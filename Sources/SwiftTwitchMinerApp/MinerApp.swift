@@ -5,14 +5,27 @@ import UserNotifications
 @main
 struct MinerApp: App {
 
-    @State private var appModel = AppModel(clientId: ClientConfiguration.clientId)
+    @State private var minerManager = MinerManager(clientId: ClientConfiguration.clientId)
+    @State private var appModel: AppModel
+    @State private var navigation: NavigationModel
+
+    init() {
+        let clientId = ClientConfiguration.clientId
+        let manager = MinerManager(clientId: clientId)
+        self._minerManager = State(initialValue: manager)
+        self._appModel = State(initialValue: AppModel(clientId: clientId, minerManager: manager))
+        self._navigation = State(initialValue: NavigationModel(clientId: clientId, minerManager: manager))
+    }
 
     var body: some Scene {
         // Main window
         WindowGroup {
             ContentView()
                 .environment(appModel)
+                .environment(navigation)
                 .task {
+                    // Only setup the manager. AppModel.setup() will check it.
+                    navigation.setup()
                     await appModel.setup()
                     await requestNotificationPermission()
                 }
@@ -48,17 +61,18 @@ struct MinerApp: App {
             }
         }
 
-        // Menu bar extra — always present so the app can run in the background.
+        // Menu bar extra
         MenuBarExtra {
             MenuBarContent()
                 .environment(appModel)
+                .environment(navigation)
         } label: {
             MenuBarLabel()
                 .environment(appModel)
         }
         .menuBarExtraStyle(.menu)
 
-        // Settings window (macOS 14+ Settings scene)
+        // Settings window
         SwiftUI.Settings {
             SettingsView()
                 .padding()
@@ -77,8 +91,6 @@ struct MenuBarLabel: View {
     @Environment(AppModel.self) private var appModel
 
     var body: some View {
-        // Use a filled/unfilled icon to indicate active vs idle state
-        // Show badge count for active miners
         Image(systemName: appModel.activeMiners > 0 ? "gift.fill" : "gift")
     }
 }
@@ -87,16 +99,15 @@ struct MenuBarLabel: View {
 
 struct MenuBarContent: View {
     @Environment(AppModel.self) private var appModel
+    @Environment(NavigationModel.self) private var navigation
 
     var body: some View {
         Group {
-            // Status header
             Label(statusText, systemImage: statusIcon)
                 .foregroundStyle(.secondary)
 
             Divider()
 
-            // Quick stats
             HStack {
                 VStack(alignment: .leading) {
                     Text("Miners Running")
@@ -121,7 +132,6 @@ struct MenuBarContent: View {
 
             Divider()
 
-            // Actions
             Button("Start All") {
                 Task { await appModel.startAll() }
             }
@@ -179,10 +189,6 @@ struct MenuBarContent: View {
     }
 }
 
-// MARK: - Build-time configuration
-
 enum ClientConfiguration {
-    /// Override via the `TWITCH_CLIENT_ID` environment variable or replace this default.
-    /// Using Twitch's Android client ID is required for device flow to work with GQL.
     static let clientId = ProcessInfo.processInfo.environment["TWITCH_CLIENT_ID"] ?? "kd1unb4b3q4t58fwlpcbzcbnm76a8fp"
 }

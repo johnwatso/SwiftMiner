@@ -21,9 +21,29 @@ public actor TwitchAPIClient {
     /// Authenticated user's login name — used as channelLogin in DropCampaignDetails
     private var userLogin: String = ""
 
+    /// Metadata for a claimed benefit from inventory.
+    /// Used as a fallback to detect claimed drops when `self` is absent from DropCampaignDetails.
+    public struct ClaimedBenefit: Sendable {
+        public let id: String
+        public let name: String
+        public let lastAwardedAt: Date
+    }
+
+    /// Benefit ID → ClaimedBenefit from the most recent inventory fetch (gameEventDrops).
+    /// Used as a fallback to detect claimed drops when `self` is absent from DropCampaignDetails.
+    /// Matches Python's `claimed_benefits: dict[str, datetime]` pattern.
+    private var lastKnownClaimedBenefits: [String: ClaimedBenefit] = [:]
+
     /// Set the authenticated user's login (call after successful auth)
     public func setUserLogin(_ login: String) {
         self.userLogin = login
+    }
+
+    /// Returns benefit metadata from the most recent inventory fetch.
+    /// These are rewards the user has already received — used as fallback claimed detection.
+    /// Matches Python's `claimed_benefits: dict[str, datetime]` pattern.
+    public func getClaimedBenefits() -> [String: ClaimedBenefit] {
+        lastKnownClaimedBenefits
     }
 
     /// Twitch API endpoints
@@ -180,25 +200,48 @@ public actor TwitchAPIClient {
             return parseBasicCampaign(from: drop)
         }
 
-        print("[TwitchAPIClient] fetchDropCampaigns: \(basicCampaigns.filter { $0.isActive }.count) active campaigns, fetching details")
+        let activeCampaigns = basicCampaigns.filter { $0.isActive }
+        let inactiveCampaigns = basicCampaigns.filter { !$0.isActive }
+        print("[TwitchAPIClient] fetchDropCampaigns: \(activeCampaigns.count) active campaigns, fetching details")
 
-        var campaigns: [Campaign] = []
-        for var campaign in basicCampaigns {
-            guard campaign.isActive else {
-                campaigns.append(campaign)
-                continue
+        // Fetch campaign details with a concurrency cap of 5 to avoid socket exhaustion.
+        // userLogin (e.g. "john") is required — DropCampaignDetails uses user(login:) not user(id:)
+        var enrichedActive = activeCampaigns
+        if !activeCampaigns.isEmpty {
+            let maxConcurrent = 5
+            try await withThrowingTaskGroup(of: (Int, Campaign).self) { group in
+                var nextIndex = 0
+
+                func addNext() {
+                    guard nextIndex < activeCampaigns.count else { return }
+                    let i = nextIndex
+                    var campaign = activeCampaigns[i]
+                    nextIndex += 1
+                    group.addTask {
+                        do {
+                            let details = try await self.fetchCampaignDetails(campaignId: campaign.id, userLogin: self.userLogin)
+                            campaign.drops = details.drops
+                        } catch {
+                            print("[TwitchAPIClient] Failed to fetch details for campaign \(campaign.id): \(error)")
+                        }
+                        return (i, campaign)
+                    }
+                }
+
+                // Seed initial batch
+                for _ in 0..<min(maxConcurrent, activeCampaigns.count) {
+                    addNext()
+                }
+
+                // As each task finishes, slot result in-place and start the next one
+                for try await (i, campaign) in group {
+                    enrichedActive[i] = campaign
+                    addNext()
+                }
             }
-            // Fetch detailed drops only for active campaigns
-            // userLogin (e.g. "john") is required — DropCampaignDetails uses user(login:) not user(id:)
-            do {
-                let details = try await fetchCampaignDetails(campaignId: campaign.id, userLogin: userLogin)
-                campaign.drops = details.drops
-            } catch {
-                print("[TwitchAPIClient] Failed to fetch details for campaign \(campaign.id): \(error)")
-            }
-            campaigns.append(campaign)
         }
-        
+
+        let campaigns = enrichedActive + inactiveCampaigns
         print("[TwitchAPIClient] fetchDropCampaigns: \(campaigns.count) parsed successfully")
         return campaigns
     }
@@ -215,15 +258,21 @@ public actor TwitchAPIClient {
         )
         
         let data = try await makeGraphQLRequest(request: request)
+
+        // Debug: dump raw DropCampaignDetails response to confirm `self` field presence on timeBasedDrops
+        if let raw = String(data: data, encoding: .utf8) {
+            print("[TwitchAPIClient] DropCampaignDetails raw (first 3000): \(raw.prefix(3000))")
+        }
+
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        
+
         guard let jsonDict = json,
               let responseData = jsonDict["data"] as? [String: Any],
               let user = responseData["user"] as? [String: Any],
               let dropCampaign = user["dropCampaign"] as? [String: Any] else {
             throw TwitchMinerError.invalidResponse
         }
-        
+
         return parseDetailedCampaign(from: dropCampaign)
     }
 
@@ -248,9 +297,47 @@ public actor TwitchAPIClient {
         }
 
         guard let currentUser = responseData["currentUser"] as? [String: Any],
-              let inventory = currentUser["inventory"] as? [String: Any],
-              let dropProgress = inventory["dropCampaignsInProgress"] as? [[String: Any]] else {
-            print("[TwitchAPIClient] fetchInventory: missing currentUser/inventory/dropCampaignsInProgress")
+              let inventory = currentUser["inventory"] as? [String: Any] else {
+            print("[TwitchAPIClient] fetchInventory: missing currentUser/inventory")
+            return []
+        }
+
+        // Parse gameEventDrops — maps benefit ID → ClaimedBenefit.
+        // Twitch omits `self.isClaimed` for fully-claimed drops in DropCampaignDetails,
+        // so we use this dict as a fallback to detect claimed drops by ID or name.
+        if let gameEventDrops = inventory["gameEventDrops"] as? [[String: Any]] {
+            var benefits: [String: ClaimedBenefit] = [:]
+            // Log first entry for diagnosis
+            if let first = gameEventDrops.first {
+                print("[TwitchAPIClient] fetchInventory: gameEventDrops[0] keys=\(first.keys.sorted()) sample=\(first)")
+            }
+            for benefit in gameEventDrops {
+                guard let benefitId = benefit["id"] as? String else {
+                    // Log if id is missing — helps diagnose key name issues
+                    print("[TwitchAPIClient] fetchInventory: gameEventDrop entry has no 'id' — keys=\(benefit.keys.sorted())")
+                    continue
+                }
+                
+                let benefitName = benefit["name"] as? String ?? "Unknown"
+                
+                // Use parseDate() which handles both plain and fractional-second ISO8601 formats
+                let date: Date
+                if let lastAwardedAt = benefit["lastAwardedAt"] as? String,
+                   let d = parseDate(lastAwardedAt) {
+                    date = d
+                } else {
+                    date = .distantPast
+                }
+                
+                benefits[benefitId] = ClaimedBenefit(id: benefitId, name: benefitName, lastAwardedAt: date)
+            }
+            lastKnownClaimedBenefits = benefits
+            print("[TwitchAPIClient] fetchInventory: \(benefits.count) claimed benefit IDs: \(Array(benefits.keys))")
+        }
+
+        // dropCampaignsInProgress is null when no campaigns are actively in-progress (all claimed or not started)
+        guard let dropProgress = inventory["dropCampaignsInProgress"] as? [[String: Any]] else {
+            print("[TwitchAPIClient] fetchInventory: dropCampaignsInProgress is null (all drops claimed or not started)")
             return []
         }
 
@@ -701,15 +788,63 @@ public actor TwitchAPIClient {
         let imageUrl = (dropDict["imageURL"] as? String).flatMap { URL(string: $0) }
         let description = dropDict["description"] as? String
 
+        // Parse per-drop active window (drops can have their own window within the campaign window)
+        let dropStartDate = (dropDict["startAt"] as? String).flatMap { parseDate($0) }
+        let dropEndDate = (dropDict["endAt"] as? String).flatMap { parseDate($0) }
+
+        // Parse ALL benefit IDs from benefitEdges — used for fallback claimed detection.
+        // Python: for benefit in self.benefits — checks ALL benefit IDs against claimed_benefits.
+        var benefitIds: [String] = []
+        var reward: Reward? = nil
+        if let benefitEdges = dropDict["benefitEdges"] as? [[String: Any]] {
+            for edge in benefitEdges {
+                guard let benefit = edge["benefit"] as? [String: Any],
+                      let benefitId = benefit["id"] as? String else { continue }
+                benefitIds.append(benefitId)
+                // Use first benefit for display (reward field)
+                if reward == nil, let benefitName = benefit["name"] as? String {
+                    let benefitImageURL = (benefit["imageAssetURL"] as? String).flatMap { URL(string: $0) }
+                    reward = Reward(id: benefitId, type: .inGame, name: benefitName, description: "", imageURL: benefitImageURL)
+                }
+            }
+        }
+
+        // Read per-drop progress from the `self` field (present in DropCampaignDetails response).
+        // Tier 1: authoritative — Twitch returns this for in-progress drops.
+        // For fully-claimed drops, Twitch omits `self` entirely; fallback handled in DropsService.mergeInventory.
+        var progress: Progress? = nil
+        if let selfDict = dropDict["self"] as? [String: Any] {
+            let isClaimed = selfDict["isClaimed"] as? Bool ?? false
+            let currentMinutes = selfDict["currentMinutesWatched"] as? Int ?? 0
+            let dropInstanceId = selfDict["dropInstanceID"] as? String ?? id
+            print("[TwitchAPIClient] parseDrop '\(name)': self.isClaimed=\(isClaimed), mins=\(currentMinutes)/\(requiredMinutes)")
+            progress = Progress(
+                id: dropInstanceId,
+                dropId: id,
+                dropName: name,
+                campaignId: "",
+                currentMinutes: currentMinutes,
+                requiredMinutes: requiredMinutes,
+                isClaimed: isClaimed
+            )
+        } else {
+            print("[TwitchAPIClient] parseDrop '\(name)': NO self field — benefitIds=\(benefitIds)")
+        }
+
         return Drop(
             id: id,
             name: name,
             description: description,
             imageURL: imageUrl,
-            requiredMinutes: requiredMinutes
+            requiredMinutes: requiredMinutes,
+            reward: reward,
+            progress: progress,
+            benefitIds: benefitIds,
+            dropStartDate: dropStartDate,
+            dropEndDate: dropEndDate
         )
     }
-    
+
     /// Parse basic campaign from ViewerDropsDashboard (no drops)
     private func parseBasicCampaign(from campaignDict: [String: Any]) -> Campaign {
         let id = campaignDict["id"] as? String ?? ""

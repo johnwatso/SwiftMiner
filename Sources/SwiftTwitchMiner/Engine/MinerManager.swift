@@ -19,11 +19,15 @@ public final class MinerManager {
         public var allCampaigns: [Campaign] = []
         public var dropsClaimed: Int
         public var isRunning: Bool
+        
+        /// Account-specific drop state store (Phase 2). Set asynchronously after engine is ready.
+        public var stateStore: AccountStateStore?
 
         public init(
             id: String,
             accountId: String,
             username: String,
+            stateStore: AccountStateStore? = nil,
             status: MinerStatus = .idle,
             currentCampaign: String? = nil,
             currentCampaignId: String? = nil,
@@ -34,6 +38,7 @@ public final class MinerManager {
             self.id = id
             self.accountId = accountId
             self.username = username
+            self.stateStore = stateStore
             self.status = status
             self.currentCampaign = currentCampaign
             self.currentCampaignId = currentCampaignId
@@ -69,6 +74,12 @@ public final class MinerManager {
     /// All managed miners
     public private(set) var miners: [ManagedMiner] = []
     
+    /// Global campaign store (Phase 1)
+    public let campaignStore: CampaignStore
+
+    /// Whether the manager has been setup (loaded accounts)
+    private var isSetup = false
+    
     /// The actual engine instances (by miner ID)
     private var engines: [String: MinerEngine] = [:]
     
@@ -82,8 +93,9 @@ public final class MinerManager {
     
     // MARK: - Initialization
     
-    public init(clientId: String) {
+    public init(clientId: String, campaignStore: CampaignStore = CampaignStore()) {
         self.clientId = clientId
+        self.campaignStore = campaignStore
     }
     
     /// Update the client ID (call before adding the first account if the ID wasn't available at init).
@@ -96,8 +108,19 @@ public final class MinerManager {
 
     /// Setup the miner manager - load saved accounts and create engines
     public func setup() async {
-        // TODO: Load saved accounts from keychain and add them
-        // For now, this is a placeholder for future account persistence
+        guard !isSetup else { return }
+        isSetup = true
+        
+        let authService = TwitchAuthService(clientId: clientId)
+        do {
+            let accounts = try await authService.loadAllAccounts()
+            print("[MinerManager] Loading \(accounts.count) saved accounts from keychain")
+            for account in accounts {
+                addAccount(account)
+            }
+        } catch {
+            print("[MinerManager] Failed to load saved accounts: \(error)")
+        }
     }
     
     // MARK: - Account Management
@@ -107,23 +130,36 @@ public final class MinerManager {
     @discardableResult
     public func addAccount(_ account: Account) -> String {
         let minerId = UUID().uuidString
+        
+        // Create engine for this account
+        let engine = MinerEngine(clientId: clientId)
+        engines[minerId] = engine
+        
         let miner = ManagedMiner(
             id: minerId,
             accountId: account.id,
             username: account.username
         )
-        
         miners.append(miner)
 
-        // Create engine for this account and inject the account directly
-        // so start() doesn't have to reload from keychain
-        let engine = MinerEngine(clientId: clientId)
-        engines[minerId] = engine
-        
-        // Set account and callbacks asynchronously
         Task {
             await engine.setAccount(account)
             await setupEngineCallbacks(engine: engine, minerId: minerId)
+
+            // Get DropsService from engine actor, then create AccountStateStore on @MainActor (Phase 2)
+            let dropsService = await engine.getDropsService()
+            let stateStore = AccountStateStore(accountId: account.id, username: account.username, dropsService: dropsService)
+
+            // Wire stateStore back into the miner entry
+            if let idx = miners.firstIndex(where: { $0.id == minerId }) {
+                miners[idx].stateStore = stateStore
+            }
+
+            // Configure global campaign store with this account's API client (Phase 1)
+            await campaignStore.configure(apiClient: engine.apiClient)
+
+            // Start the state store auto-refresh (Phase 2)
+            await stateStore.start()
         }
         
         return minerId
@@ -131,8 +167,14 @@ public final class MinerManager {
     
     /// Remove an account from management
     public func removeAccount(minerId: String) async {
+        guard let miner = getMiner(id: minerId) else { return }
+        
         // Stop the miner if running
         await stopMiner(minerId: minerId)
+        
+        // Remove from keychain
+        let authService = TwitchAuthService(clientId: clientId)
+        try? await authService.logout(accountId: miner.accountId)
         
         // Remove from collections
         engines.removeValue(forKey: minerId)

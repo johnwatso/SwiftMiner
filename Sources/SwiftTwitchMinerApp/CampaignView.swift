@@ -1,96 +1,28 @@
 import SwiftUI
 import SwiftTwitchMiner
 
-// MARK: - Game-Centric Models
-
-/// Progress of a specific drop for a specific miner
-struct MinerDropProgress: Identifiable, Sendable {
-    var id: String { minerId }
-    let minerId: String
-    let username: String
-    let watchedMinutes: Int
-    let isClaimed: Bool
-    let isCurrent: Bool
-}
-
-/// Represents a group of campaigns/drops for a single game
-struct GameGroup: Identifiable {
-    let id: String
-    let gameName: String
-    let boxArtURL: URL?
-    var drops: [GameDrop]
-
-    var isClaimable: Bool { drops.contains { $0.isClaimable } }
-    var isAvailable: Bool { !isClaimable && drops.contains { !$0.isClaimed && !$0.isLocked } }
-}
-
-/// A flattened drop model for the UI supporting multiple miners
-struct GameDrop: Identifiable {
-    let id: String
-    let name: String
-    let imageURL: URL?
-    let requiredMinutes: Int
-    let progresses: [MinerDropProgress]
-
-    /// Best progress across all miners
-    var displayMinutesWatched: Int { progresses.map(\.watchedMinutes).max() ?? 0 }
-
-    /// Miners with non-zero progress or currently watching
-    var minerCountActive: Int {
-        progresses.filter { $0.watchedMinutes > 0 || $0.isCurrent }.count
-    }
-
-    /// Miners that have completed or claimed this drop
-    var minerCountComplete: Int {
-        progresses.filter { $0.isClaimed || $0.watchedMinutes >= requiredMinutes }.count
-    }
-
-    var isClaimed: Bool { !progresses.isEmpty && progresses.allSatisfy { $0.isClaimed } }
-
-    var isClaimable: Bool {
-        progresses.contains { $0.watchedMinutes >= requiredMinutes && !$0.isClaimed }
-    }
-
-    var isLocked: Bool { _isLocked }
-    private let _isLocked: Bool
-
-    init(id: String, name: String, imageURL: URL?, requiredMinutes: Int,
-         progresses: [MinerDropProgress], isLocked: Bool) {
-        self.id = id
-        self.name = name
-        self.imageURL = imageURL
-        self.requiredMinutes = requiredMinutes
-        // Sort current miners to the top, then by progress descending
-        self.progresses = progresses.sorted { a, b in
-            if a.isCurrent != b.isCurrent { return a.isCurrent }
-            return a.watchedMinutes > b.watchedMinutes
-        }
-        self._isLocked = isLocked
-    }
-}
-
 // MARK: - Drops List View
 
 struct DropsListView: View {
     @Environment(NavigationModel.self) private var navigation
-    @State private var filter: DropFilter = .claimable
+    @State private var filter: DropFilter = .active
 
     enum DropFilter: String, CaseIterable, Identifiable {
+        case active = "Active"
         case claimable = "Claimable"
-        case available = "Available"
         case all = "All"
         var id: String { rawValue }
     }
 
     var body: some View {
         Group {
-            if displayGroups.isEmpty {
+            if displayCampaigns.isEmpty {
                 emptyDropsView
             } else {
                 ScrollView {
                     LazyVStack(spacing: 16) {
-                        ForEach(displayGroups) { group in
-                            GameGroupCard(group: group)
+                        ForEach(displayCampaigns) { displayCampaign in
+                            GameGroupCard(displayCampaign: displayCampaign, filter: filter)
                         }
                     }
                     .padding()
@@ -147,112 +79,81 @@ struct DropsListView: View {
 
     private var emptyTitle: String {
         switch filter {
-        case .claimable: return "No Claimable Drops"
-        case .available: return "No Available Drops"
-        case .all: return "No Drops Found"
+        case .active: return "No active drops"
+        case .claimable: return "No claimable drops"
+        case .all: return "No drops found"
         }
     }
 
     private var emptySubtitle: String {
         if navigation.minerManager.miners.isEmpty {
-            return "Add an account and start mining to see drops here."
+            return "Add an account to start earning drops."
         }
-        switch filter {
-        case .claimable: return "Drops you've started earning will appear here."
-        case .available: return "Connect your game accounts on Twitch to see eligible drops."
-        case .all: return "Start a miner to begin fetching drops from Twitch."
-        }
+        return "Campaigns will appear here when active on Twitch."
     }
 
-    // MARK: - Data
+    // MARK: - Data Layer (Phase 3 Merge)
 
-    /// Aggregated game groups across all miners
-    private var allGroups: [GameGroup] {
+    /// Merged campaigns across all miners
+    private var allDisplayCampaigns: [DisplayCampaign] {
+        let campaigns = navigation.minerManager.campaignStore.campaigns
         let miners = navigation.minerManager.miners
-
-        // Collect game metadata
-        var gameMetadata: [String: (name: String, art: URL?)] = [:]
+        
+        // accountId -> [DropState]
+        var accountStates: [String: [DropState]] = [:]
         for miner in miners {
-            for campaign in miner.allCampaigns {
-                gameMetadata[campaign.game.id] = (campaign.game.name, campaign.game.boxArtURL)
-            }
+            accountStates[miner.accountId] = miner.stateStore?.dropStates ?? []
         }
-
-        var groups: [GameGroup] = []
-        for (gameId, meta) in gameMetadata {
-            // dropId → aggregated data
-            var dropCollection: [String: (name: String, image: URL?, req: Int,
-                                          progresses: [MinerDropProgress], isLocked: Bool)] = [:]
-
-            for miner in miners {
-                let campaigns = miner.allCampaigns.filter { $0.game.id == gameId }
-                for campaign in campaigns {
-                    for (idx, drop) in campaign.drops.enumerated() {
-                        var entry = dropCollection[drop.id]
-                            ?? (drop.name, drop.imageURL, drop.requiredMinutes, [], true)
-
-                        let progress = MinerDropProgress(
-                            minerId: miner.id,
-                            username: miner.username,
-                            watchedMinutes: drop.progress?.currentMinutes ?? 0,
-                            isClaimed: drop.isClaimed
-                        )
-                        entry.progresses.append(progress)
-
-                        // Locked only if ALL miners see it as locked
-                        let minerLocked = idx > 0 && !campaign.drops[..<idx].allSatisfy { $0.isClaimed }
-                        entry.isLocked = entry.isLocked && minerLocked
-
-                        dropCollection[drop.id] = entry
-                    }
-                }
-            }
-
-            let gameDrops = dropCollection.map { id, data in
-                GameDrop(id: id, name: data.name, imageURL: data.image,
-                         requiredMinutes: data.req, progresses: data.progresses,
-                         isLocked: data.isLocked)
-            }.sorted { a, b in
-                // 1. Claimable, 2. In Progress, 3. Not Started
-                if a.isClaimable != b.isClaimable { return a.isClaimable }
-                if a.isClaimed != b.isClaimed { return !a.isClaimed }
-                let aInProgress = a.displayMinutesWatched > 0 && !a.isClaimed
-                let bInProgress = b.displayMinutesWatched > 0 && !b.isClaimed
-                if aInProgress != bInProgress { return aInProgress }
-                return a.displayMinutesWatched > b.displayMinutesWatched
-            }
-
-            groups.append(GameGroup(id: gameId, gameName: meta.name,
-                                    boxArtURL: meta.art, drops: gameDrops))
-        }
-
-        return groups.sorted { $0.gameName < $1.gameName }
+        
+        return MergeService.merge(campaigns: campaigns, accountStates: accountStates)
     }
 
-    private var displayGroups: [GameGroup] {
-        switch filter {
-        case .claimable:
-            return allGroups.filter {
-                $0.isClaimable || $0.drops.contains { $0.displayMinutesWatched > 0 && !$0.isClaimed }
+    private var displayCampaigns: [DisplayCampaign] {
+        allDisplayCampaigns.compactMap { displayCampaign in
+            var filtered = displayCampaign
+            
+            switch filter {
+            case .active:
+                // Active: any state.progress < 100 AND !isClaimed
+                // (Or if no accounts, show active campaigns)
+                if navigation.minerManager.miners.isEmpty {
+                    return displayCampaign.isTimeActive ? displayCampaign : nil
+                }
+                
+                let activeDrops = displayCampaign.drops.filter { drop in
+                    // If any account still needs this drop
+                    let needsEarning = drop.states.isEmpty || drop.states.contains { !$0.isComplete && !$0.isClaimed }
+                    return needsEarning && !drop.isFullyClaimed
+                }
+                if activeDrops.isEmpty { return nil }
+                filtered = DisplayCampaign(base: displayCampaign.base, drops: activeDrops)
+                
+            case .claimable:
+                // Claimable: any state.progress == 100 AND !isClaimed
+                let claimableDrops = displayCampaign.drops.filter { $0.isClaimableByAnyAccount }
+                if claimableDrops.isEmpty { return nil }
+                filtered = DisplayCampaign(base: displayCampaign.base, drops: claimableDrops)
+                
+            case .all:
+                return displayCampaign
             }
-        case .available:
-            return allGroups.filter { $0.isAvailable }
-        case .all:
-            return allGroups
-        }
+            
+            return filtered
+        }.sorted { $0.gameName < $1.gameName }
     }
 }
 
-// MARK: - Game Group Card (Liquid Glass)
+// MARK: - Game Group Card
 
 private struct GameGroupCard: View {
-    let group: GameGroup
+    let displayCampaign: DisplayCampaign
+    let filter: DropsListView.DropFilter
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header
             HStack(spacing: 12) {
-                if let url = group.boxArtURL {
+                if let url = displayCampaign.base.game.boxArtURL {
                     AsyncImage(url: url) { image in
                         image.resizable().aspectRatio(contentMode: .fill)
                     } placeholder: {
@@ -263,18 +164,22 @@ private struct GameGroupCard: View {
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(group.gameName)
+                    Text(displayCampaign.gameName)
                         .font(.system(size: 16, weight: .bold))
 
-                    let activeCount = group.drops.filter { !$0.isClaimed && !$0.isLocked }.count
-                    if activeCount > 0 {
-                        Text("\(activeCount) active drop\(activeCount == 1 ? "" : "s")")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                    }
+                    Text(displayCampaign.base.name)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
 
                 Spacer()
+                
+                if displayCampaign.hasClaimableDrops {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .foregroundStyle(.orange)
+                        .font(.system(size: 14))
+                }
             }
             .padding(16)
 
@@ -282,7 +187,7 @@ private struct GameGroupCard: View {
 
             // Drop List
             VStack(alignment: .leading, spacing: 12) {
-                ForEach(group.drops) { drop in
+                ForEach(displayCampaign.drops) { drop in
                     GameDropRow(drop: drop)
                 }
             }
@@ -295,16 +200,13 @@ private struct GameGroupCard: View {
             RoundedRectangle(cornerRadius: 20)
                 .stroke(Color.primary.opacity(0.05), lineWidth: 0.5)
         )
-        .shadow(color: .black.opacity(0.03), radius: 5, x: 0, y: 2)
     }
 
     private var tintColor: Color {
-        let name = group.gameName.lowercased()
+        let name = displayCampaign.gameName.lowercased()
         if name.contains("finals") { return .pink }
         if name.contains("rust") { return .orange }
         if name.contains("raiders") { return .teal }
-        if name.contains("genshin") { return .blue }
-        if name.contains("halo") { return .indigo }
         return .purple
     }
 }
@@ -312,7 +214,7 @@ private struct GameGroupCard: View {
 // MARK: - Game Drop Row
 
 private struct GameDropRow: View {
-    let drop: GameDrop
+    let drop: DisplayDrop
     @State private var isExpanded = false
 
     var body: some View {
@@ -325,7 +227,7 @@ private struct GameDropRow: View {
                 HStack(spacing: 12) {
                     // Thumbnail
                     Group {
-                        if let url = drop.imageURL {
+                        if let url = drop.base.imageURL {
                             AsyncImage(url: url) { image in
                                 image.resizable().aspectRatio(contentMode: .fit)
                             } placeholder: {
@@ -338,31 +240,34 @@ private struct GameDropRow: View {
                     .frame(width: 32, height: 32)
                     .clipShape(RoundedRectangle(cornerRadius: 6))
 
-                    // Name + status
+                    // Name + Status
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(drop.name)
+                        Text(drop.base.name)
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(.primary)
                             .lineLimit(1)
 
                         HStack(spacing: 4) {
-                            if drop.isClaimed {
-                                Text("Claimed")
+                            if drop.isFullyClaimed {
+                                Text("Claimed by all")
                                     .font(.system(size: 11))
                                     .foregroundStyle(.green)
-                            } else if drop.isLocked {
-                                Text("Locked")
+                            } else if drop.isClaimableByAnyAccount {
+                                Text("Ready to claim")
                                     .font(.system(size: 11))
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(.orange)
                             } else {
-                                Text("\(drop.displayMinutesWatched) / \(drop.requiredMinutes) min")
-                                    .font(.system(size: 11, design: .monospaced))
-                                    .foregroundStyle(.secondary)
-
-                                if drop.isClaimable {
-                                    Text("• Ready")
+                                // Multi-account summary
+                                let claimed = drop.claimedCount
+                                let total = drop.totalAccounts
+                                if total > 0 {
+                                    Text("\(claimed)/\(total) accounts claimed")
                                         .font(.system(size: 11))
-                                        .foregroundStyle(.orange)
+                                        .foregroundStyle(.secondary)
+                                } else {
+                                    Text("\(drop.base.requiredMinutes) min required")
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(.secondary)
                                 }
                             }
                         }
@@ -370,75 +275,58 @@ private struct GameDropRow: View {
 
                     Spacer()
 
-                    // Subtle miner count dots (max 5)
-                    if drop.minerCountActive > 0 && !drop.isClaimed {
-                        HStack(spacing: 3) {
-                            ForEach(0..<min(drop.minerCountActive, 5), id: \.self) { _ in
-                                Circle()
-                                    .fill(Color.secondary.opacity(0.4))
-                                    .frame(width: 4, height: 4)
-                            }
+                    // Multi-Account Progress Bar (Best)
+                    if !drop.isFullyClaimed && drop.totalAccounts > 0 {
+                        VStack(alignment: .trailing, spacing: 4) {
+                            let percent = drop.bestProgressPercent
+                            let remaining = Int(Double(drop.base.requiredMinutes) * (1.0 - percent/100.0))
+                            
+                            ProgressView(value: percent, total: 100)
+                                .progressViewStyle(.linear)
+                                .frame(width: 80)
+                                .tint(drop.isClaimableByAnyAccount ? .orange : .blue)
+                            
+                            Text("\(Int(percent))% • \(remaining) min left")
+                                .font(.system(size: 9, design: .monospaced))
+                                .foregroundStyle(.tertiary)
                         }
-                        .padding(.trailing, 4)
-                    }
-
-                    // Circular progress or checkmark
-                    if !drop.isClaimed && !drop.isLocked {
-                        ZStack {
-                            Circle()
-                                .stroke(Color.secondary.opacity(0.1), lineWidth: 2.5)
-                            Circle()
-                                .trim(from: 0, to: CGFloat(min(1.0,
-                                    Double(drop.displayMinutesWatched) / Double(max(1, drop.requiredMinutes)))))
-                                .stroke(drop.isClaimable ? Color.orange : Color.blue,
-                                        style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
-                                .rotationEffect(.degrees(-90))
-                        }
-                        .frame(width: 16, height: 16)
-                    } else if drop.isClaimed {
+                    } else if drop.isFullyClaimed {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundStyle(.green)
                             .font(.system(size: 14))
                     }
 
-                    // Expand chevron (only if multi-miner data available)
-                    if !drop.progresses.isEmpty {
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(.tertiary)
-                            .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                    }
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
                 }
             }
             .buttonStyle(.plain)
 
-            // Per-miner detail (expanded)
-            if isExpanded && !drop.progresses.isEmpty {
+            // Per-account detail
+            if isExpanded && !drop.states.isEmpty {
                 VStack(spacing: 8) {
-                    ForEach(drop.progresses) { progress in
-                        MinerProgressRow(progress: progress, requiredMinutes: drop.requiredMinutes)
+                    ForEach(drop.states) { state in
+                        AccountProgressRow(state: state)
                     }
                 }
                 .padding(.leading, 44)
                 .padding(.bottom, 4)
-                .transition(.asymmetric(
-                    insertion: .opacity.combined(with: .move(edge: .top)),
-                    removal: .opacity
-                ))
+                .transition(.opacity)
             }
         }
     }
 }
 
-// MARK: - Miner Progress Row (Detail)
+// MARK: - Account Progress Row
 
-private struct MinerProgressRow: View {
-    let progress: MinerDropProgress
-    let requiredMinutes: Int
+private struct AccountProgressRow: View {
+    let state: DropState
 
     var body: some View {
         HStack(spacing: 10) {
-            Text(progress.username)
+            Text(state.accountId.prefix(8)) // Simplification for demo
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.secondary)
                 .frame(width: 80, alignment: .leading)
@@ -448,22 +336,20 @@ private struct MinerProgressRow: View {
                     RoundedRectangle(cornerRadius: 2)
                         .fill(Color.secondary.opacity(0.1))
                     RoundedRectangle(cornerRadius: 2)
-                        .fill(progress.isClaimed ? Color.green : Color.blue.opacity(0.8))
-                        .frame(width: geo.size.width * CGFloat(
-                            min(1.0, Double(progress.watchedMinutes) / Double(max(1, requiredMinutes)))
-                        ))
+                        .fill(state.isClaimed ? Color.green : Color.blue.opacity(0.8))
+                        .frame(width: geo.size.width * CGFloat(state.percentComplete / 100.0))
                 }
             }
             .frame(height: 6)
 
             HStack(spacing: 4) {
-                Text("\(progress.watchedMinutes)/\(requiredMinutes)")
+                Text("\(state.progressMinutes)/\(state.requiredMinutes)")
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(.tertiary)
 
-                if progress.isClaimed {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 8, weight: .bold))
+                if state.isClaimed {
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.system(size: 8))
                         .foregroundStyle(.green)
                 }
             }

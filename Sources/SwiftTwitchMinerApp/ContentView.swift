@@ -3,9 +3,7 @@ import SwiftTwitchMiner
 
 /// Root view — 2-column NavigationSplitView (Sidebar | Detail)
 struct ContentView: View {
-    @State private var navigation = NavigationModel(
-        clientId: Settings.shared.resolvedClientId
-    )
+    @Environment(NavigationModel.self) private var navigation
 
     var body: some View {
         @Bindable var nav = navigation
@@ -15,13 +13,9 @@ struct ContentView: View {
             detailView
         }
         .frame(minWidth: 800, minHeight: 600)
-        .environment(navigation)
         .sheet(isPresented: $nav.showAddAccountSheet) {
             AuthRequiredSheet(isPresented: $nav.showAddAccountSheet)
                 .environment(navigation)
-        }
-        .task {
-            navigation.setup()
         }
     }
 
@@ -162,4 +156,6 @@ struct MinerLogRow: View {
 
 #Preview {
     ContentView()
+        .environment(NavigationModel(clientId: "preview"))
+        .environment(AppModel(clientId: "preview"))
 }
