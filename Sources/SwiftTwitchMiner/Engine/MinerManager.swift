@@ -1,0 +1,343 @@
+import Foundation
+
+/// Manages multiple MinerEngine instances for multi-account mining.
+/// Each account gets its own isolated engine with separate state.
+@MainActor
+@Observable
+public final class MinerManager {
+    
+    // MARK: - Types
+    
+    /// Represents a managed miner instance
+    public struct ManagedMiner: Identifiable, Sendable {
+        public let id: String
+        public let accountId: String
+        public let username: String
+        public var status: MinerStatus
+        public var currentCampaign: String?
+        public var allCampaigns: [Campaign] = []
+        public var dropsClaimed: Int
+        public var isRunning: Bool
+        
+        public init(
+            id: String,
+            accountId: String,
+            username: String,
+            status: MinerStatus = .idle,
+            currentCampaign: String? = nil,
+            allCampaigns: [Campaign] = [],
+            dropsClaimed: Int = 0,
+            isRunning: Bool = false
+        ) {
+            self.id = id
+            self.accountId = accountId
+            self.username = username
+            self.status = status
+            self.currentCampaign = currentCampaign
+            self.allCampaigns = allCampaigns
+            self.dropsClaimed = dropsClaimed
+            self.isRunning = isRunning
+        }
+    }
+    
+    public enum MinerStatus: String, Sendable, Equatable {
+        case idle = "IDLE"
+        case authenticating = "AUTHENTICATING"
+        case fetchingCampaigns = "FETCHING_CAMPAIGNS"
+        case watching = "WATCHING"
+        case claiming = "CLAIMING"
+        case paused = "PAUSED"
+        case error = "ERROR"
+        
+        public var displayName: String {
+            switch self {
+            case .idle: return "Idle"
+            case .authenticating: return "Authenticating"
+            case .fetchingCampaigns: return "Fetching Campaigns"
+            case .watching: return "Watching"
+            case .claiming: return "Claiming"
+            case .paused: return "Paused"
+            case .error: return "Error"
+            }
+        }
+    }
+    
+    // MARK: - Properties
+    
+    /// All managed miners
+    public private(set) var miners: [ManagedMiner] = []
+    
+    /// The actual engine instances (by miner ID)
+    private var engines: [String: MinerEngine] = [:]
+    
+    /// Client ID for Twitch API (mutable so it can be updated before first account is added)
+    private var clientId: String
+    
+    /// Callbacks for aggregated events
+    public var onMinerStatusChange: (@Sendable (ManagedMiner) -> Void)?
+    public var onAggregateProgress: (@Sendable (AggregateProgress) -> Void)?
+    public var onLogMessage: (@Sendable (String, String) -> Void)? // (minerId, message)
+    
+    // MARK: - Initialization
+    
+    public init(clientId: String) {
+        self.clientId = clientId
+    }
+    
+    /// Update the client ID (call before adding the first account if the ID wasn't available at init).
+    public func updateClientId(_ newId: String) {
+        guard !newId.isEmpty else { return }
+        clientId = newId
+    }
+
+    // MARK: - Setup
+
+    /// Setup the miner manager - load saved accounts and create engines
+    public func setup() async {
+        // TODO: Load saved accounts from keychain and add them
+        // For now, this is a placeholder for future account persistence
+    }
+    
+    // MARK: - Account Management
+    
+    /// Add a new account to manage
+    /// - Returns: The ID of the created miner
+    @discardableResult
+    public func addAccount(_ account: Account) -> String {
+        let minerId = UUID().uuidString
+        let miner = ManagedMiner(
+            id: minerId,
+            accountId: account.id,
+            username: account.username
+        )
+        
+        miners.append(miner)
+
+        // Create engine for this account and inject the account directly
+        // so start() doesn't have to reload from keychain
+        let engine = MinerEngine(clientId: clientId)
+        engines[minerId] = engine
+        
+        // Set account and callbacks asynchronously
+        Task {
+            await engine.setAccount(account)
+            await setupEngineCallbacks(engine: engine, minerId: minerId)
+        }
+        
+        return minerId
+    }
+    
+    /// Remove an account from management
+    public func removeAccount(minerId: String) async {
+        // Stop the miner if running
+        await stopMiner(minerId: minerId)
+        
+        // Remove from collections
+        engines.removeValue(forKey: minerId)
+        miners.removeAll { $0.id == minerId }
+    }
+    
+    /// Get a specific miner by ID
+    public func getMiner(id: String) -> ManagedMiner? {
+        miners.first { $0.id == id }
+    }
+    
+    /// Get the engine for a specific miner
+    public func getEngine(minerId: String) -> MinerEngine? {
+        engines[minerId]
+    }
+    
+    // MARK: - Control Operations
+    
+    /// Start a specific miner
+    public func startMiner(minerId: String) async throws {
+        guard let engine = engines[minerId] else {
+            throw TwitchMinerError.sessionNotStarted
+        }
+        
+        // Update status
+        updateMinerStatus(minerId: minerId, status: .authenticating)
+        
+        do {
+            try await engine.start()
+            updateMinerStatus(minerId: minerId, isRunning: true)
+        } catch {
+            updateMinerStatus(minerId: minerId, status: .error)
+            throw error
+        }
+    }
+    
+    /// Stop a specific miner
+    public func stopMiner(minerId: String) async {
+        guard let engine = engines[minerId] else { return }
+        
+        await engine.stop()
+        updateMinerStatus(minerId: minerId, isRunning: false, status: .idle)
+    }
+    
+    /// Start all miners
+    public func startAll() async {
+        for miner in miners where !miner.isRunning {
+            try? await startMiner(minerId: miner.id)
+        }
+    }
+    
+    /// Stop all miners
+    public func stopAll() async {
+        for miner in miners where miner.isRunning {
+            await stopMiner(minerId: miner.id)
+        }
+    }
+    
+    /// Claim all drops for a specific miner
+    public func claimAllDrops(minerId: String) async throws {
+        guard let engine = engines[minerId] else {
+            throw TwitchMinerError.sessionNotStarted
+        }
+        
+        try await engine.claimAllDrops()
+    }
+    
+    /// Claim all drops across all miners
+    public func claimAllDropsAllMiners() async {
+        for miner in miners where miner.isRunning {
+            try? await claimAllDrops(minerId: miner.id)
+        }
+    }
+    
+    // MARK: - Progress Aggregation
+    
+    /// Get aggregated progress across all miners
+    public func getAggregateProgress() async -> AggregateProgress {
+        var totalCampaigns = 0
+        var totalDrops = 0
+        var totalClaimed = 0
+        var totalPending = 0
+        var activeMiners = 0
+        
+        for (minerId, engine) in engines {
+            guard let miner = miners.first(where: { $0.id == minerId }),
+                  miner.isRunning else { continue }
+            
+            do {
+                let progress = try await engine.getCurrentProgress()
+                totalCampaigns += progress.activeCampaigns
+                totalDrops += progress.totalDrops
+                totalClaimed += progress.claimedDrops
+                totalPending += progress.pendingDrops
+                activeMiners += 1
+            } catch {
+                // Skip miners that can't provide progress
+            }
+        }
+        
+        return AggregateProgress(
+            activeMiners: activeMiners,
+            totalCampaigns: totalCampaigns,
+            totalDrops: totalDrops,
+            claimedDrops: totalClaimed,
+            pendingDrops: totalPending
+        )
+    }
+    
+    // MARK: - Private Methods
+    
+    private func setupEngineCallbacks(engine: MinerEngine, minerId: String) async {
+        await engine.setStatusChangeHandler { [weak self] status in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                let minerStatus = self.mapSessionStatus(status)
+                self.updateMinerStatus(minerId: minerId, status: minerStatus)
+            }
+        }
+        
+        await engine.setCampaignUpdateHandler { [weak self] campaigns in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                
+                // Get all campaigns from engine
+                let all = await engine.allCampaigns
+                
+                // Update current campaign info
+                if let first = campaigns.first {
+                    self.updateMinerStatus(minerId: minerId, currentCampaign: first.name, allCampaigns: all)
+                } else {
+                    self.updateMinerStatus(minerId: minerId, allCampaigns: all)
+                }
+            }
+        }
+        
+        await engine.setDropClaimedHandler { [weak self] drop in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                self.incrementDropsClaimed(minerId: minerId)
+            }
+        }
+        
+        await engine.setLogMessageHandler { [weak self] message in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                self.onLogMessage?(minerId, message)
+            }
+        }
+    }
+    
+    private func mapSessionStatus(_ status: SessionStatus) -> MinerStatus {
+        switch status {
+        case .idle: return .idle
+        case .authenticating: return .authenticating
+        case .fetchingCampaigns: return .fetchingCampaigns
+        case .watching: return .watching
+        case .claiming: return .claiming
+        case .paused: return .paused
+        case .stopped: return .idle
+        case .error: return .error
+        }
+    }
+    
+    private func updateMinerStatus(
+        minerId: String,
+        status: MinerStatus? = nil,
+        currentCampaign: String? = nil,
+        allCampaigns: [Campaign]? = nil,
+        isRunning: Bool? = nil
+    ) {
+        guard let index = miners.firstIndex(where: { $0.id == minerId }) else { return }
+        
+        var miner = miners[index]
+        if let status = status { miner.status = status }
+        if let campaign = currentCampaign { miner.currentCampaign = campaign }
+        if let campaigns = allCampaigns { miner.allCampaigns = campaigns }
+        if let running = isRunning { miner.isRunning = running }
+        miners[index] = miner
+        
+        onMinerStatusChange?(miner)
+    }
+    
+    private func updateMinerStatus(minerId: String, isRunning: Bool, status: MinerStatus) {
+        updateMinerStatus(minerId: minerId, status: status, isRunning: isRunning)
+    }
+    
+    private func incrementDropsClaimed(minerId: String) {
+        guard let index = miners.firstIndex(where: { $0.id == minerId }) else { return }
+        var miner = miners[index]
+        miner.dropsClaimed += 1
+        miners[index] = miner
+    }
+}
+
+// MARK: - Supporting Types
+
+/// Aggregated progress across all miners
+public struct AggregateProgress: Sendable {
+    public let activeMiners: Int
+    public let totalCampaigns: Int
+    public let totalDrops: Int
+    public let claimedDrops: Int
+    public let pendingDrops: Int
+    
+    public var completionPercentage: Double {
+        guard totalDrops > 0 else { return 0 }
+        return Double(claimedDrops) / Double(totalDrops) * 100
+    }
+}
