@@ -283,6 +283,11 @@ public actor MinerEngine {
         get async { session }
     }
     
+    /// The ID of the campaign currently being watched
+    public var currentCampaignId: String? {
+        get async { session?.currentCampaignId }
+    }
+    
     public var isActive: Bool {
         isRunning
     }

@@ -15,16 +15,18 @@ public final class MinerManager {
         public let username: String
         public var status: MinerStatus
         public var currentCampaign: String?
+        public var currentCampaignId: String?
         public var allCampaigns: [Campaign] = []
         public var dropsClaimed: Int
         public var isRunning: Bool
-        
+
         public init(
             id: String,
             accountId: String,
             username: String,
             status: MinerStatus = .idle,
             currentCampaign: String? = nil,
+            currentCampaignId: String? = nil,
             allCampaigns: [Campaign] = [],
             dropsClaimed: Int = 0,
             isRunning: Bool = false
@@ -34,12 +36,12 @@ public final class MinerManager {
             self.username = username
             self.status = status
             self.currentCampaign = currentCampaign
+            self.currentCampaignId = currentCampaignId
             self.allCampaigns = allCampaigns
             self.dropsClaimed = dropsClaimed
             self.isRunning = isRunning
         }
-    }
-    
+    }    
     public enum MinerStatus: String, Sendable, Equatable {
         case idle = "IDLE"
         case authenticating = "AUTHENTICATING"
@@ -247,7 +249,10 @@ public final class MinerManager {
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
                 let minerStatus = self.mapSessionStatus(status)
-                self.updateMinerStatus(minerId: minerId, status: minerStatus)
+                
+                // If status changed to watching or back to idle, update campaign info too
+                let currentId = await engine.currentCampaignId
+                self.updateMinerStatus(minerId: minerId, status: minerStatus, currentCampaignId: currentId)
             }
         }
         
@@ -255,14 +260,15 @@ public final class MinerManager {
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
                 
-                // Get all campaigns from engine
+                // Get all campaigns and current ID from engine
                 let all = await engine.allCampaigns
+                let currentId = await engine.currentCampaignId
                 
                 // Update current campaign info
                 if let first = campaigns.first {
-                    self.updateMinerStatus(minerId: minerId, currentCampaign: first.name, allCampaigns: all)
+                    self.updateMinerStatus(minerId: minerId, currentCampaign: first.name, currentCampaignId: currentId, allCampaigns: all)
                 } else {
-                    self.updateMinerStatus(minerId: minerId, allCampaigns: all)
+                    self.updateMinerStatus(minerId: minerId, currentCampaignId: currentId, allCampaigns: all)
                 }
             }
         }
@@ -299,6 +305,7 @@ public final class MinerManager {
         minerId: String,
         status: MinerStatus? = nil,
         currentCampaign: String? = nil,
+        currentCampaignId: String? = nil,
         allCampaigns: [Campaign]? = nil,
         isRunning: Bool? = nil
     ) {
@@ -307,6 +314,7 @@ public final class MinerManager {
         var miner = miners[index]
         if let status = status { miner.status = status }
         if let campaign = currentCampaign { miner.currentCampaign = campaign }
+        if let campaignId = currentCampaignId { miner.currentCampaignId = campaignId }
         if let campaigns = allCampaigns { miner.allCampaigns = campaigns }
         if let running = isRunning { miner.isRunning = running }
         miners[index] = miner
