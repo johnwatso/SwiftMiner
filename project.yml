@@ -29,6 +29,8 @@ targets:
       - target: SwiftTwitchMiner
     info:
       path: Sources/SwiftTwitchMinerApp/Info.plist
+      properties:
+        CFBundleIconFile: SwiftMiner
     settings:
       base:
         SWIFT_VERSION: "6.0"
@@ -36,7 +38,13 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.swifttwitchminer.app
         MACOSX_DEPLOYMENT_TARGET: "26.0"
         CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_ENTITLEMENTS: ""
         ENABLE_HARDENED_RUNTIME: YES
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+    postBuildScripts:
+      - name: Copy Icon
+        script: |
+          cp -R "${SRCROOT}/SwiftMiner.icon" "${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/SwiftMiner.icon"
 
   SwiftTwitchMinerCLI:
     type: tool

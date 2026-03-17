@@ -253,16 +253,28 @@ public actor TwitchAuthService {
     }
 
     public func loadSavedAccount() async throws -> Account? {
-        if let account = try await KeychainStorage.loadAccount() {
+        if let account = try await KeychainStorage.loadFirstAccount() {
             self.currentAccount = account
             return account
         }
         return nil
     }
+    
+    /// Loads all accounts saved in the keychain.
+    public func loadAllAccounts() async throws -> [Account] {
+        return try await KeychainStorage.loadAllAccounts()
+    }
 
-    public func logout() async throws {
-        try await KeychainStorage.deleteAccount()
-        currentAccount = nil
+    public func logout(accountId: String? = nil) async throws {
+        if let id = accountId {
+            try await KeychainStorage.deleteAccount(id: id)
+            if currentAccount?.id == id {
+                currentAccount = nil
+            }
+        } else if let account = currentAccount {
+            try await KeychainStorage.deleteAccount(id: account.id)
+            currentAccount = nil
+        }
     }
 
     public var isAuthenticated: Bool {
@@ -292,54 +304,98 @@ public actor TwitchAuthService {
 
 private actor KeychainStorage {
     private static let service = "com.swifttwitchminer.auth"
-    private static let accountKey = "twitch_account"
+
+    /// Base attributes shared by all keychain queries.
+    /// Uses the standard macOS keychain (not data-protection keychain) for maximum
+    /// compatibility with debug builds. The data-protection keychain requires proper
+    /// code signing which can cause -34018 errors in unsigned debug builds.
+    private static var baseQuery: [String: Any] {
+        [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service
+        ]
+    }
 
     static func save(account: Account) async throws {
         let data = try JSONEncoder().encode(account)
 
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: accountKey,
-            kSecValueData as String: data
+        var searchQuery = baseQuery
+        searchQuery[kSecAttrAccount as String] = account.id
+
+        let updateAttributes: [String: Any] = [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         ]
 
-        // Delete any existing item
-        SecItemDelete(query as CFDictionary)
+        let updateStatus = SecItemUpdate(searchQuery as CFDictionary, updateAttributes as CFDictionary)
+        if updateStatus == errSecSuccess { return }
 
-        let status = SecItemAdd(query as CFDictionary, nil)
-        guard status == errSecSuccess else {
-            throw TwitchMinerError.authenticationFailed("Failed to save credentials to keychain")
+        // Update failed — item may be in the regular keychain (pre-migration) or not exist yet.
+        // Delete from either keychain (no kSecUseDataProtectionKeychain filter) then add fresh.
+        let deleteQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account.id
+        ]
+        SecItemDelete(deleteQuery as CFDictionary)
+
+        var addQuery = searchQuery
+        addQuery[kSecValueData as String] = data
+        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
+        guard addStatus == errSecSuccess else {
+            throw TwitchMinerError.authenticationFailed(
+                "Failed to save credentials to keychain (OSStatus \(addStatus))")
         }
     }
 
-    static func loadAccount() async throws -> Account? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: accountKey,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
-        ]
+    static func loadFirstAccount() async throws -> Account? {
+        var query = baseQuery
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
 
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
 
-        guard status == errSecSuccess,
-              let data = result as? Data else {
-            return nil
-        }
-
+        guard status == errSecSuccess, let data = result as? Data else { return nil }
         return try JSONDecoder().decode(Account.self, from: data)
     }
 
-    static func deleteAccount() async throws {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: accountKey
-        ]
+    static func loadAllAccounts() async throws -> [Account] {
+        var query = baseQuery
+        query[kSecAttrAccount as String] = ""  // Wildcard - match all accounts for this service
+        query[kSecReturnData as String] = true
+        query[kSecReturnAttributes as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitAll
 
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+
+        guard status == errSecSuccess else {
+            if status != errSecItemNotFound {
+                print("[KeychainStorage] loadAllAccounts failed: OSStatus \(status)")
+            }
+            return []
+        }
+
+        // With kSecReturnAttributes + kSecReturnData + kSecMatchLimitAll,
+        // result is [[String: Any]] where each dict has kSecValueData as the blob.
+        if let itemArray = result as? [[String: Any]] {
+            return try itemArray.compactMap { item in
+                guard let data = item[kSecValueData as String] as? Data else { return nil }
+                return try JSONDecoder().decode(Account.self, from: data)
+            }
+        }
+        // Fallback: single item returned as Data
+        if let data = result as? Data {
+            return [try JSONDecoder().decode(Account.self, from: data)]
+        }
+        return []
+    }
+
+    static func deleteAccount(id: String) async throws {
+        var query = baseQuery
+        query[kSecAttrAccount as String] = id
         SecItemDelete(query as CFDictionary)
     }
 }

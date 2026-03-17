@@ -62,14 +62,20 @@ public final class NavigationModel {
     public var minerLogs: [String: [LogEntry]] = [:]
     private let maxLogsPerMiner = 300
 
+    // MARK: - Drop Completion Tracking
+
+    /// Timestamps of when a drop was first seen as claimed/completed.
+    /// Key: dropId, Value: completion Date.
+    public var completedDropTimestamps: [String: Date] = [:]
+
     // MARK: - Miner Manager
 
     public let minerManager: MinerManager
 
     // MARK: - Initialization
 
-    public init(clientId: String) {
-        self.minerManager = MinerManager(clientId: clientId)
+    public init(clientId: String, minerManager: MinerManager? = nil) {
+        self.minerManager = minerManager ?? MinerManager(clientId: clientId)
     }
 
     // MARK: - Setup

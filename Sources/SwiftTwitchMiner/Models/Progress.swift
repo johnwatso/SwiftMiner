@@ -66,6 +66,43 @@ public struct Progress: Codable, Sendable, Equatable {
     }
 }
 
+/// Represents a user-specific state for a drop (Phase 2).
+/// Separates account progress from global campaign data.
+public struct DropState: Codable, Sendable, Equatable, Identifiable {
+    public var id: String { "\(accountId)_\(dropId)" }
+    public let dropId: String
+    public let accountId: String
+    public let progressMinutes: Int
+    public let requiredMinutes: Int
+    public let isClaimed: Bool
+    public let lastUpdated: Date
+
+    public init(
+        dropId: String,
+        accountId: String,
+        progressMinutes: Int,
+        requiredMinutes: Int,
+        isClaimed: Bool,
+        lastUpdated: Date = Date()
+    ) {
+        self.dropId = dropId
+        self.accountId = accountId
+        self.progressMinutes = progressMinutes
+        self.requiredMinutes = requiredMinutes
+        self.isClaimed = isClaimed
+        self.lastUpdated = lastUpdated
+    }
+
+    public var isComplete: Bool {
+        progressMinutes >= requiredMinutes
+    }
+
+    public var percentComplete: Double {
+        guard requiredMinutes > 0 else { return 0 }
+        return min(100.0, (Double(progressMinutes) / Double(requiredMinutes)) * 100)
+    }
+}
+
 /// Represents the overall progress across all campaigns
 public struct OverallProgress: Codable, Sendable, Equatable {
     public let totalCampaigns: Int

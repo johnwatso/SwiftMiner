@@ -6,8 +6,8 @@ public actor MinerEngine {
     
     private let clientId: String
     private var authService: TwitchAuthService
-    private var apiClient: TwitchAPIClient
-    private var dropsService: DropsService
+    var apiClient: TwitchAPIClient
+    var dropsService: DropsService
     private var watchSessionManager: WatchSessionManager
     private var claimService: ClaimService
     private var pubSubClient: PubSubClient
@@ -28,6 +28,9 @@ public actor MinerEngine {
     // Mining preferences (set from AppModel/Settings)
     private var priorityGames: [String] = []
     private var excludedGames: [String] = []
+
+    /// Returns this engine's DropsService so callers on other actors can create an AccountStateStore.
+    func getDropsService() -> DropsService { dropsService }
 
     // MARK: - Callbacks
     
@@ -355,10 +358,13 @@ public actor MinerEngine {
                 onStatusChange?(.fetchingCampaigns)
                 log("Fetching active campaigns...")
 
-                // 1. Fetch active campaigns
-                let campaignsFetched = try await dropsService.fetchCampaigns()
-                self.allCampaigns = campaignsFetched
+                // 1. Fetch active campaigns with inventory merged
+                // getActiveCampaigns() merges inventory into campaigns and updates the cache.
+                // fetchCampaigns() is then called to get ALL campaigns (not just active) from
+                // the now-enriched cache, so allCampaigns reflects real progress.
                 let campaigns = try await dropsService.getActiveCampaigns()
+                let allEnriched = try await dropsService.fetchCampaigns()
+                self.allCampaigns = allEnriched
                 log("Campaigns: \(allCampaigns.count) total, \(campaigns.count) active with drops")
                 for c in allCampaigns {
                     log("  · \(c.name) status=\(c.status.rawValue) drops=\(c.drops.count) active=\(c.isTimeActive)")
@@ -474,13 +480,16 @@ public actor MinerEngine {
             !excludedGamesLower.contains($0.gameName.lowercased())
         }
 
-        // 2. Sort by:
-        //   - Priority (matching priorityGames list)
-        //   - Time active (isTimeActive)
-        //   - Most unclaimed drops
-        //   - Ending soonest
-        return filtered
-            .filter { $0.isTimeActive }
+        // 2. Log and skip campaigns where ALL drops are claimed
+        for campaign in filtered {
+            if campaign.unclaimedDrops.isEmpty {
+                log("[Engine] Skipping \(campaign.name) — all drops claimed")
+            }
+        }
+
+        // 3. Select the best campaign from those that are active and have unclaimed drops
+        let best = filtered
+            .filter { $0.isTimeActive && !$0.unclaimedDrops.isEmpty }
             .sorted { a, b in
                 let aName = a.gameName.lowercased()
                 let bName = b.gameName.lowercased()
@@ -504,6 +513,7 @@ public actor MinerEngine {
                 return a.endAt < b.endAt
             }
             .first
+        return best
     }
     
     private func selectBestChannel(from campaign: Campaign) async -> Channel? {

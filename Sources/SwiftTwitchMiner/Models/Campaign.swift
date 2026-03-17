@@ -58,6 +58,11 @@ public struct Drop: Codable, Sendable, Identifiable, Equatable {
     public let requiredMinutes: Int
     public let reward: Reward?
     public var progress: Progress?
+    /// Benefit IDs from benefitEdges — used for fallback claimed detection via gameEventDrops
+    public var benefitIds: [String]
+    /// Per-drop active window (may differ from campaign window)
+    public var dropStartDate: Date?
+    public var dropEndDate: Date?
 
     public init(
         id: String,
@@ -66,7 +71,10 @@ public struct Drop: Codable, Sendable, Identifiable, Equatable {
         imageURL: URL? = nil,
         requiredMinutes: Int,
         reward: Reward? = nil,
-        progress: Progress? = nil
+        progress: Progress? = nil,
+        benefitIds: [String] = [],
+        dropStartDate: Date? = nil,
+        dropEndDate: Date? = nil
     ) {
         self.id = id
         self.name = name
@@ -75,6 +83,9 @@ public struct Drop: Codable, Sendable, Identifiable, Equatable {
         self.requiredMinutes = requiredMinutes
         self.reward = reward
         self.progress = progress
+        self.benefitIds = benefitIds
+        self.dropStartDate = dropStartDate
+        self.dropEndDate = dropEndDate
     }
 
     /// Whether the drop has been fully earned and is ready to claim
@@ -158,4 +169,66 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
     public var startAt: Date { startDate }
     public var endAt: Date { endDate }
     public var hasDropsEnabled: Bool { true }
+}
+
+// MARK: - Phase 3: Merge Layer Models
+
+/// UI model combining a global Drop with its account-specific states.
+public struct DisplayDrop: Sendable, Identifiable, Equatable {
+    public var id: String { base.id }
+    public let base: Drop
+    public let states: [DropState]
+    
+    public init(base: Drop, states: [DropState]) {
+        self.base = base
+        self.states = states
+    }
+    
+    /// Summary of progress across all accounts for this drop.
+    public var totalAccounts: Int { states.count }
+    public var claimedCount: Int { states.filter { $0.isClaimed }.count }
+    public var isFullyClaimed: Bool { !states.isEmpty && states.allSatisfy { $0.isClaimed } }
+
+    /// Whether any account has claimed this drop.
+    public var isClaimedByAnyAccount: Bool { states.contains { $0.isClaimed } }
+
+    /// Whether any account has completed but not yet claimed (ready to claim).
+    public var isClaimableByAnyAccount: Bool { states.contains { $0.isComplete && !$0.isClaimed } }
+
+    /// Best progress across all accounts (percentage 0–100).
+    public var bestProgressPercent: Double {
+        states.map { $0.percentComplete }.max() ?? 0
+    }
+
+    /// Best progress in minutes across all accounts.
+    public var bestProgressMinutes: Int {
+        states.map { $0.progressMinutes }.max() ?? 0
+    }
+
+    /// The state for a specific account, if present.
+    public func state(for accountId: String) -> DropState? {
+        states.first { $0.accountId == accountId }
+    }
+}
+
+/// UI model combining a global Campaign with its account-specific states.
+public struct DisplayCampaign: Sendable, Identifiable, Equatable {
+    public var id: String { base.id }
+    public let base: Campaign
+    public let drops: [DisplayDrop]
+    
+    public init(base: Campaign, drops: [DisplayDrop]) {
+        self.base = base
+        self.drops = drops
+    }
+    
+    public var name: String { base.name }
+    public var gameName: String { base.game.name }
+    public var isTimeActive: Bool { base.isTimeActive }
+
+    /// Drops not yet claimed by all accounts.
+    public var unclaimedDrops: [DisplayDrop] { drops.filter { !$0.isFullyClaimed } }
+
+    /// Whether any drop is ready to claim across any account.
+    public var hasClaimableDrops: Bool { drops.contains { $0.isClaimableByAnyAccount } }
 }

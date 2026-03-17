@@ -2,10 +2,11 @@ import Foundation
 import SwiftUI
 import SwiftTwitchMiner
 
-/// Central view-model that bridges the `MinerEngine` actor to SwiftUI's `@MainActor`.
+/// Central view-model that bridges mining state to SwiftUI's `@MainActor`.
 ///
-/// All mutations happen on the main actor so SwiftUI's observation infrastructure
-/// picks them up without additional `DispatchQueue.main.async` calls.
+/// When a `MinerManager` is provided (multi-miner mode), all mining operations
+/// are delegated to it. `AppModel` only owns the engine used for the initial
+/// device-code auth flow in that case.
 @MainActor
 @Observable
 public final class AppModel {
@@ -19,54 +20,74 @@ public final class AppModel {
     public var logMessages: [LogEntry] = []
     public var authInfo: DeviceAuthInfo?
     public var isAuthenticated = false
-    
+
     // MARK: - Multi-miner compatibility properties
 
-    /// Number of active miners (0 or 1 for single-engine mode)
     public var activeMiners: Int {
-        isAuthenticated && sessionStatus != .stopped && sessionStatus != .idle ? 1 : 0
+        if let manager = minerManager {
+            return manager.miners.filter { $0.isRunning }.count
+        }
+        return isAuthenticated && sessionStatus != .stopped && sessionStatus != .idle ? 1 : 0
     }
 
-    /// Total number of miners (always 1 for single-engine mode)
     public var totalMiners: Int {
-        isAuthenticated ? 1 : 0
+        if let manager = minerManager {
+            return manager.miners.count
+        }
+        return isAuthenticated ? 1 : 0
     }
 
-    /// Drops claimed today (from overall progress)
     public var dropsClaimedToday: Int {
-        overallProgress?.claimedDrops ?? 0
+        if let manager = minerManager {
+            return manager.miners.reduce(0) { $0 + $1.dropsClaimed }
+        }
+        return overallProgress?.claimedDrops ?? 0
     }
 
-    /// Overall status for menu bar
     public var overallStatus: SessionStatus {
         sessionStatus
     }
 
-    /// Maximum log entries kept in memory
     private let maxLogEntries = 500
 
-    // MARK: - Engine
+    // MARK: - Engine (used only for device-code auth flow)
 
     private let engine: MinerEngine
     private let clientId: String
+    private weak var minerManager: MinerManager?
 
     // MARK: - Init
 
-    public init(clientId: String) {
+    public init(clientId: String, minerManager: MinerManager? = nil) {
         self.clientId = clientId
         self.engine = MinerEngine(clientId: clientId)
+        self.minerManager = minerManager
     }
 
     // MARK: - Lifecycle
 
-    /// Wire up callbacks and (if already authenticated) start mining.
     public func setup() async {
-        // Update mining preferences from Settings
+        if let manager = minerManager {
+            // Multi-miner mode: don't start our own engine.
+            // Drive isAuthenticated from MinerManager's miner list.
+            isAuthenticated = !manager.miners.isEmpty
+
+            // Update isAuthenticated whenever a miner is added/removed.
+            manager.onMinerStatusChange = { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    self.isAuthenticated = !(self.minerManager?.miners.isEmpty ?? true)
+                }
+            }
+            return
+        }
+
+        // Legacy single-engine mode (no MinerManager).
         await engine.updateMiningPreferences(
             priorityGames: Settings.shared.priorityGames,
             excludedGames: Settings.shared.excludedGames
         )
-        
+
         await engine.setStatusChangeHandler { [weak self] status in
             Task { @MainActor [weak self] in
                 self?.sessionStatus = status
@@ -105,34 +126,49 @@ public final class AppModel {
             }
         }
 
-        // Try to start if credentials are already saved
         do {
             try await engine.start()
             isAuthenticated = true
         } catch {
-            // Not authenticated yet — show auth flow
             isAuthenticated = false
         }
     }
 
     public func stop() async {
+        if let manager = minerManager {
+            await manager.stopAll()
+            return
+        }
         await engine.stop()
     }
-    
-    /// Start all miners (backward compatible - starts single engine)
+
     public func startAll() async {
+        if let manager = minerManager {
+            await manager.startAll()
+            return
+        }
         try? await engine.start()
         isAuthenticated = await engine.isActive
     }
-    
-    /// Stop all miners (backward compatible - stops single engine)
+
     public func stopAll() async {
+        if let manager = minerManager {
+            await manager.stopAll()
+            return
+        }
         await engine.stop()
         isAuthenticated = false
     }
-    
-    /// Logout and clear credentials
+
     public func logout() async {
+        if let manager = minerManager {
+            for miner in manager.miners {
+                await manager.removeAccount(minerId: miner.id)
+            }
+            isAuthenticated = false
+            authInfo = nil
+            return
+        }
         await engine.stop()
         let authService = TwitchAuthService(clientId: clientId)
         try? await authService.logout()
@@ -140,26 +176,35 @@ public final class AppModel {
         authInfo = nil
     }
 
-    // MARK: - Authentication
+    // MARK: - Authentication (always uses own engine for device-code flow)
 
-    /// Begin device-code OAuth flow. Returns info needed to display to the user.
     public func startAuthentication() async throws {
         authInfo = try await engine.authenticate()
     }
 
-    /// Poll until authentication completes (called after user enters the code).
     public func waitForAuthentication() async {
-        // Give the background polling task time to finish, then re-try start.
-        // MinerEngine's authenticate() already fires a background Task that polls.
-        // We just need to detect when isAuthenticated flips.
+        // In multi-miner mode, AuthRequiredSheet handles adding the account to MinerManager.
+        // We just wait until at least one miner appears.
+        if let manager = minerManager {
+            for _ in 0..<60 {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                if !manager.miners.isEmpty {
+                    isAuthenticated = true
+                    authInfo = nil
+                    return
+                }
+            }
+            return
+        }
+
+        // Legacy single-engine mode.
         for _ in 0..<60 {
-            try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
             if await engine.isActive {
                 isAuthenticated = true
                 authInfo = nil
                 return
             }
-            // Try starting to trigger the token check
             do {
                 try await engine.start()
                 isAuthenticated = true
@@ -174,6 +219,10 @@ public final class AppModel {
     // MARK: - Actions
 
     public func claimAllDrops() async {
+        if let manager = minerManager {
+            await manager.claimAllDropsAllMiners()
+            return
+        }
         do {
             try await engine.claimAllDrops()
         } catch {
@@ -182,6 +231,19 @@ public final class AppModel {
     }
 
     public func refreshProgress() async {
+        if let manager = minerManager {
+            let agg = await manager.getAggregateProgress()
+            overallProgress = OverallProgress(
+                totalCampaigns: agg.totalCampaigns,
+                activeCampaigns: agg.activeMiners,
+                totalDrops: agg.totalDrops,
+                claimedDrops: agg.claimedDrops,
+                pendingDrops: agg.pendingDrops,
+                totalWatchTimeMinutes: 0,
+                campaigns: []
+            )
+            return
+        }
         do {
             overallProgress = try await engine.getCurrentProgress()
         } catch {
