@@ -1,0 +1,81 @@
+name: SwiftTwitchMiner
+
+options:
+  bundleIdPrefix: com.swifttwitchminer
+  createIntermediateGroups: true
+
+targets:
+  SwiftTwitchMiner:
+    type: library.static
+    platform: macOS
+    deploymentTarget: "26.0"
+    sources:
+      - Sources/SwiftTwitchMiner
+    settings:
+      base:
+        SWIFT_VERSION: "6.0"
+        ENABLE_STRICT_CONCURRENCY: YES
+        SWIFT_STRICT_CONCURRENCY: complete
+
+  SwiftTwitchMinerApp:
+    type: application
+    platform: macOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: Sources/SwiftTwitchMinerApp
+        excludes:
+          - Info.plist
+    dependencies:
+      - target: SwiftTwitchMiner
+    info:
+      path: Sources/SwiftTwitchMinerApp/Info.plist
+    settings:
+      base:
+        SWIFT_VERSION: "6.0"
+        SWIFT_STRICT_CONCURRENCY: complete
+        PRODUCT_BUNDLE_IDENTIFIER: com.swifttwitchminer.app
+        MACOSX_DEPLOYMENT_TARGET: "26.0"
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_HARDENED_RUNTIME: YES
+
+  SwiftTwitchMinerCLI:
+    type: tool
+    platform: macOS
+    deploymentTarget: "26.0"
+    sources:
+      - Sources/SwiftTwitchMinerCLI
+    dependencies:
+      - target: SwiftTwitchMiner
+    settings:
+      base:
+        SWIFT_VERSION: "6.0"
+
+  SwiftTwitchMinerTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "26.0"
+    sources:
+      - Tests
+    dependencies:
+      - target: SwiftTwitchMiner
+    settings:
+      base:
+        SWIFT_VERSION: "6.0"
+        SWIFT_STRICT_CONCURRENCY: complete
+
+schemes:
+  SwiftTwitchMiner:
+    build:
+      targets:
+        SwiftTwitchMinerApp: all
+        SwiftTwitchMinerTests: [test]
+    run:
+      config: Debug
+      environmentVariables:
+        TWITCH_CLIENT_ID: ""
+    test:
+      config: Debug
+      targets:
+        - SwiftTwitchMinerTests
+    archive:
+      config: Release
