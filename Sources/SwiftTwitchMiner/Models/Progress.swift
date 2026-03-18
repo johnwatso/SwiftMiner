@@ -75,6 +75,7 @@ public struct DropState: Codable, Sendable, Equatable, Identifiable {
     public let progressMinutes: Int
     public let requiredMinutes: Int
     public let isClaimed: Bool
+    public let isEligible: Bool
     public let lastUpdated: Date
 
     public init(
@@ -83,6 +84,7 @@ public struct DropState: Codable, Sendable, Equatable, Identifiable {
         progressMinutes: Int,
         requiredMinutes: Int,
         isClaimed: Bool,
+        isEligible: Bool = true,
         lastUpdated: Date = Date()
     ) {
         self.dropId = dropId
@@ -90,6 +92,7 @@ public struct DropState: Codable, Sendable, Equatable, Identifiable {
         self.progressMinutes = progressMinutes
         self.requiredMinutes = requiredMinutes
         self.isClaimed = isClaimed
+        self.isEligible = isEligible
         self.lastUpdated = lastUpdated
     }
 
@@ -100,6 +103,40 @@ public struct DropState: Codable, Sendable, Equatable, Identifiable {
     public var percentComplete: Double {
         guard requiredMinutes > 0 else { return 0 }
         return min(100.0, (Double(progressMinutes) / Double(requiredMinutes)) * 100)
+    }
+
+    /// Computed status — never stored, always derived.
+    public var status: DropStatus {
+        if isClaimed { return .claimed }
+        if progressMinutes >= requiredMinutes { return .claimable }
+        if progressMinutes > 0 { return .inProgress }
+        return .notStarted
+    }
+
+    /// Minutes remaining to complete this drop.
+    public var minutesRemaining: Int {
+        max(0, requiredMinutes - progressMinutes)
+    }
+}
+
+/// Derived drop status (Phase 5 Refinement).
+public enum DropStatus: String, Codable, Sendable, Equatable, Comparable {
+    case notStarted
+    case inProgress
+    case claimable
+    case claimed
+
+    private var priority: Int {
+        switch self {
+        case .inProgress: return 0
+        case .claimable: return 1
+        case .notStarted: return 2
+        case .claimed: return 3
+        }
+    }
+
+    public static func < (lhs: DropStatus, rhs: DropStatus) -> Bool {
+        lhs.priority < rhs.priority
     }
 }
 

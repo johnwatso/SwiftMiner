@@ -231,4 +231,46 @@ public struct DisplayCampaign: Sendable, Identifiable, Equatable {
 
     /// Whether any drop is ready to claim across any account.
     public var hasClaimableDrops: Bool { drops.contains { $0.isClaimableByAnyAccount } }
+
+    /// Whether any account is linked/eligible for at least one drop in this campaign.
+    /// Returns false when no account states exist (no accounts added yet).
+    public var isEligibleByAnyAccount: Bool {
+        drops.contains { $0.states.contains { $0.isEligible } }
+    }
+}
+
+// MARK: - Phase 5.2: Campaign Grouping Model
+
+/// UI model grouping multiple campaigns for the same game.
+public struct GameDisplayGroup: Sendable, Identifiable, Equatable {
+    public var id: String { gameId }
+    public let gameId: String
+    public let gameName: String
+    public let boxArtURL: URL?
+    public let campaigns: [DisplayCampaign]
+    public let drops: [DisplayDrop]
+    
+    public init(
+        gameId: String,
+        gameName: String,
+        boxArtURL: URL?,
+        campaigns: [DisplayCampaign],
+        drops: [DisplayDrop]
+    ) {
+        self.gameId = gameId
+        self.gameName = gameName
+        self.boxArtURL = boxArtURL
+        self.campaigns = campaigns
+        self.drops = drops
+    }
+    
+    /// If ANY campaign in the group is eligible.
+    public var isEligibleByAnyAccount: Bool {
+        campaigns.contains { $0.isEligibleByAnyAccount }
+    }
+    
+    /// If any drop in any campaign is ready to claim.
+    public var hasClaimableDrops: Bool {
+        drops.contains { $0.isClaimableByAnyAccount }
+    }
 }

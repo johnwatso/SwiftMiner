@@ -9,20 +9,20 @@ struct DropsListView: View {
 
     enum DropFilter: String, CaseIterable, Identifiable {
         case active = "Active"
-        case claimable = "Claimable"
+        case claimed = "Claimed"
         case all = "All"
         var id: String { rawValue }
     }
 
     var body: some View {
         Group {
-            if displayCampaigns.isEmpty {
+            if displayGroups.isEmpty {
                 emptyDropsView
             } else {
                 ScrollView {
                     LazyVStack(spacing: 16) {
-                        ForEach(displayCampaigns) { displayCampaign in
-                            GameGroupCard(displayCampaign: displayCampaign, filter: filter)
+                        ForEach(displayGroups) { group in
+                            GameGroupCard(group: group, filter: filter)
                         }
                     }
                     .padding()
@@ -79,9 +79,9 @@ struct DropsListView: View {
 
     private var emptyTitle: String {
         switch filter {
-        case .active: return "No active drops"
-        case .claimable: return "No claimable drops"
-        case .all: return "No drops found"
+        case .active: return "No active drops available"
+        case .claimed: return "No claimed drops yet"
+        case .all: return "No campaigns found"
         }
     }
 
@@ -89,17 +89,15 @@ struct DropsListView: View {
         if navigation.minerManager.miners.isEmpty {
             return "Add an account to start earning drops."
         }
-        return "Campaigns will appear here when active on Twitch."
+        return "New campaigns will appear when active on Twitch."
     }
 
-    // MARK: - Data Layer (Phase 3 Merge)
+    // MARK: - Data Layer (Phase 5.2 Grouping)
 
-    /// Merged campaigns across all miners
     private var allDisplayCampaigns: [DisplayCampaign] {
         let campaigns = navigation.minerManager.campaignStore.campaigns
         let miners = navigation.minerManager.miners
         
-        // accountId -> [DropState]
         var accountStates: [String: [DropState]] = [:]
         for miner in miners {
             accountStates[miner.accountId] = miner.stateStore?.dropStates ?? []
@@ -108,90 +106,162 @@ struct DropsListView: View {
         return MergeService.merge(campaigns: campaigns, accountStates: accountStates)
     }
 
-    private var displayCampaigns: [DisplayCampaign] {
-        allDisplayCampaigns.compactMap { displayCampaign in
-            var filtered = displayCampaign
+    private var displayGroups: [GameDisplayGroup] {
+        // 1. Group all campaigns by Game ID or Name
+        var groupsMap: [String: [DisplayCampaign]] = [:]
+        for dc in allDisplayCampaigns {
+            let key = dc.base.game.id.isEmpty ? dc.gameName.lowercased() : dc.base.game.id
+            groupsMap[key, default: []].append(dc)
+        }
+        
+        // 2. Build GameDisplayGroup objects
+        let allGroups = groupsMap.map { (_, campaigns) -> GameDisplayGroup in
+            let first = campaigns[0]
+            let allDrops = campaigns.flatMap { $0.drops }
+            
+            return GameDisplayGroup(
+                gameId: first.base.game.id,
+                gameName: first.gameName,
+                boxArtURL: first.base.game.boxArtURL,
+                campaigns: campaigns,
+                drops: allDrops
+            )
+        }
+        
+        // 3. Filter and Sort
+        let result = allGroups.compactMap { group -> GameDisplayGroup? in
+            var filteredDrops: [DisplayDrop] = []
             
             switch filter {
             case .active:
-                // Active: any state.progress < 100 AND !isClaimed
-                // (Or if no accounts, show active campaigns)
-                if navigation.minerManager.miners.isEmpty {
-                    return displayCampaign.isTimeActive ? displayCampaign : nil
+                // Rule: If ANY campaign in the group is eligible
+                if !group.isEligibleByAnyAccount {
+                    return nil
                 }
                 
-                let activeDrops = displayCampaign.drops.filter { drop in
-                    // If any account still needs this drop
-                    let needsEarning = drop.states.isEmpty || drop.states.contains { !$0.isComplete && !$0.isClaimed }
-                    return needsEarning && !drop.isFullyClaimed
+                filteredDrops = group.drops.filter { drop in
+                    drop.states.contains { $0.isEligible && !$0.isClaimed }
+                }.sorted { a, b in
+                    let aStatus = a.states.filter(\.isEligible).map(\.status).min() ?? .notStarted
+                    let bStatus = b.states.filter(\.isEligible).map(\.status).min() ?? .notStarted
+                    return aStatus < bStatus
                 }
-                if activeDrops.isEmpty { return nil }
-                filtered = DisplayCampaign(base: displayCampaign.base, drops: activeDrops)
                 
-            case .claimable:
-                // Claimable: any state.progress == 100 AND !isClaimed
-                let claimableDrops = displayCampaign.drops.filter { $0.isClaimableByAnyAccount }
-                if claimableDrops.isEmpty { return nil }
-                filtered = DisplayCampaign(base: displayCampaign.base, drops: claimableDrops)
+            case .claimed:
+                filteredDrops = group.drops.filter { $0.isClaimedByAnyAccount }
                 
             case .all:
-                return displayCampaign
+                filteredDrops = group.drops.sorted { a, b in
+                    let aStatus = a.states.map(\.status).min() ?? .notStarted
+                    let bStatus = b.states.map(\.status).min() ?? .notStarted
+                    return aStatus < bStatus
+                }
             }
             
-            return filtered
+            if filteredDrops.isEmpty { return nil }
+            
+            return GameDisplayGroup(
+                gameId: group.gameId,
+                gameName: group.gameName,
+                boxArtURL: group.boxArtURL,
+                campaigns: group.campaigns,
+                drops: filteredDrops
+            )
         }.sorted { $0.gameName < $1.gameName }
+        
+        print("[Filter] \(filter.rawValue) → \(result.reduce(0) { $0 + $1.drops.count }) drops in \(result.count) games")
+        return result
     }
 }
 
 // MARK: - Game Group Card
 
 private struct GameGroupCard: View {
-    let displayCampaign: DisplayCampaign
+    let group: GameDisplayGroup
     let filter: DropsListView.DropFilter
+    
+    @State private var isExpanded: Bool
+
+    init(group: GameDisplayGroup, filter: DropsListView.DropFilter) {
+        self.group = group
+        self.filter = filter
+        // UNLINKED CAMPAIGN RULE: Collapse by default if not eligible
+        self._isExpanded = State(initialValue: group.isEligibleByAnyAccount)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Header
-            HStack(spacing: 12) {
-                if let url = displayCampaign.base.game.boxArtURL {
-                    AsyncImage(url: url) { image in
-                        image.resizable().aspectRatio(contentMode: .fill)
-                    } placeholder: {
-                        Color.purple.opacity(0.1)
+            // Header (Clickable to toggle)
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 12) {
+                    if let url = group.boxArtURL {
+                        AsyncImage(url: url) { image in
+                            image.resizable().aspectRatio(contentMode: .fill)
+                        } placeholder: {
+                            Color.purple.opacity(0.1)
+                        }
+                        .frame(width: 40, height: 54)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
-                    .frame(width: 40, height: 54)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                }
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(displayCampaign.gameName)
-                        .font(.system(size: 16, weight: .bold))
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 8) {
+                            Text(group.gameName)
+                                .font(.system(size: 16, weight: .bold))
+                            
+                            if !group.isEligibleByAnyAccount {
+                                Text("Not linked")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color.red.opacity(0.1))
+                                    .foregroundStyle(.red)
+                                    .clipShape(Capsule())
+                            }
+                        }
 
-                    Text(displayCampaign.base.name)
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
+                        // Show aggregate campaign info or just primary
+                        let campaignNames = Array(Set(group.campaigns.map { $0.base.name })).sorted()
+                        Text(campaignNames.joined(separator: ", "))
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
 
-                Spacer()
-                
-                if displayCampaign.hasClaimableDrops {
-                    Image(systemName: "exclamationmark.circle.fill")
-                        .foregroundStyle(.orange)
-                        .font(.system(size: 14))
+                    Spacer()
+                    
+                    if group.hasClaimableDrops {
+                        Image(systemName: "exclamationmark.circle.fill")
+                            .foregroundStyle(.orange)
+                            .font(.system(size: 14))
+                    }
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
                 }
+                .padding(16)
+                .contentShape(Rectangle())
             }
-            .padding(16)
+            .buttonStyle(.plain)
 
-            Divider().opacity(0.1)
+            if isExpanded {
+                Divider().opacity(0.1)
 
-            // Drop List
-            VStack(alignment: .leading, spacing: 12) {
-                ForEach(displayCampaign.drops) { drop in
-                    GameDropRow(drop: drop)
+                // Flattened Drop List
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach(group.drops) { drop in
+                        GameDropRow(drop: drop)
+                    }
                 }
+                .padding(16)
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
-            .padding(16)
         }
         .background(.ultraThinMaterial)
         .background(tintColor.opacity(0.08))
@@ -203,7 +273,7 @@ private struct GameGroupCard: View {
     }
 
     private var tintColor: Color {
-        let name = displayCampaign.gameName.lowercased()
+        let name = group.gameName.lowercased()
         if name.contains("finals") { return .pink }
         if name.contains("rust") { return .orange }
         if name.contains("raiders") { return .teal }
@@ -242,33 +312,57 @@ private struct GameDropRow: View {
 
                     // Name + Status
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(drop.base.name)
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
+                        HStack(spacing: 6) {
+                            Text(drop.base.name)
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                            
+                            if !drop.states.isEmpty && drop.states.allSatisfy({ !$0.isEligible }) {
+                                Text("Not linked")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .padding(.horizontal, 4)
+                                    .padding(.vertical, 1)
+                                    .background(Color.red.opacity(0.1))
+                                    .foregroundStyle(.red)
+                                    .clipShape(Capsule())
+                            }
+                        }
 
                         HStack(spacing: 4) {
                             if drop.isFullyClaimed {
-                                Text("Claimed by all")
+                                Text("Claimed")
                                     .font(.system(size: 11))
                                     .foregroundStyle(.green)
-                            } else if drop.isClaimableByAnyAccount {
-                                Text("Ready to claim")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(.orange)
-                            } else {
+                            } else if drop.totalAccounts > 1 {
                                 // Multi-account summary
-                                let claimed = drop.claimedCount
-                                let total = drop.totalAccounts
-                                if total > 0 {
-                                    Text("\(claimed)/\(total) accounts claimed")
+                                Text("\(drop.claimedCount)/\(drop.totalAccounts) claimed • \(drop.totalAccounts - drop.claimedCount) active")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.secondary)
+                            } else if let state = drop.states.first {
+                                // Single account detailed status
+                                switch state.status {
+                                case .claimed:
+                                    Text("Claimed")
                                         .font(.system(size: 11))
-                                        .foregroundStyle(.secondary)
-                                } else {
-                                    Text("\(drop.base.requiredMinutes) min required")
+                                        .foregroundStyle(.green)
+                                case .claimable:
+                                    Text("Ready to claim")
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(.orange)
+                                case .inProgress:
+                                    Text("\(Int(state.percentComplete))% • \(state.minutesRemaining) min left")
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(.blue)
+                                case .notStarted:
+                                    Text("Not started • \(state.requiredMinutes) min")
                                         .font(.system(size: 11))
                                         .foregroundStyle(.secondary)
                                 }
+                            } else {
+                                Text("Not started • \(drop.base.requiredMinutes) min")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.secondary)
                             }
                         }
                     }
@@ -276,24 +370,17 @@ private struct GameDropRow: View {
                     Spacer()
 
                     // Multi-Account Progress Bar (Best)
-                    if !drop.isFullyClaimed && drop.totalAccounts > 0 {
-                        VStack(alignment: .trailing, spacing: 4) {
-                            let percent = drop.bestProgressPercent
-                            let remaining = Int(Double(drop.base.requiredMinutes) * (1.0 - percent/100.0))
-                            
-                            ProgressView(value: percent, total: 100)
-                                .progressViewStyle(.linear)
-                                .frame(width: 80)
-                                .tint(drop.isClaimableByAnyAccount ? .orange : .blue)
-                            
-                            Text("\(Int(percent))% • \(remaining) min left")
-                                .font(.system(size: 9, design: .monospaced))
-                                .foregroundStyle(.tertiary)
-                        }
-                    } else if drop.isFullyClaimed {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
-                            .font(.system(size: 14))
+                    VStack(alignment: .trailing, spacing: 4) {
+                        let percent = drop.bestProgressPercent
+                        
+                        ProgressView(value: percent, total: 100)
+                            .progressViewStyle(.linear)
+                            .frame(width: 80)
+                            .tint(progressColor)
+                        
+                        Text("\(Int(percent))% • \(drop.base.requiredMinutes) min total")
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundStyle(.tertiary)
                     }
 
                     Image(systemName: "chevron.right")
@@ -317,6 +404,12 @@ private struct GameDropRow: View {
             }
         }
     }
+    
+    private var progressColor: Color {
+        if drop.isFullyClaimed { return .green }
+        if drop.isClaimableByAnyAccount { return .orange }
+        return .blue
+    }
 }
 
 // MARK: - Account Progress Row
@@ -326,7 +419,7 @@ private struct AccountProgressRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Text(state.accountId.prefix(8)) // Simplification for demo
+            Text(state.accountId.prefix(8))
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.secondary)
                 .frame(width: 80, alignment: .leading)
