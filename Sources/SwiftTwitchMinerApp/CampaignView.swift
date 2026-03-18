@@ -20,12 +20,12 @@ struct DropsListView: View {
                 emptyDropsView
             } else {
                 ScrollView {
-                    LazyVStack(spacing: 16) {
+                    LazyVStack(spacing: 20) {
                         ForEach(displayGroups) { group in
                             GameGroupCard(group: group, filter: filter)
                         }
                     }
-                    .padding()
+                    .padding(24)
                 }
             }
         }
@@ -33,7 +33,14 @@ struct DropsListView: View {
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
                 Button {
-                    Task { await navigation.minerManager.startAll() }
+                    Task {
+                        let settings = Settings.shared
+                        await navigation.minerManager.startAll(
+                            priorityGames: settings.priorityGames,
+                            excludedGames: settings.excludedGames,
+                            strategy: settings.miningStrategy
+                        )
+                    }
                 } label: {
                     Label("Start All", systemImage: "play.fill")
                 }
@@ -62,19 +69,13 @@ struct DropsListView: View {
     // MARK: - Empty State
 
     private var emptyDropsView: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "gamecontroller")
-                .font(.system(size: 44))
-                .foregroundStyle(.secondary)
-            Text(emptyTitle)
-                .font(.headline)
-            Text(emptySubtitle)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-        }
+        MaterialEmptyStatePanel(
+            emptyTitle,
+            systemImage: "gamecontroller",
+            description: emptySubtitle
+        )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding()
+        .padding(24)
     }
 
     private var emptyTitle: String {
@@ -205,21 +206,21 @@ private struct GameGroupCard: View {
                             Color.purple.opacity(0.1)
                         }
                         .frame(width: 40, height: 54)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
 
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 8) {
                             Text(group.gameName)
                                 .font(.system(size: 16, weight: .bold))
-                            
+
                             if !group.isEligibleByAnyAccount {
                                 Text("Not linked")
-                                    .font(.system(size: 10, weight: .bold))
+                                    .font(.system(size: 10, weight: .medium))
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 2)
-                                    .background(Color.red.opacity(0.1))
-                                    .foregroundStyle(.red)
+                                    .background(Color.secondary.opacity(0.15))
+                                    .foregroundStyle(.secondary)
                                     .clipShape(Capsule())
                             }
                         }
@@ -251,25 +252,17 @@ private struct GameGroupCard: View {
             .buttonStyle(.plain)
 
             if isExpanded {
-                Divider().opacity(0.1)
-
-                // Flattened Drop List
                 VStack(alignment: .leading, spacing: 12) {
                     ForEach(group.drops) { drop in
                         GameDropRow(drop: drop)
                     }
                 }
-                .padding(16)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 16)
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .background(.ultraThinMaterial)
-        .background(tintColor.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 20))
-        .overlay(
-            RoundedRectangle(cornerRadius: 20)
-                .stroke(Color.primary.opacity(0.05), lineWidth: 0.5)
-        )
+        .glassPanel(cornerRadius: 24)
     }
 
     private var tintColor: Color {
@@ -308,7 +301,7 @@ private struct GameDropRow: View {
                         }
                     }
                     .frame(width: 32, height: 32)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
 
                     // Name + Status
                     VStack(alignment: .leading, spacing: 2) {
@@ -317,14 +310,14 @@ private struct GameDropRow: View {
                                 .font(.system(size: 13, weight: .medium))
                                 .foregroundStyle(.primary)
                                 .lineLimit(1)
-                            
+
                             if !drop.states.isEmpty && drop.states.allSatisfy({ !$0.isEligible }) {
                                 Text("Not linked")
-                                    .font(.system(size: 9, weight: .bold))
+                                    .font(.system(size: 9, weight: .medium))
                                     .padding(.horizontal, 4)
                                     .padding(.vertical, 1)
-                                    .background(Color.red.opacity(0.1))
-                                    .foregroundStyle(.red)
+                                    .background(Color.secondary.opacity(0.15))
+                                    .foregroundStyle(.secondary)
                                     .clipShape(Capsule())
                             }
                         }
@@ -347,7 +340,7 @@ private struct GameDropRow: View {
                                         .font(.system(size: 11))
                                         .foregroundStyle(.green)
                                 case .claimable:
-                                    Text("Ready to claim")
+                                    Text("Complete")
                                         .font(.system(size: 11))
                                         .foregroundStyle(.orange)
                                 case .inProgress:
@@ -403,6 +396,8 @@ private struct GameDropRow: View {
                 .transition(.opacity)
             }
         }
+        .padding(12)
+        .glassControlSurface(cornerRadius: 18)
     }
     
     private var progressColor: Color {
@@ -426,9 +421,9 @@ private struct AccountProgressRow: View {
 
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 2)
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
                         .fill(Color.secondary.opacity(0.1))
-                    RoundedRectangle(cornerRadius: 2)
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
                         .fill(state.isClaimed ? Color.green : Color.blue.opacity(0.8))
                         .frame(width: geo.size.width * CGFloat(state.percentComplete / 100.0))
                 }

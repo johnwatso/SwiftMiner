@@ -30,6 +30,11 @@ public final class CampaignStore {
 
     public init(service: CampaignService = CampaignService()) {
         self.service = service
+        // Load cached campaigns immediately so the UI has data before the first API call
+        campaigns = CampaignDiskCache.load()
+        if !campaigns.isEmpty {
+            print("[CampaignStore] Loaded \(campaigns.count) cached campaigns from disk")
+        }
     }
 
     // MARK: - Configuration
@@ -47,6 +52,7 @@ public final class CampaignStore {
         stopAutoRefresh()
         await service.deconfigure()
         campaigns = []
+        CampaignDiskCache.clear()
         lastError = nil
     }
 
@@ -60,6 +66,7 @@ public final class CampaignStore {
             let fetched = try await service.fetchCampaigns()
             campaigns = fetched
             lastError = nil
+            CampaignDiskCache.save(fetched)
             print("[CampaignStore] Refreshed: \(fetched.count) campaigns")
         } catch {
             lastError = error
@@ -83,5 +90,56 @@ public final class CampaignStore {
     public func stopAutoRefresh() {
         refreshTask?.cancel()
         refreshTask = nil
+    }
+}
+
+// MARK: - Campaign Disk Cache
+
+/// Persists campaigns to disk so the UI has data immediately on relaunch
+/// without waiting for a fresh API call. Campaigns are non-sensitive
+/// (publicly available Twitch data), so no encryption is needed.
+enum CampaignDiskCache {
+    private static let directoryName = "com.swifttwitchminer"
+    private static let fileName = "campaigns-cache.json"
+    /// Cache expires after 1 hour — stale campaigns are discarded on load
+    private static let maxAge: TimeInterval = 3600
+
+    private struct CacheEnvelope: Codable {
+        let savedAt: Date
+        let campaigns: [Campaign]
+    }
+
+    private static var fileURL: URL {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let dir = appSupport.appendingPathComponent(directoryName, isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir.appendingPathComponent(fileName)
+    }
+
+    static func save(_ campaigns: [Campaign]) {
+        do {
+            let envelope = CacheEnvelope(savedAt: Date(), campaigns: campaigns)
+            let data = try JSONEncoder().encode(envelope)
+            try data.write(to: fileURL, options: .atomic)
+        } catch {
+            print("[CampaignDiskCache] Save failed: \(error.localizedDescription)")
+        }
+    }
+
+    static func load() -> [Campaign] {
+        guard let data = try? Data(contentsOf: fileURL),
+              let envelope = try? JSONDecoder().decode(CacheEnvelope.self, from: data) else {
+            return []
+        }
+        // Discard stale cache
+        guard Date().timeIntervalSince(envelope.savedAt) < maxAge else {
+            print("[CampaignDiskCache] Cache expired, ignoring")
+            return []
+        }
+        return envelope.campaigns
+    }
+
+    static func clear() {
+        try? FileManager.default.removeItem(at: fileURL)
     }
 }

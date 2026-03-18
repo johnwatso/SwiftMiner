@@ -71,7 +71,13 @@ struct MinerTableView: View {
     }
     
     private func startMiner(_ miner: MinerManager.ManagedMiner) async {
-        try? await navigation.minerManager.startMiner(minerId: miner.id)
+        let settings = Settings.shared
+        try? await navigation.minerManager.startMiner(
+            minerId: miner.id,
+            priorityGames: settings.priorityGames,
+            excludedGames: settings.excludedGames,
+            strategy: settings.miningStrategy
+        )
     }
     
     private func stopMiner(_ miner: MinerManager.ManagedMiner) async {

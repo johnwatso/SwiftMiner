@@ -16,14 +16,11 @@ struct AccountDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 headerSection
-                Divider()
                 statsSection
-                Divider()
                 controlsSection
-                Divider()
                 logSection
             }
-            .padding()
+            .padding(24)
         }
         .navigationTitle(miner.username)
         .toolbar {
@@ -42,10 +39,9 @@ struct AccountDetailView: View {
 
     private var headerSection: some View {
         HStack(spacing: 16) {
-            // Avatar
             ZStack {
                 Circle()
-                    .fill(avatarColor.opacity(0.15))
+                    .fill(.ultraThinMaterial)
                     .frame(width: 56, height: 56)
                 Text(miner.username.prefix(1).uppercased())
                     .font(.title2.weight(.bold))
@@ -61,9 +57,10 @@ struct AccountDetailView: View {
 
             Spacer()
 
-            // Primary toggle button
             primaryButton
         }
+        .padding(20)
+        .glassContentSurface()
     }
 
     @ViewBuilder
@@ -85,7 +82,13 @@ struct AccountDetailView: View {
             Button {
                 Task {
                     isStarting = true
-                    try? await navigation.minerManager.startMiner(minerId: miner.id)
+                    let settings = Settings.shared
+                    try? await navigation.minerManager.startMiner(
+                        minerId: miner.id,
+                        priorityGames: settings.priorityGames,
+                        excludedGames: settings.excludedGames,
+                        strategy: settings.miningStrategy
+                    )
                     isStarting = false
                 }
             } label: {
@@ -124,6 +127,8 @@ struct AccountDetailView: View {
                 color: .purple
             )
         }
+        .padding(18)
+        .glassContentSurface(cornerRadius: 24)
     }
 
     // MARK: Controls
@@ -142,7 +147,11 @@ struct AccountDetailView: View {
                 .buttonStyle(.bordered)
                 .disabled(!miner.isRunning)
             }
+            .padding(8)
+            .glassControlSurface(cornerRadius: 18)
         }
+        .padding(20)
+        .glassContentSurface(cornerRadius: 24)
     }
 
     // MARK: Log Console
@@ -175,12 +184,16 @@ struct AccountDetailView: View {
                 Text(miner.isRunning ? "Waiting for activity…" : "Start mining to see activity here.")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .glassControlSurface(cornerRadius: 16)
             } else {
                 MinerLogConsole(entries: events)
                     .frame(minHeight: 160, maxHeight: 320)
             }
         }
+        .padding(20)
+        .glassContentSurface(cornerRadius: 24)
     }
 
     // MARK: Helpers
@@ -240,7 +253,7 @@ private struct MinerStatCard: View {
         }
         .frame(maxWidth: .infinity)
         .padding(12)
-        .background(color.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+        .glassPanel(cornerRadius: 18)
     }
 }
 
@@ -263,9 +276,7 @@ struct MinerLogConsole: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(.bar)
-
-            Divider()
+            .background(.ultraThinMaterial)
 
             ScrollViewReader { proxy in
                 ScrollView {
@@ -286,9 +297,7 @@ struct MinerLogConsole: View {
                 }
             }
         }
-        .background(Color.black.opacity(0.04))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(.separator, lineWidth: 0.5))
+        .glassPanel(cornerRadius: 18)
     }
 }
 
@@ -299,30 +308,25 @@ struct AccountInspectorView: View {
     @Environment(NavigationModel.self) private var navigation
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Title
+        VStack(alignment: .leading, spacing: 16) {
             Text("Miner Details")
                 .font(.headline)
-                .padding()
-
-            Divider()
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    // Identity
                     inspectorSection(title: "Account") {
                         LabeledContent("Username", value: miner.username)
                         LabeledContent("Status", value: miner.status.displayName)
                         LabeledContent("Running", value: miner.isRunning ? "Yes" : "No")
                     }
 
-                    // Activity
                     inspectorSection(title: "Activity") {
                         LabeledContent("Campaign", value: miner.currentCampaign ?? "—")
                         LabeledContent("Drops Claimed", value: "\(miner.dropsClaimed)")
                     }
 
-                    // Quick Controls
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Controls")
                             .font(.caption.weight(.semibold))
@@ -340,7 +344,15 @@ struct AccountInspectorView: View {
                             .controlSize(.small)
                         } else {
                             Button {
-                                Task { try? await navigation.minerManager.startMiner(minerId: miner.id) }
+                                Task {
+                                    let settings = Settings.shared
+                                    try? await navigation.minerManager.startMiner(
+                                        minerId: miner.id,
+                                        priorityGames: settings.priorityGames,
+                                        excludedGames: settings.excludedGames,
+                                        strategy: settings.miningStrategy
+                                    )
+                                }
                             } label: {
                                 Label("Start", systemImage: "play.fill")
                                     .frame(maxWidth: .infinity)
@@ -349,11 +361,17 @@ struct AccountInspectorView: View {
                             .controlSize(.small)
                         }
                     }
+                    .padding(14)
+                    .glassControlSurface(cornerRadius: 18)
                 }
-                .padding()
+                .padding(.horizontal, 20)
+                .padding(.bottom, 20)
             }
         }
         .frame(minWidth: 200)
+        .background {
+            SidebarMaterialBackground()
+        }
     }
 
     private func inspectorSection<Content: View>(
@@ -369,6 +387,8 @@ struct AccountInspectorView: View {
             content()
                 .font(.callout)
         }
+        .padding(14)
+        .glassControlSurface(cornerRadius: 18)
     }
 }
 
@@ -378,12 +398,11 @@ struct SystemInspectorView: View {
     @Environment(NavigationModel.self) private var navigation
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 16) {
             Text("System Status")
                 .font(.headline)
-                .padding()
-
-            Divider()
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
@@ -413,10 +432,14 @@ struct SystemInspectorView: View {
                         }
                     }
                 }
-                .padding()
+                .padding(.horizontal, 20)
+                .padding(.bottom, 20)
             }
         }
         .frame(minWidth: 200)
+        .background {
+            SidebarMaterialBackground()
+        }
     }
 
     private func inspectorSection<Content: View>(
@@ -432,6 +455,8 @@ struct SystemInspectorView: View {
             content()
                 .font(.callout)
         }
+        .padding(14)
+        .glassControlSurface(cornerRadius: 18)
     }
 }
 

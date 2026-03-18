@@ -25,6 +25,9 @@ targets:
       - path: Sources/SwiftTwitchMinerApp
         excludes:
           - Info.plist
+      - path: SwiftMiner.icon
+        type: file
+        buildPhase: resources
     dependencies:
       - target: SwiftTwitchMiner
     info:
@@ -41,10 +44,7 @@ targets:
         CODE_SIGN_ENTITLEMENTS: ""
         ENABLE_HARDENED_RUNTIME: YES
         ENABLE_USER_SCRIPT_SANDBOXING: NO
-    postBuildScripts:
-      - name: Copy Icon
-        script: |
-          cp -R "${SRCROOT}/SwiftMiner.icon" "${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/SwiftMiner.icon"
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
 
   SwiftTwitchMinerCLI:
     type: tool

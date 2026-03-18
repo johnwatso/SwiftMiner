@@ -13,20 +13,25 @@ struct SidebarView: View {
 
     var body: some View {
         @Bindable var nav = navigation
-        List(selection: $nav.selectedItem) {
-            Label("Overview", systemImage: "house.fill")
-                .tag(NavigationModel.SidebarItem.overview)
+        ZStack {
+            SidebarMaterialBackground()
 
-            Label("Activity", systemImage: "chart.bar.fill")
-                .tag(NavigationModel.SidebarItem.activity)
+            List(selection: $nav.selectedItem) {
+                Label("Overview", systemImage: "house.fill")
+                    .tag(NavigationModel.SidebarItem.overview)
 
-            Label("Drops", systemImage: "gamecontroller.fill")
-                .tag(NavigationModel.SidebarItem.drops)
+                Label("Activity", systemImage: "chart.bar.fill")
+                    .tag(NavigationModel.SidebarItem.activity)
 
-            Label("Events", systemImage: "bell.fill")
-                .tag(NavigationModel.SidebarItem.events)
+                Label("Drops", systemImage: "gamecontroller.fill")
+                    .tag(NavigationModel.SidebarItem.drops)
+
+                Label("Events", systemImage: "bell.fill")
+                    .tag(NavigationModel.SidebarItem.events)
+            }
+            .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
         }
-        .listStyle(.sidebar)
         .navigationTitle("Miner")
         .toolbar {
             ToolbarItemGroup {
@@ -40,7 +45,14 @@ struct SidebarView: View {
                 let hasStopped = navigation.minerManager.miners.contains { !$0.isRunning }
                 if hasStopped {
                     Button {
-                        Task { await navigation.minerManager.startAll() }
+                        Task {
+                            let settings = Settings.shared
+                            await navigation.minerManager.startAll(
+                                priorityGames: settings.priorityGames,
+                                excludedGames: settings.excludedGames,
+                                strategy: settings.miningStrategy
+                            )
+                        }
                     } label: {
                         Image(systemName: "play.fill")
                     }

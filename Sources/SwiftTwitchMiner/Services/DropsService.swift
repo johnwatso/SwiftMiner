@@ -42,7 +42,8 @@ public actor DropsService {
         return enriched
     }
 
-    /// Get active campaigns (within time window and has drops to earn)
+    /// Get active campaigns (within time window, linked, and has earnable drops)
+    /// Active = isMiningEligible
     public func getActiveCampaigns() async throws -> [Campaign] {
         let campaigns = try await fetchCampaigns()
         let inventory = try await fetchInventory()
@@ -50,25 +51,17 @@ public actor DropsService {
 
         // Merge inventory progress into campaigns, with gameEventDrops fallback for claimed detection
         let enriched = mergeInventory(inventory, into: campaigns, claimedBenefits: claimedBenefits)
-        
+
         // Update cache with enriched data
         self.campaignsCache = enriched
 
         print("[DropsService] Fetched \(enriched.count) total campaigns")
-        
-        let timeActive = enriched.filter { $0.isTimeActive }
-        let withDrops = timeActive.filter { !$0.drops.isEmpty }
-        
-        // Only include campaigns that still have unclaimed drops
-        let withUnclaimed = withDrops.filter { !$0.unclaimedDrops.isEmpty }
 
-        // Prioritize campaigns where account is connected (claimable)
-        let claimable = withUnclaimed.filter { $0.isAccountConnected }
+        // Filter: must be mining-eligible (active, linked, and has drops still needing progress)
+        let active = enriched.filter { $0.isMiningEligible }
 
-        // Return claimable first, then others as fallback
-        let result = claimable.isEmpty ? withUnclaimed : claimable
-        print("[DropsService] Returning \(result.count) active campaigns with eligible drops")
-        return result
+        print("[DropsService] Returning \(active.count) mining-eligible campaigns")
+        return active
     }
 
     /// Fetch account-specific drop states for ALL drops in active campaigns.

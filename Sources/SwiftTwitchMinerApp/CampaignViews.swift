@@ -15,13 +15,14 @@ struct CampaignSidebarView: View {
             CampaignRowView(campaign: campaign)
                 .tag(campaign.id)
         }
+        .scrollContentBackground(.hidden)
         .navigationTitle("Campaigns")
         .overlay {
             if campaigns.isEmpty {
-                ContentUnavailableView(
+                MaterialEmptyStatePanel(
                     "No Active Campaigns",
                     systemImage: "calendar.badge.exclamationmark",
-                    description: Text("Start the miner to fetch campaigns.")
+                    description: "Start the miner to fetch campaigns."
                 )
             }
         }
@@ -42,12 +43,12 @@ struct CampaignRowView: View {
                 AsyncImage(url: url) { image in
                     image.resizable().scaledToFill()
                 } placeholder: {
-                    RoundedRectangle(cornerRadius: 4).fill(.tertiary)
+                    RoundedRectangle(cornerRadius: 4, style: .continuous).fill(.tertiary)
                 }
                 .frame(width: 36, height: 48)
-                .clipShape(RoundedRectangle(cornerRadius: 4))
+                .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
             } else {
-                RoundedRectangle(cornerRadius: 4)
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
                     .fill(.tertiary)
                     .frame(width: 36, height: 48)
             }
@@ -191,9 +192,9 @@ struct DropStatusBadge: View {
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.green)
         } else if drop.isClaimable {
-            Label("Ready!", systemImage: "gift.fill")
+            Label("Complete", systemImage: "gift.fill")
                 .font(.caption2.weight(.semibold))
-                .foregroundStyle(.orange)
+                .foregroundStyle(.secondary)
         } else {
             EmptyView()
         }
@@ -259,9 +260,7 @@ struct LogConsoleView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(.bar)
-
-            Divider()
+            .background(.ultraThinMaterial)
 
             ScrollViewReader { proxy in
                 ScrollView {
@@ -282,6 +281,7 @@ struct LogConsoleView: View {
                 }
             }
         }
+        .glassPanel(cornerRadius: 20)
         .navigationTitle("Log")
     }
 }

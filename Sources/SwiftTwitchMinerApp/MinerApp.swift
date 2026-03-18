@@ -75,6 +75,8 @@ struct MinerApp: App {
         // Settings window
         SwiftUI.Settings {
             SettingsView()
+                .environment(appModel)
+                .environment(navigation)
                 .padding()
         }
     }

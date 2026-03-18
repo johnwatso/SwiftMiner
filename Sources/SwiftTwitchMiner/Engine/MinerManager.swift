@@ -196,16 +196,23 @@ public final class MinerManager {
     }
     
     // MARK: - Control Operations
-    
+
     /// Start a specific miner
-    public func startMiner(minerId: String) async throws {
+    public func startMiner(minerId: String, priorityGames: [String], excludedGames: [String], strategy: MiningStrategy) async throws {
         guard let engine = engines[minerId] else {
             throw TwitchMinerError.sessionNotStarted
         }
-        
+
+        // Update mining preferences
+        await engine.updateMiningPreferences(
+            priorityGames: priorityGames,
+            excludedGames: excludedGames
+        )
+        await engine.updateMiningStrategy(strategy)
+
         // Update status
         updateMinerStatus(minerId: minerId, status: .authenticating)
-        
+
         do {
             try await engine.start()
             updateMinerStatus(minerId: minerId, isRunning: true)
@@ -224,9 +231,9 @@ public final class MinerManager {
     }
     
     /// Start all miners
-    public func startAll() async {
+    public func startAll(priorityGames: [String], excludedGames: [String], strategy: MiningStrategy) async {
         for miner in miners where !miner.isRunning {
-            try? await startMiner(minerId: miner.id)
+            try? await startMiner(minerId: miner.id, priorityGames: priorityGames, excludedGames: excludedGames, strategy: strategy)
         }
     }
     
@@ -250,6 +257,19 @@ public final class MinerManager {
     public func claimAllDropsAllMiners() async {
         for miner in miners where miner.isRunning {
             try? await claimAllDrops(minerId: miner.id)
+        }
+    }
+
+    /// Trigger an immediate campaign rescan for a specific miner
+    public func forceRefreshMiner(minerId: String) async {
+        guard let engine = engines[minerId] else { return }
+        await engine.forceRefresh()
+    }
+
+    /// Trigger an immediate campaign rescan for all running miners
+    public func forceRefreshAllMiners() async {
+        for miner in miners where miner.isRunning {
+            await forceRefreshMiner(minerId: miner.id)
         }
     }
     
