@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftTwitchMiner
 
 /// User settings managed via @AppStorage.
 /// Provides persistent preferences across app launches.
@@ -63,40 +64,83 @@ public final class Settings: ObservableObject {
     @AppStorage("twitchClientId")
     public var twitchClientId: String = ""
     
-    /// Comma-separated list of priority game names (e.g. "THE FINALS, Rust")
+    /// JSON-encoded array of GamePreference for selected games
+    @AppStorage("gamePreferencesData")
+    public var gamePreferencesData: String = "[]"
+
+    /// Legacy storage (kept for migration only)
     @AppStorage("priorityGamesString")
-    public var priorityGamesString: String = ""
-    
-    /// Comma-separated list of excluded game names
+    private var priorityGamesString: String = ""
+
+    /// Legacy storage (kept for migration only)
     @AppStorage("excludedGamesString")
-    public var excludedGamesString: String = ""
-    
-    /// Helper to get/set priority games as an array
-    public var priorityGames: [String] {
+    private var excludedGamesString: String = ""
+
+    /// Mining strategy selection
+    @AppStorage("miningStrategy")
+    public var miningStrategy: MiningStrategy = .mineAll
+
+    // MARK: - Game Preferences
+
+    /// Decoded game preferences from JSON storage
+    public var gamePreferences: [GamePreference] {
         get {
-            priorityGamesString.split(separator: ",")
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
+            guard let data = gamePreferencesData.data(using: .utf8),
+                  let prefs = try? JSONDecoder().decode([GamePreference].self, from: data) else {
+                return []
+            }
+            return prefs
         }
         set {
-            priorityGamesString = newValue.joined(separator: ",")
+            if let data = try? JSONEncoder().encode(newValue),
+               let string = String(data: data, encoding: .utf8) {
+                gamePreferencesData = string
+            }
         }
     }
-    
-    /// Helper to get/set excluded games as an array
+
+    /// Priority game names derived from preferences (backward compat for MinerEngine)
+    public var priorityGames: [String] {
+        gamePreferences.filter { $0.state == .preferred }.map { $0.gameName }
+    }
+
+    /// Excluded game names derived from preferences (backward compat for MinerEngine)
     public var excludedGames: [String] {
-        get {
-            excludedGamesString.split(separator: ",")
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
+        gamePreferences.filter { $0.state == .excluded }.map { $0.gameName }
+    }
+
+    /// Add or update a game preference
+    public func addGamePreference(_ game: Game, state: PreferenceState) {
+        var prefs = gamePreferences
+        prefs.removeAll { $0.gameId == game.id }
+        prefs.append(GamePreference(gameId: game.id, gameName: game.name, boxArtURL: game.boxArtURL, state: state))
+        gamePreferences = prefs
+    }
+
+    /// Remove a game preference by game ID
+    public func removeGamePreference(gameId: String) {
+        var prefs = gamePreferences
+        prefs.removeAll { $0.gameId == gameId }
+        gamePreferences = prefs
+    }
+
+    /// Toggle a game between preferred and excluded
+    public func togglePreferenceState(gameId: String) {
+        var prefs = gamePreferences
+        if let idx = prefs.firstIndex(where: { $0.gameId == gameId }) {
+            let old = prefs[idx]
+            prefs[idx] = GamePreference(
+                gameId: old.gameId,
+                gameName: old.gameName,
+                boxArtURL: old.boxArtURL,
+                state: old.state == .preferred ? .excluded : .preferred
+            )
         }
-        set {
-            excludedGamesString = newValue.joined(separator: ",")
-        }
+        gamePreferences = prefs
     }
     
     // MARK: - Enums
-    
+
     public enum LogLevel: String, CaseIterable, Identifiable, Sendable {
         case debug = "DEBUG"
         case info = "INFO"
@@ -137,7 +181,36 @@ public final class Settings: ObservableObject {
     
     // MARK: - Initialization
     
-    private init() {}
+    private init() {
+        migrateFromLegacyIfNeeded()
+    }
+
+    /// One-time migration from old comma-separated strings to new JSON model
+    private func migrateFromLegacyIfNeeded() {
+        guard gamePreferencesData == "[]" else { return }
+
+        var migrated: [GamePreference] = []
+
+        let oldPriority = priorityGamesString.split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        for name in oldPriority {
+            migrated.append(GamePreference(gameId: "", gameName: name, state: .preferred))
+        }
+
+        let oldExcluded = excludedGamesString.split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        for name in oldExcluded {
+            migrated.append(GamePreference(gameId: "", gameName: name, state: .excluded))
+        }
+
+        if !migrated.isEmpty {
+            gamePreferences = migrated
+            priorityGamesString = ""
+            excludedGamesString = ""
+        }
+    }
     
     // MARK: - Reset
     
@@ -200,8 +273,8 @@ public final class Settings: ObservableObject {
         preferredQuality = .auto
         showClaimNotifications = true
         lastSelectedGameId = ""
-        priorityGamesString = ""
-        excludedGamesString = ""
+        gamePreferencesData = "[]"
+        miningStrategy = .mineAll
     }
 }
 

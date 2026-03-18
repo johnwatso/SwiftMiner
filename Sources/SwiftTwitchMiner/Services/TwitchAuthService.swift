@@ -1,5 +1,4 @@
 import Foundation
-import Security
 
 /// Manages Twitch OAuth2 authentication using device code flow
 public actor TwitchAuthService {
@@ -300,103 +299,111 @@ public actor TwitchAuthService {
     }
 }
 
-// MARK: - Keychain Storage
+// MARK: - Account Storage (Encrypted, File-based)
+//
+// Stores accounts as AES-256-GCM encrypted JSON in Application Support.
+// Uses the macOS hardware UUID to derive a stable encryption key via HKDF,
+// so no secret needs to be stored separately. The file is also chmod 0600.
+//
+// Why not Keychain? The traditional macOS keychain ties item access to the
+// app's code-signing identity, which changes on every ad-hoc rebuild —
+// causing accounts to "disappear" after each Xcode build.
+
+import CryptoKit
 
 private actor KeychainStorage {
-    private static let service = "com.swifttwitchminer.auth"
+    private static let directoryName = "com.swifttwitchminer"
+    private static let fileName = "accounts.enc"
 
-    /// Base attributes shared by all keychain queries.
-    /// Uses the standard macOS keychain (not data-protection keychain) for maximum
-    /// compatibility with debug builds. The data-protection keychain requires proper
-    /// code signing which can cause -34018 errors in unsigned debug builds.
-    private static var baseQuery: [String: Any] {
-        [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service
-        ]
+    private static var storageDir: URL {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let dir = appSupport.appendingPathComponent(directoryName, isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
     }
 
-    static func save(account: Account) async throws {
-        let data = try JSONEncoder().encode(account)
+    private static var storageURL: URL {
+        storageDir.appendingPathComponent(fileName)
+    }
 
-        var searchQuery = baseQuery
-        searchQuery[kSecAttrAccount as String] = account.id
+    // MARK: - Encryption key (derived from hardware UUID)
 
-        let updateAttributes: [String: Any] = [
-            kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        ]
+    private static var encryptionKey: SymmetricKey {
+        let uuid = hardwareUUID()
+        let inputKey = SymmetricKey(data: Data(uuid.utf8))
+        // HKDF-SHA256 derive a proper 256-bit key
+        let derived = HKDF<SHA256>.deriveKey(
+            inputKeyMaterial: inputKey,
+            salt: Data("com.swifttwitchminer.accounts".utf8),
+            info: Data("aes-256-gcm".utf8),
+            outputByteCount: 32
+        )
+        return derived
+    }
 
-        let updateStatus = SecItemUpdate(searchQuery as CFDictionary, updateAttributes as CFDictionary)
-        if updateStatus == errSecSuccess { return }
-
-        // Update failed — item may be in the regular keychain (pre-migration) or not exist yet.
-        // Delete from either keychain (no kSecUseDataProtectionKeychain filter) then add fresh.
-        let deleteQuery: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account.id
-        ]
-        SecItemDelete(deleteQuery as CFDictionary)
-
-        var addQuery = searchQuery
-        addQuery[kSecValueData as String] = data
-        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
-        guard addStatus == errSecSuccess else {
-            throw TwitchMinerError.authenticationFailed(
-                "Failed to save credentials to keychain (OSStatus \(addStatus))")
+    private static func hardwareUUID() -> String {
+        let service = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("IOPlatformExpertDevice"))
+        defer { IOObjectRelease(service) }
+        guard let uuidData = IORegistryEntryCreateCFProperty(service, "IOPlatformUUID" as CFString, kCFAllocatorDefault, 0),
+              let uuid = uuidData.takeRetainedValue() as? String else {
+            // Fallback — still stable per-machine
+            return ProcessInfo.processInfo.hostName
         }
+        return uuid
+    }
+
+    // MARK: - Read / Write helpers
+
+    private static func readAll() -> [Account] {
+        guard let encrypted = try? Data(contentsOf: storageURL) else { return [] }
+        do {
+            let box = try AES.GCM.SealedBox(combined: encrypted)
+            let plaintext = try AES.GCM.open(box, using: encryptionKey)
+            return try JSONDecoder().decode([Account].self, from: plaintext)
+        } catch {
+            print("[AccountStorage] Decryption failed: \(error.localizedDescription)")
+            return []
+        }
+    }
+
+    private static func writeAll(_ accounts: [Account]) throws {
+        let plaintext = try JSONEncoder().encode(accounts)
+        let sealed = try AES.GCM.seal(plaintext, using: encryptionKey)
+        guard let combined = sealed.combined else {
+            throw TwitchMinerError.authenticationFailed("Encryption failed")
+        }
+        try combined.write(to: storageURL, options: .atomic)
+        // Restrict file to owner-only read/write
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: storageURL.path)
+    }
+
+    // MARK: - Public API
+
+    static func save(account: Account) async throws {
+        var accounts = readAll()
+        accounts.removeAll { $0.id == account.id }
+        accounts.append(account)
+        try writeAll(accounts)
+        print("[AccountStorage] Saved account \(account.username) (\(accounts.count) total)")
     }
 
     static func loadFirstAccount() async throws -> Account? {
-        var query = baseQuery
-        query[kSecReturnData as String] = true
-        query[kSecMatchLimit as String] = kSecMatchLimitOne
-
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-
-        guard status == errSecSuccess, let data = result as? Data else { return nil }
-        return try JSONDecoder().decode(Account.self, from: data)
+        let accounts = readAll()
+        print("[AccountStorage] loadFirstAccount: \(accounts.count) stored")
+        return accounts.first
     }
 
     static func loadAllAccounts() async throws -> [Account] {
-        var query = baseQuery
-        query[kSecAttrAccount as String] = ""  // Wildcard - match all accounts for this service
-        query[kSecReturnData as String] = true
-        query[kSecReturnAttributes as String] = true
-        query[kSecMatchLimit as String] = kSecMatchLimitAll
-
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-
-        guard status == errSecSuccess else {
-            if status != errSecItemNotFound {
-                print("[KeychainStorage] loadAllAccounts failed: OSStatus \(status)")
-            }
-            return []
-        }
-
-        // With kSecReturnAttributes + kSecReturnData + kSecMatchLimitAll,
-        // result is [[String: Any]] where each dict has kSecValueData as the blob.
-        if let itemArray = result as? [[String: Any]] {
-            return try itemArray.compactMap { item in
-                guard let data = item[kSecValueData as String] as? Data else { return nil }
-                return try JSONDecoder().decode(Account.self, from: data)
-            }
-        }
-        // Fallback: single item returned as Data
-        if let data = result as? Data {
-            return [try JSONDecoder().decode(Account.self, from: data)]
-        }
-        return []
+        let accounts = readAll()
+        print("[AccountStorage] loadAllAccounts: \(accounts.count) stored")
+        return accounts
     }
 
     static func deleteAccount(id: String) async throws {
-        var query = baseQuery
-        query[kSecAttrAccount as String] = id
-        SecItemDelete(query as CFDictionary)
+        var accounts = readAll()
+        accounts.removeAll { $0.id == id }
+        try writeAll(accounts)
+        print("[AccountStorage] Deleted account \(id), \(accounts.count) remaining")
     }
 }
 

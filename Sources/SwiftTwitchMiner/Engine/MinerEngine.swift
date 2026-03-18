@@ -18,6 +18,13 @@ public actor MinerEngine {
     private var mainTask: Task<Void, Never>?
     private var currentAccount: Account?
     private var shouldSwitchChannel = false
+    /// Set to true to interrupt the idle wait and immediately re-check for eligible campaigns
+    private var shouldRescanCampaigns = false
+    
+    /// Counter for minutes watched without a server progress update (local estimation)
+    private var extraMinutesWatched: Int = 0
+    /// Maximum extra minutes allowed before assuming mining is stalled (matches TDM)
+    private static let maxExtraMinutes = 15
     
     /// Cache of all campaigns fetched during the last check
     public private(set) var allCampaigns: [Campaign] = []
@@ -60,6 +67,13 @@ public actor MinerEngine {
         self.priorityGames = priorityGames
         self.excludedGames = excludedGames
     }
+
+    /// Update mining strategy
+    public func updateMiningStrategy(_ strategy: MiningStrategy) {
+        self.miningStrategy = strategy
+    }
+
+    private var miningStrategy: MiningStrategy = .mineAll
     
     public func setDropClaimedHandler(_ handler: (@Sendable (Drop) -> Void)?) {
         self.onDropClaimed = handler
@@ -263,15 +277,23 @@ public actor MinerEngine {
         )
     }
     
+    /// Triggers an immediate campaign rescan and potential channel switch.
+    /// Wakes the engine from idle sleep or breaks the current watch session.
+    public func forceRefresh() {
+        log("Forcing immediate campaign rescan...")
+        shouldRescanCampaigns = true
+        shouldSwitchChannel = true
+    }
+
     /// Claims all ready drops immediately
     public func claimAllDrops() async throws {
         guard isRunning else {
             throw TwitchMinerError.sessionNotStarted
         }
-        
+
         await claimReadyDrops()
     }
-    
+
     /// Gets current overall progress
     public func getCurrentProgress() async throws -> OverallProgress {
         guard isRunning else {
@@ -299,6 +321,9 @@ public actor MinerEngine {
 
     private func handleDropProgress(_ event: DropProgressEvent) async {
         log("Drop progress: \(event.dropId) - \(event.currentMinutes)/\(event.requiredMinutes) min")
+        
+        // Reset local estimation on server update
+        extraMinutesWatched = 0
 
         // Update overall progress
         if let progress = try? await dropsService.getOverallProgress() {
@@ -374,11 +399,19 @@ public actor MinerEngine {
                 // 2. Claim any ready drops first
                 await claimReadyDrops()
 
-                // 3. Find best campaign to mine
-                guard let campaign = selectBestCampaign(from: campaigns, priorityGames: priorityGames, excludedGames: excludedGames) else {
-                    log("No active campaigns with eligible drops")
+                // 3. Find best campaign to mine based on strategy
+                guard let campaign = selectBestCampaign(from: campaigns, priorityGames: priorityGames, excludedGames: excludedGames, strategy: miningStrategy) else {
+                    log("No eligible campaigns matching strategy '\(miningStrategy.displayName)'")
                     onStatusChange?(.idle)
-                    try await Task.sleep(nanoseconds: campaignCheckInterval)
+                    // Wait up to campaignCheckInterval in 10s ticks, breaking early on triggerRescan()
+                    shouldRescanCampaigns = false
+                    let tickNs: UInt64 = 10 * 1_000_000_000
+                    let ticks = Int(campaignCheckInterval / tickNs)
+                    for _ in 0..<ticks {
+                        if shouldRescanCampaigns { break }
+                        try await Task.sleep(nanoseconds: tickNs)
+                    }
+                    shouldRescanCampaigns = false
                     continue
                 }
 
@@ -411,6 +444,7 @@ public actor MinerEngine {
 
                 // 6. Start watching
                 onStatusChange?(.watching)
+                extraMinutesWatched = 0
                 _ = try await watchSessionManager.startWatching(
                     channel: channel,
                     campaignId: campaign.id
@@ -419,6 +453,15 @@ public actor MinerEngine {
                 // Wait for watch session while periodically checking progress
                 while await watchSessionManager.isWatching && !shouldSwitchChannel {
                     try? await Task.sleep(nanoseconds: 60 * 1_000_000_000) // 1 minute
+                    
+                    // Increment local minute count
+                    extraMinutesWatched += 1
+                    
+                    // Stuck detection (matches TDM logic)
+                    if extraMinutesWatched >= Self.maxExtraMinutes {
+                        log("⚠️ Progress stalled for \(extraMinutesWatched) mins. Triggering channel switch.")
+                        shouldSwitchChannel = true
+                    }
 
                     // Update overall progress
                     if let progress = try? await dropsService.getOverallProgress() {
@@ -471,49 +514,70 @@ public actor MinerEngine {
         }
     }
     
-    private func selectBestCampaign(from campaigns: [Campaign], priorityGames: [String], excludedGames: [String]) -> Campaign? {
+    private func selectBestCampaign(from campaigns: [Campaign], priorityGames: [String], excludedGames: [String], strategy: MiningStrategy) -> Campaign? {
         let priorityGamesLower = priorityGames.map { $0.lowercased() }
         let excludedGamesLower = excludedGames.map { $0.lowercased() }
 
-        // 1. Filter out excluded games
-        let filtered = campaigns.filter {
+        // 1. Filter out excluded games (highest priority rule - always applied)
+        let nonExcluded = campaigns.filter {
             !excludedGamesLower.contains($0.gameName.lowercased())
         }
 
-        // 2. Log and skip campaigns where ALL drops are claimed
-        for campaign in filtered {
-            if campaign.unclaimedDrops.isEmpty {
-                log("[Engine] Skipping \(campaign.name) — all drops claimed")
+        // 2. Filter to eligible campaigns (time active, linked, and has earnable drops)
+        let eligible = nonExcluded.filter { $0.isMiningEligible }
+
+        // 3. Apply mining strategy
+        switch strategy {
+        case .mineAll:
+            // Pick any eligible campaign
+            return selectBestFrom(eligible, priorityGamesLower: priorityGamesLower)
+
+        case .prioritiseSelected:
+            // Try priority games first, fallback to any eligible
+            let priorityMatches = eligible.filter {
+                priorityGamesLower.contains($0.gameName.lowercased())
             }
+            if let best = selectBestFrom(priorityMatches, priorityGamesLower: priorityGamesLower) {
+                return best
+            }
+            // Fallback to any eligible
+            return selectBestFrom(eligible, priorityGamesLower: priorityGamesLower)
+
+        case .onlyPriority:
+            // ONLY priority games, no fallback
+            let priorityOnly = eligible.filter {
+                priorityGamesLower.contains($0.gameName.lowercased())
+            }
+            return selectBestFrom(priorityOnly, priorityGamesLower: priorityGamesLower)
         }
+    }
 
-        // 3. Select the best campaign from those that are active and have unclaimed drops
-        let best = filtered
-            .filter { $0.isTimeActive && !$0.unclaimedDrops.isEmpty }
-            .sorted { a, b in
-                let aName = a.gameName.lowercased()
-                let bName = b.gameName.lowercased()
+    /// Select best campaign from a filtered list using priority, unclaimed count, and end date
+    private func selectBestFrom(_ campaigns: [Campaign], priorityGamesLower: [String]) -> Campaign? {
+        guard !campaigns.isEmpty else { return nil }
 
-                // Priority check
-                let aPriority = priorityGamesLower.firstIndex(of: aName) ?? Int.max
-                let bPriority = priorityGamesLower.firstIndex(of: bName) ?? Int.max
+        return campaigns.sorted { a, b in
+            let aName = a.gameName.lowercased()
+            let bName = b.gameName.lowercased()
 
-                if aPriority != bPriority {
-                    return aPriority < bPriority
-                }
+            // Priority check
+            let aPriority = priorityGamesLower.firstIndex(of: aName) ?? Int.max
+            let bPriority = priorityGamesLower.firstIndex(of: bName) ?? Int.max
 
-                // Unclaimed drops check
-                let aUnclaimed = a.unclaimedDrops.count
-                let bUnclaimed = b.unclaimedDrops.count
-                if aUnclaimed != bUnclaimed {
-                    return aUnclaimed > bUnclaimed
-                }
-
-                // Ending soonest check
-                return a.endAt < b.endAt
+            if aPriority != bPriority {
+                return aPriority < bPriority
             }
-            .first
-        return best
+
+            // Unclaimed drops check (prefer more drops available)
+            let aUnclaimed = a.earnableDrops.count
+            let bUnclaimed = b.earnableDrops.count
+            if aUnclaimed != bUnclaimed {
+                return aUnclaimed > bUnclaimed
+            }
+
+            // Ending soonest check
+            return a.endAt < b.endAt
+        }.first
     }
     
     private func selectBestChannel(from campaign: Campaign) async -> Channel? {
@@ -541,10 +605,11 @@ public actor MinerEngine {
                     log("Selected restricted channel: \(best.displayName)")
                     return best
                 }
-                log("No live channels match campaign restrictions for \(campaign.name). Using first available live channel instead.")
+                log("⚠️ No live channels match campaign restrictions for \(campaign.name). Cannot mine this campaign.")
+                return nil // Cannot mine if no ACL channels are live
             }
             
-            // If no restrictions or no matching restricted channels, pick the first live channel
+            // If no restrictions, pick the first live channel
             let best = liveChannels.first!
             log("Selected live channel: \(best.displayName)")
             return best

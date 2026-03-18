@@ -144,7 +144,12 @@ public final class AppModel {
 
     public func startAll() async {
         if let manager = minerManager {
-            await manager.startAll()
+            let settings = Settings.shared
+            await manager.startAll(
+                priorityGames: settings.priorityGames,
+                excludedGames: settings.excludedGames,
+                strategy: settings.miningStrategy
+            )
             return
         }
         try? await engine.start()

@@ -60,6 +60,8 @@ public struct Drop: Codable, Sendable, Identifiable, Equatable {
     public var progress: Progress?
     /// Benefit IDs from benefitEdges — used for fallback claimed detection via gameEventDrops
     public var benefitIds: [String]
+    /// Prerequisite drop IDs that must be claimed before this drop can be earned.
+    public var preconditionDrops: [String]
     /// Per-drop active window (may differ from campaign window)
     public var dropStartDate: Date?
     public var dropEndDate: Date?
@@ -73,6 +75,7 @@ public struct Drop: Codable, Sendable, Identifiable, Equatable {
         reward: Reward? = nil,
         progress: Progress? = nil,
         benefitIds: [String] = [],
+        preconditionDrops: [String] = [],
         dropStartDate: Date? = nil,
         dropEndDate: Date? = nil
     ) {
@@ -84,6 +87,7 @@ public struct Drop: Codable, Sendable, Identifiable, Equatable {
         self.reward = reward
         self.progress = progress
         self.benefitIds = benefitIds
+        self.preconditionDrops = preconditionDrops
         self.dropStartDate = dropStartDate
         self.dropEndDate = dropEndDate
     }
@@ -96,6 +100,11 @@ public struct Drop: Codable, Sendable, Identifiable, Equatable {
 
     /// Whether the drop has already been claimed
     public var isClaimed: Bool { progress?.isClaimed ?? false }
+
+    /// Whether the drop is eligible (not claimed and can be earned)
+    public var isEligible: Bool {
+        !isClaimed
+    }
 
     /// Progress percentage (0–100)
     public var percentComplete: Double { progress?.percentComplete ?? 0 }
@@ -155,11 +164,44 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
 
     public var hasClaimableDrops: Bool { drops.contains { $0.isClaimable } }
 
+    /// Whether campaign has eligible drops (not claimed and eligible for account)
+    public var hasEligibleDrops: Bool {
+        drops.contains { $0.isEligible && !$0.isClaimed }
+    }
+
     public var isFullyComplete: Bool { drops.allSatisfy { $0.isClaimed } }
 
     public var hasChannelRestrictions: Bool { !channels.isEmpty }
 
     public var unclaimedDrops: [Drop] { drops.filter { !$0.isClaimed } }
+
+    /// Whether the campaign is currently eligible for mining (active, linked, and has earneable drops).
+    public var isMiningEligible: Bool {
+        isTimeActive && isAccountConnected && !earnableDrops.isEmpty
+    }
+
+    /// Returns drops that can be earned now (not claimed, NOT yet claimable, and all preconditions met).
+    public var earnableDrops: [Drop] {
+        drops.filter { drop in
+            // Must be unclaimed, NOT already at 100% (claimable), and linked
+            guard !drop.isClaimed && !drop.isClaimable else { return false }
+            
+            // All preconditions must be fully claimed
+            return drop.preconditionDrops.allSatisfy { pid in
+                drops.first { $0.id == pid }?.isClaimed ?? true
+            }
+        }
+    }
+
+    /// Returns drops that can be claimed now or earned soon (not claimed and all preconditions met).
+    public var eligibleDrops: [Drop] {
+        drops.filter { drop in
+            guard !drop.isClaimed else { return false }
+            return drop.preconditionDrops.allSatisfy { pid in
+                drops.first { $0.id == pid }?.isClaimed ?? true
+            }
+        }
+    }
 
     // MARK: Legacy compatibility shims
 

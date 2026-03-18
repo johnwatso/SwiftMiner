@@ -7,10 +7,14 @@ struct ContentView: View {
 
     var body: some View {
         @Bindable var nav = navigation
-        NavigationSplitView {
-            SidebarView()
-        } detail: {
-            detailView
+        ZStack {
+            LiquidGlassBackdrop()
+
+            NavigationSplitView {
+                SidebarView()
+            } detail: {
+                detailView
+            }
         }
         .frame(minWidth: 800, minHeight: 600)
         .sheet(isPresented: $nav.showAddAccountSheet) {
@@ -56,49 +60,47 @@ struct EventsView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Header / Toolbar
-            HStack {
+        ZStack {
+            if filteredEvents.isEmpty {
+                MaterialEmptyStatePanel(
+                    "No Events",
+                    systemImage: "bell.slash",
+                    description: "Activity will appear here as it happens."
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(28)
+            } else {
+                List(filteredEvents) { event in
+                    EventRow(event: event, showRaw: showRawLogs)
+                }
+                .listStyle(.inset)
+                .scrollContentBackground(.hidden)
+            }
+        }
+        .navigationTitle("Events")
+        .searchable(text: $searchText, placement: .toolbar, prompt: "Search events")
+        .toolbar {
+            ToolbarItemGroup {
                 Picker("Level", selection: $levelFilter) {
                     Text("All Levels").tag(nil as EventLevel?)
                     Text("Info").tag(EventLevel.info as EventLevel?)
                     Text("Warning").tag(EventLevel.warning as EventLevel?)
                     Text("Error").tag(EventLevel.error as EventLevel?)
                 }
-                .frame(width: 150)
-                
-                TextField("Search events...", text: $searchText)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 300)
-                
-                Spacer()
-                
-                Toggle("Show raw logs", isOn: $showRawLogs)
-                    .toggleStyle(.checkbox)
-                
+                .pickerStyle(.menu)
+
+                Toggle(isOn: $showRawLogs) {
+                    Label("Raw Logs", systemImage: "text.alignleft")
+                }
+            }
+
+            ToolbarItem(placement: .primaryAction) {
                 Button("Clear") {
                     navigation.clearEvents()
                 }
-            }
-            .padding(12)
-            .background(.bar)
-
-            Divider()
-
-            if filteredEvents.isEmpty {
-                ContentUnavailableView(
-                    "No Events",
-                    systemImage: "bell.slash",
-                    description: Text("Activity will appear here as it happens.")
-                )
-            } else {
-                List(filteredEvents) { event in
-                    EventRow(event: event, showRaw: showRawLogs)
-                }
-                .listStyle(.inset)
+                .disabled(navigation.events.isEmpty)
             }
         }
-        .navigationTitle("Events")
     }
 }
 
@@ -162,12 +164,10 @@ struct OverviewView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 metricsSection
-                Divider()
                 minerStatusSection
-                Divider()
                 campaignSummarySection
             }
-            .padding()
+            .padding(24)
         }
         .navigationTitle("Overview")
         .toolbar {
@@ -193,7 +193,7 @@ struct OverviewView: View {
 
     private var metricsSection: some View {
         LazyVGrid(
-            columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 4),
+            columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 3),
             spacing: 16
         ) {
             OverviewMetricCard(
@@ -204,58 +204,102 @@ struct OverviewView: View {
                 color: .blue
             )
             OverviewMetricCard(
-                title: "Active Drops",
-                value: "\(activeDropCount)",
+                title: "Active Campaigns",
+                value: "\(activeCampaignCount)",
                 subtitle: "across all games",
                 icon: "play.fill",
-                color: .purple
+                color: .green
             )
             OverviewMetricCard(
                 title: "Total Claimed",
                 value: "\(progress?.claimedDrops ?? 0)",
                 subtitle: "+\(progress?.claimedToday ?? 0) today",
                 icon: "gift.fill",
-                color: .green
-            )
-            OverviewMetricCard(
-                title: "Pending Claims",
-                value: "\(pendingClaimCount)",
-                subtitle: "ready to claim",
-                icon: "clock.badge.fill",
-                color: .orange
+                color: .secondary
             )
         }
     }
 
-    private var activeDropCount: Int {
+    private var activeCampaignCount: Int {
         navigation.minerManager.campaignStore.campaigns
-            .filter { $0.isActive }
-            .reduce(0) { $0 + $1.drops.filter { !$0.isClaimed }.count }
-    }
-
-    private var pendingClaimCount: Int {
-        navigation.minerManager.campaignStore.campaigns
-            .reduce(0) { $0 + $1.drops.filter { $0.isClaimable }.count }
+            .filter { $0.isMiningEligible }
+            .count
     }
 
     // MARK: - Miner Status
 
     private var minerStatusSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Miners")
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Currently Mining")
                 .font(.title3.weight(.semibold))
 
-            if navigation.minerManager.miners.isEmpty {
-                Text("No miners configured. Add an account to get started.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            } else {
-                VStack(spacing: 6) {
+            let activeCampaigns = navigation.minerManager.campaignStore.campaigns.filter { $0.isMiningEligible }
+            let activeGameNames = Array(Set(activeCampaigns.map { $0.gameName })).sorted()
+
+            // Surface layer card: Miner list
+            VStack(alignment: .leading, spacing: 8) {
+                if navigation.minerManager.miners.isEmpty {
+                    Text("No miners configured. Add an account to get started.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
                     ForEach(navigation.minerManager.miners) { miner in
-                        MinerStatusRow(miner: miner)
+                        HStack(spacing: 12) {
+                            Circle()
+                                .fill(statusColor(for: miner))
+                                .frame(width: 8, height: 8)
+
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(miner.username)
+                                    .font(.system(size: 13, weight: .medium))
+                                if let campaign = miner.currentCampaign {
+                                    Text(campaign)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                            }
+
+                            Spacer()
+
+                            Text(miner.status.displayName)
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(statusColor(for: miner))
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .glassControlSurface(cornerRadius: 14)
                     }
                 }
             }
+            .padding(16)
+            .glassPanel(cornerRadius: 24)
+
+            if !activeGameNames.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Active Games")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+
+                    Text(activeGameNames.joined(separator: ", "))
+                        .font(.subheadline)
+                        .lineLimit(2)
+                }
+                .padding(16)
+                .glassPanel(cornerRadius: 24)
+            }
+        }
+        .padding(20)
+        .glassContentSurface()
+    }
+
+    private func statusColor(for miner: MinerManager.ManagedMiner) -> Color {
+        switch miner.status {
+        case .watching:                          return .green
+        case .claiming:                          return .purple
+        case .authenticating, .fetchingCampaigns, .paused: return .orange
+        case .error:                             return .red
+        case .idle:                              return .gray
         }
     }
 
@@ -266,20 +310,28 @@ struct OverviewView: View {
             Text("Active Campaigns")
                 .font(.title3.weight(.semibold))
 
-            let active = navigation.minerManager.campaignStore.campaigns.filter { $0.isActive }
+            // Show any campaign that is active, connected, and has unclaimed drops (even if they're already 100%)
+            let active = navigation.minerManager.campaignStore.campaigns.filter { 
+                $0.isTimeActive && $0.isAccountConnected && !$0.unclaimedDrops.isEmpty 
+            }
 
             if active.isEmpty {
                 Text("No active campaigns")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .glassControlSurface(cornerRadius: 16)
             } else {
-                VStack(spacing: 6) {
+                VStack(spacing: 8) {
                     ForEach(gameSummaries(from: active), id: \.id) { game in
                         CampaignSummaryRow(game: game)
                     }
                 }
             }
         }
+        .padding(20)
+        .glassContentSurface()
     }
 
     private func gameSummaries(from campaigns: [Campaign]) -> [GameSummary] {
@@ -290,13 +342,15 @@ struct OverviewView: View {
         }
         return map.map { _, group in
             let first = group[0]
-            let drops = group.flatMap { $0.drops }
+            // We count all unclaimed drops as 'active' for the UI summary
+            let unclaimedDrops = group.flatMap { $0.unclaimedDrops }
+            let allDrops = group.flatMap { $0.drops }
             return GameSummary(
                 gameId: first.game.id,
                 gameName: first.game.name,
-                totalDrops: drops.count,
-                claimedDrops: drops.filter { $0.isClaimed }.count,
-                activeDrops: drops.filter { !$0.isClaimed }.count
+                totalDrops: allDrops.count,
+                claimedDrops: allDrops.filter { $0.isClaimed }.count,
+                activeDrops: unclaimedDrops.count
             )
         }.sorted { $0.gameName < $1.gameName }
     }
@@ -345,57 +399,7 @@ struct OverviewMetricCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 14))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(color.opacity(0.15), lineWidth: 1)
-        )
-    }
-}
-
-// MARK: - Miner Status Row
-
-private struct MinerStatusRow: View {
-    let miner: MinerManager.ManagedMiner
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Circle()
-                .fill(statusColor)
-                .frame(width: 8, height: 8)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(miner.username)
-                    .font(.system(size: 13, weight: .medium))
-                if let campaign = miner.currentCampaign {
-                    Text(campaign)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            }
-
-            Spacer()
-
-            Text(miner.status.displayName)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(statusColor)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Color.secondary.opacity(0.05))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-    }
-
-    private var statusColor: Color {
-        switch miner.status {
-        case .watching:                          return .green
-        case .claiming:                          return .purple
-        case .authenticating, .fetchingCampaigns, .paused: return .orange
-        case .error:                             return .red
-        case .idle:                              return .gray
-        }
+        .glassPanel(cornerRadius: 24)
     }
 }
 
@@ -423,8 +427,7 @@ private struct CampaignSummaryRow: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(Color.secondary.opacity(0.05))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .glassControlSurface(cornerRadius: 16)
     }
 }
 

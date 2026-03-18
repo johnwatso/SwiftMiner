@@ -345,6 +345,53 @@ public actor TwitchAPIClient {
         return parseDropProgress(from: dropProgress)
     }
 
+    /// Fetch current drop progress for the watched channel.
+    /// Returns (dropId, currentMinutes) if a drop is being earned, nil otherwise.
+    public func fetchCurrentDrop(channelId: String) async throws -> (dropId: String, currentMinutes: Int)? {
+        let request = GraphQLRequest(
+            operationName: "DropCurrentSessionContext",
+            sha256Hash: GQLHashes.currentDrop,
+            variables: [
+                "channelID": channelId,
+                "channelLogin": ""
+            ]
+        )
+
+        let data = try await makeGraphQLRequest(request: request)
+        let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+
+        guard let responseData = json?["data"] as? [String: Any],
+              let currentUser = responseData["currentUser"] as? [String: Any],
+              let session = currentUser["dropCurrentSession"] as? [String: Any],
+              let dropId = session["dropID"] as? String,
+              let currentMinutes = session["currentMinutesWatched"] as? Int else {
+            return nil
+        }
+
+        return (dropId: dropId, currentMinutes: currentMinutes)
+    }
+
+    /// Fetch drops available for a specific channel.
+    /// Returns a list of campaign IDs that this channel can progress.
+    public func fetchAvailableDrops(channelId: String) async throws -> [String] {
+        let request = GraphQLRequest(
+            operationName: "DropsHighlightService_AvailableDrops",
+            sha256Hash: GQLHashes.availableDrops,
+            variables: ["channelID": channelId]
+        )
+
+        let data = try await makeGraphQLRequest(request: request)
+        let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+
+        guard let responseData = json?["data"] as? [String: Any],
+              let channel = responseData["channel"] as? [String: Any],
+              let campaigns = channel["viewerDropCampaigns"] as? [[String: Any]] else {
+            return []
+        }
+
+        return campaigns.compactMap { $0["id"] as? String }
+    }
+
     /// Claim a drop
     public func claimDrop(dropInstanceId: String) async throws -> ClaimDropResponse {
         let request = GraphQLRequest(
@@ -545,6 +592,67 @@ public actor TwitchAPIClient {
 
     // MARK: - Private Helper Methods
 
+    /// Make a request with automatic retries for transient network errors
+    private func makeRequestWithRetry(_ request: URLRequest, operationName: String, maxAttempts: Int = 3) async throws -> Data {
+        var lastError: Error?
+        
+        for attempt in 1...maxAttempts {
+            do {
+                let (data, response) = try await session.data(for: request)
+                
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    throw TwitchMinerError.invalidResponse
+                }
+
+                switch httpResponse.statusCode {
+                case 200..<300:
+                    // GQL errors arrive as HTTP 200 with a body-level error array.
+                    // Detect PersistedQueryNotFound so callers get a clear signal.
+                    if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                       let errors = json["errors"] as? [[String: Any]] {
+                        for gqlError in errors {
+                            if let msg = gqlError["message"] as? String {
+                                if msg.contains("PersistedQueryNotFound") {
+                                    print("[TwitchAPIClient] [GQL] PersistedQueryNotFound for \(operationName)")
+                                    throw TwitchMinerError.apiError(
+                                        statusCode: 200,
+                                        message: "PersistedQueryNotFound: \(operationName) - sha256 hash may be stale"
+                                    )
+                                }
+                                // Log other GQL errors too
+                                print("[TwitchAPIClient] [GQL] Error: \(msg)")
+                            }
+                        }
+                    }
+                    return data
+                case 401:
+                    throw TwitchMinerError.tokenExpired
+                case 403:
+                    throw TwitchMinerError.authenticationFailed("Forbidden")
+                case 429:
+                    let retryAfter = httpResponse.allHeaderFields["Retry-After"] as? String ?? "60"
+                    throw TwitchMinerError.apiError(statusCode: 429, message: "Rate limited, retry after \(retryAfter)s")
+                default:
+                    let errorMessage = String(data: data, encoding: .utf8) ?? "Unknown error"
+                    throw TwitchMinerError.apiError(statusCode: httpResponse.statusCode, message: errorMessage)
+                }
+            } catch let error as TwitchMinerError {
+                // Don't retry auth/rate limit/stale hash errors
+                throw error
+            } catch {
+                lastError = error
+                if attempt < maxAttempts {
+                    let delay = Double(attempt) * 2.0 // Simple backoff: 2s, 4s
+                    print("[TwitchAPIClient] Network error on attempt \(attempt) for \(operationName): \(error.localizedDescription). Retrying in \(delay)s...")
+                    try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                    continue
+                }
+            }
+        }
+        
+        throw TwitchMinerError.networkError(lastError?.localizedDescription ?? "Max retry attempts reached")
+    }
+
     /// Make a REST API request
     private func makeRESTRequest(url: String, method: String, body: Data? = nil) async throws -> Data {
         guard let requestURL = URL(string: url) else {
@@ -561,32 +669,7 @@ public actor TwitchAPIClient {
             request.httpBody = body
         }
 
-        do {
-            let (data, response) = try await session.data(for: request)
-
-            guard let httpResponse = response as? HTTPURLResponse else {
-                throw TwitchMinerError.invalidResponse
-            }
-
-            switch httpResponse.statusCode {
-            case 200..<300:
-                return data
-            case 401:
-                throw TwitchMinerError.tokenExpired
-            case 403:
-                throw TwitchMinerError.authenticationFailed("Forbidden")
-            case 429:
-                let retryAfter = httpResponse.allHeaderFields["Retry-After"] as? String ?? "60"
-                throw TwitchMinerError.apiError(statusCode: 429, message: "Rate limited, retry after \(retryAfter)s")
-            default:
-                let errorMessage = String(data: data, encoding: .utf8) ?? "Unknown error"
-                throw TwitchMinerError.apiError(statusCode: httpResponse.statusCode, message: errorMessage)
-            }
-        } catch let error as TwitchMinerError {
-            throw error
-        } catch {
-            throw TwitchMinerError.networkError(error.localizedDescription)
-        }
+        return try await makeRequestWithRetry(request, operationName: "REST \(method) \(url)")
     }
 
     /// Make a GraphQL request (rate-limited to ≤5 req/s).
@@ -624,47 +707,7 @@ public actor TwitchAPIClient {
         let requestBody = request.toJSON()
         urlRequest.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
 
-        do {
-            let (data, response) = try await session.data(for: urlRequest)
-
-            guard let httpResponse = response as? HTTPURLResponse else {
-                throw TwitchMinerError.invalidResponse
-            }
-
-            switch httpResponse.statusCode {
-            case 200..<300:
-                // GQL errors arrive as HTTP 200 with a body-level error array.
-                // Detect PersistedQueryNotFound so callers get a clear signal.
-                if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let errors = json["errors"] as? [[String: Any]] {
-                    for gqlError in errors {
-                        if let msg = gqlError["message"] as? String {
-                            if msg.contains("PersistedQueryNotFound") {
-                                print("[TwitchAPIClient] [GQL] PersistedQueryNotFound for \(request.operationName)")
-                                throw TwitchMinerError.apiError(
-                                    statusCode: 200,
-                                    message: "PersistedQueryNotFound: \(request.operationName) - sha256 hash may be stale"
-                                )
-                            }
-                            // Log other GQL errors too
-                            print("[TwitchAPIClient] [GQL] Error: \(msg)")
-                        }
-                    }
-                }
-                return data
-            case 401:
-                throw TwitchMinerError.tokenExpired
-            case 403:
-                throw TwitchMinerError.authenticationFailed("Forbidden")
-            default:
-                let errorMessage = String(data: data, encoding: .utf8) ?? "Unknown error"
-                throw TwitchMinerError.apiError(statusCode: httpResponse.statusCode, message: errorMessage)
-            }
-        } catch let error as TwitchMinerError {
-            throw error
-        } catch {
-            throw TwitchMinerError.networkError(error.localizedDescription)
-        }
+        return try await makeRequestWithRetry(urlRequest, operationName: request.operationName)
     }
 
     // MARK: - Integrity Token
@@ -792,6 +835,10 @@ public actor TwitchAPIClient {
         let dropStartDate = (dropDict["startAt"] as? String).flatMap { parseDate($0) }
         let dropEndDate = (dropDict["endAt"] as? String).flatMap { parseDate($0) }
 
+        // Parse precondition drops
+        let preconditionDrops = (dropDict["preconditionDrops"] as? [[String: Any]] ?? [])
+            .compactMap { $0["id"] as? String }
+
         // Parse ALL benefit IDs from benefitEdges — used for fallback claimed detection.
         // Python: for benefit in self.benefits — checks ALL benefit IDs against claimed_benefits.
         var benefitIds: [String] = []
@@ -840,6 +887,7 @@ public actor TwitchAPIClient {
             reward: reward,
             progress: progress,
             benefitIds: benefitIds,
+            preconditionDrops: preconditionDrops,
             dropStartDate: dropStartDate,
             dropEndDate: dropEndDate
         )

@@ -51,8 +51,7 @@ struct AuthView: View {
                             .buttonStyle(.plain)
                         }
                         .padding()
-                        .background(Color.secondary.opacity(0.1))
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .glassPanel(cornerRadius: 18)
                     }
                     
                     // Verification URL
@@ -76,8 +75,7 @@ struct AuthView: View {
                             .buttonStyle(.plain)
                         }
                         .padding()
-                        .background(Color.secondary.opacity(0.1))
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .glassPanel(cornerRadius: 18)
                     }
                     
                     // Open URL Button
@@ -133,7 +131,8 @@ struct AuthView: View {
                 .padding(.bottom, 24)
         }
         .frame(maxWidth: 500)
-        .padding()
+        .padding(24)
+        .glassContentSurface(cornerRadius: 32)
     }
     
     private func startAuthentication() {

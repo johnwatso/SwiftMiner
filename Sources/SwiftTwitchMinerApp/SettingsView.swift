@@ -7,32 +7,37 @@ struct SettingsView: View {
     @Environment(NavigationModel.self) private var navigation
     
     var body: some View {
-        TabView {
-            GeneralSettingsView(settings: settings)
-                .tabItem {
-                    Label("General", systemImage: "gearshape")
-                }
-                .tag("general")
+        ZStack {
+            LiquidGlassBackdrop()
 
-            AccountSettingsView(navigation: navigation)
-                .tabItem {
-                    Label("Accounts", systemImage: "person.2")
-                }
-                .tag("accounts")
+            TabView {
+                GeneralSettingsView(settings: settings)
+                    .tabItem {
+                        Label("General", systemImage: "gearshape")
+                    }
+                    .tag("general")
 
-            MiningSettingsView(settings: settings)
-                .tabItem {
-                    Label("Mining", systemImage: "hammer")
-                }
-                .tag("mining")
+                AccountSettingsView(navigation: navigation)
+                    .tabItem {
+                        Label("Accounts", systemImage: "person.2")
+                    }
+                    .tag("accounts")
 
-            AdvancedSettingsView(settings: settings)
-                .tabItem {
-                    Label("Advanced", systemImage: "gearshape.2")
-                }
-                .tag("advanced")
+                MiningSettingsView(settings: settings)
+                    .tabItem {
+                        Label("Mining", systemImage: "hammer")
+                    }
+                    .tag("mining")
+
+                AdvancedSettingsView(settings: settings)
+                    .tabItem {
+                        Label("Advanced", systemImage: "gearshape.2")
+                    }
+                    .tag("advanced")
+            }
+            .padding(20)
         }
-        .frame(width: 500, height: 400)
+        .frame(width: 500, height: 500)
     }
 }
 
@@ -65,29 +70,40 @@ private struct GeneralSettingsView: View {
 
 private struct AccountSettingsView: View {
     let navigation: NavigationModel
-    
+
     var body: some View {
         VStack(spacing: 0) {
             List {
-                ForEach(navigation.minerManager.miners) { miner in
-                    HStack {
-                        VStack(alignment: .leading) {
-                            Text(miner.username).font(.headline)
-                            Text(miner.accountId).font(.caption).foregroundStyle(.secondary)
+                if navigation.minerManager.miners.isEmpty {
+                    MaterialEmptyStatePanel(
+                        "No Accounts",
+                        systemImage: "person.slash",
+                        description: "Add a Twitch account to start mining."
+                    )
+                    .frame(maxWidth: .infinity, minHeight: 220)
+                    .listRowBackground(Color.clear)
+                } else {
+                    ForEach(navigation.minerManager.miners) { miner in
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text(miner.username).font(.headline)
+                                Text(miner.accountId).font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button("Remove") {
+                                Task { await navigation.minerManager.removeAccount(minerId: miner.id) }
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
                         }
-                        Spacer()
-                        Button("Remove") {
-                            Task { await navigation.minerManager.removeAccount(minerId: miner.id) }
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
+                        .padding(.vertical, 4)
                     }
-                    .padding(.vertical, 4)
                 }
             }
-            
+            .scrollContentBackground(.hidden)
+
             Divider()
-            
+
             HStack {
                 Spacer()
                 Button {
@@ -98,7 +114,7 @@ private struct AccountSettingsView: View {
                 .buttonStyle(.borderedProminent)
                 .padding()
             }
-            .background(.bar)
+            .background(.regularMaterial)
         }
     }
 }
@@ -107,7 +123,8 @@ private struct AccountSettingsView: View {
 
 private struct MiningSettingsView: View {
     @ObservedObject var settings: Settings
-    
+    @Environment(NavigationModel.self) private var navigation
+
     var body: some View {
         Form {
             Section {
@@ -116,27 +133,35 @@ private struct MiningSettingsView: View {
             } header: {
                 Text("Automation")
             }
-            
+
             Section {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Priority Games")
-                        .font(.subheadline.weight(.medium))
-                    TextField("e.g. THE FINALS, Rust", text: $settings.priorityGamesString)
-                        .textFieldStyle(.roundedBorder)
-                    Text("Miners will prioritize these games.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Excluded Games")
-                        .font(.subheadline.weight(.medium))
-                    TextField("e.g. Fortnite, Valorant", text: $settings.excludedGamesString)
-                        .textFieldStyle(.roundedBorder)
-                    Text("Miners will ignore these games.")
-                        .font(.caption).foregroundStyle(.secondary)
+                Picker("Mining Strategy", selection: $settings.miningStrategy) {
+                    ForEach(MiningStrategy.allCases) { strategy in
+                        Text(strategy.displayName).tag(strategy)
+                    }
                 }
             } header: {
-                Text("Rules")
+                Text("Mining Strategy")
+            } footer: {
+                switch settings.miningStrategy {
+                case .mineAll:
+                    Text("Mine any eligible campaign.")
+                case .prioritiseSelected:
+                    Text("Prioritize selected games, fallback to any eligible.")
+                case .onlyPriority:
+                    Text("Only mine selected games. Idle if none available.")
+                }
+            }
+
+            Section {
+                GamePreferencesSection(
+                    settings: settings,
+                    campaignStore: navigation.minerManager.campaignStore
+                )
+            } header: {
+                Text("Game Preferences")
+            } footer: {
+                Text("Search for games with active drop campaigns. Set each to preferred or excluded.")
             }
         }
         .formStyle(.grouped)

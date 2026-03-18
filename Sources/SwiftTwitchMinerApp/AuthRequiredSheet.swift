@@ -12,14 +12,14 @@ struct AuthRequiredSheet: View {
     @State private var loginService = MinerLoginService()
 
     var body: some View {
-        VStack(spacing: 0) {
-            headerBar
-            Divider()
+        VStack(alignment: .leading, spacing: 24) {
+            headerSection
             contentArea
-            Divider()
             footerBar
         }
-        .frame(width: 460, height: 420)
+        .frame(width: 480, height: 430)
+        .padding(28)
+        .glassContentSurface(cornerRadius: 32)
         .onAppear {
             loginService.startDeviceAuth()
         }
@@ -32,16 +32,16 @@ struct AuthRequiredSheet: View {
 
     // MARK: - Header
 
-    private var headerBar: some View {
-        HStack {
-            Image(systemName: "tv.fill")
-                .foregroundStyle(.purple)
-            Text("Add Twitch Account")
-                .font(.headline)
-            Spacer()
+    private var headerSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Add Twitch Account", systemImage: "tv.fill")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.primary)
+
+            Text("Authorize a Twitch account to join your miner dashboard. SwiftMiner will open Twitch in your browser and keep watching for confirmation here.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 14)
     }
 
     // MARK: - Content
@@ -69,10 +69,14 @@ struct AuthRequiredSheet: View {
     // MARK: - Starting
 
     private var startingView: some View {
-        VStack(spacing: 16) {
+        VStack(alignment: .leading, spacing: 16) {
             ProgressView()
-                .scaleEffect(1.2)
+                .controlSize(.large)
+
             Text("Connecting to Twitch…")
+                .font(.headline)
+
+            Text("Requesting a device code from Twitch.")
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -81,79 +85,80 @@ struct AuthRequiredSheet: View {
     // MARK: - Waiting for user
 
     private func waitingView(code: String, url: URL, expiresIn: Int) -> some View {
-        VStack(spacing: 20) {
-            // Instructions
-            Text("Visit the Twitch activation page and enter your code.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
-
-            // Activation code
-            VStack(spacing: 6) {
-                Text("Activation Code")
-                    .font(.caption.weight(.semibold))
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("1. Open Twitch")
+                    .font(.headline)
+                Text("Open the activation page in your browser, then enter the code shown below.")
                     .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
+            }
+
+            Button {
+                NSWorkspace.shared.open(url)
+            } label: {
+                Label("Open Twitch Activation Page", systemImage: "safari")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text("2. Enter this code")
+                    .font(.headline)
 
                 HStack(spacing: 12) {
                     Text(code)
                         .font(.system(size: 34, weight: .bold, design: .monospaced))
                         .tracking(6)
+                        .textSelection(.enabled)
 
                     Button {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(code, forType: .string)
                     } label: {
-                        Image(systemName: "doc.on.doc")
-                            .foregroundStyle(.secondary)
+                        Label("Copy", systemImage: "doc.on.doc")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.bordered)
                     .help("Copy code")
                 }
-                .padding(.horizontal, 24)
-                .padding(.vertical, 14)
-                .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+                .padding(.horizontal, 20)
+                .padding(.vertical, 18)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
 
-                Text("Expires in \(expiresIn / 60) min")
-                    .font(.caption2)
+                Text("Code expires in \(expiresIn / 60) minutes")
+                    .font(.caption)
                     .foregroundStyle(.tertiary)
             }
 
-            // Open URL button
-            Button {
-                NSWorkspace.shared.open(url)
-            } label: {
-                Label("Open Twitch Activation Page", systemImage: "safari")
-                    .font(.callout.weight(.medium))
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-
-            // Status
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
                 ProgressView()
-                    .scaleEffect(0.7)
-                Text("Waiting for confirmation…")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .controlSize(.small)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Waiting for confirmation")
+                        .font(.callout.weight(.medium))
+                    Text("This window will finish automatically after Twitch approves the login.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding()
     }
 
     // MARK: - Polling
 
     private var pollingView: some View {
-        VStack(spacing: 16) {
+        VStack(alignment: .leading, spacing: 16) {
             ProgressView()
-                .scaleEffect(1.2)
+                .controlSize(.large)
+
             Text("Waiting for confirmation…")
-                .foregroundStyle(.secondary)
+                .font(.headline)
+
             Text("Complete the authorization in your browser.")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -161,7 +166,7 @@ struct AuthRequiredSheet: View {
     // MARK: - Success
 
     private var successView: some View {
-        VStack(spacing: 14) {
+        VStack(alignment: .leading, spacing: 14) {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 48))
                 .foregroundStyle(.green)
@@ -176,7 +181,7 @@ struct AuthRequiredSheet: View {
     // MARK: - Failure
 
     private func failureView(message: String) -> some View {
-        VStack(spacing: 16) {
+        VStack(alignment: .leading, spacing: 16) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 44))
                 .foregroundStyle(.orange)
@@ -187,8 +192,6 @@ struct AuthRequiredSheet: View {
             Text(message)
                 .font(.callout)
                 .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
 
             Button("Try Again") {
                 loginService.cancel()
@@ -197,7 +200,6 @@ struct AuthRequiredSheet: View {
             .buttonStyle(.borderedProminent)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding()
     }
 
     // MARK: - Footer
@@ -212,8 +214,6 @@ struct AuthRequiredSheet: View {
 
             Spacer()
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
     }
 
     // MARK: - Handlers
@@ -225,7 +225,13 @@ struct AuthRequiredSheet: View {
 
         let minerId = navigation.minerManager.addAccount(account)
         Task {
-            try? await navigation.minerManager.startMiner(minerId: minerId)
+            let settings = Settings.shared
+            try? await navigation.minerManager.startMiner(
+                minerId: minerId,
+                priorityGames: settings.priorityGames,
+                excludedGames: settings.excludedGames,
+                strategy: settings.miningStrategy
+            )
             // Brief pause so the user sees the success state
             try? await Task.sleep(nanoseconds: 1_200_000_000)
             isPresented = false

@@ -25,7 +25,13 @@ public enum GQLHashes {
     public static let directoryPage_Game = "76cb069d835b8a02914c08dc42c421d0dafda8af5b113a3f19141824b901402f"
     
     /// Fetches broadcast and stream info for a channel
-    public static let videoPlayerStreamInfoOverlayChannel = "a5f2e34d626a9f4f5c0204f910bab2194948a9502089be558bb6e779a9e1b3d2"
+    public static let videoPlayerStreamInfoOverlayChannel = "198492e0857f6aedead9665c81c5a06d67b25b58034649687124083ff288597d"
+    
+    /// Fetches current drop session progress for a channel
+    public static let currentDrop = "4d06b702d25d652afb9ef835d2a550031f1cf762b193523a92166f40ea3d142b"
+    
+    /// Fetches drops available for a specific channel
+    public static let availableDrops = "782dad0f032942260171d2d80a654f88bdd0c5a9dddc392e9bc92218a0f42d20"
     
     /// Fetches channel points balance and available claims
     public static let channelPointsContext = "374314de591e69925fce3ddc2bcf085796f56ebb8cad67a0daa3165c03adc345"
