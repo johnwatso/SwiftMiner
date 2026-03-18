@@ -86,6 +86,10 @@ public final class MinerManager {
     /// Client ID for Twitch API (mutable so it can be updated before first account is added)
     private var clientId: String
     
+    /// Track drop IDs claimed today (locally)
+    private var claimedTodayIds: Set<String> = []
+    private var lastClaimDate: Date = Date()
+    
     /// Callbacks for aggregated events
     public var onMinerStatusChange: (@Sendable (ManagedMiner) -> Void)?
     public var onAggregateProgress: (@Sendable (AggregateProgress) -> Void)?
@@ -259,6 +263,8 @@ public final class MinerManager {
         var totalPending = 0
         var activeMiners = 0
         
+        resetDailyClaimsIfNeeded()
+        
         for (minerId, engine) in engines {
             guard let miner = miners.first(where: { $0.id == minerId }),
                   miner.isRunning else { continue }
@@ -280,11 +286,20 @@ public final class MinerManager {
             totalCampaigns: totalCampaigns,
             totalDrops: totalDrops,
             claimedDrops: totalClaimed,
+            claimedToday: claimedTodayIds.count,
             pendingDrops: totalPending
         )
     }
     
     // MARK: - Private Methods
+    
+    private func resetDailyClaimsIfNeeded() {
+        let calendar = Calendar.current
+        if !calendar.isDateInToday(lastClaimDate) {
+            claimedTodayIds.removeAll()
+            lastClaimDate = Date()
+        }
+    }
     
     private func setupEngineCallbacks(engine: MinerEngine, minerId: String) async {
         await engine.setStatusChangeHandler { [weak self] status in
@@ -318,6 +333,8 @@ public final class MinerManager {
         await engine.setDropClaimedHandler { [weak self] drop in
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
+                self.resetDailyClaimsIfNeeded()
+                self.claimedTodayIds.insert(drop.id)
                 self.incrementDropsClaimed(minerId: minerId)
             }
         }
@@ -384,6 +401,7 @@ public struct AggregateProgress: Sendable {
     public let totalCampaigns: Int
     public let totalDrops: Int
     public let claimedDrops: Int
+    public let claimedToday: Int
     public let pendingDrops: Int
     
     public var completionPercentage: Double {

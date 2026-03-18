@@ -147,17 +147,21 @@ struct AccountDetailView: View {
 
     // MARK: Log Console
 
+    private var minerEvents: [EventEntry] {
+        navigation.events.filter { $0.minerId == miner.id }
+    }
+
     private var logSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("Activity Log")
                     .font(.headline)
                 Spacer()
-                if !(navigation.minerLogs[miner.id]?.isEmpty ?? true) {
+                if !minerEvents.isEmpty {
                     Button {
-                        navigation.clearLogs(forMiner: miner.id)
+                        navigation.clearEvents()
                     } label: {
-                        Text("Clear")
+                        Text("Clear All")
                             .font(.caption)
                     }
                     .buttonStyle(.plain)
@@ -165,15 +169,15 @@ struct AccountDetailView: View {
                 }
             }
 
-            let logs = navigation.minerLogs[miner.id] ?? []
+            let events = minerEvents
 
-            if logs.isEmpty {
+            if events.isEmpty {
                 Text(miner.isRunning ? "Waiting for activity…" : "Start mining to see activity here.")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     .padding(.vertical, 8)
             } else {
-                MinerLogConsole(entries: logs)
+                MinerLogConsole(entries: events)
                     .frame(minHeight: 160, maxHeight: 320)
             }
         }
@@ -243,7 +247,7 @@ private struct MinerStatCard: View {
 // MARK: - Log Console
 
 struct MinerLogConsole: View {
-    let entries: [LogEntry]
+    let entries: [EventEntry]
     @State private var autoScroll = true
 
     var body: some View {
@@ -267,7 +271,7 @@ struct MinerLogConsole: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 1) {
                         ForEach(entries) { entry in
-                            MinerLogRow(entry: entry)
+                            EventRow(event: entry, showRaw: false)
                                 .id(entry.id)
                         }
                     }

@@ -58,7 +58,7 @@ struct MinerTableView: View {
                     }
                     
                     Button {
-                        navigation.selectAccount(miner.id)
+                        navigation.selectedMinerId = miner.id
                     } label: {
                         Image(systemName: "info.circle")
                     }

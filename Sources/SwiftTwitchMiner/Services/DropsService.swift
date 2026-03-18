@@ -71,26 +71,30 @@ public actor DropsService {
         return result
     }
 
-    /// Fetch account-specific drop states (Phase 2).
-    /// Returns a flat list of states for all active/available campaigns.
+    /// Fetch account-specific drop states for ALL drops in active campaigns.
+    /// Returns a DropState for every drop (notStarted, inProgress, claimable, or claimed).
+    /// Drops never disappear — state drives display, not presence.
     public func fetchDropStates(for accountId: String) async throws -> [DropState] {
         let campaigns = try await fetchCampaigns()
         let inventory = try await fetchInventory()
         let claimedBenefits = await apiClient.getClaimedBenefits()
-        
+
         let enriched = mergeInventory(inventory, into: campaigns, claimedBenefits: claimedBenefits)
-        
+
         return enriched.flatMap { campaign in
-            campaign.drops.compactMap { drop in
-                guard let progress = drop.progress else { return nil }
-                return DropState(
+            campaign.drops.map { drop in
+                let progress = drop.progress
+                let state = DropState(
                     dropId: drop.id,
                     accountId: accountId,
-                    progressMinutes: progress.currentMinutes,
-                    requiredMinutes: progress.requiredMinutes,
-                    isClaimed: progress.isClaimed,
-                    lastUpdated: progress.lastUpdated
+                    progressMinutes: progress?.currentMinutes ?? 0,
+                    requiredMinutes: drop.requiredMinutes,
+                    isClaimed: progress?.isClaimed ?? false,
+                    isEligible: campaign.isAccountConnected,
+                    lastUpdated: progress?.lastUpdated ?? Date()
                 )
+                print("[State] Drop \(drop.name) → status=\(state.status) eligible=\(campaign.isAccountConnected)")
+                return state
             }
         }
     }
