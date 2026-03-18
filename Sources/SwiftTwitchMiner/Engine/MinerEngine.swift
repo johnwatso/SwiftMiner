@@ -174,11 +174,10 @@ public actor MinerEngine {
     
     /// Pre-load an already-authenticated account (call before start() when account is known).
     /// This bypasses the keychain reload in start() and avoids the isTokenValid check.
-    public func setAccount(_ account: Account) {
+    public func setAccount(_ account: Account) async {
         self.currentAccount = account
-        Task {
-            await authService.setCurrentAccount(account)
-        }
+        await authService.setCurrentAccount(account)
+        await dropsService.setAccountId(account.id)
     }
 
     /// Starts the mining engine

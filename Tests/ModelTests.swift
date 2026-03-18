@@ -49,7 +49,7 @@ final class ModelTests: XCTestCase {
             dropId: "d1", campaignId: "c1",
             currentMinutes: 60, requiredMinutes: 60, isClaimed: true
         )
-        let drop = Drop(id: "d1", name: "Test Drop", requiredMinutes: 60, progress: progress)
+        let drop = Drop(id: "d1", name: "Test Drop", requiredMinutes: 60, progress: progress, isClaimed: true)
         XCTAssertFalse(drop.isClaimable)
         XCTAssertTrue(drop.isClaimed)
     }
@@ -93,7 +93,7 @@ final class ModelTests: XCTestCase {
 
         let claimedProg = Progress(dropId: "d1", campaignId: "c1",
                                    currentMinutes: 60, requiredMinutes: 60, isClaimed: true)
-        let claimed = Drop(id: "d1", name: "Claimed", requiredMinutes: 60, progress: claimedProg)
+        let claimed = Drop(id: "d1", name: "Claimed", requiredMinutes: 60, progress: claimedProg, isClaimed: true)
         let unclaimed = Drop(id: "d2", name: "Unclaimed", requiredMinutes: 60)
 
         let campaign = Campaign(

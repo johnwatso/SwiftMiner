@@ -3,19 +3,20 @@ import Foundation
 /// Service for managing Twitch drops campaigns and tracking
 public actor DropsService {
     private let apiClient: TwitchAPIClient
+    private let inventoryService: InventoryService
 
     /// Cache of campaigns
     private var campaignsCache: [Campaign] = []
     private var lastCacheUpdate: Date?
     private let cacheDuration: TimeInterval = 300 // 5 minutes
 
-    /// Cache of inventory (progress)
-    private var inventoryCache: [Progress] = []
-    private var lastInventoryUpdate: Date?
-    private let inventoryCacheDuration: TimeInterval = 60 // 1 minute
-
-    public init(apiClient: TwitchAPIClient) {
+    public init(apiClient: TwitchAPIClient, inventoryService: InventoryService? = nil) {
         self.apiClient = apiClient
+        self.inventoryService = inventoryService ?? InventoryService(apiClient: apiClient)
+    }
+
+    public func setAccountId(_ accountId: String) async {
+        await inventoryService.setAccountId(accountId)
     }
 
     /// Fetch all drop campaigns
@@ -30,12 +31,10 @@ public actor DropsService {
             return campaignsCache
         }
 
-        let campaigns = try await apiClient.fetchDropCampaigns()
-
-        // Ensure we merge existing progress into these new objects immediately
-        let inventory = try? await fetchInventory()
-        let claimedBenefits = await apiClient.getClaimedBenefits()
-        let enriched = mergeInventory(inventory ?? inventoryCache, into: campaigns, claimedBenefits: claimedBenefits)
+        let enriched = try await CampaignService.fetchCampaigns(
+            using: apiClient,
+            inventoryService: inventoryService
+        )
 
         self.campaignsCache = enriched
         self.lastCacheUpdate = Date()
@@ -46,11 +45,9 @@ public actor DropsService {
     /// Active = isMiningEligible
     public func getActiveCampaigns() async throws -> [Campaign] {
         let campaigns = try await fetchCampaigns()
-        let inventory = try await fetchInventory()
-        let claimedBenefits = await apiClient.getClaimedBenefits()
+        let snapshot = try await inventoryService.fetchInventory()
 
-        // Merge inventory progress into campaigns, with gameEventDrops fallback for claimed detection
-        let enriched = mergeInventory(inventory, into: campaigns, claimedBenefits: claimedBenefits)
+        let enriched = Self.mergeInventory(snapshot, into: campaigns)
 
         // Update cache with enriched data
         self.campaignsCache = enriched
@@ -69,10 +66,10 @@ public actor DropsService {
     /// Drops never disappear — state drives display, not presence.
     public func fetchDropStates(for accountId: String) async throws -> [DropState] {
         let campaigns = try await fetchCampaigns()
-        let inventory = try await fetchInventory()
-        let claimedBenefits = await apiClient.getClaimedBenefits()
-
-        let enriched = mergeInventory(inventory, into: campaigns, claimedBenefits: claimedBenefits)
+        let fetchedSnapshot = try? await inventoryService.fetchInventory()
+        let cachedSnapshot = await inventoryService.currentSnapshot()
+        let snapshot = fetchedSnapshot ?? cachedSnapshot ?? .empty(accountId: accountId)
+        let enriched = Self.mergeInventory(snapshot, into: campaigns)
 
         return enriched.flatMap { campaign in
             campaign.drops.map { drop in
@@ -82,7 +79,7 @@ public actor DropsService {
                     accountId: accountId,
                     progressMinutes: progress?.currentMinutes ?? 0,
                     requiredMinutes: drop.requiredMinutes,
-                    isClaimed: progress?.isClaimed ?? false,
+                    isClaimed: drop.isClaimed,
                     isEligible: campaign.isAccountConnected,
                     lastUpdated: progress?.lastUpdated ?? Date()
                 )
@@ -92,71 +89,51 @@ public actor DropsService {
         }
     }
 
-    /// Merges inventory progress into campaigns and applies Python's two-tier claimed detection:
-    ///
-    /// Tier 1 (authoritative): `self.isClaimed` from DropCampaignDetails — already stored in `drop.progress`
-    ///                         from parseDrop(). Used for in-progress drops.
-    ///
-    /// Tier 2 (fallback): `gameEventDrops` benefit IDs + metadata from Inventory.
-    ///                    Twitch omits `self` for fully-claimed drops, so we check:
-    ///                    1. Primary: ANY drop.benefitIds appear in claimedBenefits (by ID)
-    ///                    2. Fallback: drop name + required minutes match any entry in claimedBenefits
-    internal func mergeInventory(
-        _ inventory: [Progress],
-        into campaigns: [Campaign],
-        claimedBenefits: [String: TwitchAPIClient.ClaimedBenefit] = [:]
+    /// Merges inventory progress into campaigns using Twitch inventory benefit IDs
+    /// as the SOLE source of truth for claimed state.
+    internal static func mergeInventory(
+        _ snapshot: InventorySnapshot,
+        into campaigns: [Campaign]
     ) -> [Campaign] {
-        let allClaimed = Array(claimedBenefits.values)
-        
+        let progressByDropId = Dictionary(uniqueKeysWithValues: snapshot.progress.map { ($0.dropId, $0) })
+
         return campaigns.map { campaign in
             var updated = campaign
             updated.drops = campaign.drops.map { drop in
                 var d = drop
-                if let progress = inventory.first(where: { $0.dropId == drop.id }) {
-                    // Inventory has live progress — use it (includes isClaimed for in-progress drops)
-                    d.progress = progress
-                } else if d.progress == nil {
-                    // No `self` field from DropCampaignDetails and not in dropCampaignsInProgress.
-                    
-                    // 1. Primary: Match by Benefit ID
-                    let matchedById = drop.benefitIds.first { claimedBenefits[$0] != nil }
-                    
-                    if let bid = matchedById {
-                        print("[DropsService] mergeInventory: '\(drop.name)' → CLAIMED via benefitId matching (\(bid))")
-                        d.progress = Progress(
-                            id: drop.id,
-                            dropId: drop.id,
-                            dropName: drop.name,
-                            campaignId: campaign.id,
-                            currentMinutes: drop.requiredMinutes,
-                            requiredMinutes: drop.requiredMinutes,
-                            isClaimed: true
-                        )
-                    } else {
-                        // 2. Fallback: Match by benefit name (reward name, not drop name)
-                        // gameEventDrops[].name = benefit/reward name (e.g. "Free Advice")
-                        // drop.reward?.name    = benefit name from benefitEdges[0] (same field)
-                        // These should match when IDs differ due to GQL endpoint format differences.
-                        let dropRewardName = drop.reward?.name.lowercased()
-                        let matchedByName = dropRewardName.flatMap { rName in
-                            allClaimed.first { $0.name.lowercased() == rName }
-                        }
+                // SOURCE OF TRUTH: Only check inventory benefit IDs. 
+                // Ignore transient 'isClaimed' flags in progress dicts.
+                let claimedFromInventory = !drop.benefitID.isEmpty && snapshot.benefitIDs.contains(drop.benefitID)
+                d.isClaimed = claimedFromInventory
 
-                        if let benefit = matchedByName {
-                            print("[DropsService] mergeInventory: '\(drop.name)' → matched=0/1 (fallback used) → CLAIMED via benefit name '\(benefit.name)'")
-                            d.progress = Progress(
-                                id: drop.id,
-                                dropId: drop.id,
-                                dropName: drop.name,
-                                campaignId: campaign.id,
-                                currentMinutes: drop.requiredMinutes,
-                                requiredMinutes: drop.requiredMinutes,
-                                isClaimed: true
-                            )
-                        } else {
-                            print("[DropsService] mergeInventory: '\(drop.name)' rewardName=\(drop.reward?.name ?? "nil") — no match in \(allClaimed.map(\.name))")
-                        }
-                    }
+                if let progress = progressByDropId[drop.id] {
+                    d.progress = Progress(
+                        id: progress.id,
+                        dropId: progress.dropId,
+                        dropName: progress.dropName,
+                        campaignId: progress.campaignId,
+                        currentMinutes: progress.currentMinutes,
+                        requiredMinutes: progress.requiredMinutes,
+                        isClaimed: claimedFromInventory, // Force sync with inventory
+                        lastUpdated: progress.lastUpdated
+                    )
+                } else if claimedFromInventory {
+                    // Claimed but no progress entry (Twitch often hides 'self' for claimed drops)
+                    d.progress = Progress(
+                        id: drop.id,
+                        dropId: drop.id,
+                        dropName: drop.name,
+                        campaignId: campaign.id,
+                        currentMinutes: drop.requiredMinutes,
+                        requiredMinutes: drop.requiredMinutes,
+                        isClaimed: true
+                    )
+                } else {
+                    d.progress = nil
+                }
+
+                if claimedFromInventory {
+                    print("[DropsService] mergeInventory: '\(drop.name)' → CLAIMED via inventory benefit ID \(drop.benefitID)")
                 }
                 return d
             }
@@ -166,17 +143,8 @@ public actor DropsService {
 
     /// Fetch current inventory (drops in progress)
     public func fetchInventory(forceRefresh: Bool = false) async throws -> [Progress] {
-        if !forceRefresh,
-           let lastUpdate = lastInventoryUpdate,
-           Date().timeIntervalSince(lastUpdate) < inventoryCacheDuration,
-           !inventoryCache.isEmpty {
-            return inventoryCache
-        }
-        
-        let inventory = try await apiClient.fetchInventory()
-        self.inventoryCache = inventory
-        self.lastInventoryUpdate = Date()
-        return inventory
+        let snapshot = try await inventoryService.fetchInventory(forceRefresh: forceRefresh)
+        return snapshot.progress
     }
 
     /// Get a specific campaign by ID
@@ -188,6 +156,24 @@ public actor DropsService {
         }
 
         return campaign
+    }
+
+    /// Returns UI-ready CampaignViewData for all campaigns, combining live campaign data
+    /// with the current inventory snapshot. Falls back to cached data when offline so the
+    /// UI remains functional even when the miner is not running.
+    public func getCampaignViewData(forceRefresh: Bool = false) async throws -> [CampaignViewData] {
+        // Fetch campaigns — falls back to in-memory cache automatically
+        let campaigns = try await fetchCampaigns(forceRefresh: forceRefresh)
+        // Prefer a fresh inventory fetch; fall back to cached snapshot for offline support
+        let snapshot = (try? await inventoryService.fetchInventory(forceRefresh: forceRefresh))
+            ?? (await inventoryService.currentSnapshot())
+        return CampaignMapper.map(campaigns: campaigns, inventory: snapshot)
+    }
+
+    /// Returns UI-ready CampaignViewData for a single campaign by ID.
+    public func getCampaignViewData(for campaignId: String) async throws -> CampaignViewData? {
+        let all = try await getCampaignViewData()
+        return all.first { $0.id == campaignId }
     }
 
     /// Get drops that are ready to claim (100% complete but not claimed)
@@ -205,17 +191,25 @@ public actor DropsService {
     /// Get overall progress across all campaigns
     public func getOverallProgress() async throws -> OverallProgress {
         let campaigns = try await fetchCampaigns()
-        let inventory = try await fetchInventory()
+        let fetchedSnapshot = try? await inventoryService.fetchInventory()
+        let cachedSnapshot = await inventoryService.currentSnapshot()
+        let snapshot = fetchedSnapshot ?? cachedSnapshot ?? .empty(accountId: "")
+        let enriched = Self.mergeInventory(snapshot, into: campaigns)
 
-        let activeCampaigns = campaigns.filter { $0.isTimeActive }
-        let totalDrops = campaigns.reduce(0) { $0 + $1.drops.count }
-        let claimedDrops = inventory.filter { $0.isClaimed }.count
-        let pendingDrops = inventory.filter { !$0.isClaimed }.count
-        let totalWatchTime = inventory.reduce(into: 0) { $0 += $1.currentMinutes }
+        let activeCampaigns = enriched.filter { $0.isTimeActive }
+        let allDrops = enriched.flatMap(\.drops)
+        let totalDrops = allDrops.count
+        let claimedDrops = allDrops.filter(\.isClaimed).count
+        let pendingDrops = totalDrops - claimedDrops
+        let totalWatchTime = enriched
+            .flatMap(\.drops)
+            .reduce(into: 0) { total, drop in
+                total += drop.progress?.currentMinutes ?? 0
+            }
 
         let campaignProgresses = activeCampaigns.map { campaign in
-            let campaignInventory = inventory.filter { $0.campaignId == campaign.id }
-            let claimedInCampaign = campaignInventory.filter { $0.isClaimed }.count
+            let campaignProgress = campaign.drops.compactMap(\.progress)
+            let claimedInCampaign = campaign.drops.filter(\.isClaimed).count
 
             return CampaignProgress(
                 campaignId: campaign.id,
@@ -223,7 +217,7 @@ public actor DropsService {
                 gameName: campaign.gameName,
                 totalDrops: campaign.drops.count,
                 claimedDrops: claimedInCampaign,
-                dropProgress: campaignInventory
+                dropProgress: campaignProgress
             )
         }
 
@@ -242,8 +236,9 @@ public actor DropsService {
     public func clearCache() {
         campaignsCache = []
         lastCacheUpdate = nil
-        inventoryCache = []
-        lastInventoryUpdate = nil
+        Task {
+            await inventoryService.clearCache()
+        }
     }
 
     /// Fetch active campaigns (convenience method for MinerEngine)
