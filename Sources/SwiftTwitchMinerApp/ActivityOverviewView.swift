@@ -1,30 +1,35 @@
 import SwiftUI
 import SwiftTwitchMiner
 
-/// Activity Overview - displays miners as cards with controls.
+/// Activity Overview - scalable multi-account workspace.
 struct ActivityOverviewView: View {
     @Environment(NavigationModel.self) private var navigation
     @State private var aggregateProgress: AggregateProgress?
     @State private var isRefreshing = false
-    
+
+    private var miners: [MinerManager.ManagedMiner] {
+        navigation.minerManager.miners
+    }
+
+    private var selectedMiner: MinerManager.ManagedMiner? {
+        guard let selectedId = navigation.selectedMinerId else { return miners.first }
+        return miners.first { $0.id == selectedId } ?? miners.first
+    }
+
+    private var hasMultipleMiners: Bool {
+        miners.count > 1
+    }
+
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                // Metrics
-                metricsHeader
-                
-                // Miners Grid
-                if navigation.minerManager.miners.isEmpty {
-                    EmptyStateView()
-                } else {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 300, maximum: 400), spacing: 16)], spacing: 16) {
-                        ForEach(navigation.minerManager.miners) { miner in
-                            MinerCardView(miner: miner)
-                        }
-                    }
+        Group {
+            if miners.isEmpty {
+                EmptyActivityStateView()
+            } else {
+                HSplitView {
+                    minerListPane
+                    selectedMinerPane
                 }
             }
-            .padding()
         }
         .navigationTitle("Activity")
         .toolbar {
@@ -32,16 +37,29 @@ struct ActivityOverviewView: View {
                 Button {
                     Task { await refresh() }
                 } label: {
-                    Label("Refresh", systemImage: "arrow.clockwise")
+                    Label("Refresh UI", systemImage: "arrow.clockwise")
                 }
                 .disabled(isRefreshing)
-                
+
                 Button {
-                    Task { await navigation.minerManager.startAll() }
+                    Task { await navigation.minerManager.forceRefreshAllMiners() }
+                } label: {
+                    Label("Force Rescan", systemImage: "arrow.clockwise.circle.fill")
+                }
+
+                Button {
+                    Task {
+                        let settings = Settings.shared
+                        await navigation.minerManager.startAll(
+                            priorityGames: settings.priorityGames,
+                            excludedGames: settings.excludedGames,
+                            strategy: settings.miningStrategy
+                        )
+                    }
                 } label: {
                     Label("Start All", systemImage: "play.fill")
                 }
-                
+
                 Button {
                     Task { await navigation.minerManager.stopAll() }
                 } label: {
@@ -50,189 +68,411 @@ struct ActivityOverviewView: View {
             }
         }
         .task {
+            syncSelection()
             await refresh()
         }
-    }
-    
-    private var metricsHeader: some View {
-        HStack(spacing: 20) {
-            MetricView(title: "Miners", value: "\(aggregateProgress?.activeMiners ?? 0)", icon: "person.2.fill", color: .blue)
-            MetricView(title: "Claimed Today", value: "\(aggregateProgress?.claimedToday ?? 0)", icon: "gift.fill", color: .green)
-            MetricView(title: "Pending", value: "\(aggregateProgress?.pendingDrops ?? 0)", icon: "hourglass", color: .orange)
-            Spacer()
+        .onChange(of: miners.map(\.id)) { _, _ in
+            syncSelection()
         }
-        .padding(.bottom, 8)
     }
-    
+
+    private var minerListPane: some View {
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(hasMultipleMiners ? "Miners" : "Miner")
+                    .font(.headline)
+
+                Text(hasMultipleMiners ? "Select an account to inspect its live state." : "Single-account focus mode.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+
+            List(selection: selectionBinding) {
+                ForEach(miners) { miner in
+                    MinerSourceListRow(miner: miner, compact: !hasMultipleMiners)
+                        .tag(Optional(miner.id))
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                }
+            }
+            .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
+        }
+        .frame(
+            minWidth: hasMultipleMiners ? 220 : 148,
+            idealWidth: hasMultipleMiners ? 248 : 164,
+            maxWidth: hasMultipleMiners ? 280 : 176
+        )
+        .background {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(.thinMaterial)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .padding(.leading, 24)
+        .padding(.vertical, 24)
+        .padding(.trailing, hasMultipleMiners ? 12 : 8)
+    }
+
+    @ViewBuilder
+    private var selectedMinerPane: some View {
+        if let miner = selectedMiner {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    MinerControlPanel(
+                        miner: miner,
+                        aggregateProgress: aggregateProgress,
+                        nextAction: nextAction(for: miner)
+                    )
+
+                    MinerActivityFeedSection(
+                        miner: miner,
+                        entries: minerEvents(for: miner)
+                    )
+                }
+                .padding(24)
+            }
+            .id(miner.id)
+            .transition(.opacity.combined(with: .move(edge: .trailing)))
+            .animation(.easeInOut(duration: 0.22), value: miner.id)
+        } else {
+            MaterialEmptyStatePanel(
+                "Select a miner",
+                systemImage: "person.crop.square",
+                description: "Pick an account from the list to inspect its live control panel and activity feed."
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(24)
+        }
+    }
+
+    private var selectionBinding: Binding<String?> {
+        Binding(
+            get: { navigation.selectedMinerId ?? miners.first?.id },
+            set: { navigation.selectedMinerId = $0 }
+        )
+    }
+
+    private func syncSelection() {
+        guard !miners.isEmpty else {
+            navigation.selectedMinerId = nil
+            return
+        }
+
+        if let selectedId = navigation.selectedMinerId,
+           miners.contains(where: { $0.id == selectedId }) {
+            return
+        }
+
+        navigation.selectedMinerId = miners.first?.id
+    }
+
     private func refresh() async {
         isRefreshing = true
         aggregateProgress = await navigation.minerManager.getAggregateProgress()
         isRefreshing = false
     }
+
+    private func minerEvents(for miner: MinerManager.ManagedMiner) -> [EventEntry] {
+        navigation.events.filter { $0.minerId == miner.id }
+    }
+
+    private func nextAction(for miner: MinerManager.ManagedMiner) -> MinerNextAction {
+        switch miner.status {
+        case .watching:
+            return MinerNextAction(
+                title: "Watching for progress",
+                detail: "Staying on an eligible stream until the current campaign advances or completes.",
+                color: .green
+            )
+        case .claiming:
+            return MinerNextAction(
+                title: "Claiming completed rewards",
+                detail: "Wrapping up finished drops before returning to live watching.",
+                color: .purple
+            )
+        case .fetchingCampaigns:
+            return MinerNextAction(
+                title: "Scanning Twitch",
+                detail: "Refreshing campaign availability and looking for the next eligible route.",
+                color: .blue
+            )
+        case .authenticating:
+            return MinerNextAction(
+                title: "Refreshing session",
+                detail: "Checking credentials so the miner can resume automated watching.",
+                color: .orange
+            )
+        case .paused:
+            return MinerNextAction(
+                title: "Paused between opportunities",
+                detail: "Waiting for a live eligible campaign or an operator action.",
+                color: .orange
+            )
+        case .error:
+            return MinerNextAction(
+                title: "Needs attention",
+                detail: "Open Events for deeper context, then refresh or reconnect this account.",
+                color: .red
+            )
+        case .idle:
+            return MinerNextAction(
+                title: "Ready to start",
+                detail: "Start this miner to fetch campaigns and begin watching for drops.",
+                color: .secondary
+            )
+        }
+    }
 }
 
-// MARK: - Miner Card View
-
-struct MinerCardView: View {
+private struct MinerSourceListRow: View {
     let miner: MinerManager.ManagedMiner
-    @Environment(NavigationModel.self) private var navigation
+    let compact: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Header
-            HStack {
-                Circle()
-                    .fill(statusColor.opacity(0.2))
-                    .frame(width: 32, height: 32)
-                    .overlay(
-                        Text(miner.username.prefix(1).uppercased())
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(statusColor)
-                    )
-                
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(miner.username)
-                        .font(.headline)
-                    Text(miner.status.displayName)
+        HStack(spacing: 10) {
+            Circle()
+                .fill(statusColor)
+                .frame(width: 8, height: 8)
+
+            VStack(alignment: .leading, spacing: compact ? 1 : 2) {
+                Text(miner.username)
+                    .font(.body.weight(.medium))
+                    .lineLimit(1)
+
+                if !compact {
+                    Text(miner.currentCampaign ?? miner.status.displayName)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
-                
-                Spacer()
-                
-                statusIcon
             }
-            
-            Divider().opacity(0.1)
-            
-            // Current Activity
-            VStack(alignment: .leading, spacing: 4) {
-                Text("CURRENT CAMPAIGN")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(.tertiary)
-                
-                Text(miner.currentCampaign ?? "None")
-                    .font(.subheadline)
-                    .lineLimit(1)
-            }
-            .frame(height: 40, alignment: .topLeading)
-            
-            // Stats
-            HStack {
-                Label("\(miner.dropsClaimed) claimed", systemImage: "gift")
-                    .font(.caption)
+
+            Spacer(minLength: 6)
+
+            if miner.isRunning {
+                Image(systemName: "play.fill")
+                    .font(.caption2.weight(.bold))
                     .foregroundStyle(.secondary)
-                Spacer()
-            }
-            
-            Spacer(minLength: 0)
-            
-            // Controls
-            HStack(spacing: 8) {
-                if miner.isRunning {
-                    Button {
-                        Task { await navigation.minerManager.stopMiner(minerId: miner.id) }
-                    } label: {
-                        Label("Stop", systemImage: "stop.fill")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                } else {
-                    Button {
-                        Task { try? await navigation.minerManager.startMiner(minerId: miner.id) }
-                    } label: {
-                        Label("Start", systemImage: "play.fill")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-                
-                Button {
-                    Task { try? await navigation.minerManager.claimAllDrops(minerId: miner.id) }
-                } label: {
-                    Image(systemName: "gift.fill")
-                }
-                .buttonStyle(.bordered)
-                .help("Claim all available drops")
             }
         }
-        .padding()
-        .background(.ultraThinMaterial)
-        .background(statusColor.opacity(0.05))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(statusColor.opacity(0.1), lineWidth: 1)
-        )
+        .padding(.horizontal, 8)
+        .padding(.vertical, compact ? 8 : 10)
+        .contentShape(Rectangle())
     }
-    
+
     private var statusColor: Color {
         switch miner.status {
         case .watching: return .green
         case .claiming: return .purple
         case .authenticating, .fetchingCampaigns: return .blue
+        case .paused: return .orange
         case .error: return .red
-        case .idle, .paused: return .gray
-        }
-    }
-    
-    @ViewBuilder
-    private var statusIcon: some View {
-        switch miner.status {
-        case .watching:
-            Image(systemName: "play.circle.fill").foregroundStyle(.green)
-        case .claiming:
-            Image(systemName: "gift.circle.fill").foregroundStyle(.purple)
-        case .error:
-            Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.red)
-        default:
-            EmptyView()
+        case .idle: return .gray
         }
     }
 }
 
-// MARK: - Metric View
+private struct MinerControlPanel: View {
+    let miner: MinerManager.ManagedMiner
+    let aggregateProgress: AggregateProgress?
+    let nextAction: MinerNextAction
 
-struct MetricView: View {
+    @Environment(NavigationModel.self) private var navigation
+    @State private var isStarting = false
+    @State private var isStopping = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top, spacing: 16) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(miner.username)
+                        .font(.title2.weight(.semibold))
+
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(nextAction.color)
+                            .frame(width: 8, height: 8)
+
+                        Text(miner.status.displayName)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Spacer()
+
+                HStack(spacing: 10) {
+                    Button {
+                        Task { await navigation.minerManager.forceRefreshMiner(minerId: miner.id) }
+                    } label: {
+                        Label("Rescan", systemImage: "arrow.clockwise")
+                    }
+                    .buttonStyle(.bordered)
+
+                    primaryButton
+                }
+            }
+
+            HStack(spacing: 14) {
+                ControlPanelInfoBlock(
+                    title: "Campaign",
+                    value: miner.currentCampaign ?? "No campaign selected",
+                    subtitle: miner.currentCampaign == nil ? "Standing by" : "Currently assigned"
+                )
+
+                ControlPanelInfoBlock(
+                    title: "Next Action",
+                    value: nextAction.title,
+                    subtitle: nextAction.detail
+                )
+
+                ControlPanelInfoBlock(
+                    title: "Drops Claimed",
+                    value: "\(miner.dropsClaimed)",
+                    subtitle: aggregateProgress.map { "\($0.claimedToday) claimed today across all miners" } ?? "Live dashboard stats"
+                )
+            }
+        }
+        .padding(22)
+        .background {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(.regularMaterial)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .shadow(color: .black.opacity(0.10), radius: 22, y: 10)
+    }
+
+    @ViewBuilder
+    private var primaryButton: some View {
+        if miner.isRunning {
+            Button {
+                Task {
+                    isStopping = true
+                    await navigation.minerManager.stopMiner(minerId: miner.id)
+                    isStopping = false
+                }
+            } label: {
+                Label(isStopping ? "Stopping…" : "Stop", systemImage: "stop.fill")
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.red.opacity(0.85))
+            .disabled(isStopping)
+        } else {
+            Button {
+                Task {
+                    isStarting = true
+                    let settings = Settings.shared
+                    try? await navigation.minerManager.startMiner(
+                        minerId: miner.id,
+                        priorityGames: settings.priorityGames,
+                        excludedGames: settings.excludedGames,
+                        strategy: settings.miningStrategy
+                    )
+                    isStarting = false
+                }
+            } label: {
+                Label(isStarting ? "Starting…" : "Start", systemImage: "play.fill")
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(isStarting)
+        }
+    }
+}
+
+private struct ControlPanelInfoBlock: View {
     let title: String
     let value: String
-    let icon: String
-    let color: Color
-    
+    let subtitle: String
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.caption)
-                    .foregroundStyle(color)
-                Text(title)
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(.secondary)
-            }
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title.uppercased())
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.tertiary)
+
             Text(value)
-                .font(.system(size: 24, weight: .bold, design: .rounded))
+                .font(.headline)
+                .lineLimit(2)
+
+            Text(subtitle)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(Color.secondary.opacity(0.05))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .glassControlSurface(cornerRadius: 18)
     }
 }
 
-// MARK: - Empty State
+private struct MinerActivityFeedSection: View {
+    let miner: MinerManager.ManagedMiner
+    let entries: [EventEntry]
 
-struct EmptyStateView: View {
     @Environment(NavigationModel.self) private var navigation
-    
+
     var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "person.badge.plus")
-                .font(.system(size: 48))
-                .foregroundStyle(.secondary)
-            
-            Text("No Twitch accounts connected")
-                .font(.headline)
-            
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Live Activity")
+                        .font(.title3.weight(.semibold))
+                    Text("Recent account-specific events for \(miner.username).")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                if !entries.isEmpty {
+                    Button("Clear All") {
+                        navigation.clearEvents()
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                }
+            }
+
+            if entries.isEmpty {
+                Text(miner.isRunning ? "Waiting for new activity…" : "Start this miner to populate the live feed.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(16)
+                    .glassControlSurface(cornerRadius: 18)
+            } else {
+                MinerLogConsole(entries: entries)
+                    .frame(minHeight: 260)
+            }
+        }
+        .padding(22)
+        .background {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(.thinMaterial)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .shadow(color: .black.opacity(0.08), radius: 18, y: 8)
+    }
+}
+
+private struct MinerNextAction {
+    let title: String
+    let detail: String
+    let color: Color
+}
+
+private struct EmptyActivityStateView: View {
+    @Environment(NavigationModel.self) private var navigation
+
+    var body: some View {
+        MaterialEmptyStatePanel(
+            "No Twitch accounts connected",
+            systemImage: "person.badge.plus",
+            description: "Add an account to turn this space into a live activity dashboard."
+        ) {
             Button {
                 navigation.showAddAccountSheet = true
             } label: {
@@ -242,11 +482,9 @@ struct EmptyStateView: View {
             .controlSize(.large)
         }
         .frame(maxWidth: .infinity, minHeight: 300)
-        .padding()
+        .padding(24)
     }
 }
-
-// MARK: - Preview
 
 #Preview {
     ActivityOverviewView()

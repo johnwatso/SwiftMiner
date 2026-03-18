@@ -160,7 +160,7 @@ public final class MinerManager {
             }
 
             // Configure global campaign store with this account's API client (Phase 1)
-            await campaignStore.configure(apiClient: engine.apiClient)
+            await campaignStore.configure(apiClient: engine.apiClient, accountId: account.id)
 
             // Start the state store auto-refresh (Phase 2)
             await stateStore.start()

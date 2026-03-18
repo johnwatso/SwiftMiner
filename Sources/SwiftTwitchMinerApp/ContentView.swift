@@ -160,11 +160,16 @@ struct OverviewView: View {
     @State private var progress: AggregateProgress?
     @State private var isRefreshing = false
 
+    private var campaigns: [Campaign] {
+        navigation.minerManager.campaignStore.campaigns
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
+                campaignFeedSection
+                nextActionSection
                 metricsSection
-                minerStatusSection
                 campaignSummarySection
             }
             .padding(24)
@@ -192,31 +197,35 @@ struct OverviewView: View {
     // MARK: - Metrics
 
     private var metricsSection: some View {
-        LazyVGrid(
-            columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 3),
-            spacing: 16
-        ) {
-            OverviewMetricCard(
-                title: "Active Miners",
-                value: "\(progress?.activeMiners ?? navigation.minerManager.miners.filter { $0.isRunning }.count)",
-                subtitle: "\(navigation.minerManager.miners.count) total",
-                icon: "person.2.fill",
-                color: .blue
-            )
-            OverviewMetricCard(
-                title: "Active Campaigns",
-                value: "\(activeCampaignCount)",
-                subtitle: "across all games",
-                icon: "play.fill",
-                color: .green
-            )
-            OverviewMetricCard(
-                title: "Total Claimed",
-                value: "\(progress?.claimedDrops ?? 0)",
-                subtitle: "+\(progress?.claimedToday ?? 0) today",
-                icon: "gift.fill",
-                color: .secondary
-            )
+        VStack(alignment: .leading, spacing: 14) {
+            sectionHeading("Live Stats", subtitle: "A lighter snapshot of miner activity across the dashboard.")
+
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: 3),
+                spacing: 14
+            ) {
+                OverviewMetricCard(
+                    title: "Active Miners",
+                    value: "\(progress?.activeMiners ?? navigation.minerManager.miners.filter { $0.isRunning }.count)",
+                    subtitle: "\(navigation.minerManager.miners.count) online accounts",
+                    icon: "person.2.fill",
+                    color: .blue
+                )
+                OverviewMetricCard(
+                    title: "Eligible Campaigns",
+                    value: "\(activeCampaignCount)",
+                    subtitle: "ready to earn now",
+                    icon: "play.fill",
+                    color: .green
+                )
+                OverviewMetricCard(
+                    title: "Claimed Today",
+                    value: "\(progress?.claimedToday ?? 0)",
+                    subtitle: "\(progress?.claimedDrops ?? 0) total claimed",
+                    icon: "sparkles.tv.fill",
+                    color: .orange
+                )
+            }
         }
     }
 
@@ -226,71 +235,271 @@ struct OverviewView: View {
             .count
     }
 
-    // MARK: - Miner Status
+    // MARK: - Campaign Feed
 
-    private var minerStatusSection: some View {
+    private var campaignFeedSection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Currently Mining")
-                .font(.title3.weight(.semibold))
+            sectionHeading("Campaign Feed", subtitle: "Artwork-first view of what the miner is playing through right now.")
 
-            let activeCampaigns = navigation.minerManager.campaignStore.campaigns.filter { $0.isMiningEligible }
-            let activeGameNames = Array(Set(activeCampaigns.map { $0.gameName })).sorted()
-
-            // Surface layer card: Miner list
-            VStack(alignment: .leading, spacing: 8) {
-                if navigation.minerManager.miners.isEmpty {
-                    Text("No miners configured. Add an account to get started.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(navigation.minerManager.miners) { miner in
-                        HStack(spacing: 12) {
-                            Circle()
-                                .fill(statusColor(for: miner))
-                                .frame(width: 8, height: 8)
-
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(miner.username)
-                                    .font(.system(size: 13, weight: .medium))
-                                if let campaign = miner.currentCampaign {
-                                    Text(campaign)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
-                                }
-                            }
-
-                            Spacer()
-
-                            Text(miner.status.displayName)
-                                .font(.caption.weight(.medium))
-                                .foregroundStyle(statusColor(for: miner))
+            if campaignFeedItems.isEmpty {
+                MaterialEmptyStatePanel(
+                    "No campaigns to show",
+                    systemImage: "play.rectangle.on.rectangle",
+                    description: "Add an account or refresh campaigns to populate the feed."
+                )
+                .frame(maxWidth: .infinity)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(spacing: 18) {
+                        ForEach(campaignFeedItems) { item in
+                            CampaignFeedCard(item: item)
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .glassControlSurface(cornerRadius: 14)
                     }
+                    .padding(.horizontal, 2)
+                    .padding(.vertical, 4)
                 }
-            }
-            .padding(16)
-            .glassPanel(cornerRadius: 24)
-
-            if !activeGameNames.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Active Games")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-
-                    Text(activeGameNames.joined(separator: ", "))
-                        .font(.subheadline)
-                        .lineLimit(2)
-                }
-                .padding(16)
-                .glassPanel(cornerRadius: 24)
+                .scrollClipDisabled()
             }
         }
         .padding(20)
-        .glassContentSurface()
+        .glassContentSurface(cornerRadius: 30)
+    }
+
+    private var campaignFeedItems: [CampaignViewData] {
+        var items: [CampaignViewData] = []
+        var seen = Set<String>()
+
+        for campaign in currentlyMiningCampaigns {
+            let item = makeFeedItem(for: campaign, lane: .currentlyMining)
+            if seen.insert(item.id).inserted {
+                items.append(item)
+            }
+        }
+
+        for campaign in eligibleCampaigns.prefix(6) {
+            let item = makeFeedItem(for: campaign, lane: .eligible)
+            if seen.insert(item.id).inserted {
+                items.append(item)
+            }
+        }
+
+        for campaign in upcomingCampaigns.prefix(6) {
+            let item = makeFeedItem(for: campaign, lane: .upcoming)
+            if seen.insert(item.id).inserted {
+                items.append(item)
+            }
+        }
+
+        return items
+    }
+
+    private var currentlyMiningCampaigns: [Campaign] {
+        let miners = navigation.minerManager.miners
+        return campaigns.filter { campaign in
+            miners.contains { miner in
+                if let id = miner.currentCampaignId {
+                    return id == campaign.id
+                }
+                return miner.currentCampaign == campaign.name && miner.isRunning
+            }
+        }
+    }
+
+    private var eligibleCampaigns: [Campaign] {
+        campaigns
+            .filter { $0.isMiningEligible }
+            .sorted { lhs, rhs in
+                if lhs.hasClaimableDrops != rhs.hasClaimableDrops {
+                    return lhs.hasClaimableDrops && !rhs.hasClaimableDrops
+                }
+                return lhs.endDate < rhs.endDate
+            }
+    }
+
+    private var upcomingCampaigns: [Campaign] {
+        campaigns
+            .filter { $0.status == .upcoming || $0.startDate > Date() }
+            .sorted { $0.startDate < $1.startDate }
+    }
+
+    private func makeFeedItem(for campaign: Campaign, lane: CampaignFeedLane) -> CampaignViewData {
+        let progressPercent = campaignProgressPercent(for: campaign)
+        let isClaimed = isCampaignClaimed(campaign)
+
+        return CampaignViewData(
+            id: "\(lane.rawValue)-\(campaign.id)",
+            lane: lane,
+            gameName: campaign.game.name,
+            campaignName: campaign.name,
+            progressText: feedProgressText(for: campaign, lane: lane),
+            progressPercent: progressPercent,
+            artworkURL: campaign.game.boxArtURL,
+            isClaimed: isClaimed,
+            tint: tintColor(for: campaign)
+        )
+    }
+
+    private func feedStatusText(for campaign: Campaign, lane: CampaignFeedLane) -> String {
+        switch lane {
+        case .currentlyMining:
+            return "Currently mining"
+        case .eligible:
+            return campaign.hasClaimableDrops ? "Ready to claim" : "Eligible now"
+        case .upcoming:
+            return "Starts \(campaign.startDate.formatted(date: .abbreviated, time: .omitted))"
+        }
+    }
+
+    private func feedProgressText(for campaign: Campaign, lane: CampaignFeedLane) -> String {
+        let progressPercent = campaignProgressPercent(for: campaign)
+        let remainingMinutes = campaignRemainingMinutes(for: campaign)
+
+        if isCampaignClaimed(campaign) {
+            return "Completed"
+        }
+
+        switch lane {
+        case .currentlyMining, .eligible:
+            if progressPercent > 0 {
+                return "\(Int(progressPercent))% complete • \(remainingMinutes)m remaining"
+            }
+            return lane == .currentlyMining ? "Mining now" : feedStatusText(for: campaign, lane: lane)
+        case .upcoming:
+            return feedStatusText(for: campaign, lane: lane)
+        }
+    }
+
+    // MARK: - Next Action
+
+    private var nextActionSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            sectionHeading("Next Action", subtitle: primaryStatusReason.detail)
+
+            HStack(alignment: .top, spacing: 18) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(primaryStatusReason.title)
+                        .font(.title3.weight(.semibold))
+
+                    Text(primaryStatusReason.summary)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+
+                Text(primaryStatusReason.badge)
+                    .font(.caption.weight(.semibold))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .foregroundStyle(primaryStatusReason.color)
+                    .glassControlSurface(cornerRadius: 999)
+            }
+
+            if !statusReasonRows.isEmpty {
+                VStack(spacing: 10) {
+                    ForEach(statusReasonRows) { row in
+                        StatusReasonRow(row: row)
+                    }
+                }
+            }
+        }
+        .padding(22)
+        .glassContentSurface(cornerRadius: 28)
+    }
+
+    private var primaryStatusReason: StatusReason {
+        let miners = navigation.minerManager.miners
+        if miners.isEmpty {
+            return StatusReason(
+                title: "Waiting for accounts",
+                summary: "The dashboard is ready, but it needs a Twitch account before it can begin watching for drops.",
+                detail: "Add an account to wake up the system and start populating campaign activity.",
+                badge: "Standby",
+                color: .secondary
+            )
+        }
+
+        if let miner = miners.first(where: { $0.status == .claiming }) {
+            return StatusReason(
+                title: "Collecting completed drops",
+                summary: "\(miner.username) is wrapping up rewards from \(miner.currentCampaign ?? "an active campaign").",
+                detail: "Claiming is prioritized before returning the miner to watching.",
+                badge: "Claiming",
+                color: .purple
+            )
+        }
+
+        if let miner = miners.first(where: { $0.status == .watching }) {
+            let campaignName = miner.currentCampaign ?? "the current drop rotation"
+            return StatusReason(
+                title: "Watching live channels",
+                summary: "\(miner.username) is actively mining \(campaignName).",
+                detail: "The miner is staying on eligible streams and tracking progress in real time.",
+                badge: "Watching",
+                color: .green
+            )
+        }
+
+        if miners.contains(where: { $0.status == .fetchingCampaigns }) {
+            return StatusReason(
+                title: "Refreshing campaign availability",
+                summary: "The miner is scanning Twitch for new eligible campaigns and updated drop progress.",
+                detail: "This is where upcoming or newly linked campaigns enter the feed.",
+                badge: "Refreshing",
+                color: .blue
+            )
+        }
+
+        if miners.contains(where: { $0.status == .authenticating }) {
+            return StatusReason(
+                title: "Reconnecting account session",
+                summary: "An account needs fresh authentication before mining can continue.",
+                detail: "Once the session is valid, the miner resumes campaign selection automatically.",
+                badge: "Authenticating",
+                color: .orange
+            )
+        }
+
+        if miners.contains(where: { $0.status == .paused }) {
+            return StatusReason(
+                title: "Paused between campaigns",
+                summary: "The miner is waiting for an eligible campaign or live channel to become available.",
+                detail: "Upcoming and eligible cards above show the next opportunities in line.",
+                badge: "Paused",
+                color: .orange
+            )
+        }
+
+        if miners.contains(where: { $0.status == .error }) {
+            return StatusReason(
+                title: "Needs attention",
+                summary: "One or more miners hit an error and may need a refresh or reconnect.",
+                detail: "Review the Events screen for the most recent issue details.",
+                badge: "Error",
+                color: .red
+            )
+        }
+
+        return StatusReason(
+            title: "Standing by",
+            summary: "Miners are configured, but nothing is actively being watched right now.",
+            detail: "Refreshing campaigns or starting miners will move the system back into motion.",
+            badge: "Idle",
+            color: .secondary
+        )
+    }
+
+    private var statusReasonRows: [StatusReasonRowModel] {
+        navigation.minerManager.miners.map { miner in
+            StatusReasonRowModel(
+                id: miner.id,
+                title: miner.username,
+                subtitle: miner.currentCampaign ?? fallbackSubtitle(for: miner),
+                status: miner.status.displayName,
+                color: statusColor(for: miner)
+            )
+        }
     }
 
     private func statusColor(for miner: MinerManager.ManagedMiner) -> Color {
@@ -307,12 +516,10 @@ struct OverviewView: View {
 
     private var campaignSummarySection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Active Campaigns")
-                .font(.title3.weight(.semibold))
+            sectionHeading("Active Campaigns", subtitle: "Content-first rows with artwork, progress, and what still needs attention.")
 
-            // Show any campaign that is active, connected, and has unclaimed drops (even if they're already 100%)
-            let active = navigation.minerManager.campaignStore.campaigns.filter { 
-                $0.isTimeActive && $0.isAccountConnected && !$0.unclaimedDrops.isEmpty 
+            let active = navigation.minerManager.campaignStore.campaigns.filter {
+                $0.isTimeActive && $0.isAccountConnected
             }
 
             if active.isEmpty {
@@ -324,8 +531,8 @@ struct OverviewView: View {
                     .glassControlSurface(cornerRadius: 16)
             } else {
                 VStack(spacing: 8) {
-                    ForEach(gameSummaries(from: active), id: \.id) { game in
-                        CampaignSummaryRow(game: game)
+                    ForEach(activeCampaignRows(from: active)) { campaign in
+                        ActiveCampaignRow(item: campaign)
                     }
                 }
             }
@@ -334,42 +541,121 @@ struct OverviewView: View {
         .glassContentSurface()
     }
 
-    private func gameSummaries(from campaigns: [Campaign]) -> [GameSummary] {
-        var map: [String: [Campaign]] = [:]
-        for c in campaigns {
-            let key = c.game.id.isEmpty ? c.game.name.lowercased() : c.game.id
-            map[key, default: []].append(c)
+    private func activeCampaignRows(from campaigns: [Campaign]) -> [CampaignViewData] {
+        campaigns
+            .map { campaign in
+                CampaignViewData(
+                    id: campaign.id,
+                    lane: nil,
+                    gameName: campaign.game.name,
+                    campaignName: campaign.name,
+                    progressText: activeRowProgressText(for: campaign),
+                    progressPercent: campaignProgressPercent(for: campaign),
+                    artworkURL: campaign.game.boxArtURL,
+                    isClaimed: isCampaignClaimed(campaign),
+                    tint: tintColor(for: campaign)
+                )
+            }
+            .sorted { lhs, rhs in
+                if lhs.isClaimed != rhs.isClaimed {
+                    return !lhs.isClaimed && rhs.isClaimed
+                }
+                if lhs.progressPercent != rhs.progressPercent {
+                    return lhs.progressPercent > rhs.progressPercent
+                }
+                return lhs.gameName < rhs.gameName
+            }
+    }
+
+    private func activeRowProgressText(for campaign: Campaign) -> String {
+        if isCampaignClaimed(campaign) {
+            return "Completed"
         }
-        return map.map { _, group in
-            let first = group[0]
-            // We count all unclaimed drops as 'active' for the UI summary
-            let unclaimedDrops = group.flatMap { $0.unclaimedDrops }
-            let allDrops = group.flatMap { $0.drops }
-            return GameSummary(
-                gameId: first.game.id,
-                gameName: first.game.name,
-                totalDrops: allDrops.count,
-                claimedDrops: allDrops.filter { $0.isClaimed }.count,
-                activeDrops: unclaimedDrops.count
-            )
-        }.sorted { $0.gameName < $1.gameName }
+
+        let progressPercent = campaignProgressPercent(for: campaign)
+        if progressPercent > 0 {
+            return "\(Int(progressPercent))% • \(campaignRemainingMinutes(for: campaign))m remaining"
+        }
+
+        return "Not started"
+    }
+
+    private func campaignProgressPercent(for campaign: Campaign) -> Double {
+        guard !campaign.drops.isEmpty else { return 0 }
+
+        let totalRequiredMinutes = campaign.drops.reduce(0) { total, drop in
+            total + max(drop.requiredMinutes, 0)
+        }
+        guard totalRequiredMinutes > 0 else {
+            return isCampaignClaimed(campaign) ? 100 : 0
+        }
+
+        let accruedMinutes = campaign.drops.reduce(0) { total, drop in
+            if drop.isClaimed {
+                return total + drop.requiredMinutes
+            }
+            let currentMinutes = min(drop.progress?.currentMinutes ?? 0, drop.requiredMinutes)
+            return total + max(currentMinutes, 0)
+        }
+
+        return min(100, max(0, (Double(accruedMinutes) / Double(totalRequiredMinutes)) * 100))
+    }
+
+    private func campaignRemainingMinutes(for campaign: Campaign) -> Int {
+        campaign.drops.reduce(0) { total, drop in
+            if drop.isClaimed {
+                return total
+            }
+            let currentMinutes = min(drop.progress?.currentMinutes ?? 0, drop.requiredMinutes)
+            return total + max(drop.requiredMinutes - currentMinutes, 0)
+        }
+    }
+
+    private func isCampaignClaimed(_ campaign: Campaign) -> Bool {
+        !campaign.drops.isEmpty && campaign.drops.allSatisfy(\.isClaimed)
+    }
+
+    private func fallbackSubtitle(for miner: MinerManager.ManagedMiner) -> String {
+        switch miner.status {
+        case .idle:
+            return "Waiting for the next campaign"
+        case .authenticating:
+            return "Refreshing account access"
+        case .fetchingCampaigns:
+            return "Checking Twitch for live opportunities"
+        case .watching:
+            return "Watching eligible streams"
+        case .claiming:
+            return "Claiming completed rewards"
+        case .paused:
+            return "Paused until something new appears"
+        case .error:
+            return "Needs a refresh"
+        }
+    }
+
+    private func tintColor(for campaign: Campaign) -> Color {
+        let name = campaign.game.name.lowercased()
+        if name.contains("rust") { return .orange }
+        if name.contains("fortnite") { return .blue }
+        if name.contains("valorant") { return .red }
+        if name.contains("finals") { return .pink }
+        return .purple
+    }
+
+    @ViewBuilder
+    private func sectionHeading(_ title: String, subtitle: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.title3.weight(.semibold))
+            Text(subtitle)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
     }
 }
 
 // MARK: - Supporting Types
-
-struct GameSummary {
-    let gameId: String
-    let gameName: String
-    let totalDrops: Int
-    let claimedDrops: Int
-    let activeDrops: Int
-    var id: String { gameId.isEmpty ? gameName : gameId }
-    var progressPercent: Double {
-        guard totalDrops > 0 else { return 0 }
-        return Double(claimedDrops) / Double(totalDrops) * 100
-    }
-}
 
 // MARK: - Overview Metric Card
 
@@ -381,52 +667,309 @@ struct OverviewMetricCard: View {
     let color: Color
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        HStack(alignment: .top, spacing: 14) {
             Image(systemName: icon)
                 .foregroundStyle(color)
-                .font(.title3)
+                .font(.headline)
+                .frame(width: 28, height: 28)
+                .glassControlSurface(cornerRadius: 12)
 
-            Text(value)
-                .font(.system(size: 28, weight: .bold, design: .rounded))
-
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(title)
-                    .font(.caption.weight(.medium))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                Text(value)
+                    .font(.system(size: 24, weight: .semibold, design: .rounded))
+
                 Text(subtitle)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
+
+            Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .glassPanel(cornerRadius: 24)
+        .padding(14)
+        .glassPanel(cornerRadius: 20)
     }
 }
 
 // MARK: - Campaign Summary Row
 
-private struct CampaignSummaryRow: View {
-    let game: GameSummary
+private struct ActiveCampaignRow: View {
+    let item: CampaignViewData
 
     var body: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(game.gameName)
-                    .font(.system(size: 13, weight: .medium))
-                Text("\(game.activeDrops) active • \(game.claimedDrops)/\(game.totalDrops) claimed")
+        HStack(spacing: 14) {
+            CampaignThumbnail(url: item.artworkURL, tint: item.tint)
+                .frame(width: 48, height: 48)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.gameName)
+                    .font(.headline)
+
+                Text(item.campaignName)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+
+                Text(item.progressText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             Spacer()
 
-            ProgressView(value: game.progressPercent, total: 100)
-                .progressViewStyle(.linear)
-                .frame(width: 80)
-                .tint(.purple)
+            VStack(alignment: .trailing, spacing: 8) {
+                HStack(spacing: 6) {
+                    if item.isClaimed {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                    }
+
+                    Text(item.isClaimed ? "Completed" : "\(Int(item.progressPercent))%")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(item.isClaimed ? .green : .primary)
+                }
+
+                ProgressView(value: item.progressPercent, total: 100)
+                    .progressViewStyle(.linear)
+                    .frame(width: 120)
+                    .tint(item.isClaimed ? .green : .accentColor)
+            }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(14)
+        .glassPanel(cornerRadius: 20)
+    }
+}
+
+private enum CampaignFeedLane: String {
+    case currentlyMining
+    case eligible
+    case upcoming
+
+    var label: String {
+        switch self {
+        case .currentlyMining: return "Now Mining"
+        case .eligible: return "Eligible"
+        case .upcoming: return "Upcoming"
+        }
+    }
+}
+
+private struct CampaignViewData: Identifiable {
+    let id: String
+    let lane: CampaignFeedLane?
+    let gameName: String
+    let campaignName: String
+    let progressText: String
+    let progressPercent: Double
+    let artworkURL: URL?
+    let isClaimed: Bool
+    let tint: Color
+}
+
+private struct CampaignFeedCard: View {
+    let item: CampaignViewData
+    @State private var isHovering = false
+
+    var body: some View {
+        ZStack {
+            CampaignArtworkBackground(url: item.artworkURL, tint: item.tint)
+
+            LinearGradient(
+                colors: [.black.opacity(0.78), .black.opacity(0.28), .clear],
+                startPoint: .bottom,
+                endPoint: .top
+            )
+
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .top) {
+                    if let lane = item.lane {
+                        Text(lane.label)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.white.opacity(0.92))
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 5)
+                            .background(.ultraThinMaterial, in: Capsule())
+                    }
+
+                    Spacer(minLength: 0)
+
+                    if item.isClaimed {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.white, .green.opacity(0.92))
+                            .padding(8)
+                            .background(.regularMaterial, in: Circle())
+                    }
+                }
+
+                Spacer(minLength: 0)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(item.gameName)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+
+                    Text(item.campaignName)
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.84))
+                        .lineLimit(2)
+
+                    Text(item.progressText)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.white.opacity(0.92))
+                        .lineLimit(1)
+                }
+            }
+            .padding(16)
+
+            if item.progressPercent > 0 {
+                VStack {
+                    Spacer()
+
+                    ZStack(alignment: .leading) {
+                        Capsule()
+                            .fill(.white.opacity(0.18))
+
+                        Capsule()
+                            .fill(.white.opacity(0.92))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .mask(alignment: .leading) {
+                                GeometryReader { proxy in
+                                    Capsule()
+                                        .frame(width: proxy.size.width * (item.progressPercent / 100))
+                                }
+                            }
+                    }
+                    .frame(height: 4)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 12)
+                }
+            }
+        }
+        .frame(width: 240, height: 135)
+        .background(.thinMaterial.opacity(0.16))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(.white.opacity(0.16), lineWidth: 1)
+        }
+        .scaleEffect(isHovering ? 1.03 : 1)
+        .shadow(color: .black.opacity(isHovering ? 0.24 : 0.16), radius: isHovering ? 22 : 14, y: isHovering ? 12 : 8)
+        .animation(.easeInOut(duration: 0.2), value: isHovering)
+        .onHover { hovering in
+            isHovering = hovering
+        }
+    }
+}
+
+private struct CampaignArtworkBackground: View {
+    let url: URL?
+    let tint: Color
+
+    var body: some View {
+        ZStack {
+            if let url {
+                AsyncImage(url: url) { image in
+                    image
+                        .resizable()
+                        .interpolation(.high)
+                        .scaledToFill()
+                } placeholder: {
+                    placeholder
+                }
+            } else {
+                placeholder
+            }
+        }
+    }
+
+    private var placeholder: some View {
+        LinearGradient(
+            colors: [tint.opacity(0.85), tint.opacity(0.45), Color.black.opacity(0.45)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+}
+
+private struct CampaignThumbnail: View {
+    let url: URL?
+    let tint: Color
+
+    var body: some View {
+        ZStack {
+            if let url {
+                AsyncImage(url: url) { image in
+                    image
+                        .resizable()
+                        .interpolation(.high)
+                        .scaledToFill()
+                } placeholder: {
+                    placeholder
+                }
+            } else {
+                placeholder
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private var placeholder: some View {
+        LinearGradient(
+            colors: [tint.opacity(0.65), tint.opacity(0.35), Color.white.opacity(0.14)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+}
+
+private struct StatusReason {
+    let title: String
+    let summary: String
+    let detail: String
+    let badge: String
+    let color: Color
+}
+
+private struct StatusReasonRowModel: Identifiable {
+    let id: String
+    let title: String
+    let subtitle: String
+    let status: String
+    let color: Color
+}
+
+private struct StatusReasonRow: View {
+    let row: StatusReasonRowModel
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Circle()
+                .fill(row.color)
+                .frame(width: 8, height: 8)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(row.title)
+                    .font(.subheadline.weight(.semibold))
+                Text(row.subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            Text(row.status)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(row.color)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
         .glassControlSurface(cornerRadius: 16)
     }
 }

@@ -56,9 +56,11 @@ public struct Drop: Codable, Sendable, Identifiable, Equatable {
     public let description: String?
     public let imageURL: URL?
     public let requiredMinutes: Int
+    public let benefitID: String
     public let reward: Reward?
     public var progress: Progress?
-    /// Benefit IDs from benefitEdges — used for fallback claimed detection via gameEventDrops
+    public var isClaimed: Bool
+    /// Benefit IDs from benefitEdges — preserved for compatibility and diagnostics.
     public var benefitIds: [String]
     /// Prerequisite drop IDs that must be claimed before this drop can be earned.
     public var preconditionDrops: [String]
@@ -72,8 +74,10 @@ public struct Drop: Codable, Sendable, Identifiable, Equatable {
         description: String? = nil,
         imageURL: URL? = nil,
         requiredMinutes: Int,
+        benefitID: String = "",
         reward: Reward? = nil,
         progress: Progress? = nil,
+        isClaimed: Bool = false,
         benefitIds: [String] = [],
         preconditionDrops: [String] = [],
         dropStartDate: Date? = nil,
@@ -84,9 +88,13 @@ public struct Drop: Codable, Sendable, Identifiable, Equatable {
         self.description = description
         self.imageURL = imageURL
         self.requiredMinutes = requiredMinutes
+        self.benefitID = benefitID.isEmpty ? benefitIds.first ?? "" : benefitID
         self.reward = reward
         self.progress = progress
-        self.benefitIds = benefitIds
+        self.isClaimed = isClaimed
+        self.benefitIds = benefitIds.isEmpty
+            ? (self.benefitID.isEmpty ? [] : [self.benefitID])
+            : benefitIds
         self.preconditionDrops = preconditionDrops
         self.dropStartDate = dropStartDate
         self.dropEndDate = dropEndDate
@@ -95,11 +103,8 @@ public struct Drop: Codable, Sendable, Identifiable, Equatable {
     /// Whether the drop has been fully earned and is ready to claim
     public var isClaimable: Bool {
         guard let p = progress else { return false }
-        return p.isComplete && !p.isClaimed
+        return p.isComplete && !isClaimed
     }
-
-    /// Whether the drop has already been claimed
-    public var isClaimed: Bool { progress?.isClaimed ?? false }
 
     /// Whether the drop is eligible (not claimed and can be earned)
     public var isEligible: Bool {
@@ -107,13 +112,68 @@ public struct Drop: Codable, Sendable, Identifiable, Equatable {
     }
 
     /// Progress percentage (0–100)
-    public var percentComplete: Double { progress?.percentComplete ?? 0 }
+    public var percentComplete: Double {
+        if isClaimed { return 100 }
+        return progress?.percentComplete ?? 0
+    }
 
     /// Whether this is a community drop (always false for timed drops)
     public var isCommunityDrop: Bool { false }
 
     /// Alias for requiredMinutes (backward compat)
     public var requiredMinutesWatched: Int { requiredMinutes }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case description
+        case imageURL
+        case requiredMinutes
+        case benefitID
+        case reward
+        case progress
+        case isClaimed
+        case benefitIds
+        case preconditionDrops
+        case dropStartDate
+        case dropEndDate
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        description = try container.decodeIfPresent(String.self, forKey: .description)
+        imageURL = try container.decodeIfPresent(URL.self, forKey: .imageURL)
+        requiredMinutes = try container.decode(Int.self, forKey: .requiredMinutes)
+        reward = try container.decodeIfPresent(Reward.self, forKey: .reward)
+        progress = try container.decodeIfPresent(Progress.self, forKey: .progress)
+        benefitIds = try container.decodeIfPresent([String].self, forKey: .benefitIds) ?? []
+        let decodedBenefitID = try container.decodeIfPresent(String.self, forKey: .benefitID) ?? ""
+        benefitID = decodedBenefitID.isEmpty ? benefitIds.first ?? "" : decodedBenefitID
+        isClaimed = try container.decodeIfPresent(Bool.self, forKey: .isClaimed) ?? progress?.isClaimed ?? false
+        preconditionDrops = try container.decodeIfPresent([String].self, forKey: .preconditionDrops) ?? []
+        dropStartDate = try container.decodeIfPresent(Date.self, forKey: .dropStartDate)
+        dropEndDate = try container.decodeIfPresent(Date.self, forKey: .dropEndDate)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encodeIfPresent(description, forKey: .description)
+        try container.encodeIfPresent(imageURL, forKey: .imageURL)
+        try container.encode(requiredMinutes, forKey: .requiredMinutes)
+        try container.encode(benefitID, forKey: .benefitID)
+        try container.encodeIfPresent(reward, forKey: .reward)
+        try container.encodeIfPresent(progress, forKey: .progress)
+        try container.encode(isClaimed, forKey: .isClaimed)
+        try container.encode(benefitIds, forKey: .benefitIds)
+        try container.encode(preconditionDrops, forKey: .preconditionDrops)
+        try container.encodeIfPresent(dropStartDate, forKey: .dropStartDate)
+        try container.encodeIfPresent(dropEndDate, forKey: .dropEndDate)
+    }
 }
 
 // MARK: - Campaign
