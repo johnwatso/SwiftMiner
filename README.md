@@ -9,18 +9,46 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/platform-macOS%2015+-blue">
+  <img src="https://img.shields.io/badge/platform-macOS%2026+-blue">
   <img src="https://img.shields.io/badge/swift-6.0-orange">
   <img src="https://img.shields.io/badge/architecture-Apple%20Silicon-black">
   <img src="https://img.shields.io/badge/license-GPLv3-blue">
   <img src="https://img.shields.io/badge/status-active%20development-orange">
 </p>
 
-## Development Status
+---
 
-SwiftMiner is under active development.
+## Why SwiftMiner Exists
 
-Features, UI, and configuration may change frequently as the app evolves. Occasional breakage between releases is expected while core systems are refined and stabilized.
+Managing Twitch Drops across multiple accounts is messy.
+
+- Progress is fragmented  
+- Campaigns disappear once completed  
+- Running multiple miners is clunky  
+- Most solutions require a server or always-on machine  
+
+SwiftMiner was built to fix that — especially for people who just want this running on their own Mac.
+
+- No server required  
+- Native macOS app  
+- Easy multi-account management in one place  
+
+It acts as a **supervisor layer**, giving you a single, consistent view of everything.
+
+> Built on the ideas and groundwork of  
+> https://github.com/DevilXD/TwitchDropsMiner
+
+---
+
+## ⚠️ Usage Notes
+
+- Tested with up to **5 concurrent miner instances**
+- Running more than this is **untested**
+- Excessive automation **may violate Twitch policies**
+
+👉 Use at your own risk. You are responsible for how you use this tool.
+
+---
 
 ## Preview
 
@@ -28,247 +56,130 @@ Features, UI, and configuration may change frequently as the app evolves. Occasi
   <img src="assets/readme/v0.0.1 UI Example.png" alt="SwiftMiner Dashboard Preview">
 </p>
 
-## Overview
+---
 
-SwiftMiner is a native macOS application for supervising multiple Twitch Drops mining instances. It provides a clean, native interface to monitor and manage drops progress across multiple accounts simultaneously.
+## One Dashboard. All Drops.
 
-### Key Features
+SwiftMiner aggregates every campaign across every account into a single view.
 
-- **Multi-Miner Supervision** — Manage multiple Twitch accounts from a single dashboard
-- **Native SwiftUI Interface** — Clean, macOS-native design that feels at home on your system
-- **Automated Drop Progress** — Watch streams automatically and track progress across all miners
-- **Smart Aggregation** — See your best progress across all accounts at a glance
-- **Menu Bar Integration** — Quick status and controls without leaving your workflow
-- **Auto-Claiming** — Automatically claim drops when they're ready
+- Always shows campaigns — even if already claimed  
+- Prioritised ordering: **Claimable → In Progress → Available**  
+- Drops stay attached to campaigns (no disappearing UI)  
+
+This becomes your **source of truth**.
+
+---
+
+## Multi-Account, Done Properly
+
+Each account runs as its own isolated miner.
+
+SwiftMiner brings them together:
+
+- Start/stop individually or all at once  
+- See which accounts are actively mining  
+- Track contribution per account  
+
+No more juggling multiple apps or windows.
+
+---
+
+## Smart Progress, Not Noise
+
+Instead of duplicating or averaging data, SwiftMiner shows:
+
+- **Best Progress** across all miners  
+- **Active Miners** per drop  
+- **Clear completion state**  
+
+You know exactly where you stand — instantly.
+
+---
+
+## Fully Automated
+
+Once running, SwiftMiner handles the rest:
+
+- Selects the best available stream  
+- Tracks watch progress  
+- Automatically claims drops  
+
+Set it up once, let it run.
+
+---
+
+## Native macOS Experience
+
+Built in SwiftUI for macOS 26+.
+
+- Designed around modern macOS UI patterns  
+- Menu bar integration  
+- Fast, minimal, and responsive  
+
+This is not a wrapper or port.
+
+---
 
 ## Install
 
-SwiftMiner installs are distributed through [GitHub Releases](https://github.com/johnwatso/SwiftMiner/releases).
+Download from https://github.com/johnwatso/SwiftMiner/releases
 
-1. Download the latest release from [GitHub Releases](https://github.com/johnwatso/SwiftMiner/releases).
-2. Open the `.zip`.
-3. Move `SwiftMiner.app` to `/Applications`.
-4. Launch SwiftMiner and complete onboarding.
+1. Download latest `.zip`  
+2. Move `SwiftMiner.app` to `/Applications`  
+3. Launch and add your account  
 
-Future updates are handled in-app through Sparkle auto-updates.
+Updates handled via Sparkle.
+
+---
 
 ## Authentication
 
-SwiftMiner uses Twitch's OAuth device code flow for secure authentication.
+Uses Twitch OAuth device flow.
 
-### First-Time Setup
+1. Click **Add Account**  
+2. Visit https://www.twitch.tv/activate  
+3. Enter code + log in  
 
-1. Launch SwiftMiner
-2. Click **Add Account**
-3. A device code will be displayed
-4. Visit `https://www.twitch.tv/activate` on any device
-5. Enter the code shown in SwiftMiner
-6. Log in to your Twitch account and authorize the app
-7. SwiftMiner will automatically detect successful authentication
+Supports multiple accounts.
 
-### Multiple Accounts
+---
 
-SwiftMiner supports managing multiple Twitch accounts:
-
-1. Go to **Accounts** in the sidebar
-2. Click **Add Account** to authenticate additional accounts
-3. Each account runs in its own isolated miner instance
-4. Progress is aggregated across all miners for easy tracking
-
-## Features
-
-### Multi-Miner Management
-
-- Add and manage multiple Twitch accounts
-- Start/stop miners individually or all at once
-- Per-account status and campaign tracking
-- Isolated authentication and state per miner
-
-### Drops Dashboard
-
-- Unified view of all available drops across campaigns
-- Aggregated progress showing best advancement across miners
-- Active miner count per drop
-- Expandable detail view for per-miner progress
-- Smart sorting: Claimable → In Progress → Not Started
-
-### Campaign Monitoring
-
-- Real-time campaign status from Twitch
-- Automatic best channel selection
-- Priority and exclusion game lists
-- Live stream detection with automatic fallback
-
-### Progress Aggregation
-
-Each drop displays:
-- **Best Progress** — Maximum minutes watched across all miners
-- **Active Miners** — Number of miners working on this drop
-- **Completion Status** — Visual indicator when all miners have claimed
-
-### Auto-Claiming
-
-- Automatically claims drops when watch time is complete
-- Configurable notifications for newly claimed drops
-- Claim-all action for manual claiming
-
-### Menu Bar Controls
-
-- Quick start/stop all miners
-- Live status indicator (idle/active)
-- Drops claimed today counter
-- One-click dashboard access
-
-## Application Areas
-
-| Area | Purpose |
-| --- | --- |
-| Activity Overview | High-level status of all miners and overall progress |
-| Accounts | Manage connected Twitch accounts and per-miner status |
-| Drops | Unified drops list with aggregated progress and expandable details |
-| Logs | System-wide log aggregation from all miner instances |
-| Settings | App configuration, notification preferences, and game filters |
-
-## Keyboard Shortcuts
-
-| Shortcut | Action |
-|----------|--------|
-| `⌘⇧K` | Claim All Drops |
-| `⌘⇧S` | Start All Miners |
-| `⌘⇧X` | Stop All Miners |
-| `⌘R` | Refresh Progress |
-
-## Architecture
-
-SwiftMiner is built with a clean separation between the engine layer and the app layer:
+## Architecture (High-Level)
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│              SwiftTwitchMinerApp (SwiftUI)              │
-│  - Multi-miner management                                │
-│  - Aggregated UI and progress tracking                   │
-│  - Native macOS interface                                │
-└─────────────────────────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────┐
-│                 SwiftTwitchMiner (Engine)                │
-│  - MinerEngine: Single-account mining actor              │
-│  - MinerManager: Multi-miner orchestration               │
-│  - Services: Auth, API, Drops, Watch, Claim              │
-└─────────────────────────────────────────────────────────┘
+SwiftUI App (Dashboard + Control)
+        ↓
+Multi-Miner Manager
+        ↓
+Per-Account Miner Engines
+        ↓
+Auth • API • Drops • Watch • Claim • PubSub
 ```
 
-### Engine Layer (`SwiftTwitchMiner`)
+---
 
-- **MinerEngine** — Actor-based single-account mining lifecycle
-- **TwitchAuthService** — OAuth device flow authentication
-- **TwitchAPIClient** — GraphQL and REST API communication
-- **DropsService** — Campaign fetching and progress tracking
-- **WatchSessionManager** — Stream watching and heartbeat management
-- **ClaimService** — Drop claiming and inventory management
-- **PubSubClient** — Real-time drop events via WebSocket
+## Requirements
 
-### App Layer (`SwiftTwitchMinerApp`)
+- macOS 26+  
+- Apple Silicon  
+- Xcode 16+ (for building)
 
-- **MinerManager** — Manages multiple `MinerEngine` instances
-- **NavigationModel** — App state and navigation coordination
-- **ContentView** — Root navigation split view
-- **DropsListView** — Aggregated drops with multi-miner progress
+---
 
-## Storage
+## Status
 
-SwiftMiner stores application data in `~/Library/Application Support/SwiftMiner/`.
+Active development. Expect iteration and change.
 
-Common files include:
-
-- `settings.json` — App preferences and game filters
-- `accounts.json` — Account metadata (tokens stored in Keychain)
-
-Authentication tokens are stored securely in macOS Keychain.
-
-## Repository Layout
-
-- `Sources/SwiftTwitchMiner/` — Reusable mining engine library
-- `Sources/SwiftTwitchMinerApp/` — macOS SwiftUI application
-- `Sources/SwiftTwitchMinerCLI/` — Command-line interface
-- `Tests/` — Test suite
-- `Documentation/` — Architecture and technical documentation
-
-## Documentation
-
-- [Architecture](Documentation/ARCHITECTURE.md)
-- [Engine Architecture](Documentation/EngineArchitecture.md)
-- [Technical Architecture](Documentation/TECHNICAL_ARCHITECTURE.md)
-
-## Building from Source
-
-### Requirements
-
-- macOS 15.0+
-- Xcode 16.0+
-- Swift 6.0+
-
-### Build
-
-```bash
-swift build
-```
-
-### Run App
-
-```bash
-swift run SwiftTwitchMinerApp
-```
-
-### Run Tests
-
-```bash
-swift test
-```
-
-## Configuration
-
-### Environment Variables
-
-| Variable | Description |
-|----------|-------------|
-| `TWITCH_CLIENT_ID` | Override the default Twitch client ID |
-
-### Settings
-
-Configure via **Settings** (⌘,):
-
-- **Priority Games** — Games to prioritize when multiple campaigns are active
-- **Excluded Games** — Games to ignore during mining
-- **Claim Notifications** — Enable/disable drop claim notifications
-- **Debug Tracing** — Enable detailed GraphQL/PubSub logging
-
-## Troubleshooting
-
-### Authentication Issues
-
-**Problem**: Device code expires before authorization
-- **Solution**: Request a new device code (expires in ~15 minutes)
-
-**Problem**: Token refresh fails
-- **Solution**: Remove and re-add the account
-
-### Mining Issues
-
-**Problem**: No active campaigns shown
-- **Solution**: Ensure your Twitch account is linked to the game for the campaign
-
-**Problem**: Drops not progressing
-- **Solution**: Verify the channel has drops enabled and your account is linked
+---
 
 ## Contributing
 
-- Create a focused branch for each change.
-- Keep updates small, clear, and easy to review.
-- Include test notes and screenshots for behavior or UI changes.
-- Open a pull request with a concise summary of what changed.
+- Keep PRs small and focused  
+- Include screenshots for UI changes  
+- Write clear summaries  
+
+---
 
 ## License
 
-SwiftMiner is released under the GPLv3 License.
+GPLv3
