@@ -159,7 +159,7 @@ private struct AccountSettingsView: View {
                 let authService = TwitchAuthService(clientId: ClientConfiguration.clientId)
                 let account = try await authService.importTDMSession(token: token)
                 
-                await navigation.minerManager.addAccount(account)
+                navigation.minerManager.addAccount(account)
                 alertMessage = "Successfully imported account: \(account.username)"
                 showAlert = true
             } catch {
