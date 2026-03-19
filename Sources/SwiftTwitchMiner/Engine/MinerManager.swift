@@ -58,7 +58,7 @@ public final class MinerManager {
         
         public var displayName: String {
             switch self {
-            case .idle: return "Idle"
+            case .idle: return "Waiting"
             case .authenticating: return "Authenticating"
             case .fetchingCampaigns: return "Fetching Campaigns"
             case .watching: return "Watching"
@@ -114,11 +114,13 @@ public final class MinerManager {
 
     // MARK: - Setup
 
-    /// Setup the miner manager - load saved accounts and create engines
+    /// Setup the miner manager — load saved accounts from keychain.
+    /// Always awaited before `AppModel.setup()` so `miners` is populated when
+    /// `isAuthenticated` is first evaluated.
     public func setup() async {
         guard !isSetup else { return }
         isSetup = true
-        
+
         let authService = TwitchAuthService(clientId: clientId)
         do {
             let accounts = try await authService.loadAllAccounts()
@@ -128,6 +130,27 @@ public final class MinerManager {
             }
         } catch {
             print("[MinerManager] Failed to load saved accounts: \(error)")
+        }
+    }
+
+    /// Setup and optionally auto-start all miners.
+    /// Call from the app layer where `Settings` is available.
+    public func setup(
+        autoStart: Bool,
+        priorityGames: [String],
+        excludedGames: [String],
+        strategy: MiningStrategy,
+        enableBadgesEmotes: Bool
+    ) async {
+        await setup()
+        if autoStart && !miners.isEmpty {
+            print("[MinerManager] Auto-starting \(miners.count) miner(s) on launch")
+            await startAll(
+                priorityGames: priorityGames,
+                excludedGames: excludedGames,
+                strategy: strategy,
+                enableBadgesEmotes: enableBadgesEmotes
+            )
         }
     }
     
@@ -301,11 +324,11 @@ public final class MinerManager {
     
     /// Get aggregated progress across all miners
     public func getAggregateProgress() async -> AggregateProgress {
-        var totalCampaigns = 0
-        var totalDrops = 0
-        var totalClaimed = 0
-        var totalPending = 0
-        var activeMiners = 0
+        var totalCampaignsSet: Set<String> = []
+        var totalDropsCount = 0
+        var totalClaimedCount = 0
+        var totalPendingCount = 0
+        var activeMinersCount = 0
         
         resetDailyClaimsIfNeeded()
         
@@ -315,23 +338,29 @@ public final class MinerManager {
             
             do {
                 let progress = try await engine.getCurrentProgress()
-                totalCampaigns += progress.activeCampaigns
-                totalDrops += progress.totalDrops
-                totalClaimed += progress.claimedDrops
-                totalPending += progress.pendingDrops
-                activeMiners += 1
+                
+                // Add unique campaign IDs to the set for global count
+                for campaign in progress.campaigns {
+                    totalCampaignsSet.insert(campaign.campaignId)
+                }
+                
+                // Sum drops and progress per account
+                totalDropsCount += progress.totalDrops
+                totalClaimedCount += progress.claimedDrops
+                totalPendingCount += progress.pendingDrops
+                activeMinersCount += 1
             } catch {
                 // Skip miners that can't provide progress
             }
         }
         
         return AggregateProgress(
-            activeMiners: activeMiners,
-            totalCampaigns: totalCampaigns,
-            totalDrops: totalDrops,
-            claimedDrops: totalClaimed,
+            activeMiners: activeMinersCount,
+            totalCampaigns: totalCampaignsSet.count,
+            totalDrops: totalDropsCount,
+            claimedDrops: totalClaimedCount,
             claimedToday: claimedTodayIds.count,
-            pendingDrops: totalPending
+            pendingDrops: totalPendingCount
         )
     }
     

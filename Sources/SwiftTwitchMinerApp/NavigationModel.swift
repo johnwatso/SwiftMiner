@@ -71,18 +71,23 @@ public final class NavigationModel {
 
     // MARK: - Setup
 
-    /// Wire MinerManager callbacks and run initial setup.
-    /// Call this once (from ContentView's `.task`).
-    public func setup() {
+    /// Wire MinerManager callbacks and load saved accounts.
+    /// Must be awaited before `AppModel.setup()` so `miners` is populated.
+    public func setup() async {
         minerManager.onLogMessage = { [weak self] minerId, message in
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.processLogMessage(minerId: minerId, message: message)
             }
         }
-        Task {
-            await minerManager.setup()
-        }
+        let settings = Settings.shared
+        await minerManager.setup(
+            autoStart: settings.autoStartOnLaunch,
+            priorityGames: settings.priorityGames,
+            excludedGames: settings.excludedGames,
+            strategy: settings.miningStrategy,
+            enableBadgesEmotes: settings.enableBadgesEmotes
+        )
     }
 
     private func processLogMessage(minerId: String, message: String) {

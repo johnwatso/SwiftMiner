@@ -32,7 +32,7 @@ struct SidebarView: View {
             .listStyle(.sidebar)
             .scrollContentBackground(.hidden)
         }
-        .navigationTitle("Miner")
+        .navigationTitle("SwiftMiner")
         .toolbar {
             ToolbarItemGroup {
                 Button {

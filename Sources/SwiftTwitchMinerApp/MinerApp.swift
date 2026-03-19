@@ -24,8 +24,9 @@ struct MinerApp: App {
                 .environment(appModel)
                 .environment(navigation)
                 .task {
-                    // Only setup the manager. AppModel.setup() will check it.
-                    navigation.setup()
+                    // Await navigation setup first — loads accounts from keychain
+                    // and optionally auto-starts miners before AppModel reads miner state.
+                    await navigation.setup()
                     await appModel.setup()
                     await requestNotificationPermission()
                 }

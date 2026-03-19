@@ -345,9 +345,10 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
 
     public var unclaimedDrops: [Drop] { drops.filter { !$0.isClaimed } }
 
-    /// Whether the campaign is currently eligible for mining (active, linked, and has earneable drops).
+    /// Whether the campaign is currently eligible for mining (active, linked, and has eligible drops).
+    /// Eligible includes: earnable drops + claimable drops (ready to claim).
     public var isMiningEligible: Bool {
-        isTimeActive && isAccountConnected && !earnableDrops.isEmpty
+        isTimeActive && isAccountConnected && !eligibleDrops.isEmpty
     }
 
     /// Returns drops that can be earned now (not claimed, NOT yet claimable, and all preconditions met).

@@ -568,7 +568,7 @@ public actor MinerEngine {
             }
             
             let s = c.miningStatus
-            let isEligible = s == .available || s == .inProgress
+            let isEligible = s == .available || s == .inProgress || s == .claimable
             if !isEligible {
                 filteredOutReasons["status_\(s.rawValue)", default: 0] += 1
             }
