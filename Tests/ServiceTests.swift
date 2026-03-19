@@ -40,7 +40,7 @@ final class ServiceTests: XCTestCase {
                     "broadcaster_type": "",
                     "description": "Test bio",
                     "profile_image_url": "https://example.com/img.png",
-                    "offline_image_url": "",
+                    "offline_image_url": "https://example.com/offline.png",
                     "view_count": 100,
                     "created_at": "2020-01-01T00:00:00Z"
                 }
@@ -132,6 +132,7 @@ class MockURLProtocol: URLProtocol {
     nonisolated(unsafe) static var stubResponseData: Data?
     nonisolated(unsafe) static var stubError: Error?
     nonisolated(unsafe) static var lastRequest: URLRequest?
+    nonisolated(unsafe) static var requestHandler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
     
     override class func canInit(with request: URLRequest) -> Bool {
         return true
@@ -142,7 +143,34 @@ class MockURLProtocol: URLProtocol {
     }
     
     override func startLoading() {
-        MockURLProtocol.lastRequest = request
+        var captured = request
+        // URLSession moves POST body to httpBodyStream when routed through URLProtocol.
+        // Drain the stream and re-attach it as httpBody so tests can inspect it.
+        if let stream = request.httpBodyStream {
+            stream.open()
+            var data = Data()
+            let bufferSize = 4096
+            var buffer = [UInt8](repeating: 0, count: bufferSize)
+            while stream.hasBytesAvailable {
+                let read = stream.read(&buffer, maxLength: bufferSize)
+                if read > 0 { data.append(contentsOf: buffer[..<read]) }
+            }
+            stream.close()
+            if !data.isEmpty { captured.httpBody = data }
+        }
+        MockURLProtocol.lastRequest = captured
+
+        if let handler = MockURLProtocol.requestHandler {
+            do {
+                let (response, data) = try handler(request)
+                client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+                client?.urlProtocol(self, didLoad: data)
+                client?.urlProtocolDidFinishLoading(self)
+            } catch {
+                client?.urlProtocol(self, didFailWithError: error)
+            }
+            return
+        }
         
         if let error = MockURLProtocol.stubError {
             client?.urlProtocol(self, didFailWithError: error)
