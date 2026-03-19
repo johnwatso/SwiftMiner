@@ -230,7 +230,8 @@ struct AuthRequiredSheet: View {
                 minerId: minerId,
                 priorityGames: settings.priorityGames,
                 excludedGames: settings.excludedGames,
-                strategy: settings.miningStrategy
+                strategy: settings.miningStrategy,
+                enableBadgesEmotes: settings.enableBadgesEmotes
             )
             // Brief pause so the user sees the success state
             try? await Task.sleep(nanoseconds: 1_200_000_000)

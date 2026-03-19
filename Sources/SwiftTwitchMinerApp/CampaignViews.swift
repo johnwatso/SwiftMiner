@@ -75,129 +75,252 @@ struct CampaignRowView: View {
 
 /// Detail panel showing the drops for a selected campaign.
 struct CampaignDetailView: View {
-    let campaign: Campaign
+    let campaign: CampaignViewData
 
     var body: some View {
-        List {
-            Section {
-                ForEach(campaign.drops) { drop in
-                    DropRowView(drop: drop)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                campaignHeader
+
+                if campaign.drops.isEmpty {
+                    MaterialEmptyStatePanel(
+                        "No drops available",
+                        systemImage: "gift.slash",
+                        description: "This campaign doesn’t have any drop items to display yet."
+                    )
+                    .frame(maxWidth: .infinity)
+                } else {
+                    VStack(spacing: 12) {
+                        ForEach(campaign.drops) { drop in
+                            DropRowView(drop: drop)
+                        }
+                    }
                 }
-            } header: {
-                HStack {
-                    Text(campaign.name)
-                        .font(.headline)
-                    Spacer()
-                    CampaignStatusBadge(status: campaign.status)
-                }
-                .padding(.bottom, 4)
-            } footer: {
-                Text("Ends \(campaign.endDate.formatted(date: .abbreviated, time: .shortened))")
-                    .foregroundStyle(.secondary)
-                    .font(.caption)
             }
+            .padding(24)
         }
-        .navigationTitle(campaign.game.name)
+        .navigationTitle(campaign.gameName)
+    }
+
+    private var campaignHeader: some View {
+        HStack(spacing: 16) {
+            campaignArtwork
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(campaign.gameName)
+                    .font(.title3.weight(.semibold))
+
+                Text(campaign.campaignName)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 10) {
+                    Text("\(campaign.dropsClaimed)/\(campaign.totalDrops) claimed")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    if let timeRemaining = campaign.timeRemaining {
+                        Text("•")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                        Text(timeRemaining.formattedHoursMinutes)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            CampaignStatusPill(title: campaign.status, claimed: campaign.isClaimed)
+        }
+        .padding(18)
+        .glassContentSurface(cornerRadius: 26)
+    }
+
+    @ViewBuilder
+    private var campaignArtwork: some View {
+        if let url = campaign.artworkURL {
+            AsyncImage(url: url) { image in
+                image
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFill()
+            } placeholder: {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(.thinMaterial)
+            }
+            .frame(width: 72, height: 72)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        } else {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(.thinMaterial)
+                .overlay {
+                    Image(systemName: "gamecontroller.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .frame(width: 72, height: 72)
+        }
     }
 }
 
 /// One row for a single drop.
 struct DropRowView: View {
-    let drop: Drop
-
-    private var progress: Double {
-        guard let p = drop.progress else { return 0 }
-        return p.percentComplete / 100.0
-    }
+    let drop: DropViewData
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                // Drop image
-                if let url = drop.imageURL {
-                    AsyncImage(url: url) { image in
-                        image.resizable().scaledToFill()
-                    } placeholder: {
-                        Circle().fill(.tertiary)
-                    }
-                    .frame(width: 32, height: 32)
-                    .clipShape(Circle())
-                } else {
-                    Image(systemName: "gift.fill")
-                        .frame(width: 32, height: 32)
-                        .foregroundStyle(.purple)
-                }
+        HStack(alignment: .top, spacing: 14) {
+            dropArtwork
 
-                VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 12) {
                     Text(drop.name)
-                        .font(.callout.weight(.medium))
+                        .font(.headline)
+                        .lineLimit(2)
 
-                    if let p = drop.progress {
-                        Text("\(p.currentMinutes)/\(p.requiredMinutes) min")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text("\(drop.requiredMinutes) min required")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                    Spacer(minLength: 0)
+
+                    DropStateBadge(drop: drop)
                 }
 
-                Spacer()
+                ProgressView(value: drop.progress, total: 1.0)
+                    .progressViewStyle(.linear)
+                    .tint(progressTint)
 
-                DropStatusBadge(drop: drop)
-            }
+                HStack(spacing: 8) {
+                    Text("\(drop.currentMinutes) / \(drop.requiredMinutes) min")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
 
-            // Progress bar
-            if !drop.isClaimed {
-                ProgressView(value: progress)
-                    .tint(drop.isClaimable ? .green : .purple)
+                    if let description = drop.description, !description.isEmpty {
+                        Text("•")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                        Text(description)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
             }
         }
-        .padding(.vertical, 4)
-        .opacity(drop.isClaimed ? 0.5 : 1.0)
+        .padding(16)
+        .glassPanel(cornerRadius: 22)
+        .opacity(drop.isEarnable || drop.isClaimable || drop.isClaimed ? 1.0 : 0.62)
+    }
+
+    @ViewBuilder
+    private var dropArtwork: some View {
+        if let url = drop.imageURL {
+            AsyncImage(url: url) { image in
+                image
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFill()
+            } placeholder: {
+                placeholderArtwork
+            }
+            .frame(width: 52, height: 52)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        } else {
+            placeholderArtwork
+                .frame(width: 52, height: 52)
+        }
+    }
+
+    private var placeholderArtwork: some View {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(.thinMaterial)
+            .overlay {
+                Image(systemName: rewardIcon)
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+    }
+
+    private var rewardIcon: String {
+        switch drop.rewardType {
+        case .badge: return "person.badge.shield.check.fill"
+        case .emote: return "face.smiling.fill"
+        case .inGame: return "gift.fill"
+        }
+    }
+
+    private var progressTint: Color {
+        if drop.isClaimed { return .green }
+        if drop.isClaimable { return .blue }
+        if drop.isEarnable { return .accentColor }
+        return .secondary
     }
 }
 
 // MARK: - Badges
 
-struct CampaignStatusBadge: View {
-    let status: CampaignStatus
-
-    var body: some View {
-        Text(status.rawValue)
-            .font(.caption2.weight(.semibold))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(color.opacity(0.15), in: Capsule())
-            .foregroundStyle(color)
-    }
-
-    private var color: Color {
-        switch status {
-        case .active:   return .green
-        case .upcoming: return .orange
-        case .expired:  return .gray
-        case .disabled: return .red
+private extension TimeInterval {
+    var formattedHoursMinutes: String {
+        let totalMinutes = max(Int(self / 60), 0)
+        let hours = totalMinutes / 60
+        let minutes = totalMinutes % 60
+        if hours > 0 {
+            return "\(hours)h \(minutes)m remaining"
         }
+        return "\(minutes)m remaining"
     }
 }
 
-struct DropStatusBadge: View {
-    let drop: Drop
+private struct CampaignStatusPill: View {
+    let title: String
+    let claimed: Bool
 
     var body: some View {
-        if drop.isClaimed {
-            Label("Claimed", systemImage: "checkmark.seal.fill")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.green)
-        } else if drop.isClaimable {
-            Label("Complete", systemImage: "gift.fill")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-        } else {
-            EmptyView()
-        }
+        Text(claimed ? "Completed" : title.replacingOccurrences(of: "_", with: " ").capitalized)
+            .font(.caption.weight(.semibold))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .foregroundStyle(claimed ? .green : .secondary)
+            .glassControlSurface(cornerRadius: 999)
+    }
+}
+
+private struct DropStateBadge: View {
+    let drop: DropViewData
+
+    var body: some View {
+        Label(title, systemImage: icon)
+            .font(.caption2.weight(.semibold))
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .foregroundStyle(color)
+            .background(backgroundColor, in: Capsule())
+    }
+
+    private var title: String {
+        if drop.isClaimed { return "Claimed" }
+        if drop.isClaimable { return "Claimable" }
+        if drop.isEarnable { return "Earnable" }
+        return "Locked"
+    }
+
+    private var icon: String {
+        if drop.isClaimed { return "checkmark.circle.fill" }
+        if drop.isClaimable { return "sparkles" }
+        if drop.isEarnable { return "circle.fill" }
+        return "lock.fill"
+    }
+
+    private var color: Color {
+        if drop.isClaimed { return .green }
+        if drop.isClaimable { return .blue }
+        if drop.isEarnable { return .secondary }
+        return .secondary.opacity(0.8)
+    }
+
+    private var backgroundColor: Color {
+        if drop.isClaimed { return .green.opacity(0.12) }
+        if drop.isClaimable { return .blue.opacity(0.12) }
+        if drop.isEarnable { return .white.opacity(0.08) }
+        return .white.opacity(0.05)
     }
 }
 

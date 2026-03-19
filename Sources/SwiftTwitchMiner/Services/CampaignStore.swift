@@ -24,7 +24,7 @@ public final class CampaignStore {
 
     public init() {
         // Load cached campaigns immediately so the UI has data before the first API call
-        campaigns = CampaignDiskCache.load()
+        campaigns = CampaignStoreDiskCache.load()
         if !campaigns.isEmpty {
             print("[CampaignStore] Loaded \(campaigns.count) cached campaigns from disk")
         }
@@ -36,7 +36,7 @@ public final class CampaignStore {
     /// This should be called by the aggregator (CampaignDataService).
     public func updateCampaigns(_ newCampaigns: [Campaign]) {
         self.campaigns = newCampaigns
-        CampaignDiskCache.save(newCampaigns)
+        CampaignStoreDiskCache.save(newCampaigns)
     }
 }
 
@@ -45,7 +45,7 @@ public final class CampaignStore {
 /// Persists campaigns to disk so the UI has data immediately on relaunch
 /// without waiting for a fresh API call. Campaigns are non-sensitive
 /// (publicly available Twitch data), so no encryption is needed.
-enum CampaignDiskCache {
+enum CampaignStoreDiskCache {
     private static let directoryName = "com.swifttwitchminer"
     private static let fileName = "campaigns-cache.json"
     /// Cache expires after 1 hour — stale campaigns are discarded on load
@@ -69,7 +69,7 @@ enum CampaignDiskCache {
             let data = try JSONEncoder().encode(envelope)
             try data.write(to: fileURL, options: .atomic)
         } catch {
-            print("[CampaignDiskCache] Save failed: \(error.localizedDescription)")
+            print("[CampaignStoreDiskCache] Save failed: \(error.localizedDescription)")
         }
     }
 
@@ -80,7 +80,7 @@ enum CampaignDiskCache {
         }
         // Discard stale cache
         guard Date().timeIntervalSince(envelope.savedAt) < maxAge else {
-            print("[CampaignDiskCache] Cache expired, ignoring")
+            print("[CampaignStoreDiskCache] Cache expired, ignoring")
             return []
         }
         return envelope.campaigns

@@ -64,14 +64,14 @@ public actor InventoryService {
             InventoryDiskCache.save(snapshot)
             return snapshot
         } catch {
-            if let cached = currentSnapshot() {
+            if let cached = await currentSnapshot() {
                 return cached
             }
             throw error
         }
     }
 
-    public func currentSnapshot() -> InventorySnapshot? {
+    public func currentSnapshot() async -> InventorySnapshot? {
         if let snapshotCache {
             return snapshotCache
         }
@@ -85,8 +85,8 @@ public actor InventoryService {
 
     /// Checks if a drop is claimed based on its benefit ID.
     /// This uses the cached benefit IDs from the most recent inventory fetch.
-    public func isDropClaimed(benefitID: String) -> Bool {
-        guard let snapshot = currentSnapshot() else { return false }
+    public func isDropClaimed(benefitID: String) async -> Bool {
+        guard let snapshot = await currentSnapshot() else { return false }
         return snapshot.benefitIDs.contains(benefitID)
     }
 

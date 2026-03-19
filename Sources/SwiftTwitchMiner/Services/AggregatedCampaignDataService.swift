@@ -12,6 +12,14 @@ public actor AggregatedCampaignDataService {
     
     // MARK: - Types
     
+    /// Pre-computed mining state for a single account on a campaign.
+    /// Codex reads this directly — no inference required.
+    public enum AccountMiningState: String, Codable, Sendable {
+        case mining   // actively watching a channel for this campaign right now
+        case claimed  // all drops claimed (benefit IDs confirmed in inventory)
+        case idle     // linked but not currently mining this campaign
+    }
+
     /// Represents a campaign with progress across multiple accounts
     public struct AggregatedCampaign: Identifiable, Sendable, Equatable {
         public let id: String
@@ -21,12 +29,25 @@ public actor AggregatedCampaignDataService {
         public let status: String
         public let startDate: Date
         public let endDate: Date
-        
+
         /// Total drops in this campaign (shared across all accounts)
         public let totalDrops: Int
-        
+
         /// Per-account progress information
         public let accountProgress: [String: AccountProgress]
+
+        /// Ordered list of per-account state indicators for Codex avatar row.
+        /// Pre-computed — initials, state, and username are all final.
+        public let accountStates: [AccountState]
+
+        /// Per-account state indicator — all fields pre-computed for direct rendering.
+        public struct AccountState: Sendable, Equatable {
+            public let accountId: String
+            public let username: String
+            /// First two letters of username, uppercased. Pre-computed for display.
+            public let initials: String
+            public let state: AccountMiningState
+        }
         
         /// Aggregated progress across all accounts (for display)
         public var overallProgress: Double {
@@ -90,7 +111,8 @@ public actor AggregatedCampaignDataService {
             startDate: Date,
             endDate: Date,
             totalDrops: Int,
-            accountProgress: [String: AccountProgress]
+            accountProgress: [String: AccountProgress],
+            accountStates: [AccountState] = []
         ) {
             self.id = id
             self.gameName = gameName
@@ -101,6 +123,7 @@ public actor AggregatedCampaignDataService {
             self.endDate = endDate
             self.totalDrops = totalDrops
             self.accountProgress = accountProgress
+            self.accountStates = accountStates
         }
     }
     
@@ -108,11 +131,23 @@ public actor AggregatedCampaignDataService {
     
     /// Per-account data services
     private var accountServices: [String: CampaignDataService] = [:]
-    
+
     /// Username lookup by account ID
     private var accountUsernames: [String: String] = [:]
+
+    /// Currently active campaign ID per account (nil = not mining anything)
+    /// Updated by MiningDataCoordinator at each refresh.
+    private var activeCampaignIds: [String: String?] = [:]
     
     // MARK: - Account Management
+    
+    /// Optional CampaignStore to push aggregated updates to
+    private weak var campaignStore: CampaignStore?
+    
+    /// Initialize with optional CampaignStore for UI updates
+    public init(campaignStore: CampaignStore? = nil) {
+        self.campaignStore = campaignStore
+    }
     
     /// Register a miner's data service
     public func registerAccount(
@@ -128,50 +163,58 @@ public actor AggregatedCampaignDataService {
     public func unregisterAccount(accountId: String) {
         accountServices.removeValue(forKey: accountId)
         accountUsernames.removeValue(forKey: accountId)
+        activeCampaignIds.removeValue(forKey: accountId)
+    }
+
+    /// Update the currently active campaign for an account.
+    /// Called by MiningDataCoordinator at each refresh cycle.
+    public func updateActiveCampaign(accountId: String, campaignId: String?) {
+        activeCampaignIds[accountId] = campaignId
     }
     
     // MARK: - Aggregation API
     
     /// Get all unique campaigns across all miners with aggregated progress
     public func getAllCampaigns() async -> [AggregatedCampaign] {
-        // Collect campaigns from all accounts
-        var campaignsById: [String: Campaign] = [:]
-        var viewDataByAccount: [String: [CampaignViewData]] = [:]
+        let aggregated = await getAggregatedCampaignsInternal()
         
-        for (accountId, service) in accountServices {
-            let viewData = await service.getAllCampaigns()
-            viewDataByAccount[accountId] = viewData
-            
-            // Store campaign metadata (shared across accounts)
-            for data in viewData {
-                if campaignsById[data.id] == nil {
-                    // Create a Campaign from view data for storage
-                    campaignsById[data.id] = Campaign(
-                        id: data.id,
-                        name: data.campaignName,
-                        game: Game(id: "", name: data.gameName, boxArtURL: data.artworkURL),
-                        status: CampaignStatus(rawValue: data.status) ?? .active,
-                        startDate: Date(), // Will be populated from actual campaign
-                        endDate: Date().addingTimeInterval(86400), // Will be populated
-                        drops: [], // Drops loaded separately if needed
-                        isAccountConnected: true
-                    )
-                }
-            }
-        }
+        // Update CampaignStore with latest aggregated data
+        await updateCampaignStore(using: aggregated)
+        
+        return aggregated
+    }
+
+    /// Internal implementation of aggregation to avoid recursion and allow re-use
+    private func getAggregatedCampaignsInternal() async -> [AggregatedCampaign] {
+        let (viewDataByAccount, bestMetadata) = await collectCurrentCampaignViewData()
         
         // Build aggregated campaigns
-        return campaignsById.values.map { campaign in
+        return bestMetadata.values.map { data in
             buildAggregatedCampaign(
-                campaign: campaign,
+                from: data,
                 viewDataByAccount: viewDataByAccount
             )
         }.sorted { $0.gameName < $1.gameName }
     }
+
+    /// Returns the unified cached campaign feed used by the Drops UI.
+    /// This stays aligned with `CampaignDataService.currentCampaigns()`.
+    public func currentCampaigns() async -> [CampaignViewData] {
+        let (viewDataByAccount, bestMetadata) = await collectCurrentCampaignViewData()
+
+        let merged = bestMetadata.values.map { data in
+            buildUnifiedCampaignViewData(
+                from: data,
+                viewDataByAccount: viewDataByAccount
+            )
+        }
+
+        return CampaignMapper.composeFeed(from: merged)
+    }
     
     /// Get campaigns that are eligible for mining (active, not fully claimed)
     public func getEligibleCampaigns() async -> [AggregatedCampaign] {
-        let all = await getAllCampaigns()
+        let all = await getAggregatedCampaignsInternal()
         return all.filter { campaign in
             campaign.status == "ACTIVE" && !campaign.isFullyClaimed
         }
@@ -179,7 +222,7 @@ public actor AggregatedCampaignDataService {
     
     /// Get a specific campaign with all account progress
     public func getCampaign(id: String) async -> AggregatedCampaign? {
-        let all = await getAllCampaigns()
+        let all = await getAggregatedCampaignsInternal()
         return all.first { $0.id == id }
     }
     
@@ -191,7 +234,7 @@ public actor AggregatedCampaignDataService {
     
     /// Get aggregated stats across all accounts
     public func getAggregateStats() async -> AggregateStats {
-        let campaigns = await getAllCampaigns()
+        let campaigns = await getAggregatedCampaignsInternal()
         
         var totalCampaigns = 0
         var activeCampaigns = 0
@@ -227,27 +270,54 @@ public actor AggregatedCampaignDataService {
         )
     }
     
-    /// Force refresh for all accounts
+    /// Force refresh for all accounts and update CampaignStore
     public func refreshAll() async {
         for (_, service) in accountServices {
             await service.refresh()
+        }
+        let aggregated = await getAggregatedCampaignsInternal()
+        await updateCampaignStore(using: aggregated)
+    }
+    
+    /// Push aggregated campaigns to CampaignStore (if configured)
+    private func updateCampaignStore(using aggregated: [AggregatedCampaign]) async {
+        guard let store = campaignStore else { return }
+        
+        // Convert AggregatedCampaign back to Campaign for CampaignStore
+        let campaigns: [Campaign] = aggregated.map { agg in
+            // Use the best available metadata
+            Campaign(
+                id: agg.id,
+                name: agg.campaignName,
+                game: Game(id: "", name: agg.gameName, boxArtURL: agg.artworkURL),
+                status: CampaignStatus(rawValue: agg.status) ?? .active,
+                startDate: agg.startDate,
+                endDate: agg.endDate,
+                drops: [], // Drops loaded on demand via CampaignDataService
+                isAccountConnected: true // If it's in the list, at least one account is connected
+            )
+        }
+        
+        await MainActor.run {
+            store.updateCampaigns(campaigns)
         }
     }
     
     // MARK: - Private Helpers
     
     private func buildAggregatedCampaign(
-        campaign: Campaign,
+        from data: CampaignViewData,
         viewDataByAccount: [String: [CampaignViewData]]
     ) -> AggregatedCampaign {
         var accountProgress: [String: AggregatedCampaign.AccountProgress] = [:]
-        
+        var accountStates: [AggregatedCampaign.AccountState] = []
+
         for (accountId, viewDataList) in viewDataByAccount {
-            guard let viewData = viewDataList.first(where: { $0.id == campaign.id }),
+            guard let viewData = viewDataList.first(where: { $0.id == data.id }),
                   let username = accountUsernames[accountId] else {
                 continue
             }
-            
+
             accountProgress[accountId] = AggregatedCampaign.AccountProgress(
                 accountId: accountId,
                 username: username,
@@ -256,19 +326,271 @@ public actor AggregatedCampaignDataService {
                 dropsClaimed: viewData.dropsClaimed,
                 dropsTotal: viewData.totalDrops
             )
+
+            let state: AccountMiningState
+            if viewData.isClaimed {
+                state = .claimed
+            } else if activeCampaignIds[accountId] == data.id {
+                state = .mining
+            } else {
+                state = .idle
+            }
+
+            accountStates.append(AggregatedCampaign.AccountState(
+                accountId: accountId,
+                username: username,
+                initials: Self.initials(from: username),
+                state: state
+            ))
         }
-        
+
+        // Sort: mining first, then claimed, then idle — consistent ordering for Codex
+        accountStates.sort {
+            let order: [AccountMiningState: Int] = [.mining: 0, .claimed: 1, .idle: 2]
+            return (order[$0.state] ?? 3) < (order[$1.state] ?? 3)
+        }
+
         return AggregatedCampaign(
-            id: campaign.id,
-            gameName: campaign.game.name,
-            campaignName: campaign.name,
-            artworkURL: campaign.game.boxArtURL,
-            status: campaign.status.rawValue,
-            startDate: campaign.startDate,
-            endDate: campaign.endDate,
-            totalDrops: campaign.drops.count,
-            accountProgress: accountProgress
+            id: data.id,
+            gameName: data.gameName,
+            campaignName: data.campaignName,
+            artworkURL: data.artworkURL,
+            status: data.status,
+            startDate: Date(), // Metadata-only campaign objects don't have full dates
+            endDate: Date().addingTimeInterval(86400),
+            totalDrops: data.totalDrops,
+            accountProgress: accountProgress,
+            accountStates: accountStates
         )
+    }
+
+    private func collectCurrentCampaignViewData() async -> ([String: [CampaignViewData]], [String: CampaignViewData]) {
+        var viewDataByAccount: [String: [CampaignViewData]] = [:]
+        var bestMetadata: [String: CampaignViewData] = [:]
+
+        for (accountId, service) in accountServices {
+            let viewData = await service.currentCampaigns()
+            viewDataByAccount[accountId] = viewData
+
+            for data in viewData {
+                if let existing = bestMetadata[data.id] {
+                    if shouldReplaceMetadata(existing: existing, incoming: data) {
+                        bestMetadata[data.id] = data
+                    }
+                } else {
+                    bestMetadata[data.id] = data
+                }
+            }
+        }
+
+        return (viewDataByAccount, bestMetadata)
+    }
+
+    private func buildUnifiedCampaignViewData(
+        from data: CampaignViewData,
+        viewDataByAccount: [String: [CampaignViewData]]
+    ) -> CampaignViewData {
+        let accountCampaigns = viewDataByAccount.compactMap { accountId, campaigns in
+            campaigns.first(where: { $0.id == data.id }).map { (accountId, $0) }
+        }
+
+        let progressValues = accountCampaigns.map { $0.1.progress }
+        let aggregateProgress = progressValues.isEmpty
+            ? data.progress
+            : progressValues.reduce(0, +) / Double(progressValues.count)
+
+        let allClaimed = !accountCampaigns.isEmpty && accountCampaigns.allSatisfy { $0.1.isClaimed }
+        let anyClaimed = accountCampaigns.contains { $0.1.isClaimed || $0.1.miningStatus == .claimed }
+        let accountStates = buildCampaignAccountStates(for: data.id, accountCampaigns: accountCampaigns)
+        let drops = mergeDrops(from: accountCampaigns.map(\.1))
+        let miningStatus = mergedMiningStatus(
+            for: data,
+            campaigns: accountCampaigns.map(\.1),
+            allClaimed: allClaimed,
+            anyClaimed: anyClaimed
+        )
+        let relevance = mergedRelevance(
+            for: data,
+            campaigns: accountCampaigns.map(\.1),
+            miningStatus: miningStatus,
+            anyClaimed: anyClaimed
+        )
+
+        return CampaignViewData(
+            id: data.id,
+            gameName: data.gameName,
+            campaignName: data.campaignName,
+            artworkURL: data.artworkURL,
+            progress: aggregateProgress,
+            isClaimed: allClaimed,
+            dropsClaimed: accountCampaigns.map { $0.1.dropsClaimed }.max() ?? data.dropsClaimed,
+            totalDrops: accountCampaigns.map { $0.1.totalDrops }.max() ?? data.totalDrops,
+            timeRemaining: accountCampaigns.compactMap { $0.1.timeRemaining }.min() ?? data.timeRemaining,
+            status: mergeCampaignStatus(for: data, campaigns: accountCampaigns.map(\.1)),
+            miningStatus: miningStatus,
+            relevance: relevance,
+            drops: drops,
+            accountStates: accountStates
+        )
+    }
+
+    private func buildCampaignAccountStates(
+        for campaignId: String,
+        accountCampaigns: [(String, CampaignViewData)]
+    ) -> [AccountState] {
+        accountCampaigns.map { accountId, campaign in
+            let username = accountUsernames[accountId] ?? accountId
+            let state: AccountMiningStatus
+
+            if activeCampaignIds[accountId] == campaignId {
+                state = .mining
+            } else if campaign.isClaimed || campaign.miningStatus == .claimed {
+                state = .claimed
+            } else {
+                state = .idle
+            }
+
+            return AccountState(
+                accountId: accountId,
+                username: username,
+                initials: Self.initials(from: username),
+                miningStatus: state
+            )
+        }
+        .sorted { lhs, rhs in
+            let order: [AccountMiningStatus: Int] = [.mining: 0, .claimed: 1, .idle: 2]
+            return (order[lhs.miningStatus] ?? 3) < (order[rhs.miningStatus] ?? 3)
+        }
+    }
+
+    private func mergeDrops(from campaigns: [CampaignViewData]) -> [DropViewData] {
+        var bestDrops: [String: DropViewData] = [:]
+        var order: [String] = []
+
+        for campaign in campaigns {
+            for drop in campaign.drops {
+                if bestDrops[drop.id] == nil {
+                    order.append(drop.id)
+                    bestDrops[drop.id] = drop
+                } else if let existing = bestDrops[drop.id] {
+                    bestDrops[drop.id] = mergeDrop(existing: existing, incoming: drop)
+                }
+            }
+        }
+
+        return order.compactMap { bestDrops[$0] }
+    }
+
+    private func mergeDrop(existing: DropViewData, incoming: DropViewData) -> DropViewData {
+        DropViewData(
+            id: existing.id,
+            name: existing.name.isEmpty ? incoming.name : existing.name,
+            description: existing.description ?? incoming.description,
+            imageURL: existing.imageURL ?? incoming.imageURL,
+            rewardType: existing.rewardType,
+            requiredMinutes: max(existing.requiredMinutes, incoming.requiredMinutes),
+            currentMinutes: max(existing.currentMinutes, incoming.currentMinutes),
+            progress: max(existing.progress, incoming.progress),
+            isClaimed: existing.isClaimed || incoming.isClaimed,
+            isClaimable: existing.isClaimable || incoming.isClaimable,
+            isEarnable: existing.isEarnable || incoming.isEarnable
+        )
+    }
+
+    private func mergedMiningStatus(
+        for data: CampaignViewData,
+        campaigns: [CampaignViewData],
+        allClaimed: Bool,
+        anyClaimed: Bool
+    ) -> MiningCampaignStatus {
+        if campaigns.contains(where: { $0.status == CampaignStatus.expired.rawValue || $0.miningStatus == .expired }) &&
+            campaigns.allSatisfy({ $0.status == CampaignStatus.expired.rawValue || $0.miningStatus == .expired }) {
+            return .expired
+        }
+
+        if allClaimed {
+            return .claimed
+        }
+
+        if campaigns.contains(where: { $0.miningStatus == .claimable }) {
+            return .claimable
+        }
+
+        if campaigns.contains(where: { $0.miningStatus == .inProgress }) {
+            return .inProgress
+        }
+
+        if campaigns.contains(where: { $0.miningStatus == .available || $0.status == CampaignStatus.active.rawValue }) {
+            return .available
+        }
+
+        if anyClaimed {
+            return .claimed
+        }
+
+        return data.miningStatus
+    }
+
+    private func mergedRelevance(
+        for data: CampaignViewData,
+        campaigns: [CampaignViewData],
+        miningStatus: MiningCampaignStatus,
+        anyClaimed: Bool
+    ) -> CampaignRelevance {
+        if campaigns.contains(where: { $0.relevance == .prioritised }) {
+            return .prioritised
+        }
+
+        if campaigns.contains(where: { $0.relevance == .active }) ||
+            miningStatus == .available ||
+            miningStatus == .inProgress ||
+            miningStatus == .claimable {
+            return .active
+        }
+
+        if campaigns.contains(where: { $0.relevance == .recent }) || anyClaimed {
+            return .recent
+        }
+
+        return data.relevance
+    }
+
+    private func mergeCampaignStatus(for data: CampaignViewData, campaigns: [CampaignViewData]) -> String {
+        if campaigns.contains(where: { $0.status == CampaignStatus.active.rawValue }) {
+            return CampaignStatus.active.rawValue
+        }
+
+        if campaigns.contains(where: { $0.status == CampaignStatus.upcoming.rawValue }) {
+            return CampaignStatus.upcoming.rawValue
+        }
+
+        if campaigns.contains(where: { $0.status == CampaignStatus.expired.rawValue }) {
+            return CampaignStatus.expired.rawValue
+        }
+
+        return data.status
+    }
+
+    private func shouldReplaceMetadata(existing: CampaignViewData, incoming: CampaignViewData) -> Bool {
+        if existing.artworkURL == nil && incoming.artworkURL != nil {
+            return true
+        }
+
+        if incoming.totalDrops > existing.totalDrops {
+            return true
+        }
+
+        return incoming.drops.count > existing.drops.count
+    }
+
+    /// Pre-computes display initials from a username.
+    /// "john doe" → "JD", "johndoe" → "JO"
+    private static func initials(from username: String) -> String {
+        let parts = username.split(separator: " ")
+        if parts.count >= 2 {
+            return String(parts[0].prefix(1) + parts[1].prefix(1)).uppercased()
+        }
+        return String(username.prefix(2)).uppercased()
     }
 }
 

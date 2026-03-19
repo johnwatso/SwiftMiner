@@ -83,7 +83,7 @@ struct MinerApp: App {
 
     private func requestNotificationPermission() async {
         guard Settings.shared.showClaimNotifications else { return }
-        try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])
+        _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])
     }
 }
 

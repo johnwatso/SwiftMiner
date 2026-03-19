@@ -17,8 +17,8 @@ public enum MergeService {
     ) -> [DisplayCampaign] {
         // Flat map of dropId -> [DropState]
         var statesByDropId: [String: [DropState]] = [:]
-        
-        for (accountId, states) in accountStates {
+
+        for (_, states) in accountStates {
             for state in states {
                 statesByDropId[state.dropId, default: []].append(state)
             }

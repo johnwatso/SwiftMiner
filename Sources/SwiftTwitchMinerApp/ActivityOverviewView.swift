@@ -53,9 +53,9 @@ struct ActivityOverviewView: View {
                         await navigation.minerManager.startAll(
                             priorityGames: settings.priorityGames,
                             excludedGames: settings.excludedGames,
-                            strategy: settings.miningStrategy
-                        )
-                    }
+                            strategy: settings.miningStrategy,
+                            enableBadgesEmotes: settings.enableBadgesEmotes
+                        )                    }
                 } label: {
                     Label("Start All", systemImage: "play.fill")
                 }
@@ -370,7 +370,8 @@ private struct MinerControlPanel: View {
                         minerId: miner.id,
                         priorityGames: settings.priorityGames,
                         excludedGames: settings.excludedGames,
-                        strategy: settings.miningStrategy
+                        strategy: settings.miningStrategy,
+                        enableBadgesEmotes: settings.enableBadgesEmotes
                     )
                     isStarting = false
                 }

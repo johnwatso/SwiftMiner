@@ -19,6 +19,10 @@ public actor DropsService {
         await inventoryService.setAccountId(accountId)
     }
 
+    public func getInventoryService() -> InventoryService {
+        inventoryService
+    }
+
     /// Fetch all drop campaigns
     /// - Parameter forceRefresh: Force refresh even if cache is valid
     /// - Returns: Array of Campaign objects
@@ -67,7 +71,12 @@ public actor DropsService {
     public func fetchDropStates(for accountId: String) async throws -> [DropState] {
         let campaigns = try await fetchCampaigns()
         let fetchedSnapshot = try? await inventoryService.fetchInventory()
-        let cachedSnapshot = await inventoryService.currentSnapshot()
+        let cachedSnapshot: InventorySnapshot?
+        do {
+            cachedSnapshot = try await inventoryService.fetchInventory()
+        } catch {
+            cachedSnapshot = await inventoryService.currentSnapshot()
+        }
         let snapshot = fetchedSnapshot ?? cachedSnapshot ?? .empty(accountId: accountId)
         let enriched = Self.mergeInventory(snapshot, into: campaigns)
 
@@ -165,14 +174,28 @@ public actor DropsService {
         // Fetch campaigns — falls back to in-memory cache automatically
         let campaigns = try await fetchCampaigns(forceRefresh: forceRefresh)
         // Prefer a fresh inventory fetch; fall back to cached snapshot for offline support
-        let snapshot = (try? await inventoryService.fetchInventory(forceRefresh: forceRefresh))
-            ?? (await inventoryService.currentSnapshot())
-        return CampaignMapper.map(campaigns: campaigns, inventory: snapshot)
+        let snapshot: InventorySnapshot?
+        do {
+            snapshot = try await inventoryService.fetchInventory(forceRefresh: forceRefresh)
+        } catch {
+            snapshot = await inventoryService.currentSnapshot()
+        }
+        // composeFeed orders: prioritised → active → recent (never empty if data exists)
+        let mapped = CampaignMapper.map(campaigns: campaigns, inventory: snapshot)
+        return CampaignMapper.composeFeed(from: mapped)
     }
 
     /// Returns UI-ready CampaignViewData for a single campaign by ID.
+    /// Searches all campaigns (not just the composed feed) so claimed/irrelevant ones are still findable.
     public func getCampaignViewData(for campaignId: String) async throws -> CampaignViewData? {
-        let all = try await getCampaignViewData()
+        let campaigns = try await fetchCampaigns()
+        let snapshot: InventorySnapshot?
+        do {
+            snapshot = try await inventoryService.fetchInventory()
+        } catch {
+            snapshot = await inventoryService.currentSnapshot()
+        }
+        let all = CampaignMapper.map(campaigns: campaigns, inventory: snapshot)
         return all.first { $0.id == campaignId }
     }
 
@@ -192,7 +215,12 @@ public actor DropsService {
     public func getOverallProgress() async throws -> OverallProgress {
         let campaigns = try await fetchCampaigns()
         let fetchedSnapshot = try? await inventoryService.fetchInventory()
-        let cachedSnapshot = await inventoryService.currentSnapshot()
+        let cachedSnapshot: InventorySnapshot?
+        do {
+            cachedSnapshot = try await inventoryService.fetchInventory()
+        } catch {
+            cachedSnapshot = await inventoryService.currentSnapshot()
+        }
         let snapshot = fetchedSnapshot ?? cachedSnapshot ?? .empty(accountId: "")
         let enriched = Self.mergeInventory(snapshot, into: campaigns)
 

@@ -851,7 +851,12 @@ public actor TwitchAPIClient {
                 // Use first benefit for display (reward field)
                 if reward == nil, let benefitName = benefit["name"] as? String {
                     let benefitImageURL = (benefit["imageAssetURL"] as? String).flatMap { URL(string: $0) }
-                    reward = Reward(id: benefitId, type: .inGame, name: benefitName, description: "", imageURL: benefitImageURL)
+                    
+                    // Parse distribution type (IN_GAME, BADGE, EMOTE)
+                    let distributionType = benefit["distributionType"] as? String ?? "IN_GAME"
+                    let type = RewardType(rawValue: distributionType) ?? .inGame
+                    
+                    reward = Reward(id: benefitId, type: type, name: benefitName, description: "", imageURL: benefitImageURL)
                 }
             }
         }
