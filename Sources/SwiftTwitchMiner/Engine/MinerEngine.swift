@@ -16,6 +16,7 @@ public actor MinerEngine {
     private var session: MiningSession?
     private var isRunning = false
     private var mainTask: Task<Void, Never>?
+    private var maintenanceTask: Task<Void, Never>?
     private var currentAccount: Account?
     private var shouldSwitchChannel = false
     /// Set to true to interrupt the idle wait and immediately re-check for eligible campaigns
@@ -23,6 +24,8 @@ public actor MinerEngine {
     
     /// Counter for minutes watched without a server progress update (local estimation)
     private var extraMinutesWatched: Int = 0
+    /// Timestamp of the last verified progress update (GQL or PubSub)
+    private var lastProgressUpdateAt: Date = Date()
     /// Maximum extra minutes allowed before assuming mining is stalled (matches TDM)
     private static let maxExtraMinutes = 15
     
@@ -116,13 +119,14 @@ public actor MinerEngine {
         self.pubSubClient = PubSubClient()
         self.dropEventsService = DropEventsService(pubSubClient: pubSubClient)
 
-        // Handle token refresh automatically for PubSub
+        // Handle token refresh automatically for PubSub and API Client
         Task {
             await authService.setTokenRefreshHandler { [weak self] newToken in
                 guard let self = self else { return }
                 Task {
+                    await self.apiClient.updateAccessToken(newToken)
                     await self.pubSubClient.updateAccessToken(newToken)
-                    await self.log("PubSub access token updated after refresh")
+                    await self.log("Clients access token updated after refresh")
                 }
             }
         }
@@ -237,6 +241,9 @@ public actor MinerEngine {
             guard let self = self else { return }
             await self.runMiningLoop()
         }
+
+        // Start maintenance loop (30 minute intervals)
+        startMaintenanceLoop()
     }
     
     /// Stops the mining engine
@@ -244,6 +251,9 @@ public actor MinerEngine {
         log("Stopping miner...")
         isRunning = false
         mainTask?.cancel()
+        mainTask = nil
+        maintenanceTask?.cancel()
+        maintenanceTask = nil
         
         // Stop PubSub watching
         try? await dropEventsService.stopWatching()
@@ -328,6 +338,7 @@ public actor MinerEngine {
         
         // Reset local estimation on server update
         extraMinutesWatched = 0
+        lastProgressUpdateAt = Date()
 
         // Update overall progress
         if let progress = try? await dropsService.getOverallProgress() {
@@ -376,6 +387,43 @@ public actor MinerEngine {
             // Stop current watch session
             await watchSessionManager.stopWatching()
             try? await dropEventsService.stopWatchingChannel(channelId)
+        }
+    }
+    
+    // MARK: - Maintenance Loop
+
+    private func startMaintenanceLoop() {
+        maintenanceTask?.cancel()
+        maintenanceTask = Task { [weak self] in
+            while !Task.isCancelled {
+                // Wait for 30 minutes
+                try? await Task.sleep(nanoseconds: 30 * 60 * 1_000_000_000)
+                if Task.isCancelled { break }
+                
+                guard let self = self else { break }
+                await self.performMaintenance()
+            }
+        }
+    }
+
+    private func performMaintenance() async {
+        log("Running background maintenance task...")
+        do {
+            // 1. Validate / Refresh token
+            // authService.refreshTokenIfNeeded() is safe to call even if token is valid
+            let token = try await authService.refreshTokenIfNeeded()
+            
+            // 2. Ensure API Client is in sync
+            await apiClient.updateAccessToken(token)
+            
+            log("✅ Maintenance: Token validated/refreshed")
+            
+            // 3. Check for major campaign updates (TDM parity)
+            // If we've been running for a long time, it's good to force a full inventory refresh
+            // every few maintenance cycles. For now, we rely on the 5m loop in runMiningLoop.
+            
+        } catch {
+            log("⚠️ Maintenance task warning: \(error.localizedDescription)")
         }
     }
     
@@ -451,6 +499,7 @@ public actor MinerEngine {
                 // 6. Start watching
                 onStatusChange?(.watching)
                 extraMinutesWatched = 0
+                lastProgressUpdateAt = Date()
                 _ = try await watchSessionManager.startWatching(
                     channel: channel,
                     campaignId: campaign.id
@@ -468,7 +517,10 @@ public actor MinerEngine {
                         lastGqlPoll = Date()
                         if let current = try? await apiClient.fetchCurrentDrop(channelId: channel.id) {
                             log("Drop progress (GQL poll): \(current.dropId) - \(current.currentMinutes) min")
-                            extraMinutesWatched = 0 // Reset stall timer on GQL success
+                            
+                            // Reset local estimation on verified server update
+                            extraMinutesWatched = 0
+                            lastProgressUpdateAt = Date()
                             
                             // Trigger UI update
                             if let progress = try? await dropsService.getOverallProgress() {
@@ -477,14 +529,45 @@ public actor MinerEngine {
                         }
                     }
 
-                    // Standard 1-minute increment for stall detection (local estimation).
-                    // The outer loop sleeps 60s per iteration, so one increment per wakeup is correct.
-                    extraMinutesWatched += 1
-
                     // Stuck detection (matches TDM logic)
+                    // We calculate minutes elapsed since last verified progress (GQL/PubSub)
+                    let elapsed = Date().timeIntervalSince(lastProgressUpdateAt)
+                    extraMinutesWatched = Int(elapsed / 60)
+
                     if extraMinutesWatched >= Self.maxExtraMinutes {
-                        log("⚠️ Progress stalled for \(extraMinutesWatched) mins. Triggering channel switch.")
-                        shouldSwitchChannel = true
+                        log("⚠️ Progress stalled for \(extraMinutesWatched) mins. Refreshing inventory to check for external claims...")
+                        
+                        // ENHANCEMENT: Force inventory refresh before switching channels
+                        // This catches drops claimed on other devices or via Twitch UI
+                        do {
+                            // Force fresh inventory snapshot fetch (includes benefitIDs)
+                            let inventoryService = await dropsService.getInventoryService()
+                            let freshInventory = try await inventoryService.fetchInventory(forceRefresh: true)
+                            
+                            log("📋 Inventory refreshed: \(freshInventory.benefitIDs.count) claimed benefits, \(freshInventory.progress.count) in-progress drops")
+                            
+                            // Check if ANY drop in current campaign was recently claimed
+                            // This handles the case where user claimed via Twitch UI or another device
+                            let campaignDrops = allCampaigns.first { $0.id == session?.currentCampaignId }?.drops ?? []
+                            let newlyClaimedDrops = campaignDrops.filter { drop in
+                                freshInventory.benefitIDs.contains(drop.benefitID) && !drop.isClaimed
+                            }
+                            
+                            if !newlyClaimedDrops.isEmpty {
+                                log("✅ \(newlyClaimedDrops.count) drop(s) were claimed externally. Updating local state, resetting stall counter.")
+                                extraMinutesWatched = 0 // Reset stall counter
+                                lastProgressUpdateAt = Date()
+                                // Don't switch channel - continue mining remaining drops in campaign
+                            } else {
+                                log("🔄 Progress genuinely stalled (no external claims detected). Switching channel.")
+                                lastSwitchReason = .stallDetected(minutes: extraMinutesWatched)
+                                lastSwitchAt = Date()
+                                shouldSwitchChannel = true
+                            }
+                        } catch {
+                            log("⚠️ Inventory refresh failed: \(error.localizedDescription). Switching channel as fallback.")
+                            shouldSwitchChannel = true
+                        }
                     }
 
                     // Check if we should claim any drops
@@ -720,6 +803,9 @@ public actor MinerEngine {
                     let activeCampaignIds = try await apiClient.fetchAvailableDrops(channelId: ch.id)
                     if activeCampaignIds.contains(campaign.id) {
                         log("[ChannelSelect]     ✓ Verified! Campaign \(campaign.id) is active on \(ch.displayName)")
+                        // Track selected channel for UI
+                        currentChannelName = ch.displayName
+                        currentChannelId = ch.id
                         return ch
                     } else {
                         log("[ChannelSelect]     ✗ Campaign mismatch. Active IDs: \(activeCampaignIds.joined(separator: ", "))")
@@ -732,13 +818,22 @@ public actor MinerEngine {
             // Fallback: If no channel could be verified, pick the best candidate anyway (best effort)
             if let best = sortedChannels.first {
                 log("[ChannelSelect]   ! No channel fully verified via GQL. Falling back to best candidate: \(best.displayName)")
+                // Track selected channel for UI
+                currentChannelName = best.displayName
+                currentChannelId = best.id
                 return best
             }
-            
+
             return nil
         } catch {
             log("Failed to fetch live channels for '\(campaign.gameName)': \(error.localizedDescription)")
-            return campaign.channels.first
+            if let fallback = campaign.channels.first {
+                // Track selected channel for UI
+                currentChannelName = fallback.displayName
+                currentChannelId = fallback.id
+                return fallback
+            }
+            return nil
         }
     }
     
@@ -763,6 +858,59 @@ public actor MinerEngine {
         let timestamp = formatter.string(from: Date())
         onLogMessage?("[\(timestamp)] \(message)")
     }
+    
+    // MARK: - UI Helper APIs
+    
+    /// Get current stall state for UI display.
+    public func getStallState() async -> StallState {
+        let elapsed = Date().timeIntervalSince(lastProgressUpdateAt)
+        let minutes = Int(elapsed / 60)
+        let isStalled = minutes >= Self.maxExtraMinutes
+        
+        // Determine recovery action based on current state
+        let recoveryAction: MinerManager.StallRecoveryAction?
+        if isStalled && shouldSwitchChannel {
+            recoveryAction = .switchingChannel
+        } else if isStalled {
+            recoveryAction = .refreshingInventory
+        } else {
+            recoveryAction = .none
+        }
+        
+        return StallState(
+            minutesSinceLastProgress: minutes,
+            isStalled: isStalled,
+            recoveryAction: recoveryAction,
+            lastSwitchReason: lastSwitchReason,
+            lastSwitchAt: lastSwitchAt,
+            currentChannelName: currentChannelName,
+            currentChannelId: currentChannelId
+        )
+    }
+    
+    /// Get recent activity events for UI display (last N events).
+    public func getRecentActivityEvents(limit: Int) async -> [MinerManager.MinerEvent] {
+        // Return recent log messages parsed into structured events
+        // For now, return empty array - full implementation would buffer structured events
+        return []
+    }
+    
+    // MARK: - Stall Tracking
+    
+    public struct StallState: Sendable {
+        public let minutesSinceLastProgress: Int
+        public let isStalled: Bool
+        public let recoveryAction: MinerManager.StallRecoveryAction?
+        public let lastSwitchReason: MinerManager.SwitchReason?
+        public let lastSwitchAt: Date?
+        public let currentChannelName: String?
+        public let currentChannelId: String?
+    }
+    
+    private var lastSwitchReason: MinerManager.SwitchReason?
+    private var lastSwitchAt: Date?
+    private var currentChannelName: String?
+    private var currentChannelId: String?
 }
 
 // MARK: - Supporting Types

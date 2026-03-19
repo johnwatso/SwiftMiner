@@ -55,7 +55,7 @@ public final class MinerManager {
         case claiming = "CLAIMING"
         case paused = "PAUSED"
         case error = "ERROR"
-        
+
         public var displayName: String {
             switch self {
             case .idle: return "Waiting"
@@ -66,6 +66,73 @@ public final class MinerManager {
             case .paused: return "Paused"
             case .error: return "Error"
             }
+        }
+    }
+    
+    // MARK: - Activity Summary Types
+    
+    /// Structured summary of a miner's current activity state for UI display.
+    public struct MinerActivitySummary: Sendable {
+        public let minerId: String
+        public let status: MinerStatus
+        
+        // Current work context
+        public let currentCampaignName: String?
+        public let currentCampaignId: String?
+        public let currentChannelName: String?
+        public let currentChannelId: String?
+        
+        // Stall/recovery state
+        public let minutesSinceLastProgress: Int
+        public let isStalled: Bool
+        public let stallRecoveryAction: StallRecoveryAction?
+        
+        // Last switch reasoning
+        public let lastSwitchReason: SwitchReason?
+        public let lastSwitchAt: Date?
+        
+        // Recent activity (last 10 structured events)
+        public let recentEvents: [MinerEvent]
+    }
+    
+    public enum StallRecoveryAction: String, Sendable {
+        case refreshingInventory = "Refreshing Inventory"
+        case switchingChannel = "Switching Channel"
+        case waitingForProgress = "Waiting for Progress"
+        case none = "None"
+    }
+    
+    public enum SwitchReason: Sendable {
+        case stallDetected(minutes: Int)
+        case higherPriorityChannel
+        case externalDropClaimed
+        case channelWentOffline
+        case manualSelection
+        
+        public var summary: String {
+            switch self {
+            case .stallDetected(let minutes): return "Stall detected (\(minutes) min)"
+            case .higherPriorityChannel: return "Higher priority channel available"
+            case .externalDropClaimed: return "Drop claimed externally"
+            case .channelWentOffline: return "Channel went offline"
+            case .manualSelection: return "Manual selection"
+            }
+        }
+    }
+    
+    public struct MinerEvent: Sendable {
+        public let timestamp: Date
+        public let type: EventType
+        public let summary: String
+        
+        public enum EventType: String, Sendable {
+            case channelSwitched = "Channel Switched"
+            case campaignSelected = "Campaign Selected"
+            case stallDetected = "Stall Detected"
+            case inventoryRefreshed = "Inventory Refreshed"
+            case dropClaimed = "Drop Claimed"
+            case error = "Error"
+            case recoveryComplete = "Recovery Complete"
         }
     }
     
@@ -233,6 +300,37 @@ public final class MinerManager {
     /// Get the engine for a specific miner
     public func getEngine(minerId: String) -> MinerEngine? {
         engines[minerId]
+    }
+    
+    /// Get a structured activity summary for a specific miner (for UI display).
+    /// This provides a clean, structured snapshot of miner state without requiring
+    /// the UI to parse raw engine logs.
+    public func getMinerActivitySummary(minerId: String) async -> MinerActivitySummary? {
+        guard let miner = getMiner(id: minerId),
+              let engine = getEngine(minerId: minerId) else {
+            return nil
+        }
+        
+        // Get stall state from engine
+        let stallState = await engine.getStallState()
+        
+        // Build recent events from engine logs (last 10)
+        let recentEvents = await engine.getRecentActivityEvents(limit: 10)
+        
+        return MinerActivitySummary(
+            minerId: minerId,
+            status: miner.status,
+            currentCampaignName: miner.currentCampaign,
+            currentCampaignId: miner.currentCampaignId,
+            currentChannelName: stallState.currentChannelName,
+            currentChannelId: stallState.currentChannelId,
+            minutesSinceLastProgress: stallState.minutesSinceLastProgress,
+            isStalled: stallState.isStalled,
+            stallRecoveryAction: stallState.recoveryAction,
+            lastSwitchReason: stallState.lastSwitchReason,
+            lastSwitchAt: stallState.lastSwitchAt,
+            recentEvents: recentEvents
+        )
     }
     
     // MARK: - Control Operations

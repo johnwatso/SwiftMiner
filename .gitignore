@@ -131,3 +131,4 @@ local.config
 # Secrets
 *.env
 .secrets/
+Debug Logs.txt
