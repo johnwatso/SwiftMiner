@@ -591,6 +591,7 @@ public actor TwitchAPIClient {
         return broadcastId
     }
 
+
     /// Get channel points context for a channel.
     /// Returns the available claim ID if a bonus is ready, nil otherwise.
     public func getChannelPointsContext(channelLogin: String) async throws -> ChannelPointsContext? {

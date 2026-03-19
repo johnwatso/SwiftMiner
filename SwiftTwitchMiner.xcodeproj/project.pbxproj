@@ -31,6 +31,7 @@
 		454C9949227E9BF41EFFC2B2 /* Campaign.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CF26C8920536B41AE84016C /* Campaign.swift */; };
 		4972155270FB17667E7B5DD9 /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EC9E136B08F6B181F6217EF /* Logger.swift */; };
 		49D15E04E8461D6EF645EED1 /* libSwiftTwitchMiner.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 7219EAA699989EA1CD6D64F5 /* libSwiftTwitchMiner.a */; };
+		4B36CF2A52B83C28CA6A4C27 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B488322FE803D62B664E723 /* main.swift */; };
 		4BAACA3427B8910CC759EC06 /* AuthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 371233548007D74152E1404E /* AuthView.swift */; };
 		4E0FE6A9C93D951A519E1992 /* DropsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9D7BDB7960B14DC933C047B /* DropsService.swift */; };
 		5485A1ECCCBD1CC760FC49FE /* SwiftTwitchMiner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4409120F96B81D0AD34001DF /* SwiftTwitchMiner.swift */; };
@@ -54,8 +55,10 @@
 		8E83F36F7212073D6379231C /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA899DF090F85E77F1C6592B /* main.swift */; };
 		93E8301F670A5AA2E5C729F9 /* CampaignStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 755F8782C40DDDA3BB2AAE3A /* CampaignStore.swift */; };
 		961C051B14B5BAEBE585C4B2 /* APIModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B9BBC702DA993B53B3938D8 /* APIModels.swift */; };
+		98A1C6DADD3E07288A3AD837 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 8C84E48D80B7E6DF9AA56263 /* Sparkle */; };
 		9E316A15E66ACC56DD4E77CA /* MergeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA296D13DD77DEB9142E63CE /* MergeService.swift */; };
 		A2C8B257C94EC68B9D5DAC42 /* MiningDataCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB73F42791AB8D328E88D1EA /* MiningDataCoordinator.swift */; };
+		B2B10C42B28D76E4869AAA1B /* SpadeBeaconServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7574A5ED7664BE934B97C783 /* SpadeBeaconServiceTests.swift */; };
 		B51C6967621D9E73872DA809 /* NavigationModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F9701F55EB90C8697F0632E /* NavigationModel.swift */; };
 		B8F9CF64BCD0F89AE37B7F13 /* Channel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86A637D57DE24D0DE1F48B24 /* Channel.swift */; };
 		B90ABCCCB3B507503AFDDB84 /* MiningStrategy.swift in Sources */ = {isa = PBXBuildFile; fileRef = D83D21C3D523C7136C3E7D27 /* MiningStrategy.swift */; };
@@ -70,6 +73,7 @@
 		DFBEBEF2CC2CD5AAD5C09B55 /* CommunityPointsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E85B01F6B9D234C2AA0C523 /* CommunityPointsService.swift */; };
 		E005E99649A6C7A954BD539E /* TwitchAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFCD2D8FC853DBA70B120D78 /* TwitchAPIClient.swift */; };
 		E0A328AA883EAF91030B7BC7 /* AggregatedCampaignDataService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B9C74EEF705321B6E314899 /* AggregatedCampaignDataService.swift */; };
+		E5802ABC963481EC989DD987 /* AppUpdater.swift in Sources */ = {isa = PBXBuildFile; fileRef = F78BDBE720EA00C8F6359656 /* AppUpdater.swift */; };
 		EB94A201A88DEF6C594F9242 /* SwiftMiner.icon in Resources */ = {isa = PBXBuildFile; fileRef = 5B6850CF00255841B94FC5F5 /* SwiftMiner.icon */; };
 		ED029675AE501C6D57890B13 /* AuthRequiredSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 143DA5E9E038FE1AFED2B7E9 /* AuthRequiredSheet.swift */; };
 /* End PBXBuildFile section */
@@ -127,8 +131,11 @@
 		6F3C90855E006DA056A6DF36 /* SwiftTwitchMinerCLI */ = {isa = PBXFileReference; includeInIndex = 0; path = SwiftTwitchMinerCLI; sourceTree = BUILT_PRODUCTS_DIR; };
 		7219EAA699989EA1CD6D64F5 /* libSwiftTwitchMiner.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libSwiftTwitchMiner.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		755F8782C40DDDA3BB2AAE3A /* CampaignStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignStore.swift; sourceTree = "<group>"; };
+		7574A5ED7664BE934B97C783 /* SpadeBeaconServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpadeBeaconServiceTests.swift; sourceTree = "<group>"; };
 		794D6EB29BD6510BBA217D39 /* SwiftTwitchMinerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SwiftTwitchMinerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		7B488322FE803D62B664E723 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		7CF26C8920536B41AE84016C /* Campaign.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Campaign.swift; sourceTree = "<group>"; };
+		7D81B9D86212A5BF3A982954 /* SparklePublisher */ = {isa = PBXFileReference; includeInIndex = 0; path = SparklePublisher; sourceTree = BUILT_PRODUCTS_DIR; };
 		86A637D57DE24D0DE1F48B24 /* Channel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Channel.swift; sourceTree = "<group>"; };
 		86D57AB93CB1E5EDD50C5B3F /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		89F7B710738427EF8D86C5F6 /* ActivityOverviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityOverviewView.swift; sourceTree = "<group>"; };
@@ -161,6 +168,7 @@
 		E9B1FCD56A4A3218FE39E791 /* SpadeBeaconService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpadeBeaconService.swift; sourceTree = "<group>"; };
 		F28EB5655741B6F4D41A26C5 /* MinerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinerApp.swift; sourceTree = "<group>"; };
 		F362827D9153CBE107B26136 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
+		F78BDBE720EA00C8F6359656 /* AppUpdater.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdater.swift; sourceTree = "<group>"; };
 		F7E1F03FD59FA55D324A975D /* PubSubClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PubSubClient.swift; sourceTree = "<group>"; };
 		FA296D13DD77DEB9142E63CE /* MergeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MergeService.swift; sourceTree = "<group>"; };
 		FA899DF090F85E77F1C6592B /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
@@ -181,6 +189,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				8868B4A805B5A4CB3BCB9F57 /* libSwiftTwitchMiner.a in Frameworks */,
+				98A1C6DADD3E07288A3AD837 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -199,6 +208,7 @@
 			isa = PBXGroup;
 			children = (
 				7219EAA699989EA1CD6D64F5 /* libSwiftTwitchMiner.a */,
+				7D81B9D86212A5BF3A982954 /* SparklePublisher */,
 				43388CF802F054B7F0FB50E1 /* SwiftTwitchMinerApp.app */,
 				6F3C90855E006DA056A6DF36 /* SwiftTwitchMinerCLI */,
 				794D6EB29BD6510BBA217D39 /* SwiftTwitchMinerTests.xctest */,
@@ -212,6 +222,7 @@
 				DA878ABBE6616DFC787CEA2B /* AccountDetailView.swift */,
 				89F7B710738427EF8D86C5F6 /* ActivityOverviewView.swift */,
 				86D57AB93CB1E5EDD50C5B3F /* AppModel.swift */,
+				F78BDBE720EA00C8F6359656 /* AppUpdater.swift */,
 				143DA5E9E038FE1AFED2B7E9 /* AuthRequiredSheet.swift */,
 				371233548007D74152E1404E /* AuthView.swift */,
 				1FA461D1699E5A7A80975606 /* CampaignView.swift */,
@@ -284,6 +295,7 @@
 				5B6850CF00255841B94FC5F5 /* SwiftMiner.icon */,
 				7357526E73CFA7CBB5402535 /* Sources */,
 				F219C0C60DEC27333D873638 /* Tests */,
+				FBEB3BE214E3CC6D57BC79D1 /* Tools */,
 				03B5326F456325C757F3AD5A /* Products */,
 			);
 			sourceTree = "<group>";
@@ -320,6 +332,14 @@
 			path = SwiftTwitchMiner;
 			sourceTree = "<group>";
 		};
+		C15556F19D03C0FB36361287 /* SparklePublisher */ = {
+			isa = PBXGroup;
+			children = (
+				7B488322FE803D62B664E723 /* main.swift */,
+			);
+			path = SparklePublisher;
+			sourceTree = "<group>";
+		};
 		C1E5D008CCE9DA9E2C476906 /* Models */ = {
 			isa = PBXGroup;
 			children = (
@@ -342,9 +362,18 @@
 				9D56AC249BDCAE0FC8C13AF8 /* DropsServiceTests.swift */,
 				2D3ADFFDBC7EEDFBE82F8D14 /* ModelTests.swift */,
 				C47C13074251AAD25416392D /* ServiceTests.swift */,
+				7574A5ED7664BE934B97C783 /* SpadeBeaconServiceTests.swift */,
 				28409EDBF935D2FC7E659494 /* SwiftTwitchMinerTests.swift */,
 			);
 			path = Tests;
+			sourceTree = "<group>";
+		};
+		FBEB3BE214E3CC6D57BC79D1 /* Tools */ = {
+			isa = PBXGroup;
+			children = (
+				C15556F19D03C0FB36361287 /* SparklePublisher */,
+			);
+			path = Tools;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -367,6 +396,23 @@
 			productName = SwiftTwitchMiner;
 			productReference = 7219EAA699989EA1CD6D64F5 /* libSwiftTwitchMiner.a */;
 			productType = "com.apple.product-type.library.static";
+		};
+		674E05FBCFCB908ACCBF8F62 /* SparklePublisher */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E84BAA4ECF95AB612D4E5AC5 /* Build configuration list for PBXNativeTarget "SparklePublisher" */;
+			buildPhases = (
+				C89E74EAEB0EB2A1E238261D /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SparklePublisher;
+			packageProductDependencies = (
+			);
+			productName = SparklePublisher;
+			productReference = 7D81B9D86212A5BF3A982954 /* SparklePublisher */;
+			productType = "com.apple.product-type.tool";
 		};
 		7709D66317F4BA597DF783CB /* SwiftTwitchMinerTests */ = {
 			isa = PBXNativeTarget;
@@ -421,6 +467,7 @@
 			);
 			name = SwiftTwitchMinerApp;
 			packageProductDependencies = (
+				8C84E48D80B7E6DF9AA56263 /* Sparkle */,
 			);
 			productName = SwiftTwitchMinerApp;
 			productReference = 43388CF802F054B7F0FB50E1 /* SwiftTwitchMinerApp.app */;
@@ -449,11 +496,15 @@
 			);
 			mainGroup = 638ADF8BCDDEFAC2E5ADFF2B;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				98FFC366DED672AE0B346767 /* XCRemoteSwiftPackageReference "Sparkle" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 03B5326F456325C757F3AD5A /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
+				674E05FBCFCB908ACCBF8F62 /* SparklePublisher */,
 				064EBFE61FB1FB479CF0F0A7 /* SwiftTwitchMiner */,
 				CEB8016E9C736F7734598C40 /* SwiftTwitchMinerApp */,
 				B00D7013BF0F6CC488597A01 /* SwiftTwitchMinerCLI */,
@@ -538,6 +589,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C89E74EAEB0EB2A1E238261D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4B36CF2A52B83C28CA6A4C27 /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		D7A95BE81F17A99613013268 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -545,6 +604,7 @@
 				13E2C3A489A52BA39E783C97 /* DropsServiceTests.swift in Sources */,
 				143656F0DA1DB543602AFBCC /* ModelTests.swift in Sources */,
 				54F1537FC1EF628BEC59E84C /* ServiceTests.swift in Sources */,
+				B2B10C42B28D76E4869AAA1B /* SpadeBeaconServiceTests.swift in Sources */,
 				0390305B1EF582082A8ADB99 /* SwiftTwitchMinerTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -556,6 +616,7 @@
 				70C082E1DBA177212878467C /* AccountDetailView.swift in Sources */,
 				D8051531F7F217E8A0D7882B /* ActivityOverviewView.swift in Sources */,
 				0BC6AD2CBD153F7D16BBAA66 /* AppModel.swift in Sources */,
+				E5802ABC963481EC989DD987 /* AppUpdater.swift in Sources */,
 				ED029675AE501C6D57890B13 /* AuthRequiredSheet.swift in Sources */,
 				4BAACA3427B8910CC759EC06 /* AuthView.swift in Sources */,
 				23A21307461010F27647BAFC /* CampaignView.swift in Sources */,
@@ -610,6 +671,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Sources/SwiftTwitchMinerApp/Info.plist;
@@ -618,12 +680,16 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.swifttwitchminer.app;
+				PRODUCT_NAME = SwiftMiner;
 				SDKROOT = macosx;
+				SPARKLE_FEED_URL = "https://johnwatso.github.io/SwiftMiner/appcast.xml";
+				SPARKLE_PUBLIC_ED_KEY = "";
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.0;
 			};
@@ -665,6 +731,38 @@
 				SWIFT_VERSION = 6.0;
 			};
 			name = Release;
+		};
+		5F9D0C08D06C02ECF4D3D0D1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.swifttwitchminer.sparklepublisher;
+				PRODUCT_NAME = SparklePublisher;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		87294170284304ACFAB0AD5C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.swifttwitchminer.sparklepublisher;
+				PRODUCT_NAME = SparklePublisher;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
 		};
 		A01454FF2D183EB53DA6F3DB /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -830,6 +928,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Sources/SwiftTwitchMinerApp/Info.plist;
@@ -838,12 +937,16 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.swifttwitchminer.app;
+				PRODUCT_NAME = SwiftMiner;
 				SDKROOT = macosx;
+				SPARKLE_FEED_URL = "https://johnwatso.github.io/SwiftMiner/appcast.xml";
+				SPARKLE_PUBLIC_ED_KEY = "";
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.0;
 			};
@@ -938,7 +1041,35 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
+		E84BAA4ECF95AB612D4E5AC5 /* Build configuration list for PBXNativeTarget "SparklePublisher" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				87294170284304ACFAB0AD5C /* Debug */,
+				5F9D0C08D06C02ECF4D3D0D1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		98FFC366DED672AE0B346767 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.8.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		8C84E48D80B7E6DF9AA56263 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 98FFC366DED672AE0B346767 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 29B042A1A4303D864CD65C4A /* Project object */;
 }

@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Scheme
    LastUpgradeVersion = "1430"
-   version = "1.3">
+   version = "1.7">
    <BuildAction
       parallelizeBuildables = "YES"
-      buildImplicitDependencies = "YES">
+      buildImplicitDependencies = "YES"
+      runPostActionsOnFailure = "NO">
       <BuildActionEntries>
          <BuildActionEntry
             buildForTesting = "YES"
@@ -14,23 +15,9 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "CEB8016E9C736F7734598C40"
-               BuildableName = "SwiftMiner.app"
-               BlueprintName = "SwiftTwitchMinerApp"
-               ReferencedContainer = "container:SwiftTwitchMiner.xcodeproj">
-            </BuildableReference>
-         </BuildActionEntry>
-         <BuildActionEntry
-            buildForTesting = "YES"
-            buildForRunning = "NO"
-            buildForProfiling = "NO"
-            buildForArchiving = "NO"
-            buildForAnalyzing = "NO">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "7709D66317F4BA597DF783CB"
-               BuildableName = "SwiftTwitchMinerTests.xctest"
-               BlueprintName = "SwiftTwitchMinerTests"
+               BlueprintIdentifier = "674E05FBCFCB908ACCBF8F62"
+               BuildableName = "SparklePublisher"
+               BlueprintName = "SparklePublisher"
                ReferencedContainer = "container:SwiftTwitchMiner.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -40,28 +27,18 @@
       buildConfiguration = "Debug"
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
-      shouldUseLaunchSchemeArgsEnv = "YES">
+      shouldUseLaunchSchemeArgsEnv = "YES"
+      onlyGenerateCoverageForSpecifiedTargets = "NO">
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "CEB8016E9C736F7734598C40"
-            BuildableName = "SwiftMiner.app"
-            BlueprintName = "SwiftTwitchMinerApp"
+            BlueprintIdentifier = "674E05FBCFCB908ACCBF8F62"
+            BuildableName = "SparklePublisher"
+            BlueprintName = "SparklePublisher"
             ReferencedContainer = "container:SwiftTwitchMiner.xcodeproj">
          </BuildableReference>
       </MacroExpansion>
       <Testables>
-         <TestableReference
-            skipped = "NO"
-            parallelizable = "NO">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "7709D66317F4BA597DF783CB"
-               BuildableName = "SwiftTwitchMinerTests.xctest"
-               BlueprintName = "SwiftTwitchMinerTests"
-               ReferencedContainer = "container:SwiftTwitchMiner.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction
@@ -78,19 +55,14 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "CEB8016E9C736F7734598C40"
-            BuildableName = "SwiftMiner.app"
-            BlueprintName = "SwiftTwitchMinerApp"
+            BlueprintIdentifier = "674E05FBCFCB908ACCBF8F62"
+            BuildableName = "SparklePublisher"
+            BlueprintName = "SparklePublisher"
             ReferencedContainer = "container:SwiftTwitchMiner.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
-      <EnvironmentVariables>
-         <EnvironmentVariable
-            key = "TWITCH_CLIENT_ID"
-            value = ""
-            isEnabled = "YES">
-         </EnvironmentVariable>
-      </EnvironmentVariables>
+      <CommandLineArguments>
+      </CommandLineArguments>
    </LaunchAction>
    <ProfileAction
       buildConfiguration = "Release"
@@ -102,9 +74,9 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "CEB8016E9C736F7734598C40"
-            BuildableName = "SwiftMiner.app"
-            BlueprintName = "SwiftTwitchMinerApp"
+            BlueprintIdentifier = "674E05FBCFCB908ACCBF8F62"
+            BuildableName = "SparklePublisher"
+            BlueprintName = "SparklePublisher"
             ReferencedContainer = "container:SwiftTwitchMiner.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>

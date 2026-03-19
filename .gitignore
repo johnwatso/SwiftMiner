@@ -116,6 +116,7 @@ Temporary Items
 # Build output
 DerivedData/
 Build/
+release-artifacts/
 
 # IDE
 .idea/
