@@ -124,6 +124,8 @@ public enum CampaignMapper {
             status: campaign.status.rawValue,
             miningStatus: miningStatus,
             relevance: relevance,
+            startDate: campaign.startDate,
+            endDate: campaign.endDate,
             drops: dropViewData
         )
     }
