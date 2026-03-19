@@ -70,34 +70,39 @@ public class WatchSession: @unchecked Sendable {
 
 /// Manager for watch sessions that simulate watching streams
 public actor WatchSessionManager {
-    private let apiClient: TwitchAPIClient
-    private let spadeBeacon: SpadeBeaconService
-    private let communityPointsService: CommunityPointsService
-    private var activeSession: WatchSession?
-    private var heartbeatTask: Task<Void, Never>?
+private let apiClient: TwitchAPIClient
+private let spadeBeacon: SpadeBeaconService
+private let communityPointsService: CommunityPointsService
+private var activeSession: WatchSession?
+private var heartbeatTask: Task<Void, Never>?
 
-    /// 59-second watch interval — matches the Python reference implementation
-    private let heartbeatInterval: TimeInterval = SpadeBeaconService.watchInterval
+/// 59-second watch interval — matches the Python reference implementation
+private let heartbeatInterval: TimeInterval
 
-    /// Session identifier generator
-    private var sessionCounter: UInt64 = 0
+/// Session identifier generator
+private var sessionCounter: UInt64 = 0
 
-    /// The authenticated user ID — required for the Spade beacon payload
-    public var userId: String = ""
+/// The authenticated user ID — required for the Spade beacon payload
+public var userId: String = ""
 
-    /// Set the user ID (actor-isolated setter for cross-actor use)
-    public func setUserId(_ id: String) { userId = id }
+/// Set the user ID (actor-isolated setter for cross-actor use)
+public func setUserId(_ id: String) { userId = id }
 
-    /// Callbacks
-    public var onProgressUpdate: (@Sendable (Progress) -> Void)?
-    public var onStatusChange: (@Sendable (WatchSessionStatus) -> Void)?
-    public var onError: (@Sendable (TwitchMinerError) -> Void)?
+/// Callbacks
+public var onProgressUpdate: (@Sendable (Progress) -> Void)?
+public var onStatusChange: (@Sendable (WatchSessionStatus) -> Void)?
+public var onError: (@Sendable (TwitchMinerError) -> Void)?
 
-    public init(apiClient: TwitchAPIClient) {
-        self.spadeBeacon = SpadeBeaconService()
-        self.apiClient = apiClient
-        self.communityPointsService = CommunityPointsService(apiClient: apiClient)
-    }
+public init(
+    apiClient: TwitchAPIClient,
+    urlSession: URLSession = .shared,
+    heartbeatInterval: TimeInterval = SpadeBeaconService.watchInterval
+) {
+    self.spadeBeacon = SpadeBeaconService(urlSession: urlSession)
+    self.apiClient = apiClient
+    self.communityPointsService = CommunityPointsService(apiClient: apiClient)
+    self.heartbeatInterval = heartbeatInterval
+}
 
     /// Start watching a channel for a specific campaign
     /// - Parameters:

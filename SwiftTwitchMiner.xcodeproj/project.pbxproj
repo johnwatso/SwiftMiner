@@ -119,7 +119,7 @@
 		3AB26943C7C16BB567CB12AB /* Settings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Settings.swift; sourceTree = "<group>"; };
 		3F5AE07DBE82EDA384A2E562 /* CampaignViewData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignViewData.swift; sourceTree = "<group>"; };
 		3F9701F55EB90C8697F0632E /* NavigationModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationModel.swift; sourceTree = "<group>"; };
-		43388CF802F054B7F0FB50E1 /* SwiftTwitchMinerApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SwiftTwitchMinerApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		43388CF802F054B7F0FB50E1 /* SwiftMiner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SwiftMiner.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4409120F96B81D0AD34001DF /* SwiftTwitchMiner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftTwitchMiner.swift; sourceTree = "<group>"; };
 		4EC9E136B08F6B181F6217EF /* Logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logger.swift; sourceTree = "<group>"; };
 		56B773B9A381BDA23183B2A6 /* Account.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Account.swift; sourceTree = "<group>"; };
@@ -128,14 +128,14 @@
 		68ABFA6E298F66F29CEFEB65 /* TDMCookieParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TDMCookieParser.swift; sourceTree = "<group>"; };
 		6B10F0991095D9E6A4A4822E /* DropEventsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropEventsService.swift; sourceTree = "<group>"; };
 		6D27137E1428E5668A7674AC /* ClaimService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaimService.swift; sourceTree = "<group>"; };
-		6F3C90855E006DA056A6DF36 /* SwiftTwitchMinerCLI */ = {isa = PBXFileReference; includeInIndex = 0; path = SwiftTwitchMinerCLI; sourceTree = BUILT_PRODUCTS_DIR; };
+		6F3C90855E006DA056A6DF36 /* SwiftTwitchMinerCLI */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = text; path = SwiftTwitchMinerCLI; sourceTree = BUILT_PRODUCTS_DIR; };
 		7219EAA699989EA1CD6D64F5 /* libSwiftTwitchMiner.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libSwiftTwitchMiner.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		755F8782C40DDDA3BB2AAE3A /* CampaignStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignStore.swift; sourceTree = "<group>"; };
 		7574A5ED7664BE934B97C783 /* SpadeBeaconServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpadeBeaconServiceTests.swift; sourceTree = "<group>"; };
 		794D6EB29BD6510BBA217D39 /* SwiftTwitchMinerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SwiftTwitchMinerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		7B488322FE803D62B664E723 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		7CF26C8920536B41AE84016C /* Campaign.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Campaign.swift; sourceTree = "<group>"; };
-		7D81B9D86212A5BF3A982954 /* SparklePublisher */ = {isa = PBXFileReference; includeInIndex = 0; path = SparklePublisher; sourceTree = BUILT_PRODUCTS_DIR; };
+		7D81B9D86212A5BF3A982954 /* SparklePublisher */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = text; path = SparklePublisher; sourceTree = BUILT_PRODUCTS_DIR; };
 		86A637D57DE24D0DE1F48B24 /* Channel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Channel.swift; sourceTree = "<group>"; };
 		86D57AB93CB1E5EDD50C5B3F /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		89F7B710738427EF8D86C5F6 /* ActivityOverviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityOverviewView.swift; sourceTree = "<group>"; };
@@ -209,7 +209,7 @@
 			children = (
 				7219EAA699989EA1CD6D64F5 /* libSwiftTwitchMiner.a */,
 				7D81B9D86212A5BF3A982954 /* SparklePublisher */,
-				43388CF802F054B7F0FB50E1 /* SwiftTwitchMinerApp.app */,
+				43388CF802F054B7F0FB50E1 /* SwiftMiner.app */,
 				6F3C90855E006DA056A6DF36 /* SwiftTwitchMinerCLI */,
 				794D6EB29BD6510BBA217D39 /* SwiftTwitchMinerTests.xctest */,
 			);
@@ -470,7 +470,7 @@
 				8C84E48D80B7E6DF9AA56263 /* Sparkle */,
 			);
 			productName = SwiftTwitchMinerApp;
-			productReference = 43388CF802F054B7F0FB50E1 /* SwiftTwitchMinerApp.app */;
+			productReference = 43388CF802F054B7F0FB50E1 /* SwiftMiner.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -667,7 +667,7 @@
 		08B4E986B9DD8410191E255D /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				ASSETCATALOG_COMPILER_APPICON_NAME = SwiftMiner;
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
@@ -675,6 +675,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Sources/SwiftTwitchMinerApp/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = SwiftMiner;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -924,7 +925,7 @@
 		C6940D51C55168245D339CEF /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				ASSETCATALOG_COMPILER_APPICON_NAME = SwiftMiner;
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
@@ -932,6 +933,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Sources/SwiftTwitchMinerApp/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = SwiftMiner;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
