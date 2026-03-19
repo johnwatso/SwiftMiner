@@ -337,21 +337,10 @@ private struct CampaignDeckCard: View {
     let campaign: CampaignViewData
     let state: CampaignCardState
     let queueWatchers: [String]
-
-    @State private var isExpanded: Bool
-
-    init(campaign: CampaignViewData, state: CampaignCardState, queueWatchers: [String]) {
-        self.campaign = campaign
-        self.state = state
-        self.queueWatchers = queueWatchers
-        self._isExpanded = State(initialValue: state == .active || state == .claimable || state == .inProgress)
-    }
+    @State private var isHovered = false
 
     private var shownDrops: [DropViewData] {
-        if isExpanded {
-            return campaign.drops
-        }
-        return Array(campaign.drops.prefix(3))
+        Array(campaign.drops.prefix(3))
     }
 
     private var progressPercent: Int {
@@ -359,138 +348,177 @@ private struct CampaignDeckCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Button {
-                withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {
-                    isExpanded.toggle()
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 14) {
+                CampaignArtworkIcon(url: campaign.artworkURL, tint: state.tint)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(campaign.gameName)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+
+                    Text(campaign.campaignName)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+
+                    Text(statusLine)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
-            } label: {
-                VStack(alignment: .leading, spacing: 16) {
-                    hero
 
-                    HStack(alignment: .top, spacing: 16) {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(campaign.gameName)
-                                .font(.headline.weight(.semibold))
-                                .foregroundStyle(.white.opacity(0.78))
+                Spacer(minLength: 0)
 
-                            Text(campaign.campaignName)
-                                .font(.title3.weight(.semibold))
-                                .foregroundStyle(.white)
-                                .multilineTextAlignment(.leading)
+                VStack(alignment: .trailing, spacing: 10) {
+                    statusBadge
 
-                            Text(summaryText)
-                                .font(.subheadline)
-                                .foregroundStyle(.white.opacity(0.84))
-                        }
-
-                        Spacer(minLength: 0)
-
-                        VStack(alignment: .trailing, spacing: 10) {
-                            CampaignStatePill(state: state)
-
-                            if !queueWatchers.isEmpty {
-                                CampaignQueueBadge(usernames: queueWatchers)
-                            }
-                        }
-                    }
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack(spacing: 12) {
-                            metricLabel("\(campaign.dropsClaimed)/\(campaign.totalDrops) claimed")
-
-                            if progressPercent > 0, state != .claimed, state != .expired {
-                                metricLabel("\(progressPercent)% progress")
-                            }
-
-                            if let timeRemaining = campaign.timeRemaining, state != .claimed, state != .expired {
-                                metricLabel(timeRemaining.formattedHoursMinutes)
-                            }
-                        }
-
-                        if !campaign.accountStates.isEmpty {
-                            CampaignAccountStrip(accountStates: campaign.accountStates)
-                        }
-
-                        if state == .inProgress || state == .active || state == .claimable {
-                            ProgressView(value: campaign.progress, total: 1.0)
-                                .progressViewStyle(.linear)
-                                .tint(state.tint)
-                        }
+                    if !queueWatchers.isEmpty {
+                        CampaignQueueBadge(usernames: queueWatchers)
                     }
                 }
-                .padding(18)
-                .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
 
-            if !shownDrops.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 12) {
+                    metricLabel("\(campaign.dropsClaimed)/\(campaign.totalDrops) claimed")
+
+                    if progressPercent > 0, state != .claimed, state != .expired {
+                        metricLabel("\(progressPercent)% progress")
+                    }
+
+                    if let timeRemaining = campaign.timeRemaining, state != .claimed, state != .expired {
+                        metricLabel(timeRemaining.formattedHoursMinutes)
+                    }
+                }
+
+                if !campaign.accountStates.isEmpty {
+                    CampaignAccountStrip(accountStates: campaign.accountStates)
+                }
+
+                if showsProgress {
+                    ProgressView(value: campaign.progress, total: 1.0)
+                        .progressViewStyle(.linear)
+                        .tint(state.tint)
+                }
+            }
+
+            if shownDrops.isEmpty {
+                Text("Drop details will appear here when campaign rewards are available.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
                 VStack(alignment: .leading, spacing: 10) {
                     ForEach(shownDrops) { drop in
                         CampaignDropPreviewRow(drop: drop)
                     }
-
-                    if !isExpanded && campaign.drops.count > shownDrops.count {
-                        Text("Show \(campaign.drops.count - shownDrops.count) more drops")
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.secondary)
-                            .padding(.top, 4)
-                    }
                 }
-                .padding(.horizontal, 18)
-                .padding(.bottom, 18)
-                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .background(backgroundLayer)
+        .padding(18)
+        .frame(maxWidth: .infinity)
+        .background(cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 28, style: .continuous)
                 .strokeBorder(state.borderTint, lineWidth: 1)
         }
-        .shadow(color: .black.opacity(0.10), radius: 18, y: 10)
+        .shadow(color: .black.opacity(isHovered ? 0.14 : 0.10), radius: isHovered ? 22 : 18, y: isHovered ? 12 : 10)
         .opacity(state == .expired ? 0.62 : (state == .claimed ? 0.78 : 1))
         .saturation(state == .claimed ? 0.82 : 1)
+        .brightness(isHovered ? 0.008 : 0)
+        .animation(.easeInOut(duration: 0.18), value: isHovered)
+        .onHover { hovering in
+            isHovered = hovering
+        }
     }
 
     @ViewBuilder
-    private var hero: some View {
-        ZStack(alignment: .topLeading) {
-            CampaignCardArtwork(url: campaign.artworkURL, tint: state.tint)
-                .frame(height: 148)
-
-            LinearGradient(
-                colors: [.black.opacity(0.10), .black.opacity(0.58)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-
-            if state == .active {
-                HStack(spacing: 8) {
-                    LivePulseDot(color: state.tint)
-                    Text("Running now")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.94))
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(.ultraThinMaterial, in: Capsule())
-                .padding(14)
+    private var statusBadge: some View {
+        switch state {
+        case .active:
+            HStack(spacing: 8) {
+                LivePulseDot(color: .green)
+                Text("Active")
+                    .font(.caption.weight(.semibold))
             }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(.green.opacity(0.82), in: Capsule())
+        case .claimed:
+            Image(systemName: "checkmark.circle.fill")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.green)
+        case .idle, .expired:
+            Text(state == .expired ? "Expired" : "Idle")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(.thinMaterial, in: Capsule())
+        case .inProgress:
+            Text("In Progress")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(.blue.opacity(0.72), in: Capsule())
+        case .claimable:
+            Text("Claimable")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(.orange.opacity(0.78), in: Capsule())
         }
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
-    private var backgroundLayer: some View {
+    private var statusLine: String {
+        switch state {
+        case .active:
+            if let timeRemaining = campaign.timeRemaining {
+                return "\(queueWatchersLabel) watching • \(timeRemaining.formattedHoursMinutes)"
+            }
+            return "\(queueWatchersLabel) watching"
+        case .inProgress:
+            if let timeRemaining = campaign.timeRemaining {
+                return "\(progressPercent)% complete • \(timeRemaining.formattedHoursMinutes)"
+            }
+            return "\(progressPercent)% complete"
+        case .claimable:
+            return "Rewards ready to claim"
+        case .claimed:
+            return "\(campaign.dropsClaimed)/\(campaign.totalDrops) drops claimed"
+        case .expired:
+            return "Campaign window has ended"
+        case .idle:
+            return progressPercent > 0 ? "\(progressPercent)% complete" : "Available in your cached campaign history"
+        }
+    }
+
+    private var queueWatchersLabel: String {
+        queueWatchers.isEmpty ? "Queued" : queueWatchers.joined(separator: ", ")
+    }
+
+    private var showsProgress: Bool {
+        state == .active || state == .inProgress || state == .claimable
+    }
+
+    private var cardBackground: some View {
         RoundedRectangle(cornerRadius: 28, style: .continuous)
-            .fill(.thinMaterial.opacity(0.88))
+            .fill(.thinMaterial.opacity(0.92))
+            .overlay {
+                CampaignBackgroundAccent(url: campaign.artworkURL, tint: state.tint)
+            }
             .overlay {
                 RoundedRectangle(cornerRadius: 28, style: .continuous)
                     .fill(
                         LinearGradient(
                             colors: [
-                                Color.white.opacity(0.08),
-                                state.tint.opacity(state == .claimed ? 0.05 : 0.12),
+                                Color.white.opacity(0.05),
+                                state.tint.opacity(state == .claimed ? 0.03 : 0.06),
                                 Color.clear
                             ],
                             startPoint: .topLeading,
@@ -504,26 +532,6 @@ private struct CampaignDeckCard: View {
         Text(text)
             .font(.caption.weight(.medium))
             .foregroundStyle(.secondary)
-    }
-
-    private var summaryText: String {
-        switch state {
-        case .active:
-            return queueWatchers.isEmpty ? "Queued right now" : "\(queueWatchers.joined(separator: ", ")) watching"
-        case .inProgress:
-            if let timeRemaining = campaign.timeRemaining {
-                return "\(progressPercent)% complete with \(timeRemaining.formattedHoursMinutes) remaining"
-            }
-            return "\(progressPercent)% complete across cached progress"
-        case .claimable:
-            return "Rewards are ready to claim"
-        case .claimed:
-            return "Everything here has been claimed"
-        case .expired:
-            return "Campaign window has ended"
-        case .idle:
-            return "Available in your cached campaign history"
-        }
     }
 }
 
@@ -661,10 +669,10 @@ private struct CampaignQueueBadge: View {
                 .lineLimit(1)
         }
         .font(.caption2.weight(.medium))
-        .foregroundStyle(.white.opacity(0.86))
+        .foregroundStyle(.primary)
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(.ultraThinMaterial, in: Capsule())
+        .background(.thinMaterial, in: Capsule())
     }
 }
 
@@ -725,10 +733,14 @@ private struct CampaignCardArtwork: View {
     let url: URL?
     let tint: Color
 
+    private var resolvedURL: URL? {
+        url?.highResolutionArtworkURL
+    }
+
     var body: some View {
         ZStack {
-            if let url {
-                AsyncImage(url: url) { image in
+            if let resolvedURL {
+                AsyncImage(url: resolvedURL) { image in
                     image
                         .resizable()
                         .interpolation(.high)
@@ -740,6 +752,8 @@ private struct CampaignCardArtwork: View {
                 placeholder
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
     }
 
     private var placeholder: some View {
@@ -748,6 +762,73 @@ private struct CampaignCardArtwork: View {
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
+    }
+}
+
+private struct CampaignArtworkIcon: View {
+    let url: URL?
+    let tint: Color
+
+    var body: some View {
+        CampaignCardArtwork(url: url, tint: tint)
+            .frame(width: 48, height: 64)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(.white.opacity(0.10), lineWidth: 1)
+            }
+    }
+}
+
+private struct CampaignBackgroundAccent: View {
+    let url: URL?
+    let tint: Color
+
+    var body: some View {
+        ZStack {
+            if let highResURL = url?.highResolutionArtworkURL {
+                AsyncImage(url: highResURL) { image in
+                    image
+                        .resizable()
+                        .interpolation(.high)
+                        .scaledToFill()
+                } placeholder: {
+                    Color.clear
+                }
+                .opacity(0.09)
+                .blur(radius: 18)
+                .scaleEffect(1.08)
+            } else {
+                LinearGradient(
+                    colors: [
+                        tint.opacity(0.08),
+                        tint.opacity(0.02),
+                        Color.clear
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .allowsHitTesting(false)
+    }
+}
+
+private extension URL {
+    var highResolutionArtworkURL: URL {
+        let replacements: [(String, String)] = [
+            ("{width}", "1200"),
+            ("{height}", "1600"),
+            ("%7Bwidth%7D", "1200"),
+            ("%7Bheight%7D", "1600")
+        ]
+
+        let resolved = replacements.reduce(absoluteString) { partial, pair in
+            partial.replacingOccurrences(of: pair.0, with: pair.1)
+        }
+
+        return URL(string: resolved) ?? self
     }
 }
 

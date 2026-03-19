@@ -93,11 +93,14 @@ public final class Settings: ObservableObject {
                   let prefs = try? JSONDecoder().decode([GamePreference].self, from: data) else {
                 return []
             }
-            return prefs
+            return normalizedPreferences(prefs)
         }
         set {
-            if let data = try? JSONEncoder().encode(newValue),
+            let normalized = normalizedPreferences(newValue)
+            if let data = try? JSONEncoder().encode(normalized),
                let string = String(data: data, encoding: .utf8) {
+                guard gamePreferencesData != string else { return }
+                objectWillChange.send()
                 gamePreferencesData = string
             }
         }
@@ -105,19 +108,27 @@ public final class Settings: ObservableObject {
 
     /// Priority game names derived from preferences (backward compat for MinerEngine)
     public var priorityGames: [String] {
-        gamePreferences.filter { $0.state == .preferred }.map { $0.gameName }
+        gameNames(for: .preferred)
     }
 
     /// Excluded game names derived from preferences (backward compat for MinerEngine)
     public var excludedGames: [String] {
-        gamePreferences.filter { $0.state == .excluded }.map { $0.gameName }
+        gameNames(for: .excluded)
     }
 
     /// Add or update a game preference
     public func addGamePreference(_ game: Game, state: PreferenceState) {
+        setGamePreference(game, state: state)
+    }
+
+    /// Add or update a game preference with the provided state.
+    public func setGamePreference(_ game: Game, state: PreferenceState) {
         var prefs = gamePreferences
-        prefs.removeAll { $0.gameId == game.id }
-        prefs.append(GamePreference(gameId: game.id, gameName: game.name, boxArtURL: game.boxArtURL, state: state))
+        if let index = prefs.firstIndex(where: { preferenceMatches($0, gameId: game.id, gameName: game.name) }) {
+            prefs[index] = GamePreference(gameId: game.id, gameName: game.name, boxArtURL: game.boxArtURL, state: state)
+        } else {
+            prefs.append(GamePreference(gameId: game.id, gameName: game.name, boxArtURL: game.boxArtURL, state: state))
+        }
         gamePreferences = prefs
     }
 
@@ -128,19 +139,31 @@ public final class Settings: ObservableObject {
         gamePreferences = prefs
     }
 
-    /// Toggle a game between preferred and excluded
-    public func togglePreferenceState(gameId: String) {
+    /// Remove a specific game preference.
+    public func removeGamePreference(_ preference: GamePreference) {
         var prefs = gamePreferences
-        if let idx = prefs.firstIndex(where: { $0.gameId == gameId }) {
+        prefs.removeAll { preferenceMatches($0, gameId: preference.gameId, gameName: preference.gameName) }
+        gamePreferences = prefs
+    }
+
+    /// Set a stored preference to a specific state.
+    public func setPreferenceState(_ state: PreferenceState, for preference: GamePreference) {
+        var prefs = gamePreferences
+        if let idx = prefs.firstIndex(where: { preferenceMatches($0, gameId: preference.gameId, gameName: preference.gameName) }) {
             let old = prefs[idx]
             prefs[idx] = GamePreference(
                 gameId: old.gameId,
                 gameName: old.gameName,
                 boxArtURL: old.boxArtURL,
-                state: old.state == .preferred ? .excluded : .preferred
+                state: state
             )
         }
         gamePreferences = prefs
+    }
+
+    /// Toggle a stored preference through preferred -> excluded -> neutral.
+    public func togglePreferenceState(for preference: GamePreference) {
+        setPreferenceState(nextPreferenceState(after: preference.state), for: preference)
     }
     
     // MARK: - Enums
@@ -214,6 +237,60 @@ public final class Settings: ObservableObject {
             priorityGamesString = ""
             excludedGamesString = ""
         }
+    }
+
+    private func nextPreferenceState(after state: PreferenceState) -> PreferenceState {
+        switch state {
+        case .preferred:
+            return .excluded
+        case .excluded:
+            return .neutral
+        case .neutral:
+            return .preferred
+        }
+    }
+
+    private func gameNames(for state: PreferenceState) -> [String] {
+        normalizedPreferences(gamePreferences)
+            .filter { $0.state == state }
+            .map(\.gameName)
+    }
+
+    private func normalizedPreferences(_ preferences: [GamePreference]) -> [GamePreference] {
+        var seen = Set<String>()
+        var deduped: [GamePreference] = []
+
+        for preference in preferences.reversed() {
+            let trimmedName = preference.gameName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedName.isEmpty else { continue }
+
+            let normalized = GamePreference(
+                gameId: preference.gameId,
+                gameName: trimmedName,
+                boxArtURL: preference.boxArtURL,
+                state: preference.state
+            )
+
+            guard seen.insert(preferenceKey(for: normalized)).inserted else { continue }
+            deduped.append(normalized)
+        }
+
+        return deduped.reversed()
+    }
+
+    private func preferenceMatches(_ preference: GamePreference, gameId: String, gameName: String) -> Bool {
+        preferenceKey(gameId: preference.gameId, gameName: preference.gameName) == preferenceKey(gameId: gameId, gameName: gameName)
+    }
+
+    private func preferenceKey(for preference: GamePreference) -> String {
+        preferenceKey(gameId: preference.gameId, gameName: preference.gameName)
+    }
+
+    private func preferenceKey(gameId: String, gameName: String) -> String {
+        if !gameId.isEmpty {
+            return gameId
+        }
+        return gameName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
     
     // MARK: - Reset

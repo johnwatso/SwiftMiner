@@ -5,7 +5,6 @@ import SwiftTwitchMiner
 struct ActivityOverviewView: View {
     @Environment(NavigationModel.self) private var navigation
     @State private var aggregateProgress: AggregateProgress?
-    @State private var isRefreshing = false
 
     private var miners: [MinerManager.ManagedMiner] {
         navigation.minerManager.miners
@@ -32,41 +31,6 @@ struct ActivityOverviewView: View {
             }
         }
         .navigationTitle("Activity")
-        .toolbar {
-            ToolbarItemGroup {
-                Button {
-                    Task { await refresh() }
-                } label: {
-                    Label("Refresh UI", systemImage: "arrow.clockwise")
-                }
-                .disabled(isRefreshing)
-
-                Button {
-                    Task { await navigation.minerManager.forceRefreshAllMiners() }
-                } label: {
-                    Label("Force Rescan", systemImage: "arrow.clockwise.circle.fill")
-                }
-
-                Button {
-                    Task {
-                        let settings = Settings.shared
-                        await navigation.minerManager.startAll(
-                            priorityGames: settings.priorityGames,
-                            excludedGames: settings.excludedGames,
-                            strategy: settings.miningStrategy,
-                            enableBadgesEmotes: settings.enableBadgesEmotes
-                        )                    }
-                } label: {
-                    Label("Start All", systemImage: "play.fill")
-                }
-
-                Button {
-                    Task { await navigation.minerManager.stopAll() }
-                } label: {
-                    Label("Stop All", systemImage: "stop.fill")
-                }
-            }
-        }
         .task {
             syncSelection()
             await refresh()
@@ -171,9 +135,7 @@ struct ActivityOverviewView: View {
     }
 
     private func refresh() async {
-        isRefreshing = true
         aggregateProgress = await navigation.minerManager.getAggregateProgress()
-        isRefreshing = false
     }
 
     private func minerEvents(for miner: MinerManager.ManagedMiner) -> [EventEntry] {
@@ -306,14 +268,17 @@ private struct MinerControlPanel: View {
                 Spacer()
 
                 HStack(spacing: 10) {
+                    primaryButton
+
                     Button {
                         Task { await navigation.minerManager.forceRefreshMiner(minerId: miner.id) }
-                    } label: {
-                        Label("Rescan", systemImage: "arrow.clockwise")
+                    }
+                    label: {
+                        Text("Rescan")
                     }
                     .buttonStyle(.bordered)
+                    .controlSize(.small)
 
-                    primaryButton
                 }
             }
 
@@ -356,7 +321,7 @@ private struct MinerControlPanel: View {
                     isStopping = false
                 }
             } label: {
-                Label(isStopping ? "Stopping…" : "Stop", systemImage: "stop.fill")
+                Text(isStopping ? "Stopping…" : "Stop")
             }
             .buttonStyle(.borderedProminent)
             .tint(.red.opacity(0.85))
@@ -376,7 +341,7 @@ private struct MinerControlPanel: View {
                     isStarting = false
                 }
             } label: {
-                Label(isStarting ? "Starting…" : "Start", systemImage: "play.fill")
+                Text(isStarting ? "Starting…" : "Start")
             }
             .buttonStyle(.borderedProminent)
             .disabled(isStarting)

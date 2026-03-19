@@ -140,17 +140,31 @@ struct GameSuggestionRow: View {
 struct GameTokensContainer: View {
     @ObservedObject var settings: Settings
 
-    var body: some View {
-        let preferred = settings.gamePreferences.filter { $0.state == .preferred }
-        let excluded = settings.gamePreferences.filter { $0.state == .excluded }
+    private var orderedPreferences: [GamePreference] {
+        settings.gamePreferences.sorted { lhs, rhs in
+            if stateOrder(lhs.state) != stateOrder(rhs.state) {
+                return stateOrder(lhs.state) < stateOrder(rhs.state)
+            }
+            return lhs.gameName.localizedCaseInsensitiveCompare(rhs.gameName) == .orderedAscending
+        }
+    }
 
+    var body: some View {
         FlowLayout(spacing: 6) {
-            ForEach(preferred) { pref in
+            ForEach(orderedPreferences) { pref in
                 GameTokenView(preference: pref, settings: settings)
             }
-            ForEach(excluded) { pref in
-                GameTokenView(preference: pref, settings: settings)
-            }
+        }
+    }
+
+    private func stateOrder(_ state: PreferenceState) -> Int {
+        switch state {
+        case .preferred:
+            return 0
+        case .excluded:
+            return 1
+        case .neutral:
+            return 2
         }
     }
 }
@@ -164,29 +178,75 @@ struct GameTokenView: View {
     @ObservedObject var settings: Settings
 
     private var stateColor: Color {
-        preference.state == .preferred ? .green : .red
+        switch preference.state {
+        case .preferred:
+            return .green
+        case .excluded:
+            return .red
+        case .neutral:
+            return .secondary
+        }
     }
 
-    private var stateIcon: String {
-        preference.state == .preferred ? "star.fill" : "nosign"
+    private var stateIcon: String? {
+        switch preference.state {
+        case .preferred:
+            return "star.fill"
+        case .excluded:
+            return "minus.circle.fill"
+        case .neutral:
+            return nil
+        }
     }
 
     private var stateLabel: String {
-        preference.state == .preferred ? "Preferred" : "Excluded"
+        switch preference.state {
+        case .preferred:
+            return "Preferred"
+        case .excluded:
+            return "Excluded"
+        case .neutral:
+            return "Neutral"
+        }
+    }
+
+    private var chipBackground: some ShapeStyle {
+        switch preference.state {
+        case .preferred:
+            return AnyShapeStyle(.green.opacity(0.14))
+        case .excluded:
+            return AnyShapeStyle(.red.opacity(0.14))
+        case .neutral:
+            return AnyShapeStyle(.quaternary)
+        }
+    }
+
+    private var chipStroke: Color {
+        switch preference.state {
+        case .preferred:
+            return .green.opacity(0.35)
+        case .excluded:
+            return .red.opacity(0.35)
+        case .neutral:
+            return .black.opacity(0.08)
+        }
     }
 
     var body: some View {
         HStack(spacing: 4) {
-            Image(systemName: stateIcon)
-                .font(.system(size: 9))
-                .foregroundStyle(stateColor)
+            if let stateIcon {
+                Image(systemName: stateIcon)
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(stateColor)
+            }
 
             Text(preference.gameName)
                 .font(.caption)
                 .lineLimit(1)
+                .foregroundStyle(preference.state == .neutral ? .primary : stateColor)
 
             Button {
-                settings.removeGamePreference(gameId: preference.gameId)
+                settings.removeGamePreference(preference)
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 8, weight: .bold))
@@ -196,23 +256,42 @@ struct GameTokenView: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .background(.quaternary, in: Capsule())
-        .help("\(preference.gameName) — \(stateLabel)")
+        .background(chipBackground, in: Capsule())
+        .overlay {
+            Capsule()
+                .stroke(chipStroke, lineWidth: 1)
+        }
+        .contentShape(Capsule())
+        .onTapGesture {
+            settings.togglePreferenceState(for: preference)
+        }
+        .help("\(preference.gameName) — \(stateLabel). Click to cycle preference state.")
         .contextMenu {
             Button {
-                settings.togglePreferenceState(gameId: preference.gameId)
+                settings.setPreferenceState(.preferred, for: preference)
             } label: {
-                if preference.state == .preferred {
-                    Label("Set as Excluded", systemImage: "nosign")
-                } else {
-                    Label("Set as Preferred", systemImage: "star.fill")
-                }
+                Label("Set Preferred", systemImage: "star.fill")
             }
+            .disabled(preference.state == .preferred)
+
+            Button {
+                settings.setPreferenceState(.excluded, for: preference)
+            } label: {
+                Label("Set Excluded", systemImage: "minus.circle.fill")
+            }
+            .disabled(preference.state == .excluded)
+
+            Button {
+                settings.setPreferenceState(.neutral, for: preference)
+            } label: {
+                Label("Set Neutral", systemImage: "circle")
+            }
+            .disabled(preference.state == .neutral)
 
             Divider()
 
             Button(role: .destructive) {
-                settings.removeGamePreference(gameId: preference.gameId)
+                settings.removeGamePreference(preference)
             } label: {
                 Label("Remove", systemImage: "trash")
             }
