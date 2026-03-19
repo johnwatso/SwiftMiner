@@ -43,7 +43,7 @@ else
     echo "Stable appcast includes edSignature"
 fi
 
-STABLE_URL=$(grep -oE 'url="https://github.com/[^"]+"' "$APPCAST_STABLE" | head -n 1 | cut -d'"' -f2)
+STABLE_URL=$(grep -oE 'url="https://github.com/[^"]+"' "$APPCAST_STABLE" | head -n 1 | cut -d'"' -f2 || true)
 if [[ -n "$STABLE_URL" ]]; then
     echo "Checking stable enclosure reachability: $STABLE_URL"
     if curl --output /dev/null --silent --head --fail "$STABLE_URL"; then
@@ -51,6 +51,8 @@ if [[ -n "$STABLE_URL" ]]; then
     else
         echo "Warning: Stable enclosure is not reachable yet"
     fi
+else
+    echo "Stable appcast has no published enclosure yet"
 fi
 
 if [[ -f "$APPCAST_BETA" ]]; then
