@@ -29,6 +29,10 @@ public struct CampaignViewData: Codable, Sendable, Identifiable, Equatable {
     public let miningStatus: MiningCampaignStatus
     /// Context layer: relevance of this campaign to the current feed/session.
     public let relevance: CampaignRelevance
+    /// Campaign start date (from Twitch API)
+    public let startDate: Date
+    /// Campaign end date (from Twitch API)
+    public let endDate: Date
     /// Detailed information about individual drops in this campaign
     public let drops: [DropViewData]
     /// Per-account status for this campaign (used for avatar indicators)
@@ -47,6 +51,8 @@ public struct CampaignViewData: Codable, Sendable, Identifiable, Equatable {
         status: String = "ACTIVE",
         miningStatus: MiningCampaignStatus = .available,
         relevance: CampaignRelevance = .active,
+        startDate: Date,
+        endDate: Date,
         drops: [DropViewData] = [],
         accountStates: [AccountState] = []
     ) {
@@ -62,6 +68,8 @@ public struct CampaignViewData: Codable, Sendable, Identifiable, Equatable {
         self.status = status
         self.miningStatus = miningStatus
         self.relevance = relevance
+        self.startDate = startDate
+        self.endDate = endDate
         self.drops = drops
         self.accountStates = accountStates
     }

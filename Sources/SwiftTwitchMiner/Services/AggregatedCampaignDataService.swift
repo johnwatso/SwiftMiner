@@ -356,8 +356,8 @@ public actor AggregatedCampaignDataService {
             campaignName: data.campaignName,
             artworkURL: data.artworkURL,
             status: data.status,
-            startDate: Date(), // Metadata-only campaign objects don't have full dates
-            endDate: Date().addingTimeInterval(86400),
+            startDate: data.startDate,
+            endDate: data.endDate,
             totalDrops: data.totalDrops,
             accountProgress: accountProgress,
             accountStates: accountStates
@@ -432,6 +432,8 @@ public actor AggregatedCampaignDataService {
             status: mergeCampaignStatus(for: data, campaigns: accountCampaigns.map(\.1)),
             miningStatus: miningStatus,
             relevance: relevance,
+            startDate: data.startDate,
+            endDate: data.endDate,
             drops: drops,
             accountStates: accountStates
         )

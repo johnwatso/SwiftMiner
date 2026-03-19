@@ -21,6 +21,22 @@ public actor SpadeBeaconService {
 
     private let urlSession: URLSession
 
+    /// Pool of Android User-Agents to avoid fingerprinting (matches TDM's pool of 7).
+    private static let androidUserAgents = [
+        "Dalvik/2.1.0 (Linux; U; Android 16; SM-S911B Build/TP1A.220624.014) tv.twitch.android.app/25.3.0/2503006",
+        "Dalvik/2.1.0 (Linux; U; Android 16; SM-S938B Build/BP2A.250605.031) tv.twitch.android.app/25.3.0/2503006",
+        "Dalvik/2.1.0 (Linux; Android 16; SM-X716N Build/UP1A.231005.007) tv.twitch.android.app/25.3.0/2503006",
+        "Dalvik/2.1.0 (Linux; U; Android 15; SM-G990B Build/AP3A.240905.015.A2) tv.twitch.android.app/25.3.0/2503006",
+        "Dalvik/2.1.0 (Linux; U; Android 15; SM-G970F Build/AP3A.241105.008) tv.twitch.android.app/25.3.0/2503006",
+        "Dalvik/2.1.0 (Linux; U; Android 15; SM-A566E Build/AP3A.240905.015.A2) tv.twitch.android.app/25.3.0/2503006",
+        "Dalvik/2.1.0 (Linux; U; Android 14; SM-X306B Build/UP1A.231005.007) tv.twitch.android.app/25.3.0/2503006"
+    ]
+
+    /// Randomly picks a User-Agent from the pool.
+    private var randomUserAgent: String {
+        Self.androidUserAgents.randomElement() ?? Self.androidUserAgents[0]
+    }
+
     /// Cache: channel login → spade URL
     private var spadeURLCache: [String: URL] = [:]
 
@@ -77,30 +93,37 @@ public actor SpadeBeaconService {
     ///
     /// Steps:
     ///   1. GET `https://www.twitch.tv/<login>`
-    ///   2. Find the `settings.js`-style bundle URL in the page HTML
-    ///   3. GET that bundle and regex-extract `spade_url` / `beacon_url`
+    ///   2. Check if `spade_url` is directly in the HTML (typical for mobile/minimal views)
+    ///   3. Find the `settings.js`-style bundle URL in the page HTML
+    ///   4. GET that bundle and regex-extract `spade_url` / `beacon_url`
     private func extractSpadeURL(channelLogin: String) async throws -> URL {
         // Step 1: fetch the channel page
         let pageURL = URL(string: "https://www.twitch.tv/\(channelLogin)")!
         var pageRequest = URLRequest(url: pageURL)
-        pageRequest.setValue(
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            forHTTPHeaderField: "User-Agent"
-        )
+        // TDM PARITY: Use Android User-Agent consistently
+        pageRequest.setValue(randomUserAgent, forHTTPHeaderField: "User-Agent")
 
         let (pageData, _) = try await urlSession.data(for: pageRequest)
         let pageHTML = String(data: pageData, encoding: .utf8) ?? ""
+        let pageRange = NSRange(pageHTML.startIndex..., in: pageHTML)
 
-        // Step 2: find the settings/assets bundle that contains the spade URL
+        // Step 2: Check if spade_url is directly in the page HTML (TDM Step #1)
+        let spadePattern = #""(?:spade_url|beacon_url)"\s*:\s*"(https://[^"]+)""#
+        let spadeRegex = try NSRegularExpression(pattern: spadePattern, options: [.caseInsensitive])
+        
+        if let match = spadeRegex.firstMatch(in: pageHTML, options: [], range: pageRange),
+           let urlRange = Range(match.range(at: 1), in: pageHTML),
+           let url = URL(string: String(pageHTML[urlRange])) {
+            return url
+        }
+
+        // Step 3: find the settings/assets bundle that contains the spade URL
         //
         // The Twitch page embeds several <script src="..."> tags. We look for
         // one that contains "settings" in the name (historically "settings.js")
         // or just iterate all script sources and find the one with spade_url.
-        //
-        // Regex: match src="https://...*.js..." paths in script tags
         let scriptPattern = #"<script[^>]+src="(https://[^"]+\.js[^"]*)"[^>]*>"#
         let scriptRegex = try NSRegularExpression(pattern: scriptPattern, options: [])
-        let pageRange = NSRange(pageHTML.startIndex..., in: pageHTML)
         let scriptMatches = scriptRegex.matches(in: pageHTML, options: [], range: pageRange)
 
         var scriptURLs: [String] = scriptMatches.compactMap { match -> String? in
@@ -109,15 +132,11 @@ public actor SpadeBeaconService {
         }
 
         // Prioritise any URL that has "settings" in it, like older Twitch bundles did.
-        // Fall back to the first script if none matches.
         if let settingsURL = scriptURLs.first(where: { $0.contains("settings") }) {
             scriptURLs = [settingsURL] + scriptURLs.filter { $0 != settingsURL }
         }
 
-        // Step 3: scan each bundle for spade_url / beacon_url
-        let spadePattern = #""(?:spade_url|beacon_url)"\s*:\s*"(https://[^"]+)""#
-        let spadeRegex = try NSRegularExpression(pattern: spadePattern, options: [])
-
+        // Step 4: scan each bundle for spade_url / beacon_url
         for scriptURLString in scriptURLs.prefix(5) { // check at most 5 bundles
             guard let scriptURL = URL(string: scriptURLString) else { continue }
             guard let (scriptData, _) = try? await urlSession.data(from: scriptURL) else { continue }
@@ -146,26 +165,21 @@ public actor SpadeBeaconService {
         broadcastId: String,
         userId: String
     ) -> Data {
-        // The event is wrapped in a JSON array (Twitch accepts batch events)
-        let event: [[String: Any]] = [[
-            "event": "minute-watched",
-            "properties": [
-                "broadcast_id": broadcastId,
-                "channel_id": channelId,
-                "channel":    channelLogin,
-                "user_id":    userId,
-                "player":     "site",
-                "location":   "channel",
-                "logged_in":  true,
-                "live":       true,
-                "hidden":     false,
-                "muted":      false
-            ] as [String: Any]
-        ]]
+        // TDM PARITY: user_id must be an Integer in the JSON payload.
+        let userIdInt: Int64
+        if let parsed = Int64(userId) {
+            userIdInt = parsed
+        } else {
+            traceSpade("WARNING: Invalid user_id '\(userId)' — falling back to 0")
+            userIdInt = 0
+        }
 
-        // Compact JSON → Base64 → form-encoded
-        let jsonData = (try? JSONSerialization.data(withJSONObject: event, options: [.sortedKeys])) ?? Data()
-        let base64 = jsonData.base64EncodedString()
+        // TDM PARITY: To match TwitchDropsMiner's `json_minify` (compact, specific key order),
+        // we build the JSON manually. Python order in `channel.py`:
+        // broadcast_id, channel_id, channel, hidden, live, location, logged_in, muted, player, user_id
+        let json = "[{\"event\":\"minute-watched\",\"properties\":{\"broadcast_id\":\"\(broadcastId)\",\"channel_id\":\"\(channelId)\",\"channel\":\"\(channelLogin)\",\"hidden\":false,\"live\":true,\"location\":\"channel\",\"logged_in\":true,\"muted\":false,\"player\":\"site\",\"user_id\":\(userIdInt)}}]"
+
+        let base64 = Data(json.utf8).base64EncodedString()
         let formBody = "data=\(base64)"
         return formBody.data(using: .utf8) ?? Data()
     }
@@ -176,12 +190,9 @@ public actor SpadeBeaconService {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        // Twitch validates that the beacon comes from a plausible browser context
-        request.setValue(
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            forHTTPHeaderField: "User-Agent"
-        )
-        request.setValue("https://www.twitch.tv/\(channelLogin)", forHTTPHeaderField: "Referer")
+        // TDM PARITY: Use Android User-Agent to match the Client ID. 
+        // Referer is not sent by the Android app.
+        request.setValue(randomUserAgent, forHTTPHeaderField: "User-Agent")
         request.httpBody = payload
 
         let (_, response) = try await urlSession.data(for: request)
