@@ -45,6 +45,7 @@ struct SettingsView: View {
 
 private struct GeneralSettingsView: View {
     @ObservedObject var settings: Settings
+    @EnvironmentObject private var updater: AppUpdater
     
     var body: some View {
         Form {
@@ -61,8 +62,58 @@ private struct GeneralSettingsView: View {
             } header: {
                 Text("Notifications")
             }
+
+            Section {
+                HStack(spacing: 10) {
+                    updateChannelButton(.stable)
+                    updateChannelButton(.beta)
+                }
+
+                if updater.selectedChannel == .beta {
+                    Label("Beta channel enabled. Updates will come from the beta appcast feed.", systemImage: "flask.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+
+                Button("Check for Updates...") {
+                    updater.checkForUpdates()
+                }
+                .buttonStyle(.bordered)
+                .disabled(!updater.canCheckForUpdates)
+
+                if !updater.isConfigured {
+                    Text("Set `SPARKLE_PUBLIC_ED_KEY` in the app target build settings and publish an appcast to enable Sparkle updates.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } header: {
+                Text("Software Updates")
+            }
         }
         .formStyle(.grouped)
+    }
+
+    @ViewBuilder
+    private func updateChannelButton(_ channel: AppUpdater.UpdateChannel) -> some View {
+        let isSelected = updater.selectedChannel == channel
+        Button {
+            updater.setUpdateChannel(channel)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: channel.symbolName)
+                Text(channel.label)
+            }
+            .font(.subheadline.weight(.semibold))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.plain)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(isSelected ? Color.accentColor.opacity(0.6) : Color.secondary.opacity(0.2), lineWidth: isSelected ? 1.4 : 1)
+        )
     }
 }
 

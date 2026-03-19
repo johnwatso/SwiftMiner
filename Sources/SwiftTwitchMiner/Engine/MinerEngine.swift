@@ -664,73 +664,81 @@ public actor MinerEngine {
         log("[ChannelSelect]   Special Event: \(campaign.game.isSpecialEvents ? "YES" : "NO")")
         
         do {
-            let liveChannels = try await dropsService.findLiveChannels(forGame: campaign.gameName)
+            var liveChannels = try await dropsService.findLiveChannels(forGame: campaign.gameName)
             
-            // SPECIAL EVENTS BYPASS: If no channels found for the specific game, 
-            // but it's a Special Event campaign, we can mine ANY live channel in the ACL.
+            // SPECIAL EVENTS BYPASS: If no channels found for the specific game,
+            // but it's a Special Event campaign, we try the ACL channels.
             if liveChannels.isEmpty && campaign.game.isSpecialEvents {
                 log("[ChannelSelect]   Special Event bypass: no game-matched channels, trying ACL...")
-                if let firstAcl = campaign.channels.first {
-                    log("[ChannelSelect]   ✓ Selected ACL channel (Special Event): \(firstAcl.displayName)")
-                    return firstAcl
-                }
+                // In TDM, we check if any ACL channel is actually live.
+                // For now, let's just use the ACL list from the campaign.
+                liveChannels = campaign.channels
             }
 
-            log("[ChannelSelect]   Found \(liveChannels.count) live channels")
-            
-            // Log channel details for debugging
-            for (index, ch) in liveChannels.prefix(5).enumerated() {
-                let aclMarker = ch.aclBased ? " [ACL]" : ""
-                let dropsMarker = ch.hasDropsEnabled ? "" : " [NO_DROPS]"
-                log("[ChannelSelect]     #\(index+1): \(ch.displayName) (viewers: \(ch.viewerCount ?? 0))\(aclMarker)\(dropsMarker)")
-            }
+            log("[ChannelSelect]   Found \(liveChannels.count) live candidate channels")
             
             guard !liveChannels.isEmpty else {
                 log("[ChannelSelect]   ✗ No live channels found for '\(campaign.gameName)'")
-                // Fallback to static channel list if available
-                if let staticChannel = campaign.channels.first {
-                    log("[ChannelSelect]   → Falling back to static ACL channel: \(staticChannel.displayName)")
-                    return staticChannel
-                }
                 return nil
             }
 
-            // Sort channels: ACL-based first, then by viewer count (highest first)
+            // STEP 1: Sort by priority, ACL, and viewer count (HIGHEST FIRST for TDM parity)
+            // TDM PARITY: twitch.py line 758 uses reverse=True which sorts descending (highest first)
             let sortedChannels = liveChannels.sorted { a, b in
+                // Priority games check (highest priority first)
+                let aPriorityIndex = priorityGames.firstIndex(of: a.gameName ?? "")
+                let bPriorityIndex = priorityGames.firstIndex(of: b.gameName ?? "")
+                if aPriorityIndex != bPriorityIndex {
+                    let aRank = aPriorityIndex ?? Int.max
+                    let bRank = bPriorityIndex ?? Int.max
+                    return aRank < bRank
+                }
+
+                // ACL-based check (ACL channels first)
                 if a.aclBased != b.aclBased {
                     return a.aclBased && !b.aclBased
                 }
+
+                // Viewer count: HIGHEST FIRST (matching TDM's reverse=True)
                 return (a.viewerCount ?? 0) > (b.viewerCount ?? 0)
             }
 
-            // Prioritize channels that match campaign restrictions
-            if campaign.hasChannelRestrictions {
-                let restricted = sortedChannels.filter { live in 
-                    campaign.channels.contains { $0.id == live.id } 
-                }
-                log("[ChannelSelect]   \(restricted.count)/\(sortedChannels.count) channels match ACL restrictions")
+            // STEP 2: Filter and Verify (GQL-based verification)
+            // We iterate through the top candidates and verify they ACTUALLY have drops for this campaign.
+            // This prevents "stuck" sessions on channels that only have the tag but no active campaign.
+            for ch in sortedChannels.prefix(5) {
+                log("[ChannelSelect]   Verifying \(ch.displayName) (viewers: \(ch.viewerCount ?? 0))...")
                 
-                if let best = restricted.first {
-                    log("[ChannelSelect]   ✓ Selected ACL-matched channel: \(best.displayName) (viewers: \(best.viewerCount ?? 0), dropsEnabled: \(best.hasDropsEnabled))")
-                    return best
+                // If it's not a Special Event, we can filter by campaign restrictions early
+                if campaign.hasChannelRestrictions && !campaign.channels.contains(where: { $0.id == ch.id }) {
+                    log("[ChannelSelect]     ✗ Skipping: not in campaign ACL")
+                    continue
                 }
-                log("[ChannelSelect]   ✗ No live channels match ACL restrictions. Cannot mine this campaign.")
-                return nil
+
+                do {
+                    // TDM PARITY: Strict drops-enabled verification via GQL
+                    let activeCampaignIds = try await apiClient.fetchAvailableDrops(channelId: ch.id)
+                    if activeCampaignIds.contains(campaign.id) {
+                        log("[ChannelSelect]     ✓ Verified! Campaign \(campaign.id) is active on \(ch.displayName)")
+                        return ch
+                    } else {
+                        log("[ChannelSelect]     ✗ Campaign mismatch. Active IDs: \(activeCampaignIds.joined(separator: ", "))")
+                    }
+                } catch {
+                    log("[ChannelSelect]     ⚠️ Verification failed for \(ch.displayName): \(error.localizedDescription)")
+                }
+            }
+
+            // Fallback: If no channel could be verified, pick the best candidate anyway (best effort)
+            if let best = sortedChannels.first {
+                log("[ChannelSelect]   ! No channel fully verified via GQL. Falling back to best candidate: \(best.displayName)")
+                return best
             }
             
-            // If no restrictions, pick the best sorted channel
-            let best = sortedChannels.first!
-            let reason = best.aclBased ? "ACL-based" : "highest viewers"
-            log("[ChannelSelect]   ✓ Selected channel: \(best.displayName) (viewers: \(best.viewerCount ?? 0), dropsEnabled: \(best.hasDropsEnabled), reason: \(reason))")
-            return best
+            return nil
         } catch {
             log("Failed to fetch live channels for '\(campaign.gameName)': \(error.localizedDescription)")
-            // Fallback to static channel list if available
-            if let staticChannel = campaign.channels.first {
-                log("Falling back to static channel: \(staticChannel.displayName)")
-                return staticChannel
-            }
-            return nil
+            return campaign.channels.first
         }
     }
     

@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import SwiftTwitchMiner
 import UserNotifications
@@ -5,6 +6,7 @@ import UserNotifications
 @main
 struct MinerApp: App {
 
+    @StateObject private var updater = AppUpdater()
     @State private var minerManager = MinerManager(clientId: ClientConfiguration.clientId)
     @State private var appModel: AppModel
     @State private var navigation: NavigationModel
@@ -23,12 +25,14 @@ struct MinerApp: App {
             ContentView()
                 .environment(appModel)
                 .environment(navigation)
+                .environmentObject(updater)
                 .task {
                     // Await navigation setup first — loads accounts from keychain
                     // and optionally auto-starts miners before AppModel reads miner state.
                     await navigation.setup()
                     await appModel.setup()
                     await requestNotificationPermission()
+                    updater.checkForUpdatesInBackground()
                 }
                 .onReceive(
                     NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)
@@ -39,6 +43,12 @@ struct MinerApp: App {
         .windowStyle(.titleBar)
         .windowToolbarStyle(.unified)
         .commands {
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates...") {
+                    updater.checkForUpdates()
+                }
+                .disabled(!updater.canCheckForUpdates)
+            }
             CommandGroup(after: .appSettings) {
                 Button("Claim All Drops") {
                     Task { await appModel.claimAllDrops() }
@@ -78,6 +88,7 @@ struct MinerApp: App {
             SettingsView()
                 .environment(appModel)
                 .environment(navigation)
+                .environmentObject(updater)
                 .padding()
         }
     }
