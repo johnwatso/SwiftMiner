@@ -41,11 +41,6 @@ targets:
       path: Sources/SwiftTwitchMinerApp/Info.plist
       properties:
         CFBundleIconFile: SwiftMiner
-        CFBundleShortVersionString: $(MARKETING_VERSION)
-        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
-        SUEnableAutomaticChecks: true
-        SUFeedURL: $(SPARKLE_FEED_URL)
-        SUPublicEDKey: $(SPARKLE_PUBLIC_ED_KEY)
     settings:
       base:
         PRODUCT_NAME: SwiftMiner
@@ -55,6 +50,12 @@ targets:
         MACOSX_DEPLOYMENT_TARGET: "26.0"
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: SwiftMiner
+        INFOPLIST_KEY_CFBundleName: SwiftMiner
+        INFOPLIST_KEY_SUEnableAutomaticChecks: YES
+        INFOPLIST_KEY_SUFeedURL: $(SPARKLE_FEED_URL)
+        INFOPLIST_KEY_SUPublicEDKey: $(SPARKLE_PUBLIC_ED_KEY)
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_ENTITLEMENTS: ""
         ENABLE_HARDENED_RUNTIME: YES
