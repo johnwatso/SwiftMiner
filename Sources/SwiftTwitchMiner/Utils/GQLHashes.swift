@@ -38,4 +38,7 @@ public enum GQLHashes {
     
     /// Claims a community points bonus
     public static let claimCommunityPoints = "46aaeebe02c99afdf4fc97c7c0cba964124bf6b0af229395f1f6d1feed05b3d0"
+    
+    /// Deletes a notification from the Twitch inbox
+    public static let notificationsDelete = "6088c5e34f1c69a334884c618589c99c73b606c721ae7c96d43bbbf1226a146b"
 }

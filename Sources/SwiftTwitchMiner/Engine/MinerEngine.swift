@@ -387,12 +387,14 @@ public actor MinerEngine {
                 onStatusChange?(.fetchingCampaigns)
                 log("Fetching active campaigns...")
 
-                // 1. Fetch active campaigns with inventory merged
-                let campaigns = try await dropsService.getActiveCampaigns()
+                // 1. Fetch all campaigns (single call — avoids double API hit).
+                // Previously called getActiveCampaigns() + fetchCampaigns() which was redundant
+                // since getActiveCampaigns internally calls fetchCampaigns.
                 let allEnriched = try await dropsService.fetchCampaigns()
                 self.allCampaigns = allEnriched
-                
-                log("Campaigns: \(allCampaigns.count) total")
+                let campaigns = allEnriched.filter { $0.isMiningEligible }
+
+                log("Campaigns: \(allCampaigns.count) total, \(campaigns.count) mining-eligible")
                 for c in allEnriched {
                     // IMPLEMENTATION OF DOMAIN LOGGING REQUIREMENT
                     log("  · \(c.name) (\(c.gameName)) → Status: \(c.miningStatus.rawValue) → Relevance: \(c.relevance.rawValue)")
@@ -455,21 +457,34 @@ public actor MinerEngine {
                 )
 
                 // Wait for watch session while periodically checking progress
+                var lastGqlPoll = Date()
                 while await watchSessionManager.isWatching && !shouldSwitchChannel {
-                    try? await Task.sleep(nanoseconds: 60 * 1_000_000_000) // 1 minute
+                    // Check every 10 seconds for interrupts or polls
+                    try? await Task.sleep(nanoseconds: 10 * 1_000_000_000)
                     
-                    // Increment local minute count
+                    // TDM PARITY: GQL Fallback Poll
+                    // If it's been >20s since last PubSub/Poll and we haven't hit 100%
+                    if Date().timeIntervalSince(lastGqlPoll) >= 20 {
+                        lastGqlPoll = Date()
+                        if let current = try? await apiClient.fetchCurrentDrop(channelId: channel.id) {
+                            log("Drop progress (GQL poll): \(current.dropId) - \(current.currentMinutes) min")
+                            extraMinutesWatched = 0 // Reset stall timer on GQL success
+                            
+                            // Trigger UI update
+                            if let progress = try? await dropsService.getOverallProgress() {
+                                onProgressUpdate?(progress)
+                            }
+                        }
+                    }
+
+                    // Standard 1-minute increment for stall detection (local estimation).
+                    // The outer loop sleeps 60s per iteration, so one increment per wakeup is correct.
                     extraMinutesWatched += 1
-                    
+
                     // Stuck detection (matches TDM logic)
                     if extraMinutesWatched >= Self.maxExtraMinutes {
                         log("⚠️ Progress stalled for \(extraMinutesWatched) mins. Triggering channel switch.")
                         shouldSwitchChannel = true
-                    }
-
-                    // Update overall progress
-                    if let progress = try? await dropsService.getOverallProgress() {
-                        onProgressUpdate?(progress)
                     }
 
                     // Check if we should claim any drops
@@ -498,6 +513,9 @@ public actor MinerEngine {
                 let result = await claimService.claimDrop(progress)
                 if result.success {
                     log("✅ Claimed drop: \(result.dropName)")
+                    
+                    // TDM PARITY: Delete notification after successful claim
+                    try? await apiClient.deleteNotification(id: progress.id)
 
                     let drop = Drop(
                         id: progress.dropId,
@@ -519,6 +537,10 @@ public actor MinerEngine {
     }
     
     private func selectBestCampaign(from campaigns: [Campaign], priorityGames: [String], excludedGames: [String], strategy: MiningStrategy) -> Campaign? {
+        log("[CampaignSelect] Strategy: \(strategy.displayName), Total campaigns: \(campaigns.count)")
+        log("[CampaignSelect]   Excluded games: \(excludedGames.count), Priority games: \(priorityGames.count)")
+        log("[CampaignSelect]   Badge/Emotes enabled: \(enableBadgesEmotes)")
+        
         let priorityGamesLower = priorityGames.map { $0.lowercased() }
         let excludedGamesLower = excludedGames.map { $0.lowercased() }
 
@@ -526,47 +548,78 @@ public actor MinerEngine {
         let nonExcluded = campaigns.filter {
             !excludedGamesLower.contains($0.gameName.lowercased())
         }
+        let excludedCount = campaigns.count - nonExcluded.count
+        if excludedCount > 0 {
+            log("[CampaignSelect]   Excluded \(excludedCount) campaigns by game filter")
+        }
 
         // 2. Filter to mineable campaigns (Truth Layer check)
-        // Rule: Must be AVAILABLE or IN_PROGRESS. 
-        // MUST NOT be CLAIMED, CLAIMABLE, or EXPIRED.
-        // MUST be account-connected.
-        // MUST NOT be badge/emote only unless enabled (TDM parity).
+        var filteredOutReasons: [String: Int] = [:]
         let eligible = nonExcluded.filter { c in
-            guard c.isAccountConnected else { return false }
+            guard c.isAccountConnected else {
+                filteredOutReasons["not_connected", default: 0] += 1
+                return false
+            }
             
             // Filter out non-drop rewards (badges/emotes) if setting is disabled
             if !enableBadgesEmotes && c.hasOnlyBadgesOrEmotes {
+                filteredOutReasons["badge_emote_only", default: 0] += 1
                 return false
             }
             
             let s = c.miningStatus
-            return s == .available || s == .inProgress
+            let isEligible = s == .available || s == .inProgress
+            if !isEligible {
+                filteredOutReasons["status_\(s.rawValue)", default: 0] += 1
+            }
+            return isEligible
         }
+        
+        // Log filtered out reasons
+        for (reason, count) in filteredOutReasons {
+            log("[CampaignSelect]   Filtered out \(count) campaigns: \(reason)")
+        }
+        log("[CampaignSelect]   Eligible campaigns: \(eligible.count)")
 
         // 3. Apply mining strategy
         switch strategy {
         case .mineAll:
-            // Pick any eligible campaign
-            return selectBestFrom(eligible, priorityGamesLower: priorityGamesLower)
+            let result = selectBestFrom(eligible, priorityGamesLower: priorityGamesLower)
+            if let campaign = result {
+                log("[CampaignSelect]   ✓ Selected (mineAll): \(campaign.name) (\(campaign.gameName), status: \(campaign.miningStatus.rawValue))")
+            }
+            return result
 
         case .prioritiseSelected:
-            // Try priority games first, fallback to any eligible
             let priorityMatches = eligible.filter {
                 priorityGamesLower.contains($0.gameName.lowercased())
             }
+            log("[CampaignSelect]   Priority matches: \(priorityMatches.count)/\(eligible.count)")
+            
             if let best = selectBestFrom(priorityMatches, priorityGamesLower: priorityGamesLower) {
+                log("[CampaignSelect]   ✓ Selected (priority): \(best.name) (\(best.gameName))")
                 return best
             }
             // Fallback to any eligible
-            return selectBestFrom(eligible, priorityGamesLower: priorityGamesLower)
+            let fallback = selectBestFrom(eligible, priorityGamesLower: priorityGamesLower)
+            if let campaign = fallback {
+                log("[CampaignSelect]   ✓ Selected (fallback): \(campaign.name) (\(campaign.gameName))")
+            }
+            return fallback
 
         case .onlyPriority:
-            // ONLY priority games, no fallback
             let priorityOnly = eligible.filter {
                 priorityGamesLower.contains($0.gameName.lowercased())
             }
-            return selectBestFrom(priorityOnly, priorityGamesLower: priorityGamesLower)
+            log("[CampaignSelect]   Priority only: \(priorityOnly.count)/\(eligible.count)")
+            
+            let result = selectBestFrom(priorityOnly, priorityGamesLower: priorityGamesLower)
+            if let campaign = result {
+                log("[CampaignSelect]   ✓ Selected (priority only): \(campaign.name) (\(campaign.gameName))")
+            } else if !eligible.isEmpty {
+                log("[CampaignSelect]   ✗ No priority campaigns available (strategy: onlyPriority)")
+            }
+            return result
         }
     }
 
@@ -606,50 +659,69 @@ public actor MinerEngine {
     }
     
     private func selectBestChannel(from campaign: Campaign) async -> Channel? {
-        log("Searching for live channels for \(campaign.gameName)...")
+        log("[ChannelSelect] Campaign: \(campaign.name) (game: \(campaign.gameName))")
+        log("[ChannelSelect]   ACL restrictions: \(campaign.hasChannelRestrictions ? "YES (\(campaign.channels.count) channels)" : "NO")")
+        log("[ChannelSelect]   Special Event: \(campaign.game.isSpecialEvents ? "YES" : "NO")")
+        
         do {
-            var liveChannels = try await dropsService.findLiveChannels(forGame: campaign.gameName)
+            let liveChannels = try await dropsService.findLiveChannels(forGame: campaign.gameName)
             
             // SPECIAL EVENTS BYPASS: If no channels found for the specific game, 
             // but it's a Special Event campaign, we can mine ANY live channel in the ACL.
             if liveChannels.isEmpty && campaign.game.isSpecialEvents {
-                log("Special Event campaign: searching for ACL channels regardless of game...")
-                // In TDM, they just pick any channel that's live and supports drops.
-                // For SwiftMiner, we'll try the first channel in the campaign's ACL if it exists.
+                log("[ChannelSelect]   Special Event bypass: no game-matched channels, trying ACL...")
                 if let firstAcl = campaign.channels.first {
-                    log("Using ACL channel bypass: \(firstAcl.displayName)")
+                    log("[ChannelSelect]   ✓ Selected ACL channel (Special Event): \(firstAcl.displayName)")
                     return firstAcl
                 }
             }
 
-            log("Found \(liveChannels.count) live channels for \(campaign.gameName)")
+            log("[ChannelSelect]   Found \(liveChannels.count) live channels")
+            
+            // Log channel details for debugging
+            for (index, ch) in liveChannels.prefix(5).enumerated() {
+                let aclMarker = ch.aclBased ? " [ACL]" : ""
+                let dropsMarker = ch.hasDropsEnabled ? "" : " [NO_DROPS]"
+                log("[ChannelSelect]     #\(index+1): \(ch.displayName) (viewers: \(ch.viewerCount ?? 0))\(aclMarker)\(dropsMarker)")
+            }
             
             guard !liveChannels.isEmpty else {
-                log("No live channels found for '\(campaign.gameName)' on Twitch")
+                log("[ChannelSelect]   ✗ No live channels found for '\(campaign.gameName)'")
                 // Fallback to static channel list if available
                 if let staticChannel = campaign.channels.first {
-                    log("Falling back to static channel: \(staticChannel.displayName)")
+                    log("[ChannelSelect]   → Falling back to static ACL channel: \(staticChannel.displayName)")
                     return staticChannel
                 }
                 return nil
             }
 
+            // Sort channels: ACL-based first, then by viewer count (highest first)
+            let sortedChannels = liveChannels.sorted { a, b in
+                if a.aclBased != b.aclBased {
+                    return a.aclBased && !b.aclBased
+                }
+                return (a.viewerCount ?? 0) > (b.viewerCount ?? 0)
+            }
+
             // Prioritize channels that match campaign restrictions
             if campaign.hasChannelRestrictions {
-                let restricted = liveChannels.filter { live in 
+                let restricted = sortedChannels.filter { live in 
                     campaign.channels.contains { $0.id == live.id } 
                 }
+                log("[ChannelSelect]   \(restricted.count)/\(sortedChannels.count) channels match ACL restrictions")
+                
                 if let best = restricted.first {
-                    log("Selected restricted channel: \(best.displayName)")
+                    log("[ChannelSelect]   ✓ Selected ACL-matched channel: \(best.displayName) (viewers: \(best.viewerCount ?? 0), dropsEnabled: \(best.hasDropsEnabled))")
                     return best
                 }
-                log("⚠️ No live channels match campaign restrictions for \(campaign.name). Cannot mine this campaign.")
-                return nil // Cannot mine if no ACL channels are live
+                log("[ChannelSelect]   ✗ No live channels match ACL restrictions. Cannot mine this campaign.")
+                return nil
             }
             
-            // If no restrictions, pick the first live channel
-            let best = liveChannels.first!
-            log("Selected live channel: \(best.displayName)")
+            // If no restrictions, pick the best sorted channel
+            let best = sortedChannels.first!
+            let reason = best.aclBased ? "ACL-based" : "highest viewers"
+            log("[ChannelSelect]   ✓ Selected channel: \(best.displayName) (viewers: \(best.viewerCount ?? 0), dropsEnabled: \(best.hasDropsEnabled), reason: \(reason))")
             return best
         } catch {
             log("Failed to fetch live channels for '\(campaign.gameName)': \(error.localizedDescription)")
