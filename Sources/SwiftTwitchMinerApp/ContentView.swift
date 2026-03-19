@@ -107,6 +107,7 @@ struct EventsView: View {
 struct EventRow: View {
     let event: EventEntry
     let showRaw: Bool
+    @Environment(NavigationModel.self) private var navigation
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -125,7 +126,8 @@ struct EventRow: View {
                         Text(event.timestamp.formatted(.dateTime.hour().minute().second()))
                         if let minerId = event.minerId {
                             Text("•")
-                            Text("Miner \(minerId.prefix(4))")
+                            Text(minerName(for: minerId))
+                                .fontWeight(.medium)
                         }
                     }
                     .font(.system(size: 11))
@@ -134,6 +136,14 @@ struct EventRow: View {
             }
         }
         .padding(.vertical, 4)
+    }
+    
+    /// Looks up the miner username from the minerId, fallback to shortened ID
+    private func minerName(for minerId: String) -> String {
+        if let miner = navigation.minerManager.miners.first(where: { $0.id == minerId }) {
+            return miner.username
+        }
+        return "Account \(minerId.prefix(4))"
     }
 
     private var iconName: String {
@@ -168,9 +178,9 @@ struct OverviewView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
+                metricsSection
                 campaignFeedSection
                 nextActionSection
-                metricsSection
                 campaignSummarySection
             }
             .padding(24)
@@ -248,15 +258,26 @@ struct OverviewView: View {
                 )
             }
 
-            if !displayedActiveFeedItems.isEmpty {
+            if !displayedMiningFeedItems.isEmpty {
                 campaignRailSection(
-                    title: "Active / Mining",
-                    items: displayedActiveFeedItems,
+                    title: "Mining / Queued",
+                    items: displayedMiningFeedItems,
                     prominence: .feature
                 )
             }
         }
         .padding(.vertical, 2)
+    }
+
+    private var displayedMiningFeedItems: [CampaignRailItem] {
+        // Mining items = those currently being watched by any miner
+        let mining = currentlyMiningCampaigns.map { makeRailItem(for: $0, section: .active) }
+        
+        // Queued items = those next in line (we can approximate this by picking the top of the eligible list)
+        // But John's requirement is "source of truth: MinerEngine active selection".
+        // Since we already filter `currentlyMiningCampaigns` by `miner.currentCampaignId`, this is correct.
+        
+        return mining.isEmpty ? [placeholderRailItem(for: .active)] : mining
     }
 
     @ViewBuilder

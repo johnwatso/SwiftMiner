@@ -92,7 +92,7 @@ struct CampaignDetailView: View {
                 } else {
                     VStack(spacing: 12) {
                         ForEach(campaign.drops) { drop in
-                            DropRowView(drop: drop)
+                            DropRowView(drop: drop, fallbackURL: campaign.artworkURL)
                         }
                     }
                 }
@@ -168,6 +168,8 @@ struct CampaignDetailView: View {
 /// One row for a single drop.
 struct DropRowView: View {
     let drop: DropViewData
+    /// Fallback image URL (e.g., campaign artwork) when drop image is missing
+    var fallbackURL: URL? = nil
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
@@ -210,9 +212,14 @@ struct DropRowView: View {
         .opacity(drop.isEarnable || drop.isClaimable || drop.isClaimed ? 1.0 : 0.62)
     }
 
+    /// Determines the best URL to use: drop image first, then fallback, then nil
+    private var imageURLToUse: URL? {
+        drop.imageURL ?? fallbackURL
+    }
+
     @ViewBuilder
     private var dropArtwork: some View {
-        if let url = drop.imageURL {
+        if let url = imageURLToUse {
             AsyncImage(url: url) { image in
                 image
                     .resizable()

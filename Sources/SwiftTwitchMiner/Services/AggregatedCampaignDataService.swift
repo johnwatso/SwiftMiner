@@ -49,11 +49,11 @@ public actor AggregatedCampaignDataService {
             public let state: AccountMiningState
         }
         
-        /// Aggregated progress across all accounts (for display)
+        /// Maximum progress across all accounts (for display).
+        /// Each account progresses independently — showing max is more meaningful than average.
         public var overallProgress: Double {
             guard !accountProgress.isEmpty else { return 0 }
-            let total = accountProgress.values.reduce(0) { $0 + $1.progress }
-            return total / Double(accountProgress.count)
+            return accountProgress.values.map { $0.progress }.max() ?? 0
         }
         
         /// True if all drops are claimed across ALL accounts
@@ -394,10 +394,13 @@ public actor AggregatedCampaignDataService {
             campaigns.first(where: { $0.id == data.id }).map { (accountId, $0) }
         }
 
+        // Progress should NOT be averaged across accounts.
+        // Each account has independent progress. Show the maximum progress for overview,
+        // with per-account progress available via accountStates.
         let progressValues = accountCampaigns.map { $0.1.progress }
         let aggregateProgress = progressValues.isEmpty
             ? data.progress
-            : progressValues.reduce(0, +) / Double(progressValues.count)
+            : progressValues.max() ?? data.progress  // Use max progress, not average
 
         let allClaimed = !accountCampaigns.isEmpty && accountCampaigns.allSatisfy { $0.1.isClaimed }
         let anyClaimed = accountCampaigns.contains { $0.1.isClaimed || $0.1.miningStatus == .claimed }

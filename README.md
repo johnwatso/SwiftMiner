@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="Assets/AppIcon.png" width="120" alt="SwiftMiner Icon">
+  <img src="assets/readme/TM Icon.png" width="120" alt="SwiftMiner Icon">
 </p>
 
 <h1 align="center">SwiftMiner</h1>
@@ -21,6 +21,12 @@
 SwiftMiner is under active development.
 
 Features, UI, and configuration may change frequently as the app evolves. Occasional breakage between releases is expected while core systems are refined and stabilized.
+
+## Preview
+
+<p align="center">
+  <img src="assets/readme/v0.0.1 UI Example.png" alt="SwiftMiner Dashboard Preview">
+</p>
 
 ## Overview
 

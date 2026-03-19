@@ -229,16 +229,51 @@ public actor TwitchAuthService {
         return refreshedAccount.accessToken
     }
 
+    /// Validates an OAuth token and returns user info.
+    public func validateToken(_ token: String) async throws -> (userId: String, login: String) {
+        let response = try await validateTokenInternal(token)
+        return (userId: response.userId, login: response.login)
+    }
+
+    /// Import a session from TDM cookies (auth-token).
+    /// Validates the token and saves it to secure storage.
+    public func importTDMSession(token: String) async throws -> Account {
+        print("[TwitchAuthService] Importing TDM session, token prefix: \(token.prefix(10))... len=\(token.count)")
+
+        // 1. Validate the token to get user info
+        let userInfo = try await validateTokenInternal(token)
+        print("[TwitchAuthService] Token validated for \(userInfo.login)")
+
+        // 2. Create account (TDM sessions don't have refresh tokens, so we default to 30d expiry)
+        let account = Account(
+            id: userInfo.userId,
+            username: userInfo.login,
+            accessToken: token,
+            refreshToken: "", // TDM cookies usually don't have this
+            tokenExpiry: Date().addingTimeInterval(30 * 24 * 3600),
+            scopes: userInfo.scopes
+        )
+
+        // 3. Save to secure storage
+        try await KeychainStorage.save(account: account)
+        return account
+    }
+
     // MARK: - Token Validation
 
-    private func validateToken(_ token: String) async throws -> TokenValidationResponse {
+    private func validateTokenInternal(_ token: String) async throws -> TokenValidationResponse {
         var request = URLRequest(url: validateURL)
         request.setValue("OAuth \(token)", forHTTPHeaderField: "Authorization")
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            throw TwitchMinerError.authenticationFailed("Token validation failed")
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw TwitchMinerError.authenticationFailed("Token validation failed: no HTTP response")
+        }
+        let responseBody = String(data: data, encoding: .utf8) ?? "<non-utf8>"
+        print("[TwitchAuthService] Validate response: status=\(httpResponse.statusCode) body=\(responseBody.prefix(200))")
+        guard httpResponse.statusCode == 200 else {
+            throw TwitchMinerError.authenticationFailed("Token validation failed: HTTP \(httpResponse.statusCode) — \(responseBody.prefix(120))")
         }
 
         return try JSONDecoder().decode(TokenValidationResponse.self, from: data)

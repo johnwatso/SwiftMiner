@@ -92,10 +92,7 @@ struct ActivityOverviewView: View {
                         nextAction: nextAction(for: miner)
                     )
 
-                    MinerActivityFeedSection(
-                        miner: miner,
-                        entries: minerEvents(for: miner)
-                    )
+                    MinerLiveStateSection(miner: miner)
                 }
                 .padding(24)
             }
@@ -421,6 +418,193 @@ private struct MinerActivityFeedSection: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
         .shadow(color: .black.opacity(0.08), radius: 18, y: 8)
+    }
+}
+
+// MARK: - Live State Section (Bug 8: Activity vs Events Separation)
+
+private struct MinerLiveStateSection: View {
+    let miner: MinerManager.ManagedMiner
+
+    private var currentCampaign: Campaign? {
+        guard let id = miner.currentCampaignId else { return nil }
+        return miner.allCampaigns.first { $0.id == id }
+    }
+
+    /// First unclaimed drop in the current campaign.
+    private var activeDrop: Drop? {
+        currentCampaign?.drops.first { drop in
+            if let state = miner.stateStore?.dropStates.first(where: { $0.dropId == drop.id }) {
+                return !state.isClaimed
+            }
+            return !drop.isClaimed
+        }
+    }
+
+    private var activeDropState: DropState? {
+        guard let drop = activeDrop else { return nil }
+        return miner.stateStore?.dropStates.first { $0.dropId == drop.id }
+    }
+
+    /// Next eligible campaigns after the current one (up to 3).
+    private var queuedCampaigns: [Campaign] {
+        Array(miner.allCampaigns
+            .filter { $0.id != miner.currentCampaignId && $0.isMiningEligible }
+            .prefix(3))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Live Activity")
+                .font(.title3.weight(.semibold))
+
+            if let drop = activeDrop {
+                CurrentDropCard(
+                    drop: drop,
+                    state: activeDropState,
+                    campaignName: currentCampaign?.name
+                )
+            } else {
+                Text(
+                    !miner.isRunning
+                        ? "Start this miner to see live drop progress."
+                        : miner.status == .fetchingCampaigns
+                            ? "Scanning for campaigns…"
+                            : "Waiting for an eligible campaign."
+                )
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .padding(16)
+                .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            }
+
+            if !queuedCampaigns.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("QUEUED")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.tertiary)
+
+                    ForEach(queuedCampaigns) { campaign in
+                        QueuedCampaignRow(campaign: campaign)
+                    }
+                }
+            }
+        }
+        .padding(22)
+        .background {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(.thinMaterial)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .shadow(color: .black.opacity(0.08), radius: 18, y: 8)
+    }
+}
+
+private struct CurrentDropCard: View {
+    let drop: Drop
+    let state: DropState?
+    let campaignName: String?
+
+    private var progress: Double {
+        if let s = state { return s.percentComplete / 100 }
+        if let p = drop.progress { return p.percentComplete / 100 }
+        return 0
+    }
+
+    private var progressMinutes: Int {
+        state?.progressMinutes ?? drop.progress?.currentMinutes ?? 0
+    }
+
+    private var requiredMinutes: Int {
+        state?.requiredMinutes ?? drop.requiredMinutes
+    }
+
+    private var minutesRemaining: Int {
+        max(0, requiredMinutes - progressMinutes)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                AsyncImage(url: drop.imageURL) { image in
+                    image.resizable().scaledToFill()
+                } placeholder: {
+                    Image(systemName: "gift.fill").foregroundStyle(.secondary)
+                }
+                .frame(width: 44, height: 44)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    if let campaign = campaignName {
+                        Text(campaign)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(drop.name)
+                        .font(.headline)
+                }
+
+                Spacer()
+
+                Text("\(Int(progress * 100))%")
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(.green)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                ProgressView(value: progress)
+                    .tint(.green)
+
+                HStack {
+                    Text("\(progressMinutes) / \(requiredMinutes) min")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Spacer()
+
+                    if minutesRemaining > 0 {
+                        Text("\(minutesRemaining) min remaining")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("Ready to claim!")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.green)
+                    }
+                }
+            }
+        }
+        .padding(14)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+}
+
+private struct QueuedCampaignRow: View {
+    let campaign: Campaign
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Circle()
+                .fill(.blue.opacity(0.4))
+                .frame(width: 8, height: 8)
+
+            Text(campaign.game.name)
+                .font(.subheadline.weight(.medium))
+                .lineLimit(1)
+
+            Text("·")
+                .foregroundStyle(.tertiary)
+
+            Text(campaign.name)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+
+            Spacer()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 }
 
