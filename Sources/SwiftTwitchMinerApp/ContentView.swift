@@ -239,36 +239,22 @@ struct OverviewView: View {
     // MARK: - Campaign Feed
 
     private var campaignFeedSection: some View {
-        VStack(alignment: .leading, spacing: 28) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Campaign Feed")
-                    .font(.title2.weight(.medium))
-
-                Text("Pinned, live, and recently finished campaigns.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 24) {
+            if !displayedPrioritisedFeedItems.isEmpty {
+                campaignRailSection(
+                    title: "Prioritised",
+                    items: displayedPrioritisedFeedItems,
+                    prominence: .standard
+                )
             }
 
-            campaignRailSection(
-                title: "Prioritised",
-                subtitle: "Selected games stay visible, even after they are finished.",
-                items: displayedPrioritisedFeedItems,
-                prominence: .standard
-            )
-
-            campaignRailSection(
-                title: "Active / Mining",
-                subtitle: "The live row. This should feel like now playing.",
-                items: displayedActiveFeedItems,
-                prominence: .feature
-            )
-
-            campaignRailSection(
-                title: "Recent",
-                subtitle: "Finished campaigns with lower visual priority.",
-                items: displayedRecentFeedItems,
-                prominence: .compact
-            )
+            if !displayedActiveFeedItems.isEmpty {
+                campaignRailSection(
+                    title: "Active / Mining",
+                    items: displayedActiveFeedItems,
+                    prominence: .feature
+                )
+            }
         }
         .padding(.vertical, 2)
     }
@@ -276,12 +262,11 @@ struct OverviewView: View {
     @ViewBuilder
     private func campaignRailSection(
         title: String,
-        subtitle: String,
         items: [CampaignRailItem],
         prominence: CampaignCardProminence
     ) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            sectionHeading(title, subtitle: subtitle)
+            sectionHeading(title)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: prominence.spacing) {
@@ -351,15 +336,17 @@ struct OverviewView: View {
     }
 
     private var displayedPrioritisedFeedItems: [CampaignRailItem] {
-        prioritisedFeedItems.isEmpty ? [placeholderRailItem(for: .prioritised)] : prioritisedFeedItems
+        prioritisedFeedItems
     }
 
     private var displayedActiveFeedItems: [CampaignRailItem] {
-        activeFeedItems.isEmpty ? [placeholderRailItem(for: .active)] : activeFeedItems
-    }
-
-    private var displayedRecentFeedItems: [CampaignRailItem] {
-        recentFeedItems.isEmpty ? [placeholderRailItem(for: .recent)] : recentFeedItems
+        if !activeFeedItems.isEmpty {
+            return activeFeedItems
+        }
+        if !recentFeedItems.isEmpty {
+            return recentFeedItems
+        }
+        return Array(prioritisedFeedItems.prefix(6))
     }
 
     private func makeRailItem(for campaign: Campaign, section: CampaignFeedSection) -> CampaignRailItem {
@@ -389,9 +376,9 @@ struct OverviewView: View {
             id: "preferred-\(preference.gameId.isEmpty ? preference.gameName : preference.gameId)",
             section: .prioritised,
             gameName: preference.gameName,
-            campaignName: "Waiting for the next drop",
-            eyebrow: "Pinned",
-            progressText: "SwiftMiner will keep this game surfaced as campaigns rotate in.",
+            campaignName: "",
+            eyebrow: "",
+            progressText: "",
             progressPercent: 0,
             artworkURL: preference.boxArtURL,
             tint: .orange,
@@ -399,7 +386,7 @@ struct OverviewView: View {
             visualState: .idle,
             watchers: [],
             isDimmed: false,
-            isPlaceholder: true,
+            isPlaceholder: false,
             showsLiveMotion: false
         )
     }
@@ -889,6 +876,12 @@ struct OverviewView: View {
     }
 
     @ViewBuilder
+    private func sectionHeading(_ title: String) -> some View {
+        Text(title)
+            .font(.title3.weight(.medium))
+    }
+
+    @ViewBuilder
     private func sectionHeading(_ title: String, subtitle: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
@@ -1041,20 +1034,17 @@ private enum CampaignCardProminence {
     case compact
 
     var size: CGSize {
-        switch self {
-        case .feature:
-            return CGSize(width: 360, height: 198)
-        case .standard:
-            return CGSize(width: 304, height: 170)
-        case .compact:
-            return CGSize(width: 214, height: 122)
-        }
+        CGSize(width: 186, height: 286)
+    }
+
+    var artworkHeight: CGFloat {
+        202
     }
 
     var spacing: CGFloat {
         switch self {
         case .feature:
-            return 20
+            return 18
         case .standard:
             return 18
         case .compact:
@@ -1148,117 +1138,60 @@ private struct CampaignFeedCard: View {
 
     var body: some View {
         ZStack {
-            CampaignArtworkBackground(url: item.artworkURL, tint: item.tint)
+            CampaignCardTintBackground(url: item.artworkURL, tint: item.tint)
 
-            if item.showsLiveMotion {
-                CampaignCardMotionOverlay(tint: item.tint)
-            }
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(.ultraThinMaterial.opacity(0.9))
 
-            Color.black.opacity(item.section == .recent ? 0.16 : 0.08)
-
-            LinearGradient(
-                colors: [.black.opacity(item.section == .recent ? 0.72 : 0.82), .black.opacity(0.22), .clear],
-                startPoint: .bottom,
-                endPoint: .top
-            )
-
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(alignment: .top) {
-                    CampaignStateBadge(state: item.visualState, titleOverride: item.eyebrow, useDarkForeground: false)
-
-                    Spacer(minLength: 0)
-
-                    if !item.watchers.isEmpty {
-                        CampaignWatcherStack(watchers: item.watchers, size: prominence == .compact ? 22 : 24)
-                    }
-                }
-
-                Spacer(minLength: 0)
-
-                VStack(alignment: .leading, spacing: 10) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(item.gameName)
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.white.opacity(0.74))
-                            .lineLimit(1)
-
-                        Text(item.campaignName)
-                            .font(prominence == .feature ? .title3.weight(.semibold) : .headline.weight(.semibold))
-                            .foregroundStyle(.white)
-                            .lineLimit(2)
-
-                        Text(item.progressText)
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.white.opacity(0.86))
-                            .lineLimit(1)
-                    }
-
-                    HStack(spacing: 8) {
-                        if item.progressPercent > 0 {
-                            Text(item.visualState == .claimed ? "Completed" : "\(Int(item.progressPercent))%")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.white.opacity(0.96))
-                                .padding(.horizontal, 9)
-                                .padding(.vertical, 5)
-                                .background(.ultraThinMaterial, in: Capsule())
-                        }
-
-                        if item.isPlaceholder && item.section == .prioritised {
-                            Text(item.eyebrow)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.white.opacity(0.92))
-                                .padding(.horizontal, 9)
-                                .padding(.vertical, 5)
-                                .background(.ultraThinMaterial, in: Capsule())
-                        }
-                    }
-                }
-                .padding(prominence == .compact ? 11 : 13)
-                .background(
-                    RoundedRectangle(cornerRadius: prominence == .compact ? 16 : 18, style: .continuous)
-                        .fill(.regularMaterial.opacity(item.section == .recent ? 0.18 : 0.24))
+            VStack(alignment: .leading, spacing: 12) {
+                CampaignArtworkTile(
+                    url: item.artworkURL,
+                    tint: item.tint,
+                    height: prominence.artworkHeight,
+                    showsLiveMotion: item.showsLiveMotion
                 )
-            }
-            .padding(prominence == .compact ? 14 : 18)
 
-            if item.progressPercent > 0 && item.visualState != .claimed {
-                VStack {
-                    Spacer()
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(item.gameName)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
 
-                    ZStack(alignment: .leading) {
-                        Capsule()
-                            .fill(.white.opacity(0.18))
-
-                        Capsule()
-                            .fill(.white.opacity(0.92))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .mask(alignment: .leading) {
-                                GeometryReader { proxy in
-                                    Capsule()
-                                        .frame(width: proxy.size.width * (item.progressPercent / 100))
-                                }
-                            }
+                    if !item.campaignName.isEmpty {
+                        Text(item.campaignName)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
                     }
-                    .frame(height: prominence == .compact ? 3 : 4)
-                    .padding(.horizontal, prominence == .compact ? 14 : 18)
-                    .padding(.bottom, prominence == .compact ? 10 : 14)
                 }
             }
+            .padding(12)
         }
-        .frame(width: prominence.size.width, height: prominence.size.height)
-        .background(.thinMaterial.opacity(0.16))
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .frame(width: prominence.size.width, height: prominence.size.height, alignment: .topLeading)
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(item.visualState.accent.opacity(item.visualState == .claimable ? 0.32 : 0.16), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .strokeBorder(cardStrokeColor, lineWidth: 1)
         }
-        .opacity(item.section == .recent ? 0.88 : (item.isDimmed ? 0.68 : 1))
-        .saturation(item.isDimmed ? 0.76 : 1)
+        .opacity(item.section == .recent ? 0.88 : (item.isDimmed ? 0.7 : 1))
+        .saturation(item.isDimmed ? 0.82 : 1)
+        .brightness(isHovering ? 0.015 : 0)
         .scaleEffect(isHovering ? 1.03 : 1)
-        .shadow(color: .black.opacity(isHovering ? 0.24 : 0.16), radius: isHovering ? 22 : 14, y: isHovering ? 12 : 8)
+        .shadow(color: .black.opacity(isHovering ? 0.16 : 0.08), radius: isHovering ? 18 : 10, y: isHovering ? 10 : 6)
         .animation(.easeInOut(duration: 0.2), value: isHovering)
         .onHover { hovering in
             isHovering = hovering
+        }
+    }
+
+    private var cardStrokeColor: Color {
+        switch item.visualState {
+        case .watching, .inProgress, .claimable:
+            return item.visualState.accent.opacity(0.22)
+        case .claimed:
+            return .white.opacity(0.08)
+        case .idle:
+            return .white.opacity(0.12)
         }
     }
 }
@@ -1288,6 +1221,45 @@ private struct CampaignCardMotionOverlay: View {
             }
         }
         .blendMode(.screen)
+    }
+}
+
+private struct CampaignCardTintBackground: View {
+    let url: URL?
+    let tint: Color
+
+    var body: some View {
+        ZStack {
+            if let url {
+                AsyncImage(url: url.overviewHighResolutionArtworkURL) { image in
+                    image
+                        .resizable()
+                        .interpolation(.high)
+                        .scaledToFill()
+                        .blur(radius: 22)
+                        .saturation(1.08)
+                        .opacity(0.09)
+                } placeholder: {
+                    tintGradient
+                }
+            } else {
+                tintGradient
+            }
+
+            tintGradient
+        }
+    }
+
+    private var tintGradient: some View {
+        LinearGradient(
+            colors: [
+                tint.opacity(0.08),
+                tint.opacity(0.03),
+                Color.clear
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
     }
 }
 
@@ -1393,7 +1365,7 @@ private struct CampaignArtworkBackground: View {
     var body: some View {
         ZStack {
             if let url {
-                AsyncImage(url: url) { image in
+                AsyncImage(url: url.overviewHighResolutionArtworkURL) { image in
                     image
                         .resizable()
                         .interpolation(.high)
@@ -1413,6 +1385,38 @@ private struct CampaignArtworkBackground: View {
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
+    }
+}
+
+private struct CampaignArtworkTile: View {
+    let url: URL?
+    let tint: Color
+    let height: CGFloat
+    let showsLiveMotion: Bool
+
+    var body: some View {
+        ZStack {
+            CampaignArtworkBackground(url: url, tint: tint)
+
+            if showsLiveMotion {
+                CampaignCardMotionOverlay(tint: tint)
+                    .opacity(0.55)
+            }
+
+            LinearGradient(
+                colors: [Color.white.opacity(0.12), .clear, Color.black.opacity(0.08)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: height)
+        .background(.thinMaterial.opacity(0.22))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(.white.opacity(0.12), lineWidth: 1)
+        }
     }
 }
 
@@ -1444,6 +1448,23 @@ private struct CampaignThumbnail: View {
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
+    }
+}
+
+private extension URL {
+    var overviewHighResolutionArtworkURL: URL {
+        let replacements: [(String, String)] = [
+            ("{width}", "600"),
+            ("{height}", "800"),
+            ("%7Bwidth%7D", "600"),
+            ("%7Bheight%7D", "800")
+        ]
+
+        let resolved = replacements.reduce(absoluteString) { partial, pair in
+            partial.replacingOccurrences(of: pair.0, with: pair.1)
+        }
+
+        return URL(string: resolved) ?? self
     }
 }
 

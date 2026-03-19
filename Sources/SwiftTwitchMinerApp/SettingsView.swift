@@ -161,7 +161,7 @@ private struct MiningSettingsView: View {
             } header: {
                 Text("Game Preferences")
             } footer: {
-                Text("Search for games with active drop campaigns. Set each to preferred or excluded.")
+                Text("Search for games with active drop campaigns. Added games default to preferred, and clicking a chip cycles preferred, excluded, and neutral.")
             }
         }
         .formStyle(.grouped)
