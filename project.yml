@@ -64,7 +64,7 @@ targets:
           - "$(inherited)"
           - "@executable_path/../Frameworks"
         SPARKLE_FEED_URL: https://johnwatso.github.io/SwiftMiner/appcast.xml
-        SPARKLE_PUBLIC_ED_KEY: ""
+        SPARKLE_PUBLIC_ED_KEY: "4Aht0ilQOmLxGQMnSwGNJvtZ0VKH7lZoV4Raag6eEN8="
 
   SwiftTwitchMinerCLI:
     type: tool
