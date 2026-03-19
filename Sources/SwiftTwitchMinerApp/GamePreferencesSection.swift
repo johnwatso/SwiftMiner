@@ -7,11 +7,11 @@ import SwiftTwitchMiner
 /// Replaces the old "Rules" section with search-driven token selection.
 struct GamePreferencesSection: View {
     @ObservedObject var settings: Settings
-    let campaignStore: CampaignStore
+    let minerManager: MinerManager
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            GameSearchField(settings: settings, campaignStore: campaignStore)
+            GameSearchField(settings: settings, minerManager: minerManager)
 
             if !settings.gamePreferences.isEmpty {
                 GameTokensContainer(settings: settings)
@@ -25,27 +25,58 @@ struct GamePreferencesSection: View {
 /// Autocomplete search field that suggests games from active campaigns.
 struct GameSearchField: View {
     @ObservedObject var settings: Settings
-    let campaignStore: CampaignStore
+    let minerManager: MinerManager
     @State private var searchText = ""
     @State private var showSuggestions = false
+    @State private var availableGames: [Game] = []
+    @State private var hasLoadedGames = false
+    @State private var isLoadingGames = false
     @FocusState private var isSearchFocused: Bool
 
-    /// Unique games extracted from campaigns, sorted alphabetically
-    private var availableGames: [Game] {
-        var seen = Set<String>()
-        return campaignStore.campaigns
-            .map { $0.game }
-            .filter { seen.insert($0.id).inserted }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    private var searchQuery: String {
+        searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var normalizedQuery: String {
+        searchQuery.lowercased()
+    }
+
+    /// Track campaign feed updates from the shared store so search stays in sync
+    /// with the rest of the app without maintaining its own stale cache.
+    private var campaignRefreshToken: String {
+        minerManager.campaignStore.campaigns
+            .map(\.id)
+            .sorted()
+            .joined(separator: "|")
+    }
+
+    private var hasAccounts: Bool {
+        !minerManager.miners.isEmpty
     }
 
     /// Games matching search query, excluding already-selected ones
     private var filteredGames: [Game] {
         let existingIds = Set(settings.gamePreferences.map { $0.gameId })
-        let query = searchText.lowercased().trimmingCharacters(in: .whitespaces)
         return availableGames
-            .filter { !existingIds.contains($0.id) }
-            .filter { query.isEmpty || $0.name.lowercased().contains(query) }
+            .filter { game in
+                !existingIds.contains(game.id)
+                && !settings.gamePreferences.contains(where: {
+                    $0.gameName.localizedCaseInsensitiveCompare(game.name) == .orderedSame
+                })
+            }
+            .filter { normalizedQuery.isEmpty || $0.name.lowercased().contains(normalizedQuery) }
+    }
+
+    private var shouldShowLoadingState: Bool {
+        hasAccounts && !hasLoadedGames && availableGames.isEmpty && isLoadingGames
+    }
+
+    private var shouldShowAddAccountState: Bool {
+        !hasAccounts && !hasLoadedGames
+    }
+
+    private var shouldShowNoMatchesState: Bool {
+        !normalizedQuery.isEmpty && hasLoadedGames && !availableGames.isEmpty && filteredGames.isEmpty
     }
 
     var body: some View {
@@ -64,16 +95,29 @@ struct GameSearchField: View {
                         }
                     }
                 }
+                .task(id: campaignRefreshToken) {
+                    await refreshAvailableGames()
+                }
 
             if showSuggestions {
                 if filteredGames.isEmpty {
-                    if availableGames.isEmpty {
+                    if shouldShowLoadingState {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("Loading games…")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                    } else if shouldShowAddAccountState {
                         Text("Add an account to see available games.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 6)
-                    } else {
+                    } else if shouldShowNoMatchesState {
                         Text("No matching games found.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -99,6 +143,49 @@ struct GameSearchField: View {
                 }
             }
         }
+    }
+
+    @MainActor
+    private func refreshAvailableGames() async {
+        isLoadingGames = true
+        let campaigns = await minerManager.dataCoordinator.currentCampaigns()
+        availableGames = uniqueGames(from: campaigns)
+        hasLoadedGames = true
+        isLoadingGames = false
+    }
+
+    private func uniqueGames(from campaigns: [CampaignViewData]) -> [Game] {
+        var uniqueGamesByName: [String: Game] = [:]
+
+        for campaign in campaigns {
+            let gameName = campaign.gameName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !gameName.isEmpty else { continue }
+
+            let key = normalizedKey(for: gameName)
+            let candidate = Game(
+                id: key,
+                name: gameName,
+                boxArtURL: campaign.artworkURL
+            )
+
+            if let existing = uniqueGamesByName[key] {
+                if existing.boxArtURL == nil, candidate.boxArtURL != nil {
+                    uniqueGamesByName[key] = candidate
+                }
+            } else {
+                uniqueGamesByName[key] = candidate
+            }
+        }
+
+        return uniqueGamesByName.values.sorted {
+            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
+    }
+
+    private func normalizedKey(for name: String) -> String {
+        name
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
     }
 }
 

@@ -1137,41 +1137,66 @@ private struct CampaignFeedCard: View {
     @State private var isHovering = false
 
     var body: some View {
-        ZStack {
-            CampaignCardTintBackground(url: item.artworkURL, tint: item.tint)
+        ZStack(alignment: .bottomLeading) {
+            CampaignArtworkBackground(url: item.artworkURL, tint: item.tint)
 
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(.ultraThinMaterial.opacity(0.9))
+            if item.showsLiveMotion {
+                CampaignCardMotionOverlay(tint: item.tint)
+                    .opacity(0.5)
+            }
 
-            VStack(alignment: .leading, spacing: 12) {
-                CampaignArtworkTile(
-                    url: item.artworkURL,
-                    tint: item.tint,
-                    height: prominence.artworkHeight,
-                    showsLiveMotion: item.showsLiveMotion
+            LinearGradient(
+                colors: [
+                    .clear,
+                    Color.black.opacity(0.12),
+                    Color.black.opacity(0.36),
+                    Color.black.opacity(item.section == .recent ? 0.56 : 0.66)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            Rectangle()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            item.tint.opacity(0),
+                            item.tint.opacity(0.08),
+                            item.tint.opacity(0.18)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
                 )
+                .mask(alignment: .bottom) {
+                    LinearGradient(
+                        colors: [.clear, .black.opacity(0.24), .black],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(item.gameName)
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(.primary)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.gameName)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+
+                if !item.campaignName.isEmpty {
+                    Text(item.campaignName)
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.78))
                         .lineLimit(2)
-
-                    if !item.campaignName.isEmpty {
-                        Text(item.campaignName)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                    }
                 }
             }
-            .padding(12)
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(width: prominence.size.width, height: prominence.size.height, alignment: .topLeading)
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .strokeBorder(cardStrokeColor, lineWidth: 1)
+                .strokeBorder(.white.opacity(0.12), lineWidth: 1)
         }
         .opacity(item.section == .recent ? 0.88 : (item.isDimmed ? 0.7 : 1))
         .saturation(item.isDimmed ? 0.82 : 1)
@@ -1181,17 +1206,6 @@ private struct CampaignFeedCard: View {
         .animation(.easeInOut(duration: 0.2), value: isHovering)
         .onHover { hovering in
             isHovering = hovering
-        }
-    }
-
-    private var cardStrokeColor: Color {
-        switch item.visualState {
-        case .watching, .inProgress, .claimable:
-            return item.visualState.accent.opacity(0.22)
-        case .claimed:
-            return .white.opacity(0.08)
-        case .idle:
-            return .white.opacity(0.12)
         }
     }
 }
@@ -1221,45 +1235,6 @@ private struct CampaignCardMotionOverlay: View {
             }
         }
         .blendMode(.screen)
-    }
-}
-
-private struct CampaignCardTintBackground: View {
-    let url: URL?
-    let tint: Color
-
-    var body: some View {
-        ZStack {
-            if let url {
-                AsyncImage(url: url.overviewHighResolutionArtworkURL) { image in
-                    image
-                        .resizable()
-                        .interpolation(.high)
-                        .scaledToFill()
-                        .blur(radius: 22)
-                        .saturation(1.08)
-                        .opacity(0.09)
-                } placeholder: {
-                    tintGradient
-                }
-            } else {
-                tintGradient
-            }
-
-            tintGradient
-        }
-    }
-
-    private var tintGradient: some View {
-        LinearGradient(
-            colors: [
-                tint.opacity(0.08),
-                tint.opacity(0.03),
-                Color.clear
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
     }
 }
 
@@ -1385,38 +1360,6 @@ private struct CampaignArtworkBackground: View {
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
-    }
-}
-
-private struct CampaignArtworkTile: View {
-    let url: URL?
-    let tint: Color
-    let height: CGFloat
-    let showsLiveMotion: Bool
-
-    var body: some View {
-        ZStack {
-            CampaignArtworkBackground(url: url, tint: tint)
-
-            if showsLiveMotion {
-                CampaignCardMotionOverlay(tint: tint)
-                    .opacity(0.55)
-            }
-
-            LinearGradient(
-                colors: [Color.white.opacity(0.12), .clear, Color.black.opacity(0.08)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: height)
-        .background(.thinMaterial.opacity(0.22))
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(.white.opacity(0.12), lineWidth: 1)
-        }
     }
 }
 

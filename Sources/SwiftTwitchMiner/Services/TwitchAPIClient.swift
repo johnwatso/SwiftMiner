@@ -418,6 +418,45 @@ public actor TwitchAPIClient {
         )
     }
 
+    /// Delete a notification from the user's Twitch inbox
+    public func deleteNotification(id: String) async throws {
+        let request = GraphQLRequest(
+            operationName: "NotificationsDelete",
+            sha256Hash: GQLHashes.notificationsDelete,
+            variables: ["input": ["id": id]]
+        )
+        _ = try await makeGraphQLRequest(request: request)
+    }
+
+    /// Fetches a playback access token for a channel.
+    /// This is used to verify that the session is valid and the user can earn drops.
+    public func fetchPlaybackAccessToken(channelLogin: String) async throws -> (value: String, signature: String) {
+        let request = GraphQLRequest(
+            operationName: "PlaybackAccessToken",
+            sha256Hash: GQLHashes.playbackAccessToken,
+            variables: [
+                "isLive": true,
+                "isVod": false,
+                "login": channelLogin,
+                "platform": "web",
+                "playerType": "site",
+                "vodID": ""
+            ]
+        )
+
+        let data = try await makeGraphQLRequest(request: request)
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+
+        guard let responseData = json?["data"] as? [String: Any],
+              let tokenData = responseData["streamPlaybackAccessToken"] as? [String: Any],
+              let value = tokenData["value"] as? String,
+              let signature = tokenData["signature"] as? String else {
+            throw TwitchMinerError.networkError("Failed to fetch playback access token")
+        }
+
+        return (value: value, signature: signature)
+    }
+
     /// Watch stream heartbeat (maintains watch session)
     public func sendWatchHeartbeat(channelId: String, channelLogin: String) async throws {
         let request = GraphQLRequest(
@@ -493,7 +532,16 @@ public actor TwitchAPIClient {
                 // "id" and "displayName" may be absent — fall back to login
                 let id = (person["id"] as? String) ?? login
                 let displayName = (person["displayName"] as? String) ?? login
-                return Channel(id: id, login: login, displayName: displayName)
+                // Parse viewer count for channel quality sorting
+                let viewerCount = node["viewersCount"] as? Int
+                return Channel(
+                    id: id, 
+                    login: login, 
+                    displayName: displayName,
+                    isLive: true,
+                    viewerCount: viewerCount,
+                    hasDropsEnabled: true
+                )
             }
             print("[TwitchAPIClient] getLiveChannels: parsed \(channels.count) channels from \(edges.count) edges")
             return channels
@@ -960,6 +1008,34 @@ public actor TwitchAPIClient {
         let selfDict = campaignDict["self"] as? [String: Any]
         let isAccountConnected = selfDict?["isAccountConnected"] as? Bool ?? false
         
+        // Parse ACL channels from allow.channels (critical for restricted campaigns)
+        let allowDict = campaignDict["allow"] as? [String: Any] ?? [:]
+        let isAllowEnabled = allowDict["isEnabled"] as? Bool ?? true
+        let channelsArray: [Channel] = isAllowEnabled 
+            ? (allowDict["channels"] as? [[String: Any]] ?? []).compactMap { channelDict -> Channel? in
+                guard 
+                    let id = channelDict["id"] as? String,
+                    let login = channelDict["login"] as? String,
+                    let displayName = channelDict["displayName"] as? String
+                else { return nil }
+                
+                let broadcasterType = channelDict["broadcasterType"] as? String ?? ""
+                let description = channelDict["description"] as? String ?? ""
+                let profileImageURL = (channelDict["profileImageURL"] as? String).flatMap { URL(string: $0) }
+                
+                // Mark as ACL-based for prioritization
+                return Channel(
+                    id: id,
+                    login: login,
+                    displayName: displayName,
+                    description: description,
+                    profileImageUrl: profileImageURL,
+                    broadcasterType: broadcasterType,
+                    aclBased: true
+                )
+              }
+            : []
+        
         return Campaign(
             id: id,
             name: name,
@@ -968,7 +1044,7 @@ public actor TwitchAPIClient {
             startDate: startAt,
             endDate: endAt,
             drops: dropsArray,
-            channels: [],
+            channels: channelsArray,
             isAccountConnected: isAccountConnected
         )
     }

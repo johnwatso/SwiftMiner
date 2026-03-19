@@ -156,7 +156,7 @@ private struct MiningSettingsView: View {
             Section {
                 GamePreferencesSection(
                     settings: settings,
-                    campaignStore: navigation.minerManager.campaignStore
+                    minerManager: navigation.minerManager
                 )
             } header: {
                 Text("Game Preferences")
