@@ -40,6 +40,10 @@ public final class Settings: ObservableObject {
     @AppStorage("autoStartOnLaunch")
     public var autoStartOnLaunch: Bool = false
 
+    /// Whether to include campaigns that only give non-drop rewards (badges/emotes)
+    @AppStorage("enableBadgesEmotes")
+    public var enableBadgesEmotes: Bool = false
+
     /// Whether to sync all miners state (start/stop together)
     @AppStorage("syncMinersState")
     public var syncMinersState: Bool = true

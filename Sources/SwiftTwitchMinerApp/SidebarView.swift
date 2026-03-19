@@ -50,9 +50,9 @@ struct SidebarView: View {
                             await navigation.minerManager.startAll(
                                 priorityGames: settings.priorityGames,
                                 excludedGames: settings.excludedGames,
-                                strategy: settings.miningStrategy
-                            )
-                        }
+                                strategy: settings.miningStrategy,
+                                enableBadgesEmotes: settings.enableBadgesEmotes
+                            )                        }
                     } label: {
                         Image(systemName: "play.fill")
                     }

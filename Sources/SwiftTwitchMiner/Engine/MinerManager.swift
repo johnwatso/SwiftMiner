@@ -76,6 +76,9 @@ public final class MinerManager {
     
     /// Global campaign store (Phase 1)
     public let campaignStore: CampaignStore
+    
+    /// Data coordinator for multi-miner campaign aggregation
+    public let dataCoordinator: MiningDataCoordinator
 
     /// Whether the manager has been setup (loaded accounts)
     private var isSetup = false
@@ -100,6 +103,7 @@ public final class MinerManager {
     public init(clientId: String, campaignStore: CampaignStore = CampaignStore()) {
         self.clientId = clientId
         self.campaignStore = campaignStore
+        self.dataCoordinator = MiningDataCoordinator(campaignStore: campaignStore)
     }
     
     /// Update the client ID (call before adding the first account if the ID wasn't available at init).
@@ -150,8 +154,22 @@ public final class MinerManager {
             await engine.setAccount(account)
             await setupEngineCallbacks(engine: engine, minerId: minerId)
 
-            // Get DropsService from engine actor, then create AccountStateStore on @MainActor (Phase 2)
+            // Get DropsService and InventoryService from engine for data coordination
+            let apiClient = await engine.getAPIClient()
             let dropsService = await engine.getDropsService()
+            let inventoryService = await dropsService.getInventoryService()
+
+            // Register with data coordinator for multi-miner aggregation
+            dataCoordinator.registerMiner(
+                minerId: minerId,
+                accountId: account.id,
+                username: account.username,
+                apiClient: apiClient,
+                inventoryService: inventoryService,
+                engine: engine
+            )
+            
+            // Create AccountStateStore on @MainActor (Phase 2)
             let stateStore = AccountStateStore(accountId: account.id, username: account.username, dropsService: dropsService)
 
             // Wire stateStore back into the miner entry
@@ -159,13 +177,9 @@ public final class MinerManager {
                 miners[idx].stateStore = stateStore
             }
 
-            // Configure global campaign store with this account's API client (Phase 1)
-            await campaignStore.configure(apiClient: engine.apiClient, accountId: account.id)
-
             // Start the state store auto-refresh (Phase 2)
             await stateStore.start()
-        }
-        
+            }        
         return minerId
     }
     
@@ -175,6 +189,9 @@ public final class MinerManager {
         
         // Stop the miner if running
         await stopMiner(minerId: minerId)
+        
+        // Unregister from data coordinator
+        dataCoordinator.unregisterMiner(minerId: minerId, accountId: miner.accountId)
         
         // Remove from keychain
         let authService = TwitchAuthService(clientId: clientId)
@@ -198,7 +215,7 @@ public final class MinerManager {
     // MARK: - Control Operations
 
     /// Start a specific miner
-    public func startMiner(minerId: String, priorityGames: [String], excludedGames: [String], strategy: MiningStrategy) async throws {
+    public func startMiner(minerId: String, priorityGames: [String], excludedGames: [String], strategy: MiningStrategy, enableBadgesEmotes: Bool = false) async throws {
         guard let engine = engines[minerId] else {
             throw TwitchMinerError.sessionNotStarted
         }
@@ -206,7 +223,8 @@ public final class MinerManager {
         // Update mining preferences
         await engine.updateMiningPreferences(
             priorityGames: priorityGames,
-            excludedGames: excludedGames
+            excludedGames: excludedGames,
+            enableBadgesEmotes: enableBadgesEmotes
         )
         await engine.updateMiningStrategy(strategy)
 
@@ -231,9 +249,15 @@ public final class MinerManager {
     }
     
     /// Start all miners
-    public func startAll(priorityGames: [String], excludedGames: [String], strategy: MiningStrategy) async {
+    public func startAll(priorityGames: [String], excludedGames: [String], strategy: MiningStrategy, enableBadgesEmotes: Bool = false) async {
         for miner in miners where !miner.isRunning {
-            try? await startMiner(minerId: miner.id, priorityGames: priorityGames, excludedGames: excludedGames, strategy: strategy)
+            try? await startMiner(
+                minerId: miner.id, 
+                priorityGames: priorityGames, 
+                excludedGames: excludedGames, 
+                strategy: strategy,
+                enableBadgesEmotes: enableBadgesEmotes
+            )
         }
     }
     

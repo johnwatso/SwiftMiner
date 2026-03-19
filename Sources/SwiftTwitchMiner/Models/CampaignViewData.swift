@@ -22,9 +22,18 @@ public struct CampaignViewData: Codable, Sendable, Identifiable, Equatable {
     public let totalDrops: Int
     /// Estimated time remaining to earn all drops (nil if not mining or finished)
     public let timeRemaining: TimeInterval?
-    /// The current status of the campaign
+    /// The current Twitch status of the campaign (ACTIVE, EXPIRED, etc.)
     public let status: String
-    
+    /// Truth layer: derived status combining Twitch data + inventory state.
+    /// Use this for selection and display logic — do NOT use `status` alone.
+    public let miningStatus: MiningCampaignStatus
+    /// Context layer: relevance of this campaign to the current feed/session.
+    public let relevance: CampaignRelevance
+    /// Detailed information about individual drops in this campaign
+    public let drops: [DropViewData]
+    /// Per-account status for this campaign (used for avatar indicators)
+    public let accountStates: [AccountState]
+
     public init(
         id: String,
         gameName: String,
@@ -35,7 +44,11 @@ public struct CampaignViewData: Codable, Sendable, Identifiable, Equatable {
         dropsClaimed: Int,
         totalDrops: Int,
         timeRemaining: TimeInterval? = nil,
-        status: String = "ACTIVE"
+        status: String = "ACTIVE",
+        miningStatus: MiningCampaignStatus = .available,
+        relevance: CampaignRelevance = .active,
+        drops: [DropViewData] = [],
+        accountStates: [AccountState] = []
     ) {
         self.id = id
         self.gameName = gameName
@@ -47,5 +60,42 @@ public struct CampaignViewData: Codable, Sendable, Identifiable, Equatable {
         self.totalDrops = totalDrops
         self.timeRemaining = timeRemaining
         self.status = status
+        self.miningStatus = miningStatus
+        self.relevance = relevance
+        self.drops = drops
+        self.accountStates = accountStates
     }
+}
+
+// MARK: - Account State
+
+/// Represents the mining/claimed status of an account for a specific campaign.
+public struct AccountState: Codable, Sendable, Equatable, Identifiable {
+    public var id: String { accountId }
+    public let accountId: String
+    public let username: String
+    public let initials: String
+    public let miningStatus: AccountMiningStatus
+    
+    public init(
+        accountId: String,
+        username: String,
+        initials: String,
+        miningStatus: AccountMiningStatus
+    ) {
+        self.accountId = accountId
+        self.username = username
+        self.initials = initials
+        self.miningStatus = miningStatus
+    }
+}
+
+/// Status of an account's relationship with a campaign.
+public enum AccountMiningStatus: String, Codable, Sendable, Equatable {
+    /// Actively watching/earning progress for this campaign
+    case mining = "MINING"
+    /// All drops in this campaign are claimed for this account
+    case claimed = "CLAIMED"
+    /// Account is linked but not currently mining this campaign
+    case idle = "IDLE"
 }

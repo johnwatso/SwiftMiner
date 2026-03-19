@@ -13,6 +13,18 @@ public struct Game: Codable, Sendable, Identifiable, Equatable {
         self.name = name
         self.boxArtURL = boxArtURL
     }
+
+    /// Whether this game represents a global/special event category that can host drops
+    /// from any game (e.g. Just Chatting, Music, Special Events).
+    /// These campaigns bypass strict game-name channel matching — any ACL channel qualifies.
+    public var isSpecialEvents: Bool {
+        // IDs from TwitchDropsMiner and John's spec:
+        // 509658: Just Chatting
+        // 26936:  Music
+        // 509659: Travel & Outdoors
+        // 509663: Special Events
+        ["509658", "26936", "509659", "509663"].contains(id)
+    }
 }
 
 /// Status of a drop campaign
@@ -21,6 +33,32 @@ public enum CampaignStatus: String, Codable, Sendable, Equatable {
     case upcoming = "UPCOMING"
     case expired = "EXPIRED"
     case disabled = "DISABLED"
+}
+
+/// The truth layer for a campaign's status relative to an account.
+public enum MiningCampaignStatus: String, Codable, Sendable, Equatable {
+    /// Not started but eligible to earn
+    case available = "AVAILABLE"
+    /// Partially completed
+    case inProgress = "IN_PROGRESS"
+    /// Ready to claim (100% progress but not claimed)
+    case claimable = "CLAIMABLE"
+    /// Fully completed and claimed
+    case claimed = "CLAIMED"
+    /// No longer valid (time window closed)
+    case expired = "EXPIRED"
+}
+
+/// The context layer for a campaign's relevance to the user/session.
+public enum CampaignRelevance: String, Codable, Sendable, Equatable {
+    /// User-selected games (always visible)
+    case prioritised = "PRIORITISED"
+    /// Currently mineable (available / in progress / claimable)
+    case active = "ACTIVE"
+    /// Claimed recently (last 24–48h)
+    case recent = "RECENT"
+    /// Not relevant to current session
+    case irrelevant = "IRRELEVANT"
 }
 
 /// Type of reward a drop gives
@@ -191,6 +229,9 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
     public let channels: [Channel]
     /// Whether the user's game account is connected for this campaign
     public let isAccountConnected: Bool
+    
+    /// User preference context (used for relevance calculation)
+    public let isPrioritised: Bool
 
     public init(
         id: String,
@@ -201,7 +242,8 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
         endDate: Date,
         drops: [Drop] = [],
         channels: [Channel] = [],
-        isAccountConnected: Bool = false
+        isAccountConnected: Bool = false,
+        isPrioritised: Bool = false
     ) {
         self.id = id
         self.name = name
@@ -212,6 +254,66 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
         self.drops = drops
         self.channels = channels
         self.isAccountConnected = isAccountConnected
+        self.isPrioritised = isPrioritised
+    }
+
+    // MARK: - Truth Layer: Mining Status
+
+    /// The definitive status of this campaign for the current account.
+    /// Derived from both Twitch data and Inventory state.
+    public var miningStatus: MiningCampaignStatus {
+        // 1. Expired check
+        if Date() > endDate || status == .expired {
+            return .expired
+        }
+        
+        // 2. Claimed check (All drops must be claimed)
+        if !drops.isEmpty && drops.allSatisfy({ $0.isClaimed }) {
+            return .claimed
+        }
+        
+        // 3. Claimable check (Any drop ready to claim)
+        if drops.contains(where: { $0.isClaimable }) {
+            return .claimable
+        }
+        
+        // 4. In Progress check (Any drop has progress > 0)
+        if drops.contains(where: { ($0.progress?.currentMinutes ?? 0) > 0 }) {
+            return .inProgress
+        }
+        
+        // 5. Default to Available
+        return .available
+    }
+
+    // MARK: - Context Layer: Relevance
+
+    /// The relevance of this campaign to the current session/feed.
+    public var relevance: CampaignRelevance {
+        // 1. Prioritised check
+        if isPrioritised {
+            return .prioritised
+        }
+        
+        // 2. Active check (available, in progress, or claimable)
+        let s = miningStatus
+        if s == .available || s == .inProgress || s == .claimable {
+            return .active
+        }
+        
+        // 3. Recent check (Claimed recently - last 48h)
+        if s == .claimed {
+            // Check if any drop was awarded recently
+            let recentlyAwarded = drops.contains { drop in
+                guard let lastAwarded = drop.progress?.lastUpdated else { return false }
+                return Date().timeIntervalSince(lastAwarded) < (48 * 3600)
+            }
+            if recentlyAwarded {
+                return .recent
+            }
+        }
+        
+        return .irrelevant
     }
 
     // MARK: Computed properties
@@ -230,6 +332,14 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
     }
 
     public var isFullyComplete: Bool { drops.allSatisfy { $0.isClaimed } }
+
+    /// Whether the campaign consists only of badge or emote rewards (non-drop rewards).
+    public var hasOnlyBadgesOrEmotes: Bool {
+        !drops.isEmpty && drops.allSatisfy { drop in
+            guard let type = drop.reward?.type else { return false }
+            return type == .badge || type == .emote
+        }
+    }
 
     public var hasChannelRestrictions: Bool { !channels.isEmpty }
 

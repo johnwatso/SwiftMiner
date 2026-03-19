@@ -29,7 +29,10 @@ public actor CampaignDataService {
     
     private var lastCampaignLoad: Date?
     private var lastInventoryLoad: Date?
+    private var lastCleanupDate: Date?
     private var isRefreshing = false
+    /// Cleanup runs at most once per day to avoid unnecessary disk writes.
+    private static let cleanupInterval: TimeInterval = 86400
     
     // MARK: - Initialization
     
@@ -51,23 +54,23 @@ public actor CampaignDataService {
         // Try to get cached campaigns
         let cachedCampaigns = loadCachedCampaigns()
         let cachedInventory = await inventoryService.currentSnapshot()
-        
+
         // Map to view data using cached data
         let viewData = CampaignMapper.map(
             campaigns: cachedCampaigns,
             inventory: cachedInventory
         )
-        
+
         // Trigger background refresh if cache is stale
         if shouldRefreshCampaigns() || shouldRefreshInventory() {
             Task {
                 await refresh()
             }
         }
-        
+
         return viewData
     }
-    
+
     /// Get only mining-eligible campaigns as UI-ready view data.
     /// Filters to campaigns that are:
     /// - Active (time window)
@@ -83,7 +86,7 @@ public actor CampaignDataService {
             viewData.status == "ACTIVE" && !viewData.isClaimed
         }
     }
-    
+
     /// Get a single campaign by ID as UI-ready view data.
     /// Returns nil if campaign not found in cache or API.
     public func getCampaign(id: String) async -> CampaignViewData? {
@@ -93,10 +96,10 @@ public actor CampaignDataService {
             let inventory = await inventoryService.currentSnapshot()
             return CampaignMapper.mapSingle(campaign: campaign, inventory: inventory)
         }
-        
+
         // If not in cache, try to refresh
         await refresh()
-        
+
         // Check again after refresh
         let refreshed = loadCachedCampaigns()
         guard let campaign = refreshed.first(where: { $0.id == id }) else {
@@ -113,33 +116,67 @@ public actor CampaignDataService {
         await inventoryService.isDropClaimed(benefitID: benefitID)
     }
     
+    // MARK: - Public API (Parts 9)
+
+    /// Returns cached campaigns immediately — never waits for the network.
+    /// This is the synchronous entry point for app launch / UI binding.
+    public func currentCampaigns() async -> [CampaignViewData] {
+        let cached = CampaignDiskCache.load(accountId: accountId)
+        let inventory = await inventoryService.currentSnapshot()
+        let composed = CampaignMapper.composeFeed(from: CampaignMapper.map(campaigns: cached, inventory: inventory))
+        return composed
+    }
+
+    /// Performs an async fetch + merge, then updates the disk cache.
+    /// Safe to call at any time; will not block callers of currentCampaigns().
+    public func refreshCampaigns() async {
+        await refresh()
+    }
+
     /// Force a refresh of campaigns and inventory.
-    /// Updates disk cache with fresh data.
+    /// Merges fresh API data into the existing cache — never replaces it wholesale.
     public func refresh() async {
         guard !isRefreshing else { return }
         isRefreshing = true
         defer { isRefreshing = false }
-        
+
         do {
-            // Fetch campaigns from API
-            let campaigns = try await apiClient.fetchDropCampaigns()
-            saveCampaignsToCache(campaigns)
+            // Fetch fresh inventory first so merge can check benefit IDs.
+            let inventory = try? await inventoryService.fetchInventory(forceRefresh: true)
+            if inventory != nil { lastInventoryLoad = Date() }
+
+            // Fetch fresh campaigns from API.
+            let fresh = try await apiClient.fetchDropCampaigns()
+
+            // Load existing cache to merge against.
+            let cached = CampaignDiskCache.load(accountId: accountId)
+            
+            // Fix: handle async outside of potential autoclosure/if-expression
+            let current = await inventoryService.currentSnapshot()
+            let snapshot: InventorySnapshot? = inventory ?? current
+
+            // Merge: API wins for shared IDs; preserved campaigns follow merge rules.
+            let merged = CampaignMergeEngine.merge(fresh: fresh, cached: cached, inventory: snapshot)
+            saveCampaignsToCache(merged)
             lastCampaignLoad = Date()
-            
-            // Fetch inventory (this also updates its own disk cache)
-            _ = try await inventoryService.fetchInventory(forceRefresh: true)
-            lastInventoryLoad = Date()
-            
+
+            // Cleanup runs at most once per day to avoid unnecessary disk writes.
+            let shouldCleanup = lastCleanupDate.map { Date().timeIntervalSince($0) > Self.cleanupInterval } ?? true
+            if shouldCleanup {
+                CampaignDiskCache.cleanup(accountId: accountId, inventory: snapshot)
+                lastCleanupDate = Date()
+            }
+
         } catch {
-            print("[CampaignDataService] Refresh failed: \(error)")
-            // Don't throw - cached data is still available
+            print("[CampaignDataService] Refresh failed: \(error) — cached data preserved.")
+            // Don't throw — callers continue to see cached data.
         }
     }
     
     /// Clear all cached data for this account.
-    public func clearCache() {
+    public func clearCache() async {
         CampaignDiskCache.clear(accountId: accountId)
-        inventoryService.clearCache()
+        await inventoryService.clearCache()
         lastCampaignLoad = nil
         lastInventoryLoad = nil
     }
@@ -147,9 +184,8 @@ public actor CampaignDataService {
     // MARK: - Private: Cache Management
     
     private func loadCachedCampaigns() -> [Campaign] {
-        guard !shouldInvalidateCampaignCache() else {
-            return []
-        }
+        // Always load cached campaigns — the cache is never invalidated by age alone.
+        // Stale data triggers a background refresh but is still returned to the UI.
         return CampaignDiskCache.load(accountId: accountId)
     }
     
@@ -285,5 +321,48 @@ enum CampaignDiskCache {
     /// Clear all cached campaigns across all accounts.
     static func clearAll() {
         try? FileManager.default.removeItem(at: directoryURL())
+    }
+    
+    // MARK: - Cleanup (Phase 8)
+    
+    /// Removes campaigns that are expired >14 days AND not in inventory.
+    /// Call this periodically (e.g., on app launch or background refresh) to prevent cache bloat.
+    /// - Parameters:
+    ///   - accountId: The account ID to cleanup
+    ///   - inventory: The current inventory snapshot (to check for claimed drops)
+    static func cleanup(accountId: String, inventory: InventorySnapshot?) {
+        guard !accountId.isEmpty else { return }
+        
+        let campaigns = load(accountId: accountId)
+        let fourteenDays: TimeInterval = 14 * 24 * 3600
+        let expirationCutoff = Date().addingTimeInterval(-fourteenDays)
+        
+        // Keep campaigns that are:
+        // 1. Not expired (endDate > now)
+        // 2. OR expired <14 days ago (endDate > cutoff)
+        // 3. OR have drops in inventory (preservation rule)
+        let kept = campaigns.filter { campaign in
+            // If not expired, keep
+            if campaign.endDate > Date() { return true }
+            
+            // If expired but <14 days ago, keep
+            if campaign.endDate > expirationCutoff { return true }
+            
+            // If expired >14 days ago but has drops in inventory, keep
+            let inInventory = campaign.drops.contains { drop in
+                inventory?.benefitIDs.contains(drop.benefitID) ?? false
+            }
+            if inInventory { return true }
+            
+            // Expired >14 days ago and not in inventory -> remove
+            print("[CampaignDiskCache] Cleanup: Removing campaign \(campaign.name) (expired \(campaign.endDate))")
+            return false
+        }
+        
+        let removed = campaigns.count - kept.count
+        if removed > 0 {
+            print("[CampaignDiskCache] Cleanup: Removed \(removed) old campaigns, kept \(kept.count)")
+            save(campaigns: kept, accountId: accountId)
+        }
     }
 }

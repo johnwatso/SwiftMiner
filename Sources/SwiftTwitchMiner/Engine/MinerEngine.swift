@@ -35,9 +35,13 @@ public actor MinerEngine {
     // Mining preferences (set from AppModel/Settings)
     private var priorityGames: [String] = []
     private var excludedGames: [String] = []
+    private var enableBadgesEmotes: Bool = false
 
     /// Returns this engine's DropsService so callers on other actors can create an AccountStateStore.
     func getDropsService() -> DropsService { dropsService }
+
+    /// Returns this engine's API client for coordinator registration.
+    func getAPIClient() -> TwitchAPIClient { apiClient }
 
     // MARK: - Callbacks
     
@@ -63,9 +67,10 @@ public actor MinerEngine {
     }
 
     /// Update mining preferences (priority/excluded games)
-    public func updateMiningPreferences(priorityGames: [String], excludedGames: [String]) {
+    public func updateMiningPreferences(priorityGames: [String], excludedGames: [String], enableBadgesEmotes: Bool = false) {
         self.priorityGames = priorityGames
         self.excludedGames = excludedGames
+        self.enableBadgesEmotes = enableBadgesEmotes
     }
 
     /// Update mining strategy
@@ -383,24 +388,24 @@ public actor MinerEngine {
                 log("Fetching active campaigns...")
 
                 // 1. Fetch active campaigns with inventory merged
-                // getActiveCampaigns() merges inventory into campaigns and updates the cache.
-                // fetchCampaigns() is then called to get ALL campaigns (not just active) from
-                // the now-enriched cache, so allCampaigns reflects real progress.
                 let campaigns = try await dropsService.getActiveCampaigns()
                 let allEnriched = try await dropsService.fetchCampaigns()
                 self.allCampaigns = allEnriched
-                log("Campaigns: \(allCampaigns.count) total, \(campaigns.count) active with drops")
-                for c in allCampaigns {
-                    log("  · \(c.name) status=\(c.status.rawValue) drops=\(c.drops.count) active=\(c.isTimeActive)")
+                
+                log("Campaigns: \(allCampaigns.count) total")
+                for c in allEnriched {
+                    // IMPLEMENTATION OF DOMAIN LOGGING REQUIREMENT
+                    log("  · \(c.name) (\(c.gameName)) → Status: \(c.miningStatus.rawValue) → Relevance: \(c.relevance.rawValue)")
                 }
                 onCampaignUpdate?(campaigns)
 
-                // 2. Claim any ready drops first
+                // 2. Claim any ready drops first (Claimable status handled here)
                 await claimReadyDrops()
 
                 // 3. Find best campaign to mine based on strategy
-                guard let campaign = selectBestCampaign(from: campaigns, priorityGames: priorityGames, excludedGames: excludedGames, strategy: miningStrategy) else {
-                    log("No eligible campaigns matching strategy '\(miningStrategy.displayName)'")
+                // SELECTION RULE: Must be AVAILABLE or IN_PROGRESS. Never CLAIMED or EXPIRED.
+                guard let campaign = selectBestCampaign(from: allEnriched, priorityGames: priorityGames, excludedGames: excludedGames, strategy: miningStrategy) else {
+                    log("No mineable campaigns matching strategy '\(miningStrategy.displayName)'")
                     onStatusChange?(.idle)
                     // Wait up to campaignCheckInterval in 10s ticks, breaking early on triggerRescan()
                     shouldRescanCampaigns = false
@@ -522,8 +527,22 @@ public actor MinerEngine {
             !excludedGamesLower.contains($0.gameName.lowercased())
         }
 
-        // 2. Filter to eligible campaigns (time active, linked, and has earnable drops)
-        let eligible = nonExcluded.filter { $0.isMiningEligible }
+        // 2. Filter to mineable campaigns (Truth Layer check)
+        // Rule: Must be AVAILABLE or IN_PROGRESS. 
+        // MUST NOT be CLAIMED, CLAIMABLE, or EXPIRED.
+        // MUST be account-connected.
+        // MUST NOT be badge/emote only unless enabled (TDM parity).
+        let eligible = nonExcluded.filter { c in
+            guard c.isAccountConnected else { return false }
+            
+            // Filter out non-drop rewards (badges/emotes) if setting is disabled
+            if !enableBadgesEmotes && c.hasOnlyBadgesOrEmotes {
+                return false
+            }
+            
+            let s = c.miningStatus
+            return s == .available || s == .inProgress
+        }
 
         // 3. Apply mining strategy
         switch strategy {
@@ -551,7 +570,7 @@ public actor MinerEngine {
         }
     }
 
-    /// Select best campaign from a filtered list using priority, unclaimed count, and end date
+    /// Select best campaign from a filtered list using priority, progress, and end date
     private func selectBestFrom(_ campaigns: [Campaign], priorityGamesLower: [String]) -> Campaign? {
         guard !campaigns.isEmpty else { return nil }
 
@@ -567,6 +586,13 @@ public actor MinerEngine {
                 return aPriority < bPriority
             }
 
+            // Status check (prefer IN_PROGRESS over AVAILABLE)
+            let aStatus = a.miningStatus
+            let bStatus = b.miningStatus
+            if aStatus != bStatus {
+                return aStatus == .inProgress // IN_PROGRESS (true) comes before AVAILABLE (false)
+            }
+
             // Unclaimed drops check (prefer more drops available)
             let aUnclaimed = a.earnableDrops.count
             let bUnclaimed = b.earnableDrops.count
@@ -575,14 +601,27 @@ public actor MinerEngine {
             }
 
             // Ending soonest check
-            return a.endAt < b.endAt
+            return a.endDate < b.endDate
         }.first
     }
     
     private func selectBestChannel(from campaign: Campaign) async -> Channel? {
         log("Searching for live channels for \(campaign.gameName)...")
         do {
-            let liveChannels = try await dropsService.findLiveChannels(forGame: campaign.gameName)
+            var liveChannels = try await dropsService.findLiveChannels(forGame: campaign.gameName)
+            
+            // SPECIAL EVENTS BYPASS: If no channels found for the specific game, 
+            // but it's a Special Event campaign, we can mine ANY live channel in the ACL.
+            if liveChannels.isEmpty && campaign.game.isSpecialEvents {
+                log("Special Event campaign: searching for ACL channels regardless of game...")
+                // In TDM, they just pick any channel that's live and supports drops.
+                // For SwiftMiner, we'll try the first channel in the campaign's ACL if it exists.
+                if let firstAcl = campaign.channels.first {
+                    log("Using ACL channel bypass: \(firstAcl.displayName)")
+                    return firstAcl
+                }
+            }
+
             log("Found \(liveChannels.count) live channels for \(campaign.gameName)")
             
             guard !liveChannels.isEmpty else {

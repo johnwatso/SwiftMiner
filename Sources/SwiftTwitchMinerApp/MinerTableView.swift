@@ -76,7 +76,8 @@ struct MinerTableView: View {
             minerId: miner.id,
             priorityGames: settings.priorityGames,
             excludedGames: settings.excludedGames,
-            strategy: settings.miningStrategy
+            strategy: settings.miningStrategy,
+            enableBadgesEmotes: settings.enableBadgesEmotes
         )
     }
     
