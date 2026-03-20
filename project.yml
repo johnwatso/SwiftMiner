@@ -22,7 +22,7 @@ targets:
         ENABLE_STRICT_CONCURRENCY: YES
         SWIFT_STRICT_CONCURRENCY: complete
 
-  SwiftTwitchMinerApp:
+  SwiftMiner:
     type: application
     platform: macOS
     deploymentTarget: "26.0"
@@ -106,10 +106,10 @@ targets:
         MACOSX_DEPLOYMENT_TARGET: "26.0"
 
 schemes:
-  SwiftTwitchMiner:
+  SwiftMiner:
     build:
       targets:
-        SwiftTwitchMinerApp: all
+        SwiftMiner: all
         SwiftTwitchMinerTests: [test]
     run:
       config: Debug

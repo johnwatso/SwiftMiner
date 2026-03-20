@@ -1,7 +1,7 @@
 import Foundation
 
 /// Parser for TwitchDropsMiner cookie jar files (pickle binary format).
-/// Public API — mirrors the implementation in SwiftTwitchMinerApp/TDMCookieParser.swift.
+/// Public API — mirrors the implementation in SwiftMiner/TDMCookieParser.swift.
 public enum TDMCookieParser {
 
     public enum ParserError: LocalizedError {

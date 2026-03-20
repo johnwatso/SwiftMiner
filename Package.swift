@@ -16,8 +16,8 @@ let package = Package(
             targets: ["SwiftTwitchMinerCLI"]
         ),
         .executable(
-            name: "SwiftTwitchMinerApp",
-            targets: ["SwiftTwitchMinerApp"]
+            name: "SwiftMiner",
+            targets: ["SwiftMiner"]
         ),
         .executable(
             name: "SparklePublisher",
@@ -40,11 +40,12 @@ let package = Package(
             dependencies: ["SwiftTwitchMiner"]
         ),
         .executableTarget(
-            name: "SwiftTwitchMinerApp",
+            name: "SwiftMiner",
             dependencies: [
                 "SwiftTwitchMiner",
                 .product(name: "Sparkle", package: "Sparkle")
             ],
+            path: "Sources/SwiftTwitchMinerApp",
             exclude: ["Info.plist"],
             swiftSettings: [
                 .enableExperimentalFeature("StrictConcurrency")
