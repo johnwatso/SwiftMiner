@@ -168,6 +168,152 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(p.id, "c1_d1")
     }
 
+    func testDropProgressTrackerIgnoresInitialZeroProgress() {
+        var tracker = DropProgressEventTracker()
+
+        let result = tracker.observe(
+            DropProgressObservation(
+                campaignId: "campaign-1",
+                dropId: "drop-1",
+                dropLabel: "Drop One",
+                currentMinutes: 0,
+                requiredMinutes: 60,
+                source: .pubSub
+            )
+        )
+
+        XCTAssertEqual(result.transition, .none)
+        XCTAssertFalse(result.shouldAcknowledgeServerProgress)
+    }
+
+    func testDropProgressTrackerEmitsDeltaForMeaningfulIncrease() {
+        var tracker = DropProgressEventTracker()
+
+        _ = tracker.observe(
+            DropProgressObservation(
+                campaignId: "campaign-1",
+                dropId: "drop-1",
+                dropLabel: "Drop One",
+                currentMinutes: 12,
+                requiredMinutes: 60,
+                source: .pubSub
+            )
+        )
+
+        let result = tracker.observe(
+            DropProgressObservation(
+                campaignId: "campaign-1",
+                dropId: "drop-1",
+                dropLabel: "Drop One",
+                currentMinutes: 13,
+                requiredMinutes: 60,
+                source: .gqlPoll
+            )
+        )
+
+        XCTAssertEqual(
+            result.transition,
+            .progress(dropLabel: "Drop One", deltaMinutes: 1, currentMinutes: 13, requiredMinutes: 60)
+        )
+        XCTAssertTrue(result.shouldAcknowledgeServerProgress)
+    }
+
+    func testDropProgressTrackerEmitsClaimableAtThresholdInsteadOfZeroNoise() {
+        var tracker = DropProgressEventTracker()
+
+        _ = tracker.observe(
+            DropProgressObservation(
+                campaignId: "campaign-1",
+                dropId: "drop-1",
+                dropLabel: "Drop One",
+                currentMinutes: 59,
+                requiredMinutes: 60,
+                source: .pubSub
+            )
+        )
+
+        let result = tracker.observe(
+            DropProgressObservation(
+                campaignId: "campaign-1",
+                dropId: "drop-1",
+                dropLabel: "Drop One",
+                currentMinutes: 60,
+                requiredMinutes: 60,
+                source: .gqlPoll
+            )
+        )
+
+        XCTAssertEqual(
+            result.transition,
+            .claimable(dropLabel: "Drop One", currentMinutes: 60, requiredMinutes: 60)
+        )
+        XCTAssertTrue(result.shouldAcknowledgeServerProgress)
+    }
+
+    func testDropProgressTrackerSuppressesUnchangedAndRegressingPolls() {
+        var tracker = DropProgressEventTracker()
+
+        _ = tracker.observe(
+            DropProgressObservation(
+                campaignId: "campaign-1",
+                dropId: "drop-1",
+                dropLabel: "Drop One",
+                currentMinutes: 15,
+                requiredMinutes: 60,
+                source: .pubSub
+            )
+        )
+
+        let unchanged = tracker.observe(
+            DropProgressObservation(
+                campaignId: "campaign-1",
+                dropId: "drop-1",
+                dropLabel: "Drop One",
+                currentMinutes: 15,
+                requiredMinutes: 60,
+                source: .gqlPoll
+            )
+        )
+        let regression = tracker.observe(
+            DropProgressObservation(
+                campaignId: "campaign-1",
+                dropId: "drop-1",
+                dropLabel: "Drop One",
+                currentMinutes: 14,
+                requiredMinutes: 60,
+                source: .gqlPoll
+            )
+        )
+
+        XCTAssertEqual(unchanged.transition, .none)
+        XCTAssertFalse(unchanged.shouldAcknowledgeServerProgress)
+        XCTAssertEqual(regression.transition, .regression(previousMinutes: 15, observedMinutes: 14))
+        XCTAssertFalse(regression.shouldAcknowledgeServerProgress)
+    }
+
+    func testDropProgressTrackerMarksClaimedOnlyOnce() {
+        var tracker = DropProgressEventTracker()
+
+        _ = tracker.observe(
+            DropProgressObservation(
+                campaignId: "campaign-1",
+                dropId: "drop-1",
+                dropLabel: "Drop One",
+                currentMinutes: 60,
+                requiredMinutes: 60,
+                source: .pubSub
+            )
+        )
+
+        let firstClaim = tracker.markClaimed(campaignId: "campaign-1", dropId: "drop-1", dropLabel: "Drop One")
+        let secondClaim = tracker.markClaimed(campaignId: "campaign-1", dropId: "drop-1", dropLabel: "Drop One")
+
+        XCTAssertEqual(firstClaim.transition, .claimed(dropLabel: "Drop One"))
+        XCTAssertTrue(firstClaim.shouldAcknowledgeServerProgress)
+        XCTAssertEqual(secondClaim.transition, .none)
+        XCTAssertFalse(secondClaim.shouldAcknowledgeServerProgress)
+    }
+
     // MARK: - Channel
 
     func testChannelFullInit() {
