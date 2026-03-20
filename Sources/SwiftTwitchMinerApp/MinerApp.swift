@@ -31,6 +31,7 @@ struct MinerApp: App {
                     // and optionally auto-starts miners before AppModel reads miner state.
                     await navigation.setup()
                     await appModel.setup()
+                    navigation.configureOnboardingPresentation()
                     await requestNotificationPermission()
                     updater.checkForUpdatesInBackground()
                 }

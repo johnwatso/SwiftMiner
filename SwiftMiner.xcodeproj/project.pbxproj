@@ -74,6 +74,7 @@
 		D253A431EE1C420F6AAD917F /* Errors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B6EB2D903BDF4A437980855 /* Errors.swift */; };
 		D61FC7D509CE90E48F49753C /* DropViewData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90CC9350E912DBBAD69E5028 /* DropViewData.swift */; };
 		D98D9E425CE00B2FB2C57686 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46366DBAD54AF15E48C9E501 /* main.swift */; };
+		E52F851D9DEBEDDEEC337304 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E03A7BB0208D912A8E92754 /* OnboardingView.swift */; };
 		E925341DAE638143C8ECF0E9 /* LiquidGlass.swift in Sources */ = {isa = PBXBuildFile; fileRef = F555284569697C2E6A2D2F25 /* LiquidGlass.swift */; };
 		EB30184AAC8F4F743D732F71 /* InventoryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C1D34CA37C56596264921BF /* InventoryService.swift */; };
 		EB8AC36B7FA6A4821D1F0BB9 /* GQLHashes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FA1F701DF8DDE0541567D15 /* GQLHashes.swift */; };
@@ -153,6 +154,7 @@
 		71A476380E8DBA92D7A4EC0B /* AccountStateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountStateStore.swift; sourceTree = "<group>"; };
 		71EB5DF03BD277870D4E1013 /* NavigationModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationModel.swift; sourceTree = "<group>"; };
 		78721FAF11509CC76832FA8E /* SwiftTwitchMinerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SwiftTwitchMinerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		7E03A7BB0208D912A8E92754 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		812665EFC22A3589EB05F761 /* MiningDataCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiningDataCoordinator.swift; sourceTree = "<group>"; };
 		88C62874FC1D56ED3FA1E3AE /* SwiftTwitchMinerCLI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftTwitchMinerCLI.swift; sourceTree = "<group>"; };
 		8C5B42DB9F9A49F16D35AA45 /* ActivityOverviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityOverviewView.swift; sourceTree = "<group>"; };
@@ -259,6 +261,7 @@
 				5EF599E46A277765285F3732 /* MinerLoginService.swift */,
 				0B1AD20F51A64BA1943584A8 /* MinerTableView.swift */,
 				71EB5DF03BD277870D4E1013 /* NavigationModel.swift */,
+				7E03A7BB0208D912A8E92754 /* OnboardingView.swift */,
 				4148C65B54379BD0BA2DE50B /* Settings.swift */,
 				22FE0CA400F87C9B7FE3EEAF /* SettingsView.swift */,
 				3A3192DD7B171F6A1AA8A619 /* SidebarView.swift */,
@@ -656,6 +659,7 @@
 				AE3669D6863284C854F58878 /* MinerLoginService.swift in Sources */,
 				F82F135AC9DE1CDA3177AC47 /* MinerTableView.swift in Sources */,
 				51BCC845B91C566E01001F22 /* NavigationModel.swift in Sources */,
+				E52F851D9DEBEDDEEC337304 /* OnboardingView.swift in Sources */,
 				18A0A4468E997B0D0D4E2F27 /* Settings.swift in Sources */,
 				59ED297016C62137E5A79617 /* SettingsView.swift in Sources */,
 				799BA25F3C60878B8533B7B6 /* SidebarView.swift in Sources */,

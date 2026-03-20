@@ -33,9 +33,47 @@ public final class NavigationModel {
             }
         }
     }
+
+    public enum OnboardingAccountState: Equatable {
+        case noAccounts
+        case hasAccounts(count: Int)
+    }
+
+    public enum OnboardingSetupStage: String, CaseIterable {
+        case connecting
+        case campaigns
+        case inventory
+        case finalising
+
+        public var title: String {
+            switch self {
+            case .connecting: return "Connecting your account..."
+            case .campaigns: return "Fetching active campaigns..."
+            case .inventory: return "Syncing your inventory..."
+            case .finalising: return "Preparing your dashboard..."
+            }
+        }
+    }
+
+    public struct OnboardingPresentation: Equatable {
+        public let title: String
+        public let subtitle: String
+        public let accountState: OnboardingAccountState
+        public let showsGamePreferences: Bool
+        public let showsPreferences: Bool
+        public let setupStage: OnboardingSetupStage?
+    }
     
     public var selectedItem: SidebarItem? = .overview
     public var columnVisibility: NavigationSplitViewVisibility = .automatic
+
+    // MARK: - Onboarding State
+
+    /// Whether the optional onboarding surface should be visible.
+    public var showOnboarding = false
+    public private(set) var onboardingPresentation: OnboardingPresentation?
+    public var onboardingSetupStage: OnboardingSetupStage = .connecting
+    public var isRunningOnboardingSetup = false
 
     // MARK: - Sheet State
 
@@ -62,6 +100,8 @@ public final class NavigationModel {
     // MARK: - Miner Manager
 
     public let minerManager: MinerManager
+    private var onboardingSetupTask: Task<Void, Never>?
+    private var lastKnownAccountCount = 0
 
     // MARK: - Initialization
 
@@ -90,6 +130,70 @@ public final class NavigationModel {
         )
     }
 
+    public func configureOnboardingPresentation() {
+        lastKnownAccountCount = minerManager.miners.count
+        refreshOnboardingPresentation()
+    }
+
+    public func refreshOnboardingPresentation() {
+        onboardingPresentation = deriveOnboardingPresentation()
+        showOnboarding = onboardingPresentation != nil
+    }
+
+    public func dismissOnboarding() {
+        onboardingSetupTask?.cancel()
+        onboardingSetupTask = nil
+        isRunningOnboardingSetup = false
+        settings.hasDismissedOnboarding = true
+        refreshOnboardingPresentation()
+    }
+
+    public func updateOnboardingSetupStage(_ stage: OnboardingSetupStage) {
+        onboardingSetupStage = stage
+        refreshOnboardingPresentation()
+    }
+
+    public func handleOnboardingAuthenticationCompleted() {
+        guard !minerManager.miners.isEmpty else {
+            refreshOnboardingPresentation()
+            return
+        }
+
+        settings.hasDismissedOnboarding = false
+        startOnboardingSetupIfNeeded()
+    }
+
+    public func handleAccountCountChange() {
+        let currentCount = minerManager.miners.count
+        let previousCount = lastKnownAccountCount
+        guard currentCount != previousCount else {
+            refreshOnboardingPresentation()
+            return
+        }
+
+        lastKnownAccountCount = currentCount
+        settings.hasDismissedOnboarding = false
+
+        if currentCount > previousCount, showOnboarding || previousCount == 0 {
+            handleOnboardingAuthenticationCompleted()
+        } else {
+            refreshOnboardingPresentation()
+        }
+    }
+
+    public func startOnboardingSetupIfNeeded() {
+        guard !minerManager.miners.isEmpty else { return }
+        guard onboardingSetupTask == nil else { return }
+
+        isRunningOnboardingSetup = true
+        updateOnboardingSetupStage(.connecting)
+
+        onboardingSetupTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.runOnboardingSetupSequence()
+        }
+    }
+
     private func processLogMessage(minerId: String, message: String) {
         let level: EventLevel = message.contains("⚠️") ? .warning : (message.contains("❌") || message.contains("Error")) ? .error : .info
         
@@ -115,6 +219,85 @@ public final class NavigationModel {
     /// Clear all events.
     public func clearEvents() {
         events.removeAll()
+    }
+
+    private var settings: Settings { Settings.shared }
+
+    private func deriveOnboardingPresentation() -> OnboardingPresentation? {
+        let accountCount = minerManager.miners.count
+        let hasAccounts = accountCount > 0
+        let hasGamePreferences = !settings.gamePreferences.isEmpty
+
+        if settings.hasDismissedOnboarding {
+            return nil
+        }
+
+        if hasAccounts && hasGamePreferences && !isRunningOnboardingSetup {
+            return nil
+        }
+
+        let accountState: OnboardingAccountState = hasAccounts
+            ? .hasAccounts(count: accountCount)
+            : .noAccounts
+
+        if !hasAccounts {
+            return OnboardingPresentation(
+                title: "Connect an account when you're ready",
+                subtitle: "SwiftMiner is already usable. Add a Twitch account here or later from the dashboard.",
+                accountState: accountState,
+                showsGamePreferences: false,
+                showsPreferences: false,
+                setupStage: nil
+            )
+        }
+
+        if isRunningOnboardingSetup {
+            return OnboardingPresentation(
+                title: "Syncing your account",
+                subtitle: "The dashboard stays available while SwiftMiner pulls campaign and inventory data.",
+                accountState: accountState,
+                showsGamePreferences: false,
+                showsPreferences: false,
+                setupStage: onboardingSetupStage
+            )
+        }
+
+        return OnboardingPresentation(
+            title: hasGamePreferences ? "SwiftMiner is ready" : "Refine what SwiftMiner should prioritize",
+            subtitle: hasGamePreferences
+                ? "Everything here stays editable from the dashboard and settings."
+                : "Game selection is optional and saves immediately. Leave it empty to mine any eligible campaign.",
+            accountState: accountState,
+            showsGamePreferences: !hasGamePreferences,
+            showsPreferences: true,
+            setupStage: nil
+        )
+    }
+
+    private func runOnboardingSetupSequence() async {
+        defer {
+            isRunningOnboardingSetup = false
+            onboardingSetupTask = nil
+            refreshOnboardingPresentation()
+        }
+
+        updateOnboardingSetupStage(.connecting)
+        try? await Task.sleep(for: .milliseconds(350))
+        guard !Task.isCancelled else { return }
+
+        updateOnboardingSetupStage(.campaigns)
+        await minerManager.forceRefreshAllMiners()
+        try? await Task.sleep(for: .milliseconds(500))
+        guard !Task.isCancelled else { return }
+
+        updateOnboardingSetupStage(.inventory)
+        await minerManager.dataCoordinator.refreshAll()
+        try? await Task.sleep(for: .milliseconds(350))
+        guard !Task.isCancelled else { return }
+
+        updateOnboardingSetupStage(.finalising)
+        try? await Task.sleep(for: .milliseconds(250))
+        guard !Task.isCancelled else { return }
     }
 }
 

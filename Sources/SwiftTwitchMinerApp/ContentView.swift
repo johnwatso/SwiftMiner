@@ -4,6 +4,7 @@ import SwiftTwitchMiner
 /// Root view — 2-column NavigationSplitView (Sidebar | Detail)
 struct ContentView: View {
     @Environment(NavigationModel.self) private var navigation
+    @ObservedObject private var settings = Settings.shared
 
     var body: some View {
         @Bindable var nav = navigation
@@ -16,10 +17,27 @@ struct ContentView: View {
                 detailView
             }
         }
+        .overlay(alignment: .topTrailing) {
+            if nav.showOnboarding {
+                OnboardingView()
+                    .padding(24)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                    .zIndex(100)
+            }
+        }
         .frame(minWidth: 800, minHeight: 600)
         .sheet(isPresented: $nav.showAddAccountSheet) {
             AuthRequiredSheet(isPresented: $nav.showAddAccountSheet)
                 .environment(navigation)
+        }
+        .onAppear {
+            navigation.refreshOnboardingPresentation()
+        }
+        .onChange(of: settings.gamePreferencesData) { _, _ in
+            navigation.refreshOnboardingPresentation()
+        }
+        .onChange(of: navigation.minerManager.miners.count) { _, _ in
+            navigation.handleAccountCountChange()
         }
     }
 
