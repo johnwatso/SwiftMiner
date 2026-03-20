@@ -64,6 +64,10 @@ public final class Settings: ObservableObject {
     @AppStorage("lastSelectedGameId")
     public var lastSelectedGameId: String = ""
 
+    /// Whether the user explicitly dismissed the optional onboarding surface.
+    @AppStorage("hasDismissedOnboarding")
+    public var hasDismissedOnboarding: Bool = false
+
     /// Twitch application Client ID (set once; used by all miners)
     @AppStorage("twitchClientId")
     public var twitchClientId: String = ""
@@ -354,6 +358,7 @@ public final class Settings: ObservableObject {
         preferredQuality = .auto
         showClaimNotifications = false
         lastSelectedGameId = ""
+        hasDismissedOnboarding = false
         gamePreferencesData = "[]"
         miningStrategy = .mineAll
     }
