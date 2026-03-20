@@ -87,11 +87,14 @@ targets:
       - Tests
     dependencies:
       - target: SwiftTwitchMiner
+      - target: SwiftMiner
     settings:
       base:
         SWIFT_VERSION: "6.0"
         SWIFT_STRICT_CONCURRENCY: complete
         GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/SwiftMiner.app/Contents/MacOS/SwiftMiner
+        BUNDLE_LOADER: $(TEST_HOST)
 
   SparklePublisher:
     type: tool
