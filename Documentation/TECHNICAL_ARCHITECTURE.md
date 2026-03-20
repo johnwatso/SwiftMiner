@@ -27,7 +27,7 @@ The app is a **multi-account supervisor dashboard**. It:
 ### Layer Overview
 
 ```
-SwiftTwitchMinerApp  (macOS .app target — SwiftUI layer)
+SwiftMiner  (macOS .app target — SwiftUI layer)
     └── depends on ↓
 SwiftTwitchMiner     (static library — engine layer)
 ```
@@ -314,7 +314,7 @@ SwiftMiner/
     │       ├── Logger.swift              Lightweight logger utility
     │       └── RateLimiter.swift         Token bucket rate limiter (actor)
     │
-    ├── SwiftTwitchMinerApp/              macOS .app target — SwiftUI layer
+    ├── SwiftTwitchMinerApp/              SwiftMiner app source — SwiftUI layer
     │   ├── MinerApp.swift                @main App, MenuBarExtra, WindowGroup
     │   ├── NavigationModel.swift         Navigation state + log store (@MainActor)
     │   ├── MinerLoginService.swift       Add Account auth state machine (@MainActor)
