@@ -28,7 +28,6 @@ Managing Twitch Drops across multiple accounts is messy.
 
 SwiftMiner was built to fix that — especially for people who just want this running on their own Mac.
 
-- No server required  
 - Native macOS app  
 - Easy multi-account management in one place  
 
