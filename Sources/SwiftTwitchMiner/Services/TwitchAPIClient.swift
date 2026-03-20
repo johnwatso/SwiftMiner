@@ -362,11 +362,25 @@ public actor TwitchAPIClient {
 
         guard let responseData = json?["data"] as? [String: Any],
               let currentUser = responseData["currentUser"] as? [String: Any],
-              let session = currentUser["dropCurrentSession"] as? [String: Any],
-              let dropId = session["dropID"] as? String,
-              let currentMinutes = session["currentMinutesWatched"] as? Int else {
+              let session = currentUser["dropCurrentSession"] as? [String: Any] else {
             return nil
         }
+
+        let rawDropId = session["dropID"]
+        let rawCurrentMinutes = session["currentMinutesWatched"]
+        guard let dropId = rawDropId as? String,
+              let currentMinutes = rawCurrentMinutes as? Int else {
+            traceGQL(
+                "DropCurrentSessionContext parse-failed drop=\(String(describing: rawDropId)) " +
+                "rawCurrent=\(String(describing: rawCurrentMinutes))"
+            )
+            return nil
+        }
+
+        traceGQL(
+            "DropCurrentSessionContext parsed drop=\(dropId) rawCurrent=\(String(describing: rawCurrentMinutes)) " +
+            "parsedCurrent=\(currentMinutes)"
+        )
 
         return (dropId: dropId, currentMinutes: currentMinutes)
     }

@@ -32,6 +32,7 @@ public actor MinerEngine {
 
     /// Cache of all campaigns fetched during the last check
     public private(set) var allCampaigns: [Campaign] = []
+    private var progressEventTracker = DropProgressEventTracker()
 
     // Configuration
     private let campaignCheckInterval: UInt64 = 300 * 1_000_000_000 // 5 minutes
@@ -226,6 +227,7 @@ public actor MinerEngine {
 
         isRunning = true
         session = MiningSession()
+        progressEventTracker = DropProgressEventTracker()
 
         onStatusChange?(.authenticating)
         log("Starting SwiftTwitchMiner...")
@@ -279,6 +281,7 @@ public actor MinerEngine {
     public func stop() async {
         log("Stopping miner...")
         isRunning = false
+        progressEventTracker = DropProgressEventTracker()
         mainTask?.cancel()
         mainTask = nil
         maintenanceTask?.cancel()
@@ -363,19 +366,40 @@ public actor MinerEngine {
     // MARK: - Event Handlers
 
     private func handleDropProgress(_ event: DropProgressEvent) async {
-        log("Drop progress: \(event.dropId) - \(event.currentMinutes)/\(event.requiredMinutes) min")
-        
-        // Reset local estimation on server update
+        let campaignId = session?.currentCampaignId
+        let observation = DropProgressObservation(
+            campaignId: campaignId,
+            dropId: event.dropId,
+            dropLabel: dropLabel(for: event.dropId, campaignId: campaignId),
+            currentMinutes: event.currentMinutes,
+            requiredMinutes: event.requiredMinutes,
+            source: .pubSub
+        )
+        let result = progressEventTracker.observe(observation)
+        tracePubSub(
+            "drop-progress drop=\(event.dropId) rawCurrent=\(event.currentMinutes) parsedCurrent=\(event.currentMinutes) " +
+            "previous=\(result.previousMinutes.map(String.init) ?? "nil") transition=\(result.transition.traceDescription)"
+        )
+
+        guard result.shouldAcknowledgeServerProgress else {
+            return
+        }
+
+        if let message = formatProgressTransition(result.transition) {
+            log(message)
+        }
+
+        // Reset local estimation only when server progress actually advanced.
         extraMinutesWatched = 0
         lastProgressUpdateAt = Date()
 
-        // Update overall progress
         if let progress = try? await dropsService.getOverallProgress() {
             onProgressUpdate?(progress)
         }
     }
 
     private func handleDropClaim(_ event: DropClaimEvent) async {
+        let campaignId = session?.currentCampaignId
         log("Drop claim event received: dropInstanceId=\(event.dropInstanceId)")
 
         // Use the dropInstanceId directly from PubSub event for claiming
@@ -383,7 +407,16 @@ public actor MinerEngine {
             let response = try await apiClient.claimDrop(dropInstanceId: event.dropInstanceId)
 
             if response.status == "CLAIMED" || response.status == "SUCCESS" {
+                let dropName = dropLabel(for: event.dropId, campaignId: campaignId)
+                let trackerResult = progressEventTracker.markClaimed(
+                    campaignId: campaignId,
+                    dropId: event.dropId,
+                    dropLabel: dropName
+                )
                 log("✅ Auto-claimed drop from PubSub: \(event.dropInstanceId)")
+                if let message = formatProgressTransition(trackerResult.transition) {
+                    log(message)
+                }
 
                 // Try to find drop info for the callback
                 let inventory = try? await dropsService.fetchInventory()
@@ -554,15 +587,33 @@ public actor MinerEngine {
                     if Date().timeIntervalSince(lastGqlPoll) >= 20 {
                         lastGqlPoll = Date()
                         if let current = try? await apiClient.fetchCurrentDrop(channelId: channel.id) {
-                            log("Drop progress (GQL poll): \(current.dropId) - \(current.currentMinutes) min")
-                            
-                            // Reset local estimation on verified server update
-                            extraMinutesWatched = 0
-                            lastProgressUpdateAt = Date()
-                            
-                            // Trigger UI update
-                            if let progress = try? await dropsService.getOverallProgress() {
-                                onProgressUpdate?(progress)
+                            let campaignId = session?.currentCampaignId
+                            let observation = DropProgressObservation(
+                                campaignId: campaignId,
+                                dropId: current.dropId,
+                                dropLabel: dropLabel(for: current.dropId, campaignId: campaignId),
+                                currentMinutes: current.currentMinutes,
+                                requiredMinutes: requiredMinutes(for: current.dropId, campaignId: campaignId),
+                                source: .gqlPoll
+                            )
+                            let result = progressEventTracker.observe(observation)
+                            traceGQL(
+                                "DropCurrentSessionContext drop=\(current.dropId) parsedCurrent=\(current.currentMinutes) " +
+                                "previous=\(result.previousMinutes.map(String.init) ?? "nil") transition=\(result.transition.traceDescription)"
+                            )
+
+                            if result.shouldAcknowledgeServerProgress {
+                                if let message = formatProgressTransition(result.transition) {
+                                    log(message)
+                                }
+
+                                // Only treat changed server state as verified progress.
+                                extraMinutesWatched = 0
+                                lastProgressUpdateAt = Date()
+
+                                if let progress = try? await dropsService.getOverallProgress() {
+                                    onProgressUpdate?(progress)
+                                }
                             }
                         }
                     }
@@ -660,6 +711,11 @@ public actor MinerEngine {
                         id: progress.dropId,
                         name: progress.dropName,
                         requiredMinutes: progress.requiredMinutes
+                    )
+                    _ = progressEventTracker.markClaimed(
+                        campaignId: progress.campaignId,
+                        dropId: progress.dropId,
+                        dropLabel: progress.dropName.isEmpty ? dropLabel(for: progress.dropId, campaignId: progress.campaignId) : progress.dropName
                     )
                     onDropClaimed?(drop)
                     session?.dropsClaimed += 1
@@ -922,6 +978,43 @@ public actor MinerEngine {
         let timestamp = formatter.string(from: Date())
         onLogMessage?("[\(timestamp)] \(message)")
     }
+
+    private func dropLabel(for dropId: String, campaignId: String?) -> String {
+        findDrop(dropId: dropId, campaignId: campaignId)?.name ?? dropId
+    }
+
+    private func requiredMinutes(for dropId: String, campaignId: String?) -> Int? {
+        findDrop(dropId: dropId, campaignId: campaignId)?.requiredMinutes
+    }
+
+    private func findDrop(dropId: String, campaignId: String?) -> Drop? {
+        if let campaignId,
+           let campaign = allCampaigns.first(where: { $0.id == campaignId }),
+           let drop = campaign.drops.first(where: { $0.id == dropId }) {
+            return drop
+        }
+
+        return allCampaigns
+            .lazy
+            .flatMap(\.drops)
+            .first(where: { $0.id == dropId })
+    }
+
+    private func formatProgressTransition(_ transition: DropProgressTransition) -> String? {
+        switch transition {
+        case .none, .regression:
+            return nil
+        case .progress(let dropLabel, let deltaMinutes, let currentMinutes, let requiredMinutes):
+            if let requiredMinutes {
+                return "Progress +\(deltaMinutes) min on \(dropLabel) (\(currentMinutes)/\(requiredMinutes) min)"
+            }
+            return "Progress +\(deltaMinutes) min on \(dropLabel) (\(currentMinutes) min)"
+        case .claimable(let dropLabel, let currentMinutes, let requiredMinutes):
+            return "Drop claimable: \(dropLabel) (\(currentMinutes)/\(requiredMinutes) min)"
+        case .claimed(let dropLabel):
+            return "Drop claimed: \(dropLabel)"
+        }
+    }
     
     // MARK: - UI Helper APIs
     
@@ -978,6 +1071,184 @@ public actor MinerEngine {
 }
 
 // MARK: - Supporting Types
+
+struct DropProgressCacheKey: Hashable, Sendable {
+    let campaignId: String?
+    let dropId: String
+}
+
+enum DropProgressSource: String, Sendable {
+    case pubSub
+    case gqlPoll
+}
+
+struct DropProgressObservation: Sendable {
+    let campaignId: String?
+    let dropId: String
+    let dropLabel: String
+    let currentMinutes: Int
+    let requiredMinutes: Int?
+    let source: DropProgressSource
+}
+
+struct TrackedDropProgress: Sendable, Equatable {
+    let dropLabel: String
+    let currentMinutes: Int
+    let requiredMinutes: Int?
+    let isClaimed: Bool
+}
+
+enum DropProgressTransition: Sendable, Equatable {
+    case none
+    case progress(dropLabel: String, deltaMinutes: Int, currentMinutes: Int, requiredMinutes: Int?)
+    case claimable(dropLabel: String, currentMinutes: Int, requiredMinutes: Int)
+    case claimed(dropLabel: String)
+    case regression(previousMinutes: Int, observedMinutes: Int)
+
+    var traceDescription: String {
+        switch self {
+        case .none:
+            return "none"
+        case .progress(let dropLabel, let deltaMinutes, let currentMinutes, let requiredMinutes):
+            if let requiredMinutes {
+                return "progress[\(dropLabel)] delta=\(deltaMinutes) current=\(currentMinutes)/\(requiredMinutes)"
+            }
+            return "progress[\(dropLabel)] delta=\(deltaMinutes) current=\(currentMinutes)"
+        case .claimable(let dropLabel, let currentMinutes, let requiredMinutes):
+            return "claimable[\(dropLabel)] current=\(currentMinutes)/\(requiredMinutes)"
+        case .claimed(let dropLabel):
+            return "claimed[\(dropLabel)]"
+        case .regression(let previousMinutes, let observedMinutes):
+            return "regression previous=\(previousMinutes) observed=\(observedMinutes)"
+        }
+    }
+}
+
+struct DropProgressUpdateResult: Sendable, Equatable {
+    let key: DropProgressCacheKey
+    let source: DropProgressSource
+    let previousMinutes: Int?
+    let transition: DropProgressTransition
+
+    var shouldAcknowledgeServerProgress: Bool {
+        switch transition {
+        case .progress, .claimable, .claimed:
+            return true
+        case .none, .regression:
+            return false
+        }
+    }
+}
+
+struct DropProgressEventTracker: Sendable {
+    private(set) var cache: [DropProgressCacheKey: TrackedDropProgress] = [:]
+
+    mutating func observe(_ observation: DropProgressObservation) -> DropProgressUpdateResult {
+        let key = DropProgressCacheKey(campaignId: observation.campaignId, dropId: observation.dropId)
+        let previous = cache[key]
+        let mergedRequired = observation.requiredMinutes ?? previous?.requiredMinutes
+
+        if let previous, previous.isClaimed {
+            cache[key] = TrackedDropProgress(
+                dropLabel: observation.dropLabel,
+                currentMinutes: previous.currentMinutes,
+                requiredMinutes: mergedRequired,
+                isClaimed: true
+            )
+            return DropProgressUpdateResult(
+                key: key,
+                source: observation.source,
+                previousMinutes: previous.currentMinutes,
+                transition: .none
+            )
+        }
+
+        if let previous, observation.currentMinutes < previous.currentMinutes {
+            cache[key] = TrackedDropProgress(
+                dropLabel: observation.dropLabel,
+                currentMinutes: previous.currentMinutes,
+                requiredMinutes: mergedRequired,
+                isClaimed: previous.isClaimed
+            )
+            return DropProgressUpdateResult(
+                key: key,
+                source: observation.source,
+                previousMinutes: previous.currentMinutes,
+                transition: .regression(previousMinutes: previous.currentMinutes, observedMinutes: observation.currentMinutes)
+            )
+        }
+
+        let currentMinutes = max(observation.currentMinutes, previous?.currentMinutes ?? 0)
+        let current = TrackedDropProgress(
+            dropLabel: observation.dropLabel,
+            currentMinutes: currentMinutes,
+            requiredMinutes: mergedRequired,
+            isClaimed: false
+        )
+        cache[key] = current
+
+        let previousClaimable = previous.map { isClaimable(minutes: $0.currentMinutes, requiredMinutes: $0.requiredMinutes, isClaimed: $0.isClaimed) } ?? false
+        let currentClaimable = isClaimable(minutes: currentMinutes, requiredMinutes: mergedRequired, isClaimed: false)
+        if currentClaimable && !previousClaimable {
+            return DropProgressUpdateResult(
+                key: key,
+                source: observation.source,
+                previousMinutes: previous?.currentMinutes,
+                transition: .claimable(
+                    dropLabel: observation.dropLabel,
+                    currentMinutes: currentMinutes,
+                    requiredMinutes: mergedRequired ?? currentMinutes
+                )
+            )
+        }
+
+        let delta = currentMinutes - (previous?.currentMinutes ?? 0)
+        if delta > 0 {
+            return DropProgressUpdateResult(
+                key: key,
+                source: observation.source,
+                previousMinutes: previous?.currentMinutes,
+                transition: .progress(
+                    dropLabel: observation.dropLabel,
+                    deltaMinutes: delta,
+                    currentMinutes: currentMinutes,
+                    requiredMinutes: mergedRequired
+                )
+            )
+        }
+
+        return DropProgressUpdateResult(
+            key: key,
+            source: observation.source,
+            previousMinutes: previous?.currentMinutes,
+            transition: .none
+        )
+    }
+
+    mutating func markClaimed(campaignId: String?, dropId: String, dropLabel: String) -> DropProgressUpdateResult {
+        let key = DropProgressCacheKey(campaignId: campaignId, dropId: dropId)
+        let previous = cache[key]
+        let alreadyClaimed = previous?.isClaimed ?? false
+        cache[key] = TrackedDropProgress(
+            dropLabel: dropLabel,
+            currentMinutes: previous?.currentMinutes ?? 0,
+            requiredMinutes: previous?.requiredMinutes,
+            isClaimed: true
+        )
+
+        return DropProgressUpdateResult(
+            key: key,
+            source: .pubSub,
+            previousMinutes: previous?.currentMinutes,
+            transition: alreadyClaimed ? .none : .claimed(dropLabel: dropLabel)
+        )
+    }
+
+    private func isClaimable(minutes: Int, requiredMinutes: Int?, isClaimed: Bool) -> Bool {
+        guard !isClaimed, let requiredMinutes else { return false }
+        return minutes >= requiredMinutes
+    }
+}
 
 public struct DeviceAuthInfo: Sendable {
     public let userCode: String
