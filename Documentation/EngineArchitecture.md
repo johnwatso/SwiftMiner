@@ -107,15 +107,11 @@ All models conform to `Sendable` for safe actor-to-actor transfer.
 
 ## Building
 
-### Swift Package Manager
-```bash
-swift build
-```
-
 ### Xcode
 ```bash
 xcodegen generate
-open SwiftTwitchMiner.xcodeproj
+open SwiftMiner.xcodeproj
+xcodebuild -project SwiftMiner.xcodeproj -scheme SwiftMiner -destination 'platform=macOS' build
 ```
 
 ## Usage
@@ -123,8 +119,10 @@ open SwiftTwitchMiner.xcodeproj
 ### CLI
 ```bash
 export TWITCH_CLIENT_ID=your_client_id
-swift run SwiftTwitchMinerCLI
+open SwiftMiner.xcodeproj
 ```
+
+Run the `SwiftTwitchMinerCLI` scheme from Xcode when you need the headless debug runner.
 
 ### As a Library
 ```swift
