@@ -24,7 +24,7 @@ Managing Twitch Drops across multiple accounts is messy.
 
 - Progress is fragmented  
 - Campaigns disappear once completed  
-- Running multiple miners is clunky and har
+- Running multiple miners is clunky
 
 SwiftMiner was built to fix that — especially for people who just want this running on their own Mac.
 
