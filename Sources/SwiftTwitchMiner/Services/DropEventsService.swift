@@ -174,11 +174,25 @@ public actor DropEventsService {
     private func handleDropEvent(type: String, data: [String: Any]) {
         switch type {
         case "drop-progress":
+            let rawDropId = data["drop_id"]
+            let rawCurrent = data["current_progress_min"]
+            let rawRequired = data["required_progress_min"]
             guard
-                let dropId   = data["drop_id"] as? String,
-                let current  = data["current_progress_min"] as? Int,
-                let required = data["required_progress_min"] as? Int
-            else { return }
+                let dropId = rawDropId as? String,
+                let current = rawCurrent as? Int,
+                let required = rawRequired as? Int
+            else {
+                tracePubSub(
+                    "drop-progress parse-failed drop=\(String(describing: rawDropId)) " +
+                    "rawCurrent=\(String(describing: rawCurrent)) rawRequired=\(String(describing: rawRequired))"
+                )
+                return
+            }
+
+            tracePubSub(
+                "drop-progress parsed drop=\(dropId) rawCurrent=\(String(describing: rawCurrent)) " +
+                "parsedCurrent=\(current) rawRequired=\(String(describing: rawRequired)) parsedRequired=\(required)"
+            )
 
             onDropProgress?(DropProgressEvent(
                 dropId: dropId,
