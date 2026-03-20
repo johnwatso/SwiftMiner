@@ -88,7 +88,8 @@ struct AccountDetailView: View {
                         priorityGames: settings.priorityGames,
                         excludedGames: settings.excludedGames,
                         strategy: settings.miningStrategy,
-                        enableBadgesEmotes: settings.enableBadgesEmotes
+                        enableBadgesEmotes: settings.enableBadgesEmotes,
+                        showClaimNotifications: settings.showClaimNotifications
                     )
                     isStarting = false
                 }
@@ -351,7 +352,9 @@ struct AccountInspectorView: View {
                                         minerId: miner.id,
                                         priorityGames: settings.priorityGames,
                                         excludedGames: settings.excludedGames,
-                                        strategy: settings.miningStrategy
+                                        strategy: settings.miningStrategy,
+                                        enableBadgesEmotes: settings.enableBadgesEmotes,
+                                        showClaimNotifications: settings.showClaimNotifications
                                     )
                                 }
                             } label: {

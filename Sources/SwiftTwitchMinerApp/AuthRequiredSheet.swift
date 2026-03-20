@@ -231,7 +231,8 @@ struct AuthRequiredSheet: View {
                 priorityGames: settings.priorityGames,
                 excludedGames: settings.excludedGames,
                 strategy: settings.miningStrategy,
-                enableBadgesEmotes: settings.enableBadgesEmotes
+                enableBadgesEmotes: settings.enableBadgesEmotes,
+                showClaimNotifications: settings.showClaimNotifications
             )
             // Brief pause so the user sees the success state
             try? await Task.sleep(nanoseconds: 1_200_000_000)

@@ -58,7 +58,7 @@ public final class Settings: ObservableObject {
     
     /// Whether to show notifications for drop claims
     @AppStorage("showClaimNotifications")
-    public var showClaimNotifications: Bool = true
+    public var showClaimNotifications: Bool = false // Disabled by default per user request
     
     /// Last selected game/category (for UI restoration)
     @AppStorage("lastSelectedGameId")
@@ -352,7 +352,7 @@ public final class Settings: ObservableObject {
         syncMinersState = true
         runInBackground = true
         preferredQuality = .auto
-        showClaimNotifications = true
+        showClaimNotifications = false
         lastSelectedGameId = ""
         gamePreferencesData = "[]"
         miningStrategy = .mineAll

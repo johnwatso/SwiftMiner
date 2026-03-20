@@ -57,6 +57,8 @@ public enum CampaignRelevance: String, Codable, Sendable, Equatable {
     case active = "ACTIVE"
     /// Claimed recently (last 24–48h)
     case recent = "RECENT"
+    /// Campaign ended but all drops claimed (visible in "Closed Drop Campaigns")
+    case closed = "CLOSED"
     /// Not relevant to current session
     case irrelevant = "IRRELEVANT"
 }
@@ -294,14 +296,25 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
         if isPrioritised {
             return .prioritised
         }
-        
+
         // 2. Active check (available, in progress, or claimable)
         let s = miningStatus
         if s == .available || s == .inProgress || s == .claimable {
             return .active
         }
-        
-        // 3. Recent check (Claimed recently - last 48h)
+
+        // 3. Expired with unclaimed drops - keep visible in feed (shows in All tab)
+        // This handles campaigns like "The Finals" that ended but have unclaimed drops
+        if s == .expired && !drops.allSatisfy({ $0.isClaimed }) {
+            return .active
+        }
+
+        // 4. Closed check (ended but all drops claimed - show in "Closed Drop Campaigns")
+        if isClosed {
+            return .closed
+        }
+
+        // 5. Recent check (Claimed recently - last 48h)
         if s == .claimed {
             // Check if any drop was awarded recently
             let recentlyAwarded = drops.contains { drop in
@@ -312,7 +325,7 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
                 return .recent
             }
         }
-        
+
         return .irrelevant
     }
 
@@ -344,6 +357,12 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
     public var hasChannelRestrictions: Bool { !channels.isEmpty }
 
     public var unclaimedDrops: [Drop] { drops.filter { !$0.isClaimed } }
+
+    /// True if campaign has ended but all drops are claimed (visible in Twitch's "Closed Drop Campaigns")
+    public var isClosed: Bool {
+        // Campaign is closed if: ended/exired AND all drops are claimed
+        (!isActive || status == .expired) && drops.allSatisfy { $0.isClaimed }
+    }
 
     /// Whether the campaign is currently eligible for mining (active, linked, and has eligible drops).
     /// Eligible includes: earnable drops + claimable drops (ready to claim).

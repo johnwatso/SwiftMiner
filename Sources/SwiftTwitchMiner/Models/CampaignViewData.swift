@@ -1,5 +1,29 @@
 import Foundation
 
+/// Canonical tab visibility for the Drops screen.
+/// `All` is always present, while `Active` and `Claimed` are derived from a
+/// single shared classification point.
+public struct CampaignTabVisibility: OptionSet, Sendable, Equatable {
+    public let rawValue: Int
+
+    public init(rawValue: Int) {
+        self.rawValue = rawValue
+    }
+
+    public static let active = CampaignTabVisibility(rawValue: 1 << 0)
+    public static let claimed = CampaignTabVisibility(rawValue: 1 << 1)
+    public static let all = CampaignTabVisibility(rawValue: 1 << 2)
+}
+
+/// Curated feed grouping used for ranking and feed composition.
+/// This stays intentionally separate from tab visibility.
+public enum CampaignCuratedBucket: String, Sendable, Equatable {
+    case prioritised
+    case active
+    case closed
+    case recent
+}
+
 /// UI-ready data model for a drop campaign.
 /// This model combines global campaign discovery data with account-specific
 /// inventory and progress tracking.
@@ -27,7 +51,8 @@ public struct CampaignViewData: Codable, Sendable, Identifiable, Equatable {
     /// Truth layer: derived status combining Twitch data + inventory state.
     /// Use this for selection and display logic — do NOT use `status` alone.
     public let miningStatus: MiningCampaignStatus
-    /// Context layer: relevance of this campaign to the current feed/session.
+    /// Feed ranking context. Keep tab routing on `tabVisibility` instead of
+    /// branching directly on relevance in the UI.
     public let relevance: CampaignRelevance
     /// Campaign start date (from Twitch API)
     public let startDate: Date
@@ -37,6 +62,50 @@ public struct CampaignViewData: Codable, Sendable, Identifiable, Equatable {
     public let drops: [DropViewData]
     /// Per-account status for this campaign (used for avatar indicators)
     public let accountStates: [AccountState]
+
+    /// True when the campaign has ended and is fully claimed, matching Twitch's
+    /// closed-campaign bucket in the UI feed.
+    public var isClosed: Bool {
+        relevance == .closed ||
+        ((status == CampaignStatus.expired.rawValue || endDate <= Date()) && isClaimed)
+    }
+
+    /// Single source of truth for Drops tab membership.
+    public var tabVisibility: CampaignTabVisibility {
+        var visibility: CampaignTabVisibility = [.all]
+
+        if relevance == .prioritised || relevance == .active {
+            visibility.insert(.active)
+        }
+
+        if isClaimed ||
+            miningStatus == .claimed ||
+            accountStates.contains(where: { $0.miningStatus == .claimed }) {
+            visibility.insert(.claimed)
+        }
+
+        return visibility
+    }
+
+    /// Curated feed grouping used to build ordered, non-exhaustive feeds.
+    public var curatedFeedBucket: CampaignCuratedBucket? {
+        switch relevance {
+        case .prioritised:
+            return .prioritised
+        case .active:
+            return .active
+        case .closed:
+            return .closed
+        case .recent:
+            return .recent
+        case .irrelevant:
+            return nil
+        }
+    }
+
+    public var showsInActiveTab: Bool { tabVisibility.contains(.active) }
+    public var showsInClaimedTab: Bool { tabVisibility.contains(.claimed) }
+    public var showsInAllTab: Bool { tabVisibility.contains(.all) }
 
     public init(
         id: String,
@@ -104,6 +173,8 @@ public enum AccountMiningStatus: String, Codable, Sendable, Equatable {
     case mining = "MINING"
     /// All drops in this campaign are claimed for this account
     case claimed = "CLAIMED"
+    /// Account needs manual re-authentication before mining can continue
+    case needsAuth = "NEEDS_AUTH"
     /// Account is linked but not currently mining this campaign
     case idle = "IDLE"
 }

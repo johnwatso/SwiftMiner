@@ -138,6 +138,9 @@ public actor AggregatedCampaignDataService {
     /// Currently active campaign ID per account (nil = not mining anything)
     /// Updated by MiningDataCoordinator at each refresh.
     private var activeCampaignIds: [String: String?] = [:]
+
+    /// Whether an account needs manual re-authentication before mining can continue.
+    private var accountNeedsAuth: [String: Bool] = [:]
     
     // MARK: - Account Management
     
@@ -164,12 +167,18 @@ public actor AggregatedCampaignDataService {
         accountServices.removeValue(forKey: accountId)
         accountUsernames.removeValue(forKey: accountId)
         activeCampaignIds.removeValue(forKey: accountId)
+        accountNeedsAuth.removeValue(forKey: accountId)
     }
 
     /// Update the currently active campaign for an account.
     /// Called by MiningDataCoordinator at each refresh cycle.
     public func updateActiveCampaign(accountId: String, campaignId: String?) {
         activeCampaignIds[accountId] = campaignId
+    }
+
+    /// Update whether an account needs manual re-authentication.
+    public func updateAccountNeedsAuth(accountId: String, needsAuth: Bool) {
+        accountNeedsAuth[accountId] = needsAuth
     }
     
     // MARK: - Aggregation API
@@ -199,6 +208,8 @@ public actor AggregatedCampaignDataService {
 
     /// Returns the unified cached campaign feed used by the Drops UI.
     /// This stays aligned with `CampaignDataService.currentCampaigns()`.
+    /// NOTE: This applies the curated feed filter (excludes .irrelevant).
+    /// For the "All" tab, use `allCampaigns()` instead.
     public func currentCampaigns() async -> [CampaignViewData] {
         let (viewDataByAccount, bestMetadata) = await collectCurrentCampaignViewData()
 
@@ -210,6 +221,23 @@ public actor AggregatedCampaignDataService {
         }
 
         return CampaignMapper.composeFeed(from: merged)
+    }
+
+    /// Returns ALL cached campaigns without filtering.
+    /// Use this for the "All" tab to show complete campaign history.
+    /// This includes .irrelevant campaigns that are excluded from the curated feed.
+    public func allCampaigns() async -> [CampaignViewData] {
+        let (viewDataByAccount, bestMetadata) = await collectCurrentCampaignViewData()
+
+        let merged = bestMetadata.values.map { data in
+            buildUnifiedCampaignViewData(
+                from: data,
+                viewDataByAccount: viewDataByAccount
+            )
+        }
+
+        // Return all campaigns sorted by game name, no filtering
+        return merged.sorted { $0.gameName < $1.gameName }
     }
     
     /// Get campaigns that are eligible for mining (active, not fully claimed)
@@ -447,7 +475,9 @@ public actor AggregatedCampaignDataService {
             let username = accountUsernames[accountId] ?? accountId
             let state: AccountMiningStatus
 
-            if activeCampaignIds[accountId] == campaignId {
+            if accountNeedsAuth[accountId] == true {
+                state = .needsAuth
+            } else if activeCampaignIds[accountId] == campaignId {
                 state = .mining
             } else if campaign.isClaimed || campaign.miningStatus == .claimed {
                 state = .claimed
@@ -463,8 +493,8 @@ public actor AggregatedCampaignDataService {
             )
         }
         .sorted { lhs, rhs in
-            let order: [AccountMiningStatus: Int] = [.mining: 0, .claimed: 1, .idle: 2]
-            return (order[lhs.miningStatus] ?? 3) < (order[rhs.miningStatus] ?? 3)
+            let order: [AccountMiningStatus: Int] = [.needsAuth: 0, .mining: 1, .claimed: 2, .idle: 3]
+            return (order[lhs.miningStatus] ?? 4) < (order[rhs.miningStatus] ?? 4)
         }
     }
 
