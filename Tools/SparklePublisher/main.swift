@@ -27,11 +27,11 @@ struct PublisherArguments {
 func usage() {
     let text = """
     Usage:
-      swift run --package-path . SparklePublisher <version> <exported-app-or-zip> [release-notes-html] [--channel stable|beta]
-      swift run --package-path . SparklePublisher --version <version> --artifact <exported-app-or-zip> [--release-notes <release-notes-html>] [--channel stable|beta]
+      SparklePublisher <version> <exported-app-or-zip> [release-notes-html] [--channel stable|beta]
+      SparklePublisher --version <version> --artifact <exported-app-or-zip> [--release-notes <release-notes-html>] [--channel stable|beta]
 
     Example:
-      swift run --package-path . SparklePublisher 1.0.1 ~/Desktop/SwiftMiner.app docs/release-notes/1.0.1.html --channel beta
+      ./scripts/publish_sparkle_release.sh 1.0.1 ~/Desktop/SwiftMiner.app docs/release-notes/1.0.1.html --channel beta
 
     Environment:
       SPARKLE_GENERATE_APPCAST   Optional absolute path to generate_appcast

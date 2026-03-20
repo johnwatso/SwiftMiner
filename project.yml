@@ -1,4 +1,4 @@
-name: SwiftTwitchMiner
+name: SwiftMiner
 
 options:
   bundleIdPrefix: com.swifttwitchminer
@@ -119,6 +119,18 @@ schemes:
       config: Debug
       targets:
         - SwiftTwitchMinerTests
+    archive:
+      config: Release
+
+  SwiftTwitchMinerCLI:
+    build:
+      targets:
+        SwiftTwitchMinerCLI: all
+    run:
+      config: Debug
+      commandLineArguments: []
+      environmentVariables:
+        TWITCH_CLIENT_ID: ""
     archive:
       config: Release
 

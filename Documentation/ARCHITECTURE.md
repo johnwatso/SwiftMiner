@@ -22,8 +22,9 @@ Before using SwiftTwitchMiner, you need:
 ### Installation
 
 1. Clone the repository
-2. Open in Xcode 16+
-3. Build the package: `swift build`
+2. Generate the project: `xcodegen generate`
+3. Open `SwiftMiner.xcodeproj` in Xcode 16+
+4. Build the `SwiftMiner` scheme
 
 ## Architecture Overview
 
