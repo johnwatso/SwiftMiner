@@ -75,7 +75,8 @@ struct DropsListView: View {
                             priorityGames: settings.priorityGames,
                             excludedGames: settings.excludedGames,
                             strategy: settings.miningStrategy,
-                            enableBadgesEmotes: settings.enableBadgesEmotes
+                            enableBadgesEmotes: settings.enableBadgesEmotes,
+                            showClaimNotifications: settings.showClaimNotifications
                         )
                     }
                 } label: {
@@ -182,13 +183,15 @@ struct DropsListView: View {
 
     private var activeQueueCampaigns: [CampaignViewData] {
         campaigns
-            .filter { !queuedMinerNames(for: $0).isEmpty }
+            .filter { campaign in
+                !queuedMinerNames(for: campaign).isEmpty || campaign.showsInActiveTab
+            }
             .sorted(by: campaignSort)
     }
 
     private var claimedCampaigns: [CampaignViewData] {
         campaigns
-            .filter(isClaimedCampaign(_:))
+            .filter(\.showsInClaimedTab)
             .sorted(by: campaignSort)
     }
 
@@ -252,7 +255,8 @@ struct DropsListView: View {
             return
         }
 
-        let cached = await navigation.minerManager.dataCoordinator.currentCampaigns()
+        // Load ALL campaigns (not filtered) for the "All" tab
+        let cached = await navigation.minerManager.dataCoordinator.allCampaigns()
         await MainActor.run {
             if !cached.isEmpty {
                 withAnimation(.easeInOut(duration: 0.2)) {
@@ -263,7 +267,8 @@ struct DropsListView: View {
         }
 
         await navigation.minerManager.dataCoordinator.refreshAll()
-        let refreshed = await navigation.minerManager.dataCoordinator.currentCampaigns()
+        // Load ALL campaigns after refresh (not filtered)
+        let refreshed = await navigation.minerManager.dataCoordinator.allCampaigns()
 
         await MainActor.run {
             if !refreshed.isEmpty || campaigns.isEmpty {
@@ -288,12 +293,6 @@ struct DropsListView: View {
 
             return nil
         }
-    }
-
-    private func isClaimedCampaign(_ campaign: CampaignViewData) -> Bool {
-        campaign.isClaimed ||
-        campaign.miningStatus == .claimed ||
-        campaign.accountStates.contains(where: { $0.miningStatus == .claimed })
     }
 
     private func campaignSort(lhs: CampaignViewData, rhs: CampaignViewData) -> Bool {
@@ -425,8 +424,8 @@ private struct CampaignDeckCard: View {
                 .strokeBorder(state.borderTint, lineWidth: 1)
         }
         .shadow(color: .black.opacity(isHovered ? 0.14 : 0.10), radius: isHovered ? 22 : 18, y: isHovered ? 12 : 10)
-        .opacity(state == .expired ? 0.62 : (state == .claimed ? 0.78 : 1))
-        .saturation(state == .claimed ? 0.82 : 1)
+        .opacity(state == .expired ? 0.62 : 1)
+        .saturation(1)
         .brightness(isHovered ? 0.008 : 0)
         .animation(.easeInOut(duration: 0.18), value: isHovered)
         .onHover { hovering in
@@ -448,9 +447,21 @@ private struct CampaignDeckCard: View {
             .padding(.vertical, 6)
             .background(.green.opacity(0.82), in: Capsule())
         case .claimed:
-            Image(systemName: "checkmark.circle.fill")
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(.green)
+            if campaign.isClosed {
+                HStack(spacing: 8) {
+                    Image(systemName: "archivebox.fill")
+                    Text("Closed")
+                        .font(.caption.weight(.semibold))
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(.secondary.opacity(0.82), in: Capsule())
+            } else {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.green)
+            }
         case .idle, .expired:
             Text(state == .expired ? "Expired" : "Idle")
                 .font(.caption.weight(.semibold))
@@ -490,7 +501,9 @@ private struct CampaignDeckCard: View {
         case .claimable:
             return "Rewards ready to claim"
         case .claimed:
-            return "\(campaign.dropsClaimed)/\(campaign.totalDrops) drops claimed"
+            return campaign.isClosed
+                ? "Campaign closed after all drops were claimed"
+                : "\(campaign.dropsClaimed)/\(campaign.totalDrops) drops claimed"
         case .expired:
             return "Campaign window has ended"
         case .idle:
@@ -680,29 +693,63 @@ private struct CampaignAccountStrip: View {
     let accountStates: [AccountState]
 
     var body: some View {
-        HStack(spacing: 8) {
-            ForEach(accountStates.prefix(5)) { account in
-                Text(account.initials)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.92))
-                    .frame(width: 24, height: 24)
-                    .background(backgroundColor(for: account.miningStatus), in: Circle())
-                    .overlay {
-                        Circle()
-                            .strokeBorder(.white.opacity(0.12), lineWidth: 1)
-                    }
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(accountStates) { account in
+                    accountCircle(for: account)
+                        .help("\(account.username) — \(statusTitle(for: account.miningStatus))")
+                }
             }
+            .padding(.trailing, 4) // Breath room for the last circle
+        }
+        .frame(height: 28)
+    }
 
-            if accountStates.count > 5 {
-                Text("+\(accountStates.count - 5)")
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(.secondary)
+    @ViewBuilder
+    private func accountCircle(for account: AccountState) -> some View {
+        ZStack(alignment: .bottomTrailing) {
+            Text(account.initials)
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.92))
+                .frame(width: 24, height: 24)
+                .background(backgroundColor(for: account.miningStatus), in: Circle())
+                .overlay {
+                    Circle()
+                        .strokeBorder(.white.opacity(0.12), lineWidth: 1)
+                }
+
+            if account.miningStatus == .mining {
+                LivePulseDot(color: .green)
+                    .offset(x: 2, y: 2)
+            } else if account.miningStatus == .needsAuth {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 8))
+                    .foregroundStyle(.orange)
+                    .background(Color.white, in: Circle())
+                    .offset(x: 2, y: 2)
+            } else if account.miningStatus == .claimed {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 8))
+                    .foregroundStyle(.blue)
+                    .background(Color.white, in: Circle())
+                    .offset(x: 2, y: 2)
             }
+        }
+    }
+
+    private func statusTitle(for status: AccountMiningStatus) -> String {
+        switch status {
+        case .mining: return "Watching"
+        case .claimed: return "Claimed"
+        case .needsAuth: return "Needs Re-auth"
+        case .idle: return "Idle"
         }
     }
 
     private func backgroundColor(for status: AccountMiningStatus) -> Color {
         switch status {
+        case .needsAuth:
+            return .orange.opacity(0.82)
         case .mining:
             return .green.opacity(0.85)
         case .claimed:

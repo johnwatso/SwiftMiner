@@ -333,7 +333,8 @@ private struct MinerControlPanel: View {
                         priorityGames: settings.priorityGames,
                         excludedGames: settings.excludedGames,
                         strategy: settings.miningStrategy,
-                        enableBadgesEmotes: settings.enableBadgesEmotes
+                        enableBadgesEmotes: settings.enableBadgesEmotes,
+                        showClaimNotifications: settings.showClaimNotifications
                     )
                     isStarting = false
                 }

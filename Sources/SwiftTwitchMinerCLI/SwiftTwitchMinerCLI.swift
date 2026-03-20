@@ -20,6 +20,9 @@ struct SwiftTwitchMinerCLI {
         // Create engine
         let engine = MinerEngine(clientId: clientId)
 
+        // Enable debug tracing
+        await engine.setDebugTraceEnabled(true)
+
         // Set up logging using setter methods
         await engine.setLogMessageHandler { message in
             print(message)

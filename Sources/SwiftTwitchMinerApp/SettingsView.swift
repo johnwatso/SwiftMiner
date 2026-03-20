@@ -46,6 +46,7 @@ struct SettingsView: View {
 private struct GeneralSettingsView: View {
     @ObservedObject var settings: Settings
     @EnvironmentObject private var updater: AppUpdater
+    @Environment(NavigationModel.self) private var navigation
     
     var body: some View {
         Form {
@@ -59,6 +60,9 @@ private struct GeneralSettingsView: View {
             
             Section {
                 Toggle("Show notifications when drops are claimed", isOn: $settings.showClaimNotifications)
+                    .onChange(of: settings.showClaimNotifications) { _, newValue in
+                        Task { await navigation.minerManager.updateNotificationPreference(enabled: newValue) }
+                    }
             } header: {
                 Text("Notifications")
             }

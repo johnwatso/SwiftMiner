@@ -14,6 +14,7 @@ public final class MinerManager {
         public let accountId: String
         public let username: String
         public var status: MinerStatus
+        public var needsAuth: Bool
         public var currentCampaign: String?
         public var currentCampaignId: String?
         public var allCampaigns: [Campaign] = []
@@ -29,6 +30,7 @@ public final class MinerManager {
             username: String,
             stateStore: AccountStateStore? = nil,
             status: MinerStatus = .idle,
+            needsAuth: Bool = false,
             currentCampaign: String? = nil,
             currentCampaignId: String? = nil,
             allCampaigns: [Campaign] = [],
@@ -40,6 +42,7 @@ public final class MinerManager {
             self.username = username
             self.stateStore = stateStore
             self.status = status
+            self.needsAuth = needsAuth
             self.currentCampaign = currentCampaign
             self.currentCampaignId = currentCampaignId
             self.allCampaigns = allCampaigns
@@ -150,6 +153,9 @@ public final class MinerManager {
     /// Whether the manager has been setup (loaded accounts)
     private var isSetup = false
     
+    /// Track notification preference
+    public var showClaimNotifications: Bool = false
+
     /// The actual engine instances (by miner ID)
     private var engines: [String: MinerEngine] = [:]
     
@@ -171,6 +177,14 @@ public final class MinerManager {
         self.clientId = clientId
         self.campaignStore = campaignStore
         self.dataCoordinator = MiningDataCoordinator(campaignStore: campaignStore)
+    }
+    
+    /// Update notification preference for all active engines.
+    public func updateNotificationPreference(enabled: Bool) async {
+        self.showClaimNotifications = enabled
+        for engine in engines.values {
+            await engine.updateNotificationPreference(enabled: enabled)
+        }
     }
     
     /// Update the client ID (call before adding the first account if the ID wasn't available at init).
@@ -336,41 +350,53 @@ public final class MinerManager {
     // MARK: - Control Operations
 
     /// Start a specific miner
-    public func startMiner(minerId: String, priorityGames: [String], excludedGames: [String], strategy: MiningStrategy, enableBadgesEmotes: Bool = false) async throws {
-        guard let engine = engines[minerId] else {
+    public func startMiner(minerId: String, priorityGames: [String], excludedGames: [String], strategy: MiningStrategy, enableBadgesEmotes: Bool = false, showClaimNotifications: Bool = false) async throws {
+        guard let engine = engines[minerId],
+              let miner = getMiner(id: minerId) else {
             throw TwitchMinerError.sessionNotStarted
         }
+
+        // Update notification preference if provided
+        self.showClaimNotifications = showClaimNotifications
 
         // Update mining preferences
         await engine.updateMiningPreferences(
             priorityGames: priorityGames,
             excludedGames: excludedGames,
-            enableBadgesEmotes: enableBadgesEmotes
+            enableBadgesEmotes: enableBadgesEmotes,
+            showClaimNotifications: self.showClaimNotifications
         )
         await engine.updateMiningStrategy(strategy)
 
         // Update status
-        updateMinerStatus(minerId: minerId, status: .authenticating)
+        await dataCoordinator.updateAccountNeedsAuth(accountId: miner.accountId, needsAuth: false)
+        updateMinerStatus(minerId: minerId, status: .authenticating, needsAuth: false)
 
         do {
             try await engine.start()
-            updateMinerStatus(minerId: minerId, isRunning: true)
+            await dataCoordinator.updateAccountNeedsAuth(accountId: miner.accountId, needsAuth: false)
+            updateMinerStatus(minerId: minerId, isRunning: true, needsAuth: false)
         } catch {
-            updateMinerStatus(minerId: minerId, status: .error)
+            let needsAuth = Self.requiresManualReauth(for: error)
+            await dataCoordinator.updateAccountNeedsAuth(accountId: miner.accountId, needsAuth: needsAuth)
+            updateMinerStatus(minerId: minerId, status: .error, needsAuth: needsAuth)
             throw error
         }
     }
     
     /// Stop a specific miner
     public func stopMiner(minerId: String) async {
-        guard let engine = engines[minerId] else { return }
+        guard let engine = engines[minerId],
+              let miner = getMiner(id: minerId) else { return }
         
         await engine.stop()
-        updateMinerStatus(minerId: minerId, isRunning: false, status: .idle)
+        await dataCoordinator.updateAccountNeedsAuth(accountId: miner.accountId, needsAuth: false)
+        updateMinerStatus(minerId: minerId, status: .idle, isRunning: false, needsAuth: false)
     }
     
     /// Start all miners
-    public func startAll(priorityGames: [String], excludedGames: [String], strategy: MiningStrategy, enableBadgesEmotes: Bool = false) async {
+    public func startAll(priorityGames: [String], excludedGames: [String], strategy: MiningStrategy, enableBadgesEmotes: Bool = false, showClaimNotifications: Bool = false) async {
+        self.showClaimNotifications = showClaimNotifications
         for miner in miners where !miner.isRunning {
             try? await startMiner(
                 minerId: miner.id, 
@@ -480,7 +506,16 @@ public final class MinerManager {
                 
                 // If status changed to watching or back to idle, update campaign info too
                 let currentId = await engine.currentCampaignId
-                self.updateMinerStatus(minerId: minerId, status: minerStatus, currentCampaignId: currentId)
+                let clearsNeedsAuth = minerStatus != .authenticating && minerStatus != .error
+                if clearsNeedsAuth, let miner = self.getMiner(id: minerId) {
+                    await self.dataCoordinator.updateAccountNeedsAuth(accountId: miner.accountId, needsAuth: false)
+                }
+                self.updateMinerStatus(
+                    minerId: minerId,
+                    status: minerStatus,
+                    currentCampaignId: currentId,
+                    needsAuth: clearsNeedsAuth ? false : nil
+                )
             }
         }
         
@@ -516,6 +551,17 @@ public final class MinerManager {
                 self.onLogMessage?(minerId, message)
             }
         }
+
+        await engine.setErrorHandler { [weak self] error in
+            Task { @MainActor [weak self] in
+                guard let self = self,
+                      let miner = self.getMiner(id: minerId) else { return }
+
+                let needsAuth = Self.requiresManualReauth(for: error)
+                await self.dataCoordinator.updateAccountNeedsAuth(accountId: miner.accountId, needsAuth: needsAuth)
+                self.updateMinerStatus(minerId: minerId, status: .error, needsAuth: needsAuth)
+            }
+        }
     }
     
     private func mapSessionStatus(_ status: SessionStatus) -> MinerStatus {
@@ -537,7 +583,8 @@ public final class MinerManager {
         currentCampaign: String? = nil,
         currentCampaignId: String? = nil,
         allCampaigns: [Campaign]? = nil,
-        isRunning: Bool? = nil
+        isRunning: Bool? = nil,
+        needsAuth: Bool? = nil
     ) {
         guard let index = miners.firstIndex(where: { $0.id == minerId }) else { return }
         
@@ -547,6 +594,7 @@ public final class MinerManager {
         if let campaignId = currentCampaignId { miner.currentCampaignId = campaignId }
         if let campaigns = allCampaigns { miner.allCampaigns = campaigns }
         if let running = isRunning { miner.isRunning = running }
+        if let needsAuth = needsAuth { miner.needsAuth = needsAuth }
         miners[index] = miner
         
         onMinerStatusChange?(miner)
@@ -554,6 +602,17 @@ public final class MinerManager {
     
     private func updateMinerStatus(minerId: String, isRunning: Bool, status: MinerStatus) {
         updateMinerStatus(minerId: minerId, status: status, isRunning: isRunning)
+    }
+
+    static func requiresManualReauth(for error: Error) -> Bool {
+        guard let minerError = error as? TwitchMinerError else { return false }
+
+        switch minerError {
+        case .authenticationFailed, .tokenExpired:
+            return true
+        default:
+            return false
+        }
     }
     
     private func incrementDropsClaimed(minerId: String) {

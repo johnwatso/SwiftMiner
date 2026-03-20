@@ -3,7 +3,7 @@ import Foundation
 /// Main actor that orchestrates the Twitch drops mining lifecycle
 public actor MinerEngine {
     // MARK: - Properties
-    
+
     private let clientId: String
     private var authService: TwitchAuthService
     var apiClient: TwitchAPIClient
@@ -12,7 +12,8 @@ public actor MinerEngine {
     private var claimService: ClaimService
     private var pubSubClient: PubSubClient
     private var dropEventsService: DropEventsService
-    
+    private var notificationService: NotificationService?
+
     private var session: MiningSession?
     private var isRunning = false
     private var mainTask: Task<Void, Never>?
@@ -21,24 +22,26 @@ public actor MinerEngine {
     private var shouldSwitchChannel = false
     /// Set to true to interrupt the idle wait and immediately re-check for eligible campaigns
     private var shouldRescanCampaigns = false
-    
+
     /// Counter for minutes watched without a server progress update (local estimation)
     private var extraMinutesWatched: Int = 0
     /// Timestamp of the last verified progress update (GQL or PubSub)
     private var lastProgressUpdateAt: Date = Date()
     /// Maximum extra minutes allowed before assuming mining is stalled (matches TDM)
     private static let maxExtraMinutes = 15
-    
+
     /// Cache of all campaigns fetched during the last check
     public private(set) var allCampaigns: [Campaign] = []
 
     // Configuration
     private let campaignCheckInterval: UInt64 = 300 * 1_000_000_000 // 5 minutes
-    
+    private let claimCheckInterval: UInt64 = 2 * 60 * 1_000_000_000 // 2 minutes (conditional polling)
+
     // Mining preferences (set from AppModel/Settings)
     private var priorityGames: [String] = []
     private var excludedGames: [String] = []
     private var enableBadgesEmotes: Bool = false
+    private var showClaimNotifications: Bool = false
 
     /// Returns this engine's DropsService so callers on other actors can create an AccountStateStore.
     func getDropsService() -> DropsService { dropsService }
@@ -70,10 +73,36 @@ public actor MinerEngine {
     }
 
     /// Update mining preferences (priority/excluded games)
-    public func updateMiningPreferences(priorityGames: [String], excludedGames: [String], enableBadgesEmotes: Bool = false) {
+    public func updateMiningPreferences(
+        priorityGames: [String],
+        excludedGames: [String],
+        enableBadgesEmotes: Bool = false,
+        showClaimNotifications: Bool = false
+    ) {
         self.priorityGames = priorityGames
         self.excludedGames = excludedGames
         self.enableBadgesEmotes = enableBadgesEmotes
+        self.showClaimNotifications = showClaimNotifications
+        
+        // Configure notification service if enabled
+        if showClaimNotifications && notificationService == nil {
+            self.notificationService = NotificationService()
+        }
+        
+        Task {
+            await notificationService?.configure(enabled: showClaimNotifications)
+        }
+    }
+
+    /// Update notification preference
+    public func updateNotificationPreference(enabled: Bool) async {
+        self.showClaimNotifications = enabled
+        
+        if enabled && notificationService == nil {
+            self.notificationService = NotificationService()
+        }
+        
+        await notificationService?.configure(enabled: enabled)
     }
 
     /// Update mining strategy
@@ -365,11 +394,20 @@ public actor MinerEngine {
                         requiredMinutes: progress.requiredMinutes
                     )
                     onDropClaimed?(drop)
+
+                    // Send local notification if enabled
+                    if showClaimNotifications, let notificationService = notificationService {
+                        // Find campaign name for notification
+                        let campaign = try? await dropsService.getCampaign(id: progress.campaignId)
+                        await notificationService.notifyDropClaimed(
+                            campaignName: campaign?.name ?? "Unknown Campaign",
+                            dropName: progress.dropName
+                        )
+                    }
                 }
 
                 session?.dropsClaimed += 1
-            } else {
-                log("⚠️ Drop claim returned status: \(response.status)")
+            } else {                log("⚠️ Drop claim returned status: \(response.status)")
             }
         } catch {
             log("❌ Failed to auto-claim drop: \(error.localizedDescription)")
@@ -572,6 +610,14 @@ public actor MinerEngine {
 
                     // Check if we should claim any drops
                     await claimReadyDrops()
+                    
+                    // Conditional claim polling: Check every 2 minutes when actively mining
+                    // This reduces claim latency without adding background churn when idle
+                    let ticksPerClaimCheck = Int(claimCheckInterval / 10_000_000_000) // 10s ticks
+                    for _ in 0..<ticksPerClaimCheck {
+                        if shouldSwitchChannel { break }
+                        try? await Task.sleep(nanoseconds: 10_000_000_000)
+                    }
                 }
 
                 // Update session stats
@@ -589,6 +635,16 @@ public actor MinerEngine {
     }
     
     private func claimReadyDrops() async {
+        // Conditional check: Only poll for claims when there are potentially claimable drops
+        // This avoids unnecessary API calls when all campaigns are either empty or fully claimed
+        let hasClaimableCampaigns = allCampaigns.contains { campaign in
+            campaign.drops.contains { drop in !drop.isClaimed }
+        }
+        
+        guard hasClaimableCampaigns || session?.currentCampaignId != nil else {
+            return // No claimable campaigns, skip polling to reduce churn
+        }
+        
         do {
             let claimable = try await dropsService.getClaimableDrops()
 
@@ -596,7 +652,7 @@ public actor MinerEngine {
                 let result = await claimService.claimDrop(progress)
                 if result.success {
                     log("✅ Claimed drop: \(result.dropName)")
-                    
+
                     // TDM PARITY: Delete notification after successful claim
                     try? await apiClient.deleteNotification(id: progress.id)
 
@@ -607,6 +663,14 @@ public actor MinerEngine {
                     )
                     onDropClaimed?(drop)
                     session?.dropsClaimed += 1
+                    
+                    // Send local notification if enabled
+                    if showClaimNotifications, let notificationService = notificationService {
+                        await notificationService.notifyDropClaimed(
+                            campaignName: result.campaignName,
+                            dropName: result.dropName
+                        )
+                    }
                 } else {
                     log("⚠️ Drop claim returned not-success for \(progress.dropName)")
                 }

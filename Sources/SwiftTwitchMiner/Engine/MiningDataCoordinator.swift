@@ -85,15 +85,22 @@ public final class MiningDataCoordinator {
     }
     
     // MARK: - Data Access
-    
+
     /// Get all aggregated campaigns across all miners
     public func getAllCampaigns() async -> [AggregatedCampaignDataService.AggregatedCampaign] {
         await aggregatedService.getAllCampaigns()
     }
 
     /// Get the unified cached campaign feed used by the Drops UI.
+    /// This applies the curated feed filter (excludes .irrelevant).
     public func currentCampaigns() async -> [CampaignViewData] {
         await aggregatedService.currentCampaigns()
+    }
+
+    /// Get ALL cached campaigns without filtering.
+    /// Use this for the "All" tab to show complete campaign history.
+    public func allCampaigns() async -> [CampaignViewData] {
+        await aggregatedService.allCampaigns()
     }
     
     /// Get eligible campaigns (active, not fully claimed)
@@ -125,6 +132,11 @@ public final class MiningDataCoordinator {
             await aggregatedService.updateActiveCampaign(accountId: accountId, campaignId: currentCampaignId)
         }
         await aggregatedService.refreshAll()
+    }
+
+    /// Update whether an account needs manual re-authentication in aggregated UI state.
+    public func updateAccountNeedsAuth(accountId: String, needsAuth: Bool) async {
+        await aggregatedService.updateAccountNeedsAuth(accountId: accountId, needsAuth: needsAuth)
     }
     
     /// Get the underlying data service for a specific miner (for advanced use)

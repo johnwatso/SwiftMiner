@@ -72,6 +72,9 @@ public final class AppModel {
             // Drive isAuthenticated from MinerManager's miner list.
             isAuthenticated = !manager.miners.isEmpty
 
+            // Sync notification preference
+            await manager.updateNotificationPreference(enabled: Settings.shared.showClaimNotifications)
+
             // Update isAuthenticated whenever a miner is added/removed.
             manager.onMinerStatusChange = { [weak self] _ in
                 Task { @MainActor [weak self] in
@@ -85,7 +88,8 @@ public final class AppModel {
         // Legacy single-engine mode (no MinerManager).
         await engine.updateMiningPreferences(
             priorityGames: Settings.shared.priorityGames,
-            excludedGames: Settings.shared.excludedGames
+            excludedGames: Settings.shared.excludedGames,
+            showClaimNotifications: Settings.shared.showClaimNotifications
         )
 
         await engine.setStatusChangeHandler { [weak self] status in
@@ -148,7 +152,9 @@ public final class AppModel {
             await manager.startAll(
                 priorityGames: settings.priorityGames,
                 excludedGames: settings.excludedGames,
-                strategy: settings.miningStrategy
+                strategy: settings.miningStrategy,
+                enableBadgesEmotes: settings.enableBadgesEmotes,
+                showClaimNotifications: settings.showClaimNotifications
             )
             return
         }

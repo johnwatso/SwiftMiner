@@ -51,7 +51,8 @@ struct SidebarView: View {
                                 priorityGames: settings.priorityGames,
                                 excludedGames: settings.excludedGames,
                                 strategy: settings.miningStrategy,
-                                enableBadgesEmotes: settings.enableBadgesEmotes
+                                enableBadgesEmotes: settings.enableBadgesEmotes,
+                                showClaimNotifications: settings.showClaimNotifications
                             )                        }
                     } label: {
                         Image(systemName: "play.fill")

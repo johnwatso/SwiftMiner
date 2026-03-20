@@ -136,13 +136,15 @@ public enum CampaignMapper {
 public extension CampaignMapper {
 
     /// Builds the ordered feed from a list of CampaignViewData.
-    /// Order: prioritised → active → recent.
+    /// Order: prioritised → active → closed → recent.
     /// The feed is NEVER empty if any campaigns exist.
+    /// Closed campaigns (ended, all claimed) are shown separately from active ones.
     static func composeFeed(from campaigns: [CampaignViewData]) -> [CampaignViewData] {
-        let prioritised = campaigns.filter { $0.relevance == .prioritised }
-        let active      = campaigns.filter { $0.relevance == .active }
-        let recent      = campaigns.filter { $0.relevance == .recent }
+        let prioritised = campaigns.filter { $0.curatedFeedBucket == .prioritised }
+        let active      = campaigns.filter { $0.curatedFeedBucket == .active }
+        let closed      = campaigns.filter { $0.curatedFeedBucket == .closed }
+        let recent      = campaigns.filter { $0.curatedFeedBucket == .recent }
         // irrelevant campaigns are excluded from the feed but not deleted
-        return prioritised + active + recent
+        return prioritised + active + closed + recent
     }
 }
