@@ -86,7 +86,7 @@ private struct GeneralSettingsView: View {
                 .disabled(!updater.canCheckForUpdates)
 
                 if !updater.isConfigured {
-                    Text("Set `SPARKLE_PUBLIC_ED_KEY` in the app target build settings and publish an appcast to enable Sparkle updates.")
+                    Text("Automatic updates are not available in this version.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

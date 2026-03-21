@@ -23,6 +23,8 @@ public final class MinerManager {
         
         /// Account-specific drop state store (Phase 2). Set asynchronously after engine is ready.
         public var stateStore: AccountStateStore?
+        /// When the miner last transitioned to its current status. Used for stuck-detection in health UI.
+        public var statusChangedAt: Date = Date()
 
         public init(
             id: String,
@@ -394,10 +396,19 @@ public final class MinerManager {
         updateMinerStatus(minerId: minerId, status: .idle, isRunning: false, needsAuth: false)
     }
     
-    /// Start all miners
+    /// Start all miners with staggered delays to avoid API rate limiting
     public func startAll(priorityGames: [String], excludedGames: [String], strategy: MiningStrategy, enableBadgesEmotes: Bool = false, showClaimNotifications: Bool = false) async {
         self.showClaimNotifications = showClaimNotifications
-        for miner in miners where !miner.isRunning {
+        let notRunningMiners = miners.filter { !$0.isRunning }
+        let totalToStart = notRunningMiners.count
+        
+        for (index, miner) in notRunningMiners.enumerated() {
+            // Stagger starts by 3 seconds between accounts to avoid rate limit bottlenecks
+            if index > 0 {
+                print("[MinerManager] Staggering start for @\(miner.username): waiting 3s to avoid rate limits (\(index)/\(totalToStart))")
+                try? await Task.sleep(nanoseconds: 3 * 1_000_000_000)
+            }
+            
             try? await startMiner(
                 minerId: miner.id, 
                 priorityGames: priorityGames, 
@@ -589,7 +600,10 @@ public final class MinerManager {
         guard let index = miners.firstIndex(where: { $0.id == minerId }) else { return }
         
         var miner = miners[index]
-        if let status = status { miner.status = status }
+        if let status = status {
+            if status != miner.status { miner.statusChangedAt = Date() }
+            miner.status = status
+        }
         if let campaign = currentCampaign { miner.currentCampaign = campaign }
         if let campaignId = currentCampaignId { miner.currentCampaignId = campaignId }
         if let campaigns = allCampaigns { miner.allCampaigns = campaigns }
