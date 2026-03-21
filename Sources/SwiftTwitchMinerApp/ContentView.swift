@@ -196,6 +196,13 @@ struct OverviewView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
+                let miners = navigation.minerManager.miners
+                if !miners.isEmpty {
+                    MinerHealthCard(miners: miners) { minerId in
+                        navigation.selectedMinerId = minerId
+                        navigation.selectedItem = .activity
+                    }
+                }
                 metricsSection
                 campaignFeedSection
                 nextActionSection
@@ -1046,10 +1053,10 @@ private struct CampaignLibraryAmbientRow: View {
             .frame(width: 56, height: 56)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("Campaign activity will collect here")
+                Text("No active campaigns yet")
                     .font(.headline)
 
-                Text("As soon as campaigns are available, this row becomes your quick-glance progress shelf.")
+                Text("Active drop campaigns will appear here once your miner is running.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

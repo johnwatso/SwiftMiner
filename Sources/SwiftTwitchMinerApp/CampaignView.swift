@@ -145,7 +145,7 @@ struct DropsListView: View {
                 .fill(.thinMaterial.opacity(0.84))
                 .overlay(alignment: .bottomLeading) {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Campaigns update in place")
+                        Text("Campaigns are syncing")
                             .font(.headline.weight(.semibold))
 
                         Text(description)
@@ -404,7 +404,7 @@ private struct CampaignDeckCard: View {
             }
 
             if shownDrops.isEmpty {
-                Text("Drop details will appear here when campaign rewards are available.")
+                Text("No rewards available for this campaign.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
