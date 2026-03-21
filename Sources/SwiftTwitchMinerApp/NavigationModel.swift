@@ -153,13 +153,15 @@ public final class NavigationModel {
         refreshOnboardingPresentation()
     }
 
-    public func handleOnboardingAuthenticationCompleted() {
+    public func handleOnboardingAuthenticationCompleted(resetDismissal: Bool = true) {
         guard !minerManager.miners.isEmpty else {
             refreshOnboardingPresentation()
             return
         }
 
-        settings.hasDismissedOnboarding = false
+        if resetDismissal {
+            settings.hasDismissedOnboarding = false
+        }
         startOnboardingSetupIfNeeded()
     }
 
@@ -172,10 +174,15 @@ public final class NavigationModel {
         }
 
         lastKnownAccountCount = currentCount
-        settings.hasDismissedOnboarding = false
+        // Only reset dismissal when a new account is added mid-session (previousCount > 0).
+        // During initial app launch, accounts load from keychain (0 → N) and should not
+        // wipe a previously saved dismissal.
+        if previousCount > 0 {
+            settings.hasDismissedOnboarding = false
+        }
 
         if currentCount > previousCount, showOnboarding || previousCount == 0 {
-            handleOnboardingAuthenticationCompleted()
+            handleOnboardingAuthenticationCompleted(resetDismissal: previousCount > 0)
         } else {
             refreshOnboardingPresentation()
         }

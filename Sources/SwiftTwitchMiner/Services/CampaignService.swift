@@ -14,14 +14,13 @@ public enum CampaignService {
     ) async throws -> [Campaign] {
         let campaigns = try await apiClient.fetchDropCampaigns()
 
-        let fetchedSnapshot = try? await inventoryService.fetchInventory()
-        let cachedSnapshot: InventorySnapshot?
+        // Fetch inventory once - fallback to cached snapshot on failure
+        let snapshot: InventorySnapshot
         do {
-            cachedSnapshot = try await inventoryService.fetchInventory()
+            snapshot = try await inventoryService.fetchInventory()
         } catch {
-            cachedSnapshot = await inventoryService.currentSnapshot()
+            snapshot = await inventoryService.currentSnapshot() ?? .empty(accountId: "")
         }
-        let snapshot = fetchedSnapshot ?? cachedSnapshot ?? .empty(accountId: "")
 
         return DropsService.mergeInventory(snapshot, into: campaigns)
     }
