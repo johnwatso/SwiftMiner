@@ -24,10 +24,15 @@ public final class MiningDataCoordinator {
     /// Account ID lookup by miner ID
     private var minerAccountIds: [String: String] = [:]
 
-    /// Steam artwork overrides populated during enrichment.
+    /// Steam portrait artwork overrides populated during enrichment.
     /// Key = gameName (as returned by Twitch), Value = Steam CDN portrait URL.
     /// Used by views that consume raw Campaign objects (e.g. ContentView overview rail).
     public private(set) var steamArtworkOverrides: [String: URL] = [:]
+
+    /// Steam hero banner overrides populated during enrichment.
+    /// Key = gameName, Value = Steam CDN hero URL (landscape, freshest art).
+    /// Used for full-bleed blurred backgrounds in the Drops view.
+    public private(set) var steamHeroOverrides: [String: URL] = [:]
     
     // MARK: - Initialization
     
@@ -121,11 +126,12 @@ public final class MiningDataCoordinator {
     public func clearSteamArtworkCache() async {
         await SteamArtworkService.shared.clearCache()
         steamArtworkOverrides.removeAll()
+        steamHeroOverrides.removeAll()
     }
 
     /// Substitutes Steam CDN artwork into a list of campaigns.
-    /// Also populates `steamArtworkOverrides` so that views using raw Campaign
-    /// objects (e.g. the ContentView overview rail) can do a sync lookup.
+    /// Populates `steamArtworkOverrides` (portrait) and `steamHeroOverrides` (hero banner)
+    /// so all views can do a sync lookup without an async call.
     private func enrichWithSteamArtwork(_ campaigns: [CampaignViewData]) async -> [CampaignViewData] {
         var enriched = campaigns
         for i in enriched.indices {
@@ -133,6 +139,10 @@ public final class MiningDataCoordinator {
             if let url = await SteamArtworkService.shared.portraitURL(for: gameName) {
                 enriched[i] = enriched[i].withArtworkURL(url)
                 steamArtworkOverrides[gameName] = url
+            }
+            // Fetch hero URL in parallel with portrait — stored separately for blurred backgrounds
+            if let heroURL = await SteamArtworkService.shared.heroURL(for: gameName) {
+                steamHeroOverrides[gameName] = heroURL
             }
         }
         return enriched
