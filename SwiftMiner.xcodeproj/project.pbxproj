@@ -254,7 +254,7 @@
 			);
 			sourceTree = "<group>";
 		};
-		3852F84E8B980C79EB11597C /* SwiftTwitchMinerApp */ = {
+		3852F84E8B980C79EB11597C /* SwiftMiner */ = {
 			isa = PBXGroup;
 			children = (
 				F976562010602F7E0688B01F /* AccountDetailView.swift */,
@@ -278,7 +278,7 @@
 				3A3192DD7B171F6A1AA8A619 /* SidebarView.swift */,
 				7060502A0CB04BFE17E75AB3 /* TDMCookieParser.swift */,
 			);
-			path = SwiftTwitchMinerApp;
+			path = SwiftMiner;
 			sourceTree = "<group>";
 		};
 		4B3EC8D2953AC8F01EC1200C /* Models */ = {
@@ -353,7 +353,7 @@
 			isa = PBXGroup;
 			children = (
 				0070015642D2C2E22F49E4E0 /* SwiftTwitchMiner */,
-				3852F84E8B980C79EB11597C /* SwiftTwitchMinerApp */,
+				3852F84E8B980C79EB11597C /* SwiftMiner */,
 				E51CD0F425480C91EDE576CE /* SwiftTwitchMinerCLI */,
 			);
 			path = Sources;
@@ -747,7 +747,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = Sources/SwiftTwitchMinerApp/Info.plist;
+				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = SwiftMiner;
 				INFOPLIST_KEY_CFBundleName = SwiftMiner;
 				INFOPLIST_KEY_SUEnableAutomaticChecks = YES;
@@ -879,7 +879,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = Sources/SwiftTwitchMinerApp/Info.plist;
+				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = SwiftMiner;
 				INFOPLIST_KEY_CFBundleName = SwiftMiner;
 				INFOPLIST_KEY_SUEnableAutomaticChecks = YES;
