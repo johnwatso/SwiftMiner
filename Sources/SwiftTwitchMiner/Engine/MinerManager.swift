@@ -284,6 +284,12 @@ public final class MinerManager {
             }
 
             // Start the state store auto-refresh (Phase 2)
+            // Stagger starts to avoid thundering herd - 3s delay per account index
+            let accountIndex = self.miners.firstIndex(where: { $0.id == minerId }) ?? 0
+            if accountIndex > 0 {
+                let staggerDelay = UInt64(accountIndex * 3 * 1_000_000_000)
+                try? await Task.sleep(nanoseconds: staggerDelay)
+            }
             await stateStore.start()
             }        
         return minerId

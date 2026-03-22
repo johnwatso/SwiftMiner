@@ -23,6 +23,11 @@ public final class MiningDataCoordinator {
 
     /// Account ID lookup by miner ID
     private var minerAccountIds: [String: String] = [:]
+
+    /// Steam artwork overrides populated during enrichment.
+    /// Key = gameName (as returned by Twitch), Value = Steam CDN portrait URL.
+    /// Used by views that consume raw Campaign objects (e.g. ContentView overview rail).
+    public private(set) var steamArtworkOverrides: [String: URL] = [:]
     
     // MARK: - Initialization
     
@@ -93,14 +98,44 @@ public final class MiningDataCoordinator {
 
     /// Get the unified cached campaign feed used by the Drops UI.
     /// This applies the curated feed filter (excludes .irrelevant).
-    public func currentCampaigns() async -> [CampaignViewData] {
-        await aggregatedService.currentCampaigns()
+    /// Pass `preferSteamArtwork: true` to substitute Steam CDN artwork where available.
+    public func currentCampaigns(preferSteamArtwork: Bool = false) async -> [CampaignViewData] {
+        let campaigns = await aggregatedService.currentCampaigns()
+        guard preferSteamArtwork else { return campaigns }
+        return await enrichWithSteamArtwork(campaigns)
     }
 
     /// Get ALL cached campaigns without filtering.
     /// Use this for the "All" tab to show complete campaign history.
-    public func allCampaigns() async -> [CampaignViewData] {
-        await aggregatedService.allCampaigns()
+    /// Pass `preferSteamArtwork: true` to substitute Steam CDN artwork where available.
+    public func allCampaigns(preferSteamArtwork: Bool = false) async -> [CampaignViewData] {
+        let campaigns = await aggregatedService.allCampaigns()
+        guard preferSteamArtwork else { return campaigns }
+        return await enrichWithSteamArtwork(campaigns)
+    }
+
+    // MARK: - Steam Artwork Enrichment
+
+    /// Clears the Steam artwork override cache and re-enriches from scratch.
+    /// Called when the user taps "Refresh Artwork".
+    public func clearSteamArtworkCache() async {
+        await SteamArtworkService.shared.clearCache()
+        steamArtworkOverrides.removeAll()
+    }
+
+    /// Substitutes Steam CDN artwork into a list of campaigns.
+    /// Also populates `steamArtworkOverrides` so that views using raw Campaign
+    /// objects (e.g. the ContentView overview rail) can do a sync lookup.
+    private func enrichWithSteamArtwork(_ campaigns: [CampaignViewData]) async -> [CampaignViewData] {
+        var enriched = campaigns
+        for i in enriched.indices {
+            let gameName = enriched[i].gameName
+            if let url = await SteamArtworkService.shared.portraitURL(for: gameName) {
+                enriched[i] = enriched[i].withArtworkURL(url)
+                steamArtworkOverrides[gameName] = url
+            }
+        }
+        return enriched
     }
     
     /// Get eligible campaigns (active, not fully claimed)

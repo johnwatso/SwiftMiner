@@ -9,6 +9,7 @@ struct DropsListView: View {
     @State private var campaigns: [CampaignViewData] = []
     @State private var isRefreshing = false
     @State private var hasLoadedFeed = false
+    @AppStorage("preferSteamArtwork") private var preferSteamArtwork: Bool = false
 
     enum DropFilter: String, CaseIterable, Identifiable {
         case active = "Active"
@@ -36,7 +37,7 @@ struct DropsListView: View {
             } else if campaigns.isEmpty {
                 contextualStandbyState(
                     message: "No active campaigns right now",
-                    description: "Cached campaigns will appear here instantly as soon as data is available."
+                    description: "Check back once your miner has synced campaign data."
                 )
             } else if renderedCampaigns.isEmpty {
                 contextualStandbyState(
@@ -54,7 +55,12 @@ struct DropsListView: View {
                             CampaignDeckCard(
                                 campaign: campaign,
                                 state: cardState(for: campaign),
-                                queueWatchers: queuedMinerNames(for: campaign)
+                                queueWatchers: queuedMinerNames(for: campaign),
+                                onSteamIdSet: { appId in
+                                    await SteamArtworkService.shared.setManualAppId(for: campaign.gameName, appId: appId)
+                                    await navigation.minerManager.dataCoordinator.clearSteamArtworkCache()
+                                    await loadCampaignFeed()
+                                }
                             )
                             .transition(.opacity.combined(with: .scale(scale: 0.985)))
                         }
@@ -92,6 +98,21 @@ struct DropsListView: View {
                 .help("Stop all miners")
             }
 
+            if preferSteamArtwork {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        Task {
+                            await navigation.minerManager.dataCoordinator.clearSteamArtworkCache()
+                            await loadCampaignFeed()
+                        }
+                    } label: {
+                        Label("Refresh Artwork", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                    .help("Clear Steam artwork cache and reload")
+                    .disabled(isRefreshing)
+                }
+            }
+
             ToolbarItem(placement: .primaryAction) {
                 Picker("Filter", selection: $filter) {
                     ForEach(DropFilter.allCases) { choice in
@@ -104,6 +125,12 @@ struct DropsListView: View {
         }
         .task(id: accountSignature) {
             await loadCampaignFeed()
+        }
+        .onChange(of: preferSteamArtwork) { _, _ in
+            Task {
+                await navigation.minerManager.dataCoordinator.clearSteamArtworkCache()
+                await loadCampaignFeed()
+            }
         }
     }
 
@@ -128,7 +155,7 @@ struct DropsListView: View {
                 Text("Loading campaigns")
                     .font(.headline)
 
-                Text("Cached drops will appear instantly on future launches.")
+                Text("Your progress will be ready in a moment.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -233,7 +260,7 @@ struct DropsListView: View {
         case .active:
             return "The Active tab only reflects miners currently queued to watch a campaign. Your other campaign history stays intact in All."
         case .claimed:
-            return "Claimed campaigns will appear here automatically as inventory-backed status updates arrive."
+            return "Campaigns you've completed will appear here once inventory syncs."
         case .all:
             return "This view stays pinned to cached campaign history, so it will repopulate as soon as campaign data is available."
         }
@@ -256,7 +283,9 @@ struct DropsListView: View {
         }
 
         // Load ALL campaigns (not filtered) for the "All" tab
-        let cached = await navigation.minerManager.dataCoordinator.allCampaigns()
+        let cached = await navigation.minerManager.dataCoordinator.allCampaigns(
+            preferSteamArtwork: Settings.shared.preferSteamArtwork
+        )
         await MainActor.run {
             if !cached.isEmpty {
                 withAnimation(.easeInOut(duration: 0.2)) {
@@ -268,7 +297,9 @@ struct DropsListView: View {
 
         await navigation.minerManager.dataCoordinator.refreshAll()
         // Load ALL campaigns after refresh (not filtered)
-        let refreshed = await navigation.minerManager.dataCoordinator.allCampaigns()
+        let refreshed = await navigation.minerManager.dataCoordinator.allCampaigns(
+            preferSteamArtwork: Settings.shared.preferSteamArtwork
+        )
 
         await MainActor.run {
             if !refreshed.isEmpty || campaigns.isEmpty {
@@ -336,7 +367,10 @@ private struct CampaignDeckCard: View {
     let campaign: CampaignViewData
     let state: CampaignCardState
     let queueWatchers: [String]
+    var onSteamIdSet: ((String) async -> Void)?
     @State private var isHovered = false
+    @State private var showingSteamIdPopover = false
+    @State private var steamIdDraft = ""
 
     private var shownDrops: [DropViewData] {
         Array(campaign.drops.prefix(3))
@@ -430,6 +464,25 @@ private struct CampaignDeckCard: View {
         .animation(.easeInOut(duration: 0.18), value: isHovered)
         .onHover { hovering in
             isHovered = hovering
+        }
+        .contextMenu {
+            Button("Set Steam App ID…") {
+                steamIdDraft = ""
+                showingSteamIdPopover = true
+            }
+        }
+        .popover(isPresented: $showingSteamIdPopover, arrowEdge: .bottom) {
+            SteamIdInputPopover(
+                gameName: campaign.gameName,
+                appId: $steamIdDraft,
+                onConfirm: {
+                    showingSteamIdPopover = false
+                    let id = steamIdDraft.trimmingCharacters(in: .whitespaces)
+                    guard !id.isEmpty else { return }
+                    Task { await onSteamIdSet?(id) }
+                },
+                onCancel: { showingSteamIdPopover = false }
+            )
         }
     }
 
@@ -965,6 +1018,38 @@ private extension TimeInterval {
         }
 
         return "\(minutes)m left"
+    }
+}
+
+// MARK: - Steam ID Input Popover
+
+private struct SteamIdInputPopover: View {
+    let gameName: String
+    @Binding var appId: String
+    let onConfirm: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Set Steam App ID")
+                .font(.headline)
+            Text("Override artwork lookup for \"\(gameName)\"")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            TextField("App ID (e.g. 2073850)", text: $appId)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 260)
+            HStack {
+                Button("Cancel", action: onCancel)
+                Spacer()
+                Button("Set") { onConfirm() }
+                    .keyboardShortcut(.return)
+                    .disabled(appId.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(16)
+        .frame(width: 300)
     }
 }
 

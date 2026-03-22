@@ -194,3 +194,165 @@ extension MaterialEmptyStatePanel where Actions == EmptyView {
         }
     }
 }
+
+struct GlassSelectionItem<ID: Hashable>: Identifiable {
+    let id: ID
+    let title: String
+    let systemImage: String
+}
+
+private struct GlassSelectionFramePreferenceKey: PreferenceKey {
+    nonisolated(unsafe) static let defaultValue: [AnyHashable: CGRect] = [:]
+
+    static func reduce(value: inout [AnyHashable: CGRect], nextValue: () -> [AnyHashable: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+    }
+}
+
+struct GlassSelectionControl<ID: Hashable, ItemContent: View>: View {
+    let items: [GlassSelectionItem<ID>]
+    @Binding var selection: ID
+    var axis: Axis
+    var itemSpacing: CGFloat
+    var padding: CGFloat
+    var contentInsets: EdgeInsets
+    var selectedCornerRadius: CGFloat
+    var fillsAvailableSpace: Bool
+    var showsContainer: Bool
+    @ViewBuilder var itemContent: (GlassSelectionItem<ID>, Bool) -> ItemContent
+
+    @Namespace private var selectionNamespace
+    @State private var itemFrames: [AnyHashable: CGRect] = [:]
+
+    private let coordinateSpaceName = "GlassSelectionControlSpace"
+
+    init(
+        items: [GlassSelectionItem<ID>],
+        selection: Binding<ID>,
+        axis: Axis = .horizontal,
+        itemSpacing: CGFloat = 10,
+        padding: CGFloat = 6,
+        contentInsets: EdgeInsets = EdgeInsets(top: 10, leading: 14, bottom: 10, trailing: 14),
+        selectedCornerRadius: CGFloat = 18,
+        fillsAvailableSpace: Bool = true,
+        showsContainer: Bool = true,
+        @ViewBuilder itemContent: @escaping (GlassSelectionItem<ID>, Bool) -> ItemContent
+    ) {
+        self.items = items
+        self._selection = selection
+        self.axis = axis
+        self.itemSpacing = itemSpacing
+        self.padding = padding
+        self.contentInsets = contentInsets
+        self.selectedCornerRadius = selectedCornerRadius
+        self.fillsAvailableSpace = fillsAvailableSpace
+        self.showsContainer = showsContainer
+        self.itemContent = itemContent
+    }
+
+    var body: some View {
+        selectionBody
+            .coordinateSpace(name: coordinateSpaceName)
+            .onPreferenceChange(GlassSelectionFramePreferenceKey.self) { frames in
+                itemFrames = frames
+            }
+            .contentShape(Rectangle())
+            .simultaneousGesture(dragSelectionGesture)
+            .animation(.spring(response: 0.32, dampingFraction: 0.82), value: selection)
+    }
+
+    @ViewBuilder
+    private var stack: some View {
+        switch axis {
+        case .horizontal:
+            HStack(spacing: itemSpacing) {
+                itemButtons
+            }
+        case .vertical:
+            VStack(spacing: itemSpacing) {
+                itemButtons
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var selectionBody: some View {
+        if showsContainer {
+            stack
+                .padding(padding)
+                .glassControlSurface(cornerRadius: axis == .horizontal ? 26 : 24)
+        } else {
+            stack
+                .padding(padding)
+        }
+    }
+
+    private var itemButtons: some View {
+        ForEach(items) { item in
+            let isSelected = selection == item.id
+            Button {
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
+                    selection = item.id
+                }
+            } label: {
+                itemContent(item, isSelected)
+                    .frame(maxWidth: fillsAvailableSpace ? .infinity : nil, alignment: .leading)
+                    .padding(contentInsets)
+                    .background {
+                        if isSelected {
+                            RoundedRectangle(cornerRadius: selectedCornerRadius, style: .continuous)
+                                .fill(.ultraThinMaterial)
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: selectedCornerRadius, style: .continuous)
+                                        .strokeBorder(Color.white.opacity(0.28), lineWidth: 1)
+                                }
+                                .shadow(color: .white.opacity(0.12), radius: 10, y: -1)
+                                .shadow(color: .black.opacity(0.10), radius: 12, y: 5)
+                                .matchedGeometryEffect(id: "selection", in: selectionNamespace)
+                        }
+                    }
+            }
+            .buttonStyle(.plain)
+            .background {
+                GeometryReader { proxy in
+                    Color.clear.preference(
+                        key: GlassSelectionFramePreferenceKey.self,
+                        value: [AnyHashable(item.id): proxy.frame(in: .named(coordinateSpaceName))]
+                    )
+                }
+            }
+        }
+    }
+
+    private var dragSelectionGesture: some Gesture {
+        DragGesture(minimumDistance: 0, coordinateSpace: .named(coordinateSpaceName))
+            .onChanged { value in
+                guard let target = nearestItem(to: value.location) else { return }
+                guard target != selection else { return }
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.84)) {
+                    selection = target
+                }
+            }
+    }
+
+    private func nearestItem(to location: CGPoint) -> ID? {
+        if let containing = items.first(where: { item in
+            itemFrames[AnyHashable(item.id)]?.contains(location) == true
+        }) {
+            return containing.id
+        }
+
+        return items.min(by: { lhs, rhs in
+            guard let lhsFrame = itemFrames[AnyHashable(lhs.id)],
+                  let rhsFrame = itemFrames[AnyHashable(rhs.id)] else {
+                return false
+            }
+
+            let lhsCenter = CGPoint(x: lhsFrame.midX, y: lhsFrame.midY)
+            let rhsCenter = CGPoint(x: rhsFrame.midX, y: rhsFrame.midY)
+            let lhsDistance = hypot(lhsCenter.x - location.x, lhsCenter.y - location.y)
+            let rhsDistance = hypot(rhsCenter.x - location.x, rhsCenter.y - location.y)
+            return lhsDistance < rhsDistance
+        })?.id
+    }
+}
