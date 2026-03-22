@@ -27,7 +27,7 @@ targets:
     platform: macOS
     deploymentTarget: "26.0"
     sources:
-      - path: Sources/SwiftTwitchMinerApp
+      - path: Sources/SwiftMiner
         excludes:
           - Info.plist
       - path: SwiftMiner.icon
@@ -38,7 +38,7 @@ targets:
       - package: Sparkle
         product: Sparkle
     info:
-      path: Sources/SwiftTwitchMinerApp/Info.plist
+      path: Sources/SwiftMiner/Info.plist
       properties:
         CFBundleIconFile: SwiftMiner
     settings:

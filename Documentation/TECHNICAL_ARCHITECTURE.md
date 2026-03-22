@@ -313,7 +313,7 @@ SwiftMiner/
     │       ├── Logger.swift              Lightweight logger utility
     │       └── RateLimiter.swift         Token bucket rate limiter (actor)
     │
-    ├── SwiftTwitchMinerApp/              SwiftMiner app source — SwiftUI layer
+    ├── SwiftMiner/                       SwiftMiner app source — SwiftUI layer
     │   ├── MinerApp.swift                @main App, MenuBarExtra, WindowGroup
     │   ├── NavigationModel.swift         Navigation state + log store (@MainActor)
     │   ├── MinerLoginService.swift       Add Account auth state machine (@MainActor)
