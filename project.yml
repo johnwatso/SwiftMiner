@@ -49,7 +49,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.swifttwitchminer.app
         MACOSX_DEPLOYMENT_TARGET: "26.0"
         MARKETING_VERSION: "2026.3.22"
-        CURRENT_PROJECT_VERSION: "20260322.14"
+        CURRENT_PROJECT_VERSION: "2026032214"
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: SwiftMiner
         INFOPLIST_KEY_CFBundleName: SwiftMiner
