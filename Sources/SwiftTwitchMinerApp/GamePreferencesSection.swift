@@ -148,7 +148,9 @@ struct GameSearchField: View {
     @MainActor
     private func refreshAvailableGames() async {
         isLoadingGames = true
-        let campaigns = await minerManager.dataCoordinator.currentCampaigns()
+        let campaigns = await minerManager.dataCoordinator.currentCampaigns(
+            preferSteamArtwork: Settings.shared.preferSteamArtwork
+        )
         availableGames = uniqueGames(from: campaigns)
         hasLoadedGames = true
         isLoadingGames = false

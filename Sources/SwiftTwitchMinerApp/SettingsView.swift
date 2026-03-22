@@ -5,39 +5,87 @@ import SwiftTwitchMiner
 struct SettingsView: View {
     @StateObject private var settings = Settings.shared
     @Environment(NavigationModel.self) private var navigation
+    @State private var selectedTab: SettingsTab = .general
+
+    private var items: [GlassSelectionItem<SettingsTab>] {
+        SettingsTab.allCases.map {
+            GlassSelectionItem(id: $0, title: $0.title, systemImage: $0.systemImage)
+        }
+    }
     
     var body: some View {
         ZStack {
             LiquidGlassBackdrop()
 
-            TabView {
-                GeneralSettingsView(settings: settings)
-                    .tabItem {
-                        Label("General", systemImage: "gearshape")
+            VStack(spacing: 16) {
+                GlassSelectionControl(
+                    items: items,
+                    selection: $selectedTab,
+                    itemSpacing: 8,
+                    padding: 0,
+                    contentInsets: EdgeInsets(top: 10, leading: 10, bottom: 8, trailing: 10),
+                    selectedCornerRadius: 10,
+                    fillsAvailableSpace: true,
+                    showsContainer: false
+                ) { item, isSelected in
+                    VStack(spacing: 6) {
+                        Image(systemName: item.systemImage)
+                            .font(.system(size: 16, weight: .semibold))
+                        Text(item.title)
+                            .font(.system(size: 12, weight: isSelected ? .semibold : .medium))
+                            .lineLimit(1)
                     }
-                    .tag("general")
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                }
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(Color.primary.opacity(0.12))
+                        .frame(height: 1)
+                }
 
-                AccountSettingsView(navigation: navigation)
-                    .tabItem {
-                        Label("Accounts", systemImage: "person.2")
+                Group {
+                    switch selectedTab {
+                    case .general:
+                        GeneralSettingsView(settings: settings)
+                    case .accounts:
+                        AccountSettingsView(navigation: navigation)
+                    case .mining:
+                        MiningSettingsView(settings: settings)
+                    case .advanced:
+                        AdvancedSettingsView(settings: settings)
                     }
-                    .tag("accounts")
-
-                MiningSettingsView(settings: settings)
-                    .tabItem {
-                        Label("Mining", systemImage: "hammer")
-                    }
-                    .tag("mining")
-
-                AdvancedSettingsView(settings: settings)
-                    .tabItem {
-                        Label("Advanced", systemImage: "gearshape.2")
-                    }
-                    .tag("advanced")
+                }
             }
             .padding(20)
         }
         .frame(width: 500, height: 500)
+    }
+}
+
+private enum SettingsTab: String, CaseIterable, Hashable {
+    case general
+    case accounts
+    case mining
+    case advanced
+
+    var title: String {
+        switch self {
+        case .general: return "General"
+        case .accounts: return "Accounts"
+        case .mining: return "Mining"
+        case .advanced: return "Advanced"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .general: return "gearshape"
+        case .accounts: return "person.2"
+        case .mining: return "hammer"
+        case .advanced: return "gearshape.2"
+        }
     }
 }
 
@@ -58,6 +106,14 @@ private struct GeneralSettingsView: View {
                 Text("Application")
             }
             
+            Section {
+                Toggle("Use Steam artwork for game images", isOn: $settings.preferSteamArtwork)
+            } header: {
+                Text("Artwork")
+            } footer: {
+                Text("Fetches portrait artwork from Steam CDN. Falls back to Twitch artwork when a game is not found on Steam.")
+            }
+
             Section {
                 Toggle("Show notifications when drops are claimed", isOn: $settings.showClaimNotifications)
                     .onChange(of: settings.showClaimNotifications) { _, newValue in
