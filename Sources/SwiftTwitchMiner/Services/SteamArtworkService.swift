@@ -68,6 +68,24 @@ public actor SteamArtworkService {
         }
         return URL(string: "\(steamCDNBaseURL)\(appId)/header.jpg")
     }
+
+    /// Get the Steam library hero banner URL (landscape, typically the freshest artwork).
+    /// Tries the 2× retina version first, falls back to 1×.
+    /// Returns nil if neither exists on the CDN.
+    public func heroURL(for gameName: String) async -> URL? {
+        guard let appId = await lookupAppId(for: gameName) else { return nil }
+        // Prefer 2× retina; fall back to 1×
+        let candidates = [
+            "\(steamCDNBaseURL)\(appId)/library_hero_2x.jpg",
+            "\(steamCDNBaseURL)\(appId)/library_hero.jpg"
+        ]
+        for urlString in candidates {
+            if let url = URL(string: urlString), await cdnURLExists(urlString) {
+                return url
+            }
+        }
+        return nil
+    }
     
     /// Clear the lookup cache (useful for testing or memory pressure)
     public func clearCache() {
@@ -197,10 +215,14 @@ public actor SteamArtworkService {
         return nil
     }
 
-    /// Returns true if the Steam CDN portrait image (library_600x900.jpg) is accessible.
-    /// Prevents storing a URL that would silently 404 in the UI, replacing good Twitch artwork with nothing.
+    /// Returns true if a Steam CDN portrait image (library_600x900.jpg) is accessible for this appId.
     private func cdnPortraitExists(appId: String) async -> Bool {
-        guard let url = URL(string: "\(steamCDNBaseURL)\(appId)/library_600x900.jpg") else { return false }
+        await cdnURLExists("\(steamCDNBaseURL)\(appId)/library_600x900.jpg")
+    }
+
+    /// Returns true if any Steam CDN URL returns HTTP 200.
+    private func cdnURLExists(_ urlString: String) async -> Bool {
+        guard let url = URL(string: urlString) else { return false }
         var request = URLRequest(url: url)
         request.httpMethod = "HEAD"
         request.timeoutInterval = 5

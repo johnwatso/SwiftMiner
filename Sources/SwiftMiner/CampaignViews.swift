@@ -76,28 +76,54 @@ struct CampaignRowView: View {
 /// Detail panel showing the drops for a selected campaign.
 struct CampaignDetailView: View {
     let campaign: CampaignViewData
+    @Environment(NavigationModel.self) private var navigation
+    @ObservedObject private var settings = Settings.shared
+
+    private var bannerURL: URL? {
+        guard settings.preferSteamArtwork else { return nil }
+        return navigation.minerManager.dataCoordinator.steamHeroOverrides[campaign.gameName]
+    }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                campaignHeader
+        ZStack {
+            if let bannerURL {
+                AsyncImage(url: bannerURL) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .blur(radius: 40, opaque: true)
+                        .opacity(0.4)
+                        .overlay {
+                            Color.black.opacity(0.2)
+                        }
+                } placeholder: {
+                    Color.clear
+                }
+                .ignoresSafeArea()
+            }
 
-                if campaign.drops.isEmpty {
-                    MaterialEmptyStatePanel(
-                        "No drops available",
-                        systemImage: "gift.slash",
-                        description: "This campaign doesn’t have any drop items to display yet."
-                    )
-                    .frame(maxWidth: .infinity)
-                } else {
-                    VStack(spacing: 12) {
-                        ForEach(campaign.drops) { drop in
-                            DropRowView(drop: drop, fallbackURL: campaign.artworkURL)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    campaignHeader
+
+                    if campaign.drops.isEmpty {
+                        MaterialEmptyStatePanel(
+                            "No drops available",
+                            systemImage: "gift.slash",
+                            description: "This campaign doesn’t have any drop items to display yet."
+                        )
+                        .frame(maxWidth: .infinity)
+                    } else {
+                        VStack(spacing: 12) {
+                            ForEach(campaign.drops) { drop in
+                                DropRowView(drop: drop, fallbackURL: campaign.artworkURL)
+                            }
                         }
                     }
                 }
+                .padding(24)
             }
-            .padding(24)
         }
         .navigationTitle(campaign.gameName)
     }

@@ -474,7 +474,7 @@ struct OverviewView: View {
                 progressText: detail,
                 progressPercent: 0,
                 artworkURL: nil,
-                tint: .green,
+                tint: .cyan,
                 hasOnlyBadgesOrEmotes: false,
                 visualState: .idle,
                 watchers: watchers,
@@ -1182,13 +1182,26 @@ private struct CampaignFeedCard: View {
     let prominence: CampaignCardProminence
     @State private var isHovering = false
 
+    private var usesStandbyMotionStyle: Bool {
+        item.isPlaceholder && item.showsLiveMotion
+    }
+
     var body: some View {
         ZStack(alignment: .bottomLeading) {
-            CampaignArtworkBackground(url: item.artworkURL, tint: item.tint)
+            CampaignArtworkBackground(
+                url: item.artworkURL,
+                tint: item.tint,
+                useGhostArtworkPlaceholder: usesStandbyMotionStyle
+            )
 
             if item.showsLiveMotion {
-                CampaignCardMotionOverlay(tint: item.tint)
-                    .opacity(0.5)
+                if usesStandbyMotionStyle {
+                    CampaignStandbyMotionOverlay(tint: item.tint)
+                        .opacity(0.68)
+                } else {
+                    CampaignCardMotionOverlay(tint: item.tint)
+                        .opacity(0.5)
+                }
             }
 
             LinearGradient(
@@ -1204,15 +1217,29 @@ private struct CampaignFeedCard: View {
 
             Rectangle()
                 .fill(
-                    LinearGradient(
-                        colors: [
-                            item.tint.opacity(0),
-                            item.tint.opacity(0.08),
-                            item.tint.opacity(0.18)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
+                    usesStandbyMotionStyle
+                        ? AnyShapeStyle(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(0),
+                                    Color.white.opacity(0.012),
+                                    Color.black.opacity(0.08)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        : AnyShapeStyle(
+                            LinearGradient(
+                                colors: [
+                                    item.tint.opacity(0),
+                                    item.tint.opacity(0.08),
+                                    item.tint.opacity(0.18)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
                 )
                 .mask(alignment: .bottom) {
                     LinearGradient(
@@ -1231,12 +1258,32 @@ private struct CampaignFeedCard: View {
                 if !item.campaignName.isEmpty {
                     Text(item.campaignName)
                         .font(.caption)
-                        .foregroundStyle(.white.opacity(0.78))
+                        .foregroundStyle(.white.opacity(usesStandbyMotionStyle ? 0.44 : 0.78))
                         .lineLimit(2)
                 }
             }
-            .padding(14)
+            .padding(.horizontal, 14)
+            .padding(.top, 12)
+            .padding(.bottom, 16)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .background(alignment: .bottomLeading) {
+                // Material slab treatment for all cards
+                if usesStandbyMotionStyle {
+                    Rectangle()
+                        .fill(.ultraThinMaterial.opacity(0.6))
+                        .overlay(alignment: .top) {
+                            Color.white.opacity(0.1)
+                                .frame(height: 1)
+                        }
+                } else {
+                    Rectangle()
+                        .fill(.thinMaterial.opacity(0.35))
+                        .overlay(alignment: .top) {
+                            Color.white.opacity(0.08)
+                                .frame(height: 1)
+                        }
+                }
+            }
         }
         .frame(width: prominence.size.width, height: prominence.size.height, alignment: .topLeading)
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
@@ -1250,6 +1297,7 @@ private struct CampaignFeedCard: View {
         .scaleEffect(isHovering ? 1.03 : 1)
         .shadow(color: .black.opacity(isHovering ? 0.16 : 0.08), radius: isHovering ? 18 : 10, y: isHovering ? 10 : 6)
         .animation(.easeInOut(duration: 0.2), value: isHovering)
+        .animation(.easeInOut(duration: 0.7), value: usesStandbyMotionStyle)
         .onHover { hovering in
             isHovering = hovering
         }
@@ -1280,6 +1328,109 @@ private struct CampaignCardMotionOverlay: View {
                 )
             }
         }
+        .blendMode(.screen)
+    }
+}
+
+private struct CampaignStandbyMotionOverlay: View {
+    let tint: Color
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1 / 24, paused: false)) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            
+            // Hue cycling (full cycle every 30s)
+            let hueBase = (t * 0.033).truncatingRemainder(dividingBy: 1.0)
+            
+            // Noticeable but smooth multi-sinusoidal drift
+            let driftX = 70 * sin(t * 0.12) + 30 * cos(t * 0.18)
+            let driftY = 30 * cos(t * 0.08) + 15 * sin(t * 0.15)
+            
+            // Dynamic colors cycling through hues - boosted saturation and brightness for "fun" look
+            let color1 = Color(hue: hueBase, saturation: 0.85, brightness: 0.95)
+            let color2 = Color(hue: (hueBase + 0.33).truncatingRemainder(dividingBy: 1.0), saturation: 0.80, brightness: 0.90)
+            let color3 = Color(hue: (hueBase + 0.66).truncatingRemainder(dividingBy: 1.0), saturation: 0.75, brightness: 0.85)
+            let highlight = Color(hue: (hueBase + 0.15).truncatingRemainder(dividingBy: 1.0), saturation: 0.50, brightness: 1.0)
+
+            ZStack {
+                // Background base - deeper version of the primary cycling color
+                Color(hue: hueBase, saturation: 0.90, brightness: 0.30)
+
+                // 3 Overlapping vibrant soft shapes cycling colors
+                GhostArtworkShape(color: color1.opacity(0.7), size: CGSize(width: 280, height: 240))
+                    .offset(
+                        x: -80 + driftX * 0.7,
+                        y: -40 + driftY * 0.9
+                    )
+                    .scaleEffect(1.0 + 0.06 * sin(t * 0.14))
+
+                GhostArtworkShape(color: color2.opacity(0.6), size: CGSize(width: 220, height: 260))
+                    .offset(
+                        x: 20 + driftX,
+                        y: 30 + driftY * 1.1
+                    )
+                    .scaleEffect(1.0 - 0.04 * cos(t * 0.11))
+
+                GhostArtworkShape(color: color3.opacity(0.55), size: CGSize(width: 240, height: 200))
+                    .offset(
+                        x: 90 + driftX * 1.3,
+                        y: 70 + driftY * 1.4
+                    )
+                    .scaleEffect(1.0 + 0.03 * sin(t * 0.09))
+                
+                // Extra warm "light leak" highlight
+                GhostArtworkShape(color: highlight.opacity(0.22), size: CGSize(width: 200, height: 160))
+                    .offset(
+                        x: 40 + 50 * sin(t * 0.08),
+                        y: -60 + 40 * cos(t * 0.06)
+                    )
+                    .blur(radius: 60)
+
+                // Depth & Polish
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.18), // Glass top highlight
+                        .clear,
+                        Color.black.opacity(0.25)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .blendMode(.overlay)
+
+                // Subtle vignette
+                RadialGradient(
+                    colors: [.clear, Color.black.opacity(0.15)],
+                    center: .center,
+                    startRadius: 90,
+                    endRadius: 320
+                )
+                .blendMode(.multiply)
+            }
+        }
+        .mask {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+        }
+        .blendMode(.screen)
+    }
+}
+
+private struct GhostArtworkShape: View {
+    let color: Color
+    let size: CGSize
+
+    var body: some View {
+        UnevenRoundedRectangle(
+            topLeadingRadius: size.width * 0.34,
+            bottomLeadingRadius: size.width * 0.18,
+            bottomTrailingRadius: size.width * 0.32,
+            topTrailingRadius: size.width * 0.12,
+            style: .continuous
+        )
+        .fill(color)
+        .frame(width: size.width, height: size.height)
+        .rotationEffect(.degrees(-18))
+        .blur(radius: 42)
         .blendMode(.screen)
     }
 }
@@ -1382,30 +1533,80 @@ private struct CampaignStateBadge: View {
 private struct CampaignArtworkBackground: View {
     let url: URL?
     let tint: Color
+    var useGhostArtworkPlaceholder = false
 
     var body: some View {
         ZStack {
+            placeholder
+
             if let url {
-                AsyncImage(url: url.overviewHighResolutionArtworkURL) { image in
-                    image
-                        .resizable()
-                        .interpolation(.high)
-                        .scaledToFill()
-                } placeholder: {
-                    placeholder
+                AsyncImage(
+                    url: url.overviewHighResolutionArtworkURL,
+                    transaction: Transaction(animation: .easeInOut(duration: 0.55))
+                ) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .interpolation(.high)
+                            .scaledToFill()
+                            .transition(.opacity.combined(with: .scale(scale: 1.02)))
+                    case .empty:
+                        Color.clear
+                    case .failure:
+                        Color.clear
+                    @unknown default:
+                        Color.clear
+                    }
                 }
-            } else {
-                placeholder
             }
         }
+        .animation(.easeInOut(duration: 0.55), value: url)
     }
 
     private var placeholder: some View {
-        LinearGradient(
-            colors: [tint.opacity(0.85), tint.opacity(0.45), Color.black.opacity(0.45)],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
+        Group {
+            if useGhostArtworkPlaceholder {
+                ZStack {
+                    // Match the deeper base
+                    Color(red: 0.12, green: 0.11, blue: 0.28)
+
+                    GhostArtworkShape(color: Color(hue: 0.0, saturation: 0.85, brightness: 0.95).opacity(0.5), size: CGSize(width: 250, height: 210))
+                        .offset(x: -70, y: 8)
+
+                    GhostArtworkShape(color: Color(hue: 0.33, saturation: 0.80, brightness: 0.90).opacity(0.45), size: CGSize(width: 184, height: 244))
+                        .offset(x: 8, y: 48)
+
+                    GhostArtworkShape(color: Color(hue: 0.66, saturation: 0.75, brightness: 0.85).opacity(0.4), size: CGSize(width: 208, height: 154))
+                        .offset(x: 102, y: 94)
+
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.15),
+                            Color.clear,
+                            Color.black.opacity(0.18)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    .blendMode(.overlay)
+
+                    RadialGradient(
+                        colors: [.clear, Color.black.opacity(0.12)],
+                        center: .center,
+                        startRadius: 60,
+                        endRadius: 280
+                    )
+                    .blendMode(.multiply)
+                }
+            } else {
+                LinearGradient(
+                    colors: [tint.opacity(0.85), tint.opacity(0.45), Color.black.opacity(0.45)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            }
+        }
     }
 }
 
