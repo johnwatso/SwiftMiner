@@ -48,6 +48,10 @@ public final class Settings: ObservableObject {
     @AppStorage("syncMinersState")
     public var syncMinersState: Bool = true
 
+    /// Whether to use Steam CDN artwork instead of Twitch game artwork
+    @AppStorage("preferSteamArtwork")
+    public var preferSteamArtwork: Bool = false
+
     /// Whether to run in background when window is closed
     @AppStorage("runInBackground")
     public var runInBackground: Bool = true
@@ -361,6 +365,7 @@ public final class Settings: ObservableObject {
         hasDismissedOnboarding = false
         gamePreferencesData = "[]"
         miningStrategy = .mineAll
+        preferSteamArtwork = false
     }
 }
 

@@ -70,14 +70,13 @@ public actor DropsService {
     /// Drops never disappear — state drives display, not presence.
     public func fetchDropStates(for accountId: String) async throws -> [DropState] {
         let campaigns = try await fetchCampaigns()
-        let fetchedSnapshot = try? await inventoryService.fetchInventory()
-        let cachedSnapshot: InventorySnapshot?
+        // Fetch inventory once with fallback to cached snapshot
+        let snapshot: InventorySnapshot
         do {
-            cachedSnapshot = try await inventoryService.fetchInventory()
+            snapshot = try await inventoryService.fetchInventory()
         } catch {
-            cachedSnapshot = await inventoryService.currentSnapshot()
+            snapshot = await inventoryService.currentSnapshot() ?? .empty(accountId: accountId)
         }
-        let snapshot = fetchedSnapshot ?? cachedSnapshot ?? .empty(accountId: accountId)
         let enriched = Self.mergeInventory(snapshot, into: campaigns)
 
         return enriched.flatMap { campaign in
@@ -214,14 +213,13 @@ public actor DropsService {
     /// Get overall progress across all campaigns
     public func getOverallProgress() async throws -> OverallProgress {
         let campaigns = try await fetchCampaigns()
-        let fetchedSnapshot = try? await inventoryService.fetchInventory()
-        let cachedSnapshot: InventorySnapshot?
+        // Fetch inventory once with fallback to cached snapshot
+        let snapshot: InventorySnapshot
         do {
-            cachedSnapshot = try await inventoryService.fetchInventory()
+            snapshot = try await inventoryService.fetchInventory()
         } catch {
-            cachedSnapshot = await inventoryService.currentSnapshot()
+            snapshot = await inventoryService.currentSnapshot() ?? .empty(accountId: "")
         }
-        let snapshot = fetchedSnapshot ?? cachedSnapshot ?? .empty(accountId: "")
         let enriched = Self.mergeInventory(snapshot, into: campaigns)
 
         let activeCampaigns = enriched.filter { $0.isTimeActive }

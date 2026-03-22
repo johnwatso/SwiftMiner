@@ -83,7 +83,7 @@ struct EventsView: View {
                 MaterialEmptyStatePanel(
                     "No Events",
                     systemImage: "bell.slash",
-                    description: "Activity will appear here as it happens."
+                    description: "Start a miner to see mining events here."
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(28)
@@ -234,7 +234,7 @@ struct OverviewView: View {
 
     private var metricsSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            sectionHeading("Live Stats", subtitle: "A lighter snapshot of miner activity across the dashboard.")
+            sectionHeading("Live Stats", subtitle: "Real-time summary of your mining activity.")
 
             LazyVGrid(
                 columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: 3),
@@ -406,7 +406,7 @@ struct OverviewView: View {
             eyebrow: eyebrowText(for: campaign, section: section, state: state),
             progressText: campaignDetailText(for: campaign, section: section, state: state),
             progressPercent: campaignProgressPercent(for: campaign),
-            artworkURL: campaign.game.boxArtURL,
+            artworkURL: navigation.minerManager.dataCoordinator.steamArtworkOverrides[campaign.game.name] ?? campaign.game.boxArtURL,
             tint: tintColor(for: campaign),
             hasOnlyBadgesOrEmotes: campaign.hasOnlyBadgesOrEmotes,
             visualState: state,
@@ -831,7 +831,7 @@ struct OverviewView: View {
 
     private var campaignSummarySection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            sectionHeading("Campaign Progress", subtitle: "A lighter row-based view for campaigns that still need attention.")
+            sectionHeading("Campaign Progress", subtitle: "Campaigns with drops still to earn.")
 
             if campaignLibraryItems.isEmpty {
                 CampaignLibraryAmbientRow()
@@ -1056,7 +1056,7 @@ private struct CampaignLibraryAmbientRow: View {
                 Text("No active campaigns yet")
                     .font(.headline)
 
-                Text("Active drop campaigns will appear here once your miner is running.")
+                Text("Start mining to see your active drop campaigns.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

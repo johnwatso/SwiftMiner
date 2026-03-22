@@ -107,6 +107,28 @@ public struct CampaignViewData: Codable, Sendable, Identifiable, Equatable {
     public var showsInClaimedTab: Bool { tabVisibility.contains(.claimed) }
     public var showsInAllTab: Bool { tabVisibility.contains(.all) }
 
+    /// Returns a copy of this campaign with a different artwork URL.
+    public func withArtworkURL(_ url: URL?) -> CampaignViewData {
+        CampaignViewData(
+            id: id,
+            gameName: gameName,
+            campaignName: campaignName,
+            artworkURL: url,
+            progress: progress,
+            isClaimed: isClaimed,
+            dropsClaimed: dropsClaimed,
+            totalDrops: totalDrops,
+            timeRemaining: timeRemaining,
+            status: status,
+            miningStatus: miningStatus,
+            relevance: relevance,
+            startDate: startDate,
+            endDate: endDate,
+            drops: drops,
+            accountStates: accountStates
+        )
+    }
+
     public init(
         id: String,
         gameName: String,

@@ -756,7 +756,8 @@ public actor TwitchAPIClient {
         urlRequest.setValue(authHeader, forHTTPHeaderField: "Authorization")
         urlRequest.setValue(clientId, forHTTPHeaderField: "Client-Id")
         urlRequest.setValue("application/json; charset=UTF-8", forHTTPHeaderField: "Content-Type")
-        urlRequest.setValue(Self.androidUserAgent, forHTTPHeaderField: "User-Agent")
+        // TEMPORARY TEST: Using desktop Safari User-Agent to test if Android UA is being throttled
+        urlRequest.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15", forHTTPHeaderField: "User-Agent")
         urlRequest.setValue("*/*", forHTTPHeaderField: "Accept")
         urlRequest.setValue("en-US", forHTTPHeaderField: "Accept-Language")
         urlRequest.setValue("https://www.twitch.tv", forHTTPHeaderField: "Origin")
@@ -792,7 +793,8 @@ public actor TwitchAPIClient {
         request.setValue("OAuth \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue(clientId, forHTTPHeaderField: "Client-Id")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(Self.androidUserAgent, forHTTPHeaderField: "User-Agent")
+        // Use same User-Agent as GQL requests for consistency
+        request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15", forHTTPHeaderField: "User-Agent")
         request.setValue("https://www.twitch.tv", forHTTPHeaderField: "Origin")
         request.setValue("https://www.twitch.tv", forHTTPHeaderField: "Referer")
 

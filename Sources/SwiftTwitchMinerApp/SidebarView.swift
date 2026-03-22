@@ -11,32 +11,59 @@ import SwiftTwitchMiner
 struct SidebarView: View {
     @Environment(NavigationModel.self) private var navigation
 
+    private var sidebarItems: [GlassSelectionItem<NavigationModel.SidebarItem>] {
+        [
+            GlassSelectionItem(id: .overview, title: "Overview", systemImage: "house.fill"),
+            GlassSelectionItem(id: .activity, title: "Activity", systemImage: "chart.bar.fill"),
+            GlassSelectionItem(id: .drops, title: "Drops", systemImage: "gamecontroller.fill"),
+            GlassSelectionItem(id: .events, title: "Events", systemImage: "bell.fill")
+        ]
+    }
+
+    private var selectionBinding: Binding<NavigationModel.SidebarItem> {
+        Binding(
+            get: { navigation.selectedItem ?? .overview },
+            set: { navigation.selectedItem = $0 }
+        )
+    }
+
     var body: some View {
-        @Bindable var nav = navigation
         ZStack {
             SidebarMaterialBackground()
 
-            List(selection: $nav.selectedItem) {
-                Label("Overview", systemImage: "house.fill")
-                    .tag(NavigationModel.SidebarItem.overview)
+            VStack(alignment: .leading, spacing: 0) {
+                GlassSelectionControl(
+                    items: sidebarItems,
+                    selection: selectionBinding,
+                    axis: .vertical,
+                    itemSpacing: 2,
+                    padding: 0,
+                    contentInsets: EdgeInsets(top: 6, leading: 10, bottom: 6, trailing: 10),
+                    selectedCornerRadius: 10,
+                    fillsAvailableSpace: true,
+                    showsContainer: false
+                ) { item, isSelected in
+                    HStack(spacing: 12) {
+                        Image(systemName: item.systemImage)
+                            .font(.system(size: 14, weight: .semibold))
+                            .frame(width: 18)
 
-                Label("Activity", systemImage: "chart.bar.fill")
-                    .tag(NavigationModel.SidebarItem.activity)
+                        Text(item.title)
+                            .font(.system(size: 14, weight: isSelected ? .semibold : .medium))
+                    }
+                    .foregroundStyle(.primary)
+                }
 
-                Label("Drops", systemImage: "gamecontroller.fill")
-                    .tag(NavigationModel.SidebarItem.drops)
-
-                Label("Events", systemImage: "bell.fill")
-                    .tag(NavigationModel.SidebarItem.events)
+                Spacer(minLength: 0)
             }
-            .listStyle(.sidebar)
-            .scrollContentBackground(.hidden)
+            .padding(.horizontal, 8)
+            .padding(.top, 8)
         }
         .navigationTitle("SwiftMiner")
         .toolbar {
             ToolbarItemGroup {
                 Button {
-                    nav.showAddAccountSheet = true
+                    navigation.showAddAccountSheet = true
                 } label: {
                     Image(systemName: "person.badge.plus")
                 }
