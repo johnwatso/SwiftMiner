@@ -21,6 +21,13 @@ struct DropsListView: View {
 
     private var miners: [MinerManager.ManagedMiner] { navigation.minerManager.miners }
     private var hasAccounts: Bool { !miners.isEmpty }
+
+    /// Hero URL for a specific campaign — used to pass per-card blurred backdrop.
+    private func heroURL(for campaign: CampaignViewData) -> URL? {
+        guard preferSteamArtwork else { return nil }
+        return navigation.minerManager.dataCoordinator.steamHeroOverrides[campaign.gameName]
+    }
+
     private var accountSignature: String {
         miners
             .map { "\($0.id):\($0.accountId)" }
@@ -54,6 +61,7 @@ struct DropsListView: View {
                         ForEach(renderedCampaigns) { campaign in
                             CampaignDeckCard(
                                 campaign: campaign,
+                                heroURL: heroURL(for: campaign),
                                 state: cardState(for: campaign),
                                 queueWatchers: queuedMinerNames(for: campaign),
                                 onSteamIdSet: { appId in
@@ -67,7 +75,6 @@ struct DropsListView: View {
                     }
                     .padding(24)
                 }
-                .scrollContentBackground(.hidden)
                 .animation(.easeInOut(duration: 0.28), value: renderSignature)
             }
         }
@@ -365,6 +372,7 @@ struct DropsListView: View {
 
 private struct CampaignDeckCard: View {
     let campaign: CampaignViewData
+    var heroURL: URL? = nil
     let state: CampaignCardState
     let queueWatchers: [String]
     var onSteamIdSet: ((String) async -> Void)?
@@ -576,7 +584,22 @@ private struct CampaignDeckCard: View {
         RoundedRectangle(cornerRadius: 28, style: .continuous)
             .fill(.thinMaterial.opacity(0.92))
             .overlay {
-                CampaignBackgroundAccent(url: campaign.artworkURL, tint: state.tint)
+                if let heroURL {
+                    AsyncImage(url: heroURL) { phase in
+                        if let image = phase.image {
+                            image
+                                .resizable()
+                                .scaledToFill()
+                                .blur(radius: 22, opaque: true)
+                                .opacity(0.22)
+                                .transition(.opacity.animation(.easeInOut(duration: 0.5)))
+                        }
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                    .allowsHitTesting(false)
+                } else {
+                    CampaignBackgroundAccent(url: campaign.artworkURL, tint: state.tint)
+                }
             }
             .overlay {
                 RoundedRectangle(cornerRadius: 28, style: .continuous)
