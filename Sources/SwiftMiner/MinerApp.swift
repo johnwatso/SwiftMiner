@@ -90,7 +90,6 @@ struct MinerApp: App {
                 .environment(appModel)
                 .environment(navigation)
                 .environmentObject(updater)
-                .padding()
         }
     }
 

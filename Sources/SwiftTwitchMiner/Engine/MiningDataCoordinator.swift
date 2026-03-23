@@ -132,20 +132,63 @@ public final class MiningDataCoordinator {
     /// Substitutes Steam CDN artwork into a list of campaigns.
     /// Populates `steamArtworkOverrides` (portrait) and `steamHeroOverrides` (hero banner)
     /// so all views can do a sync lookup without an async call.
+    /// 
+    /// Uses TaskGroup for parallel enrichment — significantly faster for multiple campaigns.
     private func enrichWithSteamArtwork(_ campaigns: [CampaignViewData]) async -> [CampaignViewData] {
-        var enriched = campaigns
-        for i in enriched.indices {
-            let gameName = enriched[i].gameName
-            if let url = await SteamArtworkService.shared.portraitURL(for: gameName) {
-                enriched[i] = enriched[i].withArtworkURL(url)
-                steamArtworkOverrides[gameName] = url
+        // Create lookup tables for quick index access
+        let gameNames = campaigns.map { $0.gameName }
+        
+        // Structure to hold enrichment results
+        struct EnrichmentResult {
+            let gameName: String
+            let portraitURL: URL?
+            let heroURL: URL?
+        }
+        
+        // Parallel enrichment using TaskGroup
+        let results: [EnrichmentResult] = await withTaskGroup(of: EnrichmentResult.self) { group in
+            for gameName in gameNames {
+                group.addTask {
+                    async let portrait = SteamArtworkService.shared.portraitURL(for: gameName)
+                    async let hero = SteamArtworkService.shared.heroURL(for: gameName)
+                    return EnrichmentResult(
+                        gameName: gameName,
+                        portraitURL: await portrait,
+                        heroURL: await hero
+                    )
+                }
             }
-            // Fetch hero URL in parallel with portrait — stored separately for blurred backgrounds
-            if let heroURL = await SteamArtworkService.shared.heroURL(for: gameName) {
-                steamHeroOverrides[gameName] = heroURL
+            
+            var results: [EnrichmentResult] = []
+            for await result in group {
+                results.append(result)
+            }
+            return results
+        }
+        
+        // Build lookup dictionaries from results
+        var portraitURLs: [String: URL] = [:]
+        var heroURLs: [String: URL] = [:]
+        for result in results {
+            if let url = result.portraitURL {
+                portraitURLs[result.gameName] = url
+            }
+            if let url = result.heroURL {
+                heroURLs[result.gameName] = url
             }
         }
-        return enriched
+        
+        // Update override caches
+        steamArtworkOverrides.merge(portraitURLs) { _, new in new }
+        steamHeroOverrides.merge(heroURLs) { _, new in new }
+        
+        // Apply to campaigns
+        return campaigns.map { campaign in
+            if let url = portraitURLs[campaign.gameName] {
+                return campaign.withArtworkURL(url)
+            }
+            return campaign
+        }
     }
     
     /// Get eligible campaigns (active, not fully claimed)

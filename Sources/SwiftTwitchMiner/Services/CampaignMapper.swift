@@ -123,6 +123,7 @@ public enum CampaignMapper {
             timeRemaining: timeRemaining,
             status: campaign.status.rawValue,
             miningStatus: miningStatus,
+            isAccountConnected: campaign.isAccountConnected,
             relevance: relevance,
             startDate: campaign.startDate,
             endDate: campaign.endDate,
