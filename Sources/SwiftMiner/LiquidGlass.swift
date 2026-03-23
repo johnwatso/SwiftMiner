@@ -147,12 +147,12 @@ private struct GlassSurfaceModifier: ViewModifier {
 }
 
 enum GlassRadius {
-    static let subtle: CGFloat = 6      // Sidebar, window-adjacent
-    static let small: CGFloat = 8       // Controls, stat cards
-    static let medium: CGFloat = 10     // Cards, content panels
-    static let large: CGFloat = 12      // Featured highlights
-    static let artwork: CGFloat = 14    // Artwork, images
-    static let pill: CGFloat = 999      // Buttons, chips, badges
+    static let subtle: CGFloat = 4      // Sidebar selection, window-adjacent
+    static let small: CGFloat = 6       // Controls, inline panels
+    static let medium: CGFloat = 8      // Cards, content sections
+    static let large: CGFloat = 10      // Featured content
+    static let artwork: CGFloat = 10    // Artwork, images
+    static let pill: CGFloat = 999      // Status badges, fully rounded
 }
 
 extension View {
