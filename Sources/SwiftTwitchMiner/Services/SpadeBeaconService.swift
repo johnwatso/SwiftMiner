@@ -100,6 +100,7 @@ public actor SpadeBeaconService {
         // Step 1: fetch the channel page
         let pageURL = URL(string: "https://www.twitch.tv/\(channelLogin)")!
         var pageRequest = URLRequest(url: pageURL)
+        pageRequest.timeoutInterval = 15
         // TDM PARITY: Use Android User-Agent consistently
         pageRequest.setValue(randomUserAgent, forHTTPHeaderField: "User-Agent")
 
@@ -139,7 +140,9 @@ public actor SpadeBeaconService {
         // Step 4: scan each bundle for spade_url / beacon_url
         for scriptURLString in scriptURLs.prefix(5) { // check at most 5 bundles
             guard let scriptURL = URL(string: scriptURLString) else { continue }
-            guard let (scriptData, _) = try? await urlSession.data(from: scriptURL) else { continue }
+            var scriptRequest = URLRequest(url: scriptURL)
+            scriptRequest.timeoutInterval = 15
+            guard let (scriptData, _) = try? await urlSession.data(for: scriptRequest) else { continue }
             let scriptContent = String(data: scriptData, encoding: .utf8) ?? ""
             let scriptRange = NSRange(scriptContent.startIndex..., in: scriptContent)
 
@@ -188,6 +191,7 @@ public actor SpadeBeaconService {
 
     private func post(payload: Data, to url: URL, channelLogin: String) async throws {
         var request = URLRequest(url: url)
+        request.timeoutInterval = 15
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         // TDM PARITY: Use Android User-Agent to match the Client ID. 
