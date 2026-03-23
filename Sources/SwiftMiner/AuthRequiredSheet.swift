@@ -124,7 +124,7 @@ struct AuthRequiredSheet: View {
                 .padding(.horizontal, 20)
                 .padding(.vertical, 18)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
 
                 Text("Code expires in \(expiresIn / 60) minutes")
                     .font(.caption)

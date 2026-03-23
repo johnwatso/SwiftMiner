@@ -151,9 +151,9 @@ private struct OnboardingCardBase<Content: View>: View {
             content
         }
         .padding(20)
-        .background(.ultraThinMaterial.opacity(0.6), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .background(.ultraThinMaterial.opacity(0.6), in: RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
+            RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
                 .strokeBorder(.white.opacity(0.08), lineWidth: 1)
         }
     }

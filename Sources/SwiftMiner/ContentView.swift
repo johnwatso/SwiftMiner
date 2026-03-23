@@ -717,7 +717,7 @@ struct OverviewView: View {
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
                     .foregroundStyle(primaryStatusReason.color)
-                    .glassControlSurface(cornerRadius: 999)
+                    .glassControlSurface(cornerRadius: GlassRadius.pill)
             }
 
             if !statusReasonRows.isEmpty {
@@ -968,7 +968,7 @@ struct OverviewMetricCard: View {
                 .foregroundStyle(color)
                 .font(.headline)
                 .frame(width: 28, height: 28)
-                .glassControlSurface(cornerRadius: 12)
+                .glassControlSurface(cornerRadius: GlassRadius.small)
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(title)
@@ -1042,9 +1042,9 @@ private struct ActiveCampaignRow: View {
             }
         }
         .padding(16)
-        .background(.thinMaterial.opacity(0.54), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .background(.thinMaterial.opacity(0.54), in: RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
+            RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
                 .strokeBorder(.white.opacity(0.12), lineWidth: 1)
         }
         .shadow(color: .black.opacity(0.08), radius: 14, y: 6)
@@ -1070,7 +1070,7 @@ private struct CampaignLibraryAmbientRow: View {
     var body: some View {
         HStack(spacing: 14) {
             ZStack {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
                     .fill(.thinMaterial.opacity(0.6))
 
                 Image(systemName: "sparkles.tv")
@@ -1091,7 +1091,7 @@ private struct CampaignLibraryAmbientRow: View {
             Spacer()
         }
         .padding(16)
-        .background(.ultraThinMaterial.opacity(0.72), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .background(.ultraThinMaterial.opacity(0.72), in: RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
     }
 }
 
@@ -1314,9 +1314,9 @@ private struct CampaignFeedCard: View {
             }
         }
         .frame(width: prominence.size.width, height: prominence.size.height, alignment: .topLeading)
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
+            RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
                 .strokeBorder(.white.opacity(0.12), lineWidth: 1)
         }
         .opacity(item.section == .recent ? 0.88 : (item.isDimmed ? 0.7 : 1))
@@ -1452,7 +1452,7 @@ private struct CampaignStandbyMotionOverlay: View {
             }
         }
         .mask {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
+            RoundedRectangle(cornerRadius: GlassRadius.artwork, style: .continuous)
         }
         .blendMode(.screen)
     }
@@ -1509,13 +1509,13 @@ private struct CampaignAmbientRailCard: View {
             }
             .padding(prominence == .compact ? 16 : 20)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.regularMaterial.opacity(0.5), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .background(.regularMaterial.opacity(0.5), in: RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
             .padding(14)
         }
         .frame(width: prominence.size.width, height: prominence.size.height)
-        .background(.thinMaterial.opacity(0.5), in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .background(.thinMaterial.opacity(0.5), in: RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
+            RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
                 .strokeBorder(.white.opacity(0.14), lineWidth: 1)
         }
         .shadow(color: .black.opacity(0.08), radius: 16, y: 8)
@@ -1672,7 +1672,7 @@ private struct CampaignThumbnail: View {
                 placeholder
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: GlassRadius.artwork, style: .continuous))
     }
 
     private var placeholder: some View {
