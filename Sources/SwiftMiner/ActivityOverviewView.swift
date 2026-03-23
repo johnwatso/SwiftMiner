@@ -232,7 +232,7 @@ private struct MinerSourceListRow: View {
     private var statusColor: Color {
         switch miner.status {
         case .watching: return .green
-        case .waitingForStream: return .yellow
+        case .waitingForStream: return .cyan
         case .claiming: return .purple
         case .authenticating, .fetchingCampaigns: return .blue
         case .paused: return .orange
