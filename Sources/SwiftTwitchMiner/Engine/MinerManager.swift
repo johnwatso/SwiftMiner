@@ -413,7 +413,7 @@ public final class MinerManager {
         
         await engine.stop()
         await dataCoordinator.updateAccountNeedsAuth(accountId: miner.accountId, needsAuth: false)
-        updateMinerStatus(minerId: minerId, status: .idle, isRunning: false, needsAuth: false)
+        updateMinerStatus(minerId: minerId, status: .idle, currentCampaignId: .some(nil), isRunning: false, needsAuth: false)
     }
     
     /// Start all miners with staggered delays to avoid API rate limiting
@@ -544,7 +544,7 @@ public final class MinerManager {
                 self.updateMinerStatus(
                     minerId: minerId,
                     status: minerStatus,
-                    currentCampaignId: currentId,
+                    currentCampaignId: .some(currentId),
                     needsAuth: clearsNeedsAuth ? false : nil
                 )
             }
@@ -560,9 +560,9 @@ public final class MinerManager {
                 
                 // Update current campaign info
                 if let first = campaigns.first {
-                    self.updateMinerStatus(minerId: minerId, currentCampaign: first.name, currentCampaignId: currentId, allCampaigns: all)
+                    self.updateMinerStatus(minerId: minerId, currentCampaign: first.name, currentCampaignId: .some(currentId), allCampaigns: all)
                 } else {
-                    self.updateMinerStatus(minerId: minerId, currentCampaignId: currentId, allCampaigns: all)
+                    self.updateMinerStatus(minerId: minerId, currentCampaignId: .some(currentId), allCampaigns: all)
                 }
             }
         }
@@ -612,25 +612,28 @@ public final class MinerManager {
         minerId: String,
         status: MinerStatus? = nil,
         currentCampaign: String? = nil,
-        currentCampaignId: String? = nil,
+        currentCampaignId: String?? = .none, // .none = don't touch; .some(x) = always set (x may be nil)
         allCampaigns: [Campaign]? = nil,
         isRunning: Bool? = nil,
         needsAuth: Bool? = nil
     ) {
         guard let index = miners.firstIndex(where: { $0.id == minerId }) else { return }
-        
+
         var miner = miners[index]
         if let status = status {
             if status != miner.status { miner.statusChangedAt = Date() }
             miner.status = status
         }
         if let campaign = currentCampaign { miner.currentCampaign = campaign }
-        if let campaignId = currentCampaignId { miner.currentCampaignId = campaignId }
+        if case .some(let campaignId) = currentCampaignId {
+            miner.currentCampaignId = campaignId
+            if campaignId == nil { miner.currentCampaign = nil } // clear name when ID is cleared
+        }
         if let campaigns = allCampaigns { miner.allCampaigns = campaigns }
         if let running = isRunning { miner.isRunning = running }
         if let needsAuth = needsAuth { miner.needsAuth = needsAuth }
         miners[index] = miner
-        
+
         onMinerStatusChange?(miner)
     }
     
