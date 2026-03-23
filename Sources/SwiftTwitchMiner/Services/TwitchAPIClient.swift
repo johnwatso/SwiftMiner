@@ -34,6 +34,11 @@ public actor TwitchAPIClient {
     /// Matches Python's `claimed_benefits: dict[str, datetime]` pattern.
     private var lastKnownClaimedBenefits: [String: ClaimedBenefit] = [:]
 
+    /// Campaigns parsed from the most recent inventory `dropCampaignsInProgress` response.
+    /// Twitch sometimes omits active campaigns from ViewerDropsDashboard (returns "EXPIRED" status)
+    /// while they still appear here. Used to inject missing campaigns into the campaign list.
+    private var lastKnownInProgressCampaigns: [Campaign] = []
+
     /// Set the authenticated user's login (call after successful auth)
     public func setUserLogin(_ login: String) {
         self.userLogin = login
@@ -44,6 +49,12 @@ public actor TwitchAPIClient {
     /// Matches Python's `claimed_benefits: dict[str, datetime]` pattern.
     public func getClaimedBenefits() -> [String: ClaimedBenefit] {
         lastKnownClaimedBenefits
+    }
+
+    /// Returns campaigns parsed from the most recent inventory `dropCampaignsInProgress`.
+    /// These may include campaigns absent from ViewerDropsDashboard due to stale API status.
+    public func inProgressCampaigns() -> [Campaign] {
+        lastKnownInProgressCampaigns
     }
 
     /// Twitch API endpoints
@@ -204,11 +215,11 @@ public actor TwitchAPIClient {
         let inactiveCampaigns = basicCampaigns.filter { !$0.isActive }
         print("[TwitchAPIClient] fetchDropCampaigns: \(activeCampaigns.count) active campaigns, fetching details")
 
-        // Fetch campaign details with a concurrency cap of 5 to avoid socket exhaustion.
+        // Fetch campaign details with a concurrency cap of 10 to avoid socket exhaustion.
         // userLogin (e.g. "john") is required — DropCampaignDetails uses user(login:) not user(id:)
         var enrichedActive = activeCampaigns
         if !activeCampaigns.isEmpty {
-            let maxConcurrent = 5
+            let maxConcurrent = 10
             try await withThrowingTaskGroup(of: (Int, Campaign).self) { group in
                 var nextIndex = 0
 
@@ -277,7 +288,7 @@ public actor TwitchAPIClient {
     }
 
     /// Fetch inventory with drops
-    public func fetchInventory() async throws -> [Progress] {
+    public func fetchInventory() async throws -> (progress: [Progress], discoveredCampaigns: [Campaign]) {
         let request = GraphQLRequest(
             operationName: "Inventory",
             sha256Hash: GQLHashes.inventory,
@@ -293,13 +304,13 @@ public actor TwitchAPIClient {
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
 
         guard let responseData = json?["data"] as? [String: Any] else {
-            return []
+            return ([], [])
         }
 
         guard let currentUser = responseData["currentUser"] as? [String: Any],
               let inventory = currentUser["inventory"] as? [String: Any] else {
             print("[TwitchAPIClient] fetchInventory: missing currentUser/inventory")
-            return []
+            return ([], [])
         }
 
         // Parse gameEventDrops — maps benefit ID → ClaimedBenefit.
@@ -307,42 +318,41 @@ public actor TwitchAPIClient {
         // so we use this dict as a fallback to detect claimed drops by ID or name.
         if let gameEventDrops = inventory["gameEventDrops"] as? [[String: Any]] {
             var benefits: [String: ClaimedBenefit] = [:]
-            // Log first entry for diagnosis
-            if let first = gameEventDrops.first {
-                print("[TwitchAPIClient] fetchInventory: gameEventDrops[0] keys=\(first.keys.sorted()) sample=\(first)")
-            }
             for benefit in gameEventDrops {
-                guard let benefitId = benefit["id"] as? String else {
-                    // Log if id is missing — helps diagnose key name issues
-                    print("[TwitchAPIClient] fetchInventory: gameEventDrop entry has no 'id' — keys=\(benefit.keys.sorted())")
-                    continue
-                }
-                
+                guard let benefitId = benefit["id"] as? String else { continue }
                 let benefitName = benefit["name"] as? String ?? "Unknown"
-                
-                // Use parseDate() which handles both plain and fractional-second ISO8601 formats
-                let date: Date
-                if let lastAwardedAt = benefit["lastAwardedAt"] as? String,
-                   let d = parseDate(lastAwardedAt) {
-                    date = d
-                } else {
-                    date = .distantPast
-                }
-                
+                let date = (benefit["lastAwardedAt"] as? String).flatMap { parseDate($0) } ?? .distantPast
                 benefits[benefitId] = ClaimedBenefit(id: benefitId, name: benefitName, lastAwardedAt: date)
             }
             lastKnownClaimedBenefits = benefits
-            print("[TwitchAPIClient] fetchInventory: \(benefits.count) claimed benefit IDs: \(Array(benefits.keys))")
+            print("[TwitchAPIClient] fetchInventory: \(benefits.count) claimed benefit IDs")
         }
 
         // dropCampaignsInProgress is null when no campaigns are actively in-progress (all claimed or not started)
         guard let dropProgress = inventory["dropCampaignsInProgress"] as? [[String: Any]] else {
             print("[TwitchAPIClient] fetchInventory: dropCampaignsInProgress is null (all drops claimed or not started)")
-            return []
+            return ([], [])
         }
 
         print("[TwitchAPIClient] fetchInventory: \(dropProgress.count) campaigns in progress")
-        return parseDropProgress(from: dropProgress)
+
+        // Cache campaign entities for injection — handles stale "EXPIRED" status in dashboard
+        lastKnownInProgressCampaigns = dropProgress.compactMap { parseCampaignFromInProgressDict($0) }
+        if !lastKnownInProgressCampaigns.isEmpty {
+            print("[TwitchAPIClient] fetchInventory: cached \(lastKnownInProgressCampaigns.count) in-progress campaign(s): \(lastKnownInProgressCampaigns.map { $0.name })")
+        }
+
+        let progress = parseDropProgress(from: dropProgress)
+        let discovered = parseDiscoveredCampaigns(from: dropProgress)
+        
+        return (progress, discovered)
+    }
+
+    /// Parses full Campaign objects from the Inventory response.
+    /// Uses parseCampaignFromInProgressDict which correctly handles the inventory channel
+    /// format ("name" field) vs the dashboard format ("login"/"displayName").
+    private func parseDiscoveredCampaigns(from progressDicts: [[String: Any]]) -> [Campaign] {
+        return progressDicts.compactMap { parseCampaignFromInProgressDict($0) }
     }
 
     /// Fetch current drop progress for the watched channel.
@@ -834,12 +844,21 @@ public actor TwitchAPIClient {
     // MARK: - Parsing Helpers
 
     /// Parse an ISO8601 date string, handling both plain and fractional-second formats.
+    /// Twitch returns dates in multiple formats: with/without fractional seconds, with Z or +/-HH:MM timezone.
     private func parseDate(_ str: String) -> Date? {
-        let plain = ISO8601DateFormatter()
-        if let d = plain.date(from: str) { return d }
+        // Try fractional seconds format first (most common for Twitch API)
         let frac = ISO8601DateFormatter()
         frac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return frac.date(from: str)
+        if let d = frac.date(from: str) { return d }
+        
+        // Try standard internet date format (no fractional seconds)
+        let plain = ISO8601DateFormatter()
+        plain.formatOptions = [.withInternetDateTime]
+        if let d = plain.date(from: str) { return d }
+        
+        // Fallback to basic formatter
+        let basic = ISO8601DateFormatter()
+        return basic.date(from: str)
     }
 
     private func parseCampaigns(from drops: [[String: Any]]) -> [Campaign] {
@@ -1053,6 +1072,55 @@ public actor TwitchAPIClient {
               }
             : []
         
+        return Campaign(
+            id: id,
+            name: name,
+            game: game,
+            status: status,
+            startDate: startAt,
+            endDate: endAt,
+            drops: dropsArray,
+            channels: channelsArray,
+            isAccountConnected: isAccountConnected
+        )
+    }
+
+    /// Parse a Campaign from an inventory `dropCampaignsInProgress` entry.
+    /// The inventory format uses "name" (not "login"/"displayName") for ACL channels.
+    /// Returns nil if the campaign's endAt is in the past (genuinely expired).
+    private func parseCampaignFromInProgressDict(_ campaignDict: [String: Any]) -> Campaign? {
+        guard let id = campaignDict["id"] as? String,
+              let name = campaignDict["name"] as? String else { return nil }
+
+        let gameDict = campaignDict["game"] as? [String: Any] ?? [:]
+        let game = Game(
+            id: gameDict["id"] as? String ?? "",
+            name: (gameDict["displayName"] as? String) ?? (gameDict["name"] as? String) ?? "",
+            boxArtURL: (gameDict["boxArtURL"] as? String).flatMap { URL(string: $0) }
+        )
+
+        let statusDict = campaignDict["status"] as? String ?? "ACTIVE"
+        let status = CampaignStatus(rawValue: statusDict) ?? .active
+        let startAt = parseDate(campaignDict["startAt"] as? String ?? "") ?? Date()
+        let endAt = parseDate(campaignDict["endAt"] as? String ?? "") ?? Date()
+
+        // Skip genuinely expired campaigns (endAt in the past)
+        guard endAt > Date() else { return nil }
+
+        let dropsArray = (campaignDict["timeBasedDrops"] as? [[String: Any]] ?? [])
+            .compactMap { parseDrop(from: $0) }
+
+        let selfDict = campaignDict["self"] as? [String: Any]
+        let isAccountConnected = selfDict?["isAccountConnected"] as? Bool ?? false
+
+        // Inventory ACL channels use "name" field instead of "login"/"displayName"
+        let allowDict = campaignDict["allow"] as? [String: Any] ?? [:]
+        let channelsArray = (allowDict["channels"] as? [[String: Any]] ?? []).compactMap { ch -> Channel? in
+            guard let chId = ch["id"] as? String,
+                  let chName = ch["name"] as? String else { return nil }
+            return Channel(id: chId, login: chName, displayName: chName, aclBased: true)
+        }
+
         return Campaign(
             id: id,
             name: name,
