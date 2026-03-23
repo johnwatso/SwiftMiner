@@ -42,22 +42,29 @@ public enum CampaignMergeEngine {
     
     /// Determines if a campaign missing from the fresh API response should be preserved.
     /// Rule: Preserve if it exists in inventory OR it expired within the last 14 days.
+    /// Exception: Evict if status is EXPIRED and all drops are claimed (campaign fully complete).
     private static func shouldPreserve(_ campaign: Campaign, inventory: InventorySnapshot?) -> Bool {
         // 1. Check if it exists in inventory (any drop benefit ID present)
         let inInventory = campaign.drops.contains { drop in
             inventory?.benefitIDs.contains(drop.benefitID) ?? false
         }
-        
+
         if inInventory { return true }
-        
+
         // 2. Check if it expired recently (last 14 days)
         let fourteenDays: TimeInterval = 14 * 24 * 3600
         let expirationCutoff = Date().addingTimeInterval(-fourteenDays)
-        
+
         if campaign.endDate > expirationCutoff {
+            // Exception: Don't preserve fully-completed EXPIRED campaigns
+            // If Twitch removed it from API and all drops are claimed, evict it
+            if campaign.status == .expired && campaign.isFullyComplete {
+                print("[CampaignMergeEngine] Evicting completed expired campaign: \(campaign.name)")
+                return false
+            }
             return true
         }
-        
+
         return false
     }
 }
