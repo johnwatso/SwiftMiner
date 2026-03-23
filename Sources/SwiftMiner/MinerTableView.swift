@@ -118,6 +118,8 @@ struct StatusBadge: View {
             return .cyan
         case .watching:
             return .green
+        case .waitingForStream:
+            return .yellow
         case .claiming:
             return .purple
         case .paused:
