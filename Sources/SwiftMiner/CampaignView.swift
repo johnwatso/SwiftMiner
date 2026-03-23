@@ -21,6 +21,13 @@ struct DropsListView: View {
 
     private var miners: [MinerManager.ManagedMiner] { navigation.minerManager.miners }
     private var hasAccounts: Bool { !miners.isEmpty }
+    private var dropFilterItems: [GlassSelectionItem<DropFilter>] {
+        [
+            GlassSelectionItem(id: .active, title: "Active", systemImage: "dot.radiowaves.left.and.right"),
+            GlassSelectionItem(id: .claimed, title: "Claimed", systemImage: "checkmark.circle.fill"),
+            GlassSelectionItem(id: .all, title: "All", systemImage: "square.grid.2x2.fill")
+        ]
+    }
 
     /// Hero URL for a specific campaign — used to pass per-card blurred backdrop.
     private func heroURL(for campaign: CampaignViewData) -> URL? {
@@ -80,54 +87,44 @@ struct DropsListView: View {
         }
         .navigationTitle("Drops")
         .toolbar {
-            ToolbarItemGroup(placement: .navigation) {
-                Button {
-                    Task {
-                        let settings = Settings.shared
-                        await navigation.minerManager.startAll(
-                            priorityGames: settings.priorityGames,
-                            excludedGames: settings.excludedGames,
-                            strategy: settings.miningStrategy,
-                            enableBadgesEmotes: settings.enableBadgesEmotes,
-                            showClaimNotifications: settings.showClaimNotifications
-                        )
-                    }
-                } label: {
-                    Label("Start All", systemImage: "play.fill")
-                }
-                .help("Start all miners")
-
-                Button {
-                    Task { await navigation.minerManager.stopAll() }
-                } label: {
-                    Label("Stop All", systemImage: "stop.fill")
-                }
-                .help("Stop all miners")
-            }
-
-            if preferSteamArtwork {
-                ToolbarItem(placement: .primaryAction) {
+            ToolbarItemGroup(placement: .primaryAction) {
+                if preferSteamArtwork {
                     Button {
                         Task {
                             await navigation.minerManager.dataCoordinator.clearSteamArtworkCache()
                             await loadCampaignFeed()
                         }
                     } label: {
-                        Label("Refresh Artwork", systemImage: "arrow.triangle.2.circlepath")
+                        Label("Reload Steam Assets", systemImage: "arrow.triangle.2.circlepath")
                     }
-                    .help("Clear Steam artwork cache and reload")
+                    .help("Reload Steam artwork for this Drops view by clearing cached assets.")
                     .disabled(isRefreshing)
                 }
-            }
 
-            ToolbarItem(placement: .primaryAction) {
-                Picker("Filter", selection: $filter) {
-                    ForEach(DropFilter.allCases) { choice in
-                        Text(choice.rawValue).tag(choice)
-                    }
+                GlassSelectionControl(
+                    items: dropFilterItems,
+                    selection: $filter,
+                    axis: .horizontal,
+                    itemSpacing: 3,
+                    padding: 3,
+                    contentInsets: EdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10),
+                    selectedCornerRadius: 12,
+                    fillsAvailableSpace: true,
+                    showsContainer: true
+                ) { item, isSelected in
+                    Text(item.title)
+                        .font(.system(size: 12, weight: isSelected ? .semibold : .medium))
+                        .foregroundStyle(isSelected ? .primary : .secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.9)
                 }
-                .pickerStyle(.segmented)
-                .frame(width: 240)
+                .frame(width: 212)
+                .help("Filter campaigns by active, claimed, or all.")
+                .accessibilityLabel("Drops filter")
+                .accessibilityHint("Choose Active, Claimed, or All campaigns.")
+                .accessibilityValue(filter.rawValue)
+                .accessibilityElement(children: .contain)
+                .animation(.spring(response: 0.3, dampingFraction: 0.82), value: filter)
             }
         }
         .task(id: accountSignature) {
