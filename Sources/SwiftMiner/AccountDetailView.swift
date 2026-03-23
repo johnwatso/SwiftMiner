@@ -208,6 +208,7 @@ struct AccountDetailView: View {
     private var statusIcon: String {
         switch miner.status {
         case .watching:          return "eye.fill"
+        case .waitingForStream:  return "eye.slash.fill"
         case .authenticating:    return "key.fill"
         case .fetchingCampaigns: return "arrow.down.circle.fill"
         case .claiming:          return "gift.fill"
@@ -220,6 +221,7 @@ struct AccountDetailView: View {
     private var statusColor: Color {
         switch miner.status {
         case .watching:          return .green
+        case .waitingForStream:  return .yellow
         case .authenticating:    return .orange
         case .fetchingCampaigns: return .blue
         case .claiming:          return .purple
