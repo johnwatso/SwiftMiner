@@ -1,7 +1,7 @@
 # SwiftMiner Multi-User Architecture Audit Report
 
 **Date:** 19 March 2026  
-**Prepared by:** Qwen (with contributions from Claude, Gemini, Kimi)  
+**Prepared by:** SwiftMiner engineering audit team  
 **Request:** Verify SwiftMiner can support 5-7 concurrent users/miners
 
 ---
@@ -199,4 +199,4 @@ await campaignStore.configure(apiClient: engine.apiClient)
 
 ---
 
-*Report generated from collaborative audit by Qwen, Claude, Gemini, and Kimi — 19 March 2026*
+*Report generated from a collaborative audit — 19 March 2026*
