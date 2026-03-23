@@ -185,8 +185,23 @@ public actor CampaignDataService {
                             )
                         }
                     } else {
-                        print("[CampaignDataService] Discovered campaign from inventory: \(discovered.name)")
-                        fresh.append(discovered)
+                        // If Twitch has already marked this inventory-only campaign as EXPIRED,
+                        // treat it as ended now so miningStatus returns .expired immediately.
+                        if discovered.status == .expired {
+                            print("[CampaignDataService] Inventory-only campaign marked EXPIRED by Twitch — treating as ended: \(discovered.name)")
+                            let ended = Campaign(
+                                id: discovered.id, name: discovered.name, game: discovered.game,
+                                status: discovered.status, startDate: discovered.startDate,
+                                endDate: Date().addingTimeInterval(-1),
+                                drops: discovered.drops, channels: discovered.channels,
+                                isAccountConnected: discovered.isAccountConnected,
+                                isPrioritised: discovered.isPrioritised
+                            )
+                            fresh.append(ended)
+                        } else {
+                            print("[CampaignDataService] Discovered campaign from inventory: \(discovered.name)")
+                            fresh.append(discovered)
+                        }
                     }
                 }
             }
