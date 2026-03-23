@@ -1047,7 +1047,7 @@ private struct ActiveCampaignRow: View {
             RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
                 .strokeBorder(.white.opacity(0.12), lineWidth: 1)
         }
-        .shadow(color: .black.opacity(0.08), radius: 14, y: 6)
+        .shadow(color: .black.opacity(0.06), radius: 4, y: 1)
         .contextMenu {
             if let game = item.game, !item.isPlaceholder {
                 Button {
@@ -1323,7 +1323,7 @@ private struct CampaignFeedCard: View {
         .saturation(item.isDimmed ? 0.82 : 1)
         .brightness(isHovering ? 0.015 : 0)
         .scaleEffect(isHovering ? 1.03 : 1)
-        .shadow(color: .black.opacity(isHovering ? 0.16 : 0.08), radius: isHovering ? 18 : 10, y: isHovering ? 10 : 6)
+        .shadow(color: .black.opacity(isHovering ? 0.10 : 0.05), radius: isHovering ? 8 : 3, y: isHovering ? 4 : 1)
         .animation(.easeInOut(duration: 0.2), value: isHovering)
         .animation(.easeInOut(duration: 0.7), value: usesStandbyMotionStyle)
         .onHover { hovering in
@@ -1518,7 +1518,7 @@ private struct CampaignAmbientRailCard: View {
             RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
                 .strokeBorder(.white.opacity(0.14), lineWidth: 1)
         }
-        .shadow(color: .black.opacity(0.08), radius: 16, y: 8)
+        .shadow(color: .black.opacity(0.06), radius: 4, y: 1)
     }
 }
 
