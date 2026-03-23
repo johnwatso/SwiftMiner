@@ -387,6 +387,7 @@ struct StatusIndicatorView: View {
     private var statusColor: Color {
         switch appModel.sessionStatus {
         case .watching:          return .green
+        case .waitingForStream:  return .yellow
         case .authenticating:    return .orange
         case .fetchingCampaigns: return .blue
         case .claiming:          return .yellow
