@@ -148,10 +148,10 @@ private struct GlassSurfaceModifier: ViewModifier {
 
 enum GlassRadius {
     static let subtle: CGFloat = 6      // Sidebar, window-adjacent
-    static let small: CGFloat = 10      // Main containers, control surfaces
-    static let medium: CGFloat = 14     // Campaign cards, content panels
-    static let large: CGFloat = 18      // Featured highlights
-    static let artwork: CGFloat = 18    // Artwork
+    static let small: CGFloat = 8       // Controls, stat cards
+    static let medium: CGFloat = 10     // Cards, content panels
+    static let large: CGFloat = 12      // Featured highlights
+    static let artwork: CGFloat = 14    // Artwork, images
     static let pill: CGFloat = 999      // Buttons, chips, badges
 }
 
@@ -161,9 +161,9 @@ extension View {
             GlassSurfaceModifier(
                 material: AnyShapeStyle(.regularMaterial),
                 cornerRadius: cornerRadius,
-                shadowOpacity: 0.10,
-                shadowRadius: 24,
-                shadowY: 10
+                shadowOpacity: 0.08,
+                shadowRadius: 6,
+                shadowY: 2
             )
         )
     }
@@ -173,9 +173,9 @@ extension View {
             GlassSurfaceModifier(
                 material: AnyShapeStyle(.thinMaterial),
                 cornerRadius: cornerRadius,
-                shadowOpacity: 0.09,
-                shadowRadius: 18,
-                shadowY: 7
+                shadowOpacity: 0.06,
+                shadowRadius: 4,
+                shadowY: 1
             )
         )
     }
@@ -185,9 +185,9 @@ extension View {
             GlassSurfaceModifier(
                 material: AnyShapeStyle(.ultraThinMaterial),
                 cornerRadius: cornerRadius,
-                shadowOpacity: 0.06,
-                shadowRadius: 10,
-                shadowY: 4
+                shadowOpacity: 0,
+                shadowRadius: 0,
+                shadowY: 0
             )
         )
     }
@@ -352,8 +352,7 @@ struct GlassSelectionControl<ID: Hashable, ItemContent: View>: View {
                         if isSelected {
                             RoundedRectangle(cornerRadius: selectedCornerRadius, style: .continuous)
                                 .fill(.ultraThinMaterial)
-                                .shadow(color: .white.opacity(0.18), radius: 6, y: -2)
-                                .shadow(color: .black.opacity(0.12), radius: 10, y: 4)
+                                .shadow(color: .black.opacity(0.08), radius: 3, y: 1)
                                 .matchedGeometryEffect(id: "selection", in: selectionNamespace)
                         }
                     }

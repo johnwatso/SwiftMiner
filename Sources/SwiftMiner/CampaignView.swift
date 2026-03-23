@@ -462,7 +462,7 @@ private struct CampaignDeckCard: View {
             RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
                 .strokeBorder(state.borderTint, lineWidth: 1)
         }
-        .shadow(color: .black.opacity(isHovered ? 0.14 : 0.10), radius: isHovered ? 22 : 18, y: isHovered ? 12 : 10)
+        .shadow(color: .black.opacity(isHovered ? 0.10 : 0.06), radius: isHovered ? 8 : 4, y: isHovered ? 4 : 2)
         .opacity(state == .expired ? 0.62 : 1)
         .saturation(1)
         .brightness(isHovered ? 0.008 : 0)
