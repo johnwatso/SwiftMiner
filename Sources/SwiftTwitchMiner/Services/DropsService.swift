@@ -8,7 +8,7 @@ public actor DropsService {
     /// Cache of campaigns
     private var campaignsCache: [Campaign] = []
     private var lastCacheUpdate: Date?
-    private let cacheDuration: TimeInterval = 300 // 5 minutes
+    private let cacheDuration: TimeInterval = 60 // 1 minute
 
     public init(apiClient: TwitchAPIClient, inventoryService: InventoryService? = nil) {
         self.apiClient = apiClient

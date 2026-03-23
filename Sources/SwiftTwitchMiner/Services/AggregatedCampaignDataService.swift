@@ -29,6 +29,10 @@ public actor AggregatedCampaignDataService {
         public let status: String
         public let startDate: Date
         public let endDate: Date
+        /// Whether at least one account has a connected game account for this campaign
+        public let isAccountConnected: Bool
+        /// Merged drops from all accounts (used for status calculation)
+        public let drops: [Drop]
 
         /// Total drops in this campaign (shared across all accounts)
         public let totalDrops: Int
@@ -110,6 +114,8 @@ public actor AggregatedCampaignDataService {
             status: String,
             startDate: Date,
             endDate: Date,
+            isAccountConnected: Bool,
+            drops: [Drop] = [],
             totalDrops: Int,
             accountProgress: [String: AccountProgress],
             accountStates: [AccountState] = []
@@ -121,6 +127,8 @@ public actor AggregatedCampaignDataService {
             self.status = status
             self.startDate = startDate
             self.endDate = endDate
+            self.isAccountConnected = isAccountConnected
+            self.drops = drops
             self.totalDrops = totalDrops
             self.accountProgress = accountProgress
             self.accountStates = accountStates
@@ -227,7 +235,8 @@ public actor AggregatedCampaignDataService {
     /// Use this for the "All" tab to show complete campaign history.
     /// This includes .irrelevant campaigns that are excluded from the curated feed.
     public func allCampaigns() async -> [CampaignViewData] {
-        let (viewDataByAccount, bestMetadata) = await collectCurrentCampaignViewData()
+        // Use collectAllCampaignViewData() to get unfiltered campaigns from all accounts
+        let (viewDataByAccount, bestMetadata) = await collectAllCampaignViewData()
 
         let merged = bestMetadata.values.map { data in
             buildUnifiedCampaignViewData(
@@ -300,8 +309,11 @@ public actor AggregatedCampaignDataService {
     
     /// Force refresh for all accounts and update CampaignStore
     public func refreshAll() async {
-        for (_, service) in accountServices {
-            await service.refresh()
+        let services = Array(accountServices.values)
+        await withTaskGroup(of: Void.self) { group in
+            for service in services {
+                group.addTask { await service.refresh() }
+            }
         }
         let aggregated = await getAggregatedCampaignsInternal()
         await updateCampaignStore(using: aggregated)
@@ -321,8 +333,8 @@ public actor AggregatedCampaignDataService {
                 status: CampaignStatus(rawValue: agg.status) ?? .active,
                 startDate: agg.startDate,
                 endDate: agg.endDate,
-                drops: [], // Drops loaded on demand via CampaignDataService
-                isAccountConnected: true // If it's in the list, at least one account is connected
+                drops: agg.drops,
+                isAccountConnected: agg.isAccountConnected
             )
         }
         
@@ -339,11 +351,19 @@ public actor AggregatedCampaignDataService {
     ) -> AggregatedCampaign {
         var accountProgress: [String: AggregatedCampaign.AccountProgress] = [:]
         var accountStates: [AggregatedCampaign.AccountState] = []
+        var anyConnected = false
 
-        for (accountId, viewDataList) in viewDataByAccount {
-            guard let viewData = viewDataList.first(where: { $0.id == data.id }),
-                  let username = accountUsernames[accountId] else {
+        let accountCampaigns = viewDataByAccount.compactMap { accountId, campaigns in
+            campaigns.first(where: { $0.id == data.id }).map { (accountId, $0) }
+        }
+
+        for (accountId, viewData) in accountCampaigns {
+            guard let username = accountUsernames[accountId] else {
                 continue
+            }
+
+            if viewData.isAccountConnected {
+                anyConnected = true
             }
 
             accountProgress[accountId] = AggregatedCampaign.AccountProgress(
@@ -378,6 +398,28 @@ public actor AggregatedCampaignDataService {
             return (order[$0.state] ?? 3) < (order[$1.state] ?? 3)
         }
 
+        // Merge drops for status calculation in CampaignStore
+        let mergedDropData = mergeDrops(from: accountCampaigns.map(\.1))
+        let drops = mergedDropData.map { d in
+            Drop(
+                id: d.id,
+                name: d.name,
+                description: d.description,
+                imageURL: d.imageURL,
+                requiredMinutes: d.requiredMinutes,
+                progress: Progress(
+                    id: "",
+                    dropId: d.id,
+                    dropName: d.name,
+                    campaignId: data.id,
+                    currentMinutes: d.currentMinutes,
+                    requiredMinutes: d.requiredMinutes,
+                    isClaimed: d.isClaimed
+                ),
+                isClaimed: d.isClaimed
+            )
+        }
+
         return AggregatedCampaign(
             id: data.id,
             gameName: data.gameName,
@@ -386,6 +428,8 @@ public actor AggregatedCampaignDataService {
             status: data.status,
             startDate: data.startDate,
             endDate: data.endDate,
+            isAccountConnected: anyConnected,
+            drops: drops,
             totalDrops: data.totalDrops,
             accountProgress: accountProgress,
             accountStates: accountStates
@@ -397,7 +441,34 @@ public actor AggregatedCampaignDataService {
         var bestMetadata: [String: CampaignViewData] = [:]
 
         for (accountId, service) in accountServices {
-            let viewData = await service.currentCampaigns()
+            // Use allCampaigns() instead of currentCampaigns() to get unfiltered data
+            // This ensures we see connected campaigns even if they are currently .irrelevant
+            let viewData = await service.allCampaigns()
+            viewDataByAccount[accountId] = viewData
+
+            for data in viewData {
+                if let existing = bestMetadata[data.id] {
+                    if shouldReplaceMetadata(existing: existing, incoming: data) {
+                        bestMetadata[data.id] = data
+                    }
+                } else {
+                    bestMetadata[data.id] = data
+                }
+            }
+        }
+
+        return (viewDataByAccount, bestMetadata)
+    }
+    
+    /// Collects ALL campaigns from all accounts without filtering.
+    /// Use this for the "All" tab to include campaigns excluded from the curated feed.
+    private func collectAllCampaignViewData() async -> ([String: [CampaignViewData]], [String: CampaignViewData]) {
+        var viewDataByAccount: [String: [CampaignViewData]] = [:]
+        var bestMetadata: [String: CampaignViewData] = [:]
+
+        for (accountId, service) in accountServices {
+            // Use allCampaigns() instead of currentCampaigns() to get unfiltered data
+            let viewData = await service.allCampaigns()
             viewDataByAccount[accountId] = viewData
 
             for data in viewData {
@@ -432,19 +503,23 @@ public actor AggregatedCampaignDataService {
 
         let allClaimed = !accountCampaigns.isEmpty && accountCampaigns.allSatisfy { $0.1.isClaimed }
         let anyClaimed = accountCampaigns.contains { $0.1.isClaimed || $0.1.miningStatus == .claimed }
+        let anyConnected = accountCampaigns.contains { $0.1.isAccountConnected }
+
         let accountStates = buildCampaignAccountStates(for: data.id, accountCampaigns: accountCampaigns)
         let drops = mergeDrops(from: accountCampaigns.map(\.1))
         let miningStatus = mergedMiningStatus(
             for: data,
             campaigns: accountCampaigns.map(\.1),
             allClaimed: allClaimed,
-            anyClaimed: anyClaimed
+            anyClaimed: anyClaimed,
+            anyConnected: anyConnected
         )
         let relevance = mergedRelevance(
             for: data,
             campaigns: accountCampaigns.map(\.1),
             miningStatus: miningStatus,
-            anyClaimed: anyClaimed
+            anyClaimed: anyClaimed,
+            anyConnected: anyConnected
         )
 
         return CampaignViewData(
@@ -459,6 +534,7 @@ public actor AggregatedCampaignDataService {
             timeRemaining: accountCampaigns.compactMap { $0.1.timeRemaining }.min() ?? data.timeRemaining,
             status: mergeCampaignStatus(for: data, campaigns: accountCampaigns.map(\.1)),
             miningStatus: miningStatus,
+            isAccountConnected: anyConnected,
             relevance: relevance,
             startDate: data.startDate,
             endDate: data.endDate,
@@ -536,7 +612,8 @@ public actor AggregatedCampaignDataService {
         for data: CampaignViewData,
         campaigns: [CampaignViewData],
         allClaimed: Bool,
-        anyClaimed: Bool
+        anyClaimed: Bool,
+        anyConnected: Bool
     ) -> MiningCampaignStatus {
         if campaigns.contains(where: { $0.status == CampaignStatus.expired.rawValue || $0.miningStatus == .expired }) &&
             campaigns.allSatisfy({ $0.status == CampaignStatus.expired.rawValue || $0.miningStatus == .expired }) {
@@ -555,7 +632,8 @@ public actor AggregatedCampaignDataService {
             return .inProgress
         }
 
-        if campaigns.contains(where: { $0.miningStatus == .available || $0.status == CampaignStatus.active.rawValue }) {
+        // Only mark Available if at least one account is connected.
+        if anyConnected && campaigns.contains(where: { $0.miningStatus == .available || $0.status == CampaignStatus.active.rawValue }) {
             return .available
         }
 
@@ -570,20 +648,32 @@ public actor AggregatedCampaignDataService {
         for data: CampaignViewData,
         campaigns: [CampaignViewData],
         miningStatus: MiningCampaignStatus,
-        anyClaimed: Bool
+        anyClaimed: Bool,
+        anyConnected: Bool
     ) -> CampaignRelevance {
         if campaigns.contains(where: { $0.relevance == .prioritised }) {
             return .prioritised
         }
 
-        if campaigns.contains(where: { $0.relevance == .active }) ||
-            miningStatus == .available ||
+        // 1. Active check — must be connected AND in an active-earnable state
+        if anyConnected && (miningStatus == .available ||
             miningStatus == .inProgress ||
-            miningStatus == .claimable {
+            miningStatus == .claimable) {
             return .active
         }
 
-        if campaigns.contains(where: { $0.relevance == .recent }) || anyClaimed {
+        // 2. Claimed/Recent check — if claimed OR explicitly marked recent by any account
+        if anyClaimed || miningStatus == .claimed || campaigns.contains(where: { $0.relevance == .recent }) {
+            return .recent
+        }
+
+        // 3. Closed check
+        if miningStatus == .expired || campaigns.contains(where: { $0.relevance == .closed }) {
+            return .closed
+        }
+
+        // Fallback for connected campaigns: always show at least in 'All' tab (not .irrelevant)
+        if anyConnected {
             return .recent
         }
 

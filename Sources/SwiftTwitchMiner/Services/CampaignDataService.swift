@@ -20,10 +20,10 @@ public actor CampaignDataService {
     
     /// Cache version for schema migrations
     private static let cacheVersion = 1
-    /// Campaign cache validity: 1 hour
-    private static let campaignCacheDuration: TimeInterval = 3600
-    /// Inventory cache validity: 5 minutes (more volatile)
-    private static let inventoryCacheDuration: TimeInterval = 300
+    /// Campaign cache validity: 1 minute
+    private static let campaignCacheDuration: TimeInterval = 60
+    /// Inventory cache validity: 1 minute
+    private static let inventoryCacheDuration: TimeInterval = 60
     
     // MARK: - State
     
@@ -120,11 +120,22 @@ public actor CampaignDataService {
 
     /// Returns cached campaigns immediately — never waits for the network.
     /// This is the synchronous entry point for app launch / UI binding.
+    /// NOTE: This applies the curated feed filter (excludes .irrelevant campaigns).
     public func currentCampaigns() async -> [CampaignViewData] {
         let cached = CampaignDiskCache.load(accountId: accountId)
         let inventory = await inventoryService.currentSnapshot()
         let composed = CampaignMapper.composeFeed(from: CampaignMapper.map(campaigns: cached, inventory: inventory))
         return composed
+    }
+    
+    /// Returns ALL cached campaigns without filtering.
+    /// Use this for the "All" tab to show complete campaign history.
+    /// This includes campaigns that would be excluded from the curated feed.
+    public func allCampaigns() async -> [CampaignViewData] {
+        let cached = CampaignDiskCache.load(accountId: accountId)
+        let inventory = await inventoryService.currentSnapshot()
+        // Don't use composeFeed() — return all campaigns including .irrelevant
+        return CampaignMapper.map(campaigns: cached, inventory: inventory)
     }
 
     /// Performs an async fetch + merge, then updates the disk cache.
@@ -141,12 +152,45 @@ public actor CampaignDataService {
         defer { isRefreshing = false }
 
         do {
-            // Fetch fresh inventory first so merge can check benefit IDs.
-            let inventory = try? await inventoryService.fetchInventory(forceRefresh: true)
+            // Parallelize fetching inventory and campaigns
+            async let inventoryTask = try? inventoryService.fetchInventory(forceRefresh: true)
+            async let campaignsTask = apiClient.fetchDropCampaigns()
+
+            let inventory = await inventoryTask
+            let dashboardCampaigns = try await campaignsTask
+
             if inventory != nil { lastInventoryLoad = Date() }
 
-            // Fetch fresh campaigns from API.
-            let fresh = try await apiClient.fetchDropCampaigns()
+            // Merge discovered campaigns from inventory (some campaigns like CDL are missing from dashboard)
+            // Also trust inventory for isAccountConnected status
+            var fresh = dashboardCampaigns
+            if let snapshot = inventory {
+                let dashboardIds = Set(dashboardCampaigns.map { $0.id })
+                for discovered in snapshot.discoveredCampaigns {
+                    if let index = fresh.firstIndex(where: { $0.id == discovered.id }) {
+                        // Trust inventory for connectivity status
+                        if discovered.isAccountConnected && !fresh[index].isAccountConnected {
+                            print("[CampaignDataService] Inventory confirmed connection for \(discovered.name)")
+                            let existing = fresh[index]
+                            fresh[index] = Campaign(
+                                id: existing.id,
+                                name: existing.name,
+                                game: existing.game,
+                                status: existing.status,
+                                startDate: existing.startDate,
+                                endDate: existing.endDate,
+                                drops: existing.drops,
+                                channels: existing.channels,
+                                isAccountConnected: true,
+                                isPrioritised: existing.isPrioritised
+                            )
+                        }
+                    } else {
+                        print("[CampaignDataService] Discovered campaign from inventory: \(discovered.name)")
+                        fresh.append(discovered)
+                    }
+                }
+            }
 
             // Load existing cache to merge against.
             let cached = CampaignDiskCache.load(accountId: accountId)
@@ -157,6 +201,10 @@ public actor CampaignDataService {
 
             // Merge: API wins for shared IDs; preserved campaigns follow merge rules.
             let merged = CampaignMergeEngine.merge(fresh: fresh, cached: cached, inventory: snapshot)
+            print("[CampaignDataService] Refresh (@\(accountId)): fetched \(fresh.count), merged \(merged.count) campaigns")
+            for c in fresh {
+                print("  + Fresh: \(c.name) (Connected: \(c.isAccountConnected))")
+            }
             saveCampaignsToCache(merged)
             lastCampaignLoad = Date()
 

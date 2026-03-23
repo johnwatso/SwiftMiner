@@ -426,6 +426,7 @@ private struct MinerActivityFeedSection: View {
 
 private struct MinerLiveStateSection: View {
     let miner: MinerManager.ManagedMiner
+    @ObservedObject private var settings = Settings.shared
 
     private var currentCampaign: Campaign? {
         guard let id = miner.currentCampaignId else { return nil }
@@ -447,10 +448,16 @@ private struct MinerLiveStateSection: View {
         return miner.stateStore?.dropStates.first { $0.dropId == drop.id }
     }
 
-    /// Next eligible campaigns after the current one (up to 3).
+    /// Next eligible campaigns after the current one (up to 3), excluding user-excluded games.
     private var queuedCampaigns: [Campaign] {
         Array(miner.allCampaigns
-            .filter { $0.id != miner.currentCampaignId && $0.isMiningEligible }
+            .filter { campaign in
+                campaign.id != miner.currentCampaignId
+                    && campaign.isMiningEligible
+                    && !settings.excludedGames.contains(where: {
+                        $0.localizedCaseInsensitiveCompare(campaign.game.name) == .orderedSame
+                    })
+            }
             .prefix(3))
     }
 
@@ -606,6 +613,18 @@ private struct QueuedCampaignRow: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .contextMenu {
+            Button {
+                Settings.shared.setGamePreference(campaign.game, state: .preferred)
+            } label: {
+                Label("Prioritise Game", systemImage: "star.fill")
+            }
+            Button(role: .destructive) {
+                Settings.shared.setGamePreference(campaign.game, state: .excluded)
+            } label: {
+                Label("Exclude Game", systemImage: "minus.circle")
+            }
+        }
     }
 }
 

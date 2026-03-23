@@ -4,22 +4,25 @@ public struct InventorySnapshot: Codable, Sendable, Equatable {
     public let accountId: String
     public let benefitIDs: Set<String>
     public let progress: [Progress]
+    public let discoveredCampaigns: [Campaign]
     public let lastUpdated: Date
 
     public init(
         accountId: String,
         benefitIDs: Set<String>,
         progress: [Progress],
+        discoveredCampaigns: [Campaign] = [],
         lastUpdated: Date = Date()
     ) {
         self.accountId = accountId
         self.benefitIDs = benefitIDs
         self.progress = progress
+        self.discoveredCampaigns = discoveredCampaigns
         self.lastUpdated = lastUpdated
     }
 
     public static func empty(accountId: String) -> InventorySnapshot {
-        InventorySnapshot(accountId: accountId, benefitIDs: [], progress: [], lastUpdated: .distantPast)
+        InventorySnapshot(accountId: accountId, benefitIDs: [], progress: [], discoveredCampaigns: [], lastUpdated: .distantPast)
     }
 }
 
@@ -53,12 +56,13 @@ public actor InventoryService {
         }
 
         do {
-            let progress = try await apiClient.fetchInventory()
+            let result = try await apiClient.fetchInventory()
             let benefitIDs = Set(await apiClient.getClaimedBenefits().keys)
             let snapshot = InventorySnapshot(
                 accountId: accountId,
                 benefitIDs: benefitIDs,
-                progress: progress
+                progress: result.progress,
+                discoveredCampaigns: result.discoveredCampaigns
             )
             snapshotCache = snapshot
             InventoryDiskCache.save(snapshot)
