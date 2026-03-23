@@ -76,7 +76,11 @@ public struct CampaignViewData: Codable, Sendable, Identifiable, Equatable {
     public var tabVisibility: CampaignTabVisibility {
         var visibility: CampaignTabVisibility = [.all]
 
-        if relevance == .prioritised || relevance == .active {
+        // Show in Active tab if:
+        // 1. Relevance is prioritised or active (normal routing)
+        // 2. Has in-progress drops (waiting for stream to continue)
+        if relevance == .prioritised || relevance == .active ||
+           miningStatus == .inProgress || miningStatus == .available {
             visibility.insert(.active)
         }
 
