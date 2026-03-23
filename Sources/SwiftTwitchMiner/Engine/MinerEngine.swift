@@ -1081,7 +1081,7 @@ public actor MinerEngine {
         } else if isStalled {
             recoveryAction = .refreshingInventory
         } else {
-            recoveryAction = .none
+            recoveryAction = nil
         }
         
         return StallState(
