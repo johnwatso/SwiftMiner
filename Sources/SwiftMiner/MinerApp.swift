@@ -197,6 +197,7 @@ struct MenuBarContent: View {
         case .fetchingCampaigns: return "arrow.clockwise"
         case .claiming:          return "gift.fill"
         case .error:             return "exclamationmark.triangle.fill"
+        case .waitingForStream:  return "clock.fill"
         case .stopped, .idle:    return "stop.fill"
         case .paused:            return "pause.fill"
         }

@@ -27,8 +27,6 @@ public enum CampaignService {
         // Merge discovered campaigns from inventory (some campaigns like CDL are missing from dashboard)
         // Also trust inventory for isAccountConnected status (often more accurate than dashboard)
         var allCampaigns = dashboardCampaigns
-        let dashboardIds = Set(dashboardCampaigns.map { $0.id })
-        
         for discovered in snapshot.discoveredCampaigns {
             if let index = allCampaigns.firstIndex(where: { $0.id == discovered.id }) {
                 // If inventory says we are connected, trust it! 

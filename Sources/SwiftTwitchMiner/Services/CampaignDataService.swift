@@ -165,7 +165,6 @@ public actor CampaignDataService {
             // Also trust inventory for isAccountConnected status
             var fresh = dashboardCampaigns
             if let snapshot = inventory {
-                let dashboardIds = Set(dashboardCampaigns.map { $0.id })
                 for discovered in snapshot.discoveredCampaigns {
                     if let index = fresh.firstIndex(where: { $0.id == discovered.id }) {
                         // Trust inventory for connectivity status
