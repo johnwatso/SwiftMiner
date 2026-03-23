@@ -147,6 +147,12 @@ struct ActivityOverviewView: View {
                 detail: "Staying on an eligible stream until the current campaign advances or completes.",
                 color: .green
             )
+        case .waitingForStream:
+            return MinerNextAction(
+                title: "Waiting for a live stream",
+                detail: "Campaign selected but no verified channel is live. Will resume when stream returns.",
+                color: .yellow
+            )
         case .claiming:
             return MinerNextAction(
                 title: "Claiming completed rewards",
@@ -226,6 +232,7 @@ private struct MinerSourceListRow: View {
     private var statusColor: Color {
         switch miner.status {
         case .watching: return .green
+        case .waitingForStream: return .yellow
         case .claiming: return .purple
         case .authenticating, .fetchingCampaigns: return .blue
         case .paused: return .orange

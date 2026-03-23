@@ -829,6 +829,7 @@ struct OverviewView: View {
     private func statusColor(for miner: MinerManager.ManagedMiner) -> Color {
         switch miner.status {
         case .watching:                          return .green
+        case .waitingForStream:                  return .yellow
         case .claiming:                          return .purple
         case .authenticating, .fetchingCampaigns, .paused: return .orange
         case .error:                             return .red
@@ -912,6 +913,8 @@ struct OverviewView: View {
             return "Checking Twitch for live opportunities"
         case .watching:
             return "Watching eligible streams"
+        case .waitingForStream:
+            return "Waiting for a live stream"
         case .claiming:
             return "Claiming completed rewards"
         case .paused:
