@@ -689,7 +689,14 @@ public actor MinerEngine {
                         lastCampaignReevaluation = Date()
                         if let freshCampaigns = try? await dropsService.fetchCampaigns() {
                             self.allCampaigns = freshCampaigns
-                            if let bestCampaign = selectBestCampaign(
+
+                            // If the current campaign no longer exists in the API response,
+                            // clear it from session state and rescan immediately.
+                            if !freshCampaigns.contains(where: { $0.id == campaign.id }) {
+                                log("⚠️ Campaign '\(campaign.name)' no longer returned by API — clearing and rescanning.")
+                                session?.currentCampaignId = nil
+                                shouldSwitchChannel = true
+                            } else if let bestCampaign = selectBestCampaign(
                                 from: freshCampaigns,
                                 priorityGames: priorityGames,
                                 excludedGames: excludedGames,
