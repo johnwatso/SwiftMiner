@@ -23,7 +23,7 @@ public final class AccountStateStore: Identifiable {
     
     private let dropsService: DropsService
     private var refreshTask: Task<Void, Never>?
-    private let refreshInterval: TimeInterval = 300 // 5 minutes
+    private let refreshInterval: TimeInterval = 60 // 1 minute
 
     // MARK: - Init
     

@@ -31,6 +31,8 @@ public enum CampaignMergeEngine {
                 if shouldPreserve(cachedCampaign, inventory: inventory) {
                     print("[CampaignMergeEngine] Preserving campaign not in API: \(cachedCampaign.name)")
                     merged.append(cachedCampaign)
+                } else {
+                    print("[CampaignMergeEngine] Dropping expired/unlinked campaign: \(cachedCampaign.name)")
                 }
             }
         }

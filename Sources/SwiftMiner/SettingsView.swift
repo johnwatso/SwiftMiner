@@ -1,74 +1,49 @@
 import SwiftUI
 import SwiftTwitchMiner
 
-/// Production-quality macOS Preferences window (Phase 6).
+/// macOS Settings window using a Safari-style TabView with a top toolbar.
 struct SettingsView: View {
     @StateObject private var settings = Settings.shared
     @Environment(NavigationModel.self) private var navigation
     @State private var selectedTab: SettingsTab = .general
 
-    private var items: [GlassSelectionItem<SettingsTab>] {
-        SettingsTab.allCases.map {
-            GlassSelectionItem(id: $0, title: $0.title, systemImage: $0.systemImage)
-        }
-    }
-    
     var body: some View {
-        ZStack {
-            LiquidGlassBackdrop()
+        TabView(selection: $selectedTab) {
+            GeneralSettingsView(settings: settings)
+                .tabItem {
+                    Label(SettingsTab.general.title, systemImage: SettingsTab.general.systemImage)
+                }
+                .tag(SettingsTab.general)
 
-            VStack(spacing: 16) {
-                GlassSelectionControl(
-                    items: items,
-                    selection: $selectedTab,
-                    itemSpacing: 8,
-                    padding: 0,
-                    contentInsets: EdgeInsets(top: 10, leading: 10, bottom: 8, trailing: 10),
-                    selectedCornerRadius: 10,
-                    fillsAvailableSpace: true,
-                    showsContainer: false
-                ) { item, isSelected in
-                    VStack(spacing: 6) {
-                        Image(systemName: item.systemImage)
-                            .font(.system(size: 16, weight: .semibold))
-                        Text(item.title)
-                            .font(.system(size: 12, weight: isSelected ? .semibold : .medium))
-                            .lineLimit(1)
-                    }
-                    .foregroundStyle(.primary)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 50)
+            AccountSettingsView(navigation: navigation)
+                .tabItem {
+                    Label(SettingsTab.accounts.title, systemImage: SettingsTab.accounts.systemImage)
                 }
-                .overlay(alignment: .bottom) {
-                    Rectangle()
-                        .fill(Color.primary.opacity(0.12))
-                        .frame(height: 1)
-                }
+                .tag(SettingsTab.accounts)
 
-                Group {
-                    switch selectedTab {
-                    case .general:
-                        GeneralSettingsView(settings: settings)
-                    case .accounts:
-                        AccountSettingsView(navigation: navigation)
-                    case .mining:
-                        MiningSettingsView(settings: settings)
-                    case .advanced:
-                        AdvancedSettingsView(settings: settings)
-                    }
+            MiningSettingsView(settings: settings)
+                .tabItem {
+                    Label(SettingsTab.mining.title, systemImage: SettingsTab.mining.systemImage)
                 }
-            }
-            .padding(20)
+                .tag(SettingsTab.mining)
+
+            AdvancedSettingsView(settings: settings)
+                .tabItem {
+                    Label(SettingsTab.advanced.title, systemImage: SettingsTab.advanced.systemImage)
+                }
+                .tag(SettingsTab.advanced)
         }
-        .frame(width: 500, height: 500)
+        .frame(width: 520) // Authentic Safari-style pane width
     }
 }
 
-private enum SettingsTab: String, CaseIterable, Hashable {
+private enum SettingsTab: String, CaseIterable, Hashable, Identifiable {
     case general
     case accounts
     case mining
     case advanced
+
+    var id: String { rawValue }
 
     var title: String {
         switch self {
@@ -95,7 +70,14 @@ private struct GeneralSettingsView: View {
     @ObservedObject var settings: Settings
     @EnvironmentObject private var updater: AppUpdater
     @Environment(NavigationModel.self) private var navigation
-    
+
+    private var updateChannelSelection: Binding<AppUpdater.UpdateChannel> {
+        Binding(
+            get: { updater.selectedChannel },
+            set: { updater.setUpdateChannel($0) }
+        )
+    }
+
     var body: some View {
         Form {
             Section {
@@ -105,13 +87,13 @@ private struct GeneralSettingsView: View {
             } header: {
                 Text("Application")
             }
-            
+
             Section {
                 Toggle("Use Steam artwork for game images", isOn: $settings.preferSteamArtwork)
+
+                SettingsSecondaryText("Fetches portrait artwork from Steam CDN. Falls back to Twitch artwork when a game is not found on Steam.")
             } header: {
                 Text("Artwork")
-            } footer: {
-                Text("Fetches portrait artwork from Steam CDN. Falls back to Twitch artwork when a game is not found on Steam.")
             }
 
             Section {
@@ -124,56 +106,42 @@ private struct GeneralSettingsView: View {
             }
 
             Section {
-                HStack(spacing: 10) {
-                    updateChannelButton(.stable)
-                    updateChannelButton(.beta)
+                HStack(spacing: 12) {
+                    Text("Update Channel")
+                    Spacer(minLength: 8)
+                    Picker("", selection: updateChannelSelection) {
+                        ForEach(AppUpdater.UpdateChannel.allCases) { channel in
+                            Text(channel.label).tag(channel)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .frame(width: 170)
                 }
 
                 if updater.selectedChannel == .beta {
-                    Label("Beta channel enabled. Updates will come from the beta appcast feed.", systemImage: "flask.fill")
-                        .font(.caption)
-                        .foregroundStyle(.orange)
+                    SettingsSecondaryText("Beta channel enabled. Updates will come from the beta appcast feed.", tint: .orange)
                 }
 
-                Button("Check for Updates...") {
-                    updater.checkForUpdates()
+                HStack(spacing: 12) {
+                    Text("Check for Updates")
+                    Spacer(minLength: 8)
+                    Button("Check Now") {
+                        updater.checkForUpdates()
+                    }
+                    .buttonStyle(.link)
+                    .disabled(!updater.canCheckForUpdates)
                 }
-                .buttonStyle(.bordered)
-                .disabled(!updater.canCheckForUpdates)
 
                 if !updater.isConfigured {
-                    Text("Automatic updates are not available in this version.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    SettingsSecondaryText("Automatic updates are not available in this version.")
                 }
             } header: {
                 Text("Software Updates")
             }
         }
         .formStyle(.grouped)
-    }
-
-    @ViewBuilder
-    private func updateChannelButton(_ channel: AppUpdater.UpdateChannel) -> some View {
-        let isSelected = updater.selectedChannel == channel
-        Button {
-            updater.setUpdateChannel(channel)
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: channel.symbolName)
-                Text(channel.label)
-            }
-            .font(.subheadline.weight(.semibold))
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.plain)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(isSelected ? Color.accentColor.opacity(0.6) : Color.secondary.opacity(0.2), lineWidth: isSelected ? 1.4 : 1)
-        )
+        .padding(24)
     }
 }
 
@@ -182,60 +150,53 @@ private struct GeneralSettingsView: View {
 private struct AccountSettingsView: View {
     let navigation: NavigationModel
 
+    @State private var showImporter = false
+    @State private var showAlert = false
+    @State private var alertMessage = ""
+
     var body: some View {
-        VStack(spacing: 0) {
-            List {
+        Form {
+            Section {
                 if navigation.minerManager.miners.isEmpty {
-                    MaterialEmptyStatePanel(
-                        "No Accounts",
-                        systemImage: "person.slash",
-                        description: "Add a Twitch account to start mining."
-                    )
-                    .frame(maxWidth: .infinity, minHeight: 220)
-                    .listRowBackground(Color.clear)
+                    SettingsSecondaryText("No accounts connected yet.")
                 } else {
-                    ForEach(navigation.minerManager.miners) { miner in
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text(miner.username).font(.headline)
-                                Text(miner.accountId).font(.caption).foregroundStyle(.secondary)
+                    List {
+                        ForEach(navigation.minerManager.miners) { miner in
+                            HStack {
+                                Text(miner.username)
+                                Spacer()
+                                Button("Remove") {
+                                    Task { await navigation.minerManager.removeAccount(minerId: miner.id) }
+                                }
+                                .buttonStyle(.borderless)
+                                .foregroundStyle(.red)
                             }
-                            Spacer()
-                            Button("Remove") {
-                                Task { await navigation.minerManager.removeAccount(minerId: miner.id) }
-                            }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
                         }
-                        .padding(.vertical, 4)
+                    }
+                    .frame(minHeight: 120)
+                    .cornerRadius(6)
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.2), lineWidth: 1))
+                }
+            } header: {
+                Text("Accounts")
+            }
+
+            Section {
+                HStack {
+                    Button("Import from TDM\u{2026}") {
+                        showImporter = true
+                    }
+                    
+                    Button("Add Account\u{2026}") {
+                        navigation.showAddAccountSheet = true
                     }
                 }
+            } header: {
+                Text("Management")
             }
-            .scrollContentBackground(.hidden)
-
-            Divider()
-
-            HStack {
-                Button {
-                    showImporter = true
-                } label: {
-                    Label("Import from TDM", systemImage: "square.and.arrow.down")
-                }
-                .buttonStyle(.bordered)
-                .help("Import session cookies from TwitchDropsMiner (cookies.jar)")
-
-                Spacer()
-                
-                Button {
-                    navigation.showAddAccountSheet = true
-                } label: {
-                    Label("Add Account", systemImage: "plus")
-                }
-                .buttonStyle(.borderedProminent)
-            }
-            .padding()
-            .background(.regularMaterial)
         }
+        .formStyle(.grouped)
+        .padding(24)
         .fileImporter(
             isPresented: $showImporter,
             allowedContentTypes: [.data],
@@ -256,10 +217,6 @@ private struct AccountSettingsView: View {
         }
     }
 
-    @State private var showImporter = false
-    @State private var showAlert = false
-    @State private var alertMessage = ""
-
     private func importCookies(from url: URL) {
         guard url.startAccessingSecurityScopedResource() else { return }
         defer { url.stopAccessingSecurityScopedResource() }
@@ -269,7 +226,7 @@ private struct AccountSettingsView: View {
                 let token = try TDMCookieParser.parseToken(from: url)
                 let authService = TwitchAuthService(clientId: ClientConfiguration.clientId)
                 let account = try await authService.importTDMSession(token: token)
-                
+
                 navigation.minerManager.addAccount(account)
                 alertMessage = "Successfully imported account: \(account.username)"
                 showAlert = true
@@ -286,6 +243,7 @@ private struct AccountSettingsView: View {
 private struct MiningSettingsView: View {
     @ObservedObject var settings: Settings
     @Environment(NavigationModel.self) private var navigation
+    @State private var isShowingGameManagement = false
 
     var body: some View {
         Form {
@@ -302,31 +260,51 @@ private struct MiningSettingsView: View {
                         Text(strategy.displayName).tag(strategy)
                     }
                 }
+                
+                SettingsSecondaryText(strategyDetailText)
             } header: {
-                Text("Mining Strategy")
-            } footer: {
-                switch settings.miningStrategy {
-                case .mineAll:
-                    Text("Mine any eligible campaign.")
-                case .prioritiseSelected:
-                    Text("Prioritize selected games, fallback to any eligible.")
-                case .onlyPriority:
-                    Text("Only mine selected games. Idle if none available.")
-                }
+                Text("Strategy")
             }
 
             Section {
-                GamePreferencesSection(
-                    settings: settings,
-                    minerManager: navigation.minerManager
-                )
+                Button("Manage Game Rules\u{2026}") {
+                    isShowingGameManagement = true
+                }
+                
+                if let count = gameCountText {
+                    Text("\(count) rules active.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             } header: {
-                Text("Game Preferences")
-            } footer: {
-                Text("Search for games with active drop campaigns. Added games default to preferred, and clicking a chip cycles preferred, excluded, and neutral.")
+                Text("Game Rules")
             }
         }
         .formStyle(.grouped)
+        .padding(24)
+        .sheet(isPresented: $isShowingGameManagement) {
+            GamePreferenceManagementView(
+                settings: settings,
+                minerManager: navigation.minerManager
+            )
+        }
+    }
+
+    private var strategyDetailText: String {
+        switch settings.miningStrategy {
+        case .mineAll:
+            return "Mine any eligible campaign."
+        case .prioritiseSelected:
+            return "Prioritise selected games first, then fall back to other eligible campaigns."
+        case .onlyPriority:
+            return "Only mine selected games. Miners stay idle when none are available."
+        }
+    }
+
+    private var gameCountText: String? {
+        let count = settings.gamePreferences.count
+        guard count > 0 else { return nil }
+        return "\(count)"
     }
 }
 
@@ -335,30 +313,92 @@ private struct MiningSettingsView: View {
 private struct AdvancedSettingsView: View {
     @ObservedObject var settings: Settings
     @State private var showResetConfirmation = false
-    
+    @State private var showClientIdAlert = false
+    @State private var tempClientId = ""
+
     var body: some View {
         Form {
             Section {
-                TextField("Twitch Client ID", text: $settings.twitchClientId)
-                    .textFieldStyle(.roundedBorder)
-                Text("Leave blank to use default built-in client.")
-                    .font(.caption).foregroundStyle(.secondary)
+                HStack {
+                    Text("Twitch Client ID")
+                    Spacer()
+                    
+                    if settings.twitchClientId.isEmpty {
+                        Button("Set Custom Client ID\u{2026}") {
+                            tempClientId = ""
+                            showClientIdAlert = true
+                        }
+                        .buttonStyle(.link)
+                    } else {
+                        HStack(spacing: 8) {
+                            Text(settings.twitchClientId)
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.secondary)
+                            
+                            Button("Edit\u{2026}") {
+                                tempClientId = settings.twitchClientId
+                                showClientIdAlert = true
+                            }
+                            .buttonStyle(.link)
+                            
+                            Button("Reset") {
+                                settings.twitchClientId = ""
+                            }
+                            .buttonStyle(.link)
+                            .foregroundStyle(.red)
+                        }
+                    }
+                }
+
+                SettingsSecondaryText("By default, the app uses a built-in client. Only change this if you know what you are doing.")
             } header: {
                 Text("API Configuration")
             }
-            
+
             Section {
-                Button("Reset All Settings", role: .destructive) {
+                Button("Reset All Settings\u{2026}", role: .destructive) {
                     showResetConfirmation = true
                 }
+                .foregroundStyle(.red)
             } header: {
                 Text("Maintenance")
             }
         }
         .formStyle(.grouped)
+        .padding(24)
         .confirmationDialog("Reset all settings?", isPresented: $showResetConfirmation) {
-            Button("Reset", role: .destructive) { settings.resetToDefaults() }
+            Button("Reset", role: .destructive) {
+                settings.resetToDefaults()
+            }
         }
+        .alert("Custom Twitch Client ID", isPresented: $showClientIdAlert) {
+            TextField("Client ID", text: $tempClientId)
+            Button("Save") {
+                settings.twitchClientId = tempClientId.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Enter a custom Twitch Client ID to use for API requests. Leave blank to reset to default.")
+        }
+    }
+}
+
+// MARK: - Shared Components
+
+private struct SettingsSecondaryText: View {
+    let text: String
+    var tint: Color = .secondary
+
+    init(_ text: String, tint: Color = .secondary) {
+        self.text = text
+        self.tint = tint
+    }
+
+    var body: some View {
+        Text(text)
+            .font(.caption)
+            .foregroundStyle(tint)
+            .padding(.vertical, 1)
     }
 }
 

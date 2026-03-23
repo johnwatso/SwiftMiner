@@ -264,8 +264,10 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
     /// The definitive status of this campaign for the current account.
     /// Derived from both Twitch data and Inventory state.
     public var miningStatus: MiningCampaignStatus {
-        // 1. Expired check
-        if Date() > endDate || status == .expired {
+        // 1. Expired check — use date window only.
+        // The API status field can return stale values (e.g. "EXPIRED" while endDate is still
+        // in the future for CDL/esports campaigns). Rely on the date window as authoritative.
+        if Date() > endDate {
             return .expired
         }
         
@@ -297,33 +299,27 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
             return .prioritised
         }
 
-        // 2. Active check (available, in progress, or claimable)
         let s = miningStatus
-        if s == .available || s == .inProgress || s == .claimable {
+        
+        // 2. Claimed check — ALL claimed campaigns show as recent (so they appear in Claimed tab)
+        // This MUST come before Active check to prevent claimed campaigns showing in Active
+        // Use drops directly since isFullyClaimed isn't defined yet at this point in the file
+        let allDropsClaimed = !drops.isEmpty && drops.allSatisfy({ $0.isClaimed })
+        if s == .claimed || allDropsClaimed {
+            return .recent
+        }
+
+        // 3. Active check — account must be connected AND campaign not ended
+        // Only show in Active if: connected + (available/inProgress/claimable) + timeActive
+        if isAccountConnected && isTimeActive && 
+           (s == .available || s == .inProgress || s == .claimable) {
             return .active
         }
 
-        // 3. Expired with unclaimed drops - keep visible in feed (shows in All tab)
-        // This handles campaigns like "The Finals" that ended but have unclaimed drops
-        if s == .expired && !drops.allSatisfy({ $0.isClaimed }) {
-            return .active
-        }
-
-        // 4. Closed check (ended but all drops claimed - show in "Closed Drop Campaigns")
-        if isClosed {
+        // 4. Closed check — use date window only (same reasoning as isActive).
+        // API status field can be stale (e.g. "EXPIRED" while endDate is still future).
+        if endDate <= Date() {
             return .closed
-        }
-
-        // 5. Recent check (Claimed recently - last 48h)
-        if s == .claimed {
-            // Check if any drop was awarded recently
-            let recentlyAwarded = drops.contains { drop in
-                guard let lastAwarded = drop.progress?.lastUpdated else { return false }
-                return Date().timeIntervalSince(lastAwarded) < (48 * 3600)
-            }
-            if recentlyAwarded {
-                return .recent
-            }
         }
 
         return .irrelevant
@@ -332,7 +328,10 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
     // MARK: Computed properties
 
     public var isActive: Bool {
-        status == .active && Date() >= startDate && Date() <= endDate
+        // Trust the date window over the API status field — Twitch occasionally returns
+        // stale/incorrect status (e.g. "EXPIRED") for campaigns that are still within
+        // their time window (endDate in the future). Date-based check is authoritative.
+        Date() >= startDate && Date() <= endDate
     }
 
     public var isTimeActive: Bool { isActive }

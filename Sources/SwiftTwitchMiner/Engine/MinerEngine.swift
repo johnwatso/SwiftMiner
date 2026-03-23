@@ -518,6 +518,16 @@ public actor MinerEngine {
                     // IMPLEMENTATION OF DOMAIN LOGGING REQUIREMENT
                     log("  · \(c.name) (\(c.gameName)) → Status: \(c.miningStatus.rawValue) → Relevance: \(c.relevance.rawValue)")
                 }
+                
+                // Log expired campaigns that might be incorrectly marked as eligible
+                let expiredButEligible = allEnriched.filter { $0.miningStatus == .expired && $0.isMiningEligible }
+                if !expiredButEligible.isEmpty {
+                    log("⚠️ WARNING: \(expiredButEligible.count) expired campaigns incorrectly marked as mining-eligible:")
+                    for c in expiredButEligible {
+                        log("   - \(c.name) (endDate: \(c.endDate), isTimeActive: \(c.isTimeActive), isAccountConnected: \(c.isAccountConnected))")
+                    }
+                }
+                
                 onCampaignUpdate?(campaigns)
 
                 // 2. Claim any ready drops first (Claimable status handled here)
@@ -578,6 +588,7 @@ public actor MinerEngine {
 
                 // Wait for watch session while periodically checking progress
                 var lastGqlPoll = Date()
+                var lastCampaignReevaluation = Date()
                 while await watchSessionManager.isWatching && !shouldSwitchChannel {
                     // Check every 10 seconds for interrupts or polls
                     try? await Task.sleep(nanoseconds: 10 * 1_000_000_000)
@@ -656,6 +667,25 @@ public actor MinerEngine {
                         } catch {
                             log("⚠️ Inventory refresh failed: \(error.localizedDescription). Switching channel as fallback.")
                             shouldSwitchChannel = true
+                        }
+                    }
+
+                    // Periodic campaign re-evaluation: detect if a better campaign becomes available
+                    // mid-session (e.g. a priority campaign goes live after we started watching).
+                    let campaignReevalInterval: TimeInterval = 60 // Check every 60 seconds for better responsiveness
+                    if Date().timeIntervalSince(lastCampaignReevaluation) >= campaignReevalInterval {
+                        lastCampaignReevaluation = Date()
+                        if let freshCampaigns = try? await dropsService.fetchCampaigns() {
+                            self.allCampaigns = freshCampaigns
+                            if let bestCampaign = selectBestCampaign(
+                                from: freshCampaigns,
+                                priorityGames: priorityGames,
+                                excludedGames: excludedGames,
+                                strategy: miningStrategy
+                            ), bestCampaign.id != campaign.id {
+                                log("🔄 Better campaign now available: \(bestCampaign.name) (\(bestCampaign.gameName)). Switching from \(campaign.name).")
+                                shouldSwitchChannel = true
+                            }
                         }
                     }
 
@@ -842,22 +872,23 @@ public actor MinerEngine {
                 return aPriority < bPriority
             }
 
-            // Status check (prefer IN_PROGRESS over AVAILABLE)
+            // Urgency check: prefer campaigns ending sooner (time-limited events like CDL qualifiers)
+            // This runs before status so a newly-live short event beats an in-progress long campaign.
+            if a.endDate != b.endDate {
+                return a.endDate < b.endDate
+            }
+
+            // Status check (prefer IN_PROGRESS over AVAILABLE — momentum tie-breaker within same end date)
             let aStatus = a.miningStatus
             let bStatus = b.miningStatus
             if aStatus != bStatus {
-                return aStatus == .inProgress // IN_PROGRESS (true) comes before AVAILABLE (false)
+                return aStatus == .inProgress
             }
 
             // Unclaimed drops check (prefer more drops available)
             let aUnclaimed = a.earnableDrops.count
             let bUnclaimed = b.earnableDrops.count
-            if aUnclaimed != bUnclaimed {
-                return aUnclaimed > bUnclaimed
-            }
-
-            // Ending soonest check
-            return a.endDate < b.endDate
+            return aUnclaimed > bUnclaimed
         }.first
     }
     

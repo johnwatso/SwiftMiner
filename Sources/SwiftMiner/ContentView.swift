@@ -191,6 +191,11 @@ struct OverviewView: View {
 
     private var campaigns: [Campaign] {
         navigation.minerManager.campaignStore.campaigns
+            .filter { campaign in
+                !settings.excludedGames.contains(where: { 
+                    $0.localizedCaseInsensitiveCompare(campaign.game.name) == .orderedSame 
+                })
+            }
     }
 
     var body: some View {
@@ -413,7 +418,8 @@ struct OverviewView: View {
             watchers: watchers(for: campaign),
             isDimmed: state == .claimed,
             isPlaceholder: false,
-            showsLiveMotion: section == .active && (state == .watching || state == .inProgress || state == .claimable)
+            showsLiveMotion: section == .active && (state == .watching || state == .inProgress || state == .claimable),
+            game: campaign.game
         )
     }
 
@@ -433,7 +439,8 @@ struct OverviewView: View {
             watchers: [],
             isDimmed: false,
             isPlaceholder: false,
-            showsLiveMotion: false
+            showsLiveMotion: false,
+            game: Game(id: preference.gameId, name: preference.gameName, boxArtURL: preference.boxArtURL)
         )
     }
 
@@ -1036,6 +1043,21 @@ private struct ActiveCampaignRow: View {
                 .strokeBorder(.white.opacity(0.12), lineWidth: 1)
         }
         .shadow(color: .black.opacity(0.08), radius: 14, y: 6)
+        .contextMenu {
+            if let game = item.game, !item.isPlaceholder {
+                Button {
+                    Settings.shared.setGamePreference(game, state: .preferred)
+                } label: {
+                    Label("Prioritise Game", systemImage: "star.fill")
+                }
+                
+                Button(role: .destructive) {
+                    Settings.shared.setGamePreference(game, state: .excluded)
+                } label: {
+                    Label("Exclude Game", systemImage: "minus.circle")
+                }
+            }
+        }
     }
 }
 
@@ -1175,6 +1197,7 @@ private struct CampaignRailItem: Identifiable {
     let isDimmed: Bool
     let isPlaceholder: Bool
     let showsLiveMotion: Bool
+    var game: Game? = nil
 }
 
 private struct CampaignFeedCard: View {
@@ -1300,6 +1323,21 @@ private struct CampaignFeedCard: View {
         .animation(.easeInOut(duration: 0.7), value: usesStandbyMotionStyle)
         .onHover { hovering in
             isHovering = hovering
+        }
+        .contextMenu {
+            if let game = item.game, !item.isPlaceholder {
+                Button {
+                    Settings.shared.setGamePreference(game, state: .preferred)
+                } label: {
+                    Label("Prioritise Game", systemImage: "star.fill")
+                }
+                
+                Button(role: .destructive) {
+                    Settings.shared.setGamePreference(game, state: .excluded)
+                } label: {
+                    Label("Exclude Game", systemImage: "minus.circle")
+                }
+            }
         }
     }
 }

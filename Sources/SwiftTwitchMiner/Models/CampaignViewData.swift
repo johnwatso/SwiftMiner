@@ -51,6 +51,8 @@ public struct CampaignViewData: Codable, Sendable, Identifiable, Equatable {
     /// Truth layer: derived status combining Twitch data + inventory state.
     /// Use this for selection and display logic — do NOT use `status` alone.
     public let miningStatus: MiningCampaignStatus
+    /// Whether the user's game account is connected for this campaign (at least for one account in merged views)
+    public let isAccountConnected: Bool
     /// Feed ranking context. Keep tab routing on `tabVisibility` instead of
     /// branching directly on relevance in the UI.
     public let relevance: CampaignRelevance
@@ -121,6 +123,7 @@ public struct CampaignViewData: Codable, Sendable, Identifiable, Equatable {
             timeRemaining: timeRemaining,
             status: status,
             miningStatus: miningStatus,
+            isAccountConnected: isAccountConnected,
             relevance: relevance,
             startDate: startDate,
             endDate: endDate,
@@ -141,6 +144,7 @@ public struct CampaignViewData: Codable, Sendable, Identifiable, Equatable {
         timeRemaining: TimeInterval? = nil,
         status: String = "ACTIVE",
         miningStatus: MiningCampaignStatus = .available,
+        isAccountConnected: Bool = false,
         relevance: CampaignRelevance = .active,
         startDate: Date,
         endDate: Date,
@@ -158,6 +162,7 @@ public struct CampaignViewData: Codable, Sendable, Identifiable, Equatable {
         self.timeRemaining = timeRemaining
         self.status = status
         self.miningStatus = miningStatus
+        self.isAccountConnected = isAccountConnected
         self.relevance = relevance
         self.startDate = startDate
         self.endDate = endDate
