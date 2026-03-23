@@ -75,7 +75,7 @@ struct AccountDetailView: View {
             } label: {
                 Label(isStopping ? "Stopping…" : "Stop Mining", systemImage: "stop.fill")
             }
-            .buttonStyle(glassButtonStyle)
+            .buttonStyle(.bordered)
             .controlSize(.regular)
             .disabled(isStopping)
         } else {
@@ -146,7 +146,7 @@ struct AccountDetailView: View {
                 } label: {
                     Label("Claim Drops", systemImage: "gift")
                 }
-                .buttonStyle(glassButtonStyle)
+                .buttonStyle(.bordered)
                 .disabled(!miner.isRunning)
             }
             .padding(8)
@@ -199,14 +199,6 @@ struct AccountDetailView: View {
     }
 
     // MARK: Helpers
-
-    private var glassButtonStyle: some ButtonStyle {
-        if #available(macOS 26, *) {
-            return AnyButtonStyle(.glass)
-        } else {
-            return AnyButtonStyle(.bordered)
-        }
-    }
 
     private var avatarColor: Color {
         let colors: [Color] = [.purple, .blue, .teal, .green, .orange, .pink, .indigo]
@@ -531,19 +523,4 @@ struct StatusDot: View {
     ))
     .environment(NavigationModel(clientId: "preview"))
     .frame(width: 240, height: 400)
-}
-
-/// Helper to allow conditional button styles
-struct AnyButtonStyle: ButtonStyle {
-    private let _makeBody: (Configuration) -> AnyView
-
-    init<S: ButtonStyle>(_ style: S) {
-        _makeBody = { configuration in
-            AnyView(style.makeBody(configuration: configuration))
-        }
-    }
-
-    func makeBody(configuration: Configuration) -> some View {
-        _makeBody(configuration)
-    }
 }
