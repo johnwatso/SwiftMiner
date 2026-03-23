@@ -72,10 +72,10 @@ struct ActivityOverviewView: View {
             maxWidth: hasMultipleMiners ? 280 : 176
         )
         .background {
-            RoundedRectangle(cornerRadius: GlassRadius.large, style: .continuous)
+            RoundedRectangle(cornerRadius: GlassRadius.subtle, style: .continuous)
                 .fill(.thinMaterial)
         }
-        .clipShape(RoundedRectangle(cornerRadius: GlassRadius.large, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: GlassRadius.subtle, style: .continuous))
         .padding(.leading, 24)
         .padding(.vertical, 24)
         .padding(.trailing, hasMultipleMiners ? 12 : 8)

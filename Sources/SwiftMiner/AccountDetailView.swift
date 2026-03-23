@@ -60,7 +60,7 @@ struct AccountDetailView: View {
             primaryButton
         }
         .padding(20)
-        .glassContentSurface()
+        .glassContentSurface(cornerRadius: GlassRadius.small)
     }
 
     @ViewBuilder
@@ -130,7 +130,7 @@ struct AccountDetailView: View {
             )
         }
         .padding(18)
-        .glassContentSurface()
+        .glassContentSurface(cornerRadius: GlassRadius.small)
     }
 
     // MARK: Controls
@@ -153,7 +153,7 @@ struct AccountDetailView: View {
             .glassControlSurface()
         }
         .padding(20)
-        .glassContentSurface()
+        .glassContentSurface(cornerRadius: GlassRadius.small)
     }
 
     // MARK: Log Console
@@ -195,7 +195,7 @@ struct AccountDetailView: View {
             }
         }
         .padding(20)
-        .glassContentSurface()
+        .glassContentSurface(cornerRadius: GlassRadius.small)
     }
 
     // MARK: Helpers
@@ -275,7 +275,7 @@ private struct MinerStatCard: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 16)
         .padding(.horizontal, 12)
-        .glassPanel()
+        .glassPanel(cornerRadius: GlassRadius.small)
     }
 }
 
@@ -319,7 +319,7 @@ struct MinerLogConsole: View {
                 }
             }
         }
-        .glassPanel()
+        .glassPanel(cornerRadius: GlassRadius.small)
     }
 }
 
