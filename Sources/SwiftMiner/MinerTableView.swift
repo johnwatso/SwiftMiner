@@ -93,19 +93,28 @@ struct StatusBadge: View {
     let status: MinerManager.MinerStatus
     
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 5) {
             Circle()
                 .fill(statusColor)
-                .frame(width: 8, height: 8)
+                .frame(width: 7, height: 7)
             
             Text(status.displayName)
-                .font(.caption)
-                .fontWeight(.medium)
+                .font(.caption2)
+                .fontWeight(.bold)
+                .textCase(.uppercase)
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 10)
         .padding(.vertical, 4)
-        .background(statusColor.opacity(0.15))
-        .clipShape(Capsule())
+        .background {
+            Capsule()
+                .fill(.ultraThinMaterial)
+                .overlay {
+                    Capsule()
+                        .fill(statusColor.opacity(0.12))
+                }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Status: \(status.displayName)")
     }
     
     private var statusColor: Color {

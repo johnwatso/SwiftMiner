@@ -2,31 +2,59 @@ import AppKit
 import SwiftUI
 
 struct LiquidGlassBackdrop: View {
+    @State private var animationPhase = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         ZStack {
             VisualEffectMaterialView(material: .windowBackground, blendingMode: .behindWindow)
 
-            LinearGradient(
-                colors: [
-                    Color.white.opacity(0.08),
-                    Color.white.opacity(0.02),
-                    Color.blue.opacity(0.04)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            if #available(macOS 15, *) {
+                MeshGradient(
+                    width: 3,
+                    height: 3,
+                    points: [
+                        [0.0, 0.0], [0.5, 0.0], [1.0, 0.0],
+                        [0.0, 0.5], animationPhase ? [0.6, 0.4] : [0.4, 0.6], [1.0, 0.5],
+                        [0.0, 1.0], [0.5, 1.0], [1.0, 1.0]
+                    ],
+                    colors: [
+                        .white.opacity(0.05), .clear,              .white.opacity(0.03),
+                        .clear, animationPhase ? Color.blue.opacity(0.10) : Color.cyan.opacity(0.07), .blue.opacity(0.03),
+                        .clear,              .purple.opacity(0.04), .clear
+                    ]
+                )
+                .ignoresSafeArea()
+                .onAppear {
+                    if !reduceMotion {
+                        withAnimation(.easeInOut(duration: 8).repeatForever(autoreverses: true)) {
+                            animationPhase.toggle()
+                        }
+                    }
+                }
+            } else {
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.08),
+                        Color.white.opacity(0.02),
+                        Color.blue.opacity(0.04)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
 
-            Circle()
-                .fill(Color.white.opacity(0.16))
-                .frame(width: 360, height: 360)
-                .blur(radius: 90)
-                .offset(x: -220, y: -180)
+                Circle()
+                    .fill(Color.white.opacity(0.16))
+                    .frame(width: 360, height: 360)
+                    .blur(radius: 90)
+                    .offset(x: -220, y: -180)
 
-            Circle()
-                .fill(Color.cyan.opacity(0.10))
-                .frame(width: 420, height: 420)
-                .blur(radius: 120)
-                .offset(x: 260, y: 220)
+                Circle()
+                    .fill(Color.cyan.opacity(0.10))
+                    .frame(width: 420, height: 420)
+                    .blur(radius: 120)
+                    .offset(x: 260, y: 220)
+            }
         }
         .ignoresSafeArea()
     }
@@ -36,14 +64,18 @@ struct SidebarMaterialBackground: View {
     var body: some View {
         VisualEffectMaterialView(material: .sidebar)
             .overlay {
-                LinearGradient(
-                    colors: [
-                        Color.white.opacity(0.16),
-                        Color.clear
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+                if #available(macOS 26, *) {
+                    Color.clear.glassEffect(.regular.interactive())
+                } else {
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.16),
+                            Color.clear
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                }
             }
             .ignoresSafeArea()
     }
@@ -82,24 +114,32 @@ private struct GlassSurfaceModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .background {
-                shape
-                    .fill(material)
+                if #available(macOS 26, *) {
+                    shape
+                        .fill(.clear)
+                        .glassEffect(.regular.interactive())
+                } else {
+                    shape
+                        .fill(material)
+                }
             }
             .overlay {
-                shape
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.26),
-                                Color.white.opacity(0.08),
-                                Color.clear
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
+                if #unavailable(macOS 26) {
+                    shape
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(0.26),
+                                    Color.white.opacity(0.08),
+                                    Color.clear
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
                         )
-                    )
-                    .opacity(0.45)
-                    .allowsHitTesting(false)
+                        .opacity(0.45)
+                        .allowsHitTesting(false)
+                }
             }
             .clipShape(shape)
             .shadow(color: .black.opacity(shadowOpacity), radius: shadowRadius, y: shadowY)
@@ -223,6 +263,7 @@ struct GlassSelectionControl<ID: Hashable, ItemContent: View>: View {
 
     @Namespace private var selectionNamespace
     @State private var itemFrames: [AnyHashable: CGRect] = [:]
+    @ScaledMetric private var accessibilityScale: CGFloat = 1
 
     private let coordinateSpaceName = "GlassSelectionControlSpace"
 
@@ -302,12 +343,8 @@ struct GlassSelectionControl<ID: Hashable, ItemContent: View>: View {
                         if isSelected {
                             RoundedRectangle(cornerRadius: selectedCornerRadius, style: .continuous)
                                 .fill(.ultraThinMaterial)
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: selectedCornerRadius, style: .continuous)
-                                        .strokeBorder(Color.white.opacity(0.28), lineWidth: 1)
-                                }
-                                .shadow(color: .white.opacity(0.12), radius: 10, y: -1)
-                                .shadow(color: .black.opacity(0.10), radius: 12, y: 5)
+                                .shadow(color: .white.opacity(0.18), radius: 6, y: -2)
+                                .shadow(color: .black.opacity(0.12), radius: 10, y: 4)
                                 .matchedGeometryEffect(id: "selection", in: selectionNamespace)
                         }
                     }

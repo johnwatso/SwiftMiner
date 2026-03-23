@@ -75,7 +75,7 @@ struct AccountDetailView: View {
             } label: {
                 Label(isStopping ? "Stopping…" : "Stop Mining", systemImage: "stop.fill")
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(glassButtonStyle)
             .controlSize(.regular)
             .disabled(isStopping)
         } else {
@@ -146,7 +146,7 @@ struct AccountDetailView: View {
                 } label: {
                     Label("Claim Drops", systemImage: "gift")
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(glassButtonStyle)
                 .disabled(!miner.isRunning)
             }
             .padding(8)
@@ -200,6 +200,14 @@ struct AccountDetailView: View {
 
     // MARK: Helpers
 
+    private var glassButtonStyle: some ButtonStyle {
+        if #available(macOS 26, *) {
+            return AnyButtonStyle(.glass)
+        } else {
+            return AnyButtonStyle(.bordered)
+        }
+    }
+
     private var avatarColor: Color {
         let colors: [Color] = [.purple, .blue, .teal, .green, .orange, .pink, .indigo]
         return colors[abs(miner.username.hashValue) % colors.count]
@@ -241,23 +249,41 @@ private struct MinerStatCard: View {
     let color: Color
 
     var body: some View {
-        VStack(spacing: 8) {
-            Image(systemName: icon)
-                .font(.title3)
-                .foregroundStyle(color)
+        VStack(spacing: 12) {
+            // Icon with tinted glass backing (P1 hierarchy)
+            ZStack {
+                Circle()
+                    .fill(color.opacity(0.12))
+                    .frame(width: 40, height: 40)
+                
+                if #available(macOS 26, *) {
+                    Circle()
+                        .fill(.clear)
+                        .glassEffect(.regular.interactive())
+                        .frame(width: 40, height: 40)
+                }
 
-            Text(value)
-                .font(.callout.weight(.semibold))
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
+                Image(systemName: icon)
+                    .font(.headline)
+                    .foregroundStyle(color)
+            }
 
-            Text(label)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+            VStack(spacing: 2) {
+                Text(value)
+                    .font(.title3.weight(.bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+
+                Text(label)
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.tertiary)
+                    .textCase(.uppercase)
+            }
         }
         .frame(maxWidth: .infinity)
-        .padding(12)
-        .glassPanel(cornerRadius: 18)
+        .padding(.vertical, 16)
+        .padding(.horizontal, 12)
+        .glassPanel(cornerRadius: 20)
     }
 }
 
@@ -505,4 +531,19 @@ struct StatusDot: View {
     ))
     .environment(NavigationModel(clientId: "preview"))
     .frame(width: 240, height: 400)
+}
+
+/// Helper to allow conditional button styles
+struct AnyButtonStyle: ButtonStyle {
+    private let _makeBody: (Configuration) -> AnyView
+
+    init<S: ButtonStyle>(_ style: S) {
+        _makeBody = { configuration in
+            AnyView(style.makeBody(configuration: configuration))
+        }
+    }
+
+    func makeBody(configuration: Configuration) -> some View {
+        _makeBody(configuration)
+    }
 }
