@@ -50,7 +50,7 @@ struct OnboardingView: View {
             .frame(width: 440)
             .frame(maxHeight: 680)
             .glassContentSurface()
-            .shadow(color: .black.opacity(0.22), radius: 24, y: 16)
+            .shadow(color: .black.opacity(0.12), radius: 8, y: 4)
             .onAppear {
                 navigation.refreshOnboardingPresentation()
             }

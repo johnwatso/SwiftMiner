@@ -312,7 +312,7 @@ private struct MinerControlPanel: View {
                 .fill(.regularMaterial)
         }
         .clipShape(RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
-        .shadow(color: .black.opacity(0.10), radius: 22, y: 10)
+        .shadow(color: .black.opacity(0.07), radius: 6, y: 2)
     }
 
     @ViewBuilder
@@ -425,7 +425,7 @@ private struct MinerActivityFeedSection: View {
                 .fill(.thinMaterial)
         }
         .clipShape(RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
-        .shadow(color: .black.opacity(0.08), radius: 18, y: 8)
+        .shadow(color: .black.opacity(0.06), radius: 4, y: 1)
     }
 }
 
@@ -511,7 +511,7 @@ private struct MinerLiveStateSection: View {
                 .fill(.thinMaterial)
         }
         .clipShape(RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
-        .shadow(color: .black.opacity(0.08), radius: 18, y: 8)
+        .shadow(color: .black.opacity(0.06), radius: 4, y: 1)
     }
 }
 
