@@ -19,7 +19,7 @@ struct AuthRequiredSheet: View {
         }
         .frame(width: 480, height: 430)
         .padding(28)
-        .glassContentSurface(cornerRadius: 32)
+        .glassContentSurface()
         .onAppear {
             loginService.startDeviceAuth()
         }

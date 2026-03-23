@@ -147,7 +147,7 @@ private struct GlassSurfaceModifier: ViewModifier {
 }
 
 extension View {
-    func glassContentSurface(cornerRadius: CGFloat = 28) -> some View {
+    func glassContentSurface(cornerRadius: CGFloat = 12) -> some View {
         modifier(
             GlassSurfaceModifier(
                 material: AnyShapeStyle(.regularMaterial),
@@ -159,7 +159,7 @@ extension View {
         )
     }
 
-    func glassPanel(cornerRadius: CGFloat = 22) -> some View {
+    func glassPanel(cornerRadius: CGFloat = 10) -> some View {
         modifier(
             GlassSurfaceModifier(
                 material: AnyShapeStyle(.thinMaterial),
@@ -171,7 +171,7 @@ extension View {
         )
     }
 
-    func glassControlSurface(cornerRadius: CGFloat = 16) -> some View {
+    func glassControlSurface(cornerRadius: CGFloat = 8) -> some View {
         modifier(
             GlassSurfaceModifier(
                 material: AnyShapeStyle(.ultraThinMaterial),
@@ -223,7 +223,7 @@ struct MaterialEmptyStatePanel<Actions: View>: View {
         .frame(maxWidth: 420)
         .padding(.horizontal, 32)
         .padding(.vertical, 28)
-        .glassContentSurface(cornerRadius: 30)
+        .glassContentSurface(cornerRadius: 14)
     }
 }
 
@@ -321,7 +321,7 @@ struct GlassSelectionControl<ID: Hashable, ItemContent: View>: View {
         if showsContainer {
             stack
                 .padding(padding)
-                .glassControlSurface(cornerRadius: axis == .horizontal ? 26 : 24)
+                .glassControlSurface(cornerRadius: axis == .horizontal ? 12 : 10)
         } else {
             stack
                 .padding(padding)

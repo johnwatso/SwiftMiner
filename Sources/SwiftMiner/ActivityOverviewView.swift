@@ -376,7 +376,7 @@ private struct ControlPanelInfoBlock: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .glassControlSurface(cornerRadius: 18)
+        .glassControlSurface()
     }
 }
 
@@ -413,7 +413,7 @@ private struct MinerActivityFeedSection: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .padding(16)
-                    .glassControlSurface(cornerRadius: 18)
+                    .glassControlSurface()
             } else {
                 MinerLogConsole(entries: entries)
                     .frame(minHeight: 260)
