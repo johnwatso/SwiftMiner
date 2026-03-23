@@ -130,7 +130,7 @@ struct AccountDetailView: View {
             )
         }
         .padding(18)
-        .glassContentSurface(cornerRadius: 24)
+        .glassContentSurface()
     }
 
     // MARK: Controls
@@ -150,10 +150,10 @@ struct AccountDetailView: View {
                 .disabled(!miner.isRunning)
             }
             .padding(8)
-            .glassControlSurface(cornerRadius: 18)
+            .glassControlSurface()
         }
         .padding(20)
-        .glassContentSurface(cornerRadius: 24)
+        .glassContentSurface()
     }
 
     // MARK: Log Console
@@ -188,14 +188,14 @@ struct AccountDetailView: View {
                     .foregroundStyle(.tertiary)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 12)
-                    .glassControlSurface(cornerRadius: 16)
+                    .glassControlSurface()
             } else {
                 MinerLogConsole(entries: events)
                     .frame(minHeight: 160, maxHeight: 320)
             }
         }
         .padding(20)
-        .glassContentSurface(cornerRadius: 24)
+        .glassContentSurface()
     }
 
     // MARK: Helpers
@@ -275,7 +275,7 @@ private struct MinerStatCard: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 16)
         .padding(.horizontal, 12)
-        .glassPanel(cornerRadius: 20)
+        .glassPanel()
     }
 }
 
@@ -319,7 +319,7 @@ struct MinerLogConsole: View {
                 }
             }
         }
-        .glassPanel(cornerRadius: 18)
+        .glassPanel()
     }
 }
 
@@ -386,7 +386,7 @@ struct AccountInspectorView: View {
                         }
                     }
                     .padding(14)
-                    .glassControlSurface(cornerRadius: 18)
+                    .glassControlSurface()
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 20)
@@ -412,7 +412,7 @@ struct AccountInspectorView: View {
                 .font(.callout)
         }
         .padding(14)
-        .glassControlSurface(cornerRadius: 18)
+        .glassControlSurface()
     }
 }
 
@@ -480,7 +480,7 @@ struct SystemInspectorView: View {
                 .font(.callout)
         }
         .padding(14)
-        .glassControlSurface(cornerRadius: 18)
+        .glassControlSurface()
     }
 }
 
