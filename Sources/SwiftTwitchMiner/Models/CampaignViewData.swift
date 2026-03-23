@@ -80,7 +80,7 @@ public struct CampaignViewData: Codable, Sendable, Identifiable, Equatable {
         // 1. Relevance is prioritised or active (normal routing)
         // 2. Has in-progress drops (waiting for stream to continue)
         if relevance == .prioritised || relevance == .active ||
-           miningStatus == .inProgress || miningStatus == .available {
+           miningStatus == .inProgress {
             visibility.insert(.active)
         }
 
