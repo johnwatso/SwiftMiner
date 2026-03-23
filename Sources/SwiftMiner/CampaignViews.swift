@@ -43,12 +43,12 @@ struct CampaignRowView: View {
                 AsyncImage(url: url) { image in
                     image.resizable().scaledToFill()
                 } placeholder: {
-                    RoundedRectangle(cornerRadius: 4, style: .continuous).fill(.tertiary)
+                    RoundedRectangle(cornerRadius: GlassRadius.subtle, style: .continuous).fill(.tertiary)
                 }
                 .frame(width: 36, height: 48)
-                .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: GlassRadius.subtle, style: .continuous))
             } else {
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                RoundedRectangle(cornerRadius: GlassRadius.subtle, style: .continuous)
                     .fill(.tertiary)
                     .frame(width: 36, height: 48)
             }
@@ -174,13 +174,13 @@ struct CampaignDetailView: View {
                     .interpolation(.high)
                     .scaledToFill()
             } placeholder: {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: GlassRadius.artwork, style: .continuous)
                     .fill(.thinMaterial)
             }
             .frame(width: 72, height: 72)
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: GlassRadius.artwork, style: .continuous))
         } else {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: GlassRadius.artwork, style: .continuous)
                 .fill(.thinMaterial)
                 .overlay {
                     Image(systemName: "gamecontroller.fill")
@@ -255,7 +255,7 @@ struct DropRowView: View {
                 placeholderArtwork
             }
             .frame(width: 52, height: 52)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: GlassRadius.artwork, style: .continuous))
         } else {
             placeholderArtwork
                 .frame(width: 52, height: 52)
@@ -263,7 +263,7 @@ struct DropRowView: View {
     }
 
     private var placeholderArtwork: some View {
-        RoundedRectangle(cornerRadius: 14, style: .continuous)
+        RoundedRectangle(cornerRadius: GlassRadius.artwork, style: .continuous)
             .fill(.thinMaterial)
             .overlay {
                 Image(systemName: rewardIcon)
@@ -312,7 +312,7 @@ private struct CampaignStatusPill: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .foregroundStyle(claimed ? .green : .secondary)
-            .glassControlSurface(cornerRadius: 999)
+            .glassControlSurface(cornerRadius: GlassRadius.pill)
     }
 }
 

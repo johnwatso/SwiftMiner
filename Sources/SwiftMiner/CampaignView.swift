@@ -108,7 +108,7 @@ struct DropsListView: View {
                     itemSpacing: 3,
                     padding: 3,
                     contentInsets: EdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10),
-                    selectedCornerRadius: 12,
+                    selectedCornerRadius: GlassRadius.small,
                     fillsAvailableSpace: true,
                     showsContainer: true
                 ) { item, isSelected in
@@ -172,7 +172,7 @@ struct DropsListView: View {
         VStack(alignment: .leading, spacing: 18) {
             fallbackBanner(message)
 
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
+            RoundedRectangle(cornerRadius: GlassRadius.large, style: .continuous)
                 .fill(.thinMaterial.opacity(0.84))
                 .overlay(alignment: .bottomLeading) {
                     VStack(alignment: .leading, spacing: 8) {
@@ -203,7 +203,7 @@ struct DropsListView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(.ultraThinMaterial.opacity(0.75), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(.ultraThinMaterial.opacity(0.75), in: RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
     }
 
     // MARK: - Data
@@ -457,9 +457,9 @@ private struct CampaignDeckCard: View {
         .padding(18)
         .frame(maxWidth: .infinity)
         .background(cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
+            RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
                 .strokeBorder(state.borderTint, lineWidth: 1)
         }
         .shadow(color: .black.opacity(isHovered ? 0.14 : 0.10), radius: isHovered ? 22 : 18, y: isHovered ? 12 : 10)
@@ -578,7 +578,7 @@ private struct CampaignDeckCard: View {
     }
 
     private var cardBackground: some View {
-        RoundedRectangle(cornerRadius: 28, style: .continuous)
+        RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
             .fill(.thinMaterial.opacity(0.92))
             .overlay {
                 if let heroURL {
@@ -592,14 +592,14 @@ private struct CampaignDeckCard: View {
                                 .transition(.opacity.animation(.easeInOut(duration: 0.5)))
                         }
                     }
-                    .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
                     .allowsHitTesting(false)
                 } else {
                     CampaignBackgroundAccent(url: campaign.artworkURL, tint: state.tint)
                 }
             }
             .overlay {
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
                     .fill(
                         LinearGradient(
                             colors: [
@@ -654,7 +654,7 @@ private struct CampaignDropPreviewRow: View {
                 }
             }
             .frame(width: 38, height: 38)
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: GlassRadius.artwork, style: .continuous))
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(drop.name)
@@ -687,12 +687,12 @@ private struct CampaignDropPreviewRow: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(.ultraThinMaterial.opacity(0.86), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .background(.ultraThinMaterial.opacity(0.86), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
         .opacity(primaryState == .locked ? 0.72 : 1)
     }
 
     private var placeholder: some View {
-        RoundedRectangle(cornerRadius: 10, style: .continuous)
+        RoundedRectangle(cornerRadius: GlassRadius.artwork, style: .continuous)
             .fill(.thinMaterial)
             .overlay {
                 Image(systemName: "gift.fill")
@@ -892,9 +892,9 @@ private struct CampaignArtworkIcon: View {
     var body: some View {
         CampaignCardArtwork(url: url, tint: tint)
             .frame(width: 48, height: 64)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: GlassRadius.artwork, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: GlassRadius.artwork, style: .continuous)
                     .strokeBorder(.white.opacity(0.10), lineWidth: 1)
             }
     }
@@ -930,7 +930,7 @@ private struct CampaignBackgroundAccent: View {
                 )
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
         .allowsHitTesting(false)
     }
 }

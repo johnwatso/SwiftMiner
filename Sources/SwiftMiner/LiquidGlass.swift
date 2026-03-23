@@ -146,8 +146,17 @@ private struct GlassSurfaceModifier: ViewModifier {
     }
 }
 
+enum GlassRadius {
+    static let subtle: CGFloat = 6      // Sidebar, window-adjacent
+    static let small: CGFloat = 10      // Main containers, control surfaces
+    static let medium: CGFloat = 14     // Campaign cards, content panels
+    static let large: CGFloat = 18      // Featured highlights
+    static let artwork: CGFloat = 18    // Artwork
+    static let pill: CGFloat = 999      // Buttons, chips, badges
+}
+
 extension View {
-    func glassContentSurface(cornerRadius: CGFloat = 12) -> some View {
+    func glassContentSurface(cornerRadius: CGFloat = GlassRadius.medium) -> some View {
         modifier(
             GlassSurfaceModifier(
                 material: AnyShapeStyle(.regularMaterial),
@@ -159,7 +168,7 @@ extension View {
         )
     }
 
-    func glassPanel(cornerRadius: CGFloat = 10) -> some View {
+    func glassPanel(cornerRadius: CGFloat = GlassRadius.small) -> some View {
         modifier(
             GlassSurfaceModifier(
                 material: AnyShapeStyle(.thinMaterial),
@@ -171,7 +180,7 @@ extension View {
         )
     }
 
-    func glassControlSurface(cornerRadius: CGFloat = 8) -> some View {
+    func glassControlSurface(cornerRadius: CGFloat = GlassRadius.subtle) -> some View {
         modifier(
             GlassSurfaceModifier(
                 material: AnyShapeStyle(.ultraThinMaterial),
@@ -223,7 +232,7 @@ struct MaterialEmptyStatePanel<Actions: View>: View {
         .frame(maxWidth: 420)
         .padding(.horizontal, 32)
         .padding(.vertical, 28)
-        .glassContentSurface(cornerRadius: 14)
+        .glassContentSurface(cornerRadius: GlassRadius.large)
     }
 }
 
@@ -274,7 +283,7 @@ struct GlassSelectionControl<ID: Hashable, ItemContent: View>: View {
         itemSpacing: CGFloat = 10,
         padding: CGFloat = 6,
         contentInsets: EdgeInsets = EdgeInsets(top: 10, leading: 14, bottom: 10, trailing: 14),
-        selectedCornerRadius: CGFloat = 18,
+        selectedCornerRadius: CGFloat = GlassRadius.subtle,
         fillsAvailableSpace: Bool = true,
         showsContainer: Bool = true,
         @ViewBuilder itemContent: @escaping (GlassSelectionItem<ID>, Bool) -> ItemContent
@@ -321,7 +330,7 @@ struct GlassSelectionControl<ID: Hashable, ItemContent: View>: View {
         if showsContainer {
             stack
                 .padding(padding)
-                .glassControlSurface(cornerRadius: axis == .horizontal ? 12 : 10)
+                .glassControlSurface(cornerRadius: axis == .horizontal ? GlassRadius.small : GlassRadius.medium)
         } else {
             stack
                 .padding(padding)

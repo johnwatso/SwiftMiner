@@ -138,7 +138,7 @@ struct GameSearchField: View {
                     }
                     .frame(maxHeight: 200)
                     .background(.background)
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
                     .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
                 }
             }
@@ -204,11 +204,11 @@ struct GameSuggestionRow: View {
                 AsyncImage(url: game.boxArtURL) { image in
                     image.resizable().aspectRatio(contentMode: .fill)
                 } placeholder: {
-                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                    RoundedRectangle(cornerRadius: GlassRadius.subtle, style: .continuous)
                         .fill(.quaternary)
                 }
                 .frame(width: 24, height: 32)
-                .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: GlassRadius.subtle, style: .continuous))
 
                 Text(game.name)
                     .lineLimit(1)

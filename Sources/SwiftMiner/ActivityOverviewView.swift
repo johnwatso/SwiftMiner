@@ -72,10 +72,10 @@ struct ActivityOverviewView: View {
             maxWidth: hasMultipleMiners ? 280 : 176
         )
         .background {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
+            RoundedRectangle(cornerRadius: GlassRadius.large, style: .continuous)
                 .fill(.thinMaterial)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: GlassRadius.large, style: .continuous))
         .padding(.leading, 24)
         .padding(.vertical, 24)
         .padding(.trailing, hasMultipleMiners ? 12 : 8)
@@ -308,10 +308,10 @@ private struct MinerControlPanel: View {
         }
         .padding(22)
         .background {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
+            RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
                 .fill(.regularMaterial)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
         .shadow(color: .black.opacity(0.10), radius: 22, y: 10)
     }
 
@@ -421,10 +421,10 @@ private struct MinerActivityFeedSection: View {
         }
         .padding(22)
         .background {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
+            RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
                 .fill(.thinMaterial)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
         .shadow(color: .black.opacity(0.08), radius: 18, y: 8)
     }
 }
@@ -490,7 +490,7 @@ private struct MinerLiveStateSection: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .padding(16)
-                .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
             }
 
             if !queuedCampaigns.isEmpty {
@@ -507,10 +507,10 @@ private struct MinerLiveStateSection: View {
         }
         .padding(22)
         .background {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
+            RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
                 .fill(.thinMaterial)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
         .shadow(color: .black.opacity(0.08), radius: 18, y: 8)
     }
 }
@@ -547,7 +547,7 @@ private struct CurrentDropCard: View {
                     Image(systemName: "gift.fill").foregroundStyle(.secondary)
                 }
                 .frame(width: 44, height: 44)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: GlassRadius.artwork, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 3) {
                     if let campaign = campaignName {
@@ -590,7 +590,7 @@ private struct CurrentDropCard: View {
             }
         }
         .padding(14)
-        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
     }
 }
 
@@ -619,7 +619,7 @@ private struct QueuedCampaignRow: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
-        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
         .contextMenu {
             Button {
                 Settings.shared.setGamePreference(campaign.game, state: .preferred)
