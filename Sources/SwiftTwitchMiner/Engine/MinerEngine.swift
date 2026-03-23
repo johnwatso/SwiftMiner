@@ -951,18 +951,21 @@ public actor MinerEngine {
             // STEP 2: Filter and Verify (GQL-based verification)
             // We iterate through the top candidates and verify they ACTUALLY have drops for this campaign.
             // This prevents "stuck" sessions on channels that only have the tag but no active campaign.
+            var allVerificationsFailed = true  // true only if every attempt threw a network error
             for ch in sortedChannels.prefix(5) {
                 log("[ChannelSelect]   Verifying \(ch.displayName) (viewers: \(ch.viewerCount ?? 0))...")
-                
+
                 // If it's not a Special Event, we can filter by campaign restrictions early
                 if campaign.hasChannelRestrictions && !campaign.channels.contains(where: { $0.id == ch.id }) {
                     log("[ChannelSelect]     ✗ Skipping: not in campaign ACL")
+                    allVerificationsFailed = false  // not an error — campaign restriction mismatch
                     continue
                 }
 
                 do {
                     // TDM PARITY: Strict drops-enabled verification via GQL
                     let activeCampaignIds = try await apiClient.fetchAvailableDrops(channelId: ch.id)
+                    allVerificationsFailed = false  // GQL responded — campaign simply not active here
                     if activeCampaignIds.contains(campaign.id) {
                         log("[ChannelSelect]     ✓ Verified! Campaign \(campaign.id) is active on \(ch.displayName)")
                         // Track selected channel for UI
@@ -974,12 +977,15 @@ public actor MinerEngine {
                     }
                 } catch {
                     log("[ChannelSelect]     ⚠️ Verification failed for \(ch.displayName): \(error.localizedDescription)")
+                    // allVerificationsFailed remains true for this channel — it errored
                 }
             }
 
-            // Fallback: If no channel could be verified, pick the best candidate anyway (best effort)
-            if let best = sortedChannels.first {
-                log("[ChannelSelect]   ! No channel fully verified via GQL. Falling back to best candidate: \(best.displayName)")
+            // Only fall back to best-guess channel if ALL verification attempts failed due to
+            // network/GQL errors (not because the campaign simply wasn't active on those channels).
+            // This prevents watching unverified channels when the campaign is genuinely expired.
+            if allVerificationsFailed, let best = sortedChannels.first {
+                log("[ChannelSelect]   ! All GQL verifications errored. Falling back to best candidate: \(best.displayName)")
                 // Track selected channel for UI
                 currentChannelName = best.displayName
                 currentChannelId = best.id
@@ -989,6 +995,8 @@ public actor MinerEngine {
             return nil
         } catch {
             log("Failed to fetch live channels for '\(campaign.gameName)': \(error.localizedDescription)")
+            // Only use ACL fallback if the whole live-channel fetch failed (network error).
+            // Do not fall back when the campaign has no eligible channels.
             if let fallback = campaign.channels.first {
                 // Track selected channel for UI
                 currentChannelName = fallback.displayName
