@@ -557,7 +557,7 @@ public actor MinerEngine {
                     log("No eligible channels available for \(campaign.name)")
                     // Clear current campaign so UI doesn't show it as "being mined"
                     session?.currentCampaignId = nil
-                    onStatusChange?(.idle)
+                    onStatusChange?(.waitingForStream)
                     shouldRescanCampaigns = false
                     let tickNs: UInt64 = 10 * 1_000_000_000
                     let ticks = Int(campaignCheckInterval / tickNs)

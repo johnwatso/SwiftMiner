@@ -226,10 +226,11 @@ public enum SessionStatus: String, Codable, Sendable, Equatable {
     case fetchingCampaigns = "FETCHING_CAMPAIGNS"
     case watching = "WATCHING"
     case claiming = "CLAIMING"
+    case waitingForStream = "WAITING_FOR_STREAM"
     case paused = "PAUSED"
     case stopped = "STOPPED"
     case error = "ERROR"
-    
+
     public var displayName: String {
         switch self {
         case .idle: return "Idle"
@@ -237,6 +238,7 @@ public enum SessionStatus: String, Codable, Sendable, Equatable {
         case .fetchingCampaigns: return "Fetching Campaigns"
         case .watching: return "Watching"
         case .claiming: return "Claiming"
+        case .waitingForStream: return "Waiting for Stream"
         case .paused: return "Paused"
         case .stopped: return "Stopped"
         case .error: return "Error"

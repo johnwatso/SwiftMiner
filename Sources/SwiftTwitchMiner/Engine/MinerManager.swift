@@ -58,6 +58,7 @@ public final class MinerManager {
         case fetchingCampaigns = "FETCHING_CAMPAIGNS"
         case watching = "WATCHING"
         case claiming = "CLAIMING"
+        case waitingForStream = "WAITING_FOR_STREAM"
         case paused = "PAUSED"
         case error = "ERROR"
 
@@ -68,6 +69,7 @@ public final class MinerManager {
             case .fetchingCampaigns: return "Fetching Campaigns"
             case .watching: return "Watching"
             case .claiming: return "Claiming"
+            case .waitingForStream: return "Waiting for Stream"
             case .paused: return "Paused"
             case .error: return "Error"
             }
@@ -602,6 +604,7 @@ public final class MinerManager {
         case .fetchingCampaigns: return .fetchingCampaigns
         case .watching: return .watching
         case .claiming: return .claiming
+        case .waitingForStream: return .waitingForStream
         case .paused: return .paused
         case .stopped: return .idle
         case .error: return .error
