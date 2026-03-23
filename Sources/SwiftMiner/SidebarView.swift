@@ -88,7 +88,8 @@ struct SidebarView: View {
                 }
 
                 let hasRunning = navigation.minerManager.miners.contains { $0.isRunning }
-                if hasRunning {
+                let isDropsView = navigation.selectedItem == .drops
+                if hasRunning && !isDropsView {
                     Button {
                         Task { await navigation.minerManager.stopAll() }
                     } label: {
