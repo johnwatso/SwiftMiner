@@ -160,6 +160,11 @@ public final class MinerManager {
 
     /// The actual engine instances (by miner ID)
     private var engines: [String: MinerEngine] = [:]
+
+    /// Tracks in-flight engine setup tasks (setAccount + callback registration).
+    /// `startMiner()` awaits these before starting the engine, eliminating the
+    /// race condition where status callbacks were not yet registered on autostart.
+    private var engineSetupTasks: [String: Task<Void, Never>] = [:]
     
     /// Client ID for Twitch API (mutable so it can be updated before first account is added)
     private var clientId: String
@@ -256,7 +261,7 @@ public final class MinerManager {
         )
         miners.append(miner)
 
-        Task {
+        let setupTask = Task {
             await engine.setAccount(account)
             await setupEngineCallbacks(engine: engine, minerId: minerId)
 
@@ -291,7 +296,8 @@ public final class MinerManager {
                 try? await Task.sleep(nanoseconds: staggerDelay)
             }
             await stateStore.start()
-            }        
+        }
+        engineSetupTasks[minerId] = setupTask
         return minerId
     }
     
@@ -362,6 +368,14 @@ public final class MinerManager {
         guard let engine = engines[minerId],
               let miner = getMiner(id: minerId) else {
             throw TwitchMinerError.sessionNotStarted
+        }
+
+        // Ensure engine callbacks are registered before starting.
+        // addAccount() sets up callbacks in an unstructured Task; awaiting it here
+        // eliminates the race where onStatusChange fires before the handler is set.
+        if let setupTask = engineSetupTasks[minerId] {
+            await setupTask.value
+            engineSetupTasks.removeValue(forKey: minerId)
         }
 
         // Update notification preference if provided
