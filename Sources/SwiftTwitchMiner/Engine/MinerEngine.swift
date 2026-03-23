@@ -555,8 +555,9 @@ public actor MinerEngine {
                 // 4. Find eligible channel
                 guard let channel = await selectBestChannel(from: campaign) else {
                     log("No eligible channels available for \(campaign.name)")
-                    // Clear current campaign so UI doesn't show it as "being mined"
-                    session?.currentCampaignId = nil
+                    // Keep campaign ID so the UI shows it as queued/waiting (not being mined —
+                    // watchingMiners() requires .watching status, not just a currentCampaignId match)
+                    session?.currentCampaignId = campaign.id
                     onStatusChange?(.waitingForStream)
                     shouldRescanCampaigns = false
                     let tickNs: UInt64 = 10 * 1_000_000_000
