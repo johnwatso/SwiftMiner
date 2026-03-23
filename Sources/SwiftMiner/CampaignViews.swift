@@ -162,7 +162,7 @@ struct CampaignDetailView: View {
             CampaignStatusPill(title: campaign.status, claimed: campaign.isClaimed)
         }
         .padding(18)
-        .glassContentSurface(cornerRadius: 26)
+        .glassContentSurface()
     }
 
     @ViewBuilder
@@ -234,7 +234,7 @@ struct DropRowView: View {
             }
         }
         .padding(16)
-        .glassPanel(cornerRadius: 22)
+        .glassPanel()
         .opacity(drop.isEarnable || drop.isClaimable || drop.isClaimed ? 1.0 : 0.62)
     }
 
@@ -438,7 +438,7 @@ struct LogConsoleView: View {
                 }
             }
         }
-        .glassPanel(cornerRadius: 20)
+        .glassPanel()
         .navigationTitle("Log")
     }
 }

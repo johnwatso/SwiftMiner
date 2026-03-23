@@ -729,7 +729,7 @@ struct OverviewView: View {
             }
         }
         .padding(22)
-        .glassContentSurface(cornerRadius: 28)
+        .glassContentSurface()
     }
 
     private var primaryStatusReason: StatusReason {
@@ -987,7 +987,7 @@ struct OverviewMetricCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .glassPanel(cornerRadius: 20)
+        .glassPanel()
     }
 }
 
@@ -1743,7 +1743,7 @@ private struct StatusReasonRow: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .glassControlSurface(cornerRadius: 16)
+        .glassControlSurface()
     }
 }
 
