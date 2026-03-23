@@ -551,15 +551,26 @@ public actor MinerEngine {
                 }
 
                 log("Selected campaign: \(campaign.name) (\(campaign.gameName))")
-                session?.currentCampaignId = campaign.id
 
                 // 4. Find eligible channel
                 guard let channel = await selectBestChannel(from: campaign) else {
                     log("No eligible channels available for \(campaign.name)")
-                    try await Task.sleep(nanoseconds: campaignCheckInterval)
+                    // Clear current campaign so UI doesn't show it as "being mined"
+                    session?.currentCampaignId = nil
+                    onStatusChange?(.idle)
+                    shouldRescanCampaigns = false
+                    let tickNs: UInt64 = 10 * 1_000_000_000
+                    let ticks = Int(campaignCheckInterval / tickNs)
+                    for _ in 0..<ticks {
+                        if shouldRescanCampaigns { break }
+                        try await Task.sleep(nanoseconds: tickNs)
+                    }
+                    shouldRescanCampaigns = false
                     continue
                 }
 
+                // Channel confirmed — commit campaign as active target
+                session?.currentCampaignId = campaign.id
                 log("Selected channel: \(channel.displayName)")
                 session?.currentChannelId = channel.id
                 shouldSwitchChannel = false
