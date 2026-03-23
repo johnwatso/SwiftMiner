@@ -558,10 +558,12 @@ struct OverviewView: View {
 
     private func watchingMiners(for campaign: Campaign) -> [MinerManager.ManagedMiner] {
         navigation.minerManager.miners.filter { miner in
-            guard miner.isRunning || miner.status == .watching || miner.status == .claiming else {
+            // Must be actively running with watching/claiming status
+            guard miner.status == .watching || miner.status == .claiming else {
                 return false
             }
 
+            // Verify currentCampaignId matches (defense against stale session state)
             if let id = miner.currentCampaignId {
                 return id == campaign.id
             }
