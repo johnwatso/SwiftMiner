@@ -48,24 +48,8 @@ public enum CampaignService {
                     )
                 }
             } else {
-                // If Twitch has already marked this inventory-only campaign as EXPIRED, treat
-                // it as ended now. Dashboard campaigns with stale EXPIRED status are unaffected
-                // (they appear in dashboardCampaigns and go through the index update path above).
-                if discovered.status == .expired {
-                    print("[CampaignService] Inventory-only campaign marked EXPIRED by Twitch — treating as ended: \(discovered.name)")
-                    let ended = Campaign(
-                        id: discovered.id, name: discovered.name, game: discovered.game,
-                        status: discovered.status, startDate: discovered.startDate,
-                        endDate: Date().addingTimeInterval(-1),
-                        drops: discovered.drops, channels: discovered.channels,
-                        isAccountConnected: discovered.isAccountConnected,
-                        isPrioritised: discovered.isPrioritised
-                    )
-                    allCampaigns.append(ended)
-                } else {
-                    print("[CampaignService] Discovered campaign from inventory: \(discovered.name)")
-                    allCampaigns.append(discovered)
-                }
+                print("[CampaignService] Discovered campaign from inventory: \(discovered.name)")
+                allCampaigns.append(discovered)
             }
         }
 
