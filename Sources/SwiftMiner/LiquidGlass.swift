@@ -134,6 +134,31 @@ struct VisualEffectMaterialView: NSViewRepresentable {
     }
 }
 
+// MARK: - Glass Card (SwiftBot-aligned)
+
+private struct GlassCardModifier: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+    let cornerRadius: CGFloat
+    let tint: Color
+    let stroke: Color
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        content
+            .background(.thinMaterial, in: shape)
+            .overlay(
+                shape
+                    .fill(tint.opacity(colorScheme == .dark ? 1.0 : 0.50))
+                    .allowsHitTesting(false)
+            )
+            .overlay(
+                shape
+                    .strokeBorder(stroke.opacity(colorScheme == .dark ? 1.0 : 0.90), lineWidth: 1)
+                    .allowsHitTesting(false)
+            )
+    }
+}
+
 private struct GlassSurfaceModifier: ViewModifier {
     let material: AnyShapeStyle
     let cornerRadius: CGFloat
@@ -224,6 +249,15 @@ extension View {
                 shadowY: 0
             )
         )
+    }
+
+    /// SwiftBot-aligned card surface: thinMaterial + white tint overlay + white stroke border.
+    func glassCard(
+        cornerRadius: CGFloat = 18,
+        tint: Color = .white.opacity(0.10),
+        stroke: Color = .white.opacity(0.18)
+    ) -> some View {
+        modifier(GlassCardModifier(cornerRadius: cornerRadius, tint: tint, stroke: stroke))
     }
 
     func metricPanelSurface(cornerRadius: CGFloat = GlassRadius.medium) -> some View {

@@ -60,7 +60,7 @@ struct AccountDetailView: View {
             primaryButton
         }
         .padding(20)
-        .glassContentSurface()
+        .glassCard()
     }
 
     @ViewBuilder
@@ -130,7 +130,7 @@ struct AccountDetailView: View {
             )
         }
         .padding(18)
-        .glassContentSurface()
+        .glassCard()
     }
 
     // MARK: Controls
@@ -153,7 +153,7 @@ struct AccountDetailView: View {
             .glassControlSurface()
         }
         .padding(20)
-        .glassContentSurface()
+        .glassCard()
     }
 
     // MARK: Log Console
@@ -195,7 +195,7 @@ struct AccountDetailView: View {
             }
         }
         .padding(20)
-        .glassContentSurface()
+        .glassCard()
     }
 
     // MARK: Helpers
