@@ -3,7 +3,6 @@ import SwiftUI
 
 struct LiquidGlassBackdrop: View {
     @State private var animationPhase = false
-    @State private var isAppActive = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -28,15 +27,9 @@ struct LiquidGlassBackdrop: View {
                 .ignoresSafeArea()
                 .onAppear {
                     if !reduceMotion {
-                        startMeshAnimation()
-                    }
-                }
-                .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
-                    animationPhase = false // snap to static — stops compositor frame generation
-                }
-                .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-                    if !reduceMotion {
-                        startMeshAnimation()
+                        withAnimation(.easeInOut(duration: 8).repeatForever(autoreverses: true)) {
+                            animationPhase.toggle()
+                        }
                     }
                 }
             } else {
@@ -65,35 +58,25 @@ struct LiquidGlassBackdrop: View {
         }
         .ignoresSafeArea()
     }
-
-    private func startMeshAnimation() {
-        withAnimation(.easeInOut(duration: 8).repeatForever(autoreverses: true)) {
-            animationPhase.toggle()
-        }
-    }
 }
 
 struct SidebarMaterialBackground: View {
     var body: some View {
         VisualEffectMaterialView(material: .sidebar)
             .overlay {
-                // Keep sidebar treatment flat and column-like (Apple Music style),
-                // instead of a rounded floating glass slab.
-                LinearGradient(
-                    colors: [
-                        Color.white.opacity(0.10),
-                        Color.clear
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+                if #available(macOS 26, *) {
+                    Color.clear.glassEffect(.regular.interactive())
+                } else {
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.16),
+                            Color.clear
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                }
             }
-            .overlay(alignment: .trailing) {
-                Rectangle()
-                    .fill(Color.black.opacity(0.10))
-                    .frame(width: 1)
-            }
-            .clipShape(Rectangle())
             .ignoresSafeArea()
     }
 }
@@ -207,19 +190,6 @@ extension View {
                 shadowY: 0
             )
         )
-    }
-
-    func metricPanelSurface(cornerRadius: CGFloat = GlassRadius.medium) -> some View {
-        self
-            .background(
-                .thinMaterial.opacity(0.58),
-                in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .strokeBorder(.white.opacity(0.10), lineWidth: 1)
-            }
-            .shadow(color: .black.opacity(0.04), radius: 3, y: 1)
     }
 }
 
