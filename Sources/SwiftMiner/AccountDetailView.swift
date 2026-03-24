@@ -284,15 +284,6 @@ private struct MinerStatCard: View {
 struct MinerLogConsole: View {
     let entries: [EventEntry]
     @State private var autoScroll = true
-    @State private var scrollTask: Task<Void, Never>?
-
-    private static let maxVisibleEntries = 200
-
-    private var visibleEntries: [EventEntry] {
-        entries.count > Self.maxVisibleEntries
-            ? Array(entries.suffix(Self.maxVisibleEntries))
-            : entries
-    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -312,7 +303,7 @@ struct MinerLogConsole: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 1) {
-                        ForEach(visibleEntries) { entry in
+                        ForEach(entries) { entry in
                             EventRow(event: entry, showRaw: false)
                                 .id(entry.id)
                         }
@@ -320,13 +311,9 @@ struct MinerLogConsole: View {
                     .padding(8)
                 }
                 .onChange(of: entries.count) { _, _ in
-                    guard autoScroll, let lastId = visibleEntries.last?.id else { return }
-                    scrollTask?.cancel()
-                    scrollTask = Task {
-                        try? await Task.sleep(nanoseconds: 500_000_000)
-                        guard !Task.isCancelled else { return }
+                    if autoScroll, let last = entries.last {
                         withAnimation(.easeOut(duration: 0.1)) {
-                            proxy.scrollTo(lastId, anchor: .bottom)
+                            proxy.scrollTo(last.id, anchor: .bottom)
                         }
                     }
                 }
