@@ -602,12 +602,12 @@ public actor MinerEngine {
                 var lastGqlPoll = Date()
                 var lastCampaignReevaluation = Date()
                 while await watchSessionManager.isWatching && !shouldSwitchChannel {
-                    // Check every 10 seconds for interrupts or polls
-                    try? await Task.sleep(nanoseconds: 10 * 1_000_000_000)
-                    
+                    // Check every 30 seconds for interrupts or polls
+                    try? await Task.sleep(nanoseconds: 30 * 1_000_000_000)
+
                     // TDM PARITY: GQL Fallback Poll
-                    // If it's been >20s since last PubSub/Poll and we haven't hit 100%
-                    if Date().timeIntervalSince(lastGqlPoll) >= 20 {
+                    // If it's been >60s since last PubSub/Poll and we haven't hit 100%
+                    if Date().timeIntervalSince(lastGqlPoll) >= 60 {
                         lastGqlPoll = Date()
                         if let current = try? await apiClient.fetchCurrentDrop(channelId: channel.id) {
                             let campaignId = session?.currentCampaignId
@@ -684,7 +684,7 @@ public actor MinerEngine {
 
                     // Periodic campaign re-evaluation: detect if a better campaign becomes available
                     // mid-session (e.g. a priority campaign goes live after we started watching).
-                    let campaignReevalInterval: TimeInterval = 60 // Check every 60 seconds for better responsiveness
+                    let campaignReevalInterval: TimeInterval = 300 // Align with outer campaign loop (5 min)
                     if Date().timeIntervalSince(lastCampaignReevaluation) >= campaignReevalInterval {
                         lastCampaignReevaluation = Date()
                         if let freshCampaigns = try? await dropsService.fetchCampaigns() {
