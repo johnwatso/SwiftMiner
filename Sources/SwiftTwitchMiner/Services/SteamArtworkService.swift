@@ -53,49 +53,95 @@ public actor SteamArtworkService {
         print("[SteamArtworkService] Manual override set for '\(gameName)': appId=\(appId)")
     }
 
-    /// Get portrait (600x900) artwork URL for a game
-    /// - Parameter gameName: The game name from Twitch
-    /// - Returns: Steam CDN URL if found, nil otherwise
+    /// Get portrait (600x900) artwork URL for a game.
+    /// Returns a local `file://` URL after first fetch — subsequent calls load from disk instantly.
     public func portraitURL(for gameName: String) async -> URL? {
-        guard let appId = await lookupAppId(for: gameName) else {
+        guard let appId = await lookupAppId(for: gameName),
+              let remoteURL = URL(string: "\(steamCDNBaseURL)\(appId)/library_600x900.jpg") else {
             return nil
         }
-        return URL(string: "\(steamCDNBaseURL)\(appId)/library_600x900.jpg")
+        return await resolveImageURL(remote: remoteURL, appId: appId, type: "portrait")
     }
-    
-    /// Get landscape header artwork URL for a game
-    /// - Parameter gameName: The game name from Twitch
-    /// - Returns: Steam CDN URL if found, nil otherwise
+
+    /// Get landscape header artwork URL for a game.
+    /// Returns a local `file://` URL after first fetch — subsequent calls load from disk instantly.
     public func landscapeURL(for gameName: String) async -> URL? {
-        guard let appId = await lookupAppId(for: gameName) else {
+        guard let appId = await lookupAppId(for: gameName),
+              let remoteURL = URL(string: "\(steamCDNBaseURL)\(appId)/header.jpg") else {
             return nil
         }
-        return URL(string: "\(steamCDNBaseURL)\(appId)/header.jpg")
+        return await resolveImageURL(remote: remoteURL, appId: appId, type: "landscape")
     }
 
     /// Get the Steam library hero banner URL (landscape, typically the freshest artwork).
-    /// Tries the 2× retina version first, falls back to 1×.
-    /// Returns nil if neither exists on the CDN.
+    /// Checks disk cache first; downloads and caches on first call.
     public func heroURL(for gameName: String) async -> URL? {
         guard let appId = await lookupAppId(for: gameName) else { return nil }
-        // Prefer 2× retina; fall back to 1×
+        // Serve from disk if already cached — skip CDN availability check entirely
+        if let localURL = localImageURL(appId: appId, type: "hero"),
+           FileManager.default.fileExists(atPath: localURL.path) {
+            return localURL
+        }
+        // First time: find a working CDN URL, then download and cache it
         let candidates = [
             "\(steamCDNBaseURL)\(appId)/library_hero_2x.jpg",
             "\(steamCDNBaseURL)\(appId)/library_hero.jpg"
         ]
         for urlString in candidates {
             if let url = URL(string: urlString), await cdnURLExists(urlString) {
-                return url
+                return await resolveImageURL(remote: url, appId: appId, type: "hero")
             }
         }
         return nil
     }
     
-    /// Clear the lookup cache (useful for testing or memory pressure)
+    /// Clear the lookup cache and disk image cache.
     public func clearCache() {
         appIdCache.removeAll()
         failedLookups.removeAll()
         UserDefaults.standard.removeObject(forKey: Self.appIdCacheDefaultsKey)
+        if let dir = imageCacheDirectory {
+            try? FileManager.default.removeItem(at: dir)
+        }
+    }
+
+    // MARK: - Disk Image Cache
+
+    /// Root directory for cached Steam artwork on disk.
+    /// Lives in the user's Caches folder so the OS can reclaim space if needed.
+    private var imageCacheDirectory: URL? {
+        FileManager.default
+            .urls(for: .cachesDirectory, in: .userDomainMask)
+            .first?
+            .appendingPathComponent("SwiftMiner/SteamArtwork", isDirectory: true)
+    }
+
+    /// Stable local path for a given App ID and image type (e.g. "portrait", "hero").
+    private func localImageURL(appId: String, type: String) -> URL? {
+        imageCacheDirectory?.appendingPathComponent("\(appId)_\(type).jpg")
+    }
+
+    /// Returns a local `file://` URL for `remoteURL`, downloading and caching to disk on first call.
+    /// Subsequent calls return the local file immediately — no network required.
+    private func resolveImageURL(remote remoteURL: URL, appId: String, type: String) async -> URL? {
+        guard let localURL = localImageURL(appId: appId, type: type) else { return remoteURL }
+        if FileManager.default.fileExists(atPath: localURL.path) {
+            return localURL
+        }
+        do {
+            try FileManager.default.createDirectory(
+                at: localURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            let (data, response) = try await URLSession.shared.data(from: remoteURL)
+            guard (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+            try data.write(to: localURL, options: .atomic)
+            print("[SteamArtworkService] Cached \(type) image for appId=\(appId)")
+            return localURL
+        } catch {
+            print("[SteamArtworkService] Disk cache write failed for appId=\(appId) type=\(type): \(error)")
+            return remoteURL
+        }
     }
     
     // MARK: - Private Methods
