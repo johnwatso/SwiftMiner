@@ -21,12 +21,16 @@ public actor SteamArtworkService {
     private let steamSearchURL  = "https://store.steampowered.com/api/storesearch/"
     private let steamCDNBaseURL = "https://cdn.cloudflare.steamstatic.com/steam/apps/"
     private static let manualOverridesDefaultsKey = "steamArtworkManualOverrides"
+    private static let appIdCacheDefaultsKey = "steamArtworkAppIdCache"
     
     // MARK: - Init
 
     init() {
         if let saved = UserDefaults.standard.dictionary(forKey: Self.manualOverridesDefaultsKey) as? [String: String] {
             manualOverrides = saved
+        }
+        if let saved = UserDefaults.standard.dictionary(forKey: Self.appIdCacheDefaultsKey) as? [String: String] {
+            appIdCache = saved
         }
     }
 
@@ -91,6 +95,7 @@ public actor SteamArtworkService {
     public func clearCache() {
         appIdCache.removeAll()
         failedLookups.removeAll()
+        UserDefaults.standard.removeObject(forKey: Self.appIdCacheDefaultsKey)
     }
     
     // MARK: - Private Methods
@@ -125,6 +130,7 @@ public actor SteamArtworkService {
             if let appId = appId {
                 print("[SteamArtworkService] Found match for '\(gameName)': appId=\(appId)")
                 appIdCache[normalizedName] = appId
+                UserDefaults.standard.set(appIdCache, forKey: Self.appIdCacheDefaultsKey)
                 return appId
             } else {
                 print("[SteamArtworkService] No match found for '\(gameName)'")
