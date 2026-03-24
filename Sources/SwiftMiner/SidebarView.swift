@@ -39,7 +39,7 @@ struct SidebarView: View {
                     itemSpacing: 2,
                     padding: 0,
                     contentInsets: EdgeInsets(top: 6, leading: 10, bottom: 6, trailing: 10),
-                    selectedCornerRadius: GlassRadius.subtle,
+                    selectedCornerRadius: 2,
                     fillsAvailableSpace: true,
                     showsContainer: false
                 ) { item, isSelected in
@@ -62,13 +62,6 @@ struct SidebarView: View {
         .navigationTitle("SwiftMiner")
         .toolbar {
             ToolbarItemGroup {
-                Button {
-                    navigation.showAddAccountSheet = true
-                } label: {
-                    Image(systemName: "person.badge.plus")
-                }
-                .help("Add Account")
-
                 let hasStopped = navigation.minerManager.miners.contains { !$0.isRunning }
                 if hasStopped {
                     Button {
@@ -85,17 +78,6 @@ struct SidebarView: View {
                         Image(systemName: "play.fill")
                     }
                     .help("Start All Miners")
-                }
-
-                let hasRunning = navigation.minerManager.miners.contains { $0.isRunning }
-                let isDropsView = navigation.selectedItem == .drops
-                if hasRunning && !isDropsView {
-                    Button {
-                        Task { await navigation.minerManager.stopAll() }
-                    } label: {
-                        Image(systemName: "stop.fill")
-                    }
-                    .help("Stop All Miners")
                 }
             }
         }

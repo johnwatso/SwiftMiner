@@ -97,4 +97,25 @@ final class OnboardingPresentationTests: XCTestCase {
         XCTAssertEqual(navigation.onboardingPresentation?.setupStage, .campaigns)
         XCTAssertEqual(navigation.onboardingPresentation?.title, "Syncing your account")
     }
+
+    func test_InitialAccountHydration_DoesNotResetDismissedOnboarding() {
+        // Given
+        settings.hasDismissedOnboarding = true
+        let account1 = Account(id: "1", username: "one", accessToken: "token", refreshToken: "refresh", tokenExpiry: Date().addingTimeInterval(3600), scopes: [])
+        let account2 = Account(id: "2", username: "two", accessToken: "token", refreshToken: "refresh", tokenExpiry: Date().addingTimeInterval(3600), scopes: [])
+
+        // Simulate startup account restoration (before configureOnboardingPresentation is called)
+        minerManager.addAccount(account1)
+        navigation.handleAccountCountChange()
+        minerManager.addAccount(account2)
+        navigation.handleAccountCountChange()
+
+        // When
+        navigation.configureOnboardingPresentation()
+
+        // Then
+        XCTAssertTrue(settings.hasDismissedOnboarding)
+        XCTAssertFalse(navigation.showOnboarding)
+        XCTAssertNil(navigation.onboardingPresentation)
+    }
 }

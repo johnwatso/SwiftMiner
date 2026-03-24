@@ -102,6 +102,7 @@ public final class NavigationModel {
     public let minerManager: MinerManager
     private var onboardingSetupTask: Task<Void, Never>?
     private var lastKnownAccountCount = 0
+    private var hasConfiguredOnboardingBaseline = false
 
     // MARK: - Initialization
 
@@ -132,6 +133,7 @@ public final class NavigationModel {
 
     public func configureOnboardingPresentation() {
         lastKnownAccountCount = minerManager.miners.count
+        hasConfiguredOnboardingBaseline = true
         refreshOnboardingPresentation()
     }
 
@@ -167,6 +169,15 @@ public final class NavigationModel {
 
     public func handleAccountCountChange() {
         let currentCount = minerManager.miners.count
+
+        // Ignore account-load churn before the initial onboarding baseline is configured.
+        // This prevents restoring multiple saved accounts from accidentally resetting
+        // a previously dismissed onboarding flow.
+        guard hasConfiguredOnboardingBaseline else {
+            lastKnownAccountCount = currentCount
+            return
+        }
+
         let previousCount = lastKnownAccountCount
         guard currentCount != previousCount else {
             refreshOnboardingPresentation()
