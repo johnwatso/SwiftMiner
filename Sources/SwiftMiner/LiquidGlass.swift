@@ -3,6 +3,7 @@ import SwiftUI
 
 struct LiquidGlassBackdrop: View {
     @State private var animationPhase = false
+    @State private var isAnimating = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -25,13 +26,20 @@ struct LiquidGlassBackdrop: View {
                     ]
                 )
                 .ignoresSafeArea()
+                // Conditional animation modifier: only runs when isAnimating is true.
+                // Setting isAnimating=false removes the animation entirely so the
+                // SwiftUI animation engine produces zero compositor frames.
+                .animation(
+                    isAnimating ? .easeInOut(duration: 8).repeatForever(autoreverses: true) : nil,
+                    value: animationPhase
+                )
                 .onAppear {
                     if !reduceMotion {
                         startMeshAnimation()
                     }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
-                    animationPhase = false // snap to static — stops compositor frame generation
+                    stopMeshAnimation()
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                     if !reduceMotion {
@@ -66,8 +74,18 @@ struct LiquidGlassBackdrop: View {
     }
 
     private func startMeshAnimation() {
-        withAnimation(.easeInOut(duration: 8).repeatForever(autoreverses: true)) {
-            animationPhase.toggle()
+        isAnimating = true
+        animationPhase.toggle() // value change triggers the conditional .animation modifier above
+    }
+
+    private func stopMeshAnimation() {
+        // Disable animations in this transaction so the snap is hard and immediate —
+        // no interpolation runs, no compositor frames are generated.
+        var t = Transaction()
+        t.disablesAnimations = true
+        withTransaction(t) {
+            isAnimating = false
+            animationPhase = false
         }
     }
 }
