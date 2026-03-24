@@ -313,7 +313,7 @@ struct MaterialEmptyStatePanel<Actions: View>: View {
         .frame(maxWidth: 420)
         .padding(.horizontal, 32)
         .padding(.vertical, 28)
-        .glassContentSurface(cornerRadius: GlassRadius.large)
+        .glassCard()
     }
 }
 
