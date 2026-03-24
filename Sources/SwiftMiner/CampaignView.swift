@@ -444,9 +444,9 @@ private struct CampaignDeckCard: View {
         .padding(18)
         .frame(maxWidth: .infinity)
         .background(cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .strokeBorder(state.borderTint, lineWidth: 1)
         }
         .shadow(color: .black.opacity(isHovered ? 0.10 : 0.06), radius: isHovered ? 8 : 4, y: isHovered ? 4 : 2)
@@ -565,8 +565,8 @@ private struct CampaignDeckCard: View {
     }
 
     private var cardBackground: some View {
-        RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
-            .fill(.thinMaterial.opacity(0.92))
+        RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .fill(.thinMaterial)
             .overlay {
                 if let heroURL {
                     AsyncImage(url: heroURL) { phase in
@@ -579,18 +579,18 @@ private struct CampaignDeckCard: View {
                                 .transition(.opacity.animation(.easeInOut(duration: 0.5)))
                         }
                     }
-                    .clipShape(RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                     .allowsHitTesting(false)
                 } else {
                     CampaignBackgroundAccent(url: campaign.artworkURL, tint: state.tint)
                 }
             }
             .overlay {
-                RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .fill(
                         LinearGradient(
                             colors: [
-                                Color.white.opacity(0.05),
+                                Color.white.opacity(0.10),
                                 state.tint.opacity(state == .claimed ? 0.03 : 0.06),
                                 Color.clear
                             ],

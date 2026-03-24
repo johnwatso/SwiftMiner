@@ -380,7 +380,7 @@ private struct ControlPanelInfoBlock: View {
         }
         .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
         .padding(16)
-        .metricPanelSurface(cornerRadius: GlassRadius.medium)
+        .glassCard()
     }
 }
 
