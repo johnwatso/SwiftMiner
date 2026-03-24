@@ -310,11 +310,7 @@ private struct MinerControlPanel: View {
             }
         }
         .padding(22)
-        .background {
-            RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
-                .fill(.regularMaterial)
-        }
-        .clipShape(RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
+        .glassCard()
         .shadow(color: .black.opacity(0.07), radius: 6, y: 2)
     }
 
@@ -424,11 +420,7 @@ private struct MinerActivityFeedSection: View {
             }
         }
         .padding(22)
-        .background {
-            RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
-                .fill(.thinMaterial)
-        }
-        .clipShape(RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
+        .glassCard()
         .shadow(color: .black.opacity(0.06), radius: 4, y: 1)
     }
 }
@@ -511,11 +503,7 @@ private struct MinerLiveStateSection: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(22)
-        .background {
-            RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
-                .fill(.thinMaterial)
-        }
-        .clipShape(RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
+        .glassCard()
         .shadow(color: .black.opacity(0.06), radius: 4, y: 1)
     }
 }
