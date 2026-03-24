@@ -233,11 +233,15 @@ struct OverviewView: View {
             }
         }
         .task { await refreshSummary() }
+        .onChange(of: settings.gamePreferencesData) { _, _ in
+            Task { await enrichPreferredGameArtwork() }
+        }
     }
 
     private func refreshSummary() async {
         isRefreshing = true
         progress = await navigation.minerManager.getAggregateProgress()
+        await enrichPreferredGameArtwork()
         isRefreshing = false
     }
 
@@ -253,6 +257,15 @@ struct OverviewView: View {
         }
 
         progress = await navigation.minerManager.getAggregateProgress()
+        await enrichPreferredGameArtwork()
+    }
+
+    /// Enriches `steamArtworkOverrides` for preferred games that have no active campaign.
+    /// No-op when `preferSteamArtwork` is off. Safe to call repeatedly (results are cached).
+    private func enrichPreferredGameArtwork() async {
+        guard settings.preferSteamArtwork else { return }
+        let names = settings.gamePreferences.filter { $0.state == .preferred }.map(\.gameName)
+        await navigation.minerManager.dataCoordinator.enrichGameNames(names)
     }
 
     // MARK: - Metrics
@@ -444,7 +457,9 @@ struct OverviewView: View {
     }
 
     private func makePreferredGameItem(_ preference: GamePreference) -> CampaignRailItem {
-        CampaignRailItem(
+        let artworkURL = navigation.minerManager.dataCoordinator.steamArtworkOverrides[preference.gameName]
+            ?? (settings.preferSteamArtwork ? nil : preference.boxArtURL)
+        return CampaignRailItem(
             id: "preferred-\(preference.gameId.isEmpty ? preference.gameName : preference.gameId)",
             section: .prioritised,
             gameName: preference.gameName,
@@ -452,7 +467,7 @@ struct OverviewView: View {
             eyebrow: "",
             progressText: "",
             progressPercent: 0,
-            artworkURL: preference.boxArtURL,
+            artworkURL: artworkURL,
             tint: .orange,
             hasOnlyBadgesOrEmotes: false,
             visualState: .idle,
@@ -460,7 +475,7 @@ struct OverviewView: View {
             isDimmed: false,
             isPlaceholder: false,
             showsLiveMotion: false,
-            game: Game(id: preference.gameId, name: preference.gameName, boxArtURL: preference.boxArtURL)
+            game: Game(id: preference.gameId, name: preference.gameName, boxArtURL: artworkURL)
         )
     }
 
@@ -477,7 +492,10 @@ struct OverviewView: View {
                     ? "Add preferred games in Settings."
                     : "Your preferred games are ready for the next campaign.",
                 progressPercent: 0,
-                artworkURL: preferredGames.first?.boxArtURL,
+                artworkURL: preferredGames.first.flatMap { pref in
+                    navigation.minerManager.dataCoordinator.steamArtworkOverrides[pref.gameName]
+                        ?? (settings.preferSteamArtwork ? nil : pref.boxArtURL)
+                },
                 tint: .orange,
                 hasOnlyBadgesOrEmotes: false,
                 visualState: .idle,
