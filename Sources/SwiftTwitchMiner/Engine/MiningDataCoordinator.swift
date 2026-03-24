@@ -191,6 +191,34 @@ public final class MiningDataCoordinator {
         }
     }
     
+    /// Enriches `steamArtworkOverrides` / `steamHeroOverrides` for a list of bare game names
+    /// that may not appear in the active campaign feed (e.g. preferred games with no live campaign).
+    /// Safe to call repeatedly — `SteamArtworkService` caches App ID lookups persistently.
+    public func enrichGameNames(_ names: [String]) async {
+        guard !names.isEmpty else { return }
+        struct EnrichmentResult {
+            let gameName: String
+            let portraitURL: URL?
+            let heroURL: URL?
+        }
+        let results: [EnrichmentResult] = await withTaskGroup(of: EnrichmentResult.self) { group in
+            for name in names {
+                group.addTask {
+                    async let portrait = SteamArtworkService.shared.portraitURL(for: name)
+                    async let hero = SteamArtworkService.shared.heroURL(for: name)
+                    return EnrichmentResult(gameName: name, portraitURL: await portrait, heroURL: await hero)
+                }
+            }
+            var results: [EnrichmentResult] = []
+            for await result in group { results.append(result) }
+            return results
+        }
+        for result in results {
+            if let url = result.portraitURL { steamArtworkOverrides[result.gameName] = url }
+            if let url = result.heroURL { steamHeroOverrides[result.gameName] = url }
+        }
+    }
+
     /// Get eligible campaigns (active, not fully claimed)
     public func getEligibleCampaigns() async -> [AggregatedCampaignDataService.AggregatedCampaign] {
         await aggregatedService.getEligibleCampaigns()
