@@ -23,11 +23,13 @@ struct ActivityOverviewView: View {
         Group {
             if miners.isEmpty {
                 EmptyActivityStateView()
-            } else {
+            } else if hasMultipleMiners {
                 HSplitView {
                     minerListPane
                     selectedMinerPane
                 }
+            } else {
+                selectedMinerPane
             }
         }
         .navigationTitle("Activity")
@@ -94,6 +96,7 @@ struct ActivityOverviewView: View {
 
                     MinerLiveStateSection(miner: miner)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(24)
             }
             .id(miner.id)
@@ -325,10 +328,10 @@ private struct MinerControlPanel: View {
                     isStopping = false
                 }
             } label: {
-                Text(isStopping ? "Stopping…" : "Stop")
+                Label(isStopping ? "Stopping…" : "Stop", systemImage: "stop.fill")
             }
-            .buttonStyle(.borderedProminent)
-            .tint(.red.opacity(0.85))
+            .buttonStyle(.bordered)
+            .controlSize(.small)
             .disabled(isStopping)
         } else {
             Button {
@@ -346,9 +349,10 @@ private struct MinerControlPanel: View {
                     isStarting = false
                 }
             } label: {
-                Text(isStarting ? "Starting…" : "Start")
+                Label(isStarting ? "Starting…" : "Start", systemImage: "play.fill")
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.bordered)
+            .controlSize(.small)
             .disabled(isStarting)
         }
     }
@@ -360,13 +364,13 @@ private struct ControlPanelInfoBlock: View {
     let subtitle: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(title.uppercased())
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(.tertiary)
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
 
             Text(value)
-                .font(.headline)
+                .font(.system(size: 20, weight: .semibold, design: .rounded))
                 .lineLimit(2)
 
             Text(subtitle)
@@ -374,9 +378,9 @@ private struct ControlPanelInfoBlock: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .glassControlSurface()
+        .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
+        .padding(16)
+        .metricPanelSurface(cornerRadius: GlassRadius.medium)
     }
 }
 
@@ -505,6 +509,7 @@ private struct MinerLiveStateSection: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(22)
         .background {
             RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)

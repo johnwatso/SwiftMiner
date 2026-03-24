@@ -17,12 +17,18 @@ struct ContentView: View {
                 detailView
             }
         }
-        .overlay(alignment: .topTrailing) {
+        .overlay {
             if nav.showOnboarding {
-                OnboardingView()
-                    .padding(24)
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
-                    .zIndex(100)
+                ZStack {
+                    Color.black.opacity(0.28)
+                        .ignoresSafeArea()
+                        .transition(.opacity)
+
+                    OnboardingView()
+                        .padding(24)
+                        .transition(.scale(scale: 0.96).combined(with: .opacity))
+                }
+                .zIndex(100)
             }
         }
         .frame(minWidth: 800, minHeight: 600)
@@ -219,20 +225,34 @@ struct OverviewView: View {
         .toolbar {
             ToolbarItem {
                 Button {
-                    Task { await refresh() }
+                    Task { await refreshFromOverview() }
                 } label: {
                     Label("Refresh", systemImage: "arrow.clockwise")
                 }
                 .disabled(isRefreshing)
             }
         }
-        .task { await refresh() }
+        .task { await refreshSummary() }
     }
 
-    private func refresh() async {
+    private func refreshSummary() async {
         isRefreshing = true
         progress = await navigation.minerManager.getAggregateProgress()
         isRefreshing = false
+    }
+
+    private func refreshFromOverview() async {
+        isRefreshing = true
+        defer { isRefreshing = false }
+
+        if !navigation.minerManager.miners.isEmpty {
+            if settings.preferSteamArtwork {
+                await navigation.minerManager.dataCoordinator.clearSteamArtworkCache()
+            }
+            await navigation.minerManager.dataCoordinator.refreshAll()
+        }
+
+        progress = await navigation.minerManager.getAggregateProgress()
     }
 
     // MARK: - Metrics
@@ -717,7 +737,14 @@ struct OverviewView: View {
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
                     .foregroundStyle(primaryStatusReason.color)
-                    .glassControlSurface(cornerRadius: GlassRadius.pill)
+                    .background(
+                        primaryStatusReason.color.opacity(0.12),
+                        in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
+                            .strokeBorder(primaryStatusReason.color.opacity(0.22), lineWidth: 1)
+                    }
             }
 
             if !statusReasonRows.isEmpty {
@@ -729,7 +756,7 @@ struct OverviewView: View {
             }
         }
         .padding(22)
-        .glassContentSurface()
+        .metricPanelSurface(cornerRadius: GlassRadius.medium)
     }
 
     private var primaryStatusReason: StatusReason {
@@ -963,31 +990,36 @@ struct OverviewMetricCard: View {
     let color: Color
 
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            Image(systemName: icon)
-                .foregroundStyle(color)
-                .font(.headline)
-                .frame(width: 28, height: 28)
-                .glassControlSurface(cornerRadius: GlassRadius.small)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(color.opacity(0.12))
 
-            VStack(alignment: .leading, spacing: 6) {
+                    Image(systemName: icon)
+                        .foregroundStyle(color)
+                        .font(.system(size: 13, weight: .semibold))
+                }
+                .frame(width: 28, height: 28)
+
                 Text(title)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
 
-                Text(value)
-                    .font(.system(size: 24, weight: .semibold, design: .rounded))
-
-                Text(subtitle)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
             }
 
-            Spacer(minLength: 0)
+            Text(value)
+                .font(.system(size: 32, weight: .semibold, design: .rounded))
+
+            Text(subtitle)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .glassPanel()
+        .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
+        .padding(16)
+        .metricPanelSurface(cornerRadius: GlassRadius.medium)
     }
 }
 
@@ -1214,6 +1246,10 @@ private struct CampaignFeedCard: View {
         item.isPlaceholder && item.showsLiveMotion
     }
 
+    private var showsCampaignSubtitle: Bool {
+        item.section == .active && !item.campaignName.isEmpty
+    }
+
     var body: some View {
         ZStack(alignment: .bottomLeading) {
             CampaignArtworkBackground(
@@ -1283,7 +1319,7 @@ private struct CampaignFeedCard: View {
                     .foregroundStyle(.white)
                     .lineLimit(2)
 
-                if !item.campaignName.isEmpty {
+                if showsCampaignSubtitle {
                     Text(item.campaignName)
                         .font(.caption)
                         .foregroundStyle(.white.opacity(usesStandbyMotionStyle ? 0.44 : 0.78))
@@ -1741,9 +1777,10 @@ private struct StatusReasonRow: View {
                 .font(.caption.weight(.medium))
                 .foregroundStyle(row.color)
         }
+        .frame(maxWidth: .infinity, minHeight: 68, alignment: .leading)
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .glassControlSurface()
+        .metricPanelSurface(cornerRadius: GlassRadius.medium)
     }
 }
 

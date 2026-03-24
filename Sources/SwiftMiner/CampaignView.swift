@@ -87,20 +87,7 @@ struct DropsListView: View {
         }
         .navigationTitle("Drops")
         .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                if preferSteamArtwork {
-                    Button {
-                        Task {
-                            await navigation.minerManager.dataCoordinator.clearSteamArtworkCache()
-                            await loadCampaignFeed()
-                        }
-                    } label: {
-                        Label("Reload Steam Assets", systemImage: "arrow.triangle.2.circlepath")
-                    }
-                    .help("Reload Steam artwork for this Drops view by clearing cached assets.")
-                    .disabled(isRefreshing)
-                }
-
+            ToolbarItem(placement: .principal) {
                 GlassSelectionControl(
                     items: dropFilterItems,
                     selection: $filter,
