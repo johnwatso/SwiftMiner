@@ -38,12 +38,12 @@ struct LiquidGlassBackdrop: View {
                         startMeshAnimation()
                     }
                 }
-                .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
-                    stopMeshAnimation()
-                }
-                .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-                    if !reduceMotion {
-                        startMeshAnimation()
+                .onReceive(NotificationCenter.default.publisher(for: NSWindow.didChangeOcclusionStateNotification)) { note in
+                    guard let window = note.object as? NSWindow else { return }
+                    if window.occlusionState.contains(.visible) {
+                        if !reduceMotion { startMeshAnimation() }
+                    } else {
+                        stopMeshAnimation()
                     }
                 }
             } else {
