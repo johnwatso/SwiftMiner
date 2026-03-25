@@ -8,14 +8,10 @@ struct ContentView: View {
 
     var body: some View {
         @Bindable var nav = navigation
-        ZStack {
-            LiquidGlassBackdrop()
-
-            NavigationSplitView {
-                SidebarView()
-            } detail: {
-                detailView
-            }
+        NavigationSplitView {
+            SidebarView()
+        } detail: {
+            detailView
         }
         .overlay {
             if nav.showOnboarding {
