@@ -138,10 +138,15 @@ public actor TwitchAPIClient {
         }
 
         // Fallback broadening improves sequel-style searches (e.g. "battlefield 6" -> "battlefield").
+        let fallbackQueries = categorySearchFallbackQueries(for: trimmed)
+        if !fallbackQueries.isEmpty {
+            print("[TwitchAPIClient] searchCategories: no direct matches for '\(trimmed)', trying fallbacks \(fallbackQueries)")
+        }
         var collected: [Game] = []
         var seenIds = Set<String>()
-        for fallbackQuery in categorySearchFallbackQueries(for: trimmed) {
+        for fallbackQuery in fallbackQueries {
             let fallbackResults = try await fetchCategories(query: fallbackQuery, limit: cappedLimit)
+            print("[TwitchAPIClient] searchCategories: fallback '\(fallbackQuery)' returned \(fallbackResults.count) categories")
             for game in fallbackResults where seenIds.insert(game.id).inserted {
                 collected.append(game)
                 if collected.count >= cappedLimit {
@@ -150,6 +155,9 @@ public actor TwitchAPIClient {
             }
         }
 
+        if collected.isEmpty {
+            print("[TwitchAPIClient] searchCategories: no categories found for '\(trimmed)' after all fallbacks")
+        }
         return collected
     }
 
