@@ -828,6 +828,12 @@ public actor TwitchAPIClient {
                 // Don't retry auth/rate limit/stale hash errors
                 throw error
             } catch {
+                if error is CancellationError {
+                    throw error
+                }
+                if let urlError = error as? URLError, urlError.code == .cancelled {
+                    throw error
+                }
                 lastError = error
                 if attempt < maxAttempts {
                     let delay = Double(attempt) * 2.0 // Simple backoff: 2s, 4s
