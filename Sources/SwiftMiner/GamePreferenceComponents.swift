@@ -79,8 +79,12 @@ struct GameSearchField: View {
     }
 
     private var shouldShowNoMatchesState: Bool {
-        !normalizedQuery.isEmpty && hasLoadedGames && !availableGames.isEmpty && filteredGames.isEmpty
-            && twitchSearchResults.isEmpty && !isSearchingTwitch
+        !normalizedQuery.isEmpty && !isSearchingTwitch && allSuggestions.isEmpty && hasAccounts
+    }
+
+    /// Show a "Search Twitch for X" row when local results exist but Twitch hasn't returned anything yet.
+    private var shouldShowTwitchFallbackRow: Bool {
+        !normalizedQuery.isEmpty && hasAccounts && !isSearchingTwitch && twitchSearchResults.isEmpty
     }
 
     /// Combined results: local campaign games first, then Twitch search results
@@ -137,11 +141,19 @@ struct GameSearchField: View {
                             .padding(.horizontal, 8)
                             .padding(.vertical, 6)
                     } else if shouldShowNoMatchesState {
-                        Text("No games found.")
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("No games found on Twitch for \"\(searchQuery)\".")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Button("Search again") {
+                                triggerImmediateTwitchSearch(query: searchQuery)
+                            }
                             .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 6)
+                            .foregroundStyle(.accentColor)
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
                     }
                 } else {
                     ScrollView {
@@ -153,6 +165,26 @@ struct GameSearchField: View {
                                     showSuggestions = false
                                     twitchSearchResults = []
                                 }
+                            }
+
+                            if shouldShowTwitchFallbackRow {
+                                Button {
+                                    triggerImmediateTwitchSearch(query: searchQuery)
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "magnifyingglass")
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(.secondary)
+                                        Text("Search Twitch for \"\(searchQuery)\"")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                        Spacer()
+                                    }
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 6)
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
                             }
                         }
                     }
@@ -178,6 +210,7 @@ struct GameSearchField: View {
 
     /// Triggers a debounced Twitch category search.
     /// Cancels any in-flight search before starting a new one.
+    /// Sets `isSearchingTwitch = true` immediately to prevent "No results" flash during the debounce window.
     private func triggerTwitchSearch(query: String) {
         twitchSearchTask?.cancel()
         guard !query.isEmpty, hasAccounts else {
@@ -186,9 +219,22 @@ struct GameSearchField: View {
             return
         }
         twitchSearchTask = Task {
+            isSearchingTwitch = true
             // 500 ms debounce
             try? await Task.sleep(nanoseconds: 500_000_000)
             guard !Task.isCancelled else { return }
+            let results = (try? await minerManager.dataCoordinator.searchCategories(query: query)) ?? []
+            guard !Task.isCancelled else { return }
+            twitchSearchResults = results
+            isSearchingTwitch = false
+        }
+    }
+
+    /// Fires an immediate Twitch search without debounce (used by the fallback row tap).
+    private func triggerImmediateTwitchSearch(query: String) {
+        twitchSearchTask?.cancel()
+        guard !query.isEmpty, hasAccounts else { return }
+        twitchSearchTask = Task {
             isSearchingTwitch = true
             let results = (try? await minerManager.dataCoordinator.searchCategories(query: query)) ?? []
             guard !Task.isCancelled else { return }
@@ -272,10 +318,7 @@ struct GameTokensContainer: View {
 
     private var orderedPreferences: [GamePreference] {
         settings.gamePreferences.sorted { lhs, rhs in
-            if stateOrder(lhs.state) != stateOrder(rhs.state) {
-                return stateOrder(lhs.state) < stateOrder(rhs.state)
-            }
-            return lhs.gameName.localizedCaseInsensitiveCompare(rhs.gameName) == .orderedAscending
+            stateOrder(lhs.state) < stateOrder(rhs.state)
         }
     }
 

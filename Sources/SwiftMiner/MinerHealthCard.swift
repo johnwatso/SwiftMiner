@@ -46,12 +46,18 @@ struct MinerHealthCard: View {
 
     private var allHealthy: Bool { issueMiners.isEmpty }
 
+    private var anyRunning: Bool { miners.contains { $0.isRunning } }
+
     // MARK: - Body
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if allHealthy {
-                healthyRow
+                if anyRunning {
+                    healthyRow
+                } else {
+                    pausedRow
+                }
             } else {
                 issuesContent
             }
@@ -71,6 +77,18 @@ struct MinerHealthCard: View {
                 .font(.body.weight(.semibold))
             Text(miners.count == 1 ? "Miner is running normally" : "All \(miners.count) miners are running normally")
                 .font(.subheadline.weight(.medium))
+            Spacer()
+        }
+    }
+
+    private var pausedRow: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "pause.circle.fill")
+                .foregroundStyle(.secondary)
+                .font(.body.weight(.semibold))
+            Text(miners.count == 1 ? "Mining paused" : "All miners paused")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
             Spacer()
         }
     }

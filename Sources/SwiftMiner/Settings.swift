@@ -173,6 +173,19 @@ public final class Settings: ObservableObject {
     public func togglePreferenceState(for preference: GamePreference) {
         setPreferenceState(nextPreferenceState(after: preference.state), for: preference)
     }
+
+    /// Reorder game preferences within a state group (drag-to-reorder support).
+    /// Moves only items that share `state`; items in other states are unaffected.
+    public func moveGamePreferences(fromOffsets: IndexSet, toOffset: Int, inState state: PreferenceState) {
+        var prefs = gamePreferences
+        let stateIndices = prefs.indices.filter { prefs[$0].state == state }
+        var stateItems = stateIndices.map { prefs[$0] }
+        stateItems.move(fromOffsets: fromOffsets, toOffset: toOffset)
+        for (position, originalIndex) in stateIndices.enumerated() {
+            prefs[originalIndex] = stateItems[position]
+        }
+        gamePreferences = prefs
+    }
     
     // MARK: - Enums
 
