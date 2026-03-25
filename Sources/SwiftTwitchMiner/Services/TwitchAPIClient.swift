@@ -84,7 +84,9 @@ public actor TwitchAPIClient {
 
     /// Get current access token from auth service (also used by MinerEngine for PubSub auth)
     public func getAccessToken() async throws -> String {
-        return try await authService.refreshTokenIfNeeded()
+        let token = try await authService.refreshTokenIfNeeded()
+        accessToken = token
+        return token
     }
 
     // MARK: - REST API Methods
@@ -767,6 +769,17 @@ public actor TwitchAPIClient {
 
     // MARK: - Private Helper Methods
 
+    /// Force-refreshes OAuth token after a 401/tokenExpired response and syncs local caches.
+    private func refreshAccessTokenAfterExpiry() async throws -> String {
+        let refreshedToken = try await authService.forceRefreshToken()
+        accessToken = refreshedToken
+        // Integrity token is bound to auth context; force re-fetch after token rotation.
+        integrityToken = nil
+        integrityTokenExpiry = .distantPast
+        print("[TwitchAPIClient] OAuth token refreshed after tokenExpired; integrity cache invalidated")
+        return refreshedToken
+    }
+
     /// Make a request with automatic retries for transient network errors
     private func makeRequestWithRetry(_ request: URLRequest, operationName: String, maxAttempts: Int = 3) async throws -> Data {
         var lastError: Error?
@@ -829,7 +842,12 @@ public actor TwitchAPIClient {
     }
 
     /// Make a REST API request
-    private func makeRESTRequest(url: String, method: String, body: Data? = nil) async throws -> Data {
+    private func makeRESTRequest(
+        url: String,
+        method: String,
+        body: Data? = nil,
+        allowRefreshRetry: Bool = true
+    ) async throws -> Data {
         guard let requestURL = URL(string: url) else {
             throw TwitchMinerError.networkError("Invalid URL")
         }
@@ -844,12 +862,27 @@ public actor TwitchAPIClient {
             request.httpBody = body
         }
 
-        return try await makeRequestWithRetry(request, operationName: "REST \(method) \(url)")
+        let operationName = "REST \(method) \(url)"
+        do {
+            return try await makeRequestWithRetry(request, operationName: operationName)
+        } catch TwitchMinerError.tokenExpired where allowRefreshRetry {
+            print("[TwitchAPIClient] \(operationName): token expired, forcing refresh and retrying once")
+            _ = try await refreshAccessTokenAfterExpiry()
+            return try await makeRESTRequest(
+                url: url,
+                method: method,
+                body: body,
+                allowRefreshRetry: false
+            )
+        }
     }
 
     /// Make a GraphQL request (rate-limited to ≤5 req/s).
     /// Detects `PersistedQueryNotFound` and surfaces it as a clear error.
-    private func makeGraphQLRequest(request: GraphQLRequest) async throws -> Data {
+    private func makeGraphQLRequest(
+        request: GraphQLRequest,
+        allowRefreshRetry: Bool = true
+    ) async throws -> Data {
         // Enforce GQL rate limit before making the request
         await rateLimiter.wait()
         traceGQL(request.operationName)
@@ -883,7 +916,13 @@ public actor TwitchAPIClient {
         let requestBody = request.toJSON()
         urlRequest.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
 
-        return try await makeRequestWithRetry(urlRequest, operationName: request.operationName)
+        do {
+            return try await makeRequestWithRetry(urlRequest, operationName: request.operationName)
+        } catch TwitchMinerError.tokenExpired where allowRefreshRetry {
+            print("[TwitchAPIClient] [GQL] \(request.operationName): token expired, forcing refresh and retrying once")
+            _ = try await refreshAccessTokenAfterExpiry()
+            return try await makeGraphQLRequest(request: request, allowRefreshRetry: false)
+        }
     }
 
     // MARK: - Integrity Token
