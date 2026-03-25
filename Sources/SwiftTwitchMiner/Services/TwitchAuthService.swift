@@ -177,12 +177,21 @@ public actor TwitchAuthService {
             return account.accessToken
         }
 
-        // If there's already a refresh in progress, wait for it
+        return try await forceRefreshToken()
+    }
+
+    /// Force-refreshes the OAuth token regardless of local expiry metadata.
+    /// Used when Twitch returns 401/tokenExpired even though local token appears valid.
+    public func forceRefreshToken() async throws -> String {
+        guard let account = currentAccount else {
+            throw TwitchMinerError.sessionNotStarted
+        }
+
+        // If there's already a refresh in progress, wait for it.
         if let refreshTask = refreshTask {
             return try await refreshTask.value
         }
 
-        // Start new refresh task
         let task = Task<String, Error> {
             defer { self.refreshTask = nil }
             return try await performRefresh(account: account)
@@ -193,6 +202,10 @@ public actor TwitchAuthService {
     }
 
     private func performRefresh(account: Account) async throws -> String {
+        guard !account.refreshToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw TwitchMinerError.tokenExpired
+        }
+
         var request = URLRequest(url: tokenURL)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
