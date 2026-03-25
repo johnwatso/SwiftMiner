@@ -197,10 +197,6 @@ struct GameSearchField: View {
                                 .font(.caption)
                                 .foregroundStyle(Color.accentColor)
                                 .buttonStyle(.plain)
-                            } else {
-                                Text("Tip: Keep this game prioritized and SwiftMiner will mine any linked-account drops when they go live.")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
                             }
                         }
                         .padding(.horizontal, 8)
