@@ -178,8 +178,11 @@ private struct GlassSurfaceModifier: ViewModifier {
                         .fill(.clear)
                         .glassEffect(.regular.interactive())
                 } else {
+                    // Shadow on the background shape, not on the clipped view —
+                    // avoids the rectangular NSVisualEffectView shadow artefact.
                     shape
                         .fill(material)
+                        .shadow(color: .black.opacity(shadowOpacity), radius: shadowRadius, y: shadowY)
                 }
             }
             .overlay {
@@ -201,7 +204,6 @@ private struct GlassSurfaceModifier: ViewModifier {
                 }
             }
             .clipShape(shape)
-            .shadow(color: .black.opacity(shadowOpacity), radius: shadowRadius, y: shadowY)
     }
 }
 
@@ -435,8 +437,8 @@ struct GlassSelectionControl<ID: Hashable, ItemContent: View>: View {
                     .background {
                         if isSelected {
                             RoundedRectangle(cornerRadius: selectedCornerRadius, style: .continuous)
-                                .fill(.ultraThinMaterial)
-                                .shadow(color: .black.opacity(0.08), radius: 3, y: 1)
+                                .fill(Color.white.opacity(0.14))
+                                .shadow(color: .black.opacity(0.06), radius: 2, y: 1)
                                 .matchedGeometryEffect(id: "selection", in: selectionNamespace)
                         }
                     }
