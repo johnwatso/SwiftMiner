@@ -65,6 +65,10 @@ public final class Settings: ObservableObject {
     @AppStorage("debugFakeQueueEnabled")
     public var debugFakeQueueEnabled: Bool = false
 
+    /// Whether fake queue cards should show the "Debug Preview" badge.
+    @AppStorage("debugShowPreviewBadge")
+    public var debugShowPreviewBadge: Bool = false
+
     /// Data source used for fake queue generation in debug builds.
     @AppStorage("debugFakeQueueSource")
     public var debugFakeQueueSource: DebugFakeQueueSource = .prioritisedGames
