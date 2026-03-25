@@ -391,6 +391,8 @@ private struct AdvancedSettingsView: View {
                 Toggle("Enable Fake Queue", isOn: $settings.debugFakeQueueEnabled)
 
                 if settings.debugFakeQueueEnabled {
+                    Toggle("Show Debug Preview Badge", isOn: $settings.debugShowPreviewBadge)
+
                     HStack(spacing: 12) {
                         Text("Queue Source")
                         Spacer(minLength: 8)
@@ -437,7 +439,7 @@ private struct AdvancedSettingsView: View {
                     }
                 }
 
-                SettingsSecondaryText("Testing only. Overview renders a synthetic queue with a \"Debug Preview\" badge.")
+                SettingsSecondaryText("Testing only. Overview renders a synthetic queue for screenshots. The debug badge is optional.")
             } header: {
                 Text("Debug Testing")
             }
