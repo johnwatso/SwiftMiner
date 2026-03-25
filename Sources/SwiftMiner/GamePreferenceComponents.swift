@@ -33,6 +33,7 @@ struct GameSearchField: View {
     @State private var isLoadingGames = false
     @State private var twitchSearchResults: [Game] = []
     @State private var twitchSearchErrorMessage: String?
+    @State private var twitchSearchRequiresReauth = false
     @State private var isSearchingTwitch = false
     @State private var twitchSearchTask: Task<Void, Never>?
     @FocusState private var isSearchFocused: Bool
@@ -189,12 +190,18 @@ struct GameSearchField: View {
                             Text(errorMessage)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                            Button("Retry search") {
-                                triggerImmediateTwitchSearch(query: searchQuery)
+                            if !twitchSearchRequiresReauth {
+                                Button("Retry search") {
+                                    triggerImmediateTwitchSearch(query: searchQuery)
+                                }
+                                .font(.caption)
+                                .foregroundStyle(Color.accentColor)
+                                .buttonStyle(.plain)
+                            } else {
+                                Text("Reconnect Twitch in Settings > Accounts, then search again.")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
                             }
-                            .font(.caption)
-                            .foregroundStyle(Color.accentColor)
-                            .buttonStyle(.plain)
                         }
                         .padding(.horizontal, 8)
                         .padding(.vertical, 6)
@@ -296,12 +303,14 @@ struct GameSearchField: View {
         guard !query.isEmpty, hasAccounts else {
             twitchSearchResults = []
             twitchSearchErrorMessage = nil
+            twitchSearchRequiresReauth = false
             isSearchingTwitch = false
             return
         }
         twitchSearchTask = Task {
             isSearchingTwitch = true
             twitchSearchErrorMessage = nil
+            twitchSearchRequiresReauth = false
             // 500 ms debounce
             try? await Task.sleep(nanoseconds: 500_000_000)
             guard !Task.isCancelled else { return }
@@ -310,10 +319,13 @@ struct GameSearchField: View {
                 guard !Task.isCancelled else { return }
                 twitchSearchResults = results
                 twitchSearchErrorMessage = nil
+                twitchSearchRequiresReauth = false
             } catch {
                 guard !Task.isCancelled else { return }
+                let mappedError = mapSearchError(error)
                 twitchSearchResults = []
-                twitchSearchErrorMessage = "Couldn’t search Twitch right now. Please retry."
+                twitchSearchErrorMessage = mappedError.message
+                twitchSearchRequiresReauth = mappedError.requiresReauth
                 print("[GameSearchField] Twitch search failed for '\(query)': \(error)")
             }
             guard !Task.isCancelled else { return }
@@ -328,20 +340,38 @@ struct GameSearchField: View {
         twitchSearchTask = Task {
             isSearchingTwitch = true
             twitchSearchErrorMessage = nil
+            twitchSearchRequiresReauth = false
             do {
                 let results = try await minerManager.dataCoordinator.searchCategories(query: query)
                 guard !Task.isCancelled else { return }
                 twitchSearchResults = results
                 twitchSearchErrorMessage = nil
+                twitchSearchRequiresReauth = false
             } catch {
                 guard !Task.isCancelled else { return }
+                let mappedError = mapSearchError(error)
                 twitchSearchResults = []
-                twitchSearchErrorMessage = "Couldn’t search Twitch right now. Please retry."
+                twitchSearchErrorMessage = mappedError.message
+                twitchSearchRequiresReauth = mappedError.requiresReauth
                 print("[GameSearchField] Twitch search failed for '\(query)': \(error)")
             }
             guard !Task.isCancelled else { return }
             isSearchingTwitch = false
         }
+    }
+
+    private func mapSearchError(_ error: Error) -> (message: String, requiresReauth: Bool) {
+        if let twitchError = error as? TwitchMinerError {
+            switch twitchError {
+            case .tokenExpired:
+                return ("Twitch session expired. Reconnect your account in Settings > Accounts.", true)
+            case .authenticationFailed:
+                return ("Twitch authentication failed. Reconnect your account in Settings > Accounts.", true)
+            default:
+                break
+            }
+        }
+        return ("Couldn’t search Twitch right now. Please retry.", false)
     }
 
     private func uniqueGames(from campaigns: [CampaignViewData]) -> [Game] {
