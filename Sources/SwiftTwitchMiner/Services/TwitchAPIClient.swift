@@ -128,8 +128,32 @@ public actor TwitchAPIClient {
     /// Search Twitch categories (games) by name using the Helix REST API.
     /// Returns up to `limit` matching games with their Twitch IDs and box-art URLs.
     public func searchCategories(query: String, limit: Int = 10) async throws -> [Game] {
-        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
 
+        let cappedLimit = max(1, min(limit, 20))
+        let primaryResults = try await fetchCategories(query: trimmed, limit: cappedLimit)
+        if !primaryResults.isEmpty {
+            return primaryResults
+        }
+
+        // Fallback broadening improves sequel-style searches (e.g. "battlefield 6" -> "battlefield").
+        var collected: [Game] = []
+        var seenIds = Set<String>()
+        for fallbackQuery in categorySearchFallbackQueries(for: trimmed) {
+            let fallbackResults = try await fetchCategories(query: fallbackQuery, limit: cappedLimit)
+            for game in fallbackResults where seenIds.insert(game.id).inserted {
+                collected.append(game)
+                if collected.count >= cappedLimit {
+                    return collected
+                }
+            }
+        }
+
+        return collected
+    }
+
+    private func fetchCategories(query: String, limit: Int) async throws -> [Game] {
         var components = URLComponents(string: "\(helixUrl)/search/categories")!
         components.queryItems = [
             URLQueryItem(name: "query", value: query),
@@ -152,6 +176,47 @@ public actor TwitchAPIClient {
             }
             return Game(id: id, name: name, boxArtURL: artURL)
         }
+    }
+
+    private func categorySearchFallbackQueries(for query: String) -> [String] {
+        let normalized = query
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .lowercased()
+
+        let tokens = normalized
+            .split(separator: " ")
+            .map(String.init)
+        guard tokens.count > 1 else { return [] }
+
+        var candidates: [String] = []
+        let sequelTokenPattern = #"^\d+$|^[ivxlcdm]+$"#
+
+        let baseTokens = tokens.filter { token in
+            token.range(of: sequelTokenPattern, options: [.regularExpression, .caseInsensitive]) == nil
+        }
+
+        if !baseTokens.isEmpty {
+            candidates.append(baseTokens.joined(separator: " "))
+        }
+
+        let dropLast = tokens.dropLast().joined(separator: " ")
+        if !dropLast.isEmpty {
+            candidates.append(dropLast)
+        }
+
+        if let first = tokens.first {
+            candidates.append(first)
+        }
+
+        var deduped: [String] = []
+        var seen = Set<String>()
+        for candidate in candidates where candidate.count >= 3 && candidate != normalized {
+            if seen.insert(candidate).inserted {
+                deduped.append(candidate)
+            }
+        }
+        return deduped
     }
 
     /// Get the slug for a game name
