@@ -198,7 +198,7 @@ struct GameSearchField: View {
                                 .foregroundStyle(Color.accentColor)
                                 .buttonStyle(.plain)
                             } else {
-                                Text("Reconnect Twitch in Settings > Accounts, then search again.")
+                                Text("Tip: Keep this game prioritized and SwiftMiner will mine any linked-account drops when they go live.")
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                             }
@@ -238,7 +238,7 @@ struct GameSearchField: View {
                             }
 
                             if shouldShowNoActiveDropsMessage {
-                                Text("No drops currently running for \"\(searchQuery)\". You'll be first in queue when drops go live.")
+                                Text("No drops currently running for \"\(searchQuery)\". Keep it prioritized and SwiftMiner will mine any linked-account drops when they go live.")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                     .padding(.horizontal, 8)
@@ -323,7 +323,7 @@ struct GameSearchField: View {
             } catch {
                 guard !Task.isCancelled else { return }
                 if isCancellationError(error) { return }
-                let mappedError = mapSearchError(error)
+                let mappedError = mapSearchError(error, query: query)
                 twitchSearchResults = []
                 twitchSearchErrorMessage = mappedError.message
                 twitchSearchRequiresReauth = mappedError.requiresReauth
@@ -351,7 +351,7 @@ struct GameSearchField: View {
             } catch {
                 guard !Task.isCancelled else { return }
                 if isCancellationError(error) { return }
-                let mappedError = mapSearchError(error)
+                let mappedError = mapSearchError(error, query: query)
                 twitchSearchResults = []
                 twitchSearchErrorMessage = mappedError.message
                 twitchSearchRequiresReauth = mappedError.requiresReauth
@@ -362,13 +362,19 @@ struct GameSearchField: View {
         }
     }
 
-    private func mapSearchError(_ error: Error) -> (message: String, requiresReauth: Bool) {
+    private func mapSearchError(_ error: Error, query: String) -> (message: String, requiresReauth: Bool) {
         if let twitchError = error as? TwitchMinerError {
             switch twitchError {
             case .tokenExpired:
-                return ("Twitch session expired. Reconnect your account in Settings > Accounts.", true)
+                return (
+                    "No current drops found for \"\(query)\" right now. Keep it prioritized and SwiftMiner will mine any linked-account drops when they go live.",
+                    true
+                )
             case .authenticationFailed:
-                return ("Twitch authentication failed. Reconnect your account in Settings > Accounts.", true)
+                return (
+                    "No current drops found for \"\(query)\" right now. Keep it prioritized and SwiftMiner will mine any linked-account drops when they go live.",
+                    true
+                )
             default:
                 break
             }
