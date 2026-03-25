@@ -14,7 +14,7 @@ struct GamePreferencesSection: View {
             GameSearchField(settings: settings, minerManager: minerManager)
 
             if !settings.gamePreferences.isEmpty {
-                GameTokensContainer(settings: settings)
+                GameTokensContainer(settings: settings, minerManager: minerManager)
             }
         }
     }
@@ -82,9 +82,28 @@ struct GameSearchField: View {
         !normalizedQuery.isEmpty && !isSearchingTwitch && allSuggestions.isEmpty && hasAccounts
     }
 
+    /// Show a discovery hint when local campaign games don't match, so users understand
+    /// they can still search the full Twitch category catalog.
+    private var shouldShowDiscoveryHint: Bool {
+        !normalizedQuery.isEmpty && filteredGames.isEmpty && hasAccounts
+    }
+
+    /// Show contextual message when Twitch found games but none currently have active drops.
+    private var shouldShowNoActiveDropsMessage: Bool {
+        !normalizedQuery.isEmpty
+            && filteredGames.isEmpty
+            && !twitchSearchResults.isEmpty
+            && hasAccounts
+    }
+
     /// Show a "Search Twitch for X" row when local results exist but Twitch hasn't returned anything yet.
     private var shouldShowTwitchFallbackRow: Bool {
         !normalizedQuery.isEmpty && hasAccounts && !isSearchingTwitch && twitchSearchResults.isEmpty
+    }
+
+    /// Game names that currently have active drop campaigns.
+    private var activeDropGameNameSet: Set<String> {
+        Set(availableGames.map { $0.name.lowercased() })
     }
 
     /// Combined results: local campaign games first, then Twitch search results
@@ -158,8 +177,24 @@ struct GameSearchField: View {
                 } else {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 0) {
+                            if shouldShowDiscoveryHint {
+                                Text("Can't find your game? Search all of Twitch.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 6)
+                            }
+
+                            if shouldShowNoActiveDropsMessage {
+                                Text("No drops currently running for \"\(searchQuery)\". You'll be first in queue when drops go live.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .padding(.horizontal, 8)
+                                    .padding(.bottom, 4)
+                            }
+
                             ForEach(allSuggestions.prefix(10)) { game in
-                                GameSuggestionRow(game: game) {
+                                GameSuggestionRow(game: game, hasActiveDrops: hasActiveDrops(for: game)) {
                                     settings.addGamePreference(game, state: .preferred)
                                     searchText = ""
                                     showSuggestions = false
@@ -276,6 +311,10 @@ struct GameSearchField: View {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
     }
+
+    private func hasActiveDrops(for game: Game) -> Bool {
+        activeDropGameNameSet.contains(game.name.lowercased())
+    }
 }
 
 // MARK: - Suggestion Row
@@ -283,6 +322,7 @@ struct GameSearchField: View {
 /// A single game suggestion in the search dropdown.
 struct GameSuggestionRow: View {
     let game: Game
+    let hasActiveDrops: Bool
     let onSelect: () -> Void
 
     var body: some View {
@@ -300,6 +340,8 @@ struct GameSuggestionRow: View {
                 Text(game.name)
                     .lineLimit(1)
 
+                AvailabilityBadge(hasActiveDrops: hasActiveDrops)
+
                 Spacer()
             }
             .padding(.horizontal, 8)
@@ -315,6 +357,7 @@ struct GameSuggestionRow: View {
 /// Displays selected games as tokens in a wrapping flow layout.
 struct GameTokensContainer: View {
     @ObservedObject var settings: Settings
+    let minerManager: MinerManager
 
     private var orderedPreferences: [GamePreference] {
         settings.gamePreferences.sorted { lhs, rhs in
@@ -322,10 +365,21 @@ struct GameTokensContainer: View {
         }
     }
 
+    private var activeDropGameNameSet: Set<String> {
+        let names = minerManager.campaignStore.campaigns
+            .filter { $0.isMiningEligible }
+            .map { $0.game.name.lowercased() }
+        return Set(names)
+    }
+
     var body: some View {
         FlowLayout(spacing: 6) {
             ForEach(orderedPreferences) { pref in
-                GameTokenView(preference: pref, settings: settings)
+                GameTokenView(
+                    preference: pref,
+                    settings: settings,
+                    hasActiveDrops: activeDropGameNameSet.contains(pref.gameName.lowercased())
+                )
             }
         }
     }
@@ -349,6 +403,7 @@ struct GameTokensContainer: View {
 struct GameTokenView: View {
     let preference: GamePreference
     @ObservedObject var settings: Settings
+    let hasActiveDrops: Bool
 
     private var stateColor: Color {
         switch preference.state {
@@ -418,6 +473,8 @@ struct GameTokenView: View {
                 .lineLimit(1)
                 .foregroundStyle(preference.state == .neutral ? .primary : stateColor)
 
+            AvailabilityBadge(hasActiveDrops: hasActiveDrops)
+
             Button {
                 settings.removeGamePreference(preference)
             } label: {
@@ -469,6 +526,22 @@ struct GameTokenView: View {
                 Label("Remove", systemImage: "trash")
             }
         }
+    }
+}
+
+private struct AvailabilityBadge: View {
+    let hasActiveDrops: Bool
+
+    var body: some View {
+        Text(hasActiveDrops ? "Drops available" : "No active drops")
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(hasActiveDrops ? Color.green : Color.secondary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(
+                (hasActiveDrops ? Color.green.opacity(0.16) : Color.secondary.opacity(0.16)),
+                in: Capsule()
+            )
     }
 }
 
