@@ -248,11 +248,38 @@ public final class MiningDataCoordinator {
         await aggregatedService.getAggregateStats()
     }
     
-    /// Search Twitch categories (games) by name using the first available miner's API client.
-    /// Returns an empty array if no miners are registered.
+    /// Search Twitch categories (games) by name across registered miner API clients.
+    /// Tries clients in stable miner-ID order so one stale account does not block search.
+    /// Returns an empty array when at least one client responds successfully with no matches.
     public func searchCategories(query: String) async throws -> [Game] {
-        guard let engine = minerEngines.values.first else { return [] }
-        return try await engine.getAPIClient().searchCategories(query: query)
+        guard !minerEngines.isEmpty else { return [] }
+
+        let orderedEngines = minerEngines
+            .sorted { $0.key < $1.key }
+            .map(\.value)
+
+        var lastError: Error?
+        var hadSuccessfulResponse = false
+
+        for engine in orderedEngines {
+            do {
+                let results = try await engine.getAPIClient().searchCategories(query: query)
+                hadSuccessfulResponse = true
+                if !results.isEmpty {
+                    return results
+                }
+            } catch {
+                lastError = error
+            }
+        }
+
+        if hadSuccessfulResponse {
+            return []
+        }
+        if let lastError {
+            throw lastError
+        }
+        return []
     }
 
     /// Force refresh all miners and update CampaignStore
