@@ -39,9 +39,10 @@ struct SidebarView: View {
                     itemSpacing: 2,
                     padding: 0,
                     contentInsets: EdgeInsets(top: 6, leading: 10, bottom: 6, trailing: 10),
-                    selectedCornerRadius: 2,
+                    selectedCornerRadius: 11,
                     fillsAvailableSpace: true,
-                    showsContainer: false
+                    showsContainer: false,
+                    selectionOpacity: 0.20
                 ) { item, isSelected in
                     HStack(spacing: 12) {
                         Image(systemName: item.systemImage)
