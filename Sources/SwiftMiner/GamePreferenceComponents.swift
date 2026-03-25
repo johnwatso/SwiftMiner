@@ -31,6 +31,9 @@ struct GameSearchField: View {
     @State private var availableGames: [Game] = []
     @State private var hasLoadedGames = false
     @State private var isLoadingGames = false
+    @State private var twitchSearchResults: [Game] = []
+    @State private var isSearchingTwitch = false
+    @State private var twitchSearchTask: Task<Void, Never>?
     @FocusState private var isSearchFocused: Bool
 
     private var searchQuery: String {
@@ -77,6 +80,20 @@ struct GameSearchField: View {
 
     private var shouldShowNoMatchesState: Bool {
         !normalizedQuery.isEmpty && hasLoadedGames && !availableGames.isEmpty && filteredGames.isEmpty
+            && twitchSearchResults.isEmpty && !isSearchingTwitch
+    }
+
+    /// Combined results: local campaign games first, then Twitch search results
+    /// (de-duplicated against already-selected preferences).
+    private var allSuggestions: [Game] {
+        let existingNames = Set(settings.gamePreferences.map {
+            $0.gameName.lowercased()
+        })
+        let twitchDeduped = twitchSearchResults.filter { game in
+            !existingNames.contains(game.name.lowercased())
+            && !filteredGames.contains(where: { $0.name.lowercased() == game.name.lowercased() })
+        }
+        return filteredGames + twitchDeduped
     }
 
     var body: some View {
@@ -85,7 +102,9 @@ struct GameSearchField: View {
                 .textFieldStyle(.roundedBorder)
                 .focused($isSearchFocused)
                 .onChange(of: searchText) { _, newValue in
-                    showSuggestions = !newValue.trimmingCharacters(in: .whitespaces).isEmpty
+                    let trimmed = newValue.trimmingCharacters(in: .whitespaces)
+                    showSuggestions = !trimmed.isEmpty
+                    triggerTwitchSearch(query: trimmed)
                 }
                 .onChange(of: isSearchFocused) { _, focused in
                     if !focused {
@@ -100,25 +119,25 @@ struct GameSearchField: View {
                 }
 
             if showSuggestions {
-                if filteredGames.isEmpty {
-                    if shouldShowLoadingState {
+                if allSuggestions.isEmpty {
+                    if shouldShowLoadingState || isSearchingTwitch {
                         HStack(spacing: 8) {
                             ProgressView()
                                 .controlSize(.small)
-                            Text("Loading games…")
+                            Text(isSearchingTwitch ? "Searching Twitch…" : "Loading games…")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         .padding(.horizontal, 8)
                         .padding(.vertical, 6)
                     } else if shouldShowAddAccountState {
-                        Text("Add an account to see available games.")
+                        Text("Add an account to search games.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 6)
                     } else if shouldShowNoMatchesState {
-                        Text("No matching games found.")
+                        Text("No games found.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 8)
@@ -127,16 +146,17 @@ struct GameSearchField: View {
                 } else {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 0) {
-                            ForEach(filteredGames.prefix(8)) { game in
+                            ForEach(allSuggestions.prefix(10)) { game in
                                 GameSuggestionRow(game: game) {
                                     settings.addGamePreference(game, state: .preferred)
                                     searchText = ""
                                     showSuggestions = false
+                                    twitchSearchResults = []
                                 }
                             }
                         }
                     }
-                    .frame(maxHeight: 200)
+                    .frame(maxHeight: 240)
                     .background(.background)
                     .clipShape(RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
                     .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
@@ -154,6 +174,27 @@ struct GameSearchField: View {
         availableGames = uniqueGames(from: campaigns)
         hasLoadedGames = true
         isLoadingGames = false
+    }
+
+    /// Triggers a debounced Twitch category search.
+    /// Cancels any in-flight search before starting a new one.
+    private func triggerTwitchSearch(query: String) {
+        twitchSearchTask?.cancel()
+        guard !query.isEmpty, hasAccounts else {
+            twitchSearchResults = []
+            isSearchingTwitch = false
+            return
+        }
+        twitchSearchTask = Task {
+            // 500 ms debounce
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            guard !Task.isCancelled else { return }
+            isSearchingTwitch = true
+            let results = (try? await minerManager.dataCoordinator.searchCategories(query: query)) ?? []
+            guard !Task.isCancelled else { return }
+            twitchSearchResults = results
+            isSearchingTwitch = false
+        }
     }
 
     private func uniqueGames(from campaigns: [CampaignViewData]) -> [Game] {
