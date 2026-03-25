@@ -149,7 +149,7 @@ struct GameSearchField: View {
                                 triggerImmediateTwitchSearch(query: searchQuery)
                             }
                             .font(.caption)
-                            .foregroundStyle(.accentColor)
+                            .foregroundStyle(Color.accentColor)
                             .buttonStyle(.plain)
                         }
                         .padding(.horizontal, 8)
