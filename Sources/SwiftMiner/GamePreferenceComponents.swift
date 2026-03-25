@@ -32,6 +32,7 @@ struct GameSearchField: View {
     @State private var hasLoadedGames = false
     @State private var isLoadingGames = false
     @State private var twitchSearchResults: [Game] = []
+    @State private var twitchSearchErrorMessage: String?
     @State private var isSearchingTwitch = false
     @State private var twitchSearchTask: Task<Void, Never>?
     @FocusState private var isSearchFocused: Bool
@@ -79,7 +80,31 @@ struct GameSearchField: View {
     }
 
     private var shouldShowNoMatchesState: Bool {
-        !normalizedQuery.isEmpty && !isSearchingTwitch && allSuggestions.isEmpty && hasAccounts
+        !normalizedQuery.isEmpty
+            && !isSearchingTwitch
+            && allSuggestions.isEmpty
+            && filteredGames.isEmpty
+            && twitchSearchResults.isEmpty
+            && twitchSearchErrorMessage == nil
+            && hasAccounts
+    }
+
+    private var shouldShowSearchErrorState: Bool {
+        !normalizedQuery.isEmpty
+            && !isSearchingTwitch
+            && allSuggestions.isEmpty
+            && hasAccounts
+            && twitchSearchErrorMessage != nil
+    }
+
+    /// Twitch returned matches, but they are already present in the user's selected list.
+    private var shouldShowAlreadyAddedMatchesState: Bool {
+        !normalizedQuery.isEmpty
+            && !isSearchingTwitch
+            && allSuggestions.isEmpty
+            && filteredGames.isEmpty
+            && !twitchSearchResults.isEmpty
+            && hasAccounts
     }
 
     /// Show a discovery hint when local campaign games don't match, so users understand
@@ -155,6 +180,26 @@ struct GameSearchField: View {
                         .padding(.vertical, 6)
                     } else if shouldShowAddAccountState {
                         Text("Add an account to search games.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 6)
+                    } else if shouldShowSearchErrorState, let errorMessage = twitchSearchErrorMessage {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(errorMessage)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Button("Retry search") {
+                                triggerImmediateTwitchSearch(query: searchQuery)
+                            }
+                            .font(.caption)
+                            .foregroundStyle(Color.accentColor)
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                    } else if shouldShowAlreadyAddedMatchesState {
+                        Text("Matching Twitch games are already in your list.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 8)
@@ -250,17 +295,28 @@ struct GameSearchField: View {
         twitchSearchTask?.cancel()
         guard !query.isEmpty, hasAccounts else {
             twitchSearchResults = []
+            twitchSearchErrorMessage = nil
             isSearchingTwitch = false
             return
         }
         twitchSearchTask = Task {
             isSearchingTwitch = true
+            twitchSearchErrorMessage = nil
             // 500 ms debounce
             try? await Task.sleep(nanoseconds: 500_000_000)
             guard !Task.isCancelled else { return }
-            let results = (try? await minerManager.dataCoordinator.searchCategories(query: query)) ?? []
+            do {
+                let results = try await minerManager.dataCoordinator.searchCategories(query: query)
+                guard !Task.isCancelled else { return }
+                twitchSearchResults = results
+                twitchSearchErrorMessage = nil
+            } catch {
+                guard !Task.isCancelled else { return }
+                twitchSearchResults = []
+                twitchSearchErrorMessage = "Couldn’t search Twitch right now. Please retry."
+                print("[GameSearchField] Twitch search failed for '\(query)': \(error)")
+            }
             guard !Task.isCancelled else { return }
-            twitchSearchResults = results
             isSearchingTwitch = false
         }
     }
@@ -271,9 +327,19 @@ struct GameSearchField: View {
         guard !query.isEmpty, hasAccounts else { return }
         twitchSearchTask = Task {
             isSearchingTwitch = true
-            let results = (try? await minerManager.dataCoordinator.searchCategories(query: query)) ?? []
+            twitchSearchErrorMessage = nil
+            do {
+                let results = try await minerManager.dataCoordinator.searchCategories(query: query)
+                guard !Task.isCancelled else { return }
+                twitchSearchResults = results
+                twitchSearchErrorMessage = nil
+            } catch {
+                guard !Task.isCancelled else { return }
+                twitchSearchResults = []
+                twitchSearchErrorMessage = "Couldn’t search Twitch right now. Please retry."
+                print("[GameSearchField] Twitch search failed for '\(query)': \(error)")
+            }
             guard !Task.isCancelled else { return }
-            twitchSearchResults = results
             isSearchingTwitch = false
         }
     }
