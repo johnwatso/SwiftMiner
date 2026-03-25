@@ -331,6 +331,11 @@ struct OverviewView: View {
     }
 
     private var displayedMiningFeedItems: [CampaignRailItem] {
+#if DEBUG
+        if settings.debugFakeQueueEnabled {
+            return debugFakeQueueItems
+        }
+#endif
         let orderedCampaigns = orderedMiningQueueCampaigns
         guard !orderedCampaigns.isEmpty else {
             return [placeholderRailItem(for: .active)]
@@ -423,6 +428,100 @@ struct OverviewView: View {
         }
         return settings.queueDisplayStyle
     }
+
+#if DEBUG
+    private var debugFakeQueueItems: [CampaignRailItem] {
+        let maxCount = settings.clampedDebugFakeQueueLength
+        let seedNames = debugQueueSeedGameNames
+
+        guard !seedNames.isEmpty else {
+            var placeholder = placeholderRailItem(for: .active)
+            placeholder.queueLabel = "Debug Preview"
+            placeholder.isDebugPreview = true
+            return [placeholder]
+        }
+
+        return Array((0..<maxCount)).map { index in
+            let name = seedNames[index % seedNames.count]
+            var item: CampaignRailItem
+
+            if let existingCampaign = campaigns.first(where: { $0.game.name.localizedCaseInsensitiveCompare(name) == .orderedSame }) {
+                item = makeRailItem(for: existingCampaign, section: .active)
+            } else {
+                item = makeSyntheticDebugQueueItem(gameName: name, index: index)
+            }
+
+            item.queuePosition = index
+            if index == 0 {
+                item.queueLabel = "Now Mining"
+            } else if index == 1 {
+                item.queueLabel = "Next Up"
+            } else {
+                item.queueLabel = "Queue #\(index + 1)"
+            }
+            item.isDebugPreview = true
+            return item
+        }
+    }
+
+    private var debugQueueSeedGameNames: [String] {
+        let sourceNames: [String]
+        switch settings.debugFakeQueueSource {
+        case .prioritisedGames:
+            sourceNames = settings.priorityGames
+        case .customGames:
+            sourceNames = settings.debugFakeQueueCustomGames
+        }
+
+        let normalized = sourceNames
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        if !normalized.isEmpty {
+            return deduplicatedGameNames(normalized)
+        }
+
+        let fallback = campaigns.map(\.game.name)
+        return deduplicatedGameNames(fallback).prefix(8).map { $0 }
+    }
+
+    private func deduplicatedGameNames(_ names: [String]) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for name in names {
+            let key = name.lowercased()
+            if seen.insert(key).inserted {
+                result.append(name)
+            }
+        }
+        return result
+    }
+
+    private func makeSyntheticDebugQueueItem(gameName: String, index: Int) -> CampaignRailItem {
+        let subtitle = index == 0 ? "Debug queue simulation" : "Queued in debug preview"
+        let detail = index == 0 ? "Testing card hierarchy and screenshot layouts." : "Synthetic queue card for testing."
+        let tint: Color = index == 0 ? .orange : .yellow
+
+        return CampaignRailItem(
+            id: "debug-queue-\(index)-\(gameName.lowercased())",
+            section: .active,
+            gameName: gameName,
+            campaignName: subtitle,
+            eyebrow: "Debug",
+            progressText: detail,
+            progressPercent: index == 0 ? 42 : 0,
+            artworkURL: navigation.minerManager.dataCoordinator.steamArtworkOverrides[gameName],
+            tint: tint,
+            hasOnlyBadgesOrEmotes: false,
+            visualState: index == 0 ? .inProgress : .idle,
+            watchers: [],
+            isDimmed: false,
+            isPlaceholder: false,
+            showsLiveMotion: index == 0,
+            game: Game(id: "debug-\(gameName.lowercased())", name: gameName, boxArtURL: nil)
+        )
+    }
+#endif
 
     private var preferredGames: [GamePreference] {
         settings.gamePreferences.filter { $0.state == .preferred }
@@ -1418,6 +1517,7 @@ private struct CampaignRailItem: Identifiable {
     var game: Game? = nil
     var queuePosition: Int? = nil
     var queueLabel: String? = nil
+    var isDebugPreview: Bool = false
 }
 
 private struct CampaignFeedCard: View {
@@ -1435,6 +1535,10 @@ private struct CampaignFeedCard: View {
 
     private var showsQueueBadge: Bool {
         item.section == .active && !item.isPlaceholder && item.queueLabel != nil
+    }
+
+    private var showsDebugPreviewBadge: Bool {
+        item.isDebugPreview && item.section == .active
     }
 
     private var accessibilityTitle: String {
@@ -1517,6 +1621,22 @@ private struct CampaignFeedCard: View {
                             .padding(.vertical, 6)
                             .background(.ultraThinMaterial, in: Capsule())
                         Spacer()
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(12)
+            }
+
+            if showsDebugPreviewBadge {
+                VStack {
+                    HStack {
+                        Spacer()
+                        Label("Debug Preview", systemImage: "wrench.and.screwdriver.fill")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.white.opacity(0.95))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(.orange.opacity(0.8), in: Capsule())
                     }
                     Spacer(minLength: 0)
                 }
