@@ -92,12 +92,13 @@ struct DropsListView: View {
                     items: dropFilterItems,
                     selection: $filter,
                     axis: .horizontal,
-                    itemSpacing: 3,
-                    padding: 3,
-                    contentInsets: EdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10),
-                    selectedCornerRadius: GlassRadius.small,
+                    itemSpacing: 4,
+                    padding: 4,
+                    contentInsets: EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12),
+                    selectedCornerRadius: GlassRadius.large,
                     fillsAvailableSpace: true,
-                    showsContainer: true
+                    showsContainer: true,
+                    contentAlignment: .center
                 ) { item, isSelected in
                     Text(item.title)
                         .font(.system(size: 12, weight: isSelected ? .semibold : .medium))

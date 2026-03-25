@@ -349,6 +349,7 @@ struct GlassSelectionControl<ID: Hashable, ItemContent: View>: View {
     var selectedCornerRadius: CGFloat
     var fillsAvailableSpace: Bool
     var showsContainer: Bool
+    var contentAlignment: Alignment
     @ViewBuilder var itemContent: (GlassSelectionItem<ID>, Bool) -> ItemContent
 
     @Namespace private var selectionNamespace
@@ -367,6 +368,7 @@ struct GlassSelectionControl<ID: Hashable, ItemContent: View>: View {
         selectedCornerRadius: CGFloat = GlassRadius.subtle,
         fillsAvailableSpace: Bool = true,
         showsContainer: Bool = true,
+        contentAlignment: Alignment = .leading,
         @ViewBuilder itemContent: @escaping (GlassSelectionItem<ID>, Bool) -> ItemContent
     ) {
         self.items = items
@@ -378,6 +380,7 @@ struct GlassSelectionControl<ID: Hashable, ItemContent: View>: View {
         self.selectedCornerRadius = selectedCornerRadius
         self.fillsAvailableSpace = fillsAvailableSpace
         self.showsContainer = showsContainer
+        self.contentAlignment = contentAlignment
         self.itemContent = itemContent
     }
 
@@ -427,7 +430,7 @@ struct GlassSelectionControl<ID: Hashable, ItemContent: View>: View {
                 }
             } label: {
                 itemContent(item, isSelected)
-                    .frame(maxWidth: fillsAvailableSpace ? .infinity : nil, alignment: .leading)
+                    .frame(maxWidth: fillsAvailableSpace ? .infinity : nil, alignment: contentAlignment)
                     .padding(contentInsets)
                     .background {
                         if isSelected {
