@@ -274,6 +274,13 @@ struct DropsListView: View {
             return
         }
 
+        // Seed from last-known cache immediately (synchronous) so the view
+        // shows artwork-complete campaigns while the async refresh runs.
+        let lastKnown = navigation.minerManager.dataCoordinator.lastKnownAllCampaigns
+        if campaigns.isEmpty && !lastKnown.isEmpty {
+            campaigns = lastKnown
+        }
+
         // Load ALL campaigns (not filtered) for the "All" tab
         let cached = await navigation.minerManager.dataCoordinator.allCampaigns(
             preferSteamArtwork: Settings.shared.preferSteamArtwork

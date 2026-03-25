@@ -125,6 +125,35 @@ public actor TwitchAPIClient {
         }
     }
     
+    /// Search Twitch categories (games) by name using the Helix REST API.
+    /// Returns up to `limit` matching games with their Twitch IDs and box-art URLs.
+    public func searchCategories(query: String, limit: Int = 10) async throws -> [Game] {
+        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
+
+        var components = URLComponents(string: "\(helixUrl)/search/categories")!
+        components.queryItems = [
+            URLQueryItem(name: "query", value: query),
+            URLQueryItem(name: "first", value: "\(min(limit, 20))")
+        ]
+        let data = try await makeRESTRequest(url: components.string!, method: "GET")
+
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let results = json["data"] as? [[String: Any]] else {
+            return []
+        }
+
+        return results.compactMap { dict -> Game? in
+            guard let id = dict["id"] as? String,
+                  let name = dict["name"] as? String else { return nil }
+            let artURL: URL? = (dict["box_art_url"] as? String).flatMap { raw in
+                URL(string: raw
+                    .replacingOccurrences(of: "{width}", with: "188")
+                    .replacingOccurrences(of: "{height}", with: "250"))
+            }
+            return Game(id: id, name: name, boxArtURL: artURL)
+        }
+    }
+
     /// Get the slug for a game name
     public func getGameSlug(name: String) async throws -> String {
         guard !name.isEmpty else {

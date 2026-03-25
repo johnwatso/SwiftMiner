@@ -33,6 +33,13 @@ public final class MiningDataCoordinator {
     /// Key = gameName, Value = Steam CDN hero URL (landscape, freshest art).
     /// Used for full-bleed blurred backgrounds in the Drops view.
     public private(set) var steamHeroOverrides: [String: URL] = [:]
+
+    /// Last known result of `allCampaigns()` — available synchronously so views can
+    /// render immediately on recreation without waiting for the async re-fetch.
+    public private(set) var lastKnownAllCampaigns: [CampaignViewData] = []
+
+    /// Last known result of `currentCampaigns()` — same purpose as above.
+    public private(set) var lastKnownCurrentCampaigns: [CampaignViewData] = []
     
     // MARK: - Initialization
     
@@ -106,8 +113,9 @@ public final class MiningDataCoordinator {
     /// Pass `preferSteamArtwork: true` to substitute Steam CDN artwork where available.
     public func currentCampaigns(preferSteamArtwork: Bool = false) async -> [CampaignViewData] {
         let campaigns = await aggregatedService.currentCampaigns()
-        guard preferSteamArtwork else { return campaigns }
-        return await enrichWithSteamArtwork(campaigns)
+        let result = preferSteamArtwork ? await enrichWithSteamArtwork(campaigns) : campaigns
+        lastKnownCurrentCampaigns = result
+        return result
     }
 
     /// Get ALL cached campaigns without filtering.
@@ -115,8 +123,9 @@ public final class MiningDataCoordinator {
     /// Pass `preferSteamArtwork: true` to substitute Steam CDN artwork where available.
     public func allCampaigns(preferSteamArtwork: Bool = false) async -> [CampaignViewData] {
         let campaigns = await aggregatedService.allCampaigns()
-        guard preferSteamArtwork else { return campaigns }
-        return await enrichWithSteamArtwork(campaigns)
+        let result = preferSteamArtwork ? await enrichWithSteamArtwork(campaigns) : campaigns
+        lastKnownAllCampaigns = result
+        return result
     }
 
     // MARK: - Steam Artwork Enrichment
@@ -239,6 +248,13 @@ public final class MiningDataCoordinator {
         await aggregatedService.getAggregateStats()
     }
     
+    /// Search Twitch categories (games) by name using the first available miner's API client.
+    /// Returns an empty array if no miners are registered.
+    public func searchCategories(query: String) async throws -> [Game] {
+        guard let engine = minerEngines.values.first else { return [] }
+        return try await engine.getAPIClient().searchCategories(query: query)
+    }
+
     /// Force refresh all miners and update CampaignStore
     public func refreshAll() async {
         // Sync active campaign state from each engine before aggregating
