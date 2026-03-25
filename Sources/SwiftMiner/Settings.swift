@@ -60,6 +60,24 @@ public final class Settings: ObservableObject {
     @AppStorage("queueDisplayStyle")
     public var queueDisplayStyle: QueueDisplayStyle = .stacked
 
+#if DEBUG
+    /// Whether Overview should render a synthetic queue for testing/screenshots.
+    @AppStorage("debugFakeQueueEnabled")
+    public var debugFakeQueueEnabled: Bool = false
+
+    /// Data source used for fake queue generation in debug builds.
+    @AppStorage("debugFakeQueueSource")
+    public var debugFakeQueueSource: DebugFakeQueueSource = .prioritisedGames
+
+    /// Number of cards to render in the fake queue.
+    @AppStorage("debugFakeQueueLength")
+    public var debugFakeQueueLength: Int = 3
+
+    /// JSON-encoded custom game name list for debug fake queue generation.
+    @AppStorage("debugFakeQueueCustomGamesData")
+    private var debugFakeQueueCustomGamesData: String = "[]"
+#endif
+
     /// Preferred stream quality (for future use)
     @AppStorage("preferredQuality")
     public var preferredQuality: StreamQuality = .auto
@@ -127,6 +145,54 @@ public final class Settings: ObservableObject {
     public var excludedGames: [String] {
         gameNames(for: .excluded)
     }
+
+#if DEBUG
+    public var clampedDebugFakeQueueLength: Int {
+        max(1, min(8, debugFakeQueueLength))
+    }
+
+    public var debugFakeQueueCustomGames: [String] {
+        get {
+            guard let data = debugFakeQueueCustomGamesData.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode([String].self, from: data) else {
+                return []
+            }
+            return decoded
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        }
+        set {
+            let normalized = newValue
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            if let data = try? JSONEncoder().encode(normalized),
+               let encoded = String(data: data, encoding: .utf8) {
+                debugFakeQueueCustomGamesData = encoded
+            }
+        }
+    }
+
+    public func addDebugFakeQueueGame(_ gameName: String) {
+        let trimmed = gameName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        var games = debugFakeQueueCustomGames
+        guard !games.contains(where: { $0.localizedCaseInsensitiveCompare(trimmed) == .orderedSame }) else { return }
+        games.append(trimmed)
+        debugFakeQueueCustomGames = games
+    }
+
+    public func removeDebugFakeQueueGames(atOffsets offsets: IndexSet) {
+        var games = debugFakeQueueCustomGames
+        games.remove(atOffsets: offsets)
+        debugFakeQueueCustomGames = games
+    }
+
+    public func moveDebugFakeQueueGames(fromOffsets offsets: IndexSet, toOffset destination: Int) {
+        var games = debugFakeQueueCustomGames
+        games.move(fromOffsets: offsets, toOffset: destination)
+        debugFakeQueueCustomGames = games
+    }
+#endif
 
     /// Add or update a game preference
     public func addGamePreference(_ game: Game, state: PreferenceState) {
@@ -249,6 +315,24 @@ public final class Settings: ObservableObject {
             }
         }
     }
+
+#if DEBUG
+    public enum DebugFakeQueueSource: String, CaseIterable, Identifiable, Sendable {
+        case prioritisedGames = "prioritisedGames"
+        case customGames = "customGames"
+
+        public var id: String { rawValue }
+
+        public var displayName: String {
+            switch self {
+            case .prioritisedGames:
+                return "Prioritised Games"
+            case .customGames:
+                return "Custom Games"
+            }
+        }
+    }
+#endif
     
     // MARK: - Initialization
     
