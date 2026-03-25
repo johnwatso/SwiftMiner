@@ -97,6 +97,25 @@ private struct GeneralSettingsView: View {
             }
 
             Section {
+                HStack(spacing: 12) {
+                    Text("Queue Display Style")
+                    Spacer(minLength: 8)
+                    Picker("", selection: $settings.queueDisplayStyle) {
+                        ForEach(Settings.QueueDisplayStyle.allCases) { style in
+                            Text(style.displayName).tag(style)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .frame(width: 260)
+                }
+
+                SettingsSecondaryText("Controls the Mining/Queued rail style in Overview. Stacked is the default, with Classic and Cover Flow available.")
+            } header: {
+                Text("Queue Display")
+            }
+
+            Section {
                 Toggle("Show notifications when drops are claimed", isOn: $settings.showClaimNotifications)
                     .onChange(of: settings.showClaimNotifications) { _, newValue in
                         Task { await navigation.minerManager.updateNotificationPreference(enabled: newValue) }

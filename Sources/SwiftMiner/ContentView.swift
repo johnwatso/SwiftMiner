@@ -187,6 +187,7 @@ struct EventRow: View {
 
 struct OverviewView: View {
     @Environment(NavigationModel.self) private var navigation
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var settings = Settings.shared
     @State private var progress: AggregateProgress?
     @State private var isRefreshing = false
@@ -321,7 +322,8 @@ struct OverviewView: View {
                 campaignRailSection(
                     title: "Mining / Queued",
                     items: displayedMiningFeedItems,
-                    prominence: .feature
+                    prominence: .feature,
+                    displayStyle: effectiveQueueDisplayStyle
                 )
             }
         }
@@ -329,36 +331,97 @@ struct OverviewView: View {
     }
 
     private var displayedMiningFeedItems: [CampaignRailItem] {
-        // Mining items = those currently being watched by any miner
-        let mining = currentlyMiningCampaigns.map { makeRailItem(for: $0, section: .active) }
-        
-        // Queued items = those next in line (we can approximate this by picking the top of the eligible list)
-        // But John's requirement is "source of truth: MinerEngine active selection".
-        // Since we already filter `currentlyMiningCampaigns` by `miner.currentCampaignId`, this is correct.
-        
-        return mining.isEmpty ? [placeholderRailItem(for: .active)] : mining
+        let orderedCampaigns = orderedMiningQueueCampaigns
+        guard !orderedCampaigns.isEmpty else {
+            return [placeholderRailItem(for: .active)]
+        }
+
+        let firstIsActive = orderedCampaigns.first.map(isBeingWatched(_:)) ?? false
+
+        return Array(orderedCampaigns.prefix(8).enumerated()).map { index, campaign in
+            var item = makeRailItem(for: campaign, section: .active)
+            item.queuePosition = index
+
+            if index == 0 {
+                item.queueLabel = firstIsActive ? "Now Mining" : "Next Up"
+            } else if index == 1 && firstIsActive {
+                item.queueLabel = "Next Up"
+            } else {
+                item.queueLabel = "Queue #\(index + 1)"
+            }
+
+            return item
+        }
     }
 
     @ViewBuilder
     private func campaignRailSection(
         title: String,
         items: [CampaignRailItem],
-        prominence: CampaignCardProminence
+        prominence: CampaignCardProminence,
+        displayStyle: Settings.QueueDisplayStyle = .classic
     ) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             sectionHeading(title)
 
             ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(alignment: .top, spacing: prominence.spacing) {
-                    ForEach(items) { item in
-                        CampaignFeedCard(item: item, prominence: prominence)
+                if displayStyle == .classic {
+                    LazyHStack(alignment: .top, spacing: prominence.spacing) {
+                        ForEach(items) { item in
+                            CampaignFeedCard(item: item, prominence: prominence)
+                        }
                     }
+                    .padding(.horizontal, 2)
+                    .padding(.vertical, 6)
+                } else {
+                    LazyHStack(
+                        alignment: .top,
+                        spacing: displayStyle == .stacked ? -prominence.size.width * 0.52 : prominence.spacing * 0.55
+                    ) {
+                        ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                            let clampedDepth = min(index, 4)
+                            let scale = displayStyle == .stacked
+                                ? max(0.62, 1.0 - (Double(clampedDepth) * 0.12))
+                                : max(0.72, 1.0 - (Double(clampedDepth) * 0.10))
+                            let opacity = displayStyle == .stacked
+                                ? max(0.52, 1.0 - (Double(clampedDepth) * 0.16))
+                                : max(0.58, 1.0 - (Double(clampedDepth) * 0.13))
+                            let xOffset = displayStyle == .stacked
+                                ? CGFloat(clampedDepth) * 16
+                                : CGFloat(clampedDepth) * 6
+                            let yOffset = displayStyle == .stacked
+                                ? CGFloat(clampedDepth) * 4
+                                : CGFloat(clampedDepth) * 1.5
+                            let rotation = displayStyle == .coverFlow
+                                ? min(Double(clampedDepth) * 14, 36)
+                                : 0
+
+                            CampaignFeedCard(item: item, prominence: prominence)
+                                .scaleEffect(scale)
+                                .opacity(opacity)
+                                .offset(x: xOffset, y: yOffset)
+                                .rotation3DEffect(
+                                    .degrees(rotation),
+                                    axis: (x: 0, y: 1, z: 0),
+                                    perspective: 0.7
+                                )
+                                .zIndex(Double(120 - index))
+                                .animation(.spring(response: 0.34, dampingFraction: 0.82), value: items.map(\.id).joined(separator: ","))
+                        }
+                    }
+                    .padding(.horizontal, 2)
+                    .padding(.vertical, 10)
                 }
-                .padding(.horizontal, 2)
-                .padding(.vertical, 6)
             }
             .scrollClipDisabled()
         }
+    }
+
+    private var effectiveQueueDisplayStyle: Settings.QueueDisplayStyle {
+        if reduceMotion && settings.queueDisplayStyle == .coverFlow {
+            return .stacked
+        }
+        return settings.queueDisplayStyle
     }
 
     private var preferredGames: [GamePreference] {
@@ -367,6 +430,38 @@ struct OverviewView: View {
 
     private var currentlyMiningCampaigns: [Campaign] {
         campaigns.filter(isBeingWatched(_:))
+    }
+
+    private var orderedMiningQueueCampaigns: [Campaign] {
+        var ordered: [Campaign] = []
+        var seenIds = Set<String>()
+
+        let relevantMiners = navigation.minerManager.miners.filter { miner in
+            miner.isRunning
+                || miner.status == .watching
+                || miner.status == .claiming
+                || miner.status == .paused
+                || miner.status == .fetchingCampaigns
+        }
+
+        for miner in relevantMiners {
+            if let current = currentCampaign(for: miner), insertUniqueCampaign(current, into: &ordered, seenIds: &seenIds) {
+                // Keep the actively selected campaign first for this miner, even if not currently eligible.
+            }
+
+            for campaign in queueCandidates(for: miner) {
+                _ = insertUniqueCampaign(campaign, into: &ordered, seenIds: &seenIds)
+            }
+        }
+
+        if ordered.isEmpty {
+            for campaign in activeFeedCampaigns {
+                if !campaign.isMiningEligible { continue }
+                _ = insertUniqueCampaign(campaign, into: &ordered, seenIds: &seenIds)
+            }
+        }
+
+        return ordered
     }
 
     private var prioritisedCampaigns: [Campaign] {
@@ -450,6 +545,77 @@ struct OverviewView: View {
             showsLiveMotion: section == .active && (state == .watching || state == .inProgress || state == .claimable),
             game: campaign.game
         )
+    }
+
+    private func currentCampaign(for miner: MinerManager.ManagedMiner) -> Campaign? {
+        if let campaignId = miner.currentCampaignId {
+            if let localMatch = campaigns.first(where: { $0.id == campaignId }) {
+                return localMatch
+            }
+            if let minerMatch = miner.allCampaigns.first(where: { $0.id == campaignId }) {
+                return minerMatch
+            }
+        }
+
+        guard let campaignName = miner.currentCampaign else {
+            return nil
+        }
+
+        if let localMatch = campaigns.first(where: { $0.name == campaignName }) {
+            return localMatch
+        }
+        return miner.allCampaigns.first(where: { $0.name == campaignName })
+    }
+
+    private func queueCandidates(for miner: MinerManager.ManagedMiner) -> [Campaign] {
+        let currentId = miner.currentCampaignId
+
+        return miner.allCampaigns
+            .filter { campaign in
+                if let currentId, campaign.id == currentId {
+                    return false
+                }
+
+                if isGameExcluded(campaign.game.name) {
+                    return false
+                }
+
+                return campaign.isMiningEligible
+            }
+            .sorted(by: queueCampaignSort)
+    }
+
+    private func insertUniqueCampaign(
+        _ campaign: Campaign,
+        into ordered: inout [Campaign],
+        seenIds: inout Set<String>
+    ) -> Bool {
+        if seenIds.contains(campaign.id) {
+            return false
+        }
+        if isGameExcluded(campaign.game.name) {
+            return false
+        }
+        seenIds.insert(campaign.id)
+        ordered.append(campaign)
+        return true
+    }
+
+    private func queueCampaignSort(lhs: Campaign, rhs: Campaign) -> Bool {
+        let lhsPriority = priorityOrderIndex(for: lhs.game.name)
+        let rhsPriority = priorityOrderIndex(for: rhs.game.name)
+        if lhsPriority != rhsPriority {
+            return lhsPriority < rhsPriority
+        }
+        return campaignDisplaySort(lhs: lhs, rhs: rhs)
+    }
+
+    private func priorityOrderIndex(for gameName: String) -> Int {
+        settings.priorityGames.firstIndex(where: { $0.localizedCaseInsensitiveCompare(gameName) == .orderedSame }) ?? Int.max
+    }
+
+    private func isGameExcluded(_ gameName: String) -> Bool {
+        settings.excludedGames.contains(where: { $0.localizedCaseInsensitiveCompare(gameName) == .orderedSame })
     }
 
     private func makePreferredGameItem(_ preference: GamePreference) -> CampaignRailItem {
@@ -1250,6 +1416,8 @@ private struct CampaignRailItem: Identifiable {
     let isPlaceholder: Bool
     let showsLiveMotion: Bool
     var game: Game? = nil
+    var queuePosition: Int? = nil
+    var queueLabel: String? = nil
 }
 
 private struct CampaignFeedCard: View {
@@ -1263,6 +1431,17 @@ private struct CampaignFeedCard: View {
 
     private var showsCampaignSubtitle: Bool {
         item.section == .active && !item.campaignName.isEmpty
+    }
+
+    private var showsQueueBadge: Bool {
+        item.section == .active && !item.isPlaceholder && item.queueLabel != nil
+    }
+
+    private var accessibilityTitle: String {
+        if let queueLabel = item.queueLabel {
+            return "\(queueLabel). \(item.gameName)"
+        }
+        return item.gameName
     }
 
     var body: some View {
@@ -1328,6 +1507,22 @@ private struct CampaignFeedCard: View {
                     )
                 }
 
+            if let queueLabel = item.queueLabel, showsQueueBadge {
+                VStack {
+                    HStack {
+                        Label(queueLabel, systemImage: "line.3.horizontal.decrease.circle.fill")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.white.opacity(0.95))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(.ultraThinMaterial, in: Capsule())
+                        Spacer()
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(12)
+            }
+
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.gameName)
                     .font(.headline.weight(.semibold))
@@ -1377,6 +1572,9 @@ private struct CampaignFeedCard: View {
         .shadow(color: .black.opacity(isHovering ? 0.10 : 0.05), radius: isHovering ? 8 : 3, y: isHovering ? 4 : 1)
         .animation(.easeInOut(duration: 0.2), value: isHovering)
         .animation(.easeInOut(duration: 0.7), value: usesStandbyMotionStyle)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityTitle)
+        .accessibilityValue(item.campaignName.isEmpty ? item.progressText : item.campaignName)
         .onHover { hovering in
             isHovering = hovering
         }
