@@ -502,26 +502,27 @@ struct OverviewView: View {
             )
         case .active:
             let watchers = readyStateWatchers
-            let runningCount = watchers.count
-            let detail = runningCount > 0
+            let anyMinersRunning = navigation.minerManager.miners.contains { $0.isRunning }
+            let runningCount = navigation.minerManager.miners.filter { $0.isRunning }.count
+            let detail = anyMinersRunning
                 ? "\(runningCount) \(runningCount == 1 ? "miner is" : "miners are") online and ready."
-                : "Accounts are ready to jump into the next campaign."
+                : "Start a miner to begin watching for drops."
             return CampaignRailItem(
                 id: "placeholder-active",
                 section: .active,
-                gameName: "Ready",
-                campaignName: "Waiting for the next live campaign",
-                eyebrow: "Standby",
+                gameName: anyMinersRunning ? "Ready" : "Paused",
+                campaignName: anyMinersRunning ? "Waiting for the next live campaign" : "No miners are currently running",
+                eyebrow: anyMinersRunning ? "Standby" : "Paused",
                 progressText: detail,
                 progressPercent: 0,
                 artworkURL: nil,
-                tint: .cyan,
+                tint: anyMinersRunning ? .cyan : .gray,
                 hasOnlyBadgesOrEmotes: false,
                 visualState: .idle,
-                watchers: watchers,
-                isDimmed: false,
+                watchers: anyMinersRunning ? watchers : [],
+                isDimmed: !anyMinersRunning,
                 isPlaceholder: true,
-                showsLiveMotion: true
+                showsLiveMotion: anyMinersRunning
             )
         case .recent:
             return CampaignRailItem(

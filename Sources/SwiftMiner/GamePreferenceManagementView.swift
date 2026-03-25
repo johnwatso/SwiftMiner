@@ -10,12 +10,10 @@ struct GamePreferenceManagementView: View {
 
     private var prioritisedGames: [GamePreference] {
         settings.gamePreferences.filter { $0.state == .preferred }
-            .sorted { $0.gameName.localizedCaseInsensitiveCompare($1.gameName) == .orderedAscending }
     }
 
     private var excludedGames: [GamePreference] {
         settings.gamePreferences.filter { $0.state == .excluded }
-            .sorted { $0.gameName.localizedCaseInsensitiveCompare($1.gameName) == .orderedAscending }
     }
 
     var body: some View {
@@ -50,6 +48,9 @@ struct GamePreferenceManagementView: View {
                         ForEach(prioritisedGames) { preference in
                             PreferenceRow(preference: preference, settings: settings)
                         }
+                        .onMove { from, to in
+                            settings.moveGamePreferences(fromOffsets: from, toOffset: to, inState: .preferred)
+                        }
                     }
                 }
 
@@ -57,6 +58,9 @@ struct GamePreferenceManagementView: View {
                     Section("Excluded") {
                         ForEach(excludedGames) { preference in
                             PreferenceRow(preference: preference, settings: settings)
+                        }
+                        .onMove { from, to in
+                            settings.moveGamePreferences(fromOffsets: from, toOffset: to, inState: .excluded)
                         }
                     }
                 }
