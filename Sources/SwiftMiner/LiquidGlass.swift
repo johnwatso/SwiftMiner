@@ -438,7 +438,6 @@ struct GlassSelectionControl<ID: Hashable, ItemContent: View>: View {
                         if isSelected {
                             RoundedRectangle(cornerRadius: selectedCornerRadius, style: .continuous)
                                 .fill(.ultraThinMaterial)
-                                .shadow(color: .black.opacity(0.08), radius: 3, y: 1)
                                 .matchedGeometryEffect(id: "selection", in: selectionNamespace)
                         }
                     }
