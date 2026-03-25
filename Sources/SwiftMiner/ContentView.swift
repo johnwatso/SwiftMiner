@@ -436,7 +436,7 @@ struct OverviewView: View {
 
         guard !seedNames.isEmpty else {
             var placeholder = placeholderRailItem(for: .active)
-            placeholder.queueLabel = "Debug Preview"
+            placeholder.queueLabel = "Now Mining"
             placeholder.isDebugPreview = true
             return [placeholder]
         }
@@ -1523,6 +1523,7 @@ private struct CampaignRailItem: Identifiable {
 private struct CampaignFeedCard: View {
     let item: CampaignRailItem
     let prominence: CampaignCardProminence
+    @ObservedObject private var settings = Settings.shared
     @State private var isHovering = false
 
     private var usesStandbyMotionStyle: Bool {
@@ -1538,7 +1539,11 @@ private struct CampaignFeedCard: View {
     }
 
     private var showsDebugPreviewBadge: Bool {
+#if DEBUG
+        item.isDebugPreview && item.section == .active && settings.debugShowPreviewBadge
+#else
         item.isDebugPreview && item.section == .active
+#endif
     }
 
     private var accessibilityTitle: String {
