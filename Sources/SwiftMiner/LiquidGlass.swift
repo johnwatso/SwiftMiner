@@ -414,7 +414,7 @@ struct GlassSelectionControl<ID: Hashable, ItemContent: View>: View {
         if showsContainer {
             stack
                 .padding(padding)
-                .glassControlSurface(cornerRadius: axis == .horizontal ? GlassRadius.small : GlassRadius.medium)
+                .glassPanel(cornerRadius: axis == .horizontal ? GlassRadius.small : GlassRadius.medium)
         } else {
             stack
                 .padding(padding)
