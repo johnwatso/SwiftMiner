@@ -56,6 +56,10 @@ public final class Settings: ObservableObject {
     @AppStorage("runInBackground")
     public var runInBackground: Bool = true
 
+    /// Display style used for the Mining/Queued queue rail in Overview.
+    @AppStorage("queueDisplayStyle")
+    public var queueDisplayStyle: QueueDisplayStyle = .stacked
+
     /// Preferred stream quality (for future use)
     @AppStorage("preferredQuality")
     public var preferredQuality: StreamQuality = .auto
@@ -223,6 +227,25 @@ public final class Settings: ObservableObject {
             case .high: return "High"
             case .medium: return "Medium"
             case .low: return "Low"
+            }
+        }
+    }
+
+    public enum QueueDisplayStyle: String, CaseIterable, Identifiable, Sendable {
+        case classic = "classic"
+        case stacked = "stacked"
+        case coverFlow = "coverFlow"
+
+        public var id: String { rawValue }
+
+        public var displayName: String {
+            switch self {
+            case .classic:
+                return "Classic"
+            case .stacked:
+                return "Stacked"
+            case .coverFlow:
+                return "Cover Flow"
             }
         }
     }
