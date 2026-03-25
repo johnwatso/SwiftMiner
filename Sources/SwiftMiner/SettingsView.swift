@@ -334,6 +334,9 @@ private struct AdvancedSettingsView: View {
     @State private var showResetConfirmation = false
     @State private var showClientIdAlert = false
     @State private var tempClientId = ""
+#if DEBUG
+    @State private var debugGameDraft = ""
+#endif
 
     var body: some View {
         Form {
@@ -382,6 +385,63 @@ private struct AdvancedSettingsView: View {
             } header: {
                 Text("Maintenance")
             }
+
+#if DEBUG
+            Section {
+                Toggle("Enable Fake Queue", isOn: $settings.debugFakeQueueEnabled)
+
+                if settings.debugFakeQueueEnabled {
+                    HStack(spacing: 12) {
+                        Text("Queue Source")
+                        Spacer(minLength: 8)
+                        Picker("", selection: $settings.debugFakeQueueSource) {
+                            ForEach(Settings.DebugFakeQueueSource.allCases) { source in
+                                Text(source.displayName).tag(source)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.segmented)
+                        .frame(width: 240)
+                    }
+
+                    Stepper(
+                        "Queue Length: \(settings.clampedDebugFakeQueueLength)",
+                        value: $settings.debugFakeQueueLength,
+                        in: 1...8
+                    )
+
+                    if settings.debugFakeQueueSource == .customGames {
+                        HStack(spacing: 10) {
+                            TextField("Add custom game", text: $debugGameDraft)
+                                .textFieldStyle(.roundedBorder)
+
+                            Button("Add") {
+                                settings.addDebugFakeQueueGame(debugGameDraft)
+                                debugGameDraft = ""
+                            }
+                            .disabled(debugGameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        }
+
+                        if settings.debugFakeQueueCustomGames.isEmpty {
+                            SettingsSecondaryText("No custom games yet. Add game names for screenshot queue previews.")
+                        } else {
+                            List {
+                                ForEach(Array(settings.debugFakeQueueCustomGames.enumerated()), id: \.offset) { _, gameName in
+                                    Text(gameName)
+                                }
+                                .onDelete(perform: settings.removeDebugFakeQueueGames)
+                                .onMove(perform: settings.moveDebugFakeQueueGames)
+                            }
+                            .frame(minHeight: 120, maxHeight: 180)
+                        }
+                    }
+                }
+
+                SettingsSecondaryText("Testing only. Overview renders a synthetic queue with a \"Debug Preview\" badge.")
+            } header: {
+                Text("Debug Testing")
+            }
+#endif
         }
         .formStyle(.grouped)
         .padding(24)
