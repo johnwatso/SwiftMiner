@@ -352,6 +352,7 @@ struct GlassSelectionControl<ID: Hashable, ItemContent: View>: View {
     var fillsAvailableSpace: Bool
     var showsContainer: Bool
     var contentAlignment: Alignment
+    var selectionOpacity: Double
     @ViewBuilder var itemContent: (GlassSelectionItem<ID>, Bool) -> ItemContent
 
     @Namespace private var selectionNamespace
@@ -371,6 +372,7 @@ struct GlassSelectionControl<ID: Hashable, ItemContent: View>: View {
         fillsAvailableSpace: Bool = true,
         showsContainer: Bool = true,
         contentAlignment: Alignment = .leading,
+        selectionOpacity: Double = 0.14,
         @ViewBuilder itemContent: @escaping (GlassSelectionItem<ID>, Bool) -> ItemContent
     ) {
         self.items = items
@@ -383,6 +385,7 @@ struct GlassSelectionControl<ID: Hashable, ItemContent: View>: View {
         self.fillsAvailableSpace = fillsAvailableSpace
         self.showsContainer = showsContainer
         self.contentAlignment = contentAlignment
+        self.selectionOpacity = selectionOpacity
         self.itemContent = itemContent
     }
 
@@ -437,7 +440,7 @@ struct GlassSelectionControl<ID: Hashable, ItemContent: View>: View {
                     .background {
                         if isSelected {
                             RoundedRectangle(cornerRadius: selectedCornerRadius, style: .continuous)
-                                .fill(Color.white.opacity(0.14))
+                                .fill(Color.white.opacity(selectionOpacity))
                                 .shadow(color: .black.opacity(0.06), radius: 2, y: 1)
                                 .matchedGeometryEffect(id: "selection", in: selectionNamespace)
                         }
