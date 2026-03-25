@@ -322,6 +322,7 @@ struct GameSearchField: View {
                 twitchSearchRequiresReauth = false
             } catch {
                 guard !Task.isCancelled else { return }
+                if isCancellationError(error) { return }
                 let mappedError = mapSearchError(error)
                 twitchSearchResults = []
                 twitchSearchErrorMessage = mappedError.message
@@ -349,6 +350,7 @@ struct GameSearchField: View {
                 twitchSearchRequiresReauth = false
             } catch {
                 guard !Task.isCancelled else { return }
+                if isCancellationError(error) { return }
                 let mappedError = mapSearchError(error)
                 twitchSearchResults = []
                 twitchSearchErrorMessage = mappedError.message
@@ -372,6 +374,16 @@ struct GameSearchField: View {
             }
         }
         return ("Couldn’t search Twitch right now. Please retry.", false)
+    }
+
+    private func isCancellationError(_ error: Error) -> Bool {
+        if error is CancellationError {
+            return true
+        }
+        if let urlError = error as? URLError, urlError.code == .cancelled {
+            return true
+        }
+        return false
     }
 
     private func uniqueGames(from campaigns: [CampaignViewData]) -> [Game] {
