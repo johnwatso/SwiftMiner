@@ -159,8 +159,7 @@ struct DropsListView: View {
         VStack(alignment: .leading, spacing: 18) {
             fallbackBanner(message)
 
-            RoundedRectangle(cornerRadius: GlassRadius.large, style: .continuous)
-                .fill(.thinMaterial.opacity(0.84))
+            Color.clear
                 .overlay(alignment: .bottomLeading) {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Campaigns are syncing")
@@ -173,6 +172,7 @@ struct DropsListView: View {
                     .padding(24)
                 }
                 .frame(height: 220)
+                .glassCard()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(24)
