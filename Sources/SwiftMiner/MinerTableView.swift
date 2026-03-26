@@ -1,5 +1,5 @@
 import SwiftUI
-import SwiftTwitchMiner
+import SwiftMinerCore
 
 /// SwiftUI Table displaying all miners and their status
 struct MinerTableView: View {

@@ -1,6 +1,6 @@
 import XCTest
 import UserNotifications
-@testable import SwiftTwitchMiner
+@testable import SwiftMinerCore
 
 final class NotificationServiceTests: XCTestCase {
     

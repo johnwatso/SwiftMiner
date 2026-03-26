@@ -1,5 +1,5 @@
 import XCTest
-@testable import SwiftTwitchMiner
+@testable import SwiftMinerCore
 
 // MARK: - Per-URL Mock Protocol
 

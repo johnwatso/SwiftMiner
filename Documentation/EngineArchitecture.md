@@ -1,8 +1,8 @@
-# SwiftTwitchMiner Engine Architecture
+# SwiftMinerCore Engine Architecture
 
 ## Overview
 
-The SwiftTwitchMiner engine is built using Swift 6's actor-based concurrency model to ensure thread safety and proper isolation of mutable state.
+The SwiftMinerCore engine is built using Swift 6's actor-based concurrency model to ensure thread safety and proper isolation of mutable state.
 
 ## Core Components
 
@@ -122,11 +122,11 @@ export TWITCH_CLIENT_ID=your_client_id
 open SwiftMiner.xcodeproj
 ```
 
-Run the `SwiftTwitchMinerCLI` scheme from Xcode when you need the headless debug runner.
+Run the `SwiftMinerCLI` scheme from Xcode when you need the headless debug runner.
 
 ### As a Library
 ```swift
-import SwiftTwitchMiner
+import SwiftMinerCore
 
 let engine = MinerEngine(clientId: "your_client_id")
 

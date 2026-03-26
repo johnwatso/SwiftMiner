@@ -1,5 +1,5 @@
 import SwiftUI
-import SwiftTwitchMiner
+import SwiftMinerCore
 
 /// User settings managed via @AppStorage.
 /// Provides persistent preferences across app launches.

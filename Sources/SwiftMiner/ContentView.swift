@@ -1,5 +1,5 @@
 import SwiftUI
-import SwiftTwitchMiner
+import SwiftMinerCore
 
 /// Root view — 2-column NavigationSplitView (Sidebar | Detail)
 struct ContentView: View {
