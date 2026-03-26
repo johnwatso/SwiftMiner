@@ -1,6 +1,6 @@
 import Foundation
 import SwiftUI
-import SwiftTwitchMiner
+import SwiftMinerCore
 
 /// Central view-model that bridges mining state to SwiftUI's `@MainActor`.
 ///

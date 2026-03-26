@@ -1,4 +1,4 @@
-# SwiftTwitchMiner — Architecture Research
+# SwiftMinerCore — Architecture Research
 
 > Reverse-engineered from TwitchDropsMiner (Python reference implementation)
 > Date: 2026-03-17
@@ -298,7 +298,7 @@ Switch triggers:
 ## 12. Proposed File Structure
 
 ```
-Sources/SwiftTwitchMiner/
+Sources/SwiftMinerCore/
 ├── Engine/
 │   ├── MinerEngine.swift          ← actor, lifecycle state machine
 │   └── MinerState.swift           ← State enum

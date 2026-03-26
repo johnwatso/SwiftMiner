@@ -1,6 +1,6 @@
 import AppKit
 import SwiftUI
-import SwiftTwitchMiner
+import SwiftMinerCore
 import UserNotifications
 
 @main

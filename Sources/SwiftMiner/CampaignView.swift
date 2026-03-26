@@ -1,5 +1,5 @@
 import SwiftUI
-import SwiftTwitchMiner
+import SwiftMinerCore
 
 // MARK: - Drops List View
 

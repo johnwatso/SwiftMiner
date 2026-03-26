@@ -260,7 +260,7 @@ public actor CampaignDataService {
 
 /// Enhanced disk cache for campaigns with per-account isolation and versioning.
 enum CampaignDiskCache {
-    private static let directoryName = "com.swifttwitchminer"
+    private static let directoryName = "com.swiftminer"
     private static let campaignsFolder = "campaigns"
     private static let currentVersion = 1
     

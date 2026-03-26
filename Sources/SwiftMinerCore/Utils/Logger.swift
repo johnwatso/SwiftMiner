@@ -19,14 +19,14 @@ public actor Logger {
         }
     }
     
-    private let subsystem = "com.swifttwitchminer"
+    private let subsystem = "com.swiftminer"
     private let category: String
     private let osLog: OSLog
     private var logLevel: LogLevel = .info
     
     public var logHandler: (@Sendable (LogLevel, String) -> Void)?
     
-    public init(category: String = "SwiftTwitchMiner") {
+    public init(category: String = "SwiftMinerCore") {
         self.category = category
         self.osLog = OSLog(subsystem: subsystem, category: category)
     }

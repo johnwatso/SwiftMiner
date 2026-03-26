@@ -1,5 +1,5 @@
 import SwiftUI
-import SwiftTwitchMiner
+import SwiftMinerCore
 
 /// Navigation model for the multi-miner dashboard
 /// Manages sidebar selection and view routing

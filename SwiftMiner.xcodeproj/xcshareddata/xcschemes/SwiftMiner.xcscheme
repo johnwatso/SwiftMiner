@@ -29,9 +29,9 @@
             buildForAnalyzing = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "3304B20527D8EFFBE78894C9"
-               BuildableName = "SwiftTwitchMinerTests.xctest"
-               BlueprintName = "SwiftTwitchMinerTests"
+               BlueprintIdentifier = "7A231EC5D7FDEFC2FD3B169E"
+               BuildableName = "SwiftMinerCoreTests.xctest"
+               BlueprintName = "SwiftMinerCoreTests"
                ReferencedContainer = "container:SwiftMiner.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -58,9 +58,9 @@
             parallelizable = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "3304B20527D8EFFBE78894C9"
-               BuildableName = "SwiftTwitchMinerTests.xctest"
-               BlueprintName = "SwiftTwitchMinerTests"
+               BlueprintIdentifier = "7A231EC5D7FDEFC2FD3B169E"
+               BuildableName = "SwiftMinerCoreTests.xctest"
+               BlueprintName = "SwiftMinerCoreTests"
                ReferencedContainer = "container:SwiftMiner.xcodeproj">
             </BuildableReference>
          </TestableReference>

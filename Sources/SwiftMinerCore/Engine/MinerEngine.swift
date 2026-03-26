@@ -230,7 +230,7 @@ public actor MinerEngine {
         progressEventTracker = DropProgressEventTracker()
 
         onStatusChange?(.authenticating)
-        log("Starting SwiftTwitchMiner...")
+        log("Starting SwiftMinerCore...")
 
         // Use pre-loaded account if available, otherwise try keychain.
         // Load even if the token appears expired — refreshTokenIfNeeded() will

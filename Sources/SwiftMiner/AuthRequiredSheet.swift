@@ -1,5 +1,5 @@
 import SwiftUI
-import SwiftTwitchMiner
+import SwiftMinerCore
 
 /// Sheet for adding a new Twitch account via device-code OAuth.
 ///

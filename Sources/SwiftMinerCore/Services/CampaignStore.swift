@@ -46,7 +46,7 @@ public final class CampaignStore {
 /// without waiting for a fresh API call. Campaigns are non-sensitive
 /// (publicly available Twitch data), so no encryption is needed.
 enum CampaignStoreDiskCache {
-    private static let directoryName = "com.swifttwitchminer"
+    private static let directoryName = "com.swiftminer"
     private static let fileName = "campaigns-cache.json"
     /// Cache expires after 1 hour — stale campaigns are discarded on load
     private static let maxAge: TimeInterval = 3600

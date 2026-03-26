@@ -1,6 +1,6 @@
 import Foundation
 import AppKit
-import SwiftTwitchMiner
+import SwiftMinerCore
 
 /// Manages the Twitch OAuth device-code login flow for adding a new miner account.
 ///

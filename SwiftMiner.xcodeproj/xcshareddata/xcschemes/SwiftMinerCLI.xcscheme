@@ -15,9 +15,9 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "1B94E549FC1441A306522450"
-               BuildableName = "SwiftTwitchMinerCLI"
-               BlueprintName = "SwiftTwitchMinerCLI"
+               BlueprintIdentifier = "9E44E878695947BB21AD27D4"
+               BuildableName = "SwiftMinerCLI"
+               BlueprintName = "SwiftMinerCLI"
                ReferencedContainer = "container:SwiftMiner.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -32,9 +32,9 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "1B94E549FC1441A306522450"
-            BuildableName = "SwiftTwitchMinerCLI"
-            BlueprintName = "SwiftTwitchMinerCLI"
+            BlueprintIdentifier = "9E44E878695947BB21AD27D4"
+            BuildableName = "SwiftMinerCLI"
+            BlueprintName = "SwiftMinerCLI"
             ReferencedContainer = "container:SwiftMiner.xcodeproj">
          </BuildableReference>
       </MacroExpansion>
@@ -55,9 +55,9 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "1B94E549FC1441A306522450"
-            BuildableName = "SwiftTwitchMinerCLI"
-            BlueprintName = "SwiftTwitchMinerCLI"
+            BlueprintIdentifier = "9E44E878695947BB21AD27D4"
+            BuildableName = "SwiftMinerCLI"
+            BlueprintName = "SwiftMinerCLI"
             ReferencedContainer = "container:SwiftMiner.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -81,9 +81,9 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "1B94E549FC1441A306522450"
-            BuildableName = "SwiftTwitchMinerCLI"
-            BlueprintName = "SwiftTwitchMinerCLI"
+            BlueprintIdentifier = "9E44E878695947BB21AD27D4"
+            BuildableName = "SwiftMinerCLI"
+            BlueprintName = "SwiftMinerCLI"
             ReferencedContainer = "container:SwiftMiner.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>

@@ -7,8 +7,32 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 INFO_PLIST="$ROOT_DIR/Sources/SwiftMiner/Info.plist"
+PROJECT_PATH="$ROOT_DIR/SwiftMiner.xcodeproj"
+SCHEME="SwiftMiner"
+CONFIGURATION="${SPARKLE_VALIDATION_CONFIGURATION:-Release}"
 APPCAST_STABLE="$ROOT_DIR/docs/appcast.xml"
 APPCAST_BETA="$ROOT_DIR/docs/beta/appcast.xml"
+
+BUILD_SETTINGS_CACHE=""
+
+load_build_settings() {
+    if [[ -n "$BUILD_SETTINGS_CACHE" ]]; then
+        return
+    fi
+    BUILD_SETTINGS_CACHE=$(xcodebuild \
+        -project "$PROJECT_PATH" \
+        -scheme "$SCHEME" \
+        -configuration "$CONFIGURATION" \
+        -showBuildSettings 2>/dev/null || true)
+}
+
+build_setting_value() {
+    local key="$1"
+    echo "$BUILD_SETTINGS_CACHE" \
+        | sed -nE "s/^[[:space:]]*$key = (.*)$/\\1/p" \
+        | head -n 1 \
+        | tr -d '"'
+}
 
 echo "Validating Sparkle release pipeline..."
 
@@ -17,19 +41,37 @@ if [[ ! -f "$INFO_PLIST" ]]; then
     exit 1
 fi
 
-FEED_URL=$(plutil -extract SUFeedURL raw "$INFO_PLIST" || echo "")
-PUBLIC_KEY=$(plutil -extract SUPublicEDKey raw "$INFO_PLIST" || echo "")
+FEED_URL=$(plutil -extract SUFeedURL raw "$INFO_PLIST" 2>/dev/null || true)
+PUBLIC_KEY=$(plutil -extract SUPublicEDKey raw "$INFO_PLIST" 2>/dev/null || true)
+
+if [[ -z "$FEED_URL" || -z "$PUBLIC_KEY" ]]; then
+    load_build_settings
+fi
 
 if [[ -z "$FEED_URL" ]]; then
-    echo "Error: SUFeedURL missing in Info.plist"
-    exit 1
+    FEED_URL=$(build_setting_value "INFOPLIST_KEY_SUFeedURL")
 fi
-echo "SUFeedURL template: $FEED_URL"
+if [[ -z "$FEED_URL" ]]; then
+    FEED_URL=$(build_setting_value "SPARKLE_FEED_URL")
+fi
 
 if [[ -z "$PUBLIC_KEY" ]]; then
-    echo "Warning: SUPublicEDKey is blank in Info.plist template. Set SPARKLE_PUBLIC_ED_KEY in build settings before shipping."
+    PUBLIC_KEY=$(build_setting_value "INFOPLIST_KEY_SUPublicEDKey")
+fi
+if [[ -z "$PUBLIC_KEY" ]]; then
+    PUBLIC_KEY=$(build_setting_value "SPARKLE_PUBLIC_ED_KEY")
+fi
+
+if [[ -z "$FEED_URL" ]]; then
+    echo "Error: SUFeedURL is missing. Define INFOPLIST_KEY_SUFeedURL/SPARKLE_FEED_URL in SwiftMiner build settings."
+    exit 1
+fi
+echo "Resolved SUFeedURL: $FEED_URL"
+
+if [[ -z "$PUBLIC_KEY" ]]; then
+    echo "Warning: SUPublicEDKey is blank. Set INFOPLIST_KEY_SUPublicEDKey/SPARKLE_PUBLIC_ED_KEY before shipping."
 else
-    echo "SUPublicEDKey template present"
+    echo "Resolved SUPublicEDKey present"
 fi
 
 if [[ ! -f "$APPCAST_STABLE" ]]; then

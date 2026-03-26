@@ -1,5 +1,5 @@
 import SwiftUI
-import SwiftTwitchMiner
+import SwiftMinerCore
 
 /// At-a-glance health summary card for all miners.
 /// Shows "All miners healthy" when everything is fine, or a concise list of issues.
