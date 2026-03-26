@@ -212,7 +212,7 @@ func escapeForShellSingleQuotes(_ value: String) -> String {
 }
 
 func parseOwnerRepo(from remoteURL: String) -> (owner: String, repo: String)? {
-    let pattern = "github\\\\.com[:/]([^/]+)/([^/.]+)(\\\\.git)?$"
+    let pattern = #"github\.com[:/]([^/]+)/([^/.]+)(\.git)?$"#
     guard let regex = try? NSRegularExpression(pattern: pattern) else {
         return nil
     }
@@ -319,6 +319,9 @@ func validateBundleVersionInArchive(_ archiveURL: URL) throws {
 }
 
 func copyReplacingIfNeeded(from source: URL, to destination: URL) throws {
+    if source.standardizedFileURL == destination.standardizedFileURL {
+        return
+    }
     if pathExists(destination) {
         try FileManager.default.removeItem(at: destination)
     }
