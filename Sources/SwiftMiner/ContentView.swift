@@ -191,6 +191,7 @@ struct OverviewView: View {
     @ObservedObject private var settings = Settings.shared
     @State private var progress: AggregateProgress?
     @State private var isRefreshing = false
+    @State private var steamIdSheetPresentation: SteamIdSheetPresentation?
 
     private var campaigns: [Campaign] {
         navigation.minerManager.campaignStore.campaigns
@@ -233,6 +234,12 @@ struct OverviewView: View {
         .onChange(of: settings.gamePreferencesData) { _, _ in
             Task { await enrichPreferredGameArtwork() }
         }
+        .sheet(item: $steamIdSheetPresentation) { presentation in
+            SetSteamIdSheet { appId in
+                applySteamAppId(appId, for: presentation.gameName)
+            }
+            .presentationBackground(.clear)
+        }
     }
 
     private func refreshSummary() async {
@@ -263,6 +270,20 @@ struct OverviewView: View {
         guard settings.preferSteamArtwork else { return }
         let names = settings.gamePreferences.filter { $0.state == .preferred }.map(\.gameName)
         await navigation.minerManager.dataCoordinator.enrichGameNames(names)
+    }
+
+    private func presentSteamIdSheet(for gameName: String) {
+        steamIdSheetPresentation = SteamIdSheetPresentation(gameName: gameName)
+    }
+
+    private func applySteamAppId(_ appId: String, for gameName: String) {
+        Task {
+            await SteamArtworkService.shared.setManualAppId(for: gameName, appId: appId)
+            await navigation.minerManager.dataCoordinator.enrichGameNames([gameName])
+            await MainActor.run {
+                Settings.shared.objectWillChange.send()
+            }
+        }
     }
 
     // MARK: - Metrics
@@ -373,7 +394,11 @@ struct OverviewView: View {
                 if displayStyle == .classic {
                     LazyHStack(alignment: .top, spacing: prominence.spacing) {
                         ForEach(items) { item in
-                            CampaignFeedCard(item: item, prominence: prominence)
+                            CampaignFeedCard(
+                                item: item,
+                                prominence: prominence,
+                                onSetSteamId: presentSteamIdSheet(for:)
+                            )
                         }
                     }
                     .padding(.horizontal, 2)
@@ -401,7 +426,11 @@ struct OverviewView: View {
                                 ? min(Double(clampedDepth) * 14, 36)
                                 : 0
 
-                            CampaignFeedCard(item: item, prominence: prominence)
+                            CampaignFeedCard(
+                                item: item,
+                                prominence: prominence,
+                                onSetSteamId: presentSteamIdSheet(for:)
+                            )
                                 .scaleEffect(scale)
                                 .opacity(opacity)
                                 .offset(x: xOffset, y: yOffset)
@@ -1155,7 +1184,7 @@ struct OverviewView: View {
             } else {
                 VStack(spacing: 10) {
                     ForEach(campaignLibraryItems) { campaign in
-                        ActiveCampaignRow(item: campaign)
+                        ActiveCampaignRow(item: campaign, onSetSteamId: presentSteamIdSheet(for:))
                     }
                 }
             }
@@ -1307,6 +1336,7 @@ struct OverviewMetricCard: View {
 
 private struct ActiveCampaignRow: View {
     let item: CampaignRailItem
+    let onSetSteamId: (String) -> Void
 
     var body: some View {
         HStack(spacing: 14) {
@@ -1365,13 +1395,31 @@ private struct ActiveCampaignRow: View {
                 Button {
                     Settings.shared.setGamePreference(game, state: .preferred)
                 } label: {
-                    Label("Prioritise Game", systemImage: "star.fill")
+                    GameActionMenuLabel(
+                        title: "Prioritise Game",
+                        systemImage: "star"
+                    )
                 }
-                
-                Button(role: .destructive) {
+
+                Button {
                     Settings.shared.setGamePreference(game, state: .excluded)
                 } label: {
-                    Label("Exclude Game", systemImage: "minus.circle")
+                    GameActionMenuLabel(
+                        title: "Exclude Game",
+                        systemImage: "minus.circle"
+                    )
+                }
+
+                Divider()
+
+                Button {
+                    onSetSteamId(game.name)
+                } label: {
+                    GameActionMenuLabel(
+                        title: "Set Steam ID",
+                        subtitle: "Set a Steam ID to enable high-resolution artwork for this game.",
+                        systemImage: "photo.artframe"
+                    )
                 }
             }
         }
@@ -1523,6 +1571,7 @@ private struct CampaignRailItem: Identifiable {
 private struct CampaignFeedCard: View {
     let item: CampaignRailItem
     let prominence: CampaignCardProminence
+    let onSetSteamId: (String) -> Void
     @ObservedObject private var settings = Settings.shared
     @State private var isHovering = false
 
@@ -1708,15 +1757,225 @@ private struct CampaignFeedCard: View {
                 Button {
                     Settings.shared.setGamePreference(game, state: .preferred)
                 } label: {
-                    Label("Prioritise Game", systemImage: "star.fill")
+                    GameActionMenuLabel(
+                        title: "Prioritise Game",
+                        systemImage: "star"
+                    )
                 }
-                
-                Button(role: .destructive) {
+
+                Button {
                     Settings.shared.setGamePreference(game, state: .excluded)
                 } label: {
-                    Label("Exclude Game", systemImage: "minus.circle")
+                    GameActionMenuLabel(
+                        title: "Exclude Game",
+                        systemImage: "minus.circle"
+                    )
+                }
+
+                Divider()
+
+                Button {
+                    onSetSteamId(game.name)
+                } label: {
+                    GameActionMenuLabel(
+                        title: "Set Steam ID",
+                        subtitle: "Set a Steam ID to enable high-resolution artwork for this game.",
+                        systemImage: "photo.artframe"
+                    )
                 }
             }
+        }
+    }
+}
+
+private struct SteamIdSheetPresentation: Identifiable {
+    let id = UUID()
+    let gameName: String
+}
+
+private struct SetSteamIdSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @FocusState private var isInputFocused: Bool
+    @State private var steamId = ""
+    let onSet: (String) -> Void
+    private let modalCornerRadius: CGFloat = 20
+
+    private var normalizedSteamId: String {
+        steamId.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var isValidSteamId: Bool {
+        !normalizedSteamId.isEmpty && normalizedSteamId.allSatisfy(\.isNumber)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Set Steam ID")
+                .font(.title3.weight(.semibold))
+
+            Text("""
+            SwiftMiner uses Steam IDs to fetch high-resolution artwork for games.
+            Without this, some games may appear with low-quality or missing images.
+            """)
+            .font(.body)
+            .foregroundStyle(Color.secondary.opacity(0.82))
+            .lineLimit(nil)
+            .lineSpacing(2)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.top, 10)
+
+            TextField("e.g. 2073850", text: $steamId)
+                .textFieldStyle(.roundedBorder)
+                .controlSize(.large)
+                .frame(maxWidth: .infinity)
+                .focused($isInputFocused)
+                .onSubmit {
+                    submitIfValid()
+                }
+                .opacity(0.82)
+                .padding(.top, 16)
+
+            Text("You can find this on SteamDB or the game's store page.")
+                .font(.footnote)
+                .foregroundStyle(.tertiary)
+                .opacity(0.76)
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 4)
+
+            HStack(spacing: 14) {
+                Spacer()
+
+                Button("Cancel") {
+                    dismiss()
+                }
+                .buttonStyle(SteamSecondaryGlassButtonStyle())
+                .keyboardShortcut(.cancelAction)
+
+                Button("Set") {
+                    submitIfValid()
+                }
+                .buttonStyle(SteamPrimaryGlassButtonStyle())
+                .keyboardShortcut(.defaultAction)
+                .disabled(!isValidSteamId)
+            }
+            .padding(.top, 18)
+        }
+        .frame(maxWidth: 420, alignment: .leading)
+        .padding(24)
+        .background {
+            RoundedRectangle(cornerRadius: modalCornerRadius, style: .continuous)
+                .fill(.thinMaterial.opacity(0.50))
+        }
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.12),
+                            Color.white.opacity(0.03),
+                            .clear
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .frame(height: 1)
+                .padding(.horizontal, 16)
+                .blendMode(.screen)
+        }
+        .shadow(color: .black.opacity(0.055), radius: 46, y: 14)
+        .scaleEffect(1.001)
+        .padding(20)
+        .onAppear {
+            isInputFocused = true
+        }
+    }
+
+    private func submitIfValid() {
+        guard isValidSteamId else { return }
+        onSet(normalizedSteamId)
+        dismiss()
+    }
+}
+
+private struct SteamPrimaryGlassButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        PrimaryBody(configuration: configuration)
+    }
+
+    private struct PrimaryBody: View {
+        let configuration: Configuration
+        @Environment(\.isEnabled) private var isEnabled
+        @State private var isHovering = false
+
+        var body: some View {
+            configuration.label
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white.opacity(isEnabled ? 0.96 : 0.72))
+                .padding(.horizontal, 15)
+                .padding(.vertical, 8)
+                .background {
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .fill(.ultraThinMaterial.opacity(0.58))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                                .fill(Color.accentColor.opacity(isHovering ? 0.34 : 0.30))
+                        }
+                        .overlay(alignment: .top) {
+                            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [
+                                            Color.white.opacity(0.20),
+                                            .clear
+                                        ],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                )
+                                .padding(0.5)
+                                .blendMode(.screen)
+                        }
+                }
+                .brightness(isHovering ? 0.028 : 0)
+                .brightness(configuration.isPressed ? -0.06 : 0)
+                .opacity(isEnabled ? 1 : 0.65)
+                .onHover { hovering in
+                    isHovering = hovering
+                }
+                .animation(.easeInOut(duration: 0.16), value: isHovering)
+                .animation(.easeInOut(duration: 0.10), value: configuration.isPressed)
+        }
+    }
+}
+
+private struct SteamSecondaryGlassButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        SecondaryBody(configuration: configuration)
+    }
+
+    private struct SecondaryBody: View {
+        let configuration: Configuration
+        @Environment(\.isEnabled) private var isEnabled
+        @State private var isHovering = false
+
+        var body: some View {
+            configuration.label
+                .font(.system(size: 13, weight: .regular))
+                .foregroundStyle(.tertiary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.white.opacity(isHovering ? 0.08 : 0.01))
+                }
+                .opacity(configuration.isPressed ? 0.78 : (isEnabled ? 0.58 : 0.42))
+                .onHover { hovering in
+                    isHovering = hovering
+                }
+                .animation(.easeInOut(duration: 0.16), value: isHovering)
+                .animation(.easeInOut(duration: 0.10), value: configuration.isPressed)
         }
     }
 }
@@ -1849,6 +2108,35 @@ private struct GhostArtworkShape: View {
         .rotationEffect(.degrees(-18))
         .blur(radius: 42)
         .blendMode(.screen)
+    }
+}
+
+private struct GameActionMenuLabel: View {
+    let title: String
+    var subtitle: String? = nil
+    let systemImage: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: systemImage)
+                .font(.system(size: 13, weight: .regular))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(.secondary)
+                .frame(width: 14, alignment: .center)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.body)
+
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
     }
 }
 
