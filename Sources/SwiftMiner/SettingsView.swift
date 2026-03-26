@@ -71,13 +71,6 @@ private struct GeneralSettingsView: View {
     @EnvironmentObject private var updater: AppUpdater
     @Environment(NavigationModel.self) private var navigation
 
-    private var updateChannelSelection: Binding<AppUpdater.UpdateChannel> {
-        Binding(
-            get: { updater.selectedChannel },
-            set: { updater.setUpdateChannel($0) }
-        )
-    }
-
     var body: some View {
         Form {
             Section {
@@ -125,35 +118,36 @@ private struct GeneralSettingsView: View {
             }
 
             Section {
-                HStack(spacing: 12) {
-                    Text("Update Channel")
-                    Spacer(minLength: 8)
-                    Picker("", selection: updateChannelSelection) {
-                        ForEach(AppUpdater.UpdateChannel.allCases) { channel in
-                            Text(channel.label).tag(channel)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
-                    .frame(width: 170)
+                let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
+                let currentBuild = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown"
+
+                HStack(spacing: 8) {
+                    updateChannelOption(.stable)
+                    updateChannelOption(.beta)
                 }
 
                 if updater.selectedChannel == .beta {
-                    SettingsSecondaryText("Beta channel enabled. Updates will come from the beta appcast feed.", tint: .orange)
+                    Label("Beta channel enabled. Updates will come from the beta appcast feed.", systemImage: "flask.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
                 }
 
-                HStack(spacing: 12) {
-                    Text("Check for Updates")
-                    Spacer(minLength: 8)
-                    Button("Check Now") {
-                        updater.checkForUpdates()
-                    }
-                    .buttonStyle(.link)
-                    .disabled(!updater.canCheckForUpdates)
+                Button("Check for Updates...") {
+                    updater.checkForUpdates()
                 }
+                .buttonStyle(.bordered)
+                .disabled(!updater.canCheckForUpdates)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Current version: \(currentVersion)")
+                    Text("Build: \(currentBuild)")
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.leading, 2)
 
                 if !updater.isConfigured {
-                    SettingsSecondaryText("Automatic updates are not available in this version.")
+                    SettingsSecondaryText("Set `SUFeedURL` and `SUPublicEDKey` in the app target build settings to enable Sparkle updates.")
                 }
             } header: {
                 Text("Software Updates")
@@ -161,6 +155,29 @@ private struct GeneralSettingsView: View {
         }
         .formStyle(.grouped)
         .padding(24)
+    }
+
+    @ViewBuilder
+    private func updateChannelOption(_ channel: AppUpdater.UpdateChannel) -> some View {
+        let isSelected = updater.selectedChannel == channel
+        Button {
+            updater.setUpdateChannel(channel)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: channel.symbolName)
+                Text(channel.label)
+            }
+            .font(.subheadline.weight(.semibold))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.plain)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(isSelected ? .white.opacity(0.42) : .white.opacity(0.18), lineWidth: isSelected ? 1.4 : 1)
+        )
     }
 }
 
