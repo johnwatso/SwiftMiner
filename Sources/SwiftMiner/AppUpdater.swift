@@ -44,6 +44,7 @@ final class AppUpdater: NSObject, ObservableObject {
     private var updaterController: SPUStandardUpdaterController?
 #endif
     private let stableFeedURL: String
+    private var autoCheckTask: Task<Void, Never>?
 
     init(bundle: Bundle = .main) {
         let persistedChannelRaw = UserDefaults.standard.string(forKey: Self.updateChannelDefaultsKey) ?? UpdateChannel.stable.rawValue
@@ -74,7 +75,13 @@ final class AppUpdater: NSObject, ObservableObject {
             updaterController?.updater.automaticallyChecksForUpdates = true
             updaterController?.updater.automaticallyDownloadsUpdates = true
             canCheckForUpdates = true
+            startAutoCheckLoop()
+        } else {
+            updaterController = nil
+            canCheckForUpdates = false
         }
+#else
+        canCheckForUpdates = false
 #endif
     }
 
@@ -88,6 +95,19 @@ final class AppUpdater: NSObject, ObservableObject {
 #if canImport(Sparkle)
         updaterController?.updater.checkForUpdatesInBackground()
 #endif
+    }
+
+    private func startAutoCheckLoop() {
+        autoCheckTask?.cancel()
+        autoCheckTask = Task { [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 300_000_000_000) // 5 minutes
+                await MainActor.run {
+                    self.checkForUpdatesInBackground()
+                }
+            }
+        }
     }
 
     func setUpdateChannel(_ channel: UpdateChannel) {
