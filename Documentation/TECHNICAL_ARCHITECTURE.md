@@ -1,4 +1,4 @@
-# SwiftTwitchMiner — Technical Architecture
+# SwiftMinerCore — Technical Architecture
 
 > **Current as of:** March 2026
 > **Build status:** ✅ Clean
@@ -8,7 +8,7 @@
 
 ## 1. Project Overview
 
-**SwiftTwitchMiner** is a fully native macOS SwiftUI application that automates Twitch drop mining across multiple accounts simultaneously. It has no external dependencies on Python, worker subprocesses, or third-party runtimes — everything runs in-process in Swift.
+**SwiftMinerCore** is a fully native macOS SwiftUI application that automates Twitch drop mining across multiple accounts simultaneously. It has no external dependencies on Python, worker subprocesses, or third-party runtimes — everything runs in-process in Swift.
 
 The app is a **multi-account supervisor dashboard**. It:
 
@@ -29,10 +29,10 @@ The app is a **multi-account supervisor dashboard**. It:
 ```
 SwiftMiner  (macOS .app target — SwiftUI layer)
     └── depends on ↓
-SwiftTwitchMiner     (static library — engine layer)
+SwiftMinerCore     (static library — engine layer)
 ```
 
-### Engine Layer: `SwiftTwitchMiner`
+### Engine Layer: `SwiftMinerCore`
 
 #### `MinerEngine` (actor)
 The core per-account orchestrator. One instance per Twitch account. Owns all services for that account. Exposes `start()`, `stop()`, `authenticate()`, `claimAllDrops()`, `getCurrentProgress()`.
@@ -282,7 +282,7 @@ SwiftMiner/
 │
 └── Sources/
     │
-    ├── SwiftTwitchMiner/                 Static library — engine layer
+    ├── SwiftMinerCore/                 Static library — engine layer
     │   ├── Engine/
     │   │   ├── MinerEngine.swift         Per-account orchestrator (actor)
     │   │   └── MinerManager.swift        Multi-account supervisor (@MainActor)
@@ -330,7 +330,7 @@ SwiftMiner/
     │   ├── AuthView.swift                Legacy auth view (superseded)
     │   └── CampaignViews.swift           Legacy campaign/log views (partially superseded)
     │
-    └── SwiftTwitchMinerCLI/              Command-line runner (debug / headless testing)
+    └── SwiftMinerCLI/              Command-line runner (debug / headless testing)
         └── main.swift
 ```
 
@@ -366,4 +366,4 @@ The 5 req/s token bucket is a single constructor parameter — trivial to adjust
 | 5 | **No watch-time persistence** | `MiningSession.totalWatchTime` resets on engine stop. Lifetime statistics are not written to disk. |
 | 6 | **Legacy files present** | `AppModel.swift`, `AuthView.swift`, `CampaignViews.swift` are from the single-engine era. Still compile but are not used by the current navigation. Should be removed once confirmed as dead code. |
 | 7 | **`CommunityPointsService` stub** | File exists but contains no implementation. Community points auto-claim is not yet supported. |
-| 8 | **CLI target drift** | `SwiftTwitchMinerCLI/main.swift` is not maintained in lockstep with the engine's actor API. May require updates after engine changes. |
+| 8 | **CLI target drift** | `SwiftMinerCLI/main.swift` is not maintained in lockstep with the engine's actor API. May require updates after engine changes. |

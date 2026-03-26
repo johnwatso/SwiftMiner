@@ -1,5 +1,5 @@
 import SwiftUI
-import SwiftTwitchMiner
+import SwiftMinerCore
 
 /// Activity Overview - scalable multi-account workspace.
 struct ActivityOverviewView: View {

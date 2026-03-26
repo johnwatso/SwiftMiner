@@ -1,7 +1,7 @@
 import XCTest
-@testable import SwiftTwitchMiner
+@testable import SwiftMinerCore
 
-final class SwiftTwitchMinerTests: XCTestCase {
+final class SwiftMinerCoreTests: XCTestCase {
 
     // MARK: - Campaign time window
 

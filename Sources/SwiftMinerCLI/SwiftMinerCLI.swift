@@ -1,10 +1,10 @@
 import Foundation
-import SwiftTwitchMiner
+import SwiftMinerCore
 
 @main
-struct SwiftTwitchMinerCLI {
+struct SwiftMinerCLI {
     static func main() async {
-        print("SwiftTwitchMiner CLI")
+        print("SwiftMiner CLI")
         print("====================")
 
         // Configuration

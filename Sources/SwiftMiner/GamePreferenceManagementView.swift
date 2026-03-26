@@ -1,5 +1,5 @@
 import SwiftUI
-import SwiftTwitchMiner
+import SwiftMinerCore
 
 /// Dedicated view for managing game preferences (Prioritised and Excluded).
 /// Opened as a sheet from Settings.

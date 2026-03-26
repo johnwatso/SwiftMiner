@@ -1,5 +1,5 @@
 import XCTest
-@testable import SwiftTwitchMiner
+@testable import SwiftMinerCore
 
 /// Regression test suite for campaign tab routing (Active, Claimed, All).
 /// This verifies the "Target Contract" agreed upon during Phase 1.

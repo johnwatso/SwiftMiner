@@ -1,5 +1,5 @@
 import SwiftUI
-import SwiftTwitchMiner
+import SwiftMinerCore
 
 /// Sidebar navigation for the multi-miner dashboard (Phase 6).
 ///

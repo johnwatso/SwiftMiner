@@ -1,7 +1,7 @@
 name: SwiftMiner
 
 options:
-  bundleIdPrefix: com.swifttwitchminer
+  bundleIdPrefix: com.swiftminer
   createIntermediateGroups: true
 
 packages:
@@ -10,12 +10,12 @@ packages:
     majorVersion: 2.8.0
 
 targets:
-  SwiftTwitchMiner:
+  SwiftMinerCore:
     type: library.static
     platform: macOS
     deploymentTarget: "26.0"
     sources:
-      - Sources/SwiftTwitchMiner
+      - Sources/SwiftMinerCore
     settings:
       base:
         SWIFT_VERSION: "6.0"
@@ -34,7 +34,7 @@ targets:
         type: file
         buildPhase: resources
     dependencies:
-      - target: SwiftTwitchMiner
+      - target: SwiftMinerCore
       - package: Sparkle
         product: Sparkle
     info:
@@ -46,7 +46,7 @@ targets:
         PRODUCT_NAME: SwiftMiner
         SWIFT_VERSION: "6.0"
         SWIFT_STRICT_CONCURRENCY: complete
-        PRODUCT_BUNDLE_IDENTIFIER: com.swifttwitchminer.app
+        PRODUCT_BUNDLE_IDENTIFIER: com.swiftminer.app
         MACOSX_DEPLOYMENT_TARGET: "26.0"
         MARKETING_VERSION: "1.05"
         CURRENT_PROJECT_VERSION: "2026032214"
@@ -67,26 +67,26 @@ targets:
         SPARKLE_FEED_URL: https://johnwatso.github.io/SwiftMiner/appcast.xml
         SPARKLE_PUBLIC_ED_KEY: "OTycmeGRCsewFd9QUCV93CiC40oE+iiewSfWMptLeLI="
 
-  SwiftTwitchMinerCLI:
+  SwiftMinerCLI:
     type: tool
     platform: macOS
     deploymentTarget: "26.0"
     sources:
-      - Sources/SwiftTwitchMinerCLI
+      - Sources/SwiftMinerCLI
     dependencies:
-      - target: SwiftTwitchMiner
+      - target: SwiftMinerCore
     settings:
       base:
         SWIFT_VERSION: "6.0"
 
-  SwiftTwitchMinerTests:
+  SwiftMinerCoreTests:
     type: bundle.unit-test
     platform: macOS
     deploymentTarget: "26.0"
     sources:
       - Tests
     dependencies:
-      - target: SwiftTwitchMiner
+      - target: SwiftMinerCore
       - target: SwiftMiner
     settings:
       base:
@@ -105,7 +105,7 @@ targets:
     settings:
       base:
         PRODUCT_NAME: SparklePublisher
-        PRODUCT_BUNDLE_IDENTIFIER: com.swifttwitchminer.sparklepublisher
+        PRODUCT_BUNDLE_IDENTIFIER: com.swiftminer.sparklepublisher
         SWIFT_VERSION: "6.0"
         MACOSX_DEPLOYMENT_TARGET: "26.0"
 
@@ -114,7 +114,7 @@ schemes:
     build:
       targets:
         SwiftMiner: all
-        SwiftTwitchMinerTests: [test]
+        SwiftMinerCoreTests: [test]
     run:
       config: Debug
       environmentVariables:
@@ -122,14 +122,14 @@ schemes:
     test:
       config: Debug
       targets:
-        - SwiftTwitchMinerTests
+        - SwiftMinerCoreTests
     archive:
       config: Release
 
-  SwiftTwitchMinerCLI:
+  SwiftMinerCLI:
     build:
       targets:
-        SwiftTwitchMinerCLI: all
+        SwiftMinerCLI: all
     run:
       config: Debug
       commandLineArguments: []

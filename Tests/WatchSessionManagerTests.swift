@@ -1,5 +1,5 @@
 import XCTest
-@testable import SwiftTwitchMiner
+@testable import SwiftMinerCore
 
 @MainActor
 final class WatchSessionManagerTests: XCTestCase {

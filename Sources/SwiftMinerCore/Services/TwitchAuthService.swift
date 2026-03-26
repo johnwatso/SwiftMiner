@@ -360,7 +360,7 @@ public actor TwitchAuthService {
 import CryptoKit
 
 private actor KeychainStorage {
-    private static let directoryName = "com.swifttwitchminer"
+    private static let directoryName = "com.swiftminer"
     private static let fileName = "accounts.enc"
 
     private static var storageDir: URL {
@@ -382,7 +382,7 @@ private actor KeychainStorage {
         // HKDF-SHA256 derive a proper 256-bit key
         let derived = HKDF<SHA256>.deriveKey(
             inputKeyMaterial: inputKey,
-            salt: Data("com.swifttwitchminer.accounts".utf8),
+            salt: Data("com.swiftminer.accounts".utf8),
             info: Data("aes-256-gcm".utf8),
             outputByteCount: 32
         )

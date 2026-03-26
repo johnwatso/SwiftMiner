@@ -1,5 +1,5 @@
 import SwiftUI
-import SwiftTwitchMiner
+import SwiftMinerCore
 
 /// macOS Settings window using a Safari-style TabView with a top toolbar.
 struct SettingsView: View {

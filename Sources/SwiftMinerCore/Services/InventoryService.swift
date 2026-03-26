@@ -106,7 +106,7 @@ public actor InventoryService {
 }
 
 enum InventoryDiskCache {
-    private static let directoryName = "com.swifttwitchminer"
+    private static let directoryName = "com.swiftminer"
     private static let folderName = "inventory-snapshots"
 
     private static func fileURL(accountId: String) -> URL {

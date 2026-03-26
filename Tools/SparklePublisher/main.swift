@@ -357,6 +357,15 @@ func upsertReleaseNotesLink(in appcast: String, releaseNotesURL: String) throws 
     return appcast
 }
 
+func ensureEdSignaturePresent(in appcast: String) throws {
+    let signaturePattern = #"sparkle:edSignature="[^"]+""#
+    let regex = try NSRegularExpression(pattern: signaturePattern)
+    let range = NSRange(appcast.startIndex..<appcast.endIndex, in: appcast)
+    guard regex.firstMatch(in: appcast, options: [], range: range) != nil else {
+        throw CommandError(message: "Generated appcast is missing sparkle:edSignature. Ensure SPARKLE_PRIVATE_KEY_PATH points to a valid Sparkle EdDSA private key.")
+    }
+}
+
 func publishReleaseIfPossible(
     ghPath: String?,
     owner: String,
@@ -526,6 +535,7 @@ func main() throws {
         appcastContents = try upsertReleaseNotesLink(in: appcastContents, releaseNotesURL: releaseNotesPublishedURL)
     }
 
+    try ensureEdSignaturePresent(in: appcastContents)
     try appcastContents.write(to: appcastPath, atomically: true, encoding: .utf8)
 
     try publishReleaseIfPossible(

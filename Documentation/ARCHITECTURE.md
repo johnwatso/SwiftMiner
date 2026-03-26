@@ -1,4 +1,4 @@
-# SwiftTwitchMiner Documentation
+# SwiftMinerCore Documentation
 
 ## Table of Contents
 
@@ -12,7 +12,7 @@
 
 ### Prerequisites
 
-Before using SwiftTwitchMiner, you need:
+Before using SwiftMinerCore, you need:
 
 1. **Twitch Developer Account**: Register at [dev.twitch.tv](https://dev.twitch.tv)
 2. **OAuth Client ID**: Create a new application in the Twitch Developer Console
