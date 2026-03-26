@@ -147,7 +147,7 @@ private struct GeneralSettingsView: View {
                 .padding(.leading, 2)
 
                 if !updater.isConfigured {
-                    SettingsSecondaryText("Set SUFEEDURL and SUPublicEDKey in the app target build settings to enable Sparkle updates.")
+                    SettingsSecondaryText("Set SUFeedURL and SUPublicEDKey in the app target build settings to enable Sparkle updates.")
                 }
             } header: {
                 Text("Software Updates")
