@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftMinerCore
+import AppKit
 
 /// Root view — 2-column NavigationSplitView (Sidebar | Detail)
 struct ContentView: View {
@@ -609,18 +610,21 @@ struct OverviewView: View {
     private var activeFeedCampaigns: [Campaign] {
         campaigns
             .filter { campaign in
-                isBeingWatched(campaign)
-                    || campaign.relevance == .active
-                    || campaign.miningStatus == .claimable
-                    || campaign.miningStatus == .inProgress
+                let state = visualState(for: campaign)
+                return state == .watching
+                    || state == .claimable
+                    || state == .inProgress
                     || campaign.isMiningEligible
+                    || campaign.relevance == .active
             }
             .sorted(by: campaignDisplaySort)
     }
 
     private var recentCampaigns: [Campaign] {
         campaigns
-            .filter { $0.relevance == .recent || $0.miningStatus == .claimed }
+            .filter { campaign in
+                isCampaignClaimed(campaign) || campaign.relevance == .recent
+            }
             .sorted { recentActivityDate(for: $0) > recentActivityDate(for: $1) }
     }
 
@@ -654,23 +658,25 @@ struct OverviewView: View {
 
     private func makeRailItem(for campaign: Campaign, section: CampaignFeedSection) -> CampaignRailItem {
         let state = visualState(for: campaign)
+        let hasPriorityLinkIssue = hasPriorityLinkIssue(for: campaign, section: section)
 
         return CampaignRailItem(
             id: "\(section.rawValue)-\(campaign.id)",
             section: section,
             gameName: campaign.game.name,
             campaignName: campaign.name,
-            eyebrow: eyebrowText(for: campaign, section: section, state: state),
-            progressText: campaignDetailText(for: campaign, section: section, state: state),
+            eyebrow: eyebrowText(for: campaign, section: section, state: state, hasPriorityLinkIssue: hasPriorityLinkIssue),
+            progressText: campaignDetailText(for: campaign, state: state, hasPriorityLinkIssue: hasPriorityLinkIssue),
             progressPercent: campaignProgressPercent(for: campaign),
             artworkURL: navigation.minerManager.dataCoordinator.steamArtworkOverrides[campaign.game.name] ?? campaign.game.boxArtURL,
-            tint: tintColor(for: campaign),
+            tint: tintColor(for: campaign, hasPriorityLinkIssue: hasPriorityLinkIssue),
             hasOnlyBadgesOrEmotes: campaign.hasOnlyBadgesOrEmotes,
             visualState: state,
             watchers: watchers(for: campaign),
             isDimmed: state == .claimed,
             isPlaceholder: false,
             showsLiveMotion: section == .active && (state == .watching || state == .inProgress || state == .claimable),
+            issueBadge: hasPriorityLinkIssue ? .accountLinkRequired : nil,
             game: campaign.game
         )
     }
@@ -840,47 +846,45 @@ struct OverviewView: View {
     }
 
     private func visualState(for campaign: Campaign) -> CampaignVisualState {
+        if isCampaignClaimed(campaign) {
+            return .claimed
+        }
+
         if isBeingWatched(campaign) {
             return .watching
         }
 
-        switch campaign.miningStatus {
-        case .claimable:
+        if hasClaimableRewards(campaign) {
             return .claimable
-        case .inProgress:
-            return .inProgress
-        case .claimed, .expired:
-            return .claimed
-        case .available:
-            return .idle
         }
+
+        if hasStartedProgress(campaign) {
+            return .inProgress
+        }
+
+        return .idle
     }
 
     private func watchers(for campaign: Campaign) -> [CampaignWatcher] {
-        let palette: [Color] = [.green, .blue, .orange, .pink, .cyan, .teal]
-
-        return watchingMiners(for: campaign).enumerated().map { index, miner in
+        return watchingMiners(for: campaign).map { miner in
             CampaignWatcher(
-                id: miner.id,
+                id: miner.accountId,
                 username: miner.username,
-                initials: initials(for: miner.username),
-                tint: palette[index % palette.count]
+                initials: initials(for: miner.username)
             )
         }
     }
 
     private var readyStateWatchers: [CampaignWatcher] {
-        let palette: [Color] = [.green, .blue, .orange, .pink, .cyan, .teal]
         let activeMiners = navigation.minerManager.miners.filter { miner in
             miner.isRunning || miner.status == .fetchingCampaigns || miner.status == .authenticating || miner.status == .paused
         }
 
-        return activeMiners.enumerated().map { index, miner in
+        return activeMiners.map { miner in
             CampaignWatcher(
-                id: miner.id,
+                id: miner.accountId,
                 username: miner.username,
-                initials: initials(for: miner.username),
-                tint: palette[index % palette.count]
+                initials: initials(for: miner.username)
             )
         }
     }
@@ -916,8 +920,13 @@ struct OverviewView: View {
     private func eyebrowText(
         for campaign: Campaign,
         section: CampaignFeedSection,
-        state: CampaignVisualState
+        state: CampaignVisualState,
+        hasPriorityLinkIssue: Bool = false
     ) -> String {
+        if hasPriorityLinkIssue {
+            return "Link Required"
+        }
+
         switch state {
         case .watching:
             return "Watching"
@@ -941,37 +950,56 @@ struct OverviewView: View {
 
     private func campaignDetailText(
         for campaign: Campaign,
-        section: CampaignFeedSection,
-        state: CampaignVisualState
+        state: CampaignVisualState,
+        hasPriorityLinkIssue: Bool = false
     ) -> String {
-        let progressPercent = campaignProgressPercent(for: campaign)
+        if hasPriorityLinkIssue {
+            return "Link the game publisher account in Twitch Drops to start mining."
+        }
+
         let remainingMinutes = campaignRemainingMinutes(for: campaign)
         let activeWatchers = watchers(for: campaign)
 
         switch state {
         case .watching:
-            if activeWatchers.count == 1, let watcher = activeWatchers.first {
-                return "\(watcher.username) is watching now"
+            if remainingMinutes > 0 {
+                return remainingTimeText(minutes: remainingMinutes)
             }
-            return "\(activeWatchers.count) accounts are watching"
+            return activeWatchers.isEmpty ? "In progress" : "Watching now"
         case .claimable:
-            return "Reward ready to collect"
+            return "Ready to claim"
         case .inProgress:
-            return "\(Int(progressPercent))% complete • \(remainingMinutes)m left"
+            return remainingMinutes > 0
+                ? remainingTimeText(minutes: remainingMinutes)
+                : "In progress"
         case .claimed:
-            return section == .recent ? "Recently wrapped and safely claimed" : "Completed, still pinned"
+            return "Completed"
         case .idle:
             if campaign.startDate > Date() {
-                return "Starts \(campaign.startDate.formatted(date: .abbreviated, time: .omitted))"
+                return "Not started"
             }
-            if campaign.isMiningEligible {
-                return "Available now"
-            }
-            if progressPercent > 0 {
-                return "\(Int(progressPercent))% complete • \(remainingMinutes)m left"
-            }
-            return section == .recent ? "Completed recently" : "Waiting for the next viewing session"
+            return campaign.isMiningEligible ? "Available" : "Not started"
         }
+    }
+
+    private func hasPriorityLinkIssue(for campaign: Campaign, section: CampaignFeedSection) -> Bool {
+        guard section == .prioritised else { return false }
+        guard campaign.isTimeActive else { return false }
+        guard !campaign.isAccountConnected else { return false }
+        guard campaign.drops.contains(where: { !$0.isClaimed }) else { return false }
+        return campaign.relevance == .prioritised || preferredGames.contains(where: { matches(campaign, preference: $0) })
+    }
+
+    private func remainingTimeText(minutes: Int) -> String {
+        let clamped = max(minutes, 0)
+        let hours = clamped / 60
+        let mins = clamped % 60
+
+        if hours > 0 {
+            return mins > 0 ? "\(hours)h \(mins)m remaining" : "\(hours)h remaining"
+        }
+
+        return "\(mins)m remaining"
     }
 
     private func campaignDisplaySort(lhs: Campaign, rhs: Campaign) -> Bool {
@@ -1239,6 +1267,15 @@ struct OverviewView: View {
         !campaign.drops.isEmpty && campaign.drops.allSatisfy(\.isClaimed)
     }
 
+    private func hasStartedProgress(_ campaign: Campaign) -> Bool {
+        campaignProgressPercent(for: campaign) > 0
+            || campaign.drops.contains { ($0.progress?.currentMinutes ?? 0) > 0 }
+    }
+
+    private func hasClaimableRewards(_ campaign: Campaign) -> Bool {
+        campaign.drops.contains { $0.isClaimable && !$0.isClaimed }
+    }
+
     private func fallbackSubtitle(for miner: MinerManager.ManagedMiner) -> String {
         switch miner.status {
         case .idle:
@@ -1260,7 +1297,10 @@ struct OverviewView: View {
         }
     }
 
-    private func tintColor(for campaign: Campaign) -> Color {
+    private func tintColor(for campaign: Campaign, hasPriorityLinkIssue: Bool = false) -> Color {
+        if hasPriorityLinkIssue {
+            return .orange
+        }
         let name = campaign.game.name.lowercased()
         if name.contains("rust") { return .orange }
         if name.contains("fortnite") { return .blue }
@@ -1338,6 +1378,30 @@ private struct ActiveCampaignRow: View {
     let item: CampaignRailItem
     let onSetSteamId: (String) -> Void
 
+    private var isActiveState: Bool {
+        item.visualState == .watching || item.visualState == .inProgress || item.visualState == .claimable
+    }
+
+    private var stateSummaryLabel: String {
+        switch item.visualState {
+        case .claimed:
+            return "Completed"
+        case .idle:
+            return item.progressText == "Not started" ? "Not started" : "Available"
+        default:
+            return item.progressText
+        }
+    }
+
+    private var stateBadgeTitleOverride: String? {
+        switch item.visualState {
+        case .claimed, .idle:
+            return stateSummaryLabel
+        default:
+            return nil
+        }
+    }
+
     var body: some View {
         HStack(spacing: 14) {
             CampaignThumbnail(url: item.artworkURL, tint: item.tint)
@@ -1352,33 +1416,27 @@ private struct ActiveCampaignRow: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
 
-                HStack(spacing: 8) {
-                    Text(item.progressText)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-
-                    if !item.watchers.isEmpty {
-                        CampaignWatcherStack(watchers: item.watchers, size: 18)
-                    }
+                if !item.watchers.isEmpty {
+                    CampaignWatcherStack(watchers: item.watchers, size: 18)
                 }
             }
 
             Spacer()
 
             VStack(alignment: .trailing, spacing: 8) {
-                CampaignStateBadge(state: item.visualState)
+                CampaignStateBadge(state: item.visualState, titleOverride: stateBadgeTitleOverride)
 
-                if item.progressPercent > 0 {
+                if isActiveState {
                     VStack(alignment: .trailing, spacing: 6) {
-                        Text(item.visualState == .claimed ? "Completed" : "\(Int(item.progressPercent))%")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(item.visualState.accent)
-
                         ProgressView(value: item.progressPercent, total: 100)
                             .progressViewStyle(.linear)
                             .frame(width: 118)
                             .tint(item.visualState.accent)
+
+                        Text(stateSummaryLabel)
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(.secondary.opacity(0.78))
+                            .lineLimit(1)
                     }
                 }
             }
@@ -1543,7 +1601,160 @@ private struct CampaignWatcher: Identifiable {
     let id: String
     let username: String
     let initials: String
-    let tint: Color
+}
+
+struct AvatarColorSwatch {
+    let top: Color
+    let bottom: Color
+    let text: Color
+
+    var gradient: LinearGradient {
+        LinearGradient(
+            colors: [top, bottom],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+}
+
+enum AvatarColorPalette {
+    private static let palette: [NSColor] = [
+        .systemBlue,
+        .systemIndigo,
+        .systemPurple,
+        .systemPink,
+        .systemOrange,
+        .systemTeal,
+        .systemGreen
+    ]
+
+    static func swatch(for userID: String?, username: String) -> AvatarColorSwatch {
+        let base = softenedBaseColor(
+            for: normalizedKey(userID: userID, username: username)
+        )
+        let top = base
+            .mixed(with: .white, amount: 0.20)
+            .adjusted(saturationFactor: 0.96, brightnessFactor: 1.03)
+        let bottom = base
+            .mixed(with: .black, amount: 0.08)
+            .adjusted(saturationFactor: 0.97, brightnessFactor: 0.93)
+
+        let text: Color = base.relativeLuminance > 0.64
+            ? Color.black.opacity(0.72)
+            : Color.white.opacity(0.93)
+
+        return AvatarColorSwatch(
+            top: Color(nsColor: top),
+            bottom: Color(nsColor: bottom),
+            text: text
+        )
+    }
+
+    private static func softenedBaseColor(for userKey: String) -> NSColor {
+        let hash = stableHash(for: userKey)
+        let index = Int(hash % UInt64(palette.count))
+        let variantA = CGFloat((hash >> 24) & 0xFF) / 255
+        let variantB = CGFloat((hash >> 32) & 0xFF) / 255
+        let variantC = CGFloat((hash >> 40) & 0xFF) / 255
+
+        let saturationFactor = 0.70 + (variantA * 0.11)
+        let brightnessFactor = 0.87 + (variantB * 0.09)
+        let whiteMix = 0.08 + (variantC * 0.05)
+
+        return palette[index]
+            .adjusted(
+                saturationFactor: saturationFactor,
+                brightnessFactor: brightnessFactor
+            )
+            .mixed(with: .white, amount: whiteMix)
+    }
+
+    private static func stableHash(for value: String) -> UInt64 {
+        var hash: UInt64 = 1_469_598_103_934_665_603
+        for byte in value.lowercased().utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1_099_511_628_211
+        }
+
+        // Finalize for stronger low-bit distribution before modulo palette size.
+        hash ^= hash >> 30
+        hash &*= 0xBF58_476D_1CE4_E5B9
+        hash ^= hash >> 27
+        hash &*= 0x94D0_49BB_1331_11EB
+        hash ^= hash >> 31
+        return hash
+    }
+
+    private static func normalizedKey(userID: String?, username: String) -> String {
+        let normalizedID = (userID ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if !normalizedID.isEmpty {
+            return normalizedID
+        }
+        return username.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+}
+
+private extension NSColor {
+    func adjusted(saturationFactor: CGFloat, brightnessFactor: CGFloat) -> NSColor {
+        let color = (usingColorSpace(.deviceRGB) ?? self)
+        var hue: CGFloat = 0
+        var saturation: CGFloat = 0
+        var brightness: CGFloat = 0
+        var alpha: CGFloat = 0
+        color.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha)
+
+        return NSColor(
+            hue: hue,
+            saturation: max(0, min(1, saturation * saturationFactor)),
+            brightness: max(0, min(1, brightness * brightnessFactor)),
+            alpha: alpha
+        )
+    }
+
+    func mixed(with color: NSColor, amount: CGFloat) -> NSColor {
+        let start = usingColorSpace(.deviceRGB) ?? self
+        let end = color.usingColorSpace(.deviceRGB) ?? color
+        let t = max(0, min(1, amount))
+
+        var sr: CGFloat = 0
+        var sg: CGFloat = 0
+        var sb: CGFloat = 0
+        var sa: CGFloat = 0
+        var er: CGFloat = 0
+        var eg: CGFloat = 0
+        var eb: CGFloat = 0
+        var ea: CGFloat = 0
+        start.getRed(&sr, green: &sg, blue: &sb, alpha: &sa)
+        end.getRed(&er, green: &eg, blue: &eb, alpha: &ea)
+
+        return NSColor(
+            red: sr + ((er - sr) * t),
+            green: sg + ((eg - sg) * t),
+            blue: sb + ((eb - sb) * t),
+            alpha: sa + ((ea - sa) * t)
+        )
+    }
+
+    var relativeLuminance: CGFloat {
+        let color = usingColorSpace(.deviceRGB) ?? self
+        var r: CGFloat = 0
+        var g: CGFloat = 0
+        var b: CGFloat = 0
+        var a: CGFloat = 0
+        color.getRed(&r, green: &g, blue: &b, alpha: &a)
+
+        func linearize(_ channel: CGFloat) -> CGFloat {
+            if channel <= 0.04045 {
+                return channel / 12.92
+            }
+            return pow((channel + 0.055) / 1.055, 2.4)
+        }
+
+        let lr = linearize(r)
+        let lg = linearize(g)
+        let lb = linearize(b)
+        return (0.2126 * lr) + (0.7152 * lg) + (0.0722 * lb)
+    }
 }
 
 private struct CampaignRailItem: Identifiable {
@@ -1562,10 +1773,29 @@ private struct CampaignRailItem: Identifiable {
     let isDimmed: Bool
     let isPlaceholder: Bool
     let showsLiveMotion: Bool
+    var issueBadge: CampaignIssueBadge? = nil
     var game: Game? = nil
     var queuePosition: Int? = nil
     var queueLabel: String? = nil
     var isDebugPreview: Bool = false
+}
+
+private enum CampaignIssueBadge {
+    case accountLinkRequired
+
+    var title: String {
+        switch self {
+        case .accountLinkRequired:
+            return "Link Required"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .accountLinkRequired:
+            return "exclamationmark.triangle.fill"
+        }
+    }
 }
 
 private struct CampaignFeedCard: View {
@@ -1595,7 +1825,14 @@ private struct CampaignFeedCard: View {
 #endif
     }
 
+    private var showsIssueBadge: Bool {
+        !item.isPlaceholder && item.issueBadge != nil
+    }
+
     private var accessibilityTitle: String {
+        if let issue = item.issueBadge {
+            return "\(issue.title). \(item.gameName)"
+        }
         if let queueLabel = item.queueLabel {
             return "\(queueLabel). \(item.gameName)"
         }
@@ -1681,16 +1918,28 @@ private struct CampaignFeedCard: View {
                 .padding(12)
             }
 
-            if showsDebugPreviewBadge {
+            if showsDebugPreviewBadge || showsIssueBadge {
                 VStack {
                     HStack {
                         Spacer()
-                        Label("Debug Preview", systemImage: "wrench.and.screwdriver.fill")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.white.opacity(0.95))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(.orange.opacity(0.8), in: Capsule())
+                        VStack(alignment: .trailing, spacing: 6) {
+                            if showsDebugPreviewBadge {
+                                Label("Debug Preview", systemImage: "wrench.and.screwdriver.fill")
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(.white.opacity(0.95))
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(.orange.opacity(0.8), in: Capsule())
+                            }
+                            if let issue = item.issueBadge, showsIssueBadge {
+                                Label(issue.title, systemImage: issue.symbol)
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(.white.opacity(0.95))
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(.orange.opacity(0.88), in: Capsule())
+                            }
+                        }
                     }
                     Spacer(minLength: 0)
                 }
@@ -2187,28 +2436,54 @@ private struct CampaignAmbientRailCard: View {
 private struct CampaignWatcherStack: View {
     let watchers: [CampaignWatcher]
     let size: CGFloat
+    private var avatarDiameter: CGFloat { size * 0.88 }
 
     var body: some View {
-        HStack(spacing: -size * 0.28) {
-            ForEach(Array(watchers.prefix(3))) { watcher in
+        HStack(spacing: -avatarDiameter * 0.24) {
+            ForEach(Array(watchers.prefix(3).enumerated()), id: \.element.id) { index, watcher in
+                let swatch = AvatarColorPalette.swatch(for: watcher.id, username: watcher.username)
+
                 Text(watcher.initials)
-                    .font(.system(size: size * 0.38, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white)
-                    .frame(width: size, height: size)
-                    .background(watcher.tint.opacity(0.9), in: Circle())
+                    .font(.system(size: avatarDiameter * 0.34, weight: .semibold, design: .rounded))
+                    .tracking(0.16)
+                    .foregroundStyle(swatch.text)
+                    .frame(width: avatarDiameter, height: avatarDiameter)
+                    .background(.ultraThinMaterial, in: Circle())
                     .overlay {
                         Circle()
-                            .strokeBorder(.white.opacity(0.5), lineWidth: 1)
+                            .fill(swatch.gradient)
+                            .opacity(0.9)
                     }
+                    .overlay {
+                        Circle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color.white.opacity(0.24), .clear],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .opacity(0.72)
+                    }
+                    .overlay {
+                        Circle()
+                            .strokeBorder(.white.opacity(0.68), lineWidth: 1)
+                    }
+                    .shadow(color: .black.opacity(0.045), radius: 2, y: 1)
+                    .zIndex(Double(watchers.count - index))
             }
 
             if watchers.count > 3 {
                 Text("+\(watchers.count - 3)")
-                    .font(.system(size: size * 0.34, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.92))
-                    .frame(height: size)
-                    .padding(.horizontal, size * 0.28)
+                    .font(.system(size: avatarDiameter * 0.32, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.primary.opacity(0.75))
+                    .frame(height: avatarDiameter)
+                    .padding(.horizontal, avatarDiameter * 0.3)
                     .background(.ultraThinMaterial, in: Capsule())
+                    .overlay {
+                        Capsule()
+                            .strokeBorder(.white.opacity(0.56), lineWidth: 1)
+                    }
                     .padding(.leading, 4)
             }
         }

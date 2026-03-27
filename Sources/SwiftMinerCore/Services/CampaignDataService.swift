@@ -299,11 +299,15 @@ enum CampaignDiskCache {
         do {
             let data = try JSONEncoder().encode(envelope)
             let fileURL = fileURL(accountId: accountId)
-            
-            // Atomic write: write to temp file, then move
-            let tempURL = fileURL.appendingPathExtension("tmp")
-            try data.write(to: tempURL, options: .atomic)
-            try FileManager.default.moveItem(at: tempURL, to: fileURL)
+
+            // Clean up stale legacy temp file from older write strategy.
+            let staleTempURL = fileURL.appendingPathExtension("tmp")
+            if FileManager.default.fileExists(atPath: staleTempURL.path) {
+                try? FileManager.default.removeItem(at: staleTempURL)
+            }
+
+            // Atomic replace in-place. This safely overwrites existing cache files.
+            try data.write(to: fileURL, options: .atomic)
             
         } catch {
             print("[CampaignDiskCache] Save failed: \(error)")

@@ -43,6 +43,8 @@ public actor MinerEngine {
     private var excludedGames: [String] = []
     private var enableBadgesEmotes: Bool = false
     private var showClaimNotifications: Bool = false
+    private var ignoreAccountLinkWarnings: Bool = false
+    private var warnedUnlinkedPriorityGames: Set<String> = []
 
     /// Returns this engine's DropsService so callers on other actors can create an AccountStateStore.
     func getDropsService() -> DropsService { dropsService }
@@ -78,12 +80,14 @@ public actor MinerEngine {
         priorityGames: [String],
         excludedGames: [String],
         enableBadgesEmotes: Bool = false,
-        showClaimNotifications: Bool = false
+        showClaimNotifications: Bool = false,
+        ignoreAccountLinkWarnings: Bool = false
     ) {
         self.priorityGames = priorityGames
         self.excludedGames = excludedGames
         self.enableBadgesEmotes = enableBadgesEmotes
         self.showClaimNotifications = showClaimNotifications
+        self.ignoreAccountLinkWarnings = ignoreAccountLinkWarnings
         
         // Configure notification service if enabled
         if showClaimNotifications && notificationService == nil {
@@ -92,6 +96,14 @@ public actor MinerEngine {
         
         Task {
             await notificationService?.configure(enabled: showClaimNotifications)
+        }
+    }
+
+    /// Update whether account-link-required warnings should be ignored for this miner.
+    public func updateAccountLinkWarningPreference(ignored: Bool) {
+        self.ignoreAccountLinkWarnings = ignored
+        if ignored {
+            warnedUnlinkedPriorityGames.removeAll()
         }
     }
 
@@ -217,6 +229,10 @@ public actor MinerEngine {
         self.currentAccount = account
         await authService.setCurrentAccount(account)
         await dropsService.setAccountId(account.id)
+        await apiClient.updateAccessToken(account.accessToken)
+        await apiClient.setUserLogin(account.username)
+        await pubSubClient.updateAccessToken(account.accessToken)
+        await watchSessionManager.setUserId(account.id)
     }
 
     /// Starts the mining engine
@@ -228,6 +244,7 @@ public actor MinerEngine {
         isRunning = true
         session = MiningSession()
         progressEventTracker = DropProgressEventTracker()
+        warnedUnlinkedPriorityGames.removeAll()
 
         onStatusChange?(.authenticating)
         log("Starting SwiftMinerCore...")
@@ -518,6 +535,8 @@ public actor MinerEngine {
                     // IMPLEMENTATION OF DOMAIN LOGGING REQUIREMENT
                     log("  · \(c.name) (\(c.gameName)) → Status: \(c.miningStatus.rawValue) → Relevance: \(c.relevance.rawValue)")
                 }
+
+                await warnForUnlinkedPriorityCampaigns(in: allEnriched)
                 
                 // Log expired campaigns that might be incorrectly marked as eligible
                 let expiredButEligible = allEnriched.filter { $0.miningStatus == .expired && $0.isMiningEligible }
@@ -785,6 +804,60 @@ public actor MinerEngine {
             }
         } catch {
             log("Error fetching claimable drops: \(error.localizedDescription)")
+        }
+    }
+
+    private func warnForUnlinkedPriorityCampaigns(in campaigns: [Campaign]) async {
+        guard !ignoreAccountLinkWarnings else {
+            warnedUnlinkedPriorityGames.removeAll()
+            return
+        }
+
+        let priorityGamesLower = Set(priorityGames.map { $0.lowercased() })
+        guard !priorityGamesLower.isEmpty else {
+            warnedUnlinkedPriorityGames.removeAll()
+            return
+        }
+
+        let blockedCampaigns = campaigns.filter { campaign in
+            campaign.isTimeActive
+                && !campaign.isAccountConnected
+                && priorityGamesLower.contains(campaign.gameName.lowercased())
+                && campaign.drops.contains(where: { !$0.isClaimed })
+        }
+
+        let blockedGamesNow = Set(blockedCampaigns.map { $0.gameName.lowercased() })
+        warnedUnlinkedPriorityGames.formIntersection(blockedGamesNow)
+
+        let blockedByGame = Dictionary(grouping: blockedCampaigns, by: { $0.gameName.lowercased() })
+        let newBlockedGames = blockedByGame.keys
+            .filter { !warnedUnlinkedPriorityGames.contains($0) }
+            .sorted()
+
+        for key in newBlockedGames {
+            guard let campaignsForGame = blockedByGame[key], let sample = campaignsForGame.first else {
+                continue
+            }
+
+            warnedUnlinkedPriorityGames.insert(key)
+
+            let campaignSummary = campaignsForGame
+                .map(\.name)
+                .prefix(2)
+                .joined(separator: ", ")
+            let suffix = campaignsForGame.count > 2 ? ", and more" : ""
+
+            log("⚠️ Priority game blocked: \(sample.gameName) is prioritised, but account linking is required to earn drops. Active blocked campaign(s): \(campaignSummary)\(suffix).")
+
+            if notificationService == nil {
+                notificationService = NotificationService()
+            }
+            if let notificationService {
+                await notificationService.configure(enabled: true)
+                await notificationService.notifyAccountLinkRequired(
+                    gameName: sample.gameName
+                )
+            }
         }
     }
     

@@ -7,6 +7,7 @@ import SwiftMinerCore
 struct MinerHealthCard: View {
     let miners: [MinerManager.ManagedMiner]
     var onSelectMiner: ((String) -> Void)?
+    @ObservedObject private var settings = Settings.shared
 
     /// Refreshes time-dependent verdicts (e.g. "stuck for X min") every 30 seconds.
     @State private var now = Date()
@@ -21,6 +22,9 @@ struct MinerHealthCard: View {
     }
 
     private func verdict(for miner: MinerManager.ManagedMiner) -> HealthVerdict {
+        if let blockedGame = blockedPriorityGameRequiringLink(for: miner) {
+            return HealthVerdict(severity: .warning, message: "Link required for \(blockedGame) drops")
+        }
         if miner.needsAuth {
             return HealthVerdict(severity: .error, message: "Re-authentication required")
         }
@@ -35,6 +39,25 @@ struct MinerHealthCard: View {
             }
         }
         return HealthVerdict(severity: .ok, message: miner.status.displayName)
+    }
+
+    private func blockedPriorityGameRequiringLink(for miner: MinerManager.ManagedMiner) -> String? {
+        guard miner.isRunning else { return nil }
+        guard !settings.isIgnoringAccountLinkWarnings(for: miner.accountId) else { return nil }
+
+        let priorityGames = Set(
+            settings.priorityGames
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+                .filter { !$0.isEmpty }
+        )
+        guard !priorityGames.isEmpty else { return nil }
+
+        return miner.allCampaigns.first { campaign in
+            campaign.isTimeActive
+                && !campaign.isAccountConnected
+                && priorityGames.contains(campaign.gameName.lowercased())
+                && campaign.drops.contains(where: { !$0.isClaimed })
+        }?.gameName
     }
 
     private var issueMiners: [(miner: MinerManager.ManagedMiner, verdict: HealthVerdict)] {

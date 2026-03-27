@@ -89,6 +89,10 @@ public final class Settings: ObservableObject {
     /// Whether to show notifications for drop claims
     @AppStorage("showClaimNotifications")
     public var showClaimNotifications: Bool = false // Disabled by default per user request
+
+    /// JSON-encoded account IDs that should ignore account-link-required warnings.
+    @AppStorage("ignoredAccountLinkWarningAccountIdsData")
+    private var ignoredAccountLinkWarningAccountIdsData: String = "[]"
     
     /// Last selected game/category (for UI restoration)
     @AppStorage("lastSelectedGameId")
@@ -148,6 +152,53 @@ public final class Settings: ObservableObject {
     /// Excluded game names derived from preferences (backward compat for MinerEngine)
     public var excludedGames: [String] {
         gameNames(for: .excluded)
+    }
+
+    /// Account IDs that should suppress account-link-required warnings.
+    public var ignoredAccountLinkWarningAccountIds: [String] {
+        get {
+            guard let data = ignoredAccountLinkWarningAccountIdsData.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode([String].self, from: data) else {
+                return []
+            }
+            var seen = Set<String>()
+            return decoded
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .filter { seen.insert($0).inserted }
+        }
+        set {
+            let normalized = Array(
+                Set(
+                    newValue
+                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .filter { !$0.isEmpty }
+                )
+            ).sorted()
+
+            if let data = try? JSONEncoder().encode(normalized),
+               let encoded = String(data: data, encoding: .utf8),
+               ignoredAccountLinkWarningAccountIdsData != encoded {
+                objectWillChange.send()
+                ignoredAccountLinkWarningAccountIdsData = encoded
+            }
+        }
+    }
+
+    public func isIgnoringAccountLinkWarnings(for accountId: String) -> Bool {
+        ignoredAccountLinkWarningAccountIds.contains(accountId)
+    }
+
+    public func setIgnoreAccountLinkWarnings(_ ignored: Bool, for accountId: String) {
+        var ids = ignoredAccountLinkWarningAccountIds
+        if ignored {
+            if !ids.contains(accountId) {
+                ids.append(accountId)
+            }
+        } else {
+            ids.removeAll { $0 == accountId }
+        }
+        ignoredAccountLinkWarningAccountIds = ids
     }
 
 #if DEBUG
@@ -490,6 +541,7 @@ public final class Settings: ObservableObject {
         gamePreferencesData = "[]"
         miningStrategy = .mineAll
         preferSteamArtwork = true
+        ignoredAccountLinkWarningAccountIdsData = "[]"
     }
 }
 

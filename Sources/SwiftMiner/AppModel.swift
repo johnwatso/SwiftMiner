@@ -1,6 +1,10 @@
 import Foundation
 import SwiftUI
 import SwiftMinerCore
+import UserNotifications
+#if canImport(AppKit)
+import AppKit
+#endif
 
 /// Central view-model that bridges mining state to SwiftUI's `@MainActor`.
 ///
@@ -68,18 +72,21 @@ public final class AppModel {
 
     public func setup() async {
         if let manager = minerManager {
+            manager.updateClientId(Settings.shared.resolvedClientId)
             // Multi-miner mode: don't start our own engine.
             // Drive isAuthenticated from MinerManager's miner list.
-            isAuthenticated = !manager.miners.isEmpty
+            reconcileManagerState(manager)
 
             // Sync notification preference
             await manager.updateNotificationPreference(enabled: Settings.shared.showClaimNotifications)
 
-            // Update isAuthenticated whenever a miner is added/removed.
-            manager.onMinerStatusChange = { [weak self] _ in
+            // Keep app-level state (auth + badge) in sync whenever miners or
+            // account-link warning preferences change.
+            manager.onMinersChanged = { [weak self] in
                 Task { @MainActor [weak self] in
-                    guard let self else { return }
-                    self.isAuthenticated = !(self.minerManager?.miners.isEmpty ?? true)
+                    guard let self,
+                          let manager = self.minerManager else { return }
+                    self.reconcileManagerState(manager)
                 }
             }
             return
@@ -269,6 +276,52 @@ public final class AppModel {
         logMessages.append(entry)
         if logMessages.count > maxLogEntries {
             logMessages.removeFirst(logMessages.count - maxLogEntries)
+        }
+    }
+
+    private func reconcileManagerState(_ manager: MinerManager) {
+        isAuthenticated = !manager.miners.isEmpty
+        updateAccountLinkIssueBadge(using: manager)
+    }
+
+    private func updateAccountLinkIssueBadge(using manager: MinerManager) {
+        let settings = Settings.shared
+        let priorityGames = Set(
+            settings.priorityGames
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+                .filter { !$0.isEmpty }
+        )
+
+        guard !priorityGames.isEmpty else {
+            setDockBadgeVisible(false)
+            return
+        }
+
+        let ignoredAccountIds = Set(settings.ignoredAccountLinkWarningAccountIds)
+        let hasUnresolvedIssue = manager.miners.contains { miner in
+            guard miner.isRunning else { return false }
+            guard !ignoredAccountIds.contains(miner.accountId) else { return false }
+
+            return miner.allCampaigns.contains { campaign in
+                campaign.isTimeActive
+                    && !campaign.isAccountConnected
+                    && priorityGames.contains(campaign.gameName.lowercased())
+                    && campaign.drops.contains(where: { !$0.isClaimed })
+            }
+        }
+
+        setDockBadgeVisible(hasUnresolvedIssue)
+    }
+
+    private func setDockBadgeVisible(_ visible: Bool) {
+#if canImport(AppKit)
+        NSApplication.shared.dockTile.badgeLabel = visible ? "!" : nil
+#endif
+        if #available(macOS 13.0, *) {
+            UNUserNotificationCenter.current().setBadgeCount(visible ? 1 : 0) { error in
+                guard let error else { return }
+                print("⚠️ Failed to update notification badge count: \(error.localizedDescription)")
+            }
         }
     }
 }

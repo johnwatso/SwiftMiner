@@ -69,24 +69,33 @@ public struct CampaignViewData: Codable, Sendable, Identifiable, Equatable {
     /// closed-campaign bucket in the UI feed.
     public var isClosed: Bool {
         relevance == .closed ||
-        ((status == CampaignStatus.expired.rawValue || endDate <= Date()) && isClaimed)
+        (endDate <= Date() && isFullyClaimedByUser)
     }
 
     /// Single source of truth for Drops tab membership.
     public var tabVisibility: CampaignTabVisibility {
         var visibility: CampaignTabVisibility = [.all]
+        let now = Date()
 
-        // Show in Active tab if:
-        // 1. Relevance is prioritised or active (normal routing)
-        // 2. Has in-progress drops (waiting for stream to continue)
-        if relevance == .prioritised || relevance == .active ||
-           miningStatus == .inProgress {
+        if relevance == .prioritised {
             visibility.insert(.active)
         }
 
-        if isClaimed ||
-            miningStatus == .claimed ||
-            accountStates.contains(where: { $0.miningStatus == .claimed }) {
+        let isActivelyMining = accountStates.contains { $0.miningStatus == .mining }
+        let hasStartedProgress = progress > 0
+            || dropsClaimed > 0
+            || drops.contains { ($0.currentMinutes > 0) && !$0.isClaimed }
+        let isAvailable = isAccountConnected
+            && !isFullyClaimedByUser
+            && !hasStartedProgress
+            && startDate <= now
+            && endDate > now
+
+        if !isFullyClaimedByUser && (isActivelyMining || hasStartedProgress || isAvailable) {
+            visibility.insert(.active)
+        }
+
+        if isFullyClaimedByUser {
             visibility.insert(.claimed)
         }
 
@@ -112,6 +121,19 @@ public struct CampaignViewData: Codable, Sendable, Identifiable, Equatable {
     public var showsInActiveTab: Bool { tabVisibility.contains(.active) }
     public var showsInClaimedTab: Bool { tabVisibility.contains(.claimed) }
     public var showsInAllTab: Bool { tabVisibility.contains(.all) }
+
+    private var isFullyClaimedByUser: Bool {
+        if !accountStates.isEmpty {
+            return accountStates.allSatisfy { $0.miningStatus == .claimed }
+        }
+        if totalDrops > 0 {
+            return dropsClaimed >= totalDrops
+        }
+        if !drops.isEmpty {
+            return drops.allSatisfy(\.isClaimed)
+        }
+        return isClaimed
+    }
 
     /// Returns a copy of this campaign with a different artwork URL.
     public func withArtworkURL(_ url: URL?) -> CampaignViewData {
