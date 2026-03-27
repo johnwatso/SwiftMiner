@@ -1118,7 +1118,7 @@ public actor TwitchAPIClient {
             id: id,
             name: name,
             description: description,
-            imageURL: imageUrl,
+            imageURL: imageUrl ?? reward?.imageURL,
             requiredMinutes: requiredMinutes,
             benefitID: benefitIds.first ?? "",
             reward: reward,

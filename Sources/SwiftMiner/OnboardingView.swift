@@ -342,7 +342,7 @@ struct OnboardingView: View {
             .onChange(of: settings.showClaimNotifications) { _, newValue in
                 guard newValue else { return }
                 Task {
-                    _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])
+                    _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
                 }
             }
         }
@@ -471,13 +471,29 @@ private struct OnboardingConnectedAccountRow: View {
     }
 
     var body: some View {
+        let swatch = AvatarColorPalette.swatch(for: nil, username: username)
+
         HStack(spacing: 12) {
             ZStack {
                 Circle()
-                    .fill(Color.secondary.opacity(0.14))
+                    .fill(.ultraThinMaterial)
+                Circle()
+                    .fill(swatch.gradient)
+                    .opacity(0.9)
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.22), .clear],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .opacity(0.68)
+                Circle()
+                    .strokeBorder(.white.opacity(0.62), lineWidth: 1)
                 Text(initials)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(swatch.text)
             }
             .frame(width: 34, height: 34)
 

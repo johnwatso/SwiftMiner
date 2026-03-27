@@ -251,6 +251,7 @@ private struct MinerControlPanel: View {
     let nextAction: MinerNextAction
 
     @Environment(NavigationModel.self) private var navigation
+    @ObservedObject private var settings = Settings.shared
     @State private var isStarting = false
     @State private var isStopping = false
 
@@ -308,10 +309,54 @@ private struct MinerControlPanel: View {
                     subtitle: aggregateProgress.map { "\($0.claimedToday) claimed today across all miners" } ?? "Live dashboard stats"
                 )
             }
+
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 10) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+
+                    Text("Account Link Alerts")
+                        .font(.subheadline.weight(.semibold))
+
+                    Spacer()
+
+                    Button {
+                        ignoreAccountLinkWarningsBinding.wrappedValue.toggle()
+                    } label: {
+                        Label(
+                            ignoreAccountLinkWarningsBinding.wrappedValue ? "Ignored" : "Active",
+                            systemImage: ignoreAccountLinkWarningsBinding.wrappedValue ? "bell.slash.fill" : "bell.fill"
+                        )
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .tint(ignoreAccountLinkWarningsBinding.wrappedValue ? .gray : .orange)
+                }
+
+                Text("Stops \"Link Required\" alerts for \(miner.username) only. Other miners still notify normally.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(14)
+            .glassCard()
         }
         .padding(22)
         .glassCard()
         .shadow(color: .black.opacity(0.07), radius: 6, y: 2)
+    }
+
+    private var ignoreAccountLinkWarningsBinding: Binding<Bool> {
+        Binding(
+            get: {
+                settings.isIgnoringAccountLinkWarnings(for: miner.accountId)
+            },
+            set: { newValue in
+                settings.setIgnoreAccountLinkWarnings(newValue, for: miner.accountId)
+                Task {
+                    await navigation.minerManager.setAccountLinkWarningIgnored(minerId: miner.id, ignored: newValue)
+                }
+            }
+        )
     }
 
     @ViewBuilder

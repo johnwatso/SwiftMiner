@@ -10,6 +10,7 @@ struct MinerApp: App {
     @State private var minerManager = MinerManager(clientId: ClientConfiguration.clientId)
     @State private var appModel: AppModel
     @State private var navigation: NavigationModel
+    @State private var notificationDelegate = AppNotificationDelegate()
 
     init() {
         let clientId = ClientConfiguration.clientId
@@ -32,6 +33,7 @@ struct MinerApp: App {
                     await navigation.setup()
                     await appModel.setup()
                     navigation.configureOnboardingPresentation()
+                    UNUserNotificationCenter.current().delegate = notificationDelegate
                     await requestNotificationPermission()
                     updater.checkForUpdatesInBackground()
                 }
@@ -94,8 +96,16 @@ struct MinerApp: App {
     }
 
     private func requestNotificationPermission() async {
-        guard Settings.shared.showClaimNotifications else { return }
-        _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])
+        _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
+    }
+}
+
+private final class AppNotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        [.banner, .list, .sound, .badge]
     }
 }
 
@@ -205,5 +215,31 @@ struct MenuBarContent: View {
 }
 
 enum ClientConfiguration {
-    static let clientId = ProcessInfo.processInfo.environment["TWITCH_CLIENT_ID"] ?? "kd1unb4b3q4t58fwlpcbzcbnm76a8fp"
+    // Resolve from environment first, but treat empty/malformed values as missing.
+    static var clientId: String {
+        let raw = ProcessInfo.processInfo.environment["TWITCH_CLIENT_ID"] ?? ""
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return fallbackClientId }
+
+        // Xcode scheme envs can sometimes be pasted as JSON blobs.
+        if let parsed = parseWrappedValue(trimmed), !parsed.isEmpty {
+            return parsed
+        }
+
+        return trimmed
+    }
+
+    private static let fallbackClientId = "kd1unb4b3q4t58fwlpcbzcbnm76a8fp"
+
+    private static func parseWrappedValue(_ input: String) -> String? {
+        guard input.hasPrefix("{") || input.hasPrefix("[") else { return nil }
+        guard let valueRange = input.range(of: "\"value\""),
+              let colonRange = input[valueRange.upperBound...].range(of: ":"),
+              let quoteStart = input[colonRange.upperBound...].range(of: "\"") else {
+            return nil
+        }
+        let afterQuote = input[quoteStart.upperBound...]
+        guard let quoteEnd = afterQuote.range(of: "\"") else { return nil }
+        return String(afterQuote[..<quoteEnd.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 }

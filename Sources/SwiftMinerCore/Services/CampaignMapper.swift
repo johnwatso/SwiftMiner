@@ -94,7 +94,7 @@ public enum CampaignMapper {
                 id: drop.id,
                 name: drop.name,
                 description: drop.description,
-                imageURL: drop.imageURL,
+                imageURL: drop.imageURL ?? drop.reward?.imageURL,
                 rewardType: drop.reward?.type ?? .inGame,
                 requiredMinutes: drop.requiredMinutes,
                 currentMinutes: currentMinutes,

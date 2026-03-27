@@ -38,14 +38,33 @@ struct AccountDetailView: View {
     // MARK: Header
 
     private var headerSection: some View {
-        HStack(spacing: 16) {
+        let avatarSwatch = AvatarColorPalette.swatch(for: miner.accountId, username: miner.username)
+
+        return HStack(spacing: 16) {
             ZStack {
                 Circle()
                     .fill(.ultraThinMaterial)
                     .frame(width: 56, height: 56)
+                Circle()
+                    .fill(avatarSwatch.gradient)
+                    .opacity(0.9)
+                    .frame(width: 56, height: 56)
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.24), .clear],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .opacity(0.72)
+                    .frame(width: 56, height: 56)
+                Circle()
+                    .strokeBorder(.white.opacity(0.62), lineWidth: 1)
+                    .frame(width: 56, height: 56)
                 Text(miner.username.prefix(1).uppercased())
                     .font(.title2.weight(.bold))
-                    .foregroundStyle(avatarColor)
+                    .foregroundStyle(avatarSwatch.text)
             }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -199,11 +218,6 @@ struct AccountDetailView: View {
     }
 
     // MARK: Helpers
-
-    private var avatarColor: Color {
-        let colors: [Color] = [.purple, .blue, .teal, .green, .orange, .pink, .indigo]
-        return colors[abs(miner.username.hashValue) % colors.count]
-    }
 
     private var statusIcon: String {
         switch miner.status {
