@@ -149,7 +149,7 @@ public actor AggregatedCampaignDataService {
 
     /// Whether an account needs manual re-authentication before mining can continue.
     private var accountNeedsAuth: [String: Bool] = [:]
-    
+
     // MARK: - Account Management
     
     /// Optional CampaignStore to push aggregated updates to
@@ -253,7 +253,10 @@ public actor AggregatedCampaignDataService {
     public func getEligibleCampaigns() async -> [AggregatedCampaign] {
         let all = await getAggregatedCampaignsInternal()
         return all.filter { campaign in
-            campaign.status == "ACTIVE" && !campaign.isFullyClaimed
+            campaign.endDate > Date()
+                && campaign.isAccountConnected
+                && !campaign.isFullyClaimed
+                && campaign.drops.contains { !$0.isClaimed }
         }
     }
     
@@ -278,12 +281,13 @@ public actor AggregatedCampaignDataService {
         var fullyClaimedCampaigns = 0
         var totalDrops = 0
         var totalClaimedDrops = 0
+        let now = Date()
         
         for campaign in campaigns {
             totalCampaigns += 1
             totalDrops += campaign.totalDrops
             
-            if campaign.status == "ACTIVE" {
+            if campaign.endDate > now && campaign.isAccountConnected && !campaign.isFullyClaimed {
                 activeCampaigns += 1
             }
             
@@ -502,7 +506,6 @@ public actor AggregatedCampaignDataService {
             : progressValues.max() ?? data.progress  // Use max progress, not average
 
         let allClaimed = !accountCampaigns.isEmpty && accountCampaigns.allSatisfy { $0.1.isClaimed }
-        let anyClaimed = accountCampaigns.contains { $0.1.isClaimed || $0.1.miningStatus == .claimed }
         let anyConnected = accountCampaigns.contains { $0.1.isAccountConnected }
 
         let accountStates = buildCampaignAccountStates(for: data.id, accountCampaigns: accountCampaigns)
@@ -511,14 +514,13 @@ public actor AggregatedCampaignDataService {
             for: data,
             campaigns: accountCampaigns.map(\.1),
             allClaimed: allClaimed,
-            anyClaimed: anyClaimed,
             anyConnected: anyConnected
         )
         let relevance = mergedRelevance(
             for: data,
             campaigns: accountCampaigns.map(\.1),
             miningStatus: miningStatus,
-            anyClaimed: anyClaimed,
+            allClaimed: allClaimed,
             anyConnected: anyConnected
         )
 
@@ -612,33 +614,41 @@ public actor AggregatedCampaignDataService {
         for data: CampaignViewData,
         campaigns: [CampaignViewData],
         allClaimed: Bool,
-        anyClaimed: Bool,
         anyConnected: Bool
     ) -> MiningCampaignStatus {
-        if campaigns.contains(where: { $0.status == CampaignStatus.expired.rawValue || $0.miningStatus == .expired }) &&
-            campaigns.allSatisfy({ $0.status == CampaignStatus.expired.rawValue || $0.miningStatus == .expired }) {
-            return .expired
-        }
-
         if allClaimed {
             return .claimed
         }
 
-        if campaigns.contains(where: { $0.miningStatus == .claimable }) {
+        let hasClaimableRewards = campaigns.contains { campaign in
+            campaign.drops.contains { $0.isClaimable && !$0.isClaimed }
+        }
+        if hasClaimableRewards {
             return .claimable
         }
 
-        if campaigns.contains(where: { $0.miningStatus == .inProgress }) {
+        let hasActivelyMiningAccount = activeCampaignIds.values.contains { $0 == data.id }
+        let hasStartedProgress = campaigns.contains { campaign in
+            campaign.progress > 0
+                || campaign.dropsClaimed > 0
+                || campaign.drops.contains { ($0.currentMinutes > 0) && !$0.isClaimed }
+        }
+
+        if hasActivelyMiningAccount || hasStartedProgress {
             return .inProgress
         }
 
-        // Only mark Available if at least one account is connected.
-        if anyConnected && campaigns.contains(where: { $0.miningStatus == .available || $0.status == CampaignStatus.active.rawValue }) {
+        let hasUnclaimedRewards = campaigns.contains { campaign in
+            let knownTotals = campaign.totalDrops > 0 && campaign.dropsClaimed < campaign.totalDrops
+            let knownDrops = campaign.drops.contains { !$0.isClaimed }
+            return knownTotals || knownDrops
+        }
+        if anyConnected && hasUnclaimedRewards {
             return .available
         }
 
-        if anyClaimed {
-            return .claimed
+        if campaigns.allSatisfy({ $0.endDate <= Date() }) {
+            return .expired
         }
 
         return data.miningStatus
@@ -648,7 +658,7 @@ public actor AggregatedCampaignDataService {
         for data: CampaignViewData,
         campaigns: [CampaignViewData],
         miningStatus: MiningCampaignStatus,
-        anyClaimed: Bool,
+        allClaimed: Bool,
         anyConnected: Bool
     ) -> CampaignRelevance {
         if campaigns.contains(where: { $0.relevance == .prioritised }) {
@@ -663,7 +673,7 @@ public actor AggregatedCampaignDataService {
         }
 
         // 2. Claimed/Recent check — if claimed OR explicitly marked recent by any account
-        if anyClaimed || miningStatus == .claimed || campaigns.contains(where: { $0.relevance == .recent }) {
+        if allClaimed || miningStatus == .claimed || campaigns.contains(where: { $0.relevance == .recent }) {
             return .recent
         }
 

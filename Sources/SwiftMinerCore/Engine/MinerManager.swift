@@ -159,6 +159,7 @@ public final class MinerManager {
     
     /// Track notification preference
     public var showClaimNotifications: Bool = false
+    private var ignoredAccountLinkWarningAccountIds: Set<String> = []
 
     /// The actual engine instances (by miner ID)
     private var engines: [String: MinerEngine] = [:]
@@ -177,6 +178,7 @@ public final class MinerManager {
     
     /// Callbacks for aggregated events
     public var onMinerStatusChange: (@Sendable (ManagedMiner) -> Void)?
+    public var onMinersChanged: (@Sendable () -> Void)?
     public var onAggregateProgress: (@Sendable (AggregateProgress) -> Void)?
     public var onLogMessage: (@Sendable (String, String) -> Void)? // (minerId, message)
     
@@ -194,6 +196,36 @@ public final class MinerManager {
         for engine in engines.values {
             await engine.updateNotificationPreference(enabled: enabled)
         }
+    }
+
+    /// Replace the ignored-account set used to suppress account-link-required warnings.
+    /// Applies immediately to all active engines and persists in app settings at the caller layer.
+    public func updateIgnoredAccountLinkWarningAccounts(_ accountIds: [String]) async {
+        ignoredAccountLinkWarningAccountIds = Set(accountIds)
+        for miner in miners {
+            guard let engine = engines[miner.id] else { continue }
+            let ignored = ignoredAccountLinkWarningAccountIds.contains(miner.accountId)
+            await engine.updateAccountLinkWarningPreference(ignored: ignored)
+        }
+        onMinersChanged?()
+    }
+
+    /// Toggle account-link warning suppression for a specific miner.
+    public func setAccountLinkWarningIgnored(minerId: String, ignored: Bool) async {
+        guard let miner = getMiner(id: minerId) else { return }
+
+        if ignored {
+            ignoredAccountLinkWarningAccountIds.insert(miner.accountId)
+        } else {
+            ignoredAccountLinkWarningAccountIds.remove(miner.accountId)
+        }
+
+        guard let engine = engines[minerId] else {
+            onMinersChanged?()
+            return
+        }
+        await engine.updateAccountLinkWarningPreference(ignored: ignored)
+        onMinersChanged?()
     }
     
     /// Update the client ID (call before adding the first account if the ID wasn't available at init).
@@ -230,8 +262,10 @@ public final class MinerManager {
         priorityGames: [String],
         excludedGames: [String],
         strategy: MiningStrategy,
-        enableBadgesEmotes: Bool
+        enableBadgesEmotes: Bool,
+        ignoredAccountLinkWarningAccountIds: [String] = []
     ) async {
+        self.ignoredAccountLinkWarningAccountIds = Set(ignoredAccountLinkWarningAccountIds)
         await setup()
         if autoStart && !miners.isEmpty {
             print("[MinerManager] Auto-starting \(miners.count) miner(s) on launch")
@@ -262,9 +296,12 @@ public final class MinerManager {
             username: account.username
         )
         miners.append(miner)
+        onMinersChanged?()
 
         let setupTask = Task {
             await engine.setAccount(account)
+            let ignored = self.ignoredAccountLinkWarningAccountIds.contains(account.id)
+            await engine.updateAccountLinkWarningPreference(ignored: ignored)
             await setupEngineCallbacks(engine: engine, minerId: minerId)
 
             // Get DropsService and InventoryService from engine for data coordination
@@ -320,6 +357,7 @@ public final class MinerManager {
         // Remove from collections
         engines.removeValue(forKey: minerId)
         miners.removeAll { $0.id == minerId }
+        onMinersChanged?()
     }
     
     /// Get a specific miner by ID
@@ -388,7 +426,8 @@ public final class MinerManager {
             priorityGames: priorityGames,
             excludedGames: excludedGames,
             enableBadgesEmotes: enableBadgesEmotes,
-            showClaimNotifications: self.showClaimNotifications
+            showClaimNotifications: self.showClaimNotifications,
+            ignoreAccountLinkWarnings: ignoredAccountLinkWarningAccountIds.contains(miner.accountId)
         )
         await engine.updateMiningStrategy(strategy)
 
@@ -638,6 +677,7 @@ public final class MinerManager {
         miners[index] = miner
 
         onMinerStatusChange?(miner)
+        onMinersChanged?()
     }
     
     private func updateMinerStatus(minerId: String, isRunning: Bool, status: MinerStatus) {
@@ -660,6 +700,7 @@ public final class MinerManager {
         var miner = miners[index]
         miner.dropsClaimed += 1
         miners[index] = miner
+        onMinersChanged?()
     }
 }
 

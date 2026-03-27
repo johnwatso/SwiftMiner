@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftMinerCore
+import CoreImage
 
 // MARK: - Drops List View
 
@@ -29,12 +30,6 @@ struct DropsListView: View {
         ]
     }
 
-    /// Hero URL for a specific campaign — used to pass per-card blurred backdrop.
-    private func heroURL(for campaign: CampaignViewData) -> URL? {
-        guard preferSteamArtwork else { return nil }
-        return navigation.minerManager.dataCoordinator.steamHeroOverrides[campaign.gameName]
-    }
-
     private var accountSignature: String {
         miners
             .map { "\($0.id):\($0.accountId)" }
@@ -55,6 +50,7 @@ struct DropsListView: View {
                 )
             } else if renderedCampaigns.isEmpty {
                 contextualStandbyState(
+                    title: emptyFilterTitle,
                     message: emptyFilterMessage,
                     description: emptyFilterDescription
                 )
@@ -68,7 +64,6 @@ struct DropsListView: View {
                         ForEach(renderedCampaigns) { campaign in
                             CampaignDeckCard(
                                 campaign: campaign,
-                                heroURL: heroURL(for: campaign),
                                 state: cardState(for: campaign),
                                 queueWatchers: queuedMinerNames(for: campaign),
                                 onSteamIdSet: { appId in
@@ -156,14 +151,14 @@ struct DropsListView: View {
         .padding(24)
     }
 
-    private func contextualStandbyState(message: String, description: String) -> some View {
+    private func contextualStandbyState(title: String = "Campaigns are syncing", message: String, description: String) -> some View {
         VStack(alignment: .leading, spacing: 18) {
             fallbackBanner(message)
 
             Color.clear
                 .overlay(alignment: .bottomLeading) {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Campaigns are syncing")
+                        Text(title)
                             .font(.headline.weight(.semibold))
 
                         Text(description)
@@ -247,6 +242,17 @@ struct DropsListView: View {
         }
     }
 
+    private var emptyFilterTitle: String {
+        switch filter {
+        case .active:
+            return "No campaigns in Active"
+        case .claimed:
+            return "No campaigns in Claimed"
+        case .all:
+            return "Campaigns are syncing"
+        }
+    }
+
     private var emptyFilterDescription: String {
         switch filter {
         case .active:
@@ -264,14 +270,20 @@ struct DropsListView: View {
         }
     }
 
+    @MainActor
     private func loadCampaignFeed() async {
         guard hasAccounts else {
-            await MainActor.run {
-                campaigns = []
-                hasLoadedFeed = false
-                isRefreshing = false
-            }
+            campaigns = []
+            hasLoadedFeed = false
+            isRefreshing = false
             return
+        }
+        print("[DropsListView] loadCampaignFeed start: miners=\(miners.count), existingCampaigns=\(campaigns.count), filter=\(filter.rawValue)")
+
+        isRefreshing = true
+        defer {
+            hasLoadedFeed = true
+            isRefreshing = false
         }
 
         // Seed from last-known cache immediately (synchronous) so the view
@@ -285,29 +297,52 @@ struct DropsListView: View {
         let cached = await navigation.minerManager.dataCoordinator.allCampaigns(
             preferSteamArtwork: Settings.shared.preferSteamArtwork
         )
-        await MainActor.run {
-            if !cached.isEmpty {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    campaigns = cached
-                }
+        print("[DropsListView] cached campaigns count=\(cached.count)")
+        if !cached.isEmpty {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                campaigns = cached
             }
-            isRefreshing = true
         }
 
-        await navigation.minerManager.dataCoordinator.refreshAll()
-        // Load ALL campaigns after refresh (not filtered)
-        let refreshed = await navigation.minerManager.dataCoordinator.allCampaigns(
-            preferSteamArtwork: Settings.shared.preferSteamArtwork
+        let preferSteamArtwork = Settings.shared.preferSteamArtwork
+        let refreshTask = Task {
+            await navigation.minerManager.dataCoordinator.refreshAll()
+        }
+        let completedInTime = await waitForRefreshTask(
+            refreshTask,
+            timeout: .seconds(45)
         )
+        print("[DropsListView] refresh wait completedInTime=\(completedInTime)")
 
-        await MainActor.run {
-            if !refreshed.isEmpty || campaigns.isEmpty {
-                withAnimation(.easeInOut(duration: 0.24)) {
-                    campaigns = refreshed
+        // Don't leave the UI waiting forever when one account is slow.
+        // Let refresh continue in the background and apply results when ready.
+        if !completedInTime {
+            Task { @MainActor in
+                await refreshTask.value
+                guard hasAccounts else { return }
+                let eventual = await navigation.minerManager.dataCoordinator.allCampaigns(
+                    preferSteamArtwork: preferSteamArtwork
+                )
+                print("[DropsListView] eventual campaigns after slow refresh=\(eventual.count)")
+                if !eventual.isEmpty || campaigns.isEmpty {
+                    withAnimation(.easeInOut(duration: 0.24)) {
+                        campaigns = eventual
+                    }
                 }
             }
-            hasLoadedFeed = true
-            isRefreshing = false
+            return
+        }
+
+        // Load ALL campaigns after refresh (not filtered)
+        let refreshed = await navigation.minerManager.dataCoordinator.allCampaigns(
+            preferSteamArtwork: preferSteamArtwork
+        )
+        print("[DropsListView] refreshed campaigns count=\(refreshed.count)")
+
+        if !refreshed.isEmpty || campaigns.isEmpty {
+            withAnimation(.easeInOut(duration: 0.24)) {
+                campaigns = refreshed
+            }
         }
     }
 
@@ -322,6 +357,27 @@ struct DropsListView: View {
             }
 
             return nil
+        }
+    }
+
+    private func waitForRefreshTask(_ task: Task<Void, Never>, timeout: Duration) async -> Bool {
+        await withTaskGroup(of: Bool.self) { group in
+            group.addTask {
+                await task.value
+                return true
+            }
+            group.addTask {
+                do {
+                    try await Task.sleep(for: timeout)
+                    return false
+                } catch {
+                    return true
+                }
+            }
+
+            let first = await group.next() ?? true
+            group.cancelAll()
+            return first
         }
     }
 
@@ -341,22 +397,32 @@ struct DropsListView: View {
     }
 
     private func cardState(for campaign: CampaignViewData) -> CampaignCardState {
-        if !queuedMinerNames(for: campaign).isEmpty {
+        let hasAccountStates = !campaign.accountStates.isEmpty
+        let allRewardsClaimedByMiners: Bool
+
+        if hasAccountStates {
+            allRewardsClaimedByMiners = campaign.accountStates.allSatisfy { $0.miningStatus == .claimed }
+        } else {
+            allRewardsClaimedByMiners = campaign.isClaimed || (campaign.totalDrops > 0 && campaign.dropsClaimed >= campaign.totalDrops)
+        }
+
+        if allRewardsClaimedByMiners {
+            return .claimed
+        }
+
+        let anyMinerActivelyProgressing = campaign.accountStates.contains { $0.miningStatus == .mining }
+        if anyMinerActivelyProgressing || !queuedMinerNames(for: campaign).isEmpty {
             return .active
         }
 
-        switch campaign.miningStatus {
-        case .claimable:
-            return .claimable
-        case .inProgress:
+        let hasAnyUserProgress = campaign.progress > 0 ||
+            campaign.dropsClaimed > 0 ||
+            campaign.accountStates.contains { $0.miningStatus == .claimed }
+        if hasAnyUserProgress {
             return .inProgress
-        case .claimed:
-            return .claimed
-        case .expired:
-            return .expired
-        case .available:
-            return campaign.status == CampaignStatus.expired.rawValue ? .expired : .idle
         }
+
+        return Date() > campaign.endDate ? .expired : .idle
     }
 }
 
@@ -364,20 +430,28 @@ struct DropsListView: View {
 
 private struct CampaignDeckCard: View {
     let campaign: CampaignViewData
-    var heroURL: URL? = nil
     let state: CampaignCardState
     let queueWatchers: [String]
     var onSteamIdSet: ((String) async -> Void)?
     @State private var isHovered = false
     @State private var showingSteamIdPopover = false
     @State private var steamIdDraft = ""
+    @State private var extractedArtworkTint: Color?
 
     private var shownDrops: [DropViewData] {
         Array(campaign.drops.prefix(3))
     }
 
-    private var progressPercent: Int {
-        Int((campaign.progress * 100).rounded())
+    private var campaignGame: Game {
+        Game(id: "", name: campaign.gameName, boxArtURL: campaign.artworkURL)
+    }
+
+    private var hasAccountLinkIssue: Bool {
+        campaign.relevance == .prioritised
+            && campaign.startDate <= Date()
+            && campaign.endDate > Date()
+            && !campaign.isAccountConnected
+            && campaign.drops.contains(where: { !$0.isClaimed })
     }
 
     var body: some View {
@@ -414,26 +488,10 @@ private struct CampaignDeckCard: View {
             }
 
             VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 12) {
-                    metricLabel("\(campaign.dropsClaimed)/\(campaign.totalDrops) claimed")
-
-                    if progressPercent > 0, state != .claimed, state != .expired {
-                        metricLabel("\(progressPercent)% progress")
-                    }
-
-                    if let timeRemaining = campaign.timeRemaining, state != .claimed, state != .expired {
-                        metricLabel(timeRemaining.formattedHoursMinutes)
-                    }
-                }
+                progressMetadata
 
                 if !campaign.accountStates.isEmpty {
                     CampaignAccountStrip(accountStates: campaign.accountStates)
-                }
-
-                if showsProgress {
-                    ProgressView(value: campaign.progress, total: 1.0)
-                        .progressViewStyle(.linear)
-                        .tint(state.tint)
                 }
             }
 
@@ -455,7 +513,7 @@ private struct CampaignDeckCard: View {
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(state.borderTint, lineWidth: 1)
+                .strokeBorder(hasAccountLinkIssue ? .orange.opacity(0.36) : state.borderTint, lineWidth: 1)
         }
         .shadow(color: .black.opacity(isHovered ? 0.10 : 0.06), radius: isHovered ? 8 : 4, y: isHovered ? 4 : 2)
         .opacity(state == .expired ? 0.62 : 1)
@@ -465,10 +523,29 @@ private struct CampaignDeckCard: View {
         .onHover { hovering in
             isHovered = hovering
         }
+        .task(id: campaign.artworkURL?.absoluteString ?? campaign.id) {
+            extractedArtworkTint = await CampaignArtworkTintSampler.shared.tintColor(from: campaign.artworkURL)
+        }
         .contextMenu {
-            Button("Set Steam App ID…") {
+            Button {
+                Settings.shared.setGamePreference(campaignGame, state: .preferred)
+            } label: {
+                Label("Prioritise Game", systemImage: "star")
+            }
+
+            Button {
+                Settings.shared.setGamePreference(campaignGame, state: .excluded)
+            } label: {
+                Label("Exclude Game", systemImage: "minus.circle")
+            }
+
+            Divider()
+
+            Button {
                 steamIdDraft = ""
                 showingSteamIdPopover = true
+            } label: {
+                Label("Set Steam ID", systemImage: "photo.artframe")
             }
         }
         .popover(isPresented: $showingSteamIdPopover, arrowEdge: .bottom) {
@@ -488,6 +565,17 @@ private struct CampaignDeckCard: View {
 
     @ViewBuilder
     private var statusBadge: some View {
+        if hasAccountLinkIssue {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                Text("Link Required")
+                    .font(.caption.weight(.semibold))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(.orange.opacity(0.86), in: Capsule())
+        } else {
         switch state {
         case .active:
             HStack(spacing: 8) {
@@ -511,9 +599,7 @@ private struct CampaignDeckCard: View {
                 .padding(.vertical, 6)
                 .background(.secondary.opacity(0.82), in: Capsule())
             } else {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(.green)
+                EmptyView()
             }
         case .idle, .expired:
             Text(state == .expired ? "Expired" : "Idle")
@@ -537,30 +623,27 @@ private struct CampaignDeckCard: View {
                 .padding(.vertical, 6)
                 .background(.orange.opacity(0.78), in: Capsule())
         }
+        }
     }
 
     private var statusLine: String {
+        if hasAccountLinkIssue {
+            return "Link the game publisher account on Twitch to start mining."
+        }
+
         switch state {
         case .active:
-            if let timeRemaining = campaign.timeRemaining {
-                return "\(queueWatchersLabel) watching • \(timeRemaining.formattedHoursMinutes)"
-            }
             return "\(queueWatchersLabel) watching"
         case .inProgress:
-            if let timeRemaining = campaign.timeRemaining {
-                return "\(progressPercent)% complete • \(timeRemaining.formattedHoursMinutes)"
-            }
-            return "\(progressPercent)% complete"
+            return "Tracking reward progress"
         case .claimable:
             return "Rewards ready to claim"
         case .claimed:
-            return campaign.isClosed
-                ? "Campaign closed after all drops were claimed"
-                : "\(campaign.dropsClaimed)/\(campaign.totalDrops) drops claimed"
+            return campaign.isClosed ? "Campaign closed" : "Completed"
         case .expired:
             return "Campaign window has ended"
         case .idle:
-            return progressPercent > 0 ? "\(progressPercent)% complete" : "Available in your cached campaign history"
+            return campaign.progress > 0 ? "In progress" : "Available"
         }
     }
 
@@ -568,30 +651,83 @@ private struct CampaignDeckCard: View {
         queueWatchers.isEmpty ? "Queued" : queueWatchers.joined(separator: ", ")
     }
 
-    private var showsProgress: Bool {
-        state == .active || state == .inProgress || state == .claimable
+    @ViewBuilder
+    private var progressMetadata: some View {
+        switch state {
+        case .claimed:
+            Label("Completed", systemImage: "checkmark.circle.fill")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.green.opacity(0.92))
+        case .active, .inProgress, .claimable:
+            VStack(alignment: .leading, spacing: 6) {
+                ProgressView(value: campaign.progress, total: 1.0)
+                    .progressViewStyle(.linear)
+                    .tint(state.tint)
+
+                Text(progressSecondaryText)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary.opacity(0.78))
+            }
+        case .idle:
+            if hasAccountLinkIssue {
+                Label("Account link required before rewards can be earned", systemImage: "link.badge.plus")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.orange.opacity(0.88))
+            } else {
+                Text(campaign.progress > 0 ? "In progress" : "Available")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary.opacity(0.86))
+            }
+        case .expired:
+            Text("Expired")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var progressSecondaryText: String {
+        if state == .claimable {
+            return "Ready to claim"
+        }
+
+        if let timeRemaining = campaign.timeRemaining {
+            return timeRemaining.formattedRemaining
+        }
+
+        return "In progress"
     }
 
     private var cardBackground: some View {
         RoundedRectangle(cornerRadius: 18, style: .continuous)
-            .fill(.thinMaterial)
+            .fill(.thinMaterial.opacity(0.98))
             .overlay {
-                if let heroURL {
-                    AsyncImage(url: heroURL) { phase in
-                        if let image = phase.image {
-                            image
-                                .resizable()
-                                .scaledToFill()
-                                .blur(radius: 22, opaque: true)
-                                .opacity(0.22)
-                                .transition(.opacity.animation(.easeInOut(duration: 0.5)))
-                        }
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                materialTint.opacity(0.09),
+                                materialTint.opacity(0.06),
+                                materialTint.opacity(0.04)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .mask {
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(
+                                RadialGradient(
+                                    colors: [
+                                        .clear,
+                                        .black.opacity(0.60),
+                                        .black
+                                    ],
+                                    center: .center,
+                                    startRadius: 12,
+                                    endRadius: 240
+                                )
+                            )
                     }
-                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .allowsHitTesting(false)
-                } else {
-                    CampaignBackgroundAccent(url: campaign.artworkURL, tint: state.tint)
-                }
             }
             .overlay {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -607,13 +743,26 @@ private struct CampaignDeckCard: View {
                         )
                     )
             }
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                Color.white.opacity(0.10),
+                                Color.clear
+                            ],
+                            center: .center,
+                            startRadius: 0,
+                            endRadius: 150
+                        )
+                    )
+            }
     }
 
-    private func metricLabel(_ text: String) -> some View {
-        Text(text)
-            .font(.caption.weight(.medium))
-            .foregroundStyle(.secondary)
+    private var materialTint: Color {
+        extractedArtworkTint ?? Color.gray
     }
+
 }
 
 // MARK: - Drop Preview Row
@@ -759,48 +908,72 @@ private struct CampaignQueueBadge: View {
 
 private struct CampaignAccountStrip: View {
     let accountStates: [AccountState]
+    private let avatarDiameter: CGFloat = 21
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(accountStates) { account in
+            HStack(spacing: -avatarDiameter * 0.24) {
+                ForEach(Array(accountStates.enumerated()), id: \.element.id) { index, account in
                     accountCircle(for: account)
                         .help("\(account.username) — \(statusTitle(for: account.miningStatus))")
+                        .zIndex(Double(accountStates.count - index))
                 }
             }
-            .padding(.trailing, 4) // Breath room for the last circle
+            .padding(.trailing, 6) // Breathing room for the last avatar
         }
-        .frame(height: 28)
+        .frame(height: avatarDiameter + 4)
     }
 
     @ViewBuilder
     private func accountCircle(for account: AccountState) -> some View {
+        let swatch = AvatarColorPalette.swatch(for: account.accountId, username: account.username)
+
         ZStack(alignment: .bottomTrailing) {
             Text(account.initials)
-                .font(.system(size: 10, weight: .bold, design: .rounded))
-                .foregroundStyle(.white.opacity(0.92))
-                .frame(width: 24, height: 24)
-                .background(backgroundColor(for: account.miningStatus), in: Circle())
+                .font(.system(size: avatarDiameter * 0.34, weight: .semibold, design: .rounded))
+                .tracking(0.16)
+                .foregroundStyle(swatch.text)
+                .frame(width: avatarDiameter, height: avatarDiameter)
+                .background(.ultraThinMaterial, in: Circle())
                 .overlay {
                     Circle()
-                        .strokeBorder(.white.opacity(0.12), lineWidth: 1)
+                        .fill(swatch.gradient)
+                        .opacity(0.9)
                 }
+                .overlay {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.white.opacity(0.24), .clear],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .opacity(0.72)
+                }
+                .overlay {
+                    Circle()
+                        .strokeBorder(.white.opacity(0.68), lineWidth: 1)
+                }
+                .shadow(color: .black.opacity(0.045), radius: 2, y: 1)
 
             if account.miningStatus == .mining {
                 LivePulseDot(color: .green)
-                    .offset(x: 2, y: 2)
+                    .offset(x: 1.5, y: 1.5)
             } else if account.miningStatus == .needsAuth {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 8))
+                    .font(.system(size: 7))
                     .foregroundStyle(.orange)
-                    .background(Color.white, in: Circle())
-                    .offset(x: 2, y: 2)
+                    .padding(1.5)
+                    .background(.regularMaterial, in: Circle())
+                    .offset(x: 1.5, y: 1.5)
             } else if account.miningStatus == .claimed {
                 Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 8))
+                    .font(.system(size: 7))
                     .foregroundStyle(.blue)
-                    .background(Color.white, in: Circle())
-                    .offset(x: 2, y: 2)
+                    .padding(1.5)
+                    .background(.regularMaterial, in: Circle())
+                    .offset(x: 1.5, y: 1.5)
             }
         }
     }
@@ -811,19 +984,6 @@ private struct CampaignAccountStrip: View {
         case .claimed: return "Claimed"
         case .needsAuth: return "Needs Re-auth"
         case .idle: return "Idle"
-        }
-    }
-
-    private func backgroundColor(for status: AccountMiningStatus) -> Color {
-        switch status {
-        case .needsAuth:
-            return .orange.opacity(0.82)
-        case .mining:
-            return .green.opacity(0.85)
-        case .claimed:
-            return .blue.opacity(0.72)
-        case .idle:
-            return .white.opacity(0.18)
         }
     }
 }
@@ -837,9 +997,9 @@ private struct LivePulseDot: View {
 
             Circle()
                 .fill(color)
-                .frame(width: 8, height: 8)
+                .frame(width: 7, height: 7)
                 .scaleEffect(scale)
-                .shadow(color: color.opacity(0.6), radius: 6)
+                .shadow(color: color.opacity(0.28), radius: 3, y: 0.5)
         }
     }
 }
@@ -895,41 +1055,6 @@ private struct CampaignArtworkIcon: View {
     }
 }
 
-private struct CampaignBackgroundAccent: View {
-    let url: URL?
-    let tint: Color
-
-    var body: some View {
-        ZStack {
-            if let highResURL = url?.highResolutionArtworkURL {
-                AsyncImage(url: highResURL) { image in
-                    image
-                        .resizable()
-                        .interpolation(.high)
-                        .scaledToFill()
-                } placeholder: {
-                    Color.clear
-                }
-                .opacity(0.09)
-                .blur(radius: 18)
-                .scaleEffect(1.08)
-            } else {
-                LinearGradient(
-                    colors: [
-                        tint.opacity(0.08),
-                        tint.opacity(0.02),
-                        Color.clear
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
-        .allowsHitTesting(false)
-    }
-}
-
 private extension URL {
     var highResolutionArtworkURL: URL {
         let replacements: [(String, String)] = [
@@ -944,6 +1069,112 @@ private extension URL {
         }
 
         return URL(string: resolved) ?? self
+    }
+}
+
+private actor CampaignArtworkTintSampler {
+    static let shared = CampaignArtworkTintSampler()
+
+    private var cache: [URL: ArtworkRGB] = [:]
+    private var inFlight: [URL: Task<ArtworkRGB?, Never>] = [:]
+
+    func tintColor(from artworkURL: URL?) async -> Color? {
+        guard let artworkURL else { return nil }
+
+        if let cached = cache[artworkURL] {
+            return cached.color
+        }
+
+        if let existingTask = inFlight[artworkURL] {
+            return await existingTask.value?.color
+        }
+
+        let task = Task<ArtworkRGB?, Never> {
+            await Self.fetchAndExtractTint(from: artworkURL.highResolutionArtworkURL)
+        }
+        inFlight[artworkURL] = task
+
+        let extracted = await task.value
+        inFlight[artworkURL] = nil
+
+        if let extracted {
+            cache[artworkURL] = extracted
+        }
+
+        return extracted?.color
+    }
+
+    private static func fetchAndExtractTint(from url: URL) async -> ArtworkRGB? {
+        do {
+            let (data, response) = try await URLSession.shared.data(from: url)
+            if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
+                return nil
+            }
+
+            return extractDominantColor(from: data)?.softenedForGlass
+        } catch {
+            return nil
+        }
+    }
+
+    private static func extractDominantColor(from data: Data) -> ArtworkRGB? {
+        guard let ciImage = CIImage(data: data) else { return nil }
+        let extent = ciImage.extent
+        guard !extent.isEmpty else { return nil }
+
+        guard let filter = CIFilter(name: "CIAreaAverage") else { return nil }
+        filter.setValue(ciImage, forKey: kCIInputImageKey)
+        filter.setValue(CIVector(cgRect: extent), forKey: kCIInputExtentKey)
+        guard let outputImage = filter.outputImage else { return nil }
+
+        let context = CIContext()
+        var pixel = [UInt8](repeating: 0, count: 4)
+        context.render(
+            outputImage,
+            toBitmap: &pixel,
+            rowBytes: 4,
+            bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
+            format: .RGBA8,
+            colorSpace: nil
+        )
+
+        return ArtworkRGB(
+            red: Double(pixel[0]) / 255.0,
+            green: Double(pixel[1]) / 255.0,
+            blue: Double(pixel[2]) / 255.0
+        )
+    }
+}
+
+private struct ArtworkRGB: Sendable, Hashable {
+    let red: Double
+    let green: Double
+    let blue: Double
+
+    var color: Color {
+        Color(red: red.clamped01, green: green.clamped01, blue: blue.clamped01)
+    }
+
+    var softenedForGlass: ArtworkRGB {
+        let luminance = ((red * 0.299) + (green * 0.587) + (blue * 0.114)).clamped01
+        let desaturation: Double = 0.38
+        let whiteMix: Double = 0.22
+
+        let softenedRed = ((red * (1 - desaturation)) + (luminance * desaturation)).clamped01
+        let softenedGreen = ((green * (1 - desaturation)) + (luminance * desaturation)).clamped01
+        let softenedBlue = ((blue * (1 - desaturation)) + (luminance * desaturation)).clamped01
+
+        return ArtworkRGB(
+            red: ((softenedRed * (1 - whiteMix)) + whiteMix).clamped01,
+            green: ((softenedGreen * (1 - whiteMix)) + whiteMix).clamped01,
+            blue: ((softenedBlue * (1 - whiteMix)) + whiteMix).clamped01
+        )
+    }
+}
+
+private extension Double {
+    var clamped01: Double {
+        min(max(self, 0), 1)
     }
 }
 
@@ -1033,6 +1264,20 @@ private extension TimeInterval {
         }
 
         return "\(minutes)m left"
+    }
+
+    var formattedRemaining: String {
+        let totalMinutes = max(Int(self / 60), 0)
+        let hours = totalMinutes / 60
+        let minutes = totalMinutes % 60
+
+        if hours > 0 {
+            return minutes > 0
+                ? "\(hours)h \(minutes)m remaining"
+                : "\(hours)h remaining"
+        }
+
+        return "\(minutes)m remaining"
     }
 }
 
