@@ -96,7 +96,7 @@ else
   ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 fi
 
-DERIVED_DATA_DIR="$ROOT_DIR/.build/xcode"
+DERIVED_DATA_DIR="${SPARKLE_PUBLISHER_DERIVED_DATA_PATH:-$HOME/Library/Developer/Xcode/DerivedData/SwiftMiner-SparklePublisher}"
 PROJECT_PATH="$ROOT_DIR/SwiftMiner.xcodeproj"
 CONFIGURATION="${SPARKLE_PUBLISHER_CONFIGURATION:-Release}"
 PUBLISHER_BINARY="$DERIVED_DATA_DIR/Build/Products/$CONFIGURATION/SparklePublisher"
