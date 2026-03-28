@@ -27,6 +27,7 @@ ARTIFACT_PATH=""
 RELEASE_NOTES_PATH=""
 CHANNEL="${SHIPHOOK_RELEASE_CHANNEL:-stable}"
 WORKING_DIR=""
+SKIP_APPCAST_COMMIT=0
 
 if [[ $# -ge 2 && "$1" != --* ]]; then
   VERSION="$1"
@@ -65,7 +66,7 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --skip-appcast-commit)
-      # SparklePublisher does not auto-commit appcast changes.
+      SKIP_APPCAST_COMMIT=1
       shift
       ;;
     --help|-h)
@@ -120,4 +121,59 @@ if [[ -n "$RELEASE_NOTES_PATH" ]]; then
   PUBLISHER_ARGS+=(--release-notes "$RELEASE_NOTES_PATH")
 fi
 
-exec env SWIFTMINER_ROOT="$ROOT_DIR" "$PUBLISHER_BINARY" "${PUBLISHER_ARGS[@]}"
+env SWIFTMINER_ROOT="$ROOT_DIR" "$PUBLISHER_BINARY" "${PUBLISHER_ARGS[@]}"
+
+publish_appcast_commit_if_possible() {
+  if [[ "$SKIP_APPCAST_COMMIT" -eq 1 ]]; then
+    echo "Skipping appcast git commit/push by request."
+    return 0
+  fi
+
+  if ! git -C "$ROOT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "Skipping appcast git commit/push: working directory is not a git repository."
+    return 0
+  fi
+
+  local appcast_path="$ROOT_DIR/docs/appcast.xml"
+  local release_notes_output=""
+
+  if [[ "$CHANNEL" == "beta" ]]; then
+    appcast_path="$ROOT_DIR/docs/beta/appcast.xml"
+    if [[ -n "$RELEASE_NOTES_PATH" ]]; then
+      release_notes_output="$ROOT_DIR/docs/beta/release-notes/${VERSION}.html"
+    fi
+  else
+    if [[ -n "$RELEASE_NOTES_PATH" ]]; then
+      release_notes_output="$ROOT_DIR/docs/release-notes/${VERSION}.html"
+    fi
+  fi
+
+  local files_to_add=("$appcast_path")
+  if [[ -n "$release_notes_output" ]]; then
+    files_to_add+=("$release_notes_output")
+  fi
+
+  git -C "$ROOT_DIR" add -- "${files_to_add[@]}"
+
+  if git -C "$ROOT_DIR" diff --cached --quiet; then
+    echo "No appcast documentation changes to commit."
+    return 0
+  fi
+
+  local current_branch
+  current_branch="$(git -C "$ROOT_DIR" rev-parse --abbrev-ref HEAD)"
+  if [[ -z "$current_branch" || "$current_branch" == "HEAD" ]]; then
+    echo "Skipping appcast git push: repository is not on a branch."
+    return 0
+  fi
+
+  local channel_prefix=""
+  if [[ "$CHANNEL" == "beta" ]]; then
+    channel_prefix="beta "
+  fi
+
+  git -C "$ROOT_DIR" commit -m "chore(shiphook): update ${channel_prefix}appcast for SwiftMiner ${VERSION} [shiphook skip]"
+  git -C "$ROOT_DIR" push origin "$current_branch"
+}
+
+publish_appcast_commit_if_possible
