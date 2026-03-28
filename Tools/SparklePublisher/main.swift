@@ -296,25 +296,38 @@ func makeArchiveIfNeeded(
     throw CommandError(message: "Input must be a signed .app bundle or a .zip archive: \(inputURL.path)")
 }
 
-func validateBundleVersionInArchive(_ archiveURL: URL) throws {
-    let command = "unzip -p \(escapeForShellSingleQuotes(archiveURL.path)) '*/Contents/Info.plist' | plutil -extract CFBundleVersion raw -o - -"
-    let versionResult = try runProcess(
+func readPlistValueFromArchive(_ archiveURL: URL, key: String) throws -> String {
+    let command = "unzip -p \(escapeForShellSingleQuotes(archiveURL.path)) '*/Contents/Info.plist' | plutil -extract \(key) raw -o - -"
+    let result = try runProcess(
         "/bin/bash",
         ["-lc", command],
         allowFailure: true
     )
 
-    let bundleVersion = versionResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-    if versionResult.status != 0 || bundleVersion.isEmpty {
-        throw CommandError(message: "Archive is missing CFBundleVersion. Sparkle requires a numeric build version.")
+    let value = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+    if result.status != 0 || value.isEmpty {
+        throw CommandError(message: "Archive is missing \(key).")
+    }
+    return value
+}
+
+func validateBundleVersionInArchive(_ archiveURL: URL, expectedMarketingVersion: String, expectedBuildVersion: String?) throws {
+    let bundleShortVersion = try readPlistValueFromArchive(archiveURL, key: "CFBundleShortVersionString")
+    if bundleShortVersion != expectedMarketingVersion {
+        throw CommandError(message: "Archive CFBundleShortVersionString (\(bundleShortVersion)) does not match requested release version (\(expectedMarketingVersion)).")
     }
 
+    let bundleVersion = try readPlistValueFromArchive(archiveURL, key: "CFBundleVersion")
     let numericPattern = "^[0-9]+([.][0-9]+)*$"
     let regex = try NSRegularExpression(pattern: numericPattern)
     let range = NSRange(bundleVersion.startIndex..<bundleVersion.endIndex, in: bundleVersion)
     let matches = regex.firstMatch(in: bundleVersion, range: range) != nil
     if !matches {
         throw CommandError(message: "CFBundleVersion must be numeric for Sparkle updates. Found: \(bundleVersion)")
+    }
+
+    if let expectedBuildVersion, !expectedBuildVersion.isEmpty, bundleVersion != expectedBuildVersion {
+        throw CommandError(message: "Archive CFBundleVersion (\(bundleVersion)) does not match requested build version (\(expectedBuildVersion)).")
     }
 }
 
@@ -482,7 +495,12 @@ func main() throws {
         channel: channel,
         releaseArtifactsDir: releaseArtifactsDir
     )
-    try validateBundleVersionInArchive(archiveURL)
+    let expectedBuildVersion = env["SHIPHOOK_BUILD_VERSION"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+    try validateBundleVersionInArchive(
+        archiveURL,
+        expectedMarketingVersion: version,
+        expectedBuildVersion: expectedBuildVersion
+    )
 
     let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("sparkle-publish-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
