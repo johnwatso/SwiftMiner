@@ -101,6 +101,13 @@ PROJECT_PATH="$ROOT_DIR/SwiftMiner.xcodeproj"
 CONFIGURATION="${SPARKLE_PUBLISHER_CONFIGURATION:-Release}"
 PUBLISHER_BINARY="$DERIVED_DATA_DIR/Build/Products/$CONFIGURATION/SparklePublisher"
 
+# ShipHook project inspection can be confused by stale package projects under
+# repo-local .build output from earlier script versions.
+LEGACY_REPO_DERIVED_DATA_DIR="$ROOT_DIR/.build/xcode"
+if [[ -d "$LEGACY_REPO_DERIVED_DATA_DIR" ]]; then
+  rm -rf "$LEGACY_REPO_DERIVED_DATA_DIR"
+fi
+
 xcodebuild \
   -project "$PROJECT_PATH" \
   -scheme SparklePublisher \
