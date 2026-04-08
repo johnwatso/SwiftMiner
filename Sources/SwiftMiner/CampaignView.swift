@@ -9,12 +9,11 @@ struct DropsListView: View {
     @State private var filter: DropFilter = .active
     @State private var campaigns: [CampaignViewData] = []
     @State private var isRefreshing = false
-    @State private var hasLoadedFeed = false
     @AppStorage("preferSteamArtwork") private var preferSteamArtwork: Bool = false
 
     enum DropFilter: String, CaseIterable, Identifiable {
         case active = "Active"
-        case claimed = "Claimed"
+        case claimable = "Claimable"
         case all = "All"
 
         var id: String { rawValue }
@@ -25,7 +24,7 @@ struct DropsListView: View {
     private var dropFilterItems: [GlassSelectionItem<DropFilter>] {
         [
             GlassSelectionItem(id: .active, title: "Active", systemImage: "dot.radiowaves.left.and.right"),
-            GlassSelectionItem(id: .claimed, title: "Claimed", systemImage: "checkmark.circle.fill"),
+            GlassSelectionItem(id: .claimable, title: "Claimable", systemImage: "sparkles"),
             GlassSelectionItem(id: .all, title: "All", systemImage: "square.grid.2x2.fill")
         ]
     }
@@ -45,8 +44,9 @@ struct DropsListView: View {
                 initialLoadingState
             } else if campaigns.isEmpty {
                 contextualStandbyState(
-                    message: "No active campaigns right now",
-                    description: "Check back once your miner has synced campaign data."
+                    title: "No campaigns yet",
+                    message: "No campaigns yet",
+                    description: "SwiftMiner will show campaigns here once your miners sync their latest Twitch drops data."
                 )
             } else if renderedCampaigns.isEmpty {
                 contextualStandbyState(
@@ -57,6 +57,8 @@ struct DropsListView: View {
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 18) {
+                        dashboardHeader
+
                         if let message = contextualBannerMessage {
                             fallbackBanner(message)
                         }
@@ -64,8 +66,7 @@ struct DropsListView: View {
                         ForEach(renderedCampaigns) { campaign in
                             CampaignDeckCard(
                                 campaign: campaign,
-                                state: cardState(for: campaign),
-                                queueWatchers: queuedMinerNames(for: campaign),
+                                activity: activity(for: campaign),
                                 onSteamIdSet: { appId in
                                     await SteamArtworkService.shared.setManualAppId(for: campaign.gameName, appId: appId)
                                     await navigation.minerManager.dataCoordinator.clearSteamArtworkCache()
@@ -102,9 +103,9 @@ struct DropsListView: View {
                         .minimumScaleFactor(0.9)
                 }
                 .frame(width: 212)
-                .help("Filter campaigns by active, claimed, or all.")
+                .help("Filter campaigns that are currently being mined, ready to claim, or part of your full campaign history.")
                 .accessibilityLabel("Drops filter")
-                .accessibilityHint("Choose Active, Claimed, or All campaigns.")
+                .accessibilityHint("Choose Active, Claimable, or All campaigns.")
                 .accessibilityValue(filter.rawValue)
                 .accessibilityElement(children: .contain)
                 .animation(.spring(response: 0.3, dampingFraction: 0.82), value: filter)
@@ -195,26 +196,26 @@ struct DropsListView: View {
         campaigns.sorted(by: campaignSort)
     }
 
-    private var activeQueueCampaigns: [CampaignViewData] {
+    private var activeMiningCampaigns: [CampaignViewData] {
         campaigns
             .filter { campaign in
-                !queuedMinerNames(for: campaign).isEmpty || campaign.showsInActiveTab
+                activity(for: campaign).state == .active
             }
             .sorted(by: campaignSort)
     }
 
-    private var claimedCampaigns: [CampaignViewData] {
+    private var claimableCampaigns: [CampaignViewData] {
         campaigns
-            .filter(\.showsInClaimedTab)
+            .filter { activity(for: $0).claimableDropCount > 0 }
             .sorted(by: campaignSort)
     }
 
     private var renderedCampaigns: [CampaignViewData] {
         switch filter {
         case .active:
-            return activeQueueCampaigns
-        case .claimed:
-            return claimedCampaigns
+            return activeMiningCampaigns
+        case .claimable:
+            return claimableCampaigns
         case .all:
             return allCampaigns
         }
@@ -224,8 +225,8 @@ struct DropsListView: View {
         switch filter {
         case .all where isRefreshing:
             return "Refreshing campaigns in the background"
-        case .claimed where !claimedCampaigns.isEmpty && isRefreshing:
-            return "Refreshing claimed campaigns in the background"
+        case .claimable where !claimableCampaigns.isEmpty && isRefreshing:
+            return "Refreshing claimable rewards in the background"
         default:
             return nil
         }
@@ -234,57 +235,85 @@ struct DropsListView: View {
     private var emptyFilterMessage: String {
         switch filter {
         case .active:
-            return "No active campaigns right now"
-        case .claimed:
-            return "No claimed campaigns yet"
+            return "Nothing being mined right now"
+        case .claimable:
+            return "No rewards ready to claim yet"
         case .all:
-            return "No campaigns available right now"
+            return "No campaigns yet"
         }
     }
 
     private var emptyFilterTitle: String {
         switch filter {
         case .active:
-            return "No campaigns in Active"
-        case .claimed:
-            return "No campaigns in Claimed"
+            return "Nothing being mined right now"
+        case .claimable:
+            return "No rewards ready to claim yet"
         case .all:
-            return "Campaigns are syncing"
+            return "No campaigns yet"
         }
     }
 
     private var emptyFilterDescription: String {
         switch filter {
         case .active:
-            return "The Active tab only reflects miners currently queued to watch a campaign. Your other campaign history stays intact in All."
-        case .claimed:
-            return "Campaigns you've completed will appear here once inventory syncs."
+            return "Start a miner or wait for Twitch to surface an eligible campaign, and active mining will appear here immediately."
+        case .claimable:
+            return "Rewards move here as soon as Twitch reports them ready to claim."
         case .all:
-            return "This view stays pinned to cached campaign history, so it will repopulate as soon as campaign data is available."
+            return "Campaign history appears here once your miners have synced with Twitch."
         }
     }
 
     private var renderSignature: [String] {
         renderedCampaigns.map { campaign in
-            "\(campaign.id)-\(cardState(for: campaign).rawValue)-\(Int(campaign.progress * 100))-\(campaign.dropsClaimed)-\(queuedMinerNames(for: campaign).joined(separator: ","))"
+            let activity = activity(for: campaign)
+            return "\(campaign.id)-\(activity.state.rawValue)-\(activity.activeMiners.count)-\(activity.claimableDropCount)-\(campaign.dropsClaimed)"
         }
+    }
+
+    private var dashboardHeader: some View {
+        HStack(spacing: 12) {
+            DashboardMetricCard(
+                title: "Active miners",
+                value: "\(miners.filter { $0.status == .watching || $0.status == .claiming }.count)",
+                detail: "\(activeMiningCampaigns.count) \(activeMiningCampaigns.count == 1 ? "campaign" : "campaigns") in motion",
+                tint: .green,
+                systemImage: "person.2.fill"
+            )
+
+            DashboardMetricCard(
+                title: "Ready to claim",
+                value: "\(claimableRewardCount)",
+                detail: "\(claimableCampaigns.count) \(claimableCampaigns.count == 1 ? "campaign" : "campaigns") waiting",
+                tint: .orange,
+                systemImage: "sparkles"
+            )
+
+            DashboardMetricCard(
+                title: "Rewards claimed",
+                value: "\(campaigns.reduce(0) { $0 + activity(for: $1).claimedRewardCount })",
+                detail: "\(campaigns.count) \(campaigns.count == 1 ? "campaign" : "campaigns") tracked",
+                tint: .blue,
+                systemImage: "checkmark.circle.fill"
+            )
+        }
+    }
+
+    private var claimableRewardCount: Int {
+        campaigns.reduce(0) { $0 + activity(for: $1).claimableDropCount }
     }
 
     @MainActor
     private func loadCampaignFeed() async {
         guard hasAccounts else {
             campaigns = []
-            hasLoadedFeed = false
             isRefreshing = false
             return
         }
-        print("[DropsListView] loadCampaignFeed start: miners=\(miners.count), existingCampaigns=\(campaigns.count), filter=\(filter.rawValue)")
 
         isRefreshing = true
-        defer {
-            hasLoadedFeed = true
-            isRefreshing = false
-        }
+        defer { isRefreshing = false }
 
         // Seed from last-known cache immediately (synchronous) so the view
         // shows artwork-complete campaigns while the async refresh runs.
@@ -297,7 +326,6 @@ struct DropsListView: View {
         let cached = await navigation.minerManager.dataCoordinator.allCampaigns(
             preferSteamArtwork: Settings.shared.preferSteamArtwork
         )
-        print("[DropsListView] cached campaigns count=\(cached.count)")
         if !cached.isEmpty {
             withAnimation(.easeInOut(duration: 0.2)) {
                 campaigns = cached
@@ -312,7 +340,6 @@ struct DropsListView: View {
             refreshTask,
             timeout: .seconds(45)
         )
-        print("[DropsListView] refresh wait completedInTime=\(completedInTime)")
 
         // Don't leave the UI waiting forever when one account is slow.
         // Let refresh continue in the background and apply results when ready.
@@ -323,7 +350,6 @@ struct DropsListView: View {
                 let eventual = await navigation.minerManager.dataCoordinator.allCampaigns(
                     preferSteamArtwork: preferSteamArtwork
                 )
-                print("[DropsListView] eventual campaigns after slow refresh=\(eventual.count)")
                 if !eventual.isEmpty || campaigns.isEmpty {
                     withAnimation(.easeInOut(duration: 0.24)) {
                         campaigns = eventual
@@ -337,7 +363,6 @@ struct DropsListView: View {
         let refreshed = await navigation.minerManager.dataCoordinator.allCampaigns(
             preferSteamArtwork: preferSteamArtwork
         )
-        print("[DropsListView] refreshed campaigns count=\(refreshed.count)")
 
         if !refreshed.isEmpty || campaigns.isEmpty {
             withAnimation(.easeInOut(duration: 0.24)) {
@@ -346,17 +371,17 @@ struct DropsListView: View {
         }
     }
 
-    private func queuedMinerNames(for campaign: CampaignViewData) -> [String] {
-        miners.compactMap { miner in
-            if let id = miner.currentCampaignId, id == campaign.id, miner.isRunning {
-                return miner.username
+    private func activeMiners(for campaign: CampaignViewData) -> [MinerManager.ManagedMiner] {
+        miners.filter { miner in
+            guard miner.status == .watching || miner.status == .claiming else {
+                return false
             }
 
-            if miner.currentCampaign == campaign.campaignName, miner.isRunning {
-                return miner.username
+            if let id = miner.currentCampaignId {
+                return id == campaign.id
             }
 
-            return nil
+            return miner.currentCampaign == campaign.campaignName
         }
     }
 
@@ -382,47 +407,61 @@ struct DropsListView: View {
     }
 
     private func campaignSort(lhs: CampaignViewData, rhs: CampaignViewData) -> Bool {
-        let lhsState = cardState(for: lhs)
-        let rhsState = cardState(for: rhs)
+        let lhsActivity = activity(for: lhs)
+        let rhsActivity = activity(for: rhs)
 
-        if lhsState.priority != rhsState.priority {
-            return lhsState.priority < rhsState.priority
+        if lhsActivity.state.priority != rhsActivity.state.priority {
+            return lhsActivity.state.priority < rhsActivity.state.priority
         }
 
-        if lhs.progress != rhs.progress {
-            return lhs.progress > rhs.progress
+        if lhsActivity.activeMiners.count != rhsActivity.activeMiners.count {
+            return lhsActivity.activeMiners.count > rhsActivity.activeMiners.count
+        }
+
+        if lhsActivity.claimableDropCount != rhsActivity.claimableDropCount {
+            return lhsActivity.claimableDropCount > rhsActivity.claimableDropCount
+        }
+
+        if lhsActivity.claimedRewardCount != rhsActivity.claimedRewardCount {
+            return lhsActivity.claimedRewardCount > rhsActivity.claimedRewardCount
         }
 
         return lhs.gameName < rhs.gameName
     }
 
-    private func cardState(for campaign: CampaignViewData) -> CampaignCardState {
-        let hasAccountStates = !campaign.accountStates.isEmpty
-        let allRewardsClaimedByMiners: Bool
+    private func activity(for campaign: CampaignViewData) -> CampaignActivitySnapshot {
+        let activeMiners = activeMiners(for: campaign)
+        let claimedAccounts = campaign.accountStates.filter { $0.miningStatus == .claimed }
+        let needsAuthAccounts = campaign.accountStates.filter { $0.miningStatus == .needsAuth }
+        let claimableDropCount = campaign.drops.filter { $0.isClaimable && !$0.isClaimed }.count
+        let claimedRewardCount = max(
+            campaign.dropsClaimed,
+            campaign.drops.filter(\.isClaimed).count
+        )
+        let remainingRewardCount = max(campaign.totalDrops - claimedRewardCount, 0)
+        let allRewardsClaimed = remainingRewardCount == 0 && max(campaign.totalDrops, campaign.drops.count) > 0
+        let isExpired = !allRewardsClaimed && Date() >= campaign.endDate
 
-        if hasAccountStates {
-            allRewardsClaimedByMiners = campaign.accountStates.allSatisfy { $0.miningStatus == .claimed }
+        let state: CampaignCardState
+        if allRewardsClaimed {
+            state = .claimed
+        } else if isExpired {
+            state = .expired
+        } else if !activeMiners.isEmpty {
+            state = .active
         } else {
-            allRewardsClaimedByMiners = campaign.isClaimed || (campaign.totalDrops > 0 && campaign.dropsClaimed >= campaign.totalDrops)
+            state = .idle
         }
 
-        if allRewardsClaimedByMiners {
-            return .claimed
-        }
-
-        let anyMinerActivelyProgressing = campaign.accountStates.contains { $0.miningStatus == .mining }
-        if anyMinerActivelyProgressing || !queuedMinerNames(for: campaign).isEmpty {
-            return .active
-        }
-
-        let hasAnyUserProgress = campaign.progress > 0 ||
-            campaign.dropsClaimed > 0 ||
-            campaign.accountStates.contains { $0.miningStatus == .claimed }
-        if hasAnyUserProgress {
-            return .inProgress
-        }
-
-        return Date() > campaign.endDate ? .expired : .idle
+        return CampaignActivitySnapshot(
+            state: state,
+            activeMiners: activeMiners,
+            claimedAccounts: claimedAccounts,
+            needsAuthAccounts: needsAuthAccounts,
+            claimableDropCount: claimableDropCount,
+            claimedRewardCount: claimedRewardCount,
+            remainingRewardCount: remainingRewardCount
+        )
     }
 }
 
@@ -430,8 +469,7 @@ struct DropsListView: View {
 
 private struct CampaignDeckCard: View {
     let campaign: CampaignViewData
-    let state: CampaignCardState
-    let queueWatchers: [String]
+    let activity: CampaignActivitySnapshot
     var onSteamIdSet: ((String) async -> Void)?
     @State private var isHovered = false
     @State private var showingSteamIdPopover = false
@@ -439,7 +477,7 @@ private struct CampaignDeckCard: View {
     @State private var extractedArtworkTint: Color?
 
     private var shownDrops: [DropViewData] {
-        Array(campaign.drops.prefix(3))
+        campaign.drops
     }
 
     private var campaignGame: Game {
@@ -447,51 +485,150 @@ private struct CampaignDeckCard: View {
     }
 
     private var hasAccountLinkIssue: Bool {
-        campaign.relevance == .prioritised
-            && campaign.startDate <= Date()
+        campaign.startDate <= Date()
             && campaign.endDate > Date()
             && !campaign.isAccountConnected
-            && campaign.drops.contains(where: { !$0.isClaimed })
+            && activity.state != .claimed
+    }
+
+    private var isActive: Bool {
+        activity.state == .active
+    }
+
+    private var requirementBannerCopy: (title: String, message: String, systemImage: String, tint: Color)? {
+        if hasAccountLinkIssue {
+            return (
+                title: "Action required before mining can start",
+                message: "Link the game account on Twitch to let miners earn these rewards.",
+                systemImage: "link.badge.plus",
+                tint: .orange
+            )
+        }
+
+        if !activity.needsAuthAccounts.isEmpty {
+            let accountCount = activity.needsAuthAccounts.count
+            return (
+                title: accountCount == 1 ? "1 miner needs attention" : "\(accountCount) miners need attention",
+                message: "Reconnect the affected Twitch account\(accountCount == 1 ? "" : "s") before mining can continue.",
+                systemImage: "exclamationmark.triangle.fill",
+                tint: .orange
+            )
+        }
+
+        return nil
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .top, spacing: 14) {
-                CampaignArtworkIcon(url: campaign.artworkURL, tint: state.tint)
+                CampaignArtworkIcon(url: campaign.artworkURL, tint: activity.state.tint)
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(campaign.gameName)
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .top, spacing: 10) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(campaign.gameName)
+                                .font(.title3.weight(.bold))
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
 
-                    Text(campaign.campaignName)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
+                            Text(campaign.campaignName)
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                        }
 
-                    Text(statusLine)
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
+                        Spacer(minLength: 0)
 
-                Spacer(minLength: 0)
+                        HStack(spacing: 6) {
+                            if isActive {
+                                LivePulseDot(color: activity.state.tint)
+                            } else {
+                                Image(systemName: activity.state.symbol)
+                                    .font(.caption2.weight(.bold))
+                            }
 
-                VStack(alignment: .trailing, spacing: 10) {
-                    statusBadge
+                            Text(activity.state.title)
+                                .lineLimit(1)
+                        }
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(activity.state.tint)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(.regularMaterial.opacity(0.92), in: Capsule())
+                    }
 
-                    if !queueWatchers.isEmpty {
-                        CampaignQueueBadge(usernames: queueWatchers)
+                    HStack(spacing: 8) {
+                        CampaignMetricPill(
+                            title: "\(activity.activeMiners.count) active",
+                            systemImage: "person.2.fill",
+                            tint: .green
+                        )
+                        CampaignMetricPill(
+                            title: "\(activity.claimedRewardCount) claimed",
+                            systemImage: "checkmark.circle.fill",
+                            tint: .blue
+                        )
+                        CampaignMetricPill(
+                            title: "\(activity.remainingRewardCount) remaining",
+                            systemImage: "gift.fill",
+                            tint: .secondary
+                        )
+
+                        if activity.claimableDropCount > 0 {
+                            CampaignMetricPill(
+                                title: "\(activity.claimableDropCount) ready",
+                                systemImage: "sparkles",
+                                tint: .orange
+                            )
+                        }
+                    }
+
+                    if isActive {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(
+                                campaign.progress > 0
+                                    ? "\(Int((campaign.progress * 100).rounded()))% campaign progress reported"
+                                    : "Watching now. Waiting for the first progress update."
+                            )
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.secondary)
+
+                            if campaign.progress > 0 {
+                                ProgressView(value: campaign.progress, total: 1.0)
+                                    .progressViewStyle(.linear)
+                                    .tint(activity.state.tint)
+                            }
+                        }
                     }
                 }
             }
 
-            VStack(alignment: .leading, spacing: 10) {
-                progressMetadata
+            if let requirementBannerCopy {
+                CampaignRequirementBanner(
+                    title: requirementBannerCopy.title,
+                    message: requirementBannerCopy.message,
+                    systemImage: requirementBannerCopy.systemImage,
+                    tint: requirementBannerCopy.tint
+                )
+            }
 
-                if !campaign.accountStates.isEmpty {
-                    CampaignAccountStrip(accountStates: campaign.accountStates)
+            if !activeMinerParticipants.isEmpty || !claimedParticipants.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    if !activeMinerParticipants.isEmpty {
+                        CampaignParticipantSection(
+                            title: "Currently mining",
+                            systemImage: "dot.radiowaves.left.and.right",
+                            participants: activeMinerParticipants
+                        )
+                    }
+
+                    if !claimedParticipants.isEmpty {
+                        CampaignParticipantSection(
+                            title: "Already claimed",
+                            systemImage: "checkmark.circle.fill",
+                            participants: claimedParticipants
+                        )
+                    }
                 }
             }
 
@@ -500,9 +637,12 @@ private struct CampaignDeckCard: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 8) {
                     ForEach(shownDrops) { drop in
-                        CampaignDropPreviewRow(drop: drop)
+                        CampaignDropPreviewRow(
+                            drop: drop,
+                            activity: activity
+                        )
                     }
                 }
             }
@@ -513,10 +653,19 @@ private struct CampaignDeckCard: View {
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(hasAccountLinkIssue ? .orange.opacity(0.36) : state.borderTint, lineWidth: 1)
+                .strokeBorder(
+                    hasAccountLinkIssue ? .orange.opacity(0.36) : activity.state.borderTint,
+                    lineWidth: isActive ? 1.2 : 1
+                )
         }
-        .shadow(color: .black.opacity(isHovered ? 0.10 : 0.06), radius: isHovered ? 8 : 4, y: isHovered ? 4 : 2)
-        .opacity(state == .expired ? 0.62 : 1)
+        .shadow(
+            color: isActive
+                ? activity.state.tint.opacity(isHovered ? 0.18 : 0.10)
+                : .black.opacity(isHovered ? 0.10 : 0.06),
+            radius: isHovered ? 10 : (isActive ? 8 : 4),
+            y: isHovered ? 5 : (isActive ? 4 : 2)
+        )
+        .opacity(activity.state == .expired ? 0.62 : 1)
         .saturation(1)
         .brightness(isHovered ? 0.008 : 0)
         .animation(.easeInOut(duration: 0.18), value: isHovered)
@@ -563,138 +712,28 @@ private struct CampaignDeckCard: View {
         }
     }
 
-    @ViewBuilder
-    private var statusBadge: some View {
-        if hasAccountLinkIssue {
-            HStack(spacing: 8) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                Text("Link Required")
-                    .font(.caption.weight(.semibold))
-            }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(.orange.opacity(0.86), in: Capsule())
-        } else {
-        switch state {
-        case .active:
-            HStack(spacing: 8) {
-                LivePulseDot(color: .green)
-                Text("Active")
-                    .font(.caption.weight(.semibold))
-            }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(.green.opacity(0.82), in: Capsule())
-        case .claimed:
-            if campaign.isClosed {
-                HStack(spacing: 8) {
-                    Image(systemName: "archivebox.fill")
-                    Text("Closed")
-                        .font(.caption.weight(.semibold))
-                }
-                .foregroundStyle(.white)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(.secondary.opacity(0.82), in: Capsule())
-            } else {
-                EmptyView()
-            }
-        case .idle, .expired:
-            Text(state == .expired ? "Expired" : "Idle")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(.thinMaterial, in: Capsule())
-        case .inProgress:
-            Text("In Progress")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(.blue.opacity(0.72), in: Capsule())
-        case .claimable:
-            Text("Claimable")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(.orange.opacity(0.78), in: Capsule())
-        }
+    private var activeMinerParticipants: [CampaignParticipant] {
+        activity.activeMiners.map { miner in
+            CampaignParticipant(
+                id: miner.id,
+                username: miner.username,
+                initials: initials(for: miner.username),
+                statusSymbol: "dot.radiowaves.left.and.right",
+                statusTint: .green
+            )
         }
     }
 
-    private var statusLine: String {
-        if hasAccountLinkIssue {
-            return "Link the game publisher account on Twitch to start mining."
+    private var claimedParticipants: [CampaignParticipant] {
+        activity.claimedAccounts.map { account in
+            CampaignParticipant(
+                id: account.id,
+                username: account.username,
+                initials: account.initials,
+                statusSymbol: "checkmark.circle.fill",
+                statusTint: .blue
+            )
         }
-
-        switch state {
-        case .active:
-            return "\(queueWatchersLabel) watching"
-        case .inProgress:
-            return "Tracking reward progress"
-        case .claimable:
-            return "Rewards ready to claim"
-        case .claimed:
-            return campaign.isClosed ? "Campaign closed" : "Completed"
-        case .expired:
-            return "Campaign window has ended"
-        case .idle:
-            return campaign.progress > 0 ? "In progress" : "Available"
-        }
-    }
-
-    private var queueWatchersLabel: String {
-        queueWatchers.isEmpty ? "Queued" : queueWatchers.joined(separator: ", ")
-    }
-
-    @ViewBuilder
-    private var progressMetadata: some View {
-        switch state {
-        case .claimed:
-            Label("Completed", systemImage: "checkmark.circle.fill")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.green.opacity(0.92))
-        case .active, .inProgress, .claimable:
-            VStack(alignment: .leading, spacing: 6) {
-                ProgressView(value: campaign.progress, total: 1.0)
-                    .progressViewStyle(.linear)
-                    .tint(state.tint)
-
-                Text(progressSecondaryText)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary.opacity(0.78))
-            }
-        case .idle:
-            if hasAccountLinkIssue {
-                Label("Account link required before rewards can be earned", systemImage: "link.badge.plus")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.orange.opacity(0.88))
-            } else {
-                Text(campaign.progress > 0 ? "In progress" : "Available")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.primary.opacity(0.86))
-            }
-        case .expired:
-            Text("Expired")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    private var progressSecondaryText: String {
-        if state == .claimable {
-            return "Ready to claim"
-        }
-
-        if let timeRemaining = campaign.timeRemaining {
-            return timeRemaining.formattedRemaining
-        }
-
-        return "In progress"
     }
 
     private var cardBackground: some View {
@@ -705,9 +744,9 @@ private struct CampaignDeckCard: View {
                     .fill(
                         LinearGradient(
                             colors: [
-                                materialTint.opacity(0.09),
-                                materialTint.opacity(0.06),
-                                materialTint.opacity(0.04)
+                                materialTint.opacity(isActive ? 0.14 : 0.09),
+                                materialTint.opacity(isActive ? 0.10 : 0.06),
+                                materialTint.opacity(isActive ? 0.06 : 0.04)
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -734,8 +773,8 @@ private struct CampaignDeckCard: View {
                     .fill(
                         LinearGradient(
                             colors: [
-                                Color.white.opacity(0.10),
-                                state.tint.opacity(state == .claimed ? 0.03 : 0.06),
+                                Color.white.opacity(isActive ? 0.14 : 0.10),
+                                activity.state.tint.opacity(activity.state == .claimed ? 0.03 : (isActive ? 0.12 : 0.06)),
                                 Color.clear
                             ],
                             startPoint: .topLeading,
@@ -748,7 +787,7 @@ private struct CampaignDeckCard: View {
                     .fill(
                         RadialGradient(
                             colors: [
-                                Color.white.opacity(0.10),
+                                isActive ? activity.state.tint.opacity(0.16) : Color.white.opacity(0.10),
                                 Color.clear
                             ],
                             center: .center,
@@ -762,19 +801,181 @@ private struct CampaignDeckCard: View {
     private var materialTint: Color {
         extractedArtworkTint ?? Color.gray
     }
+}
 
+// MARK: - Activity Support
+
+private struct CampaignActivitySnapshot {
+    let state: CampaignCardState
+    let activeMiners: [MinerManager.ManagedMiner]
+    let claimedAccounts: [AccountState]
+    let needsAuthAccounts: [AccountState]
+    let claimableDropCount: Int
+    let claimedRewardCount: Int
+    let remainingRewardCount: Int
+}
+
+private struct CampaignParticipant: Identifiable {
+    let id: String
+    let username: String
+    let initials: String
+    let statusSymbol: String
+    let statusTint: Color
+}
+
+private struct DashboardMetricCard: View {
+    let title: String
+    let value: String
+    let detail: String
+    let tint: Color
+    let systemImage: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(title, systemImage: systemImage)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            Text(value)
+                .font(.title2.weight(.bold))
+                .foregroundStyle(.primary)
+
+            Text(detail)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(.thinMaterial.opacity(0.96), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(tint.opacity(0.18), lineWidth: 1)
+        }
+    }
+}
+
+private struct CampaignMetricPill: View {
+    let title: String
+    let systemImage: String
+    let tint: Color
+
+    var body: some View {
+        Label(title, systemImage: systemImage)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(.regularMaterial.opacity(0.9), in: Capsule())
+    }
+}
+
+private struct CampaignParticipantSection: View {
+    let title: String
+    let systemImage: String
+    let participants: [CampaignParticipant]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(title, systemImage: systemImage)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(participants) { participant in
+                        CampaignParticipantChip(participant: participant)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+        }
+    }
+}
+
+private struct CampaignRequirementBanner: View {
+    let title: String
+    let message: String
+    let systemImage: String
+    let tint: Color
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: systemImage)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(tint)
+                .frame(width: 18, height: 18)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(tint.opacity(0.22), lineWidth: 1)
+        }
+    }
+}
+
+private struct CampaignParticipantChip: View {
+    let participant: CampaignParticipant
+
+    var body: some View {
+        let swatch = AvatarColorPalette.swatch(for: participant.id, username: participant.username)
+
+        HStack(spacing: 8) {
+            Text(participant.initials)
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+                .foregroundStyle(swatch.text)
+                .frame(width: 22, height: 22)
+                .background(swatch.gradient, in: Circle())
+                .overlay {
+                    Circle()
+                        .strokeBorder(.white.opacity(0.24), lineWidth: 1)
+                }
+
+            Text(participant.username)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+
+            Image(systemName: participant.statusSymbol)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(participant.statusTint)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(.ultraThinMaterial.opacity(0.9), in: Capsule())
+    }
 }
 
 // MARK: - Drop Preview Row
 
 private struct CampaignDropPreviewRow: View {
     let drop: DropViewData
+    let activity: CampaignActivitySnapshot
 
-    private var primaryState: DropPreviewState {
+    private var status: DropPreviewState {
         if drop.isClaimed { return .claimed }
         if drop.isClaimable { return .claimable }
-        if drop.isEarnable || drop.progress > 0 { return .inProgress }
+        if drop.progress > 0 || !activity.activeMiners.isEmpty {
+            return .inProgress
+        }
         return .locked
+    }
+
+    private var showsProgressBar: Bool {
+        activity.state == .active && drop.progress > 0 && !drop.isClaimed && !drop.isClaimable
     }
 
     private var progressPercent: Int {
@@ -782,93 +983,78 @@ private struct CampaignDropPreviewRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
-            Group {
-                if let url = drop.imageURL {
-                    AsyncImage(url: url) { image in
-                        image
-                            .resizable()
-                            .interpolation(.high)
-                            .scaledToFill()
-                    } placeholder: {
-                        placeholder
-                    }
-                } else {
-                    placeholder
-                }
-            }
-            .frame(width: 38, height: 38)
-            .clipShape(RoundedRectangle(cornerRadius: GlassRadius.artwork, style: .continuous))
+        HStack(alignment: .center, spacing: 12) {
+            thumbnail
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(drop.name)
-                    .font(.subheadline.weight(.medium))
-                    .lineLimit(1)
+                    .font(.subheadline.weight(activity.state == .active ? .semibold : .medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
 
-                Text(statusText)
+                Text("Watch \(drop.requiredMinutes) minutes")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
             }
 
-            Spacer()
+            Spacer(minLength: 0)
 
-            VStack(alignment: .trailing, spacing: 6) {
-                if primaryState == .claimed {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
+            Group {
+                if showsProgressBar {
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Text("\(progressPercent)%")
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(.secondary)
+
+                        ProgressView(value: drop.progress, total: 1.0)
+                            .progressViewStyle(.linear)
+                            .tint(status.tint)
+                            .frame(width: 44)
+                    }
                 } else {
-                    ProgressView(value: drop.progress, total: 1.0)
-                        .progressViewStyle(.linear)
-                        .frame(width: 82)
-                        .tint(progressTint)
-
-                    Text("\(progressPercent)%")
-                        .font(.caption2.weight(.medium))
-                        .foregroundStyle(.secondary)
+                    Image(systemName: status.symbol)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(status.tint)
+                        .frame(width: 20, height: 20)
                 }
             }
+            .help(status.title)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(.ultraThinMaterial.opacity(0.86), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
-        .opacity(primaryState == .locked ? 0.72 : 1)
+        .padding(.vertical, 8)
+        .help(status.helpText)
     }
 
-    private var placeholder: some View {
-        RoundedRectangle(cornerRadius: GlassRadius.artwork, style: .continuous)
+    private var thumbnail: some View {
+        Group {
+            if let url = drop.imageURL {
+                AsyncImage(url: url) { image in
+                    image
+                        .resizable()
+                        .interpolation(.high)
+                        .scaledToFill()
+                } placeholder: {
+                    thumbnailPlaceholder
+                }
+            } else {
+                thumbnailPlaceholder
+            }
+        }
+        .frame(width: 36, height: 36)
+        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .strokeBorder(.white.opacity(0.10), lineWidth: 1)
+        }
+    }
+
+    private var thumbnailPlaceholder: some View {
+        RoundedRectangle(cornerRadius: 9, style: .continuous)
             .fill(.thinMaterial)
             .overlay {
                 Image(systemName: "gift.fill")
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
             }
-    }
-
-    private var progressTint: Color {
-        switch primaryState {
-        case .claimed:
-            return .green
-        case .claimable:
-            return .orange
-        case .inProgress:
-            return .blue
-        case .locked:
-            return .secondary
-        }
-    }
-
-    private var statusText: String {
-        switch primaryState {
-        case .claimed:
-            return "Claimed"
-        case .claimable:
-            return "Ready to claim"
-        case .inProgress:
-            return "\(drop.currentMinutes)/\(drop.requiredMinutes) min"
-        case .locked:
-            return drop.isEarnable ? "\(drop.currentMinutes)/\(drop.requiredMinutes) min" : "Locked"
-        }
     }
 }
 
@@ -1199,12 +1385,12 @@ private enum CampaignCardState: String {
 
     var title: String {
         switch self {
-        case .active: return "Active"
-        case .inProgress: return "In Progress"
-        case .claimable: return "Claimable"
-        case .claimed: return "Claimed"
+        case .active: return "Mining in progress"
+        case .inProgress: return "Mining in progress"
+        case .claimable: return "No miners assigned"
+        case .claimed: return "All rewards claimed"
         case .expired: return "Expired"
-        case .idle: return "Idle"
+        case .idle: return "No miners assigned"
         }
     }
 
@@ -1212,10 +1398,10 @@ private enum CampaignCardState: String {
         switch self {
         case .active: return "dot.radiowaves.left.and.right"
         case .inProgress: return "chart.bar.fill"
-        case .claimable: return "sparkles"
+        case .claimable: return "person.crop.circle.badge.xmark"
         case .claimed: return "checkmark.circle.fill"
         case .expired: return "clock.badge.exclamationmark"
-        case .idle: return "circle.fill"
+        case .idle: return "person.crop.circle.badge.xmark"
         }
     }
 
@@ -1223,7 +1409,7 @@ private enum CampaignCardState: String {
         switch self {
         case .active: return .green
         case .inProgress: return .blue
-        case .claimable: return .orange
+        case .claimable: return .secondary
         case .claimed: return .green
         case .expired: return .secondary
         case .idle: return .secondary
@@ -1235,7 +1421,7 @@ private enum CampaignCardState: String {
         case .active:
             return .green.opacity(0.28)
         case .claimable:
-            return .orange.opacity(0.28)
+            return .white.opacity(0.12)
         case .inProgress:
             return .blue.opacity(0.20)
         case .claimed:
@@ -1251,6 +1437,55 @@ private enum DropPreviewState {
     case claimable
     case inProgress
     case locked
+
+    var title: String {
+        switch self {
+        case .claimed: return "Claimed"
+        case .claimable: return "Claimable"
+        case .inProgress: return "In progress"
+        case .locked: return "Locked"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .claimed: return "checkmark.circle.fill"
+        case .claimable: return "sparkles"
+        case .inProgress: return "chart.bar.fill"
+        case .locked: return "lock.fill"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .claimed: return .green
+        case .claimable: return .orange
+        case .inProgress: return .blue
+        case .locked: return .secondary
+        }
+    }
+
+    var helpText: String {
+        switch self {
+        case .claimed: return "Reward already claimed"
+        case .claimable: return "Reward ready to claim"
+        case .inProgress: return "Reward currently being mined"
+        case .locked: return "Reward not available yet"
+        }
+    }
+}
+
+private func initials(for username: String) -> String {
+    let parts = username
+        .split(whereSeparator: { $0 == " " || $0 == "_" || $0 == "-" })
+        .prefix(2)
+
+    let letters = parts.compactMap { $0.first }.map { String($0) }.joined()
+    if !letters.isEmpty {
+        return letters.uppercased()
+    }
+
+    return String(username.prefix(2)).uppercased()
 }
 
 private extension TimeInterval {
