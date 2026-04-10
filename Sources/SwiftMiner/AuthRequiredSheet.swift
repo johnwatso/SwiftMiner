@@ -10,6 +10,13 @@ struct AuthRequiredSheet: View {
     @Environment(NavigationModel.self) private var navigation
 
     @State private var loginService = MinerLoginService()
+    @State private var successDismissTask: Task<Void, Never>?
+
+    private let sheetCornerRadius: CGFloat = 18
+
+    private var sheetShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: sheetCornerRadius, style: .continuous)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
@@ -19,7 +26,21 @@ struct AuthRequiredSheet: View {
         }
         .frame(width: 480, height: 430)
         .padding(28)
-        .glassContentSurface()
+        .background {
+            sheetShape
+                .fill(Color(nsColor: .windowBackgroundColor).opacity(0.97))
+                .overlay {
+                    sheetShape
+                        .fill(.ultraThinMaterial.opacity(0.35))
+                }
+                .shadow(color: .black.opacity(0.14), radius: 16, y: 10)
+        }
+        .overlay {
+            sheetShape
+                .strokeBorder(.white.opacity(0.10), lineWidth: 1)
+        }
+        .clipShape(sheetShape)
+        .compositingGroup()
         .onAppear {
             loginService.startDeviceAuth()
         }
@@ -27,6 +48,10 @@ struct AuthRequiredSheet: View {
             if case .succeeded(let account) = newState {
                 handleSuccess(account: account)
             }
+        }
+        .onDisappear {
+            successDismissTask?.cancel()
+            successDismissTask = nil
         }
     }
 
@@ -69,17 +94,27 @@ struct AuthRequiredSheet: View {
     // MARK: - Starting
 
     private var startingView: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        statusView(
+            title: "Connecting to Twitchâ€¦",
+            description: "Requesting a device code from Twitch."
+        )
+    }
+
+    private func statusView(title: String, description: String) -> some View {
+        VStack(spacing: 20) {
             ProgressView()
                 .controlSize(.large)
 
-            Text("Connecting to Twitchâ€¦")
-                .font(.headline)
+            VStack(spacing: 6) {
+                Text(title)
+                    .font(.headline)
 
-            Text("Requesting a device code from Twitch.")
-                .foregroundStyle(.secondary)
+                Text(description)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
 
     // MARK: - Waiting for user
@@ -150,17 +185,10 @@ struct AuthRequiredSheet: View {
     // MARK: - Polling
 
     private var pollingView: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            ProgressView()
-                .controlSize(.large)
-
-            Text("Waiting for confirmationâ€¦")
-                .font(.headline)
-
-            Text("Complete the authorization in your browser.")
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        statusView(
+            title: "Waiting for confirmationâ€¦",
+            description: "Complete the authorization in your browser."
+        )
     }
 
     // MARK: - Success
@@ -206,44 +234,44 @@ struct AuthRequiredSheet: View {
 
     private var footerBar: some View {
         HStack {
-            Button("Cancel") {
-                loginService.cancel()
-                isPresented = false
+            if isSuccessState {
+                Spacer()
+
+                Button(successActionTitle) {
+                    dismissSuccessState()
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+            } else {
+                Button("Cancel") {
+                    loginService.cancel()
+                    isPresented = false
+                }
+                .keyboardShortcut(.cancelAction)
+
+                Spacer()
             }
-            .keyboardShortcut(.cancelAction)
-
-            Spacer()
         }
     }
 
-    // MARK: - Handlers
+    private var isSuccessState: Bool {
+        if case .succeedeHÙÚ[”Ù\šXÙKœİ]HÂˆ™]\›ˆYBˆBˆ™]\›ˆ˜[ÙBˆB‚ˆš]˜]H˜\ˆİXØÙ\ÜĞXİ[Û•]Nˆİš[™ÈÂˆ”İ\Z[š[™È‚ˆB‚ˆËÈPT’ÎˆH[™\œÂ‚ˆš]˜]H[˜È[™TİXØÙ\ÜÊXØÛİ[ˆXØÛİ[
+HÂˆËÈ[œİ\™HZ[™\“X[˜YÙ\ˆ\Ù\ÈHÛÜœ™XİÛY[QÚ[ˆÜ™X][™ÈH[™Ú[™K‚ˆËÈ\ÈX]\œÈÚ[ˆHÛY[QØ\Èİ\YYšXHÙ][™ÜÈ˜]\ˆ[ˆ[ˆ˜\‹‚ˆ˜]šYØ][Û‹›Z[™\“X[˜YÙ\‹\]PÛY[Y
+Ù][™ÜËœÚ\™Yœ™\ÛÛ™YÛY[Y
+B‚ˆ]Z[™\’YH˜]šYØ][Û‹›Z[™\“X[˜YÙ\‹˜YXØÛİ[
+XØÛİ[
+Bˆ\ÚÈÂˆ]Ù][™ÜÈHÙ][™ÜËœÚ\™YˆOÈ]ØZ]˜]šYØ][Û‹›Z[™\“X[˜YÙ\‹œİ\Z[™\ŠˆZ[™\’YˆZ[™\’Yˆš[Üš]QØ[Y\ÎˆÙ][™ÜËœš[Üš]QØ[Y\Ëˆ^ÛYYØ[Y\ÎˆÙ][™ÜË™^ÛYYØ[Y\Ëˆİ˜]YŞNˆÙ][™ÜË›Z[š[™Ôİ˜]YŞKˆ[˜X›P˜YÙ\Ñ[[İ\ÎˆÙ][™ÜË™[˜X›P˜YÙ\Ñ[[İ\ËˆÚİĞÛZ[S›İYšXØ][ÛœÎˆÙ][™ÜËœÚİĞÛZ[S›İYšXØ][ÛœÂˆ
+Bˆ]ØZ]XZ[XİÜ‹œ[ˆÂˆØÚY[TİXØÙ\ÜÑ\ÛZ\ÜÊ
+BˆBˆBˆB‚ˆXZ[XİÜ‚ˆš]˜]H[˜ÈØÚY[TİXØÙ\ÜÑ\ÛZ\ÜÊ
+HÂˆİXØÙ\ÜÑ\ÛZ\ÜÕ\ÚÏË˜Ø[˜Ù[
 
-    private func handleSuccess(account: Account) {
-        // Ensure MinerManager uses the correct client ID when creating the engine.
-        // This matters when the client ID was supplied via Settings rather than env var.
-        navigation.minerManager.updateClientId(Settings.shared.resolvedClientId)
+BˆİXØÙ\ÜÑ\ÛZ\ÜÕ\ÚÈH\ÚÈÂˆOÈ]ØZ]\ÚËœÛY\
+˜[›ÜÙXÛÛ™ÎˆWÎÌÌ
+BˆİX\™U\ÚËš\ĞØ[˜Ù[Y[ÙHÈ™]\›ˆBˆ\Ô™\Ù[YH˜[ÙBˆBˆB‚ˆš]˜]H[˜È\ÛZ\ÜÔİXØÙ\ÜÔİ]J
+HÂˆİXØÙ\ÜÑ\ÛZ\ÜÕ\ÚÏË˜Ø[˜Ù[
 
-        let minerId = navigation.minerManager.addAccount(account)
-        Task {
-            let settings = Settings.shared
-            try? await navigation.minerManager.startMiner(
-                minerId: minerId,
-                priorityGames: settings.priorityGames,
-                excludedGames: settings.excludedGames,
-                strategy: settings.miningStrategy,
-                enableBadgesEmotes: settings.enableBadgesEmotes,
-                showClaimNotifications: settings.showClaimNotifications
-            )
-            // Brief pause so the user sees the success state
-            try? await Task.sleep(nanoseconds: 1_200_000_000)
-            isPresented = false
-        }
-    }
-}
-
-// MARK: - Preview
-
-#Preview {
-    AuthRequiredSheet(isPresented: .constant(true))
-        .environment(NavigationModel(clientId: "preview"))
-}
+BˆİXØÙ\ÜÑ\ÛZ\ÜÕ\ÚÈHš[ˆ\Ô™\Ù[YH˜[ÙBˆBŸB‚‹ËÈPT’ÎˆH™]šY]Â‚ˆÔ™]šY]ÈÂˆ]]™\]Z\™YÚY]
+\Ô™\Ù[Yˆ˜ÛÛœİ[
+YJJBˆ™[š\›Û›Y[
+˜]šYØ][Û“[Ù[
+ÛY[Yˆœ™]šY]ÈŠJBŸB
