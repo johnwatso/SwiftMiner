@@ -283,11 +283,14 @@ struct DropsListView: View {
             )
 
             DashboardMetricCard(
-                title: "Ready to claim",
-                value: "\(claimableRewardCount)",
-                detail: "\(claimableCampaigns.count) \(claimableCampaigns.count == 1 ? "campaign" : "campaigns") waiting",
+                title: "Rewards ready",
+                value: claimableRewardCount == 0 ? "None" : "\(claimableRewardCount)",
+                detail: claimableRewardCount == 0
+                    ? "No rewards ready"
+                    : "\(claimableCampaigns.count) \(claimableCampaigns.count == 1 ? "campaign" : "campaigns") waiting",
                 tint: .orange,
-                systemImage: "sparkles"
+                systemImage: "sparkles",
+                isMuted: claimableRewardCount == 0
             )
 
             DashboardMetricCard(
@@ -449,6 +452,8 @@ struct DropsListView: View {
             state = .expired
         } else if !activeMiners.isEmpty {
             state = .active
+        } else if claimableDropCount > 0 {
+            state = .claimable
         } else {
             state = .idle
         }
@@ -493,6 +498,38 @@ private struct CampaignDeckCard: View {
 
     private var isActive: Bool {
         activity.state == .active
+    }
+
+    private var statusSummary: String? {
+        if hasAccountLinkIssue || !activity.needsAuthAccounts.isEmpty {
+            return nil
+        }
+
+        switch activity.state {
+        case .active:
+            let minerCount = activity.activeMiners.count
+            let minerCopy = "\(minerCount) miner\(minerCount == 1 ? "" : "s") watching now"
+            if campaign.progress > 0 {
+                return "\(minerCopy) • \(Int((campaign.progress * 100).rounded()))% complete"
+            }
+            return minerCopy
+        case .claimable:
+            return activity.claimableDropCount == 1
+                ? "1 reward ready to claim"
+                : "\(activity.claimableDropCount) rewards ready to claim"
+        case .claimed:
+            return "All campaign rewards claimed"
+        case .expired:
+            return "Campaign ended"
+        case .inProgress:
+            return campaign.progress > 0
+                ? "\(Int((campaign.progress * 100).rounded()))% campaign progress"
+                : nil
+        case .idle:
+            return activity.remainingRewardCount > 0
+                ? "\(activity.remainingRewardCount) reward\(activity.remainingRewardCount == 1 ? "" : "s") still available"
+                : nil
+        }
     }
 
     private var requirementBannerCopy: (title: String, message: String, systemImage: String, tint: Color)? {
@@ -559,11 +596,6 @@ private struct CampaignDeckCard: View {
 
                     HStack(spacing: 8) {
                         CampaignMetricPill(
-                            title: "\(activity.activeMiners.count) active",
-                            systemImage: "person.2.fill",
-                            tint: .green
-                        )
-                        CampaignMetricPill(
                             title: "\(activity.claimedRewardCount) claimed",
                             systemImage: "checkmark.circle.fill",
                             tint: .blue
@@ -583,22 +615,23 @@ private struct CampaignDeckCard: View {
                         }
                     }
 
-                    if isActive {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(
-                                campaign.progress > 0
-                                    ? "\(Int((campaign.progress * 100).rounded()))% campaign progress reported"
-                                    : "Watching now. Waiting for the first progress update."
-                            )
-                            .font(.caption.weight(.medium))
+                    if let statusSummary {
+                        Text(statusSummary)
+                            .font(.caption)
                             .foregroundStyle(.secondary)
+                    }
 
-                            if campaign.progress > 0 {
-                                ProgressView(value: campaign.progress, total: 1.0)
-                                    .progressViewStyle(.linear)
-                                    .tint(activity.state.tint)
-                            }
-                        }
+                    if isActive && campaign.progress > 0 {
+                        ProgressView(value: campaign.progress, total: 1.0)
+                            .progressViewStyle(.linear)
+                            .tint(activity.state.tint)
+                            .padding(.top, 2)
+                    } else if isActive {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(activity.state.tint)
+                            .padding(.top, 2)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
             }
@@ -610,26 +643,6 @@ private struct CampaignDeckCard: View {
                     systemImage: requirementBannerCopy.systemImage,
                     tint: requirementBannerCopy.tint
                 )
-            }
-
-            if !activeMinerParticipants.isEmpty || !claimedParticipants.isEmpty {
-                VStack(alignment: .leading, spacing: 12) {
-                    if !activeMinerParticipants.isEmpty {
-                        CampaignParticipantSection(
-                            title: "Currently mining",
-                            systemImage: "dot.radiowaves.left.and.right",
-                            participants: activeMinerParticipants
-                        )
-                    }
-
-                    if !claimedParticipants.isEmpty {
-                        CampaignParticipantSection(
-                            title: "Already claimed",
-                            systemImage: "checkmark.circle.fill",
-                            participants: claimedParticipants
-                        )
-                    }
-                }
             }
 
             if shownDrops.isEmpty {
@@ -712,70 +725,17 @@ private struct CampaignDeckCard: View {
         }
     }
 
-    private var activeMinerParticipants: [CampaignParticipant] {
-        activity.activeMiners.map { miner in
-            CampaignParticipant(
-                id: miner.id,
-                username: miner.username,
-                initials: initials(for: miner.username),
-                statusSymbol: "dot.radiowaves.left.and.right",
-                statusTint: .green
-            )
-        }
-    }
-
-    private var claimedParticipants: [CampaignParticipant] {
-        activity.claimedAccounts.map { account in
-            CampaignParticipant(
-                id: account.id,
-                username: account.username,
-                initials: account.initials,
-                statusSymbol: "checkmark.circle.fill",
-                statusTint: .blue
-            )
-        }
-    }
-
     private var cardBackground: some View {
         RoundedRectangle(cornerRadius: 18, style: .continuous)
-            .fill(.thinMaterial.opacity(0.98))
+            .fill(.thinMaterial.opacity(isActive ? 0.98 : 0.95))
             .overlay {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .fill(
                         LinearGradient(
                             colors: [
-                                materialTint.opacity(isActive ? 0.14 : 0.09),
-                                materialTint.opacity(isActive ? 0.10 : 0.06),
-                                materialTint.opacity(isActive ? 0.06 : 0.04)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .mask {
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .fill(
-                                RadialGradient(
-                                    colors: [
-                                        .clear,
-                                        .black.opacity(0.60),
-                                        .black
-                                    ],
-                                    center: .center,
-                                    startRadius: 12,
-                                    endRadius: 240
-                                )
-                            )
-                    }
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(isActive ? 0.14 : 0.10),
-                                activity.state.tint.opacity(activity.state == .claimed ? 0.03 : (isActive ? 0.12 : 0.06)),
-                                Color.clear
+                                materialTint.opacity(isActive ? 0.10 : 0.05),
+                                materialTint.opacity(isActive ? 0.05 : 0.025),
+                                Color.white.opacity(isActive ? 0.045 : 0.02)
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -785,14 +745,14 @@ private struct CampaignDeckCard: View {
             .overlay {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .fill(
-                        RadialGradient(
+                        LinearGradient(
                             colors: [
-                                isActive ? activity.state.tint.opacity(0.16) : Color.white.opacity(0.10),
+                                Color.white.opacity(isActive ? 0.12 : 0.08),
+                                activity.state.tint.opacity(activity.state == .claimed ? 0.02 : (isActive ? 0.06 : 0.03)),
                                 Color.clear
                             ],
-                            center: .center,
-                            startRadius: 0,
-                            endRadius: 150
+                            startPoint: .topLeading,
+                            endPoint: UnitPoint(x: 0.75, y: 0.65)
                         )
                     )
             }
@@ -815,43 +775,37 @@ private struct CampaignActivitySnapshot {
     let remainingRewardCount: Int
 }
 
-private struct CampaignParticipant: Identifiable {
-    let id: String
-    let username: String
-    let initials: String
-    let statusSymbol: String
-    let statusTint: Color
-}
-
 private struct DashboardMetricCard: View {
     let title: String
     let value: String
     let detail: String
     let tint: Color
     let systemImage: String
+    var isMuted = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Label(title, systemImage: systemImage)
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(isMuted ? .tertiary : .secondary)
 
             Text(value)
-                .font(.title2.weight(.bold))
-                .foregroundStyle(.primary)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(isMuted ? .secondary : .primary)
 
             Text(detail)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(isMuted ? .tertiary : .secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(.thinMaterial.opacity(0.96), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .padding(14)
+        .background(.thinMaterial.opacity(isMuted ? 0.78 : 0.88), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(tint.opacity(0.18), lineWidth: 1)
+                .strokeBorder(tint.opacity(isMuted ? 0.08 : 0.14), lineWidth: 1)
         }
+        .opacity(isMuted ? 0.82 : 1)
     }
 }
 
@@ -862,34 +816,11 @@ private struct CampaignMetricPill: View {
 
     var body: some View {
         Label(title, systemImage: systemImage)
-            .font(.caption.weight(.semibold))
+            .font(.caption2.weight(.semibold))
             .foregroundStyle(tint)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(.regularMaterial.opacity(0.9), in: Capsule())
-    }
-}
-
-private struct CampaignParticipantSection: View {
-    let title: String
-    let systemImage: String
-    let participants: [CampaignParticipant]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label(title, systemImage: systemImage)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(participants) { participant in
-                        CampaignParticipantChip(participant: participant)
-                    }
-                }
-                .padding(.vertical, 2)
-            }
-        }
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background(.regularMaterial.opacity(0.72), in: Capsule())
     }
 }
 
@@ -924,38 +855,6 @@ private struct CampaignRequirementBanner: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .strokeBorder(tint.opacity(0.22), lineWidth: 1)
         }
-    }
-}
-
-private struct CampaignParticipantChip: View {
-    let participant: CampaignParticipant
-
-    var body: some View {
-        let swatch = AvatarColorPalette.swatch(for: participant.id, username: participant.username)
-
-        HStack(spacing: 8) {
-            Text(participant.initials)
-                .font(.system(size: 10, weight: .bold, design: .rounded))
-                .foregroundStyle(swatch.text)
-                .frame(width: 22, height: 22)
-                .background(swatch.gradient, in: Circle())
-                .overlay {
-                    Circle()
-                        .strokeBorder(.white.opacity(0.24), lineWidth: 1)
-                }
-
-            Text(participant.username)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-
-            Image(systemName: participant.statusSymbol)
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(participant.statusTint)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(.ultraThinMaterial.opacity(0.9), in: Capsule())
     }
 }
 
@@ -1385,12 +1284,12 @@ private enum CampaignCardState: String {
 
     var title: String {
         switch self {
-        case .active: return "Mining in progress"
-        case .inProgress: return "Mining in progress"
-        case .claimable: return "No miners assigned"
+        case .active: return "Watching now"
+        case .inProgress: return "In progress"
+        case .claimable: return "Reward ready"
         case .claimed: return "All rewards claimed"
         case .expired: return "Expired"
-        case .idle: return "No miners assigned"
+        case .idle: return "Idle"
         }
     }
 
@@ -1398,7 +1297,7 @@ private enum CampaignCardState: String {
         switch self {
         case .active: return "dot.radiowaves.left.and.right"
         case .inProgress: return "chart.bar.fill"
-        case .claimable: return "person.crop.circle.badge.xmark"
+        case .claimable: return "sparkles"
         case .claimed: return "checkmark.circle.fill"
         case .expired: return "clock.badge.exclamationmark"
         case .idle: return "person.crop.circle.badge.xmark"
@@ -1473,19 +1372,6 @@ private enum DropPreviewState {
         case .locked: return "Reward not available yet"
         }
     }
-}
-
-private func initials(for username: String) -> String {
-    let parts = username
-        .split(whereSeparator: { $0 == " " || $0 == "_" || $0 == "-" })
-        .prefix(2)
-
-    let letters = parts.compactMap { $0.first }.map { String($0) }.joined()
-    if !letters.isEmpty {
-        return letters.uppercased()
-    }
-
-    return String(username.prefix(2)).uppercased()
 }
 
 private extension TimeInterval {
