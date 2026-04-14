@@ -9,8 +9,6 @@ struct AccountDetailView: View {
     let miner: MinerManager.ManagedMiner
 
     @Environment(NavigationModel.self) private var navigation
-    @State private var isStarting = false
-    @State private var isStopping = false
 
     var body: some View {
         ScrollView {
@@ -73,52 +71,9 @@ struct AccountDetailView: View {
 
                 StatusBadge(status: miner.status)
             }
-
-            Spacer()
-
-            primaryButton
         }
         .padding(20)
         .glassCard()
-    }
-
-    @ViewBuilder
-    private var primaryButton: some View {
-        if miner.isRunning {
-            Button {
-                Task {
-                    isStopping = true
-                    await navigation.minerManager.stopMiner(minerId: miner.id)
-                    isStopping = false
-                }
-            } label: {
-                Label(isStopping ? "Stopping…" : "Stop Mining", systemImage: "stop.fill")
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.regular)
-            .disabled(isStopping)
-        } else {
-            Button {
-                Task {
-                    isStarting = true
-                    let settings = Settings.shared
-                    try? await navigation.minerManager.startMiner(
-                        minerId: miner.id,
-                        priorityGames: settings.priorityGames,
-                        excludedGames: settings.excludedGames,
-                        strategy: settings.miningStrategy,
-                        enableBadgesEmotes: settings.enableBadgesEmotes,
-                        showClaimNotifications: settings.showClaimNotifications
-                    )
-                    isStarting = false
-                }
-            } label: {
-                Label(isStarting ? "Starting…" : "Start Mining", systemImage: "play.fill")
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.regular)
-            .disabled(isStarting)
-        }
     }
 
     // MARK: Stats
@@ -202,7 +157,7 @@ struct AccountDetailView: View {
             let events = minerEvents
 
             if events.isEmpty {
-                Text(miner.isRunning ? "Waiting for activity…" : "Start mining to see activity here.")
+                Text(miner.isRunning ? "Waiting for activity…" : "This account will resume automatically when campaigns are available.")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     .padding(.horizontal, 14)
@@ -226,7 +181,7 @@ struct AccountDetailView: View {
         case .fetchingCampaigns: return "arrow.down.circle.fill"
         case .claiming:          return "gift.fill"
         case .waitingForStream:  return "clock.fill"
-        case .paused:            return "pause.fill"
+        case .paused:            return "clock.badge.checkmark"
         case .error:             return "exclamationmark.triangle.fill"
         case .idle:              return "moon.fill"
         }
@@ -375,45 +330,6 @@ struct AccountInspectorView: View {
                         LabeledContent("Campaign", value: miner.currentCampaign ?? "—")
                         LabeledContent("Drops Claimed", value: "\(miner.dropsClaimed)")
                     }
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Controls")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .textCase(.uppercase)
-
-                        if miner.isRunning {
-                            Button(role: .destructive) {
-                                Task { await navigation.minerManager.stopMiner(minerId: miner.id) }
-                            } label: {
-                                Label("Stop", systemImage: "stop.fill")
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                        } else {
-                            Button {
-                                Task {
-                                    let settings = Settings.shared
-                                    try? await navigation.minerManager.startMiner(
-                                        minerId: miner.id,
-                                        priorityGames: settings.priorityGames,
-                                        excludedGames: settings.excludedGames,
-                                        strategy: settings.miningStrategy,
-                                        enableBadgesEmotes: settings.enableBadgesEmotes,
-                                        showClaimNotifications: settings.showClaimNotifications
-                                    )
-                                }
-                            } label: {
-                                Label("Start", systemImage: "play.fill")
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.small)
-                        }
-                    }
-                    .padding(14)
-                    .glassControlSurface()
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 20)

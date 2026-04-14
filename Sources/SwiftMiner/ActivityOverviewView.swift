@@ -176,8 +176,8 @@ struct ActivityOverviewView: View {
             )
         case .paused:
             return MinerNextAction(
-                title: "Paused between opportunities",
-                detail: "Waiting for a live eligible campaign or an operator action.",
+                title: "Standing by between opportunities",
+                detail: "Waiting for a live eligible campaign or stream to become available.",
                 color: .orange
             )
         case .error:
@@ -188,8 +188,8 @@ struct ActivityOverviewView: View {
             )
         case .idle:
             return MinerNextAction(
-                title: "Ready to start",
-                detail: "Start this miner to fetch campaigns and begin watching for drops.",
+                title: "Ready",
+                detail: "This miner will fetch campaigns and resume automatically.",
                 color: .secondary
             )
         }
@@ -252,8 +252,6 @@ private struct MinerControlPanel: View {
 
     @Environment(NavigationModel.self) private var navigation
     @ObservedObject private var settings = Settings.shared
-    @State private var isStarting = false
-    @State private var isStopping = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -276,8 +274,6 @@ private struct MinerControlPanel: View {
                 Spacer()
 
                 HStack(spacing: 10) {
-                    primaryButton
-
                     Button {
                         Task { await navigation.minerManager.forceRefreshMiner(minerId: miner.id) }
                     }
@@ -358,45 +354,6 @@ private struct MinerControlPanel: View {
             }
         )
     }
-
-    @ViewBuilder
-    private var primaryButton: some View {
-        if miner.isRunning {
-            Button {
-                Task {
-                    isStopping = true
-                    await navigation.minerManager.stopMiner(minerId: miner.id)
-                    isStopping = false
-                }
-            } label: {
-                Label(isStopping ? "Stopping…" : "Stop", systemImage: "stop.fill")
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .disabled(isStopping)
-        } else {
-            Button {
-                Task {
-                    isStarting = true
-                    let settings = Settings.shared
-                    try? await navigation.minerManager.startMiner(
-                        minerId: miner.id,
-                        priorityGames: settings.priorityGames,
-                        excludedGames: settings.excludedGames,
-                        strategy: settings.miningStrategy,
-                        enableBadgesEmotes: settings.enableBadgesEmotes,
-                        showClaimNotifications: settings.showClaimNotifications
-                    )
-                    isStarting = false
-                }
-            } label: {
-                Label(isStarting ? "Starting…" : "Start", systemImage: "play.fill")
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .disabled(isStarting)
-        }
-    }
 }
 
 private struct ControlPanelInfoBlock: View {
@@ -454,7 +411,7 @@ private struct MinerActivityFeedSection: View {
             }
 
             if entries.isEmpty {
-                Text(miner.isRunning ? "Waiting for new activity…" : "Start this miner to populate the live feed.")
+                Text(miner.isRunning ? "Waiting for new activity…" : "This miner will resume automatically when Twitch has work available.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .padding(16)
@@ -523,7 +480,7 @@ private struct MinerLiveStateSection: View {
             } else {
                 Text(
                     !miner.isRunning
-                        ? "Start this miner to see live drop progress."
+                        ? "This miner will resume automatically when a campaign becomes available."
                         : miner.status == .fetchingCampaigns
                             ? "Scanning for campaigns…"
                             : "Waiting for an eligible campaign."

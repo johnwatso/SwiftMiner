@@ -74,7 +74,6 @@ private struct GeneralSettingsView: View {
     var body: some View {
         Form {
             Section {
-                Toggle("Auto-start all miners on launch", isOn: $settings.autoStartOnLaunch)
                 Toggle("Minimize to menu bar", isOn: $settings.minimizeToMenuBar)
                 Toggle("Run in background when closed", isOn: $settings.runInBackground)
             } header: {
@@ -263,7 +262,16 @@ private struct AccountSettingsView: View {
                 let authService = TwitchAuthService(clientId: ClientConfiguration.clientId)
                 let account = try await authService.importTDMSession(token: token)
 
-                navigation.minerManager.addAccount(account)
+                let minerId = navigation.minerManager.addAccount(account)
+                let settings = Settings.shared
+                try? await navigation.minerManager.startMiner(
+                    minerId: minerId,
+                    priorityGames: settings.priorityGames,
+                    excludedGames: settings.excludedGames,
+                    strategy: settings.miningStrategy,
+                    enableBadgesEmotes: settings.enableBadgesEmotes,
+                    showClaimNotifications: settings.showClaimNotifications
+                )
                 alertMessage = "Successfully imported account: \(account.username)"
                 showAlert = true
             } catch {
