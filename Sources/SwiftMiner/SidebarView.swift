@@ -60,27 +60,6 @@ struct SidebarView: View {
             .padding(.top, 8)
         }
         .navigationTitle("SwiftMiner")
-        .toolbar {
-            ToolbarItemGroup {
-                let hasStopped = navigation.minerManager.miners.contains { !$0.isRunning }
-                if hasStopped {
-                    Button {
-                        Task {
-                            let settings = Settings.shared
-                            await navigation.minerManager.startAll(
-                                priorityGames: settings.priorityGames,
-                                excludedGames: settings.excludedGames,
-                                strategy: settings.miningStrategy,
-                                enableBadgesEmotes: settings.enableBadgesEmotes,
-                                showClaimNotifications: settings.showClaimNotifications
-                            )                        }
-                    } label: {
-                        Image(systemName: "play.fill")
-                    }
-                    .help("Start All Miners")
-                }
-            }
-        }
     }
 }
 

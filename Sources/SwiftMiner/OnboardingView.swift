@@ -332,12 +332,6 @@ struct OnboardingView: View {
                     subtitle: "Alert me when a drop is secured.",
                     isOn: $settings.showClaimNotifications
                 )
-
-                OnboardingToggleRow(
-                    title: "Auto-start on launch",
-                    subtitle: "Start mining when SwiftMiner opens.",
-                    isOn: $settings.autoStartOnLaunch
-                )
             }
             .onChange(of: settings.showClaimNotifications) { _, newValue in
                 guard newValue else { return }
@@ -400,7 +394,7 @@ struct OnboardingView: View {
         case .noAccounts:
             return "Finish"
         case .hasAccounts:
-            return "Start Mining"
+            return "Open Dashboard"
         }
     }
 

@@ -806,13 +806,13 @@ struct OverviewView: View {
             let runningCount = navigation.minerManager.miners.filter { $0.isRunning }.count
             let detail = anyMinersRunning
                 ? "\(runningCount) \(runningCount == 1 ? "miner is" : "miners are") online and ready."
-                : "Start a miner to begin watching for drops."
+                : "Accounts will start mining automatically when they are available."
             return CampaignRailItem(
                 id: "placeholder-active",
                 section: .active,
-                gameName: anyMinersRunning ? "Ready" : "Paused",
-                campaignName: anyMinersRunning ? "Waiting for the next live campaign" : "No miners are currently running",
-                eyebrow: anyMinersRunning ? "Standby" : "Paused",
+                gameName: anyMinersRunning ? "Ready" : "Standby",
+                campaignName: anyMinersRunning ? "Waiting for the next live campaign" : "No miners are currently active",
+                eyebrow: "Standby",
                 progressText: detail,
                 progressPercent: 0,
                 artworkURL: nil,
@@ -1151,10 +1151,10 @@ struct OverviewView: View {
 
         if miners.contains(where: { $0.status == .paused }) {
             return StatusReason(
-                title: "Paused between campaigns",
+                title: "Standing by between campaigns",
                 summary: "The miner is waiting for an eligible campaign or live channel to become available.",
                 detail: "Upcoming and eligible cards above show the next opportunities in line.",
-                badge: "Paused",
+                badge: "Standby",
                 color: .orange
             )
         }
@@ -1207,29 +1207,64 @@ struct OverviewView: View {
         VStack(alignment: .leading, spacing: 14) {
             sectionHeading("Campaign Progress", subtitle: "Campaigns with drops still to earn.")
 
-            if campaignLibraryItems.isEmpty {
+            if gameProgressItems.isEmpty {
                 CampaignLibraryAmbientRow()
             } else {
                 VStack(spacing: 10) {
-                    ForEach(campaignLibraryItems) { campaign in
-                        ActiveCampaignRow(item: campaign, onSetSteamId: presentSteamIdSheet(for:))
+                    ForEach(gameProgressItems) { game in
+                        GameProgressRow(item: game)
                     }
                 }
             }
         }
     }
 
-    private var campaignLibraryItems: [CampaignRailItem] {
+    private var gameProgressItems: [GameProgressItem] {
         let sourceCampaigns: [Campaign]
         if !activeFeedCampaigns.isEmpty {
-            sourceCampaigns = Array(activeFeedCampaigns.prefix(6))
+            sourceCampaigns = activeFeedCampaigns
         } else if !prioritisedCampaigns.isEmpty {
-            sourceCampaigns = Array(prioritisedCampaigns.prefix(6))
+            sourceCampaigns = prioritisedCampaigns
         } else {
-            sourceCampaigns = Array(recentCampaigns.prefix(6))
+            sourceCampaigns = recentCampaigns
         }
 
-        return sourceCampaigns.map { makeRailItem(for: $0, section: .active) }
+        var groupedGames: [String: GameProgressAccumulator] = [:]
+        var orderedKeys: [String] = []
+
+        for campaign in sourceCampaigns {
+            let key = gameProgressGroupKey(for: campaign.game)
+            if groupedGames[key] == nil {
+                orderedKeys.append(key)
+                groupedGames[key] = GameProgressAccumulator(
+                    id: key,
+                    gameName: campaign.game.name,
+                    artworkURL: navigation.minerManager.dataCoordinator.steamArtworkOverrides[campaign.game.name] ?? campaign.game.boxArtURL,
+                    tint: tintColor(for: campaign)
+                )
+            }
+
+            groupedGames[key]?.merge(campaign)
+        }
+
+        return orderedKeys
+            .compactMap { groupedGames[$0]?.item }
+            .prefix(6)
+            .map { $0 }
+    }
+
+    private func gameProgressGroupKey(for game: Game) -> String {
+        let trimmedId = game.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedId.isEmpty {
+            return "id:\(trimmedId)"
+        }
+
+        let trimmedName = game.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedName.isEmpty {
+            return "name:\(trimmedName.lowercased())"
+        }
+
+        return "fallback:unknown-game"
     }
 
     private func campaignProgressPercent(for campaign: Campaign) -> Double {
@@ -1291,7 +1326,7 @@ struct OverviewView: View {
         case .claiming:
             return "Claiming completed rewards"
         case .paused:
-            return "Paused until something new appears"
+            return "Standing by for the next opportunity"
         case .error:
             return "Needs a refresh"
         }
@@ -1374,32 +1409,11 @@ struct OverviewMetricCard: View {
 
 // MARK: - Campaign Summary Row
 
-private struct ActiveCampaignRow: View {
-    let item: CampaignRailItem
-    let onSetSteamId: (String) -> Void
+private struct GameProgressRow: View {
+    let item: GameProgressItem
 
-    private var isActiveState: Bool {
-        item.visualState == .watching || item.visualState == .inProgress || item.visualState == .claimable
-    }
-
-    private var stateSummaryLabel: String {
-        switch item.visualState {
-        case .claimed:
-            return "Completed"
-        case .idle:
-            return item.progressText == "Not started" ? "Not started" : "Available"
-        default:
-            return item.progressText
-        }
-    }
-
-    private var stateBadgeTitleOverride: String? {
-        switch item.visualState {
-        case .claimed, .idle:
-            return stateSummaryLabel
-        default:
-            return nil
-        }
+    private var progressFraction: Double {
+        item.progressFraction
     }
 
     var body: some View {
@@ -1407,38 +1421,27 @@ private struct ActiveCampaignRow: View {
             CampaignThumbnail(url: item.artworkURL, tint: item.tint)
                 .frame(width: 56, height: 56)
 
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: 8) {
                 Text(item.gameName)
                     .font(.headline)
-
-                Text(item.campaignName)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
                     .lineLimit(1)
 
-                if !item.watchers.isEmpty {
-                    CampaignWatcherStack(watchers: item.watchers, size: 18)
-                }
+                ProgressView(value: progressFraction)
+                    .progressViewStyle(.linear)
+                    .tint(item.tint)
+                    .frame(maxWidth: 220)
+
+                Text("\(item.completedDrops) of \(item.totalDrops) drops completed")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Spacer()
 
-            VStack(alignment: .trailing, spacing: 8) {
-                CampaignStateBadge(state: item.visualState, titleOverride: stateBadgeTitleOverride)
-
-                if isActiveState {
-                    VStack(alignment: .trailing, spacing: 6) {
-                        ProgressView(value: item.progressPercent, total: 100)
-                            .progressViewStyle(.linear)
-                            .frame(width: 118)
-                            .tint(item.visualState.accent)
-
-                        Text(stateSummaryLabel)
-                            .font(.caption2.weight(.medium))
-                            .foregroundStyle(.secondary.opacity(0.78))
-                            .lineLimit(1)
-                    }
-                }
+            VStack(alignment: .trailing, spacing: 6) {
+                Text("\(Int((progressFraction * 100).rounded()))%")
+                    .font(.title3.weight(.semibold))
+                    .monospacedDigit()
             }
         }
         .padding(16)
@@ -1448,39 +1451,6 @@ private struct ActiveCampaignRow: View {
                 .strokeBorder(.white.opacity(0.12), lineWidth: 1)
         }
         .shadow(color: .black.opacity(0.06), radius: 4, y: 1)
-        .contextMenu {
-            if let game = item.game, !item.isPlaceholder {
-                Button {
-                    Settings.shared.setGamePreference(game, state: .preferred)
-                } label: {
-                    GameActionMenuLabel(
-                        title: "Prioritise Game",
-                        systemImage: "star"
-                    )
-                }
-
-                Button {
-                    Settings.shared.setGamePreference(game, state: .excluded)
-                } label: {
-                    GameActionMenuLabel(
-                        title: "Exclude Game",
-                        systemImage: "minus.circle"
-                    )
-                }
-
-                Divider()
-
-                Button {
-                    onSetSteamId(game.name)
-                } label: {
-                    GameActionMenuLabel(
-                        title: "Set Steam ID",
-                        subtitle: "Set a Steam ID to enable high-resolution artwork for this game.",
-                        systemImage: "photo.artframe"
-                    )
-                }
-            }
-        }
     }
 }
 
@@ -1501,7 +1471,7 @@ private struct CampaignLibraryAmbientRow: View {
                 Text("No active campaigns yet")
                     .font(.headline)
 
-                Text("Start mining to see your active drop campaigns.")
+                Text("Active drop campaigns will appear here automatically.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -1754,6 +1724,117 @@ private extension NSColor {
         let lg = linearize(g)
         let lb = linearize(b)
         return (0.2126 * lr) + (0.7152 * lg) + (0.0722 * lb)
+    }
+}
+
+private struct GameProgressItem: Identifiable {
+    let id: String
+    let gameName: String
+    let artworkURL: URL?
+    let totalDrops: Int
+    let completedDrops: Int
+    let progressFraction: Double
+    let tint: Color
+}
+
+private struct GameProgressAccumulator {
+    let id: String
+    var gameName: String
+    var artworkURL: URL?
+    let tint: Color
+    private var dropsById: [String: AggregatedDropProgress] = [:]
+
+    init(
+        id: String,
+        gameName: String,
+        artworkURL: URL?,
+        tint: Color
+    ) {
+        self.id = id
+        self.gameName = gameName
+        self.artworkURL = artworkURL
+        self.tint = tint
+    }
+
+    mutating func merge(_ campaign: Campaign) {
+        if artworkURL == nil {
+            artworkURL = campaign.game.boxArtURL
+        }
+
+        if gameName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            gameName = campaign.game.name
+        }
+
+        for drop in campaign.drops {
+            let key: String
+            let trimmedId = drop.id.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedId.isEmpty {
+                key = "id:\(trimmedId)"
+            } else {
+                key = "name:\(drop.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())"
+            }
+
+            let requiredMinutes = max(drop.requiredMinutes, 0)
+            let accruedMinutes: Int
+            if drop.isClaimed {
+                accruedMinutes = requiredMinutes
+            } else {
+                accruedMinutes = min(max(drop.progress?.currentMinutes ?? 0, 0), requiredMinutes)
+            }
+
+            let isCompleted = drop.isClaimed || drop.isClaimable || (drop.progress?.isComplete ?? false)
+            let merged = AggregatedDropProgress(
+                requiredMinutes: requiredMinutes,
+                accruedMinutes: accruedMinutes,
+                isCompleted: isCompleted
+            )
+
+            if let existing = dropsById[key] {
+                dropsById[key] = existing.merged(with: merged)
+            } else {
+                dropsById[key] = merged
+            }
+        }
+    }
+
+    var item: GameProgressItem {
+        let totalDrops = dropsById.count
+        let completedDrops = dropsById.values.filter(\.isCompleted).count
+        let totalRequiredMinutes = dropsById.values.reduce(0) { $0 + $1.requiredMinutes }
+        let totalAccruedMinutes = dropsById.values.reduce(0) { $0 + $1.accruedMinutes }
+        let progressFraction: Double
+
+        if totalRequiredMinutes > 0 {
+            progressFraction = min(max(Double(totalAccruedMinutes) / Double(totalRequiredMinutes), 0), 1)
+        } else if totalDrops > 0 {
+            progressFraction = Double(completedDrops) / Double(totalDrops)
+        } else {
+            progressFraction = 0
+        }
+
+        return GameProgressItem(
+            id: id,
+            gameName: gameName,
+            artworkURL: artworkURL,
+            totalDrops: totalDrops,
+            completedDrops: completedDrops,
+            progressFraction: progressFraction,
+            tint: tint
+        )
+    }
+}
+
+private struct AggregatedDropProgress {
+    let requiredMinutes: Int
+    let accruedMinutes: Int
+    let isCompleted: Bool
+
+    func merged(with other: AggregatedDropProgress) -> AggregatedDropProgress {
+        AggregatedDropProgress(
+            requiredMinutes: max(requiredMinutes, other.requiredMinutes),
+            accruedMinutes: max(accruedMinutes, other.accruedMinutes),
+            isCompleted: isCompleted || other.isCompleted
+        )
     }
 }
 
