@@ -279,13 +279,16 @@ public actor AggregatedCampaignDataService {
         var totalCampaigns = 0
         var activeCampaigns = 0
         var fullyClaimedCampaigns = 0
-        var totalDrops = 0
-        var totalClaimedDrops = 0
+        
+        // Use sets to deduplicate by ID across all campaigns and accounts
+        var uniqueDropIds = Set<String>()
+        var earnedDropIds = Set<String>()
+        var claimedDropIds = Set<String>()
+        
         let now = Date()
         
         for campaign in campaigns {
             totalCampaigns += 1
-            totalDrops += campaign.totalDrops
             
             if campaign.endDate > now && campaign.isAccountConnected && !campaign.isFullyClaimed {
                 activeCampaigns += 1
@@ -295,9 +298,20 @@ public actor AggregatedCampaignDataService {
                 fullyClaimedCampaigns += 1
             }
             
-            // Sum claimed drops across all accounts
-            for (_, progress) in campaign.accountProgress {
-                totalClaimedDrops += progress.dropsClaimed
+            // Deduplicate drops by ID across all campaigns
+            for drop in campaign.drops {
+                let dropId = drop.id
+                uniqueDropIds.insert(dropId)
+                
+                // Earned = progress.isComplete
+                if drop.progress?.isComplete == true {
+                    earnedDropIds.insert(dropId)
+                }
+                
+                // Claimed = isClaimed
+                if drop.isClaimed {
+                    claimedDropIds.insert(dropId)
+                }
             }
         }
         
@@ -305,8 +319,9 @@ public actor AggregatedCampaignDataService {
             totalCampaigns: totalCampaigns,
             activeCampaigns: activeCampaigns,
             fullyClaimedCampaigns: fullyClaimedCampaigns,
-            totalDrops: totalDrops,
-            totalClaimedDrops: totalClaimedDrops,
+            totalDrops: uniqueDropIds.count,
+            totalEarnedDrops: earnedDropIds.count,
+            totalClaimedDrops: claimedDropIds.count,
             accountCount: accountServices.count
         )
     }
@@ -736,12 +751,13 @@ public struct AggregateStats: Sendable {
     public let activeCampaigns: Int
     public let fullyClaimedCampaigns: Int
     public let totalDrops: Int
+    public let totalEarnedDrops: Int
     public let totalClaimedDrops: Int
     public let accountCount: Int
     
     public var completionPercentage: Double {
         guard totalDrops > 0 else { return 0 }
-        return Double(totalClaimedDrops) / Double(totalDrops) * 100
+        return Double(totalEarnedDrops) / Double(totalDrops) * 100
     }
     
     public init(
@@ -749,6 +765,7 @@ public struct AggregateStats: Sendable {
         activeCampaigns: Int,
         fullyClaimedCampaigns: Int,
         totalDrops: Int,
+        totalEarnedDrops: Int,
         totalClaimedDrops: Int,
         accountCount: Int
     ) {
@@ -756,6 +773,7 @@ public struct AggregateStats: Sendable {
         self.activeCampaigns = activeCampaigns
         self.fullyClaimedCampaigns = fullyClaimedCampaigns
         self.totalDrops = totalDrops
+        self.totalEarnedDrops = totalEarnedDrops
         self.totalClaimedDrops = totalClaimedDrops
         self.accountCount = accountCount
     }
