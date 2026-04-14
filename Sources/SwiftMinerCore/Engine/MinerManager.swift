@@ -70,7 +70,7 @@ public final class MinerManager {
             case .watching: return "Watching"
             case .claiming: return "Claiming"
             case .waitingForStream: return "Waiting for Stream"
-            case .paused: return "Paused"
+            case .paused: return "Standby"
             case .error: return "Error"
             }
         }
