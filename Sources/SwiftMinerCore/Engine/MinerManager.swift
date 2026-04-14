@@ -21,6 +21,12 @@ public final class MinerManager {
         public var dropsClaimed: Int
         public var isRunning: Bool
         
+        /// Resolved "Primary State" for the user-facing activity UI (Phase 4).
+        @MainActor
+        public var primaryState: PrimaryState {
+            PrimaryStateResolver.resolve(for: self)
+        }
+        
         /// Account-specific drop state store (Phase 2). Set asynchronously after engine is ready.
         public var stateStore: AccountStateStore?
         /// When the miner last transitioned to its current status. Used for stuck-detection in health UI.
