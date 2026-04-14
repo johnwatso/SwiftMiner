@@ -1207,19 +1207,19 @@ struct OverviewView: View {
         VStack(alignment: .leading, spacing: 14) {
             sectionHeading("Campaign Progress", subtitle: "Campaigns with drops still to earn.")
 
-            if gameProgressItems.isEmpty {
+            if gameAggregates.isEmpty {
                 CampaignLibraryAmbientRow()
             } else {
                 VStack(spacing: 10) {
-                    ForEach(gameProgressItems) { game in
-                        GameProgressRow(item: game)
+                    ForEach(gameAggregates) { game in
+                        GameProgressRow(item: game, tint: gameTintColor(forGameName: game.gameName))
                     }
                 }
             }
         }
     }
 
-    private var gameProgressItems: [GameProgressItem] {
+    private var gameAggregates: [GameAggregate] {
         let sourceCampaigns: [Campaign]
         if !activeFeedCampaigns.isEmpty {
             sourceCampaigns = activeFeedCampaigns
@@ -1229,42 +1229,26 @@ struct OverviewView: View {
             sourceCampaigns = recentCampaigns
         }
 
-        var groupedGames: [String: GameProgressAccumulator] = [:]
-        var orderedKeys: [String] = []
-
-        for campaign in sourceCampaigns {
-            let key = gameProgressGroupKey(for: campaign.game)
-            if groupedGames[key] == nil {
-                orderedKeys.append(key)
-                groupedGames[key] = GameProgressAccumulator(
-                    id: key,
-                    gameName: campaign.game.name,
-                    artworkURL: navigation.minerManager.dataCoordinator.steamArtworkOverrides[campaign.game.name] ?? campaign.game.boxArtURL,
-                    tint: tintColor(for: campaign)
+        let aggregates = GameAggregateBuilder.build(from: sourceCampaigns)
+        return aggregates
+            .filter { aggregate in
+                // Defensive guard: hard exclude "Just Chatting" at UI layer to prevent regressions.
+                let name = aggregate.gameName.trimmingCharacters(in: .whitespacesAndNewlines)
+                return name.localizedCaseInsensitiveCompare("Just Chatting") != .orderedSame
+            }
+            .map { aggregate in
+                GameAggregate(
+                    id: aggregate.id,
+                    gameName: aggregate.gameName,
+                    artworkURL: navigation.minerManager.dataCoordinator.steamArtworkOverrides[aggregate.gameName] ?? aggregate.artworkURL,
+                    totalDrops: aggregate.totalDrops,
+                    earnedDrops: aggregate.earnedDrops,
+                    claimedDrops: aggregate.claimedDrops,
+                    claimableDrops: aggregate.claimableDrops
                 )
             }
-
-            groupedGames[key]?.merge(campaign)
-        }
-
-        return orderedKeys
-            .compactMap { groupedGames[$0]?.item }
             .prefix(6)
             .map { $0 }
-    }
-
-    private func gameProgressGroupKey(for game: Game) -> String {
-        let trimmedId = game.id.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedId.isEmpty {
-            return "id:\(trimmedId)"
-        }
-
-        let trimmedName = game.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedName.isEmpty {
-            return "name:\(trimmedName.lowercased())"
-        }
-
-        return "fallback:unknown-game"
     }
 
     private func campaignProgressPercent(for campaign: Campaign) -> Double {
@@ -1336,12 +1320,7 @@ struct OverviewView: View {
         if hasPriorityLinkIssue {
             return .orange
         }
-        let name = campaign.game.name.lowercased()
-        if name.contains("rust") { return .orange }
-        if name.contains("fortnite") { return .blue }
-        if name.contains("valorant") { return .red }
-        if name.contains("finals") { return .pink }
-        return .purple
+        return gameTintColor(forGameName: campaign.game.name)
     }
 
     @ViewBuilder
@@ -1410,15 +1389,29 @@ struct OverviewMetricCard: View {
 // MARK: - Campaign Summary Row
 
 private struct GameProgressRow: View {
-    let item: GameProgressItem
+    let item: GameAggregate
+    let tint: Color
 
     private var progressFraction: Double {
         item.progressFraction
     }
 
+    private var statusText: some View {
+        if item.isFinalizing {
+            return Text("Finalizing rewards... (\(item.claimedDrops) of \(item.totalDrops) claimed)")
+                .font(.caption)
+                .foregroundStyle(.orange)
+        }
+        let earnedStr = "\(item.earnedDrops) of \(item.totalDrops) earned"
+        let claimedStr = item.claimedDrops > 0 ? " · \(item.claimedDrops) claimed" : ""
+        return Text(earnedStr + claimedStr)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+    }
+
     var body: some View {
         HStack(spacing: 14) {
-            CampaignThumbnail(url: item.artworkURL, tint: item.tint)
+            CampaignThumbnail(url: item.artworkURL, tint: tint)
                 .frame(width: 56, height: 56)
 
             VStack(alignment: .leading, spacing: 8) {
@@ -1428,12 +1421,10 @@ private struct GameProgressRow: View {
 
                 ProgressView(value: progressFraction)
                     .progressViewStyle(.linear)
-                    .tint(item.tint)
+                    .tint(tint)
                     .frame(maxWidth: 220)
 
-                Text("\(item.completedDrops) of \(item.totalDrops) drops completed")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                statusText
             }
 
             Spacer()
@@ -1442,6 +1433,7 @@ private struct GameProgressRow: View {
                 Text("\(Int((progressFraction * 100).rounded()))%")
                     .font(.title3.weight(.semibold))
                     .monospacedDigit()
+                    .foregroundStyle(item.isCompleted ? .green : (item.isFinalizing ? .orange : .primary))
             }
         }
         .padding(16)
@@ -1727,115 +1719,13 @@ private extension NSColor {
     }
 }
 
-private struct GameProgressItem: Identifiable {
-    let id: String
-    let gameName: String
-    let artworkURL: URL?
-    let totalDrops: Int
-    let completedDrops: Int
-    let progressFraction: Double
-    let tint: Color
-}
-
-private struct GameProgressAccumulator {
-    let id: String
-    var gameName: String
-    var artworkURL: URL?
-    let tint: Color
-    private var dropsById: [String: AggregatedDropProgress] = [:]
-
-    init(
-        id: String,
-        gameName: String,
-        artworkURL: URL?,
-        tint: Color
-    ) {
-        self.id = id
-        self.gameName = gameName
-        self.artworkURL = artworkURL
-        self.tint = tint
-    }
-
-    mutating func merge(_ campaign: Campaign) {
-        if artworkURL == nil {
-            artworkURL = campaign.game.boxArtURL
-        }
-
-        if gameName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            gameName = campaign.game.name
-        }
-
-        for drop in campaign.drops {
-            let key: String
-            let trimmedId = drop.id.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmedId.isEmpty {
-                key = "id:\(trimmedId)"
-            } else {
-                key = "name:\(drop.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())"
-            }
-
-            let requiredMinutes = max(drop.requiredMinutes, 0)
-            let accruedMinutes: Int
-            if drop.isClaimed {
-                accruedMinutes = requiredMinutes
-            } else {
-                accruedMinutes = min(max(drop.progress?.currentMinutes ?? 0, 0), requiredMinutes)
-            }
-
-            let isCompleted = drop.isClaimed || drop.isClaimable || (drop.progress?.isComplete ?? false)
-            let merged = AggregatedDropProgress(
-                requiredMinutes: requiredMinutes,
-                accruedMinutes: accruedMinutes,
-                isCompleted: isCompleted
-            )
-
-            if let existing = dropsById[key] {
-                dropsById[key] = existing.merged(with: merged)
-            } else {
-                dropsById[key] = merged
-            }
-        }
-    }
-
-    var item: GameProgressItem {
-        let totalDrops = dropsById.count
-        let completedDrops = dropsById.values.filter(\.isCompleted).count
-        let totalRequiredMinutes = dropsById.values.reduce(0) { $0 + $1.requiredMinutes }
-        let totalAccruedMinutes = dropsById.values.reduce(0) { $0 + $1.accruedMinutes }
-        let progressFraction: Double
-
-        if totalRequiredMinutes > 0 {
-            progressFraction = min(max(Double(totalAccruedMinutes) / Double(totalRequiredMinutes), 0), 1)
-        } else if totalDrops > 0 {
-            progressFraction = Double(completedDrops) / Double(totalDrops)
-        } else {
-            progressFraction = 0
-        }
-
-        return GameProgressItem(
-            id: id,
-            gameName: gameName,
-            artworkURL: artworkURL,
-            totalDrops: totalDrops,
-            completedDrops: completedDrops,
-            progressFraction: progressFraction,
-            tint: tint
-        )
-    }
-}
-
-private struct AggregatedDropProgress {
-    let requiredMinutes: Int
-    let accruedMinutes: Int
-    let isCompleted: Bool
-
-    func merged(with other: AggregatedDropProgress) -> AggregatedDropProgress {
-        AggregatedDropProgress(
-            requiredMinutes: max(requiredMinutes, other.requiredMinutes),
-            accruedMinutes: max(accruedMinutes, other.accruedMinutes),
-            isCompleted: isCompleted || other.isCompleted
-        )
-    }
+private func gameTintColor(forGameName gameName: String) -> Color {
+    let name = gameName.lowercased()
+    if name.contains("rust") { return .orange }
+    if name.contains("fortnite") { return .blue }
+    if name.contains("valorant") { return .red }
+    if name.contains("finals") { return .pink }
+    return .purple
 }
 
 private struct CampaignRailItem: Identifiable {

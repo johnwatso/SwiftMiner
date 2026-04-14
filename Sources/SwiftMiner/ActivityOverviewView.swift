@@ -87,14 +87,14 @@ struct ActivityOverviewView: View {
     private var selectedMinerPane: some View {
         if let miner = selectedMiner {
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    MinerControlPanel(
-                        miner: miner,
-                        aggregateProgress: aggregateProgress,
-                        nextAction: nextAction(for: miner)
-                    )
+                VStack(alignment: .leading, spacing: 24) {
+                    MinerStateCard(state: miner.primaryState) {
+                        if case .blocked(let reasons) = miner.primaryState, reasons.contains(.accountNotLinked) {
+                            Task { try? await navigation.minerManager.startMiner(minerId: miner.id, priorityGames: [], excludedGames: [], strategy: .mineAll) }
+                        }
+                    }
 
-                    MinerLiveStateSection(miner: miner)
+                    queuedCampaignsSection(for: miner)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(24)
@@ -138,60 +138,26 @@ struct ActivityOverviewView: View {
         aggregateProgress = await navigation.minerManager.getAggregateProgress()
     }
 
-    private func minerEvents(for miner: MinerManager.ManagedMiner) -> [EventEntry] {
-        navigation.events.filter { $0.minerId == miner.id }
-    }
+    @ViewBuilder
+    private func queuedCampaignsSection(for miner: MinerManager.ManagedMiner) -> some View {
+        let queued = miner.allCampaigns.filter { 
+            $0.id != miner.currentCampaignId && $0.isMiningEligible 
+        }
+        
+        if !queued.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("UP NEXT")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.tertiary)
+                    .padding(.leading, 4)
 
-    private func nextAction(for miner: MinerManager.ManagedMiner) -> MinerNextAction {
-        switch miner.status {
-        case .watching:
-            return MinerNextAction(
-                title: "Watching for progress",
-                detail: "Staying on an eligible stream until the current campaign advances or completes.",
-                color: .green
-            )
-        case .waitingForStream:
-            return MinerNextAction(
-                title: "Waiting for a live stream",
-                detail: "Campaign selected but no verified channel is live. Will resume when stream returns.",
-                color: .yellow
-            )
-        case .claiming:
-            return MinerNextAction(
-                title: "Claiming completed rewards",
-                detail: "Wrapping up finished drops before returning to live watching.",
-                color: .purple
-            )
-        case .fetchingCampaigns:
-            return MinerNextAction(
-                title: "Scanning Twitch",
-                detail: "Refreshing campaign availability and looking for the next eligible route.",
-                color: .blue
-            )
-        case .authenticating:
-            return MinerNextAction(
-                title: "Refreshing session",
-                detail: "Checking credentials so the miner can resume automated watching.",
-                color: .orange
-            )
-        case .paused:
-            return MinerNextAction(
-                title: "Standing by between opportunities",
-                detail: "Waiting for a live eligible campaign or stream to become available.",
-                color: .orange
-            )
-        case .error:
-            return MinerNextAction(
-                title: "Needs attention",
-                detail: "Open Events for deeper context, then refresh or reconnect this account.",
-                color: .red
-            )
-        case .idle:
-            return MinerNextAction(
-                title: "Ready",
-                detail: "This miner will fetch campaigns and resume automatically.",
-                color: .secondary
-            )
+                VStack(spacing: 8) {
+                    ForEach(queued.prefix(3)) { campaign in
+                        QueuedCampaignRow(campaign: campaign)
+                    }
+                }
+            }
+            .padding(.horizontal, 2)
         }
     }
 }
@@ -245,358 +211,14 @@ private struct MinerSourceListRow: View {
     }
 }
 
-private struct MinerControlPanel: View {
-    let miner: MinerManager.ManagedMiner
-    let aggregateProgress: AggregateProgress?
-    let nextAction: MinerNextAction
-
-    @Environment(NavigationModel.self) private var navigation
-    @ObservedObject private var settings = Settings.shared
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .top, spacing: 16) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(miner.username)
-                        .font(.title2.weight(.semibold))
-
-                    HStack(spacing: 8) {
-                        Circle()
-                            .fill(nextAction.color)
-                            .frame(width: 8, height: 8)
-
-                        Text(miner.status.displayName)
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Spacer()
-
-                HStack(spacing: 10) {
-                    Button {
-                        Task { await navigation.minerManager.forceRefreshMiner(minerId: miner.id) }
-                    }
-                    label: {
-                        Text("Rescan")
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-
-                }
-            }
-
-            HStack(spacing: 14) {
-                ControlPanelInfoBlock(
-                    title: "Campaign",
-                    value: miner.currentCampaign ?? "No campaign selected",
-                    subtitle: miner.currentCampaign == nil ? "Standing by" : "Currently assigned"
-                )
-
-                ControlPanelInfoBlock(
-                    title: "Next Action",
-                    value: nextAction.title,
-                    subtitle: nextAction.detail
-                )
-
-                ControlPanelInfoBlock(
-                    title: "Drops Claimed",
-                    value: "\(miner.dropsClaimed)",
-                    subtitle: aggregateProgress.map { "\($0.claimedToday) claimed today across all miners" } ?? "Live dashboard stats"
-                )
-            }
-
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 10) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
-
-                    Text("Account Link Alerts")
-                        .font(.subheadline.weight(.semibold))
-
-                    Spacer()
-
-                    Button {
-                        ignoreAccountLinkWarningsBinding.wrappedValue.toggle()
-                    } label: {
-                        Label(
-                            ignoreAccountLinkWarningsBinding.wrappedValue ? "Ignored" : "Active",
-                            systemImage: ignoreAccountLinkWarningsBinding.wrappedValue ? "bell.slash.fill" : "bell.fill"
-                        )
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .tint(ignoreAccountLinkWarningsBinding.wrappedValue ? .gray : .orange)
-                }
-
-                Text("Stops \"Link Required\" alerts for \(miner.username) only. Other miners still notify normally.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(14)
-            .glassCard()
-        }
-        .padding(22)
-        .glassCard()
-        .shadow(color: .black.opacity(0.07), radius: 6, y: 2)
-    }
-
-    private var ignoreAccountLinkWarningsBinding: Binding<Bool> {
-        Binding(
-            get: {
-                settings.isIgnoringAccountLinkWarnings(for: miner.accountId)
-            },
-            set: { newValue in
-                settings.setIgnoreAccountLinkWarnings(newValue, for: miner.accountId)
-                Task {
-                    await navigation.minerManager.setAccountLinkWarningIgnored(minerId: miner.id, ignored: newValue)
-                }
-            }
-        )
-    }
-}
-
-private struct ControlPanelInfoBlock: View {
-    let title: String
-    let value: String
-    let subtitle: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-
-            Text(value)
-                .font(.system(size: 20, weight: .semibold, design: .rounded))
-                .lineLimit(2)
-
-            Text(subtitle)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
-        .padding(16)
-        .glassCard()
-    }
-}
-
-private struct MinerActivityFeedSection: View {
-    let miner: MinerManager.ManagedMiner
-    let entries: [EventEntry]
-
-    @Environment(NavigationModel.self) private var navigation
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Live Activity")
-                        .font(.title3.weight(.semibold))
-                    Text("Recent account-specific events for \(miner.username).")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                if !entries.isEmpty {
-                    Button("Clear All") {
-                        navigation.clearEvents()
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-                }
-            }
-
-            if entries.isEmpty {
-                Text(miner.isRunning ? "Waiting for new activity…" : "This miner will resume automatically when Twitch has work available.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .padding(16)
-                    .glassControlSurface()
-            } else {
-                MinerLogConsole(entries: entries)
-                    .frame(minHeight: 260)
-            }
-        }
-        .padding(22)
-        .glassCard()
-        .shadow(color: .black.opacity(0.06), radius: 4, y: 1)
-    }
-}
-
-// MARK: - Live State Section (Bug 8: Activity vs Events Separation)
-
-private struct MinerLiveStateSection: View {
-    let miner: MinerManager.ManagedMiner
-    @ObservedObject private var settings = Settings.shared
-
-    private var currentCampaign: Campaign? {
-        guard let id = miner.currentCampaignId else { return nil }
-        return miner.allCampaigns.first { $0.id == id }
-    }
-
-    /// First unclaimed drop in the current campaign.
-    private var activeDrop: Drop? {
-        currentCampaign?.drops.first { drop in
-            if let state = miner.stateStore?.dropStates.first(where: { $0.dropId == drop.id }) {
-                return !state.isClaimed
-            }
-            return !drop.isClaimed
-        }
-    }
-
-    private var activeDropState: DropState? {
-        guard let drop = activeDrop else { return nil }
-        return miner.stateStore?.dropStates.first { $0.dropId == drop.id }
-    }
-
-    /// Next eligible campaigns after the current one (up to 3), excluding user-excluded games.
-    private var queuedCampaigns: [Campaign] {
-        Array(miner.allCampaigns
-            .filter { campaign in
-                campaign.id != miner.currentCampaignId
-                    && campaign.isMiningEligible
-                    && !settings.excludedGames.contains(where: {
-                        $0.localizedCaseInsensitiveCompare(campaign.game.name) == .orderedSame
-                    })
-            }
-            .prefix(3))
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Live Activity")
-                .font(.title3.weight(.semibold))
-
-            if let drop = activeDrop {
-                CurrentDropCard(
-                    drop: drop,
-                    state: activeDropState,
-                    campaignName: currentCampaign?.name
-                )
-            } else {
-                Text(
-                    !miner.isRunning
-                        ? "This miner will resume automatically when a campaign becomes available."
-                        : miner.status == .fetchingCampaigns
-                            ? "Scanning for campaigns…"
-                            : "Waiting for an eligible campaign."
-                )
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .padding(16)
-                .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
-            }
-
-            if !queuedCampaigns.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("QUEUED")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(.tertiary)
-
-                    ForEach(queuedCampaigns) { campaign in
-                        QueuedCampaignRow(campaign: campaign)
-                    }
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(22)
-        .glassCard()
-        .shadow(color: .black.opacity(0.06), radius: 4, y: 1)
-    }
-}
-
-private struct CurrentDropCard: View {
-    let drop: Drop
-    let state: DropState?
-    let campaignName: String?
-
-    private var progress: Double {
-        if let s = state { return s.percentComplete / 100 }
-        if let p = drop.progress { return p.percentComplete / 100 }
-        return 0
-    }
-
-    private var progressMinutes: Int {
-        state?.progressMinutes ?? drop.progress?.currentMinutes ?? 0
-    }
-
-    private var requiredMinutes: Int {
-        state?.requiredMinutes ?? drop.requiredMinutes
-    }
-
-    private var minutesRemaining: Int {
-        max(0, requiredMinutes - progressMinutes)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                AsyncImage(url: drop.imageURL) { image in
-                    image.resizable().scaledToFill()
-                } placeholder: {
-                    Image(systemName: "gift.fill").foregroundStyle(.secondary)
-                }
-                .frame(width: 44, height: 44)
-                .clipShape(RoundedRectangle(cornerRadius: GlassRadius.artwork, style: .continuous))
-
-                VStack(alignment: .leading, spacing: 3) {
-                    if let campaign = campaignName {
-                        Text(campaign)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Text(drop.name)
-                        .font(.headline)
-                }
-
-                Spacer()
-
-                Text("\(Int(progress * 100))%")
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(.green)
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                ProgressView(value: progress)
-                    .tint(.green)
-
-                HStack {
-                    Text("\(progressMinutes) / \(requiredMinutes) min")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    Spacer()
-
-                    if minutesRemaining > 0 {
-                        Text("\(minutesRemaining) min remaining")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text("Ready to claim!")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.green)
-                    }
-                }
-            }
-        }
-        .padding(14)
-        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
-    }
-}
-
 private struct QueuedCampaignRow: View {
     let campaign: Campaign
 
     var body: some View {
         HStack(spacing: 10) {
             Circle()
-                .fill(.blue.opacity(0.4))
-                .frame(width: 8, height: 8)
+                .fill(.blue.opacity(0.3))
+                .frame(width: 6, height: 6)
 
             Text(campaign.game.name)
                 .font(.subheadline.weight(.medium))
@@ -612,28 +234,10 @@ private struct QueuedCampaignRow: View {
 
             Spacer()
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
-        .contextMenu {
-            Button {
-                Settings.shared.setGamePreference(campaign.game, state: .preferred)
-            } label: {
-                Label("Prioritise Game", systemImage: "star.fill")
-            }
-            Button(role: .destructive) {
-                Settings.shared.setGamePreference(campaign.game, state: .excluded)
-            } label: {
-                Label("Exclude Game", systemImage: "minus.circle")
-            }
-        }
+        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
     }
-}
-
-private struct MinerNextAction {
-    let title: String
-    let detail: String
-    let color: Color
 }
 
 private struct EmptyActivityStateView: View {

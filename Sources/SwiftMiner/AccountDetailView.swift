@@ -13,8 +13,13 @@ struct AccountDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                headerSection
-                statsSection
+                MinerStateCard(state: miner.primaryState) {
+                    if case .blocked(let reasons) = miner.primaryState, reasons.contains(.accountNotLinked) {
+                        Task { try? await navigation.minerManager.startMiner(minerId: miner.id, priorityGames: [], excludedGames: [], strategy: .mineAll) }
+                    }
+                }
+
+                secondaryStatsSection
                 controlsSection
                 logSection
             }
@@ -33,69 +38,17 @@ struct AccountDetailView: View {
         }
     }
 
-    // MARK: Header
-
-    private var headerSection: some View {
-        let avatarSwatch = AvatarColorPalette.swatch(for: miner.accountId, username: miner.username)
-
-        return HStack(spacing: 16) {
-            ZStack {
-                Circle()
-                    .fill(.ultraThinMaterial)
-                    .frame(width: 56, height: 56)
-                Circle()
-                    .fill(avatarSwatch.gradient)
-                    .opacity(0.9)
-                    .frame(width: 56, height: 56)
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white.opacity(0.24), .clear],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .opacity(0.72)
-                    .frame(width: 56, height: 56)
-                Circle()
-                    .strokeBorder(.white.opacity(0.62), lineWidth: 1)
-                    .frame(width: 56, height: 56)
-                Text(miner.username.prefix(1).uppercased())
-                    .font(.title2.weight(.bold))
-                    .foregroundStyle(avatarSwatch.text)
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(miner.username)
-                    .font(.title2.weight(.semibold))
-
-                StatusBadge(status: miner.status)
-            }
-        }
-        .padding(20)
-        .glassCard()
-    }
-
     // MARK: Stats
 
-    private var statsSection: some View {
-        LazyVGrid(columns: [
-            GridItem(.flexible()),
-            GridItem(.flexible()),
-            GridItem(.flexible())
-        ], spacing: 12) {
+    private var secondaryStatsSection: some View {
+        HStack(spacing: 12) {
             MinerStatCard(
                 label: "Drops Claimed",
                 value: "\(miner.dropsClaimed)",
                 icon: "gift.fill",
                 color: .green
             )
-            MinerStatCard(
-                label: "Status",
-                value: miner.status.displayName,
-                icon: statusIcon,
-                color: statusColor
-            )
+            
             MinerStatCard(
                 label: "Campaign",
                 value: miner.currentCampaign ?? "None",
@@ -103,8 +56,6 @@ struct AccountDetailView: View {
                 color: .purple
             )
         }
-        .padding(18)
-        .glassCard()
     }
 
     // MARK: Controls
@@ -171,37 +122,7 @@ struct AccountDetailView: View {
         .padding(20)
         .glassCard()
     }
-
-    // MARK: Helpers
-
-    private var statusIcon: String {
-        switch miner.status {
-        case .watching:          return "eye.fill"
-        case .authenticating:    return "key.fill"
-        case .fetchingCampaigns: return "arrow.down.circle.fill"
-        case .claiming:          return "gift.fill"
-        case .waitingForStream:  return "clock.fill"
-        case .paused:            return "clock.badge.checkmark"
-        case .error:             return "exclamationmark.triangle.fill"
-        case .idle:              return "moon.fill"
-        }
-    }
-
-    private var statusColor: Color {
-        switch miner.status {
-        case .watching:          return .green
-        case .authenticating:    return .orange
-        case .fetchingCampaigns: return .blue
-        case .claiming:          return .purple
-        case .waitingForStream:  return .cyan
-        case .paused:            return .orange
-        case .error:             return .secondary
-        case .idle:              return .gray
-        }
-    }
 }
-
-// MARK: - Stat Card
 
 private struct MinerStatCard: View {
     let label: String
