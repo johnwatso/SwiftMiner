@@ -124,7 +124,7 @@ public final class NavigationModel {
         let settings = Settings.shared
         minerManager.updateClientId(settings.resolvedClientId)
         await minerManager.setup(
-            autoStart: settings.autoStartOnLaunch,
+            autoStart: true,
             priorityGames: settings.priorityGames,
             excludedGames: settings.excludedGames,
             strategy: settings.miningStrategy,
