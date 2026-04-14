@@ -79,7 +79,7 @@ struct MinerHealthCard: View {
                 if anyRunning {
                     healthyRow
                 } else {
-                    pausedRow
+                    standbyRow
                 }
             } else {
                 issuesContent
@@ -104,12 +104,12 @@ struct MinerHealthCard: View {
         }
     }
 
-    private var pausedRow: some View {
+    private var standbyRow: some View {
         HStack(spacing: 10) {
-            Image(systemName: "pause.circle.fill")
+            Image(systemName: "clock.badge.checkmark")
                 .foregroundStyle(.secondary)
                 .font(.body.weight(.semibold))
-            Text(miners.count == 1 ? "Mining paused" : "All miners paused")
+            Text(miners.count == 1 ? "Miner is standing by" : "All miners are standing by")
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(.secondary)
             Spacer()

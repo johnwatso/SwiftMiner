@@ -239,7 +239,7 @@ public enum SessionStatus: String, Codable, Sendable, Equatable {
         case .watching: return "Watching"
         case .claiming: return "Claiming"
         case .waitingForStream: return "Waiting for Stream"
-        case .paused: return "Paused"
+        case .paused: return "Standby"
         case .stopped: return "Stopped"
         case .error: return "Error"
         }

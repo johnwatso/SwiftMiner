@@ -58,16 +58,6 @@ struct MinerApp: App {
                 }
                 .keyboardShortcut("k", modifiers: [.command, .shift])
 
-                Button("Start All Miners") {
-                    Task { await appModel.startAll() }
-                }
-                .keyboardShortcut("s", modifiers: [.command, .shift])
-
-                Button("Stop All Miners") {
-                    Task { await appModel.stopAll() }
-                }
-                .keyboardShortcut("x", modifiers: [.command, .shift])
-
                 Button("Refresh Progress") {
                     Task { await appModel.refreshProgress() }
                 }
@@ -156,16 +146,6 @@ struct MenuBarContent: View {
 
             Divider()
 
-            Button("Start All") {
-                Task { await appModel.startAll() }
-            }
-            .disabled(appModel.activeMiners == appModel.totalMiners)
-
-            Button("Stop All") {
-                Task { await appModel.stopAll() }
-            }
-            .disabled(appModel.activeMiners == 0)
-
             Button("Claim All Drops") {
                 Task { await appModel.claimAllDrops() }
             }
@@ -192,7 +172,7 @@ struct MenuBarContent: View {
 
     private var statusText: String {
         if appModel.activeMiners == 0 {
-            return "All miners stopped"
+            return "No miners active"
         } else if appModel.activeMiners == appModel.totalMiners {
             return "All miners active"
         } else {
@@ -209,7 +189,7 @@ struct MenuBarContent: View {
         case .error:             return "exclamationmark.triangle.fill"
         case .waitingForStream:  return "clock.fill"
         case .stopped, .idle:    return "stop.fill"
-        case .paused:            return "pause.fill"
+        case .paused:            return "clock.fill"
         }
     }
 }

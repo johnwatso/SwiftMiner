@@ -255,23 +255,58 @@ struct AuthRequiredSheet: View {
     }
 
     private var isSuccessState: Bool {
-        if case .succeedeHÙÚ[”Ù\šXÙKœİ]HÂˆ™]\›ˆYBˆBˆ™]\›ˆ˜[ÙBˆB‚ˆš]˜]H˜\ˆİXØÙ\ÜĞXİ[Û•]Nˆİš[™ÈÂˆ”İ\Z[š[™È‚ˆB‚ˆËÈPT’ÎˆH[™\œÂ‚ˆš]˜]H[˜È[™TİXØÙ\ÜÊXØÛİ[ˆXØÛİ[
-HÂˆËÈ[œİ\™HZ[™\“X[˜YÙ\ˆ\Ù\ÈHÛÜœ™XİÛY[QÚ[ˆÜ™X][™ÈH[™Ú[™K‚ˆËÈ\ÈX]\œÈÚ[ˆHÛY[QØ\Èİ\YYšXHÙ][™ÜÈ˜]\ˆ[ˆ[ˆ˜\‹‚ˆ˜]šYØ][Û‹›Z[™\“X[˜YÙ\‹\]PÛY[Y
-Ù][™ÜËœÚ\™Yœ™\ÛÛ™YÛY[Y
-B‚ˆ]Z[™\’YH˜]šYØ][Û‹›Z[™\“X[˜YÙ\‹˜YXØÛİ[
-XØÛİ[
-Bˆ\ÚÈÂˆ]Ù][™ÜÈHÙ][™ÜËœÚ\™YˆOÈ]ØZ]˜]šYØ][Û‹›Z[™\“X[˜YÙ\‹œİ\Z[™\ŠˆZ[™\’YˆZ[™\’Yˆš[Üš]QØ[Y\ÎˆÙ][™ÜËœš[Üš]QØ[Y\Ëˆ^ÛYYØ[Y\ÎˆÙ][™ÜË™^ÛYYØ[Y\Ëˆİ˜]YŞNˆÙ][™ÜË›Z[š[™Ôİ˜]YŞKˆ[˜X›P˜YÙ\Ñ[[İ\ÎˆÙ][™ÜË™[˜X›P˜YÙ\Ñ[[İ\ËˆÚİĞÛZ[S›İYšXØ][ÛœÎˆÙ][™ÜËœÚİĞÛZ[S›İYšXØ][ÛœÂˆ
-Bˆ]ØZ]XZ[XİÜ‹œ[ˆÂˆØÚY[TİXØÙ\ÜÑ\ÛZ\ÜÊ
-BˆBˆBˆB‚ˆXZ[XİÜ‚ˆš]˜]H[˜ÈØÚY[TİXØÙ\ÜÑ\ÛZ\ÜÊ
-HÂˆİXØÙ\ÜÑ\ÛZ\ÜÕ\ÚÏË˜Ø[˜Ù[
+        if case .succeeded = loginService.state {
+            return true
+        }
+        return false
+    }
 
-BˆİXØÙ\ÜÑ\ÛZ\ÜÕ\ÚÈH\ÚÈÂˆOÈ]ØZ]\ÚËœÛY\
-˜[›ÜÙXÛÛ™ÎˆWÎÌÌ
-BˆİX\™U\ÚËš\ĞØ[˜Ù[Y[ÙHÈ™]\›ˆBˆ\Ô™\Ù[YH˜[ÙBˆBˆB‚ˆš]˜]H[˜È\ÛZ\ÜÔİXØÙ\ÜÔİ]J
-HÂˆİXØÙ\ÜÑ\ÛZ\ÜÕ\ÚÏË˜Ø[˜Ù[
+    private var successActionTitle: String {
+        "Done"
+    }
 
-BˆİXØÙ\ÜÑ\ÛZ\ÜÕ\ÚÈHš[ˆ\Ô™\Ù[YH˜[ÙBˆBŸB‚‹ËÈPT’ÎˆH™]šY]Â‚ˆÔ™]šY]ÈÂˆ]]™\]Z\™YÚY]
-\Ô™\Ù[Yˆ˜ÛÛœİ[
-YJJBˆ™[š\›Û›Y[
-˜]šYØ][Û“[Ù[
-ÛY[Yˆœ™]šY]ÈŠJBŸB
+    private func dismissSuccessState() {
+        successDismissTask?.cancel()
+        successDismissTask = nil
+        isPresented = false
+    }
+
+    // MARK: - Handlers
+
+    private func handleSuccess(account: Account) {
+        successDismissTask?.cancel()
+
+        // Ensure MinerManager uses the correct client ID when creating the engine.
+        // This matters when the client ID was supplied via Settings rather than env var.
+        navigation.minerManager.updateClientId(Settings.shared.resolvedClientId)
+
+        let minerId = navigation.minerManager.addAccount(account)
+        Task {
+            let settings = Settings.shared
+            try? await navigation.minerManager.startMiner(
+                minerId: minerId,
+                priorityGames: settings.priorityGames,
+                excludedGames: settings.excludedGames,
+                strategy: settings.miningStrategy,
+                enableBadgesEmotes: settings.enableBadgesEmotes,
+                showClaimNotifications: settings.showClaimNotifications
+            )
+        }
+
+        successDismissTask = Task {
+            // Brief pause so the user sees the success state.
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                dismissSuccessState()
+            }
+        }
+    }
+}
+
+// MARK: - Preview
+
+#Preview {
+    AuthRequiredSheet(isPresented: .constant(true))
+        .environment(NavigationModel(clientId: "preview"))
+}

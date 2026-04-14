@@ -39,24 +39,6 @@ struct MinerTableView: View {
             
             TableColumn("Actions") { miner in
                 HStack(spacing: 8) {
-                    if miner.isRunning {
-                        Button {
-                            Task { await stopMiner(miner) }
-                        } label: {
-                            Image(systemName: "stop.fill")
-                                .foregroundStyle(.red)
-                        }
-                        .buttonStyle(.borderless)
-                    } else {
-                        Button {
-                            Task { await startMiner(miner) }
-                        } label: {
-                            Image(systemName: "play.fill")
-                                .foregroundStyle(.green)
-                        }
-                        .buttonStyle(.borderless)
-                    }
-                    
                     Button {
                         navigation.selectedMinerId = miner.id
                     } label: {
@@ -68,22 +50,6 @@ struct MinerTableView: View {
             .width(min: 80, ideal: 100)
         }
         .tableStyle(.inset)
-    }
-    
-    private func startMiner(_ miner: MinerManager.ManagedMiner) async {
-        let settings = Settings.shared
-        try? await navigation.minerManager.startMiner(
-            minerId: miner.id,
-            priorityGames: settings.priorityGames,
-            excludedGames: settings.excludedGames,
-            strategy: settings.miningStrategy,
-            enableBadgesEmotes: settings.enableBadgesEmotes,
-            showClaimNotifications: settings.showClaimNotifications
-        )
-    }
-    
-    private func stopMiner(_ miner: MinerManager.ManagedMiner) async {
-        await navigation.minerManager.stopMiner(minerId: miner.id)
     }
 }
 
