@@ -231,3 +231,69 @@ public enum AccountMiningStatus: String, Codable, Sendable, Equatable {
     /// Account is linked but not currently mining this campaign
     case idle = "IDLE"
 }
+
+// MARK: - Overview Projection
+
+/// Overview-only projection states backed strictly by Drops view data.
+public enum CampaignOverviewState: String, Sendable, Equatable {
+    case available = "AVAILABLE"
+    case inProgress = "IN_PROGRESS"
+    case claimable = "CLAIMABLE"
+    case completed = "COMPLETED"
+}
+
+public extension CampaignViewData {
+    /// True when at least one unclaimed drop has real Twitch watch progress.
+    var hasValidProgress: Bool {
+        overviewProgressFraction != nil
+    }
+
+    /// True when all drops are claimed, using inventory-backed claimed state.
+    var isCompleted: Bool {
+        if totalDrops > 0 {
+            return dropsClaimed >= totalDrops
+        }
+        if !drops.isEmpty {
+            return drops.allSatisfy(\.isClaimed)
+        }
+        return isClaimed
+    }
+
+    /// Overview must only surface campaigns with real progress or completed rewards.
+    var isDisplayableInOverview: Bool {
+        hasValidProgress || isCompleted
+    }
+
+    /// Overview progress is projected from real drop progress objects only.
+    /// It intentionally avoids averaging campaign percentages or fabricating 0%.
+    var overviewProgressFraction: Double? {
+        drops
+            .compactMap { drop -> Double? in
+                guard !drop.isClaimed else { return nil }
+                guard drop.isClaimable || drop.currentMinutes > 0 else { return nil }
+                return min(max(drop.progress, 0), 1)
+            }
+            .max()
+    }
+
+    var overviewState: CampaignOverviewState {
+        if isCompleted {
+            return .completed
+        }
+        if drops.contains(where: { $0.isClaimable && !$0.isClaimed }) {
+            return .claimable
+        }
+        if hasValidProgress {
+            return .inProgress
+        }
+        return .available
+    }
+
+    var overviewClaimedRewardCount: Int {
+        max(dropsClaimed, drops.filter(\.isClaimed).count)
+    }
+
+    var overviewRemainingRewardCount: Int {
+        max(totalDrops - overviewClaimedRewardCount, 0)
+    }
+}

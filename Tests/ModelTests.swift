@@ -348,4 +348,117 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(event.dropId, "d1")
         XCTAssertEqual(event.channelId, "ch1")
     }
+
+    // MARK: - Overview Projection
+
+    func testOverviewProjectionHidesCampaignWithoutRealProgress() {
+        let campaign = makeCampaignViewData(
+            dropsClaimed: 0,
+            totalDrops: 2,
+            drops: [
+                makeDropViewData(id: "d1", currentMinutes: 0, requiredMinutes: 60, progress: 0, isClaimed: false),
+                makeDropViewData(id: "d2", currentMinutes: 0, requiredMinutes: 60, progress: 0, isClaimed: false)
+            ]
+        )
+
+        XCTAssertFalse(campaign.hasValidProgress)
+        XCTAssertFalse(campaign.isCompleted)
+        XCTAssertFalse(campaign.isDisplayableInOverview)
+        XCTAssertNil(campaign.overviewProgressFraction)
+        XCTAssertEqual(campaign.overviewState, .available)
+    }
+
+    func testOverviewProjectionUsesBestRealDropProgressInsteadOfCampaignAverage() {
+        let campaign = makeCampaignViewData(
+            progress: 0.42,
+            dropsClaimed: 0,
+            totalDrops: 3,
+            drops: [
+                makeDropViewData(id: "d1", currentMinutes: 15, requiredMinutes: 60, progress: 0.25, isClaimed: false),
+                makeDropViewData(id: "d2", currentMinutes: 45, requiredMinutes: 60, progress: 0.75, isClaimed: false),
+                makeDropViewData(id: "d3", currentMinutes: 0, requiredMinutes: 60, progress: 0, isClaimed: false)
+            ]
+        )
+
+        XCTAssertTrue(campaign.hasValidProgress)
+        XCTAssertTrue(campaign.isDisplayableInOverview)
+        XCTAssertEqual(campaign.overviewState, .inProgress)
+        XCTAssertEqual(campaign.overviewProgressFraction ?? -1, 0.75, accuracy: 0.001)
+    }
+
+    func testOverviewProjectionTreatsClaimableAsDisplayableProgress() {
+        let campaign = makeCampaignViewData(
+            dropsClaimed: 0,
+            totalDrops: 1,
+            drops: [
+                makeDropViewData(id: "d1", currentMinutes: 60, requiredMinutes: 60, progress: 1.0, isClaimed: false, isClaimable: true)
+            ]
+        )
+
+        XCTAssertTrue(campaign.hasValidProgress)
+        XCTAssertTrue(campaign.isDisplayableInOverview)
+        XCTAssertEqual(campaign.overviewState, .claimable)
+        XCTAssertEqual(campaign.overviewProgressFraction ?? -1, 1.0, accuracy: 0.001)
+    }
+
+    func testOverviewProjectionTreatsCompletedAsDisplayableWithoutProgress() {
+        let campaign = makeCampaignViewData(
+            dropsClaimed: 2,
+            totalDrops: 2,
+            drops: [
+                makeDropViewData(id: "d1", currentMinutes: 60, requiredMinutes: 60, progress: 1.0, isClaimed: true),
+                makeDropViewData(id: "d2", currentMinutes: 60, requiredMinutes: 60, progress: 1.0, isClaimed: true)
+            ]
+        )
+
+        XCTAssertFalse(campaign.hasValidProgress)
+        XCTAssertTrue(campaign.isCompleted)
+        XCTAssertTrue(campaign.isDisplayableInOverview)
+        XCTAssertNil(campaign.overviewProgressFraction)
+        XCTAssertEqual(campaign.overviewState, .completed)
+    }
+
+    private func makeCampaignViewData(
+        progress: Double = 0,
+        dropsClaimed: Int,
+        totalDrops: Int,
+        drops: [DropViewData]
+    ) -> CampaignViewData {
+        CampaignViewData(
+            id: "c1",
+            gameName: "Test Game",
+            campaignName: "Test Campaign",
+            artworkURL: nil,
+            progress: progress,
+            isClaimed: dropsClaimed == totalDrops && totalDrops > 0,
+            dropsClaimed: dropsClaimed,
+            totalDrops: totalDrops,
+            startDate: Date().addingTimeInterval(-3600),
+            endDate: Date().addingTimeInterval(3600),
+            drops: drops
+        )
+    }
+
+    private func makeDropViewData(
+        id: String,
+        currentMinutes: Int,
+        requiredMinutes: Int,
+        progress: Double,
+        isClaimed: Bool,
+        isClaimable: Bool = false
+    ) -> DropViewData {
+        DropViewData(
+            id: id,
+            name: id,
+            description: nil,
+            imageURL: nil,
+            rewardType: .inGame,
+            requiredMinutes: requiredMinutes,
+            currentMinutes: currentMinutes,
+            progress: progress,
+            isClaimed: isClaimed,
+            isClaimable: isClaimable,
+            isEarnable: !isClaimed && !isClaimable
+        )
+    }
 }
