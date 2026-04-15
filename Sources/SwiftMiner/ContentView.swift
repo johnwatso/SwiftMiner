@@ -191,14 +191,15 @@ struct OverviewView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var settings = Settings.shared
     @State private var progress: AggregateProgress?
+    @State private var overviewCampaigns: [CampaignViewData] = []
     @State private var isRefreshing = false
     @State private var steamIdSheetPresentation: SteamIdSheetPresentation?
 
-    private var campaigns: [Campaign] {
-        navigation.minerManager.campaignStore.campaigns
+    private var campaigns: [CampaignViewData] {
+        overviewCampaigns
             .filter { campaign in
                 !settings.excludedGames.contains(where: { 
-                    $0.localizedCaseInsensitiveCompare(campaign.game.name) == .orderedSame 
+                    $0.localizedCaseInsensitiveCompare(campaign.gameName) == .orderedSame 
                 })
             }
     }
@@ -246,6 +247,12 @@ struct OverviewView: View {
     private func refreshSummary() async {
         isRefreshing = true
         progress = await navigation.minerManager.getAggregateProgress()
+        if overviewCampaigns.isEmpty && !navigation.minerManager.dataCoordinator.lastKnownAllCampaigns.isEmpty {
+            overviewCampaigns = navigation.minerManager.dataCoordinator.lastKnownAllCampaigns
+        }
+        overviewCampaigns = await navigation.minerManager.dataCoordinator.allCampaigns(
+            preferSteamArtwork: Settings.shared.preferSteamArtwork
+        )
         await enrichPreferredGameArtwork()
         isRefreshing = false
     }
@@ -262,6 +269,9 @@ struct OverviewView: View {
         }
 
         progress = await navigation.minerManager.getAggregateProgress()
+        overviewCampaigns = await navigation.minerManager.dataCoordinator.allCampaigns(
+            preferSteamArtwork: Settings.shared.preferSteamArtwork
+        )
         await enrichPreferredGameArtwork()
     }
 
@@ -323,8 +333,12 @@ struct OverviewView: View {
     }
 
     private var activeCampaignCount: Int {
-        navigation.minerManager.campaignStore.campaigns
-            .filter { $0.isMiningEligible }
+        campaigns
+            .filter { campaign in
+                campaign.isAccountConnected
+                    && campaign.endDate > Date()
+                    && campaign.overviewState != .completed
+            }
             .count
     }
 
@@ -475,7 +489,7 @@ struct OverviewView: View {
             let name = seedNames[index % seedNames.count]
             var item: CampaignRailItem
 
-            if let existingCampaign = campaigns.first(where: { $0.game.name.localizedCaseInsensitiveCompare(name) == .orderedSame }) {
+            if let existingCampaign = campaigns.first(where: { $0.gameName.localizedCaseInsensitiveCompare(name) == .orderedSame }) {
                 item = makeRailItem(for: existingCampaign, section: .active)
             } else {
                 item = makeSyntheticDebugQueueItem(gameName: name, index: index)
@@ -511,7 +525,7 @@ struct OverviewView: View {
             return deduplicatedGameNames(normalized)
         }
 
-        let fallback = campaigns.map(\.game.name)
+        let fallback = campaigns.map(\.gameName)
         return deduplicatedGameNames(fallback).prefix(8).map { $0 }
     }
 
@@ -557,46 +571,19 @@ struct OverviewView: View {
         settings.gamePreferences.filter { $0.state == .preferred }
     }
 
-    private var currentlyMiningCampaigns: [Campaign] {
+    private var currentlyMiningCampaigns: [CampaignViewData] {
         campaigns.filter(isBeingWatched(_:))
     }
 
-    private var orderedMiningQueueCampaigns: [Campaign] {
-        var ordered: [Campaign] = []
-        var seenIds = Set<String>()
-
-        let relevantMiners = navigation.minerManager.miners.filter { miner in
-            miner.isRunning
-                || miner.status == .watching
-                || miner.status == .claiming
-                || miner.status == .paused
-                || miner.status == .fetchingCampaigns
-        }
-
-        for miner in relevantMiners {
-            if let current = currentCampaign(for: miner), insertUniqueCampaign(current, into: &ordered, seenIds: &seenIds) {
-                // Keep the actively selected campaign first for this miner, even if not currently eligible.
-            }
-
-            for campaign in queueCandidates(for: miner) {
-                _ = insertUniqueCampaign(campaign, into: &ordered, seenIds: &seenIds)
-            }
-        }
-
-        if ordered.isEmpty {
-            for campaign in activeFeedCampaigns {
-                if !campaign.isMiningEligible { continue }
-                _ = insertUniqueCampaign(campaign, into: &ordered, seenIds: &seenIds)
-            }
-        }
-
-        return ordered
+    private var orderedMiningQueueCampaigns: [CampaignViewData] {
+        activeFeedCampaigns.sorted(by: campaignDisplaySort)
     }
 
-    private var prioritisedCampaigns: [Campaign] {
+    private var prioritisedCampaigns: [CampaignViewData] {
         campaigns
             .filter { campaign in
-                campaign.relevance == .prioritised || preferredGames.contains(where: { matches(campaign, preference: $0) })
+                (campaign.relevance == .prioritised || preferredGames.contains(where: { matches(campaign, preference: $0) }))
+                    && campaign.isDisplayableInOverview
             }
             .sorted(by: campaignDisplaySort)
     }
@@ -607,23 +594,21 @@ struct OverviewView: View {
         }
     }
 
-    private var activeFeedCampaigns: [Campaign] {
+    private var activeFeedCampaigns: [CampaignViewData] {
         campaigns
             .filter { campaign in
                 let state = visualState(for: campaign)
                 return state == .watching
                     || state == .claimable
                     || state == .inProgress
-                    || campaign.isMiningEligible
-                    || campaign.relevance == .active
             }
             .sorted(by: campaignDisplaySort)
     }
 
-    private var recentCampaigns: [Campaign] {
+    private var recentCampaigns: [CampaignViewData] {
         campaigns
             .filter { campaign in
-                isCampaignClaimed(campaign) || campaign.relevance == .recent
+                campaign.isCompleted
             }
             .sorted { recentActivityDate(for: $0) > recentActivityDate(for: $1) }
     }
@@ -656,92 +641,42 @@ struct OverviewView: View {
         return Array(prioritisedFeedItems.prefix(6))
     }
 
-    private func makeRailItem(for campaign: Campaign, section: CampaignFeedSection) -> CampaignRailItem {
+    private func makeRailItem(for campaign: CampaignViewData, section: CampaignFeedSection) -> CampaignRailItem {
         let state = visualState(for: campaign)
         let hasPriorityLinkIssue = hasPriorityLinkIssue(for: campaign, section: section)
+        let game = Game(id: campaign.id, name: campaign.gameName, boxArtURL: campaign.artworkURL)
 
         return CampaignRailItem(
             id: "\(section.rawValue)-\(campaign.id)",
             section: section,
-            gameName: campaign.game.name,
-            campaignName: campaign.name,
+            gameName: campaign.gameName,
+            campaignName: campaign.campaignName,
             eyebrow: eyebrowText(for: campaign, section: section, state: state, hasPriorityLinkIssue: hasPriorityLinkIssue),
             progressText: campaignDetailText(for: campaign, state: state, hasPriorityLinkIssue: hasPriorityLinkIssue),
             progressPercent: campaignProgressPercent(for: campaign),
-            artworkURL: navigation.minerManager.dataCoordinator.steamArtworkOverrides[campaign.game.name] ?? campaign.game.boxArtURL,
+            artworkURL: navigation.minerManager.dataCoordinator.steamArtworkOverrides[campaign.gameName] ?? campaign.artworkURL,
             tint: tintColor(for: campaign, hasPriorityLinkIssue: hasPriorityLinkIssue),
-            hasOnlyBadgesOrEmotes: campaign.hasOnlyBadgesOrEmotes,
+            hasOnlyBadgesOrEmotes: false,
             visualState: state,
             watchers: watchers(for: campaign),
             isDimmed: state == .claimed,
             isPlaceholder: false,
             showsLiveMotion: section == .active && (state == .watching || state == .inProgress || state == .claimable),
             issueBadge: hasPriorityLinkIssue ? .accountLinkRequired : nil,
-            game: campaign.game
+            game: game
         )
     }
 
-    private func currentCampaign(for miner: MinerManager.ManagedMiner) -> Campaign? {
+    private func currentCampaign(for miner: MinerManager.ManagedMiner) -> CampaignViewData? {
         if let campaignId = miner.currentCampaignId {
-            if let localMatch = campaigns.first(where: { $0.id == campaignId }) {
-                return localMatch
-            }
-            if let minerMatch = miner.allCampaigns.first(where: { $0.id == campaignId }) {
-                return minerMatch
-            }
+            return campaigns.first(where: { $0.id == campaignId })
         }
 
         guard let campaignName = miner.currentCampaign else {
             return nil
         }
 
-        if let localMatch = campaigns.first(where: { $0.name == campaignName }) {
-            return localMatch
-        }
-        return miner.allCampaigns.first(where: { $0.name == campaignName })
-    }
-
-    private func queueCandidates(for miner: MinerManager.ManagedMiner) -> [Campaign] {
-        let currentId = miner.currentCampaignId
-
-        return miner.allCampaigns
-            .filter { campaign in
-                if let currentId, campaign.id == currentId {
-                    return false
-                }
-
-                if isGameExcluded(campaign.game.name) {
-                    return false
-                }
-
-                return campaign.isMiningEligible
-            }
-            .sorted(by: queueCampaignSort)
-    }
-
-    private func insertUniqueCampaign(
-        _ campaign: Campaign,
-        into ordered: inout [Campaign],
-        seenIds: inout Set<String>
-    ) -> Bool {
-        if seenIds.contains(campaign.id) {
-            return false
-        }
-        if isGameExcluded(campaign.game.name) {
-            return false
-        }
-        seenIds.insert(campaign.id)
-        ordered.append(campaign)
-        return true
-    }
-
-    private func queueCampaignSort(lhs: Campaign, rhs: Campaign) -> Bool {
-        let lhsPriority = priorityOrderIndex(for: lhs.game.name)
-        let rhsPriority = priorityOrderIndex(for: rhs.game.name)
-        if lhsPriority != rhsPriority {
-            return lhsPriority < rhsPriority
-        }
-        return campaignDisplaySort(lhs: lhs, rhs: rhs)
+        return campaigns.first(where: { $0.campaignName == campaignName })
     }
 
     private func priorityOrderIndex(for gameName: String) -> Int {
@@ -845,27 +780,23 @@ struct OverviewView: View {
         }
     }
 
-    private func visualState(for campaign: Campaign) -> CampaignVisualState {
-        if isCampaignClaimed(campaign) {
+    private func visualState(for campaign: CampaignViewData) -> CampaignVisualState {
+        if campaign.isCompleted {
             return .claimed
         }
 
-        if isBeingWatched(campaign) {
-            return .watching
-        }
-
-        if hasClaimableRewards(campaign) {
+        if campaign.overviewState == .claimable {
             return .claimable
         }
 
-        if hasStartedProgress(campaign) {
-            return .inProgress
+        if campaign.hasValidProgress {
+            return isBeingWatched(campaign) ? .watching : .inProgress
         }
 
         return .idle
     }
 
-    private func watchers(for campaign: Campaign) -> [CampaignWatcher] {
+    private func watchers(for campaign: CampaignViewData) -> [CampaignWatcher] {
         return watchingMiners(for: campaign).map { miner in
             CampaignWatcher(
                 id: miner.accountId,
@@ -889,7 +820,7 @@ struct OverviewView: View {
         }
     }
 
-    private func watchingMiners(for campaign: Campaign) -> [MinerManager.ManagedMiner] {
+    private func watchingMiners(for campaign: CampaignViewData) -> [MinerManager.ManagedMiner] {
         navigation.minerManager.miners.filter { miner in
             // Must be actively running with watching/claiming status
             guard miner.status == .watching || miner.status == .claiming else {
@@ -901,24 +832,20 @@ struct OverviewView: View {
                 return id == campaign.id
             }
 
-            return miner.currentCampaign == campaign.name
+            return miner.currentCampaign == campaign.campaignName
         }
     }
 
-    private func isBeingWatched(_ campaign: Campaign) -> Bool {
+    private func isBeingWatched(_ campaign: CampaignViewData) -> Bool {
         !watchingMiners(for: campaign).isEmpty
     }
 
-    private func matches(_ campaign: Campaign, preference: GamePreference) -> Bool {
-        if !preference.gameId.isEmpty, campaign.game.id == preference.gameId {
-            return true
-        }
-
-        return campaign.game.name.localizedCaseInsensitiveCompare(preference.gameName) == .orderedSame
+    private func matches(_ campaign: CampaignViewData, preference: GamePreference) -> Bool {
+        campaign.gameName.localizedCaseInsensitiveCompare(preference.gameName) == .orderedSame
     }
 
     private func eyebrowText(
-        for campaign: Campaign,
+        for campaign: CampaignViewData,
         section: CampaignFeedSection,
         state: CampaignVisualState,
         hasPriorityLinkIssue: Bool = false
@@ -929,7 +856,7 @@ struct OverviewView: View {
 
         switch state {
         case .watching:
-            return "Watching"
+            return "In Progress"
         case .claimable:
             return "Claimable"
         case .inProgress:
@@ -949,7 +876,7 @@ struct OverviewView: View {
     }
 
     private func campaignDetailText(
-        for campaign: Campaign,
+        for campaign: CampaignViewData,
         state: CampaignVisualState,
         hasPriorityLinkIssue: Bool = false
     ) -> String {
@@ -957,57 +884,48 @@ struct OverviewView: View {
             return "Link the game publisher account in Twitch Drops to start mining."
         }
 
-        let remainingMinutes = campaignRemainingMinutes(for: campaign)
         let activeWatchers = watchers(for: campaign)
+        let progressPercent = Int(campaignProgressPercent(for: campaign).rounded())
 
         switch state {
         case .watching:
-            if remainingMinutes > 0 {
-                return remainingTimeText(minutes: remainingMinutes)
+            let watcherCount = activeWatchers.count
+            let watcherCopy = "\(watcherCount) miner\(watcherCount == 1 ? "" : "s") watching"
+            if progressPercent > 0 {
+                return "\(watcherCopy) • \(progressPercent)% reward progress"
             }
-            return activeWatchers.isEmpty ? "In progress" : "Watching now"
+            return watcherCopy
         case .claimable:
             return "Ready to claim"
         case .inProgress:
-            return remainingMinutes > 0
-                ? remainingTimeText(minutes: remainingMinutes)
-                : "In progress"
+            return progressPercent > 0 ? "\(progressPercent)% reward progress" : "Progress synced from Drops"
         case .claimed:
-            return "Completed"
+            return "All campaign rewards claimed"
         case .idle:
-            if campaign.startDate > Date() {
-                return "Not started"
-            }
-            return campaign.isMiningEligible ? "Available" : "Not started"
+            return "Available"
         }
     }
 
-    private func hasPriorityLinkIssue(for campaign: Campaign, section: CampaignFeedSection) -> Bool {
+    private func hasPriorityLinkIssue(for campaign: CampaignViewData, section: CampaignFeedSection) -> Bool {
         guard section == .prioritised else { return false }
-        guard campaign.isTimeActive else { return false }
+        guard campaign.startDate <= Date(), campaign.endDate > Date() else { return false }
         guard !campaign.isAccountConnected else { return false }
         guard campaign.drops.contains(where: { !$0.isClaimed }) else { return false }
         return campaign.relevance == .prioritised || preferredGames.contains(where: { matches(campaign, preference: $0) })
     }
 
-    private func remainingTimeText(minutes: Int) -> String {
-        let clamped = max(minutes, 0)
-        let hours = clamped / 60
-        let mins = clamped % 60
-
-        if hours > 0 {
-            return mins > 0 ? "\(hours)h \(mins)m remaining" : "\(hours)h remaining"
-        }
-
-        return "\(mins)m remaining"
-    }
-
-    private func campaignDisplaySort(lhs: Campaign, rhs: Campaign) -> Bool {
+    private func campaignDisplaySort(lhs: CampaignViewData, rhs: CampaignViewData) -> Bool {
         let lhsPriority = displayPriority(for: lhs)
         let rhsPriority = displayPriority(for: rhs)
 
         if lhsPriority != rhsPriority {
             return lhsPriority < rhsPriority
+        }
+
+        let lhsPinned = priorityOrderIndex(for: lhs.gameName)
+        let rhsPinned = priorityOrderIndex(for: rhs.gameName)
+        if lhsPinned != rhsPinned {
+            return lhsPinned < rhsPinned
         }
 
         let lhsProgress = campaignProgressPercent(for: lhs)
@@ -1020,10 +938,10 @@ struct OverviewView: View {
             return lhs.endDate < rhs.endDate
         }
 
-        return lhs.game.name < rhs.game.name
+        return lhs.gameName < rhs.gameName
     }
 
-    private func displayPriority(for campaign: Campaign) -> Int {
+    private func displayPriority(for campaign: CampaignViewData) -> Int {
         switch visualState(for: campaign) {
         case .watching: return 0
         case .claimable: return 1
@@ -1033,8 +951,8 @@ struct OverviewView: View {
         }
     }
 
-    private func recentActivityDate(for campaign: Campaign) -> Date {
-        campaign.drops.compactMap(\.progress?.lastUpdated).max() ?? campaign.endDate
+    private func recentActivityDate(for campaign: CampaignViewData) -> Date {
+        campaign.endDate
     }
 
     private func initials(for username: String) -> String {
@@ -1205,22 +1123,25 @@ struct OverviewView: View {
 
     private var campaignSummarySection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            sectionHeading("Campaign Progress", subtitle: "Campaigns with drops still to earn.")
+            sectionHeading("Campaign Progress", subtitle: "Drops-backed campaigns with real progress or completed rewards.")
 
-            if gameAggregates.isEmpty {
+            if summaryCampaigns.isEmpty {
                 CampaignLibraryAmbientRow()
             } else {
                 VStack(spacing: 10) {
-                    ForEach(gameAggregates) { game in
-                        GameProgressRow(item: game, tint: gameTintColor(forGameName: game.gameName))
+                    ForEach(summaryCampaigns) { campaign in
+                        OverviewCampaignSummaryRow(
+                            campaign: campaign,
+                            tint: gameTintColor(forGameName: campaign.gameName)
+                        )
                     }
                 }
             }
         }
     }
 
-    private var gameAggregates: [GameAggregate] {
-        let sourceCampaigns: [Campaign]
+    private var summaryCampaigns: [CampaignViewData] {
+        let sourceCampaigns: [CampaignViewData]
         if !activeFeedCampaigns.isEmpty {
             sourceCampaigns = activeFeedCampaigns
         } else if !prioritisedCampaigns.isEmpty {
@@ -1229,70 +1150,20 @@ struct OverviewView: View {
             sourceCampaigns = recentCampaigns
         }
 
-        let aggregates = GameAggregateBuilder.build(from: sourceCampaigns)
-        return aggregates
-            .filter { aggregate in
-                // Defensive guard: hard exclude "Just Chatting" at UI layer to prevent regressions.
-                let name = aggregate.gameName.trimmingCharacters(in: .whitespacesAndNewlines)
-                return name.localizedCaseInsensitiveCompare("Just Chatting") != .orderedSame
-            }
-            .map { aggregate in
-                GameAggregate(
-                    id: aggregate.id,
-                    gameName: aggregate.gameName,
-                    artworkURL: navigation.minerManager.dataCoordinator.steamArtworkOverrides[aggregate.gameName] ?? aggregate.artworkURL,
-                    totalDrops: aggregate.totalDrops,
-                    earnedDrops: aggregate.earnedDrops,
-                    claimedDrops: aggregate.claimedDrops,
-                    claimableDrops: aggregate.claimableDrops
-                )
-            }
+        return sourceCampaigns
+            .filter { $0.isDisplayableInOverview }
             .prefix(6)
             .map { $0 }
     }
 
-    private func campaignProgressPercent(for campaign: Campaign) -> Double {
-        guard !campaign.drops.isEmpty else { return 0 }
-
-        let totalRequiredMinutes = campaign.drops.reduce(0) { total, drop in
-            total + max(drop.requiredMinutes, 0)
+    private func campaignProgressPercent(for campaign: CampaignViewData) -> Double {
+        let progressPercent = (campaign.overviewProgressFraction ?? 0) * 100
+#if DEBUG
+        if progressPercent > 0, !campaign.hasValidProgress {
+            print("[Overview] ERROR: attempted to render progress for \(campaign.id) without Drops progress")
         }
-        guard totalRequiredMinutes > 0 else {
-            return isCampaignClaimed(campaign) ? 100 : 0
-        }
-
-        let accruedMinutes = campaign.drops.reduce(0) { total, drop in
-            if drop.isClaimed {
-                return total + drop.requiredMinutes
-            }
-            let currentMinutes = min(drop.progress?.currentMinutes ?? 0, drop.requiredMinutes)
-            return total + max(currentMinutes, 0)
-        }
-
-        return min(100, max(0, (Double(accruedMinutes) / Double(totalRequiredMinutes)) * 100))
-    }
-
-    private func campaignRemainingMinutes(for campaign: Campaign) -> Int {
-        campaign.drops.reduce(0) { total, drop in
-            if drop.isClaimed {
-                return total
-            }
-            let currentMinutes = min(drop.progress?.currentMinutes ?? 0, drop.requiredMinutes)
-            return total + max(drop.requiredMinutes - currentMinutes, 0)
-        }
-    }
-
-    private func isCampaignClaimed(_ campaign: Campaign) -> Bool {
-        !campaign.drops.isEmpty && campaign.drops.allSatisfy(\.isClaimed)
-    }
-
-    private func hasStartedProgress(_ campaign: Campaign) -> Bool {
-        campaignProgressPercent(for: campaign) > 0
-            || campaign.drops.contains { ($0.progress?.currentMinutes ?? 0) > 0 }
-    }
-
-    private func hasClaimableRewards(_ campaign: Campaign) -> Bool {
-        campaign.drops.contains { $0.isClaimable && !$0.isClaimed }
+#endif
+        return progressPercent
     }
 
     private func fallbackSubtitle(for miner: MinerManager.ManagedMiner) -> String {
@@ -1316,11 +1187,11 @@ struct OverviewView: View {
         }
     }
 
-    private func tintColor(for campaign: Campaign, hasPriorityLinkIssue: Bool = false) -> Color {
+    private func tintColor(for campaign: CampaignViewData, hasPriorityLinkIssue: Bool = false) -> Color {
         if hasPriorityLinkIssue {
             return .orange
         }
-        return gameTintColor(forGameName: campaign.game.name)
+        return gameTintColor(forGameName: campaign.gameName)
     }
 
     @ViewBuilder
@@ -1388,41 +1259,60 @@ struct OverviewMetricCard: View {
 
 // MARK: - Campaign Summary Row
 
-private struct GameProgressRow: View {
-    let item: GameAggregate
+private struct OverviewCampaignSummaryRow: View {
+    let campaign: CampaignViewData
     let tint: Color
 
-    private var progressFraction: Double {
-        item.progressFraction
+    private var progressFraction: Double? {
+        campaign.overviewProgressFraction
     }
 
+    @ViewBuilder
     private var statusText: some View {
-        if item.isFinalizing {
-            return Text("Finalizing rewards... (\(item.claimedDrops) of \(item.totalDrops) claimed)")
+        switch campaign.overviewState {
+        case .completed:
+            Text("All campaign rewards claimed")
+                .font(.caption)
+                .foregroundStyle(.green)
+        case .claimable:
+            Text("Reward ready to claim")
                 .font(.caption)
                 .foregroundStyle(.orange)
+        case .inProgress:
+            let claimedCopy = campaign.overviewClaimedRewardCount > 0
+                ? " · \(campaign.overviewClaimedRewardCount) claimed"
+                : ""
+            Text("Progress synced from Drops" + claimedCopy)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        case .available:
+            Text("Available")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
-        let earnedStr = "\(item.earnedDrops) of \(item.totalDrops) earned"
-        let claimedStr = item.claimedDrops > 0 ? " · \(item.claimedDrops) claimed" : ""
-        return Text(earnedStr + claimedStr)
-            .font(.caption)
-            .foregroundStyle(.secondary)
     }
 
     var body: some View {
         HStack(spacing: 14) {
-            CampaignThumbnail(url: item.artworkURL, tint: tint)
+            CampaignThumbnail(url: campaign.artworkURL, tint: tint)
                 .frame(width: 56, height: 56)
 
             VStack(alignment: .leading, spacing: 8) {
-                Text(item.gameName)
+                Text(campaign.gameName)
                     .font(.headline)
                     .lineLimit(1)
 
-                ProgressView(value: progressFraction)
-                    .progressViewStyle(.linear)
-                    .tint(tint)
-                    .frame(maxWidth: 220)
+                Text(campaign.campaignName)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+
+                if let progressFraction {
+                    ProgressView(value: progressFraction)
+                        .progressViewStyle(.linear)
+                        .tint(tint)
+                        .frame(maxWidth: 220)
+                }
 
                 statusText
             }
@@ -1430,10 +1320,16 @@ private struct GameProgressRow: View {
             Spacer()
 
             VStack(alignment: .trailing, spacing: 6) {
-                Text("\(Int((progressFraction * 100).rounded()))%")
-                    .font(.title3.weight(.semibold))
-                    .monospacedDigit()
-                    .foregroundStyle(item.isCompleted ? .green : (item.isFinalizing ? .orange : .primary))
+                if let progressFraction {
+                    Text("\(Int((progressFraction * 100).rounded()))%")
+                        .font(.title3.weight(.semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(campaign.overviewState == .claimable ? .orange : .primary)
+                } else if campaign.isCompleted {
+                    Text("Done")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(.green)
+                }
             }
         }
         .padding(16)
