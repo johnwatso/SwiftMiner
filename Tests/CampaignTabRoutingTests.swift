@@ -60,9 +60,10 @@ final class CampaignTabRoutingTests: XCTestCase {
 
     func test_Irrelevant_Campaign_Routing() {
         // Completely finished/irrelevant (e.g. old unclaimed expired)
-        let campaign = createCampaign(relevance: .irrelevant)
+        // Ensure progress is 0 so it doesn't show in Active
+        let campaign = createCampaign(relevance: .irrelevant, progress: 0.0)
         
-        XCTAssertFalse(campaign.showsInActiveTab, "Irrelevant should NOT show in Active tab")
+        XCTAssertFalse(campaign.showsInActiveTab, "Irrelevant with 0 progress should NOT show in Active tab")
         XCTAssertFalse(campaign.showsInClaimedTab, "Irrelevant should NOT show in Claimed tab")
         XCTAssertTrue(campaign.showsInAllTab, "Should always show in All tab")
     }
@@ -73,13 +74,14 @@ final class CampaignTabRoutingTests: XCTestCase {
             gameName: "Test Game",
             campaignName: "Test Campaign",
             artworkURL: nil,
-            progress: 0.5,
-            isClaimed: false,
-            dropsClaimed: 0,
+            progress: 1.0,
+            isClaimed: true,
+            dropsClaimed: 1,
             totalDrops: 1,
             status: "ACTIVE",
-            miningStatus: .available,
-            relevance: .active,
+            miningStatus: .claimed,
+            isAccountConnected: true,
+            relevance: .recent,
             startDate: now.addingTimeInterval(-3600),
             endDate: now.addingTimeInterval(3600),
             accountStates: [
@@ -92,7 +94,7 @@ final class CampaignTabRoutingTests: XCTestCase {
             ]
         )
 
-        XCTAssertTrue(campaign.showsInActiveTab, "Active relevance should keep the campaign in Active")
+        XCTAssertFalse(campaign.showsInActiveTab, "Fully claimed campaign should NOT show in Active tab")
         XCTAssertTrue(campaign.showsInClaimedTab, "Claimed account state should surface the campaign in Claimed")
     }
 
@@ -137,19 +139,21 @@ final class CampaignTabRoutingTests: XCTestCase {
         relevance: CampaignRelevance,
         status: String = "ACTIVE",
         miningStatus: MiningCampaignStatus = .available,
-        isClaimed: Bool = false
+        isClaimed: Bool = false,
+        progress: Double? = nil
     ) -> CampaignViewData {
         return CampaignViewData(
             id: "test",
             gameName: "Test Game",
             campaignName: "Test Campaign",
             artworkURL: nil,
-            progress: isClaimed ? 1.0 : 0.5,
+            progress: progress ?? (isClaimed ? 1.0 : 0.5),
             isClaimed: isClaimed,
             dropsClaimed: isClaimed ? 1 : 0,
             totalDrops: 1,
             status: status,
             miningStatus: miningStatus,
+            isAccountConnected: false,
             relevance: relevance,
             startDate: now.addingTimeInterval(-3600),
             endDate: now.addingTimeInterval(3600)

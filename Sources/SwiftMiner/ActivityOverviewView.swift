@@ -88,7 +88,7 @@ struct ActivityOverviewView: View {
         if let miner = selectedMiner {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    MinerStateCard(state: miner.primaryState) {
+                    MinerStateCard(miner: miner) {
                         if case .blocked(let reasons) = miner.primaryState, reasons.contains(.accountNotLinked) {
                             Task { try? await navigation.minerManager.startMiner(minerId: miner.id, priorityGames: [], excludedGames: [], strategy: .mineAll) }
                         }
@@ -178,7 +178,7 @@ private struct MinerSourceListRow: View {
                     .lineLimit(1)
 
                 if !compact {
-                    Text(miner.currentCampaign ?? miner.status.displayName)
+                    Text(activityLabel)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -199,15 +199,40 @@ private struct MinerSourceListRow: View {
     }
 
     private var statusColor: Color {
-        switch miner.status {
-        case .watching: return .green
-        case .waitingForStream: return .cyan
-        case .claiming: return .purple
-        case .authenticating, .fetchingCampaigns: return .blue
-        case .paused: return .orange
-        case .error: return .red
-        case .idle: return .gray
+        guard let resolved = miner.resolvedPrimaryState?.resolved else {
+            if miner.needsAuth { return .orange }
+            return miner.status == .watching ? .green : .gray
         }
+
+        switch resolved.state {
+        case .watching:
+            return .green
+        case .blocked:
+            return resolved.reason == .notLinked ? .orange : .cyan
+        case .idle:
+            return .gray
+        }
+    }
+
+    private var activityLabel: String {
+        if let resolved = miner.resolvedPrimaryState?.resolved {
+            switch resolved.state {
+            case .watching:
+                return "Watching \(resolved.gameName)"
+            case .blocked:
+                if resolved.reason == .notLinked {
+                    return "Needs Link"
+                }
+                return "No active campaigns"
+            case .idle:
+                return "No active campaigns"
+            }
+        }
+
+        if miner.needsAuth {
+            return "Needs Link"
+        }
+        return "No active campaigns"
     }
 }
 

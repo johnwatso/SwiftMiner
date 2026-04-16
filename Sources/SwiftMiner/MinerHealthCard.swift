@@ -38,12 +38,11 @@ struct MinerHealthCard: View {
                 return HealthVerdict(severity: .warning, message: "Campaign fetch is taking \(mins) min")
             }
         }
-        return HealthVerdict(severity: .ok, message: miner.status.displayName)
+        return HealthVerdict(severity: .ok, message: miner.statusLabel)
     }
 
     private func blockedPriorityGameRequiringLink(for miner: MinerManager.ManagedMiner) -> String? {
         guard miner.isRunning else { return nil }
-        guard !settings.isIgnoringAccountLinkWarnings(for: miner.accountId) else { return nil }
 
         let priorityGames = Set(
             settings.priorityGames
@@ -53,10 +52,15 @@ struct MinerHealthCard: View {
         guard !priorityGames.isEmpty else { return nil }
 
         return miner.allCampaigns.first { campaign in
-            campaign.isTimeActive
+            guard campaign.isTimeActive
                 && !campaign.isAccountConnected
                 && priorityGames.contains(campaign.gameName.lowercased())
-                && campaign.drops.contains(where: { !$0.isClaimed })
+                && campaign.drops.contains(where: { !$0.isClaimed }) else {
+                return false
+            }
+
+            // Respect game-scoped suppression
+            return !settings.isIgnoringAccountLinkWarnings(for: miner.accountId, gameId: campaign.game.id)
         }?.gameName
     }
 

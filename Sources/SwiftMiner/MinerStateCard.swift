@@ -4,20 +4,29 @@ import SwiftMinerCore
 /// A unified hero card that represents the resolved PrimaryState of a miner.
 /// Replaces legacy status badges and scattered state labels with a single story.
 struct MinerStateCard: View {
-    let state: PrimaryState
+    let miner: MinerManager.ManagedMiner
     var onAction: (() -> Void)? = nil
-    
+    var onDismiss: ((String) -> Void)? = nil
+
+    private var state: PrimaryState { miner.primaryState }
+    private var resolved: ResolvedPrimaryState? { miner.resolvedPrimaryState }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             headerSection
-            
+
             if case .mining(let progress) = state {
                 miningProgressSection(progress)
             } else if case .blocked(let reasons) = state, reasons.contains(.accountNotLinked) {
+                let gameId = resolved?.resolved?.gameId ?? "all"
                 actionSection(
-                    title: "Link your account",
-                    subtitle: "Connect your game account to earn drops automatically.",
-                    buttonTitle: "Open Link Page"
+                    title: "Action required",
+                    subtitle: "Connect your game account to resume earning drops.",
+                    buttonTitle: "Link Account",
+                    secondaryButtonTitle: "Dismiss",
+                    onSecondaryAction: {
+                        onDismiss?(gameId)
+                    }
                 )
             }
         }
@@ -25,59 +34,61 @@ struct MinerStateCard: View {
         .glassCard()
         .shadow(color: .black.opacity(0.07), radius: 6, y: 2)
     }
-    
+
     private var headerSection: some View {
         HStack(alignment: .top, spacing: 16) {
             ZStack {
                 Circle()
                     .fill(config.color.opacity(0.15))
                     .frame(width: 44, height: 44)
-                
+
                 Image(systemName: config.icon)
                     .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(config.color)
             }
-            
+
             VStack(alignment: .leading, spacing: 4) {
                 Text(config.headline)
                     .font(.title3.weight(.bold))
-                
-                Text(config.subtitle)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
+
+                if let subtitle = config.subtitle {
+                    Text(subtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
-            
+
             Spacer()
         }
     }
-    
+
     private func miningProgressSection(_ progress: MiningProgress) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text(progress.dropName)
                     .font(.subheadline.weight(.semibold))
-                
+
                 Spacer()
-                
+
                 Text("\(Int(progress.progressFraction * 100))%")
                     .font(.subheadline.weight(.bold))
                     .monospacedDigit()
                     .foregroundStyle(.green)
             }
-            
+
             ProgressView(value: progress.progressFraction)
                 .progressViewStyle(.linear)
                 .tint(.green)
-            
+
             HStack {
                 Text("\(progress.campaignName)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                
+
                 Spacer()
-                
+
                 if progress.minutesRemaining > 0 {
                     Text("\(progress.minutesRemaining) min remaining")
                         .font(.caption)
@@ -92,8 +103,14 @@ struct MinerStateCard: View {
         .padding(14)
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
     }
-    
-    private func actionSection(title: String, subtitle: String, buttonTitle: String) -> some View {
+
+    private func actionSection(
+        title: String,
+        subtitle: String,
+        buttonTitle: String,
+        secondaryButtonTitle: String? = nil,
+        onSecondaryAction: (() -> Void)? = nil
+    ) -> some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
@@ -102,9 +119,19 @@ struct MinerStateCard: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            
+
             Spacer()
-            
+
+            if let secondaryTitle = secondaryButtonTitle {
+                Button {
+                    onSecondaryAction?()
+                } label: {
+                    Text(secondaryTitle)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+
             Button {
                 onAction?()
             } label: {
@@ -121,64 +148,65 @@ struct MinerStateCard: View {
                 .strokeBorder(.orange.opacity(0.2), lineWidth: 1)
         }
     }
-    
+
     // MARK: - View Config
-    
+
     private var config: StateConfig {
+        let gameName = resolved?.resolved?.gameName
         switch state {
         case .blocked(let reasons):
             if reasons.contains(.accountNotLinked) {
                 return StateConfig(
-                    headline: "Link Required",
-                    subtitle: "Authentication or account link missing. Action required to resume.",
+                    headline: gameName ?? "Account",
+                    subtitle: "Not linked",
                     icon: "link.badge.plus",
                     color: .orange
                 )
             } else if reasons.contains(.noEligibleCampaign) {
                 return StateConfig(
-                    headline: "Nothing to earn",
-                    subtitle: "No active drop campaigns for your preferred games right now.",
+                    headline: "No active campaigns",
+                    subtitle: "No drops available for prioritised games",
                     icon: "archivebox",
                     color: .secondary
                 )
             } else {
                 return StateConfig(
-                    headline: "Waiting for stream",
-                    subtitle: "The selected campaign is active, but no participating channels are live.",
+                    headline: gameName ?? "No live streams",
+                    subtitle: "No participating channels are live right now.",
                     icon: "antenna.radiowaves.left.and.right",
                     color: .cyan
                 )
             }
-            
+
         case .ready:
             return StateConfig(
-                headline: "Ready to mine",
-                subtitle: "System is healthy and scanning for available drops.",
+                headline: "No active campaigns",
+                subtitle: "No drops available for prioritised games",
                 icon: "waveform.path.ecg",
                 color: .blue
             )
-            
+
         case .mining(let progress):
             return StateConfig(
-                headline: "Mining \(progress.gameName)",
-                subtitle: "Actively earning progress on an eligible stream.",
+                headline: "Watching \(progress.gameName)",
+                subtitle: nil,
                 icon: "play.fill",
                 color: .green
             )
-            
+
         case .completed:
             return StateConfig(
-                headline: "All caught up",
-                subtitle: "You've earned all available drops for now. Great work!",
+                headline: "No active campaigns",
+                subtitle: "All currently available drops are completed.",
                 icon: "checkmark.seal.fill",
                 color: .purple
             )
         }
     }
-    
+
     private struct StateConfig {
         let headline: String
-        let subtitle: String
+        let subtitle: String?
         let icon: String
         let color: Color
     }

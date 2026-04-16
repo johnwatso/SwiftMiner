@@ -113,6 +113,7 @@ public enum CampaignMapper {
 
         return CampaignViewData(
             id: campaign.id,
+            gameId: campaign.game.id,
             gameName: campaign.game.name,
             campaignName: campaign.name,
             artworkURL: campaign.game.boxArtURL,
