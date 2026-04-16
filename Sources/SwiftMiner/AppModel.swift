@@ -77,6 +77,9 @@ public final class AppModel {
             // Drive isAuthenticated from MinerManager's miner list.
             reconcileManagerState(manager)
 
+            // Sync priority games so state evaluation uses the current preferences
+            manager.updatePriorityGames(Settings.shared.priorityGames)
+
             // Sync notification preference
             await manager.updateNotificationPreference(enabled: Settings.shared.showClaimNotifications)
 
@@ -297,16 +300,20 @@ public final class AppModel {
             return
         }
 
-        let ignoredAccountIds = Set(settings.ignoredAccountLinkWarningAccountIds)
         let hasUnresolvedIssue = manager.miners.contains { miner in
             guard miner.isRunning else { return false }
-            guard !ignoredAccountIds.contains(miner.accountId) else { return false }
 
             return miner.allCampaigns.contains { campaign in
-                campaign.isTimeActive
+                // Only consider active, unlinked campaigns for prioritised games
+                guard campaign.isTimeActive
                     && !campaign.isAccountConnected
                     && priorityGames.contains(campaign.gameName.lowercased())
-                    && campaign.drops.contains(where: { !$0.isClaimed })
+                    && campaign.drops.contains(where: { !$0.isClaimed }) else {
+                    return false
+                }
+
+                // Check if this specific game warning is suppressed for this account
+                return !settings.isIgnoringAccountLinkWarnings(for: miner.accountId, gameId: campaign.game.id)
             }
         }
 

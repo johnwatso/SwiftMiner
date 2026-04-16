@@ -400,4 +400,168 @@ final class GameAggregateTests: XCTestCase {
         XCTAssertEqual(aggregates.first?.totalDrops, 3)
         XCTAssertEqual(aggregates.first?.gameName, "Test Game")
     }
+
+    // MARK: - Drops Grouping Aggregates (CampaignViewData)
+
+    func testBuildDrops_AggregatesByGameId_WithBlockedPrecedence() {
+        let now = Date()
+        let blocked = makeCampaignViewData(
+            id: "c-blocked",
+            gameId: "g-1",
+            gameName: "Game One",
+            progress: 0,
+            isAccountConnected: false,
+            startDate: now.addingTimeInterval(-600),
+            endDate: now.addingTimeInterval(3600)
+        )
+        let inProgress = makeCampaignViewData(
+            id: "c-progress",
+            gameId: "g-1",
+            gameName: "Game One",
+            progress: 0.42,
+            isAccountConnected: true,
+            startDate: now.addingTimeInterval(-600),
+            endDate: now.addingTimeInterval(3600)
+        )
+
+        let grouped = GameAggregateBuilder.buildDrops(from: [inProgress, blocked], now: now)
+
+        XCTAssertEqual(grouped.count, 1)
+        XCTAssertEqual(grouped.first?.id, "g-1")
+        XCTAssertEqual(grouped.first?.aggregateState, .actionRequired)
+        XCTAssertEqual(grouped.first?.campaigns.count, 2)
+        XCTAssertEqual(grouped.first?.campaigns.first?.state, .actionRequired)
+    }
+
+    func testBuildDrops_StatePrecedence_InProgressThenReadyThenCompleted() {
+        let now = Date()
+        let ready = makeCampaignViewData(
+            id: "c-ready",
+            gameId: "g-ready",
+            gameName: "Ready Game",
+            progress: 0,
+            isAccountConnected: true,
+            startDate: now.addingTimeInterval(-600),
+            endDate: now.addingTimeInterval(3600),
+            drops: [makeDrop(id: "d-ready", progress: 0, isClaimed: false, isClaimable: false)],
+            dropsClaimed: 0,
+            totalDrops: 1
+        )
+        let completed = makeCampaignViewData(
+            id: "c-complete",
+            gameId: "g-complete",
+            gameName: "Complete Game",
+            progress: 1.0,
+            isClaimed: true,
+            isAccountConnected: true,
+            startDate: now.addingTimeInterval(-3600),
+            endDate: now.addingTimeInterval(-60),
+            drops: [makeDrop(id: "d-complete", progress: 1, isClaimed: true, isClaimable: false)],
+            dropsClaimed: 1,
+            totalDrops: 1
+        )
+        let inProgress = makeCampaignViewData(
+            id: "c-progress",
+            gameId: "g-progress",
+            gameName: "Progress Game",
+            progress: 0.2,
+            isAccountConnected: true,
+            startDate: now.addingTimeInterval(-600),
+            endDate: now.addingTimeInterval(3600)
+        )
+
+        let grouped = GameAggregateBuilder.buildDrops(from: [completed, ready, inProgress], now: now)
+
+        XCTAssertEqual(grouped.map(\.aggregateState), [.inProgress, .ready, .completed])
+    }
+
+    func testBuildDrops_ExpiredAndUnavailableEdgeCases() {
+        let now = Date()
+        let expiredUnclaimed = makeCampaignViewData(
+            id: "c-expired",
+            gameId: "g-edge",
+            gameName: "Edge Game",
+            progress: 0.3,
+            isAccountConnected: true,
+            startDate: now.addingTimeInterval(-7200),
+            endDate: now.addingTimeInterval(-60),
+            drops: [makeDrop(id: "d-expired", progress: 0.3, isClaimed: false, isClaimable: false)],
+            dropsClaimed: 0,
+            totalDrops: 1
+        )
+        let expiredClaimed = makeCampaignViewData(
+            id: "c-expired-claimed",
+            gameId: "g-edge",
+            gameName: "Edge Game",
+            progress: 1.0,
+            isClaimed: true,
+            isAccountConnected: true,
+            startDate: now.addingTimeInterval(-7200),
+            endDate: now.addingTimeInterval(-60),
+            drops: [makeDrop(id: "d-expired-claimed", progress: 1, isClaimed: true, isClaimable: false)],
+            dropsClaimed: 1,
+            totalDrops: 1
+        )
+
+        let grouped = GameAggregateBuilder.buildDrops(from: [expiredUnclaimed, expiredClaimed], now: now)
+        let states = grouped.first?.campaigns.map(\.state)
+
+        XCTAssertEqual(grouped.first?.aggregateState, .completed)
+        XCTAssertEqual(states, [.completed, .unavailable])
+    }
+
+    private func makeCampaignViewData(
+        id: String,
+        gameId: String,
+        gameName: String,
+        progress: Double,
+        isClaimed: Bool = false,
+        isAccountConnected: Bool,
+        startDate: Date,
+        endDate: Date,
+        drops: [DropViewData] = [DropViewData(id: "d-default", name: "Drop", description: nil, imageURL: nil, rewardType: .inGame, requiredMinutes: 60, currentMinutes: 0, progress: 0, isClaimed: false, isClaimable: false, isEarnable: true)],
+        dropsClaimed: Int = 0,
+        totalDrops: Int = 1
+    ) -> CampaignViewData {
+        CampaignViewData(
+            id: id,
+            gameId: gameId,
+            gameName: gameName,
+            campaignName: "Campaign \(id)",
+            artworkURL: nil,
+            progress: progress,
+            isClaimed: isClaimed,
+            dropsClaimed: dropsClaimed,
+            totalDrops: totalDrops,
+            status: "ACTIVE",
+            miningStatus: isClaimed ? .claimed : (progress > 0 ? .inProgress : .available),
+            isAccountConnected: isAccountConnected,
+            relevance: .active,
+            startDate: startDate,
+            endDate: endDate,
+            drops: drops,
+            accountStates: []
+        )
+    }
+
+    private func makeDrop(
+        id: String,
+        progress: Double,
+        isClaimed: Bool,
+        isClaimable: Bool
+    ) -> DropViewData {
+        DropViewData(
+            id: id,
+            name: "Drop \(id)",
+            description: nil,
+            imageURL: nil,
+            rewardType: .inGame,
+            requiredMinutes: 60,
+            currentMinutes: Int((progress * 60).rounded()),
+            progress: progress,
+            isClaimed: isClaimed,
+            isClaimable: isClaimable,
+            isEarnable: !isClaimed && !isClaimable
+        )
+    }
 }

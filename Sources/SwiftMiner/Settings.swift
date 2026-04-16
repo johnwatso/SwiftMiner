@@ -90,10 +90,88 @@ public final class Settings: ObservableObject {
     @AppStorage("showClaimNotifications")
     public var showClaimNotifications: Bool = false // Disabled by default per user request
 
-    /// JSON-encoded account IDs that should ignore account-link-required warnings.
-    @AppStorage("ignoredAccountLinkWarningAccountIdsData")
-    private var ignoredAccountLinkWarningAccountIdsData: String = "[]"
-    
+    /// JSON-encoded warnings that should be suppressed.
+    /// Format: "accountId:gameId:warningType"
+    @AppStorage("ignoredWarningsData")
+    private var ignoredWarningsData: String = "[]"
+
+    public enum WarningType: String, Codable, Sendable {
+        case accountLink = "accountLink"
+    }
+
+    /// Scoped warnings that should be suppressed.
+    public var ignoredWarnings: [String] {
+        get {
+            guard let data = ignoredWarningsData.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode([String].self, from: data) else {
+                return []
+            }
+            return decoded
+        }
+        set {
+            if let data = try? JSONEncoder().encode(newValue),
+               let encoded = String(data: data, encoding: .utf8),
+               ignoredWarningsData != encoded {
+                objectWillChange.send()
+                ignoredWarningsData = encoded
+            }
+        }
+    }
+
+    /// Account IDs that should suppress account-link-required warnings (Legacy/Global).
+    public var ignoredAccountLinkWarningAccountIds: [String] {
+        get {
+            let ids = ignoredWarnings
+                .filter { $0.contains(":all:accountLink") || !$0.contains(":") }
+                .map { $0.components(separatedBy: ":").first ?? $0 }
+            return Array(Set(ids)).sorted()
+        }
+        set {
+            var current = ignoredWarnings
+            // Remove all global accountLink warnings for these IDs
+            current.removeAll { warning in
+                let parts = warning.components(separatedBy: ":")
+                return parts.count <= 1 || (parts.count >= 3 && parts[1] == "all" && parts[2] == WarningType.accountLink.rawValue)
+            }
+            // Add them back as global
+            for id in newValue {
+                current.append("\(id):all:accountLink")
+            }
+            ignoredWarnings = Array(Set(current)).sorted()
+        }
+    }
+
+    public func isIgnoringWarning(accountId: String, gameId: String = "all", type: WarningType) -> Bool {
+        let specific = "\(accountId):\(gameId):\(type.rawValue)"
+        let global = "\(accountId):all:\(type.rawValue)"
+        return ignoredWarnings.contains(specific) || ignoredWarnings.contains(global)
+    }
+
+    public func setIgnoreWarning(_ ignored: Bool, accountId: String, gameId: String = "all", type: WarningType) {
+        let key = "\(accountId):\(gameId):\(type.rawValue)"
+        var current = ignoredWarnings
+        if ignored {
+            if !current.contains(key) {
+                current.append(key)
+            }
+        } else {
+            current.removeAll { $0 == key }
+        }
+        ignoredWarnings = current
+    }
+
+    public func isIgnoringAccountLinkWarnings(for accountId: String) -> Bool {
+        isIgnoringWarning(accountId: accountId, type: .accountLink)
+    }
+
+    public func isIgnoringAccountLinkWarnings(for accountId: String, gameId: String) -> Bool {
+        isIgnoringWarning(accountId: accountId, gameId: gameId, type: .accountLink)
+    }
+
+    public func setIgnoreAccountLinkWarnings(_ ignored: Bool, for accountId: String, gameId: String = "all") {
+        setIgnoreWarning(ignored, accountId: accountId, gameId: gameId, type: .accountLink)
+    }
+
     /// Last selected game/category (for UI restoration)
     @AppStorage("lastSelectedGameId")
     public var lastSelectedGameId: String = ""
@@ -152,53 +230,6 @@ public final class Settings: ObservableObject {
     /// Excluded game names derived from preferences (backward compat for MinerEngine)
     public var excludedGames: [String] {
         gameNames(for: .excluded)
-    }
-
-    /// Account IDs that should suppress account-link-required warnings.
-    public var ignoredAccountLinkWarningAccountIds: [String] {
-        get {
-            guard let data = ignoredAccountLinkWarningAccountIdsData.data(using: .utf8),
-                  let decoded = try? JSONDecoder().decode([String].self, from: data) else {
-                return []
-            }
-            var seen = Set<String>()
-            return decoded
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-                .filter { seen.insert($0).inserted }
-        }
-        set {
-            let normalized = Array(
-                Set(
-                    newValue
-                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                        .filter { !$0.isEmpty }
-                )
-            ).sorted()
-
-            if let data = try? JSONEncoder().encode(normalized),
-               let encoded = String(data: data, encoding: .utf8),
-               ignoredAccountLinkWarningAccountIdsData != encoded {
-                objectWillChange.send()
-                ignoredAccountLinkWarningAccountIdsData = encoded
-            }
-        }
-    }
-
-    public func isIgnoringAccountLinkWarnings(for accountId: String) -> Bool {
-        ignoredAccountLinkWarningAccountIds.contains(accountId)
-    }
-
-    public func setIgnoreAccountLinkWarnings(_ ignored: Bool, for accountId: String) {
-        var ids = ignoredAccountLinkWarningAccountIds
-        if ignored {
-            if !ids.contains(accountId) {
-                ids.append(accountId)
-            }
-        } else {
-            ids.removeAll { $0 == accountId }
-        }
-        ignoredAccountLinkWarningAccountIds = ids
     }
 
 #if DEBUG
@@ -541,7 +572,7 @@ public final class Settings: ObservableObject {
         gamePreferencesData = "[]"
         miningStrategy = .mineAll
         preferSteamArtwork = true
-        ignoredAccountLinkWarningAccountIdsData = "[]"
+        ignoredWarningsData = "[]"
     }
 }
 
