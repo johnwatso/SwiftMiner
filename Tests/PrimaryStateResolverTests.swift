@@ -10,7 +10,8 @@ final class PrimaryStateResolverTests: XCTestCase {
         status: MinerManager.MinerStatus = .idle,
         needsAuth: Bool = false,
         allCampaigns: [Campaign] = [],
-        currentCampaignId: String? = nil
+        currentCampaignId: String? = nil,
+        priorityGames: [String] = ["Test Game"]
     ) -> MinerManager.ManagedMiner {
         MinerManager.ManagedMiner(
             id: "test-miner",
@@ -20,7 +21,8 @@ final class PrimaryStateResolverTests: XCTestCase {
             needsAuth: needsAuth,
             currentCampaignId: currentCampaignId,
             allCampaigns: allCampaigns,
-            isRunning: true
+            isRunning: true,
+            priorityGames: priorityGames
         )
     }
 
@@ -80,7 +82,7 @@ final class PrimaryStateResolverTests: XCTestCase {
 
     func testBlockedState_NoLiveStreams() {
         let campaign = createCampaign(id: "c1", isAccountConnected: true, drops: [createDrop(id: "d1")])
-        let miner = createMiner(status: .waitingForStream, allCampaigns: [campaign])
+        let miner = createMiner(status: .waitingForStream, allCampaigns: [campaign], currentCampaignId: "c1")
         let state = PrimaryStateResolver.resolve(for: miner)
         XCTAssertEqual(state, .blocked(reasons: [.noLiveStreams]))
     }
@@ -173,5 +175,127 @@ final class PrimaryStateResolverTests: XCTestCase {
         
         let state = PrimaryStateResolver.resolve(for: miner)
         XCTAssertEqual(state, .completed, "Should be completed when all drops are claimed even if account is disconnected")
+    }
+
+    // MARK: - MinerGameState Model Tests
+
+    func testEvaluateGameStates_WatchingRequiresStatusAndCampaignMatch() {
+        let campaign = createCampaign(id: "c1", drops: [createDrop(id: "d1")])
+
+        // Status is watching but currentCampaignId does NOT match → idle
+        let idleMiner = createMiner(status: .watching, allCampaigns: [campaign], currentCampaignId: "other")
+        let idleStates = MinerManager.evaluateGameStates(for: idleMiner, priorityGames: idleMiner.priorityGames)
+        XCTAssertEqual(idleStates.first?.state, .idle)
+
+        // Status is watching and currentCampaignId matches → watching
+        let watchingMiner = createMiner(status: .watching, allCampaigns: [campaign], currentCampaignId: "c1")
+        let watchingStates = MinerManager.evaluateGameStates(for: watchingMiner, priorityGames: watchingMiner.priorityGames)
+        XCTAssertEqual(watchingStates.first?.state, .watching)
+    }
+
+    func testEvaluateGameStates_BlockedWinsOverWatchingWithinSameGame() {
+        let blockedCampaign = createCampaign(id: "c1", isAccountConnected: false, drops: [createDrop(id: "d1")])
+        let miningCampaign = createCampaign(id: "c2", drops: [createDrop(id: "d2")])
+        let miner = createMiner(status: .watching, allCampaigns: [blockedCampaign, miningCampaign], currentCampaignId: "c2")
+
+        let states = MinerManager.evaluateGameStates(for: miner, priorityGames: miner.priorityGames)
+        XCTAssertEqual(states.count, 1) // same game
+        XCTAssertEqual(states.first?.state, .blocked)
+        XCTAssertEqual(states.first?.reason, .notLinked)
+    }
+
+    func testResolvedPrimaryState_PriorityBlockedOverWatchingOverIdle() {
+        let states = [
+            MinerGameState(minerId: "m1", gameId: "g1", gameName: "Game 1", state: .idle, reason: .none),
+            MinerGameState(minerId: "m1", gameId: "g2", gameName: "Game 2", state: .watching, reason: .none),
+            MinerGameState(minerId: "m1", gameId: "g3", gameName: "Game 3", state: .blocked, reason: .notLinked)
+        ]
+        let resolved = ResolvedPrimaryState(gameStates: states)
+        XCTAssertEqual(resolved.resolved?.gameId, "g3")
+        XCTAssertEqual(resolved.resolved?.state, .blocked)
+    }
+
+    func testEvaluateGameStates_WaitingForStreamScopedToGame() {
+        let campaign = createCampaign(id: "c1", isAccountConnected: true, drops: [createDrop(id: "d1")])
+        let miner = createMiner(status: .waitingForStream, allCampaigns: [campaign], currentCampaignId: "c1")
+
+        let states = MinerManager.evaluateGameStates(for: miner, priorityGames: miner.priorityGames)
+        XCTAssertEqual(states.first?.state, .blocked)
+        XCTAssertEqual(states.first?.reason, .noLiveStreams)
+        XCTAssertEqual(states.first?.campaignId, "c1")
+    }
+
+    func testManagedMiner_GameStatesAndResolvedPrimaryState() {
+        let campaign = createCampaign(id: "c1", drops: [createDrop(id: "d1")])
+        let miner = createMiner(status: .watching, allCampaigns: [campaign], currentCampaignId: "c1")
+
+        XCTAssertEqual(miner.gameStates.count, 1)
+        XCTAssertEqual(miner.gameStates.first?.state, .watching)
+        XCTAssertEqual(miner.resolvedPrimaryState?.resolved?.state, .watching)
+    }
+
+    // MARK: - Prioritised Games Filtering Tests
+
+    func testEmptyPriorityGames_ResolvesToReady() {
+        let campaign = createCampaign(id: "c1", drops: [createDrop(id: "d1")])
+        let miner = createMiner(allCampaigns: [campaign], priorityGames: [])
+
+        XCTAssertTrue(miner.gameStates.isEmpty, "No game states should be produced when priority list is empty")
+        XCTAssertEqual(miner.primaryState, .ready, "Empty priority list should resolve to ready (idle)")
+    }
+
+    func testNonPrioritisedCampaign_NoGameStateOrWarning() {
+        let campaign = createCampaign(id: "c1", drops: [createDrop(id: "d1")])
+        let miner = createMiner(allCampaigns: [campaign], priorityGames: ["Other Game"])
+
+        // The non-prioritised campaign should not appear in the game-state list
+        let hasTestGameState = miner.gameStates.contains { $0.gameName == "Test Game" }
+        XCTAssertFalse(hasTestGameState, "Non-prioritised campaign should not produce a MinerGameState")
+
+        // The prioritised game "Other Game" has no campaigns, so it produces an idle state
+        XCTAssertEqual(miner.gameStates.count, 1)
+        XCTAssertEqual(miner.gameStates.first?.gameName, "Other Game")
+        XCTAssertEqual(miner.gameStates.first?.state, .idle)
+        XCTAssertEqual(miner.gameStates.first?.reason, .noEligibleCampaign)
+    }
+
+    func testPrioritisedCampaign_ByGameId() {
+        let campaign = createCampaign(id: "c1", drops: [createDrop(id: "d1")])
+        let miner = createMiner(status: .watching, allCampaigns: [campaign], currentCampaignId: "c1", priorityGames: ["game1"])
+
+        XCTAssertEqual(miner.gameStates.count, 1, "Should match prioritised game by ID")
+        XCTAssertEqual(miner.gameStates.first?.state, .watching)
+    }
+
+    func testPrioritisedGame_ZeroCampaigns_ProducesIdleNoEligibleCampaign() {
+        let miner = createMiner(allCampaigns: [], priorityGames: ["Test Game"])
+
+        XCTAssertEqual(miner.gameStates.count, 1, "Prioritised game with no campaigns must still produce a MinerGameState")
+        let state = miner.gameStates.first
+        XCTAssertEqual(state?.state, .idle)
+        XCTAssertEqual(state?.reason, .noEligibleCampaign)
+        XCTAssertEqual(state?.gameName, "Test Game")
+    }
+
+    func testPrioritisedGame_NotLinked_ProducesBlocked() {
+        let campaign = createCampaign(id: "c1", isAccountConnected: false, drops: [createDrop(id: "d1")])
+        let miner = createMiner(allCampaigns: [campaign], priorityGames: ["Test Game"])
+
+        XCTAssertEqual(miner.gameStates.count, 1)
+        let state = miner.gameStates.first
+        XCTAssertEqual(state?.state, .blocked)
+        XCTAssertEqual(state?.reason, .notLinked)
+    }
+
+    func testPrioritisedGame_NotLinkedEvenIfNoDrops_ProducesBlocked() {
+        // Campaign exists but has no drops (relevant.isEmpty is true)
+        // But it is NOT linked.
+        let campaign = createCampaign(id: "c1", isAccountConnected: false, drops: [])
+        let miner = createMiner(allCampaigns: [campaign], priorityGames: ["Test Game"])
+
+        XCTAssertEqual(miner.gameStates.count, 1)
+        let state = miner.gameStates.first
+        XCTAssertEqual(state?.state, .blocked)
+        XCTAssertEqual(state?.reason, .notLinked)
     }
 }

@@ -276,7 +276,8 @@
 			children = (
 				46366DBAD54AF15E48C9E501 /* main.swift */,
 			);
-			path = SparklePublisher;
+			name = SparklePublisher;
+			path = ../SwiftMiner/Tools/SparklePublisher;
 			sourceTree = "<group>";
 		};
 		5629FD78F9089165C0AA11A0 /* Tools */ = {
@@ -284,7 +285,8 @@
 			children = (
 				4B58CEDBCC5DB3F22B204C53 /* SparklePublisher */,
 			);
-			path = Tools;
+			name = Tools;
+			path = ../Tools;
 			sourceTree = "<group>";
 		};
 		5E6BEB18B0ABD2C67D1FBB4F /* SwiftMinerCore */ = {
@@ -296,7 +298,8 @@
 				B6F6CBFB1F96D64D9C4A05EC /* Services */,
 				F56A7F75C670ED0909786059 /* Utils */,
 			);
-			path = SwiftMinerCore;
+			name = SwiftMinerCore;
+			path = ../SwiftMiner/Sources/SwiftMinerCore;
 			sourceTree = "<group>";
 		};
 		7F37B3D6C20D03892E162D2D /* Products */ = {
@@ -337,7 +340,8 @@
 				DAF81B3BBAA69FF63BECA50C /* SidebarView.swift */,
 				B987C70E0E71C5210198E0FA /* TDMCookieParser.swift */,
 			);
-			path = SwiftMiner;
+			name = SwiftMiner;
+			path = ../SwiftMiner/Sources/SwiftMiner;
 			sourceTree = "<group>";
 		};
 		B64F5A76903E8C633A6BF79D /* Models */ = {
@@ -393,7 +397,8 @@
 				FAFB22681090184EC2B570F2 /* SwiftMinerCLI */,
 				5E6BEB18B0ABD2C67D1FBB4F /* SwiftMinerCore */,
 			);
-			path = Sources;
+			name = Sources;
+			path = ../Sources;
 			sourceTree = "<group>";
 		};
 		E901A37D9DD80204A5583082 /* Tests */ = {
@@ -415,6 +420,7 @@
 				41472EDA22183F56029E12DB /* WarningSuppressionTests.swift */,
 				AC39C0659C5D0936EE467992 /* WatchSessionManagerTests.swift */,
 			);
+			name = Tests;
 			path = Tests;
 			sourceTree = "<group>";
 		};
@@ -437,7 +443,8 @@
 			children = (
 				6EA905C272B33C8EE9B13079 /* SwiftMinerCLI.swift */,
 			);
-			path = SwiftMinerCLI;
+			name = SwiftMinerCLI;
+			path = ../SwiftMiner/Sources/SwiftMinerCLI;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */

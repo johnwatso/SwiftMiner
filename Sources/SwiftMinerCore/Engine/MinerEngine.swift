@@ -43,7 +43,7 @@ public actor MinerEngine {
     private var excludedGames: [String] = []
     private var enableBadgesEmotes: Bool = false
     private var showClaimNotifications: Bool = false
-    private var ignoreAccountLinkWarnings: Bool = false
+    private var ignoredAccountLinkWarningGames: Set<String> = []
     private var warnedUnlinkedPriorityGames: Set<String> = []
 
     /// Returns this engine's DropsService so callers on other actors can create an AccountStateStore.
@@ -81,13 +81,13 @@ public actor MinerEngine {
         excludedGames: [String],
         enableBadgesEmotes: Bool = false,
         showClaimNotifications: Bool = false,
-        ignoreAccountLinkWarnings: Bool = false
+        ignoredAccountLinkWarningGames: [String] = []
     ) {
         self.priorityGames = priorityGames
         self.excludedGames = excludedGames
         self.enableBadgesEmotes = enableBadgesEmotes
         self.showClaimNotifications = showClaimNotifications
-        self.ignoreAccountLinkWarnings = ignoreAccountLinkWarnings
+        self.ignoredAccountLinkWarningGames = Set(ignoredAccountLinkWarningGames)
         
         // Configure notification service if enabled
         if showClaimNotifications && notificationService == nil {
@@ -99,11 +99,24 @@ public actor MinerEngine {
         }
     }
 
-    /// Update whether account-link-required warnings should be ignored for this miner.
-    public func updateAccountLinkWarningPreference(ignored: Bool) {
-        self.ignoreAccountLinkWarnings = ignored
-        if ignored {
+    /// Update the prioritised games list.
+    public func updatePriorityGames(_ priorityGames: [String]) {
+        self.priorityGames = priorityGames
+        // Waking the engine might be desired, but periodic refresh will handle it too.
+    }
+
+    /// Update which games should have account-link warnings suppressed for this miner.
+    /// - Parameter games: Array of game names or IDs, or ["all"] for global suppression.
+    public func updateAccountLinkWarningPreference(games: [String]) {
+        self.ignoredAccountLinkWarningGames = Set(games)
+        if games.contains("all") {
             warnedUnlinkedPriorityGames.removeAll()
+        } else {
+            // Remove games that are no longer ignored from the "already warned" set
+            // so they can be warned about again if they reappear.
+            // Actually, warnedUnlinkedPriorityGames is just to avoid spamming the log.
+            // If we un-ignore a game, we want to warn about it again.
+            warnedUnlinkedPriorityGames.subtract(Set(games))
         }
     }
 
@@ -362,10 +375,32 @@ public actor MinerEngine {
         guard isRunning else {
             throw TwitchMinerError.sessionNotStarted
         }
+
+        let rawProgress = try await dropsService.getOverallProgress()
         
-        return try await dropsService.getOverallProgress()
+        // Strict prioritisation contract: Filter progress to prioritised games only.
+        let prioritySet = Set(priorityGames.map { $0.lowercased() })
+        let filteredCampaigns = rawProgress.campaigns.filter { cp in
+            prioritySet.contains(cp.gameName.lowercased())
+        }
+        
+        // Re-calculate totals based on filtered set
+        let totalDrops = filteredCampaigns.reduce(0) { $0 + $1.totalDrops }
+        let claimedDrops = filteredCampaigns.reduce(0) { $0 + $1.claimedDrops }
+        let totalWatchTime = filteredCampaigns.reduce(0) { total, cp in
+            total + cp.dropProgress.reduce(0) { $0 + $1.currentMinutes }
+        }
+        
+        return OverallProgress(
+            totalCampaigns: filteredCampaigns.count,
+            activeCampaigns: filteredCampaigns.count,
+            totalDrops: totalDrops,
+            claimedDrops: claimedDrops,
+            pendingDrops: max(0, totalDrops - claimedDrops),
+            totalWatchTimeMinutes: totalWatchTime,
+            campaigns: filteredCampaigns
+        )
     }
-    
     /// Current mining session info
     public var currentSession: MiningSession? {
         get async { session }
@@ -524,22 +559,24 @@ public actor MinerEngine {
                 log("Fetching active campaigns...")
 
                 // 1. Fetch all campaigns (single call — avoids double API hit).
-                // Previously called getActiveCampaigns() + fetchCampaigns() which was redundant
-                // since getActiveCampaigns internally calls fetchCampaigns.
                 let allEnriched = try await dropsService.fetchCampaigns()
-                self.allCampaigns = allEnriched
-                let campaigns = allEnriched.filter { $0.isMiningEligible }
+                
+                // Strict prioritisation contract: Filter all campaigns before further processing.
+                let prioritisedAll = filterByPrioritisedGames(allEnriched)
+                
+                self.allCampaigns = prioritisedAll
+                let campaigns = prioritisedAll.filter { $0.isMiningEligible }
 
-                log("Campaigns: \(allCampaigns.count) total, \(campaigns.count) mining-eligible")
-                for c in allEnriched {
+                log("Campaigns: \(allCampaigns.count) total prioritised, \(campaigns.count) mining-eligible")
+                for c in prioritisedAll {
                     // IMPLEMENTATION OF DOMAIN LOGGING REQUIREMENT
                     log("  · \(c.name) (\(c.gameName)) → Status: \(c.miningStatus.rawValue) → Relevance: \(c.relevance.rawValue)")
                 }
 
-                await warnForUnlinkedPriorityCampaigns(in: allEnriched)
+                await warnForUnlinkedPriorityCampaigns(in: prioritisedAll)
                 
-                // Log expired campaigns that might be incorrectly marked as eligible
-                let expiredButEligible = allEnriched.filter { $0.miningStatus == .expired && $0.isMiningEligible }
+                // Log expired campaigns that might be incorrectly marked as eligible (from the prioritised subset)
+                let expiredButEligible = prioritisedAll.filter { $0.miningStatus == .expired && $0.isMiningEligible }
                 if !expiredButEligible.isEmpty {
                     log("⚠️ WARNING: \(expiredButEligible.count) expired campaigns incorrectly marked as mining-eligible:")
                     for c in expiredButEligible {
@@ -554,7 +591,7 @@ public actor MinerEngine {
 
                 // 3. Find best campaign to mine based on strategy
                 // SELECTION RULE: Must be AVAILABLE or IN_PROGRESS. Never CLAIMED or EXPIRED.
-                guard let campaign = selectBestCampaign(from: allEnriched, priorityGames: priorityGames, excludedGames: excludedGames, strategy: miningStrategy) else {
+                guard let campaign = selectBestCampaign(from: prioritisedAll, priorityGames: priorityGames, excludedGames: excludedGames, strategy: miningStrategy) else {
                     log("No mineable campaigns matching strategy '\(miningStrategy.displayName)'")
                     onStatusChange?(.idle)
                     // Wait up to campaignCheckInterval in 10s ticks, breaking early on triggerRescan()
@@ -706,10 +743,11 @@ public actor MinerEngine {
                     let campaignReevalInterval: TimeInterval = 300 // Align with outer campaign loop (5 min)
                     if Date().timeIntervalSince(lastCampaignReevaluation) >= campaignReevalInterval {
                         lastCampaignReevaluation = Date()
-                        if let freshCampaigns = try? await dropsService.fetchCampaigns() {
+                        if let fetched = try? await dropsService.fetchCampaigns() {
+                            let freshCampaigns = filterByPrioritisedGames(fetched)
                             self.allCampaigns = freshCampaigns
 
-                            // If the current campaign no longer exists in the API response,
+                            // If the current campaign no longer exists in the API response (or is no longer prioritised),
                             // clear it from session state and rescan immediately.
                             if !freshCampaigns.contains(where: { $0.id == campaign.id }) {
                                 log("⚠️ Campaign '\(campaign.name)' no longer returned by API — clearing and rescanning.")
@@ -807,12 +845,23 @@ public actor MinerEngine {
         }
     }
 
-    private func warnForUnlinkedPriorityCampaigns(in campaigns: [Campaign]) async {
-        guard !ignoreAccountLinkWarnings else {
-            warnedUnlinkedPriorityGames.removeAll()
-            return
+    /// Filters campaigns to only those in the prioritised games list.
+    /// Includes debug logging for filtered-out campaigns.
+    private func filterByPrioritisedGames(_ campaigns: [Campaign]) -> [Campaign] {
+        let prioritySet = Set(priorityGames.map { $0.lowercased() })
+        return campaigns.filter { c in
+            let isPrioritised = prioritySet.contains(c.gameName.lowercased())
+                || prioritySet.contains(c.game.id.lowercased())
+            if !isPrioritised {
+                log("[MinerEngine] Filtering out non-prioritised campaign: \(c.name) (\(c.gameName))")
+            }
+            return isPrioritised
         }
+    }
 
+    private func warnForUnlinkedPriorityCampaigns(in campaigns: [Campaign]) async {
+        let isGlobalIgnore = ignoredAccountLinkWarningGames.contains("all")
+        
         let priorityGamesLower = Set(priorityGames.map { $0.lowercased() })
         guard !priorityGamesLower.isEmpty else {
             warnedUnlinkedPriorityGames.removeAll()
@@ -820,6 +869,7 @@ public actor MinerEngine {
         }
 
         let blockedCampaigns = campaigns.filter { campaign in
+            // Filter only to priority games that aren't linked and have active, uncollected drops
             campaign.isTimeActive
                 && !campaign.isAccountConnected
                 && priorityGamesLower.contains(campaign.gameName.lowercased())
@@ -830,8 +880,18 @@ public actor MinerEngine {
         warnedUnlinkedPriorityGames.formIntersection(blockedGamesNow)
 
         let blockedByGame = Dictionary(grouping: blockedCampaigns, by: { $0.gameName.lowercased() })
+        
+        // Filter out games that are explicitly suppressed for this miner
+        let suppressibleGames = blockedByGame.keys.filter { gameName in
+            if isGlobalIgnore { return true }
+            // Check by name or potentially ID (though ignoredAccountLinkWarningGames currently uses lowercased names usually)
+            return ignoredAccountLinkWarningGames.contains(gameName) ||
+                   ignoredAccountLinkWarningGames.contains(blockedByGame[gameName]?.first?.game.id ?? "")
+        }
+        
         let newBlockedGames = blockedByGame.keys
             .filter { !warnedUnlinkedPriorityGames.contains($0) }
+            .filter { !suppressibleGames.contains($0) }
             .sorted()
 
         for key in newBlockedGames {
