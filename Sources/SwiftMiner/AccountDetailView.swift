@@ -13,11 +13,17 @@ struct AccountDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                MinerStateCard(state: miner.primaryState) {
+                MinerStateCard(miner: miner, onAction: {
                     if case .blocked(let reasons) = miner.primaryState, reasons.contains(.accountNotLinked) {
                         Task { try? await navigation.minerManager.startMiner(minerId: miner.id, priorityGames: [], excludedGames: [], strategy: .mineAll) }
                     }
-                }
+                }, onDismiss: { gameId in
+                    Task {
+                        await navigation.minerManager.setAccountLinkWarningIgnored(minerId: miner.id, gameId: gameId, ignored: true)
+                        // Persist immediately
+                        Settings.shared.setIgnoreAccountLinkWarnings(true, for: miner.accountId, gameId: gameId)
+                    }
+                })
 
                 secondaryStatsSection
                 controlsSection
@@ -243,7 +249,7 @@ struct AccountInspectorView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     inspectorSection(title: "Account") {
                         LabeledContent("Username", value: miner.username)
-                        LabeledContent("Status", value: miner.status.displayName)
+                        LabeledContent("Status", value: miner.statusLabel)
                         LabeledContent("Running", value: miner.isRunning ? "Yes" : "No")
                     }
 

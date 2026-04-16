@@ -1102,13 +1102,29 @@ struct OverviewView: View {
                 id: miner.id,
                 title: miner.username,
                 subtitle: miner.currentCampaign ?? fallbackSubtitle(for: miner),
-                status: miner.status.displayName,
+                status: miner.statusLabel,
                 color: statusColor(for: miner)
             )
         }
     }
 
     private func statusColor(for miner: MinerManager.ManagedMiner) -> Color {
+        guard let resolved = miner.resolvedPrimaryState?.resolved else {
+            return fallbackStatusColor(for: miner)
+        }
+        switch resolved.state {
+        case .watching:                          return .green
+        case .blocked:
+            switch resolved.reason {
+            case .notLinked:                        return .orange
+            case .noLiveStreams:                    return .cyan
+            default:                                return .secondary
+            }
+        case .idle:                              return .gray
+        }
+    }
+
+    private func fallbackStatusColor(for miner: MinerManager.ManagedMiner) -> Color {
         switch miner.status {
         case .watching:                          return .green
         case .waitingForStream:                  return .yellow

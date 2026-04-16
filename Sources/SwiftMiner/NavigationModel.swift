@@ -129,7 +129,7 @@ public final class NavigationModel {
             excludedGames: settings.excludedGames,
             strategy: settings.miningStrategy,
             enableBadgesEmotes: settings.enableBadgesEmotes,
-            ignoredAccountLinkWarningAccountIds: settings.ignoredAccountLinkWarningAccountIds
+            ignoredWarnings: settings.ignoredWarnings
         )
     }
 

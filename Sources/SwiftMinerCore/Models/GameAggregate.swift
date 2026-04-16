@@ -1,5 +1,38 @@
 import Foundation
 
+/// Normalized game-level state for Drops grouping.
+/// Priority order: actionRequired > inProgress > ready > completed > unavailable
+public enum GameAggregateState: String, Codable, Sendable, Equatable {
+    case actionRequired = "ACTION_REQUIRED"
+    case inProgress = "IN_PROGRESS"
+    case ready = "READY"
+    case completed = "COMPLETED"
+    case unavailable = "UNAVAILABLE"
+
+    public var priority: Int {
+        switch self {
+        case .actionRequired: return 0
+        case .inProgress: return 1
+        case .ready: return 2
+        case .completed: return 3
+        case .unavailable: return 4
+        }
+    }
+}
+
+/// Campaign-level entry preserved inside a grouped game aggregate.
+public struct GameAggregateCampaign: Sendable, Equatable, Identifiable {
+    public let campaign: CampaignViewData
+    public let state: GameAggregateState
+
+    public var id: String { campaign.id }
+
+    public init(campaign: CampaignViewData, state: GameAggregateState) {
+        self.campaign = campaign
+        self.state = state
+    }
+}
+
 // MARK: - GameAggregate
 
 /// Aggregated game-level progress across all campaigns and accounts.
@@ -17,6 +50,10 @@ public struct GameAggregate: Identifiable, Sendable, Equatable {
     public let earnedDrops: Int
     public let claimedDrops: Int
     public let claimableDrops: Int
+    /// Drops-list grouped campaigns for this game (CampaignViewData path).
+    public let campaigns: [GameAggregateCampaign]
+    /// Aggregated state computed from `campaigns` using precedence rules.
+    public let aggregateState: GameAggregateState
 
     public var progressFraction: Double {
         guard totalDrops > 0 else { return 0 }
@@ -35,6 +72,34 @@ public struct GameAggregate: Identifiable, Sendable, Equatable {
         totalDrops > 0 && earnedDrops == totalDrops && claimedDrops < totalDrops
     }
 
+    public var singleCampaign: GameAggregateCampaign? {
+        campaigns.count == 1 ? campaigns.first : nil
+    }
+
+    public var claimedRewardCount: Int {
+        campaigns.reduce(0) { $0 + $1.campaign.overviewClaimedRewardCount }
+    }
+
+    public var remainingRewardCount: Int {
+        campaigns.reduce(0) { $0 + $1.campaign.overviewRemainingRewardCount }
+    }
+
+    public var claimableRewardCount: Int {
+        campaigns.reduce(0) { count, item in
+            count + item.campaign.drops.filter { $0.isClaimable && !$0.isClaimed }.count
+        }
+    }
+
+    /// Average of campaigns that currently have non-zero watch progress.
+    public var combinedProgressFraction: Double? {
+        let values = campaigns
+            .map(\.campaign.progress)
+            .filter { $0 > 0 }
+
+        guard !values.isEmpty else { return nil }
+        return min(max(values.reduce(0, +) / Double(values.count), 0), 1)
+    }
+
     public init(
         id: String,
         gameName: String,
@@ -42,7 +107,9 @@ public struct GameAggregate: Identifiable, Sendable, Equatable {
         totalDrops: Int,
         earnedDrops: Int,
         claimedDrops: Int,
-        claimableDrops: Int = 0
+        claimableDrops: Int = 0,
+        campaigns: [GameAggregateCampaign] = [],
+        aggregateState: GameAggregateState = .unavailable
     ) {
         self.id = id
         self.gameName = gameName
@@ -51,6 +118,8 @@ public struct GameAggregate: Identifiable, Sendable, Equatable {
         self.earnedDrops = earnedDrops
         self.claimedDrops = claimedDrops
         self.claimableDrops = claimableDrops
+        self.campaigns = campaigns
+        self.aggregateState = aggregateState
     }
 }
 
@@ -137,6 +206,48 @@ public enum GameAggregateBuilder {
         .sorted { $0.gameName < $1.gameName }
     }
 
+    /// Creates per-game drops groupings from flat `CampaignViewData`.
+    ///
+    /// Rules:
+    /// 1. Group by `gameId` when present, otherwise normalized `gameName`.
+    /// 2. Preserve each campaign with its own state.
+    /// 3. Aggregate state precedence: actionRequired > inProgress > ready > completed > unavailable.
+    /// 4. Sort game groups and campaigns deterministically by state priority and signal strength.
+    public static func buildDrops(from campaigns: [CampaignViewData], now: Date = Date()) -> [GameAggregate] {
+        let grouped = Dictionary(grouping: campaigns) { $0.aggregateGameGroupKey }
+
+        let aggregates = grouped.compactMap { gameId, groupCampaigns -> GameAggregate? in
+            guard !groupCampaigns.isEmpty else { return nil }
+
+            let groupedCampaigns = groupCampaigns
+                .map { campaign in
+                    GameAggregateCampaign(
+                        campaign: campaign,
+                        state: campaign.gameAggregateState(now: now)
+                    )
+                }
+                .sorted(by: dropsCampaignSort)
+
+            let state = resolveDropsAggregateState(from: groupedCampaigns.map(\.state))
+            let gameName = resolveGameName(from: groupCampaigns)
+            let artworkURL = groupCampaigns.compactMap(\.artworkURL).first
+
+            return GameAggregate(
+                id: gameId,
+                gameName: gameName,
+                artworkURL: artworkURL,
+                totalDrops: 0,
+                earnedDrops: 0,
+                claimedDrops: 0,
+                claimableDrops: 0,
+                campaigns: groupedCampaigns,
+                aggregateState: state
+            )
+        }
+
+        return aggregates.sorted(by: dropsAggregateSort)
+    }
+
     // MARK: - Private Helpers
 
     private static func isJustChatting(_ campaign: Campaign) -> Bool {
@@ -193,5 +304,75 @@ public enum GameAggregateBuilder {
             requiredMinutes: max(existing.requiredMinutes, incoming.requiredMinutes),
             isClaimed: existing.isClaimed || incoming.isClaimed
         )
+    }
+
+    private static func resolveDropsAggregateState(from states: [GameAggregateState]) -> GameAggregateState {
+        if states.contains(.actionRequired) {
+            return .actionRequired
+        }
+        if states.contains(.inProgress) {
+            return .inProgress
+        }
+        if states.contains(.ready) {
+            return .ready
+        }
+        if states.contains(.completed) {
+            return .completed
+        }
+        return .unavailable
+    }
+
+    private static func resolveGameName(from campaigns: [CampaignViewData]) -> String {
+        campaigns
+            .first(where: { !$0.gameName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })?
+            .gameName
+            ?? campaigns.first?.gameName
+            ?? "Unknown Game"
+    }
+
+    private static func dropsAggregateSort(lhs: GameAggregate, rhs: GameAggregate) -> Bool {
+        if lhs.aggregateState.priority != rhs.aggregateState.priority {
+            return lhs.aggregateState.priority < rhs.aggregateState.priority
+        }
+
+        let lhsInProgress = lhs.campaigns.filter { $0.state == .inProgress }.count
+        let rhsInProgress = rhs.campaigns.filter { $0.state == .inProgress }.count
+        if lhsInProgress != rhsInProgress {
+            return lhsInProgress > rhsInProgress
+        }
+
+        let lhsReady = lhs.campaigns.filter { $0.state == .ready }.count
+        let rhsReady = rhs.campaigns.filter { $0.state == .ready }.count
+        if lhsReady != rhsReady {
+            return lhsReady > rhsReady
+        }
+
+        if lhs.campaigns.count != rhs.campaigns.count {
+            return lhs.campaigns.count > rhs.campaigns.count
+        }
+
+        return lhs.gameName.localizedCaseInsensitiveCompare(rhs.gameName) == .orderedAscending
+    }
+
+    private static func dropsCampaignSort(lhs: GameAggregateCampaign, rhs: GameAggregateCampaign) -> Bool {
+        if lhs.state.priority != rhs.state.priority {
+            return lhs.state.priority < rhs.state.priority
+        }
+
+        if lhs.state == .inProgress || rhs.state == .inProgress {
+            if lhs.campaign.progress != rhs.campaign.progress {
+                return lhs.campaign.progress > rhs.campaign.progress
+            }
+        }
+
+        if lhs.campaign.overviewClaimedRewardCount != rhs.campaign.overviewClaimedRewardCount {
+            return lhs.campaign.overviewClaimedRewardCount > rhs.campaign.overviewClaimedRewardCount
+        }
+
+        if lhs.campaign.overviewRemainingRewardCount != rhs.campaign.overviewRemainingRewardCount {
+            return lhs.campaign.overviewRemainingRewardCount < rhs.campaign.overviewRemainingRewardCount
+        }
+
+        return lhs.campaign.campaignName.localizedCaseInsensitiveCompare(rhs.campaign.campaignName) == .orderedAscending
     }
 }

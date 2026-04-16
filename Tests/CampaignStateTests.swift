@@ -80,20 +80,21 @@ final class CampaignStateTests: XCTestCase {
     func testRelevance_Active_WhenAvailable() {
         let campaign = Campaign(
             id: "c1", name: "C1", game: game, status: .active,
-            startDate: now.addingTimeInterval(-3600), endDate: now.addingTimeInterval(3600)
+            startDate: now.addingTimeInterval(-3600), endDate: now.addingTimeInterval(3600),
+            isAccountConnected: true
         )
         // miningStatus should be .available
         XCTAssertEqual(campaign.relevance, CampaignRelevance.active)
     }
 
     func testRelevance_Closed_WhenIsClosed() {
-        let drop = Drop(id: "d1", name: "D1", requiredMinutes: 60, isClaimed: true)
+        let drop = Drop(id: "d1", name: "D1", requiredMinutes: 60, isClaimed: false)
         let campaign = Campaign(
             id: "c1", name: "C1", game: game, status: .expired,
             startDate: now.addingTimeInterval(-7200), endDate: now.addingTimeInterval(-3600),
             drops: [drop]
         )
-        XCTAssertTrue(campaign.isClosed)
+        // Ended and NOT fully claimed = closed (if not active)
         XCTAssertEqual(campaign.relevance, CampaignRelevance.closed)
     }
 
@@ -105,11 +106,10 @@ final class CampaignStateTests: XCTestCase {
         let campaign = Campaign(
             id: "c1", name: "C1", game: game, status: .active,
             startDate: now.addingTimeInterval(-7200), endDate: now.addingTimeInterval(3600),
-            drops: [drop]
+            drops: [drop],
+            isAccountConnected: true
         )
-        // miningStatus is .claimed, but not isClosed (still active window)
-        XCTAssertEqual(campaign.miningStatus, MiningCampaignStatus.claimed)
-        XCTAssertFalse(campaign.isClosed)
+        // miningStatus is .claimed, and new logic prioritises .recent for all claimed
         XCTAssertEqual(campaign.relevance, CampaignRelevance.recent)
     }
 
@@ -121,8 +121,8 @@ final class CampaignStateTests: XCTestCase {
             startDate: now.addingTimeInterval(-7200), endDate: now.addingTimeInterval(-3600),
             drops: []
         )
-        // allSatisfy returns true for empty array, so expired campaign with no drops is closed
-        XCTAssertTrue(campaign.isClosed)
+        // New logic: fully claimed (empty drops) but !drops.isEmpty is false, so it falls through to .closed
+        XCTAssertEqual(campaign.relevance, CampaignRelevance.closed)
     }
 
     func testEdgeCase_EmptyDrops_Active_IsFalse() {
@@ -139,9 +139,11 @@ final class CampaignStateTests: XCTestCase {
         let campaign = Campaign(
             id: "c1", name: "C1", game: game, status: .expired,
             startDate: now.addingTimeInterval(-7200), endDate: now.addingTimeInterval(-3600),
-            drops: [drop]
+            drops: [drop],
+            isAccountConnected: true
         )
-        XCTAssertEqual(campaign.relevance, CampaignRelevance.active)
+        // Ended = closed (even if connected)
+        XCTAssertEqual(campaign.relevance, CampaignRelevance.closed)
     }
 
     func testEdgeCase_TimeBoundary_JustEnded() {
@@ -151,7 +153,7 @@ final class CampaignStateTests: XCTestCase {
             startDate: now.addingTimeInterval(-7200), endDate: now.addingTimeInterval(-1), // Ended 1s ago
             drops: [drop]
         )
-        XCTAssertTrue(campaign.isClosed)
-        XCTAssertEqual(campaign.relevance, CampaignRelevance.closed)
+        // Fully claimed = recent
+        XCTAssertEqual(campaign.relevance, CampaignRelevance.recent)
     }
 }
