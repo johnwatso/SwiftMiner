@@ -541,6 +541,7 @@ public actor AggregatedCampaignDataService {
 
         return CampaignViewData(
             id: data.id,
+            gameId: data.gameId,
             gameName: data.gameName,
             campaignName: data.campaignName,
             artworkURL: data.artworkURL,
