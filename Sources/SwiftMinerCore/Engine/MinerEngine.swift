@@ -6,8 +6,8 @@ public actor MinerEngine {
 
     private let clientId: String
     private var authService: TwitchAuthService
-    var apiClient: TwitchAPIClient
-    var dropsService: DropsService
+    private var apiClient: TwitchAPIClient
+    private var dropsService: DropsService
     private var watchSessionManager: WatchSessionManager
     private var claimService: ClaimService
     private var pubSubClient: PubSubClient
@@ -813,6 +813,12 @@ public actor MinerEngine {
         do {
             let claimable = try await dropsService.getClaimableDrops()
 
+            if claimable.isEmpty {
+                log("No claimable drops found in inventory")
+            } else {
+                log("Found \(claimable.count) claimable drop(s): \(claimable.map { $0.dropName }.joined(separator: ", "))")
+            }
+
             for progress in claimable {
                 let result = await claimService.claimDrop(progress)
                 if result.success {
@@ -833,7 +839,7 @@ public actor MinerEngine {
                     )
                     onDropClaimed?(drop)
                     session?.dropsClaimed += 1
-                    
+
                     // Send local notification if enabled
                     if showClaimNotifications, let notificationService = notificationService {
                         await notificationService.notifyDropClaimed(
@@ -842,7 +848,8 @@ public actor MinerEngine {
                         )
                     }
                 } else {
-                    log("⚠️ Drop claim returned not-success for \(progress.dropName)")
+                    let reason = result.error.map { " (\($0))" } ?? ""
+                    log("⚠️ Drop claim returned not-success for \(progress.dropName)\(reason)")
                 }
 
                 // Small delay between claims
@@ -1065,15 +1072,31 @@ public actor MinerEngine {
                 return (a.viewerCount ?? 0) > (b.viewerCount ?? 0)
             }
 
+            var verificationCandidates = Self.verificationCandidates(from: sortedChannels, campaign: campaign)
+            if campaign.hasChannelRestrictions {
+                log("[ChannelSelect]   ACL-matched live directory candidates: \(verificationCandidates.count)")
+                if verificationCandidates.isEmpty {
+                    log("[ChannelSelect]   No directory candidates matched the campaign ACL; probing approved channels directly...")
+                    verificationCandidates = await liveACLChannels(for: campaign)
+                    log("[ChannelSelect]   Live approved-channel fallback candidates: \(verificationCandidates.count)")
+                }
+            }
+
+            guard !verificationCandidates.isEmpty else {
+                log("[ChannelSelect]   ✗ No candidate channels matched campaign requirements")
+                return nil
+            }
+
             // STEP 2: Filter and Verify (GQL-based verification)
             // We iterate through the top candidates and verify they ACTUALLY have drops for this campaign.
             // This prevents "stuck" sessions on channels that only have the tag but no active campaign.
             var allVerificationsFailed = true  // true only if every attempt threw a network error
-            for ch in sortedChannels.prefix(5) {
-                log("[ChannelSelect]   Verifying \(ch.displayName) (viewers: \(ch.viewerCount ?? 0))...")
+            for ch in verificationCandidates {
+                let channel = await resolveChannelIdIfNeeded(ch)
+                log("[ChannelSelect]   Verifying \(channel.displayName) (viewers: \(channel.viewerCount ?? 0), id: \(channel.id))...")
 
                 // If it's not a Special Event, we can filter by campaign restrictions early
-                if campaign.hasChannelRestrictions && !campaign.channels.contains(where: { $0.id == ch.id }) {
+                if campaign.hasChannelRestrictions && !Self.channelMatchesCampaignACL(channel, campaign: campaign) {
                     log("[ChannelSelect]     ✗ Skipping: not in campaign ACL")
                     allVerificationsFailed = false  // not an error — campaign restriction mismatch
                     continue
@@ -1081,19 +1104,19 @@ public actor MinerEngine {
 
                 do {
                     // TDM PARITY: Strict drops-enabled verification via GQL
-                    let activeCampaignIds = try await apiClient.fetchAvailableDrops(channelId: ch.id)
+                    let activeCampaignIds = try await apiClient.fetchAvailableDrops(channelId: channel.id)
                     allVerificationsFailed = false  // GQL responded — campaign simply not active here
                     if activeCampaignIds.contains(campaign.id) {
-                        log("[ChannelSelect]     ✓ Verified! Campaign \(campaign.id) is active on \(ch.displayName)")
+                        log("[ChannelSelect]     ✓ Verified! Campaign \(campaign.id) is active on \(channel.displayName)")
                         // Track selected channel for UI
-                        currentChannelName = ch.displayName
-                        currentChannelId = ch.id
-                        return ch
+                        currentChannelName = channel.displayName
+                        currentChannelId = channel.id
+                        return channel
                     } else {
                         log("[ChannelSelect]     ✗ Campaign mismatch. Active IDs: \(activeCampaignIds.joined(separator: ", "))")
                     }
                 } catch {
-                    log("[ChannelSelect]     ⚠️ Verification failed for \(ch.displayName): \(error.localizedDescription)")
+                    log("[ChannelSelect]     ⚠️ Verification failed for \(channel.displayName): \(error.localizedDescription)")
                     // allVerificationsFailed remains true for this channel — it errored
                 }
             }
@@ -1101,7 +1124,7 @@ public actor MinerEngine {
             // Only fall back to best-guess channel if ALL verification attempts failed due to
             // network/GQL errors (not because the campaign simply wasn't active on those channels).
             // This prevents watching unverified channels when the campaign is genuinely expired.
-            if allVerificationsFailed, let best = sortedChannels.first {
+            if allVerificationsFailed, let best = verificationCandidates.first {
                 log("[ChannelSelect]   ! All GQL verifications errored. Falling back to best candidate: \(best.displayName)")
                 // Track selected channel for UI
                 currentChannelName = best.displayName
@@ -1122,6 +1145,102 @@ public actor MinerEngine {
             }
             return nil
         }
+    }
+
+    private func resolveChannelIdIfNeeded(_ channel: Channel) async -> Channel {
+        guard channel.id == channel.login else { return channel }
+
+        do {
+            let resolved = try await apiClient.getChannel(login: channel.login)
+            log("[ChannelSelect]   Resolved \(channel.login) → channel ID \(resolved.id)")
+            return Channel(
+                id: resolved.id,
+                login: resolved.login,
+                displayName: resolved.displayName,
+                description: channel.description,
+                profileImageUrl: channel.profileImageUrl,
+                isLive: channel.isLive,
+                viewerCount: channel.viewerCount,
+                gameId: channel.gameId,
+                gameName: channel.gameName,
+                tags: channel.tags,
+                hasDropsEnabled: channel.hasDropsEnabled,
+                broadcasterType: channel.broadcasterType,
+                aclBased: channel.aclBased
+            )
+        } catch {
+            log("[ChannelSelect]   ⚠️ Could not resolve channel ID for \(channel.login): \(error.localizedDescription)")
+            return channel
+        }
+    }
+
+    private func liveACLChannels(for campaign: Campaign, limit: Int = 30) async -> [Channel] {
+        guard campaign.hasChannelRestrictions else { return [] }
+
+        var liveChannels: [Channel] = []
+        for channel in campaign.channels.prefix(limit) {
+            let login = channel.login.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !login.isEmpty else { continue }
+
+            do {
+                guard try await apiClient.fetchBroadcastId(channelLogin: login) != nil else {
+                    continue
+                }
+
+                let resolved = await resolveChannelIdIfNeeded(channel)
+                liveChannels.append(Channel(
+                    id: resolved.id,
+                    login: resolved.login,
+                    displayName: resolved.displayName,
+                    description: channel.description,
+                    profileImageUrl: channel.profileImageUrl,
+                    isLive: true,
+                    viewerCount: channel.viewerCount,
+                    gameId: channel.gameId,
+                    gameName: channel.gameName,
+                    tags: channel.tags,
+                    hasDropsEnabled: true,
+                    broadcasterType: channel.broadcasterType,
+                    aclBased: true
+                ))
+            } catch {
+                log("[ChannelSelect]   ⚠️ Could not check live state for approved channel \(channel.displayName): \(error.localizedDescription)")
+            }
+        }
+
+        return liveChannels
+    }
+
+    internal static func verificationCandidates(from sortedChannels: [Channel], campaign: Campaign) -> [Channel] {
+        guard campaign.hasChannelRestrictions else {
+            return Array(sortedChannels.prefix(50))
+        }
+
+        return sortedChannels.filter { channel in
+            channelMatchesCampaignACL(channel, campaign: campaign)
+        }
+    }
+
+    internal static func channelMatchesCampaignACL(_ channel: Channel, campaign: Campaign) -> Bool {
+        let channelKeys = identityKeys(for: channel)
+        guard !channelKeys.isEmpty else { return false }
+
+        return campaign.channels.contains { aclChannel in
+            !channelKeys.isDisjoint(with: identityKeys(for: aclChannel))
+        }
+    }
+
+    private static func identityKeys(for channel: Channel) -> Set<String> {
+        [channel.id, channel.login, channel.displayName].reduce(into: Set<String>()) { keys, value in
+            let normalized = normalizedChannelIdentity(value)
+            if !normalized.isEmpty {
+                keys.insert(normalized)
+            }
+        }
+    }
+
+    private static func normalizedChannelIdentity(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
     
     private func handleError(_ error: TwitchMinerError) {

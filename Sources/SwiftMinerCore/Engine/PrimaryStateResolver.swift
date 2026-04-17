@@ -8,9 +8,9 @@ public enum PrimaryStateResolver {
     /// Resolves the PrimaryState for a given miner.
     ///
     /// Derives from the per-game state list to ensure a single, consistent resolution:
-    /// 1. `.blocked`: If ANY game state is blocked.
-    /// 2. `.mining`: If ANY game state is actively watching with progress.
-    /// 3. `.ready`: If ANY game state is idle but earnable.
+    /// 1. `.mining`: If ANY game state is actively watching with progress.
+    /// 2. `.ready`: If ANY game state is idle but earnable.
+    /// 3. `.blocked`: If no game is earnable and a game state is blocked.
     /// 4. `.completed`: If ALL game states have earned drops.
     @MainActor
     public static func resolve(for miner: MinerManager.ManagedMiner) -> PrimaryState {

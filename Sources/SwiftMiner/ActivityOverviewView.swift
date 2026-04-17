@@ -96,7 +96,7 @@ struct ActivityOverviewView: View {
                         }
                     }
 
-                    campaignActivitySection(campaigns: activeCampaigns)
+                    campaignActivitySection(for: miner, campaigns: activeCampaigns)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(24)
@@ -141,7 +141,7 @@ struct ActivityOverviewView: View {
     }
 
     @ViewBuilder
-    private func campaignActivitySection(campaigns: [Campaign]) -> some View {
+    private func campaignActivitySection(for miner: MinerManager.ManagedMiner, campaigns: [Campaign]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("CAMPAIGNS")
                 .font(.caption2.weight(.bold))
@@ -153,7 +153,8 @@ struct ActivityOverviewView: View {
                     NoActiveCampaignsRow()
                 } else {
                     ForEach(campaigns) { campaign in
-                        CampaignActivityRow(campaign: campaign)
+                        let isWatching = miner.status == .watching && miner.currentCampaignId == campaign.id
+                        CampaignActivityRow(campaign: campaign, isWatching: isWatching)
                     }
                 }
             }
@@ -299,6 +300,7 @@ private struct MinerSourceListRow: View {
 
 private struct CampaignActivityRow: View {
     let campaign: Campaign
+    let isWatching: Bool
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
@@ -316,9 +318,9 @@ private struct CampaignActivityRow: View {
 
             Spacer(minLength: 12)
 
-            Text(campaign.activityStatusMessage)
+            Text(campaign.activityStatusMessage(isWatching: isWatching))
                 .font(.caption)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(isWatching ? AnyShapeStyle(Color.green) : AnyShapeStyle(.tertiary))
                 .lineLimit(1)
                 .frame(minWidth: 150, alignment: .trailing)
         }
@@ -352,15 +354,17 @@ private struct NoActiveCampaignsRow: View {
 
 extension Campaign {
     var activityStatusMessage: String {
+        activityStatusMessage(isWatching: false)
+    }
+
+    func activityStatusMessage(isWatching: Bool) -> String {
         if !isAccountConnected {
             return "Account not linked"
         }
-
-        if !hasDropsEnabled {
-            return "Waiting for eligible stream"
+        if isWatching {
+            return "Mining"
         }
-
-        return "Mining"
+        return "Waiting for eligible stream"
     }
 }
 

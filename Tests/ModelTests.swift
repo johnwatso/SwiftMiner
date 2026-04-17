@@ -157,6 +157,56 @@ final class ModelTests: XCTestCase {
         XCTAssertFalse(campaign.isMiningEligible)
     }
 
+    func testVerificationCandidatesForRestrictedCampaignSkipsNonACLChannels() {
+        let game = Game(id: "g1", name: "THE FINALS")
+        let now = Date()
+        let approved = Channel(id: "100", login: "approvedstreamer", displayName: "ApprovedStreamer")
+        let campaign = Campaign(
+            id: "campaign",
+            name: "Restricted Campaign",
+            game: game,
+            status: .active,
+            startDate: now.addingTimeInterval(-3600),
+            endDate: now.addingTimeInterval(3600),
+            drops: [Drop(id: "d1", name: "Drop", requiredMinutes: 60)],
+            channels: [approved],
+            isAccountConnected: true
+        )
+        let sortedChannels = [
+            Channel(id: "1", login: "popularone", displayName: "PopularOne", viewerCount: 10_000),
+            Channel(id: "2", login: "populartwo", displayName: "PopularTwo", viewerCount: 8_000),
+            Channel(id: "100", login: "approvedstreamer", displayName: "ApprovedStreamer", viewerCount: 42)
+        ]
+
+        let candidates = MinerEngine.verificationCandidates(from: sortedChannels, campaign: campaign)
+
+        XCTAssertEqual(candidates.map(\.login), ["approvedstreamer"])
+    }
+
+    func testRestrictedCampaignACLMatchesDirectoryLoginFallback() {
+        let game = Game(id: "g1", name: "THE FINALS")
+        let now = Date()
+        let campaign = Campaign(
+            id: "campaign",
+            name: "Restricted Campaign",
+            game: game,
+            status: .active,
+            startDate: now.addingTimeInterval(-3600),
+            endDate: now.addingTimeInterval(3600),
+            drops: [Drop(id: "d1", name: "Drop", requiredMinutes: 60)],
+            channels: [Channel(id: "100", login: "approvedstreamer", displayName: "ApprovedStreamer")],
+            isAccountConnected: true
+        )
+        let directoryChannel = Channel(
+            id: "approvedstreamer",
+            login: "approvedstreamer",
+            displayName: "approvedstreamer",
+            viewerCount: 42
+        )
+
+        XCTAssertTrue(MinerEngine.channelMatchesCampaignACL(directoryChannel, campaign: campaign))
+    }
+    
     // MARK: - Progress
 
     func testProgressPartial() {
@@ -332,6 +382,87 @@ final class ModelTests: XCTestCase {
         XCTAssertTrue(firstClaim.shouldAcknowledgeServerProgress)
         XCTAssertEqual(secondClaim.transition, .none)
         XCTAssertFalse(secondClaim.shouldAcknowledgeServerProgress)
+    }
+
+    func testDropProgressTrackerSuppressesObserveAfterClaimed() {
+        var tracker = DropProgressEventTracker()
+
+        _ = tracker.observe(DropProgressObservation(
+            campaignId: "campaign-1", dropId: "drop-1", dropLabel: "Drop One",
+            currentMinutes: 60, requiredMinutes: 60, source: .pubSub
+        ))
+        _ = tracker.markClaimed(campaignId: "campaign-1", dropId: "drop-1", dropLabel: "Drop One")
+
+        // A late-arriving poll after claiming should be suppressed
+        let result = tracker.observe(DropProgressObservation(
+            campaignId: "campaign-1", dropId: "drop-1", dropLabel: "Drop One",
+            currentMinutes: 60, requiredMinutes: 60, source: .gqlPoll
+        ))
+
+        XCTAssertEqual(result.transition, .none)
+        XCTAssertFalse(result.shouldAcknowledgeServerProgress)
+        // Cache should still reflect the claimed state
+        let key = DropProgressCacheKey(campaignId: "campaign-1", dropId: "drop-1")
+        XCTAssertTrue(tracker.cache[key]?.isClaimed ?? false)
+    }
+
+    func testDropProgressTrackerRegressionPreservesHigherCachedMinutes() {
+        var tracker = DropProgressEventTracker()
+
+        _ = tracker.observe(DropProgressObservation(
+            campaignId: "campaign-1", dropId: "drop-1", dropLabel: "Drop One",
+            currentMinutes: 30, requiredMinutes: 60, source: .pubSub
+        ))
+
+        // Server returns a regressed value (stale poll)
+        let result = tracker.observe(DropProgressObservation(
+            campaignId: "campaign-1", dropId: "drop-1", dropLabel: "Drop One",
+            currentMinutes: 20, requiredMinutes: 60, source: .gqlPoll
+        ))
+
+        XCTAssertEqual(result.transition, .regression(previousMinutes: 30, observedMinutes: 20))
+        // Cache should still hold the higher minute count
+        let key = DropProgressCacheKey(campaignId: "campaign-1", dropId: "drop-1")
+        XCTAssertEqual(tracker.cache[key]?.currentMinutes, 30)
+    }
+
+    func testDropProgressTrackerInheritsRequiredMinutesFromPreviousObservation() {
+        var tracker = DropProgressEventTracker()
+
+        _ = tracker.observe(DropProgressObservation(
+            campaignId: "campaign-1", dropId: "drop-1", dropLabel: "Drop One",
+            currentMinutes: 59, requiredMinutes: 60, source: .pubSub
+        ))
+
+        // Second observation omits requiredMinutes — should inherit 60 from cache
+        let result = tracker.observe(DropProgressObservation(
+            campaignId: "campaign-1", dropId: "drop-1", dropLabel: "Drop One",
+            currentMinutes: 60, requiredMinutes: nil, source: .gqlPoll
+        ))
+
+        XCTAssertEqual(
+            result.transition,
+            .claimable(dropLabel: "Drop One", currentMinutes: 60, requiredMinutes: 60)
+        )
+    }
+
+    func testDropProgressTrackerNilCampaignIdKeyedSeparately() {
+        var tracker = DropProgressEventTracker()
+
+        _ = tracker.observe(DropProgressObservation(
+            campaignId: "campaign-1", dropId: "drop-1", dropLabel: "Drop One",
+            currentMinutes: 10, requiredMinutes: 60, source: .pubSub
+        ))
+        _ = tracker.observe(DropProgressObservation(
+            campaignId: nil, dropId: "drop-1", dropLabel: "Drop One",
+            currentMinutes: 5, requiredMinutes: 60, source: .pubSub
+        ))
+
+        // The two keys must not interfere with each other
+        let keyWithCampaign = DropProgressCacheKey(campaignId: "campaign-1", dropId: "drop-1")
+        let keyNoCampaign = DropProgressCacheKey(campaignId: nil, dropId: "drop-1")
+        XCTAssertEqual(tracker.cache[keyWithCampaign]?.currentMinutes, 10)
+        XCTAssertEqual(tracker.cache[keyNoCampaign]?.currentMinutes, 5)
     }
 
     // MARK: - Channel

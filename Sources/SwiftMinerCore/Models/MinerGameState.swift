@@ -87,7 +87,7 @@ public struct MinerGameState: Equatable, Sendable {
 
 /// The resolved primary state for a miner, derived from the full per-game state list.
 ///
-/// Priority order: **watching > blocked > idle**
+/// Priority order: **watching > ready idle > blocked > other idle**.
 public struct ResolvedPrimaryState: Equatable, Sendable {
     /// The single resolved game state that should be shown as the primary visible state.
     public let resolved: MinerGameState?
@@ -97,29 +97,37 @@ public struct ResolvedPrimaryState: Equatable, Sendable {
     public init(gameStates: [MinerGameState]) {
         self.allStates = gameStates
 
-        // Priority: watching > blocked > idle. Blocked campaigns are still listed per game,
-        // but an account that is successfully mining should present as mining.
+        // Priority: watching > ready idle > blocked > other idle. Blocked campaigns are
+        // still listed per game, but they should not prevent mining another earnable
+        // prioritised game.
         var blocked: MinerGameState?
+        var readyIdle: MinerGameState?
+        var fallbackIdle: MinerGameState?
         var watching: MinerGameState?
 
         for gs in gameStates {
-            if gs.isBlocking, blocked == nil {
-                blocked = gs
-            } else if gs.isActive, watching == nil {
+            if gs.isActive, watching == nil {
                 watching = gs
+            } else if gs.isIdle && gs.reason == .none && readyIdle == nil {
+                readyIdle = gs
+            } else if gs.isBlocking, blocked == nil {
+                blocked = gs
+            } else if gs.isIdle && fallbackIdle == nil {
+                fallbackIdle = gs
             }
-            if blocked != nil, watching != nil {
+            if watching != nil, readyIdle != nil, blocked != nil, fallbackIdle != nil {
                 break
             }
         }
 
         if let watching {
             self.resolved = watching
+        } else if let readyIdle {
+            self.resolved = readyIdle
         } else if let blocked {
             self.resolved = blocked
         } else {
-            // Return the first idle state (or first game state if none match)
-            self.resolved = gameStates.first { $0.isIdle } ?? gameStates.first
+            self.resolved = fallbackIdle ?? gameStates.first
         }
     }
 }

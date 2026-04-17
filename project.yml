@@ -87,6 +87,7 @@ targets:
       - Tests
     dependencies:
       - target: SwiftMinerCore
+        link: false
       - target: SwiftMiner
     settings:
       base:
