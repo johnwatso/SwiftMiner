@@ -288,6 +288,10 @@ struct OverviewView: View {
     }
 
     private func applySteamAppId(_ appId: String, for gameName: String) {
+        guard SteamArtworkService.supportsSteamArtwork(forGameName: gameName) else {
+            return
+        }
+
         Task {
             await SteamArtworkService.shared.setManualAppId(for: gameName, appId: appId)
             await navigation.minerManager.dataCoordinator.enrichGameNames([gameName])
@@ -554,7 +558,9 @@ struct OverviewView: View {
             eyebrow: "Debug",
             progressText: detail,
             progressPercent: index == 0 ? 42 : 0,
-            artworkURL: navigation.minerManager.dataCoordinator.steamArtworkOverrides[gameName],
+            artworkURL: SteamArtworkService.supportsSteamArtwork(forGameName: gameName)
+                ? navigation.minerManager.dataCoordinator.steamArtworkOverrides[gameName]
+                : nil,
             tint: tint,
             hasOnlyBadgesOrEmotes: false,
             visualState: index == 0 ? .inProgress : .idle,
@@ -644,7 +650,10 @@ struct OverviewView: View {
     private func makeRailItem(for campaign: CampaignViewData, section: CampaignFeedSection) -> CampaignRailItem {
         let state = visualState(for: campaign)
         let hasPriorityLinkIssue = hasPriorityLinkIssue(for: campaign, section: section)
-        let game = Game(id: campaign.id, name: campaign.gameName, boxArtURL: campaign.artworkURL)
+        let game = Game(id: campaign.gameId ?? campaign.id, name: campaign.gameName, boxArtURL: campaign.artworkURL)
+        let artworkURL = SteamArtworkService.supportsSteamArtwork(forGameName: campaign.gameName, gameId: campaign.gameId)
+            ? navigation.minerManager.dataCoordinator.steamArtworkOverrides[campaign.gameName] ?? campaign.artworkURL
+            : campaign.artworkURL
 
         return CampaignRailItem(
             id: "\(section.rawValue)-\(campaign.id)",
@@ -654,7 +663,7 @@ struct OverviewView: View {
             eyebrow: eyebrowText(for: campaign, section: section, state: state, hasPriorityLinkIssue: hasPriorityLinkIssue),
             progressText: campaignDetailText(for: campaign, state: state, hasPriorityLinkIssue: hasPriorityLinkIssue),
             progressPercent: campaignProgressPercent(for: campaign),
-            artworkURL: navigation.minerManager.dataCoordinator.steamArtworkOverrides[campaign.gameName] ?? campaign.artworkURL,
+            artworkURL: artworkURL,
             tint: tintColor(for: campaign, hasPriorityLinkIssue: hasPriorityLinkIssue),
             hasOnlyBadgesOrEmotes: false,
             visualState: state,
@@ -688,8 +697,14 @@ struct OverviewView: View {
     }
 
     private func makePreferredGameItem(_ preference: GamePreference) -> CampaignRailItem {
-        let artworkURL = navigation.minerManager.dataCoordinator.steamArtworkOverrides[preference.gameName]
-            ?? (settings.preferSteamArtwork ? nil : preference.boxArtURL)
+        let supportsSteamArtwork = SteamArtworkService.supportsSteamArtwork(
+            forGameName: preference.gameName,
+            gameId: preference.gameId
+        )
+        let artworkURL = supportsSteamArtwork
+            ? navigation.minerManager.dataCoordinator.steamArtworkOverrides[preference.gameName]
+                ?? (settings.preferSteamArtwork ? nil : preference.boxArtURL)
+            : preference.boxArtURL
         return CampaignRailItem(
             id: "preferred-\(preference.gameId.isEmpty ? preference.gameName : preference.gameId)",
             section: .prioritised,
@@ -724,8 +739,13 @@ struct OverviewView: View {
                     : "Your preferred games are ready for the next campaign.",
                 progressPercent: 0,
                 artworkURL: preferredGames.first.flatMap { pref in
-                    navigation.minerManager.dataCoordinator.steamArtworkOverrides[pref.gameName]
+                    (SteamArtworkService.supportsSteamArtwork(
+                        forGameName: pref.gameName,
+                        gameId: pref.gameId
+                    ))
+                    ? navigation.minerManager.dataCoordinator.steamArtworkOverrides[pref.gameName]
                         ?? (settings.preferSteamArtwork ? nil : pref.boxArtURL)
+                    : pref.boxArtURL
                 },
                 tint: .orange,
                 hasOnlyBadgesOrEmotes: false,
@@ -1906,14 +1926,16 @@ private struct CampaignFeedCard: View {
 
                 Divider()
 
-                Button {
-                    onSetSteamId(game.name)
-                } label: {
-                    GameActionMenuLabel(
-                        title: "Set Steam ID",
-                        subtitle: "Set a Steam ID to enable high-resolution artwork for this game.",
-                        systemImage: "photo.artframe"
-                    )
+                if SteamArtworkService.supportsSteamArtwork(forGameName: game.name, gameId: game.id) {
+                    Button {
+                        onSetSteamId(game.name)
+                    } label: {
+                        GameActionMenuLabel(
+                            title: "Set Steam ID",
+                            subtitle: "Set a Steam ID to enable high-resolution artwork for this game.",
+                            systemImage: "photo.artframe"
+                        )
+                    }
                 }
             }
         }

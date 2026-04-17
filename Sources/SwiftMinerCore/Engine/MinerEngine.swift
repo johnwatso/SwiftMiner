@@ -561,22 +561,24 @@ public actor MinerEngine {
                 // 1. Fetch all campaigns (single call — avoids double API hit).
                 let allEnriched = try await dropsService.fetchCampaigns()
                 
-                // Strict prioritisation contract: Filter all campaigns before further processing.
-                let prioritisedAll = filterByPrioritisedGames(allEnriched)
-                
-                self.allCampaigns = prioritisedAll
-                let campaigns = prioritisedAll.filter { $0.isMiningEligible }
+                self.allCampaigns = allEnriched
+                let candidates = candidateCampaigns(
+                    from: allEnriched,
+                    priorityGames: priorityGames,
+                    excludedGames: excludedGames,
+                    strategy: miningStrategy
+                )
 
-                log("Campaigns: \(allCampaigns.count) total prioritised, \(campaigns.count) mining-eligible")
-                for c in prioritisedAll {
+                log("Campaigns: \(allCampaigns.count) total, \(candidates.count) account-eligible")
+                for c in allEnriched {
                     // IMPLEMENTATION OF DOMAIN LOGGING REQUIREMENT
                     log("  · \(c.name) (\(c.gameName)) → Status: \(c.miningStatus.rawValue) → Relevance: \(c.relevance.rawValue)")
                 }
 
-                await warnForUnlinkedPriorityCampaigns(in: prioritisedAll)
+                await warnForUnlinkedPriorityCampaigns(in: allEnriched)
                 
-                // Log expired campaigns that might be incorrectly marked as eligible (from the prioritised subset)
-                let expiredButEligible = prioritisedAll.filter { $0.miningStatus == .expired && $0.isMiningEligible }
+                // Log expired campaigns that might be incorrectly marked as eligible.
+                let expiredButEligible = allEnriched.filter { $0.miningStatus == .expired && $0.isMiningEligible }
                 if !expiredButEligible.isEmpty {
                     log("⚠️ WARNING: \(expiredButEligible.count) expired campaigns incorrectly marked as mining-eligible:")
                     for c in expiredButEligible {
@@ -584,15 +586,15 @@ public actor MinerEngine {
                     }
                 }
                 
-                onCampaignUpdate?(campaigns)
+                onCampaignUpdate?(candidates)
 
                 // 2. Claim any ready drops first (Claimable status handled here)
                 await claimReadyDrops()
 
-                // 3. Find best campaign to mine based on strategy
-                // SELECTION RULE: Must be AVAILABLE or IN_PROGRESS. Never CLAIMED or EXPIRED.
-                guard let campaign = selectBestCampaign(from: prioritisedAll, priorityGames: priorityGames, excludedGames: excludedGames, strategy: miningStrategy) else {
-                    log("No mineable campaigns matching strategy '\(miningStrategy.displayName)'")
+                // 3. Find the best account-eligible campaign that also has a live channel.
+                guard !candidates.isEmpty else {
+                    log("No account-eligible campaigns matching strategy '\(miningStrategy.displayName)'")
+                    session?.currentCampaignId = nil
                     onStatusChange?(.idle)
                     // Wait up to campaignCheckInterval in 10s ticks, breaking early on triggerRescan()
                     shouldRescanCampaigns = false
@@ -606,14 +608,21 @@ public actor MinerEngine {
                     continue
                 }
 
-                log("Selected campaign: \(campaign.name) (\(campaign.gameName))")
+                var selectedCampaign: Campaign?
+                var selectedChannel: Channel?
+                for candidate in candidates {
+                    log("Checking campaign: \(candidate.name) (\(candidate.gameName))")
+                    if let channel = await selectBestChannel(from: candidate) {
+                        selectedCampaign = candidate
+                        selectedChannel = channel
+                        break
+                    }
+                    log("No eligible channels available for \(candidate.name); trying next candidate.")
+                }
 
-                // 4. Find eligible channel
-                guard let channel = await selectBestChannel(from: campaign) else {
-                    log("No eligible channels available for \(campaign.name)")
-                    // Keep campaign ID so the UI shows it as queued/waiting (not being mined —
-                    // watchingMiners() requires .watching status, not just a currentCampaignId match)
-                    session?.currentCampaignId = campaign.id
+                guard let campaign = selectedCampaign, let channel = selectedChannel else {
+                    log("No eligible channels available for \(candidates.count) account-eligible campaign(s)")
+                    session?.currentCampaignId = nil
                     onStatusChange?(.waitingForStream)
                     shouldRescanCampaigns = false
                     let tickNs: UInt64 = 10 * 1_000_000_000
@@ -744,21 +753,20 @@ public actor MinerEngine {
                     if Date().timeIntervalSince(lastCampaignReevaluation) >= campaignReevalInterval {
                         lastCampaignReevaluation = Date()
                         if let fetched = try? await dropsService.fetchCampaigns() {
-                            let freshCampaigns = filterByPrioritisedGames(fetched)
-                            self.allCampaigns = freshCampaigns
+                            self.allCampaigns = fetched
 
-                            // If the current campaign no longer exists in the API response (or is no longer prioritised),
+                            // If the current campaign no longer exists in the API response,
                             // clear it from session state and rescan immediately.
-                            if !freshCampaigns.contains(where: { $0.id == campaign.id }) {
+                            if !fetched.contains(where: { $0.id == campaign.id }) {
                                 log("⚠️ Campaign '\(campaign.name)' no longer returned by API — clearing and rescanning.")
                                 session?.currentCampaignId = nil
                                 shouldSwitchChannel = true
-                            } else if let bestCampaign = selectBestCampaign(
-                                from: freshCampaigns,
+                            } else if let bestCampaign = candidateCampaigns(
+                                from: fetched,
                                 priorityGames: priorityGames,
                                 excludedGames: excludedGames,
                                 strategy: miningStrategy
-                            ), bestCampaign.id != campaign.id {
+                            ).first, bestCampaign.id != campaign.id {
                                 log("🔄 Better campaign now available: \(bestCampaign.name) (\(bestCampaign.gameName)). Switching from \(campaign.name).")
                                 shouldSwitchChannel = true
                             }
@@ -845,20 +853,6 @@ public actor MinerEngine {
         }
     }
 
-    /// Filters campaigns to only those in the prioritised games list.
-    /// Includes debug logging for filtered-out campaigns.
-    private func filterByPrioritisedGames(_ campaigns: [Campaign]) -> [Campaign] {
-        let prioritySet = Set(priorityGames.map { $0.lowercased() })
-        return campaigns.filter { c in
-            let isPrioritised = prioritySet.contains(c.gameName.lowercased())
-                || prioritySet.contains(c.game.id.lowercased())
-            if !isPrioritised {
-                log("[MinerEngine] Filtering out non-prioritised campaign: \(c.name) (\(c.gameName))")
-            }
-            return isPrioritised
-        }
-    }
-
     private func warnForUnlinkedPriorityCampaigns(in campaigns: [Campaign]) async {
         let isGlobalIgnore = ignoredAccountLinkWarningGames.contains("all")
         
@@ -921,127 +915,109 @@ public actor MinerEngine {
         }
     }
     
-    private func selectBestCampaign(from campaigns: [Campaign], priorityGames: [String], excludedGames: [String], strategy: MiningStrategy) -> Campaign? {
+    private func candidateCampaigns(
+        from campaigns: [Campaign],
+        priorityGames: [String],
+        excludedGames: [String],
+        strategy: MiningStrategy
+    ) -> [Campaign] {
         log("[CampaignSelect] Strategy: \(strategy.displayName), Total campaigns: \(campaigns.count)")
         log("[CampaignSelect]   Excluded games: \(excludedGames.count), Priority games: \(priorityGames.count)")
         log("[CampaignSelect]   Badge/Emotes enabled: \(enableBadgesEmotes)")
-        
-        let priorityGamesLower = priorityGames.map { $0.lowercased() }
-        let excludedGamesLower = excludedGames.map { $0.lowercased() }
 
-        // 1. Filter out excluded games (highest priority rule - always applied)
-        let nonExcluded = campaigns.filter {
-            !excludedGamesLower.contains($0.gameName.lowercased())
-        }
-        let excludedCount = campaigns.count - nonExcluded.count
-        if excludedCount > 0 {
-            log("[CampaignSelect]   Excluded \(excludedCount) campaigns by game filter")
-        }
-
-        // 2. Filter to mineable campaigns (Truth Layer check)
+        let priorityKeys = priorityGames.map { normalizedGameKey($0) }.filter { !$0.isEmpty }
+        let prioritySet = Set(priorityKeys)
+        let excludedSet = Set(excludedGames.map { normalizedGameKey($0) }.filter { !$0.isEmpty })
         var filteredOutReasons: [String: Int] = [:]
-        let eligible = nonExcluded.filter { c in
-            guard c.isAccountConnected else {
+
+        let eligible = campaigns.filter { campaign in
+            let gameName = normalizedGameKey(campaign.gameName)
+            let gameId = normalizedGameKey(campaign.game.id)
+
+            if excludedSet.contains(gameName) || excludedSet.contains(gameId) {
+                filteredOutReasons["excluded_game", default: 0] += 1
+                return false
+            }
+            if strategy == .onlyPriority && !prioritySet.contains(gameName) && !prioritySet.contains(gameId) {
+                filteredOutReasons["not_prioritised", default: 0] += 1
+                return false
+            }
+            guard campaign.isTimeActive, campaign.status != .disabled else {
+                filteredOutReasons["inactive", default: 0] += 1
+                return false
+            }
+            guard campaign.isAccountConnected else {
                 filteredOutReasons["not_connected", default: 0] += 1
                 return false
             }
-            
-            // Filter out non-drop rewards (badges/emotes) if setting is disabled
-            if !enableBadgesEmotes && c.hasOnlyBadgesOrEmotes {
+            guard campaign.hasDropsEnabled else {
+                filteredOutReasons["not_eligible_for_account", default: 0] += 1
+                return false
+            }
+            guard !campaign.eligibleDrops.isEmpty else {
+                filteredOutReasons["no_eligible_drops", default: 0] += 1
+                return false
+            }
+            if !enableBadgesEmotes && campaign.hasOnlyBadgesOrEmotes {
                 filteredOutReasons["badge_emote_only", default: 0] += 1
                 return false
             }
-            
-            let s = c.miningStatus
-            let isEligible = s == .available || s == .inProgress || s == .claimable
-            if !isEligible {
-                filteredOutReasons["status_\(s.rawValue)", default: 0] += 1
+            let status = campaign.miningStatus
+            guard status == .available || status == .inProgress || status == .claimable else {
+                filteredOutReasons["status_\(status.rawValue)", default: 0] += 1
+                return false
             }
-            return isEligible
+            return true
         }
-        
-        // Log filtered out reasons
-        for (reason, count) in filteredOutReasons {
+
+        for (reason, count) in filteredOutReasons.sorted(by: { $0.key < $1.key }) {
             log("[CampaignSelect]   Filtered out \(count) campaigns: \(reason)")
         }
-        log("[CampaignSelect]   Eligible campaigns: \(eligible.count)")
 
-        // 3. Apply mining strategy
-        switch strategy {
-        case .mineAll:
-            let result = selectBestFrom(eligible, priorityGamesLower: priorityGamesLower)
-            if let campaign = result {
-                log("[CampaignSelect]   ✓ Selected (mineAll): \(campaign.name) (\(campaign.gameName), status: \(campaign.miningStatus.rawValue))")
-            }
-            return result
-
-        case .prioritiseSelected:
-            let priorityMatches = eligible.filter {
-                priorityGamesLower.contains($0.gameName.lowercased())
-            }
-            log("[CampaignSelect]   Priority matches: \(priorityMatches.count)/\(eligible.count)")
-            
-            if let best = selectBestFrom(priorityMatches, priorityGamesLower: priorityGamesLower) {
-                log("[CampaignSelect]   ✓ Selected (priority): \(best.name) (\(best.gameName))")
-                return best
-            }
-            // Fallback to any eligible
-            let fallback = selectBestFrom(eligible, priorityGamesLower: priorityGamesLower)
-            if let campaign = fallback {
-                log("[CampaignSelect]   ✓ Selected (fallback): \(campaign.name) (\(campaign.gameName))")
-            }
-            return fallback
-
-        case .onlyPriority:
-            let priorityOnly = eligible.filter {
-                priorityGamesLower.contains($0.gameName.lowercased())
-            }
-            log("[CampaignSelect]   Priority only: \(priorityOnly.count)/\(eligible.count)")
-            
-            let result = selectBestFrom(priorityOnly, priorityGamesLower: priorityGamesLower)
-            if let campaign = result {
-                log("[CampaignSelect]   ✓ Selected (priority only): \(campaign.name) (\(campaign.gameName))")
-            } else if !eligible.isEmpty {
-                log("[CampaignSelect]   ✗ No priority campaigns available (strategy: onlyPriority)")
-            }
-            return result
+        let sorted = sortedCandidates(eligible, priorityKeys: priorityKeys, strategy: strategy)
+        log("[CampaignSelect]   Eligible campaigns: \(sorted.count)")
+        if let campaign = sorted.first {
+            log("[CampaignSelect]   Best candidate: \(campaign.name) (\(campaign.gameName), status: \(campaign.miningStatus.rawValue))")
         }
+        return sorted
     }
 
-    /// Select best campaign from a filtered list using priority, progress, and end date
-    private func selectBestFrom(_ campaigns: [Campaign], priorityGamesLower: [String]) -> Campaign? {
-        guard !campaigns.isEmpty else { return nil }
+    private func sortedCandidates(
+        _ campaigns: [Campaign],
+        priorityKeys: [String],
+        strategy: MiningStrategy
+    ) -> [Campaign] {
+        campaigns.enumerated().sorted { lhs, rhs in
+            let left = lhs.element
+            let right = rhs.element
+            let leftPriority = priorityIndex(for: left, priorityKeys: priorityKeys)
+            let rightPriority = priorityIndex(for: right, priorityKeys: priorityKeys)
+            let leftIsPriority = leftPriority != Int.max
+            let rightIsPriority = rightPriority != Int.max
 
-        return campaigns.sorted { a, b in
-            let aName = a.gameName.lowercased()
-            let bName = b.gameName.lowercased()
-
-            // Priority check
-            let aPriority = priorityGamesLower.firstIndex(of: aName) ?? Int.max
-            let bPriority = priorityGamesLower.firstIndex(of: bName) ?? Int.max
-
-            if aPriority != bPriority {
-                return aPriority < bPriority
+            switch strategy {
+            case .mineAll:
+                if left.endDate != right.endDate { return left.endDate < right.endDate }
+                if leftIsPriority != rightIsPriority { return leftIsPriority }
+                if leftPriority != rightPriority { return leftPriority < rightPriority }
+            case .prioritiseSelected, .onlyPriority:
+                if leftIsPriority != rightIsPriority { return leftIsPriority }
+                if leftPriority != rightPriority { return leftPriority < rightPriority }
+                if left.endDate != right.endDate { return left.endDate < right.endDate }
             }
 
-            // Urgency check: prefer campaigns ending sooner (time-limited events like CDL qualifiers)
-            // This runs before status so a newly-live short event beats an in-progress long campaign.
-            if a.endDate != b.endDate {
-                return a.endDate < b.endDate
-            }
+            return lhs.offset < rhs.offset
+        }.map(\.element)
+    }
 
-            // Status check (prefer IN_PROGRESS over AVAILABLE — momentum tie-breaker within same end date)
-            let aStatus = a.miningStatus
-            let bStatus = b.miningStatus
-            if aStatus != bStatus {
-                return aStatus == .inProgress
-            }
+    private func priorityIndex(for campaign: Campaign, priorityKeys: [String]) -> Int {
+        let gameName = normalizedGameKey(campaign.gameName)
+        let gameId = normalizedGameKey(campaign.game.id)
+        return priorityKeys.firstIndex { $0 == gameName || $0 == gameId } ?? Int.max
+    }
 
-            // Unclaimed drops check (prefer more drops available)
-            let aUnclaimed = a.earnableDrops.count
-            let bUnclaimed = b.earnableDrops.count
-            return aUnclaimed > bUnclaimed
-        }.first
+    private func normalizedGameKey(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
     
     private func selectBestChannel(from campaign: Campaign) async -> Channel? {

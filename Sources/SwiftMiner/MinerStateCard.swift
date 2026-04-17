@@ -5,11 +5,13 @@ import SwiftMinerCore
 /// Replaces legacy status badges and scattered state labels with a single story.
 struct MinerStateCard: View {
     let miner: MinerManager.ManagedMiner
+    var activityCampaigns: [Campaign] = []
     var onAction: (() -> Void)? = nil
     var onDismiss: ((String) -> Void)? = nil
 
     private var state: PrimaryState { miner.primaryState }
     private var resolved: ResolvedPrimaryState? { miner.resolvedPrimaryState }
+    private var firstActivityCampaign: Campaign? { activityCampaigns.first }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -163,6 +165,15 @@ struct MinerStateCard: View {
                     color: .orange
                 )
             } else if reasons.contains(.noEligibleCampaign) {
+                if let campaign = firstActivityCampaign {
+                    return StateConfig(
+                        headline: campaign.game.name,
+                        subtitle: campaign.activityStatusMessage,
+                        icon: "list.bullet.rectangle",
+                        color: .secondary
+                    )
+                }
+
                 return StateConfig(
                     headline: "No active campaigns",
                     subtitle: "No drops available for prioritised games",
@@ -179,6 +190,15 @@ struct MinerStateCard: View {
             }
 
         case .ready:
+            if let campaign = firstActivityCampaign {
+                return StateConfig(
+                    headline: "Campaigns available",
+                    subtitle: campaign.game.name,
+                    icon: "list.bullet.rectangle",
+                    color: .blue
+                )
+            }
+
             return StateConfig(
                 headline: "No active campaigns",
                 subtitle: "No drops available for prioritised games",
@@ -195,6 +215,15 @@ struct MinerStateCard: View {
             )
 
         case .completed:
+            if let campaign = firstActivityCampaign {
+                return StateConfig(
+                    headline: "Drops completed",
+                    subtitle: campaign.game.name,
+                    icon: "checkmark.seal.fill",
+                    color: .purple
+                )
+            }
+
             return StateConfig(
                 headline: "No active campaigns",
                 subtitle: "All currently available drops are completed.",
