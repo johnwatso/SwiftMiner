@@ -617,6 +617,10 @@ private struct CampaignDeckCard: View {
         Game(id: "", name: campaign.gameName, boxArtURL: campaign.artworkURL)
     }
 
+    private var supportsSteamArtwork: Bool {
+        SteamArtworkService.supportsSteamArtwork(forGameName: campaign.gameName, gameId: campaign.gameId)
+    }
+
     private var hasAccountLinkIssue: Bool {
         activity.state == .blocked && !campaign.isAccountConnected
     }
@@ -844,11 +848,13 @@ private struct CampaignDeckCard: View {
 
             Divider()
 
-            Button {
-                steamIdDraft = ""
-                showingSteamIdPopover = true
-            } label: {
-                Label("Set Steam ID", systemImage: "photo.artframe")
+            if supportsSteamArtwork {
+                Button {
+                    steamIdDraft = ""
+                    showingSteamIdPopover = true
+                } label: {
+                    Label("Set Steam ID", systemImage: "photo.artframe")
+                }
             }
         }
         .popover(isPresented: $showingSteamIdPopover, arrowEdge: .bottom) {

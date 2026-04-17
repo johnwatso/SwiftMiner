@@ -23,6 +23,7 @@ final class ServiceTests: XCTestCase {
         MockURLProtocol.stubResponseData = nil
         MockURLProtocol.stubError = nil
         MockURLProtocol.lastRequest = nil
+        MockURLProtocol.requestHandler = nil
         super.tearDown()
     }
     
@@ -83,6 +84,129 @@ final class ServiceTests: XCTestCase {
            let variables = json["variables"] as? [String: Any] {
             XCTAssertEqual(variables["name"] as? String, "Fortnite")
         }
+    }
+
+    func testFetchDropCampaignsKeepsConnectionStateFromDetails() async throws {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        let startAt = formatter.string(from: Date().addingTimeInterval(-3600))
+        let endAt = formatter.string(from: Date().addingTimeInterval(3600))
+        let boxArtURL = "https://example.com/the-finals-box.png"
+
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+
+            if request.url?.path == "/integrity" {
+                return (response, #"{"token":"integrity-token","expiration":4102444800000}"#.data(using: .utf8)!)
+            }
+
+            let bodyData = request.httpBody ?? Data()
+            let body = (try? JSONSerialization.jsonObject(with: bodyData)) as? [String: Any]
+            let operationName = body?["operationName"] as? String
+
+            switch operationName {
+            case "ViewerDropsDashboard":
+                let json = """
+                {
+                  "data": {
+                    "currentUser": {
+                      "dropCampaigns": [
+                        {
+                          "id": "finals-respec",
+                          "name": "RESPEC ORDER DROPS",
+                          "status": "ACTIVE",
+                          "startAt": "\(startAt)",
+                          "endAt": "\(endAt)",
+                          "self": { "isAccountConnected": false },
+                          "game": {
+                            "id": "1910103699",
+                            "displayName": "THE FINALS",
+                            "boxArtURL": "\(boxArtURL)"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+                """
+                return (response, json.data(using: .utf8)!)
+
+            case "DropCampaignDetails":
+                let json = """
+                {
+                  "data": {
+                    "user": {
+                      "dropCampaign": {
+                        "id": "finals-respec",
+                        "name": "RESPEC ORDER DROPS",
+                        "status": "ACTIVE",
+                        "startAt": "\(startAt)",
+                        "endAt": "\(endAt)",
+                        "self": { "isAccountConnected": true },
+                        "allow": { "isEnabled": false, "channels": null },
+                        "game": {
+                          "id": "1910103699",
+                          "displayName": "THE FINALS"
+                        },
+                        "timeBasedDrops": [
+                          {
+                            "id": "tangerine-spear",
+                            "name": "Tangerine Spear",
+                            "requiredMinutesWatched": 60,
+                            "benefitEdges": [
+                              {
+                                "benefit": {
+                                  "id": "benefit-spear",
+                                  "name": "Tangerine Spear",
+                                  "imageAssetURL": "https://example.com/spear.png",
+                                  "distributionType": "DIRECT_ENTITLEMENT"
+                                }
+                              }
+                            ],
+                            "self": {
+                              "currentMinutesWatched": 0,
+                              "isClaimed": false,
+                              "dropInstanceID": "instance-spear"
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+                """
+                return (response, json.data(using: .utf8)!)
+
+            default:
+                return (response, #"{"data":{}}"#.data(using: .utf8)!)
+            }
+        }
+
+        await apiClient.setUserLogin("ruffcrumble")
+        let campaigns = try await apiClient.fetchDropCampaigns()
+
+        XCTAssertEqual(campaigns.count, 1)
+        let campaign = try XCTUnwrap(campaigns.first)
+        XCTAssertEqual(campaign.name, "RESPEC ORDER DROPS")
+        XCTAssertEqual(campaign.game.name, "THE FINALS")
+        XCTAssertEqual(campaign.game.boxArtURL?.absoluteString, boxArtURL)
+        XCTAssertTrue(campaign.isAccountConnected)
+        XCTAssertFalse(campaign.hasDropsEnabled)
+        XCTAssertTrue(campaign.channels.isEmpty)
+        XCTAssertEqual(campaign.drops.map(\.name), ["Tangerine Spear"])
+        XCTAssertFalse(campaign.isMiningEligible)
+    }
+
+    func testJustChattingDoesNotSupportSteamArtwork() {
+        XCTAssertFalse(SteamArtworkService.supportsSteamArtwork(forGameName: "Just Chatting"))
+        XCTAssertFalse(SteamArtworkService.supportsSteamArtwork(forGameName: " just chatting "))
+        XCTAssertFalse(SteamArtworkService.supportsSteamArtwork(forGameName: "Anything", gameId: "509658"))
+        XCTAssertTrue(SteamArtworkService.supportsSteamArtwork(forGameName: "THE FINALS", gameId: "1910103699"))
     }
     
     // MARK: - CommunityPointsService Tests
@@ -162,7 +286,7 @@ class MockURLProtocol: URLProtocol {
 
         if let handler = MockURLProtocol.requestHandler {
             do {
-                let (response, data) = try handler(request)
+                let (response, data) = try handler(captured)
                 client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
                 client?.urlProtocol(self, didLoad: data)
                 client?.urlProtocolDidFinishLoading(self)
