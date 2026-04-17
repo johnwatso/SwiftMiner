@@ -279,7 +279,7 @@ struct DropsListView: View {
         }
 
         if selectedFilters == [.active] {
-            return "No campaigns are currently mining or in progress."
+            return "No campaigns are currently mining, in progress, or queued."
         }
 
         if selectedFilters == [.needsSetup] {
@@ -494,9 +494,9 @@ struct DropsListView: View {
         }
 
         switch activity.state {
-        case .active, .inProgress, .claimable:
+        case .active, .inProgress, .claimable, .idle:
             return true
-        case .blocked, .claimed, .expired, .idle:
+        case .blocked, .claimed, .expired:
             return false
         }
     }
@@ -569,7 +569,7 @@ struct DropsListView: View {
 
         let state: CampaignCardState
         // Strict precedence to avoid conflicting UI signals:
-        // blocked > inProgress(active/claimable/in-progress) > ready(idle) > completed(claimed)
+        // blocked > active > claimable > claimed > inProgress > idle
         if isBlocked {
             state = .blocked
         } else if isExpired {
@@ -578,6 +578,10 @@ struct DropsListView: View {
             state = .active
         } else if claimableDropCount > 0 {
             state = .claimable
+        } else if allRewardsClaimed {
+            // Must check before hasProgressStarted — a 100%-progress claimed
+            // campaign would otherwise be misclassified as .inProgress.
+            state = .claimed
         } else if hasProgressStarted {
             state = .inProgress
         } else if remainingRewardCount > 0 {
@@ -1678,7 +1682,7 @@ private enum CampaignCardState: String {
         case .claimable: return "Reward ready"
         case .claimed: return "All rewards claimed"
         case .expired: return "Needs attention"
-        case .idle: return "Idle"
+        case .idle: return "Queued"
         }
     }
 
@@ -1690,7 +1694,7 @@ private enum CampaignCardState: String {
         case .claimable: return "sparkles"
         case .claimed: return "checkmark.circle.fill"
         case .expired: return "clock.badge.exclamationmark"
-        case .idle: return "person.crop.circle.badge.xmark"
+        case .idle: return "clock.badge.checkmark.fill"
         }
     }
 
