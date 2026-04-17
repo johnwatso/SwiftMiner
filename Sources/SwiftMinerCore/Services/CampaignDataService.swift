@@ -181,6 +181,7 @@ public actor CampaignDataService {
                                 drops: existing.drops,
                                 channels: existing.channels,
                                 isAccountConnected: true,
+                                allowIsEnabled: existing.allowIsEnabled,
                                 isPrioritised: existing.isPrioritised
                             )
                         }
