@@ -335,7 +335,7 @@ public actor TwitchAPIClient {
                     group.addTask {
                         do {
                             let details = try await self.fetchCampaignDetails(campaignId: campaign.id, userLogin: self.userLogin)
-                            campaign.drops = details.drops
+                            campaign = Self.mergeBasicCampaign(campaign, withDetails: details)
                         } catch {
                             print("[TwitchAPIClient] Failed to fetch details for campaign \(campaign.id): \(error)")
                         }
@@ -389,6 +389,33 @@ public actor TwitchAPIClient {
         }
 
         return parseDetailedCampaign(from: dropCampaign)
+    }
+
+    /// Combine ViewerDropsDashboard's broad metadata with DropCampaignDetails' richer,
+    /// account-specific fields. Details is authoritative for link state, drops, ACL, and
+    /// time/status data, while the dashboard can still carry artwork that details omits.
+    private nonisolated static func mergeBasicCampaign(_ basic: Campaign, withDetails details: Campaign) -> Campaign {
+        let detailedGame = details.game
+        let basicGame = basic.game
+        let mergedGame = Game(
+            id: detailedGame.id.isEmpty ? basicGame.id : detailedGame.id,
+            name: detailedGame.name.isEmpty ? basicGame.name : detailedGame.name,
+            boxArtURL: detailedGame.boxArtURL ?? basicGame.boxArtURL
+        )
+
+        return Campaign(
+            id: details.id.isEmpty ? basic.id : details.id,
+            name: details.name.isEmpty ? basic.name : details.name,
+            game: mergedGame,
+            status: details.status,
+            startDate: details.startDate,
+            endDate: details.endDate,
+            drops: details.drops.isEmpty ? basic.drops : details.drops,
+            channels: details.channels,
+            isAccountConnected: details.isAccountConnected || basic.isAccountConnected,
+            allowIsEnabled: details.allowIsEnabled ?? basic.allowIsEnabled,
+            isPrioritised: basic.isPrioritised
+        )
     }
 
     /// Fetch inventory with drops
@@ -1228,7 +1255,8 @@ public actor TwitchAPIClient {
             endDate: endAt,
             drops: dropsArray,
             channels: channelsArray,
-            isAccountConnected: isAccountConnected
+            isAccountConnected: isAccountConnected,
+            allowIsEnabled: isAllowEnabled
         )
     }
 
@@ -1262,11 +1290,14 @@ public actor TwitchAPIClient {
 
         // Inventory ACL channels use "name" field instead of "login"/"displayName"
         let allowDict = campaignDict["allow"] as? [String: Any] ?? [:]
-        let channelsArray = (allowDict["channels"] as? [[String: Any]] ?? []).compactMap { ch -> Channel? in
-            guard let chId = ch["id"] as? String,
-                  let chName = ch["name"] as? String else { return nil }
-            return Channel(id: chId, login: chName, displayName: chName, aclBased: true)
-        }
+        let isAllowEnabled = allowDict["isEnabled"] as? Bool ?? true
+        let channelsArray = isAllowEnabled
+            ? (allowDict["channels"] as? [[String: Any]] ?? []).compactMap { ch -> Channel? in
+                guard let chId = ch["id"] as? String,
+                      let chName = ch["name"] as? String else { return nil }
+                return Channel(id: chId, login: chName, displayName: chName, aclBased: true)
+              }
+            : []
 
         return Campaign(
             id: id,
@@ -1277,7 +1308,8 @@ public actor TwitchAPIClient {
             endDate: endAt,
             drops: dropsArray,
             channels: channelsArray,
-            isAccountConnected: isAccountConnected
+            isAccountConnected: isAccountConnected,
+            allowIsEnabled: isAllowEnabled
         )
     }
 

@@ -10,9 +10,9 @@ public enum MiningStrategy: String, CaseIterable, Identifiable, Sendable {
 
     public var displayName: String {
         switch self {
-        case .mineAll: return "Mine all eligible drops"
-        case .prioritiseSelected: return "Prioritise selected games"
-        case .onlyPriority: return "Only mine priority games"
+        case .mineAll: return "Smart"
+        case .prioritiseSelected: return "Prefer prioritised games"
+        case .onlyPriority: return "Only prioritised games"
         }
     }
 }

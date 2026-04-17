@@ -134,15 +134,17 @@ final class PrimaryStateResolverTests: XCTestCase {
         XCTAssertEqual(state, .ready, "Should be ready when drops are earned but not yet claimed")
     }
 
-    func testPriority_BlockedOverMining() {
+    func testPriority_MiningOverBlocked() {
         // 1 campaign blocked, 1 campaign mining.
-        // Rule: Blocked > Mining.
+        // Rule: an account that is successfully mining should not present as blocked.
         let blockedCampaign = createCampaign(id: "c1", isAccountConnected: false, drops: [createDrop(id: "d1")])
         let miningCampaign = createCampaign(id: "c2", drops: [createDrop(id: "d2")])
         let miner = createMiner(status: .watching, allCampaigns: [blockedCampaign, miningCampaign], currentCampaignId: "c2")
         
         let state = PrimaryStateResolver.resolve(for: miner)
-        XCTAssertEqual(state, .blocked(reasons: [.accountNotLinked]))
+        if case .mining = state {} else {
+            XCTFail("Should be .mining")
+        }
     }
 
     func testPriority_MiningOverReady() {
@@ -193,26 +195,26 @@ final class PrimaryStateResolverTests: XCTestCase {
         XCTAssertEqual(watchingStates.first?.state, .watching)
     }
 
-    func testEvaluateGameStates_BlockedWinsOverWatchingWithinSameGame() {
+    func testEvaluateGameStates_WatchingWinsOverBlockedWithinSameGame() {
         let blockedCampaign = createCampaign(id: "c1", isAccountConnected: false, drops: [createDrop(id: "d1")])
         let miningCampaign = createCampaign(id: "c2", drops: [createDrop(id: "d2")])
         let miner = createMiner(status: .watching, allCampaigns: [blockedCampaign, miningCampaign], currentCampaignId: "c2")
 
         let states = MinerManager.evaluateGameStates(for: miner, priorityGames: miner.priorityGames)
         XCTAssertEqual(states.count, 1) // same game
-        XCTAssertEqual(states.first?.state, .blocked)
-        XCTAssertEqual(states.first?.reason, .notLinked)
+        XCTAssertEqual(states.first?.state, .watching)
+        XCTAssertEqual(states.first?.reason, MinerGameStateReason.none)
     }
 
-    func testResolvedPrimaryState_PriorityBlockedOverWatchingOverIdle() {
+    func testResolvedPrimaryState_PriorityWatchingOverBlockedOverIdle() {
         let states = [
             MinerGameState(minerId: "m1", gameId: "g1", gameName: "Game 1", state: .idle, reason: .none),
             MinerGameState(minerId: "m1", gameId: "g2", gameName: "Game 2", state: .watching, reason: .none),
             MinerGameState(minerId: "m1", gameId: "g3", gameName: "Game 3", state: .blocked, reason: .notLinked)
         ]
         let resolved = ResolvedPrimaryState(gameStates: states)
-        XCTAssertEqual(resolved.resolved?.gameId, "g3")
-        XCTAssertEqual(resolved.resolved?.state, .blocked)
+        XCTAssertEqual(resolved.resolved?.gameId, "g2")
+        XCTAssertEqual(resolved.resolved?.state, .watching)
     }
 
     func testEvaluateGameStates_WaitingForStreamScopedToGame() {

@@ -44,6 +44,7 @@ public enum CampaignService {
                         drops: existing.drops,
                         channels: existing.channels,
                         isAccountConnected: true,
+                        allowIsEnabled: existing.allowIsEnabled,
                         isPrioritised: existing.isPrioritised
                     )
                 }

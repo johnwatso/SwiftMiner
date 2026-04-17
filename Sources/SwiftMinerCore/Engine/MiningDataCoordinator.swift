@@ -145,7 +145,9 @@ public final class MiningDataCoordinator {
     /// Uses TaskGroup for parallel enrichment — significantly faster for multiple campaigns.
     private func enrichWithSteamArtwork(_ campaigns: [CampaignViewData]) async -> [CampaignViewData] {
         // Create lookup tables for quick index access
-        let gameNames = campaigns.map { $0.gameName }
+        let gameNames = campaigns
+            .map { $0.gameName }
+            .filter { SteamArtworkService.supportsSteamArtwork(forGameName: $0) }
         
         // Structure to hold enrichment results
         struct EnrichmentResult {
@@ -204,14 +206,15 @@ public final class MiningDataCoordinator {
     /// that may not appear in the active campaign feed (e.g. preferred games with no live campaign).
     /// Safe to call repeatedly — `SteamArtworkService` caches App ID lookups persistently.
     public func enrichGameNames(_ names: [String]) async {
-        guard !names.isEmpty else { return }
+        let supportedNames = names.filter { SteamArtworkService.supportsSteamArtwork(forGameName: $0) }
+        guard !supportedNames.isEmpty else { return }
         struct EnrichmentResult {
             let gameName: String
             let portraitURL: URL?
             let heroURL: URL?
         }
         let results: [EnrichmentResult] = await withTaskGroup(of: EnrichmentResult.self) { group in
-            for name in names {
+            for name in supportedNames {
                 group.addTask {
                     async let portrait = SteamArtworkService.shared.portraitURL(for: name)
                     async let hero = SteamArtworkService.shared.heroURL(for: name)

@@ -337,11 +337,11 @@ private struct MiningSettingsView: View {
     private var strategyDetailText: String {
         switch settings.miningStrategy {
         case .mineAll:
-            return "Mine any eligible campaign."
+            return "Mine campaigns ending soonest, then prioritised games, then any other eligible drops."
         case .prioritiseSelected:
-            return "Prioritise selected games first, then fall back to other eligible campaigns."
+            return "Mine prioritised games first, then choose the campaign ending soonest."
         case .onlyPriority:
-            return "Only mine selected games. Miners stay idle when none are available."
+            return "Ignore non-prioritised campaigns entirely."
         }
     }
 
