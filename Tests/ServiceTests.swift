@@ -56,6 +56,36 @@ final class ServiceTests: XCTestCase {
         XCTAssertEqual(user.login, "testuser")
         XCTAssertEqual(MockURLProtocol.lastRequest?.url?.path, "/helix/users")
     }
+
+    func testGetChannelByLoginResolvesNumericId() async throws {
+        let jsonString = """
+        {
+            "data": [
+                {
+                    "id": "98765",
+                    "login": "dropstreamer",
+                    "display_name": "DropStreamer",
+                    "type": "",
+                    "broadcaster_type": "",
+                    "description": "",
+                    "profile_image_url": "https://example.com/img.png",
+                    "offline_image_url": "",
+                    "view_count": 100,
+                    "created_at": "2020-01-01T00:00:00Z"
+                }
+            ]
+        }
+        """
+        MockURLProtocol.stubResponseData = jsonString.data(using: .utf8)
+
+        let channel = try await apiClient.getChannel(login: "DropStreamer")
+
+        XCTAssertEqual(channel.id, "98765")
+        XCTAssertEqual(channel.login, "dropstreamer")
+        XCTAssertEqual(channel.displayName, "DropStreamer")
+        XCTAssertEqual(MockURLProtocol.lastRequest?.url?.path, "/helix/users")
+        XCTAssertEqual(MockURLProtocol.lastRequest?.url?.query, "login=dropstreamer")
+    }
     
     func testGetGameSlug() async throws {
         let jsonString = """
