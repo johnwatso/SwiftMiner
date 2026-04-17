@@ -21,6 +21,10 @@ public actor TwitchAPIClient {
     /// Authenticated user's login name — used as channelLogin in DropCampaignDetails
     private var userLogin: String = ""
 
+    /// Broadcaster login -> numeric channel ID cache for stream directory results that
+    /// only include a login. `AvailableDrops` and PubSub require the numeric ID.
+    private var channelIdByLogin: [String: String] = [:]
+
     /// Metadata for a claimed benefit from inventory.
     /// Used as a fallback to detect claimed drops when `self` is absent from DropCampaignDetails.
     public struct ClaimedBenefit: Sendable {
@@ -125,6 +129,37 @@ public actor TwitchAPIClient {
                 displayName: user.displayName
             )
         }
+    }
+
+    /// Resolve channel information by broadcaster login.
+    public func getChannel(login: String) async throws -> Channel {
+        let normalizedLogin = login.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalizedLogin.isEmpty else {
+            throw TwitchMinerError.channelNotFound
+        }
+
+        if let cachedId = channelIdByLogin[normalizedLogin] {
+            return Channel(id: cachedId, login: normalizedLogin, displayName: login)
+        }
+
+        var components = URLComponents(string: "\(helixUrl)/users")!
+        components.queryItems = [URLQueryItem(name: "login", value: normalizedLogin)]
+
+        let data = try await makeRESTRequest(url: components.string!, method: "GET")
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let response = try decoder.decode(TwitchUsersResponse.self, from: data)
+
+        guard let user = response.data.first else {
+            throw TwitchMinerError.channelNotFound
+        }
+
+        channelIdByLogin[normalizedLogin] = user.id
+        return Channel(
+            id: user.id,
+            login: user.login,
+            displayName: user.displayName
+        )
     }
     
     /// Search Twitch categories (games) by name using the Helix REST API.
@@ -631,7 +666,7 @@ public actor TwitchAPIClient {
     }
     
     /// Get live channels for a specific game
-    public func getLiveChannels(gameSlug: String, limit: Int = 30) async throws -> [Channel] {
+    public func getLiveChannels(gameSlug: String, limit: Int = 100) async throws -> [Channel] {
         let request = GraphQLRequest(
             operationName: "DirectoryPage_Game",
             sha256Hash: GQLHashes.directoryPage_Game,
@@ -1333,8 +1368,13 @@ public actor TwitchAPIClient {
 
                 let currentMinutes = selfDict["currentMinutesWatched"] as? Int ?? 0
                 let isClaimed = selfDict["isClaimed"] as? Bool ?? false
-                // dropInstanceID is used for claiming via the ClaimDropRewards mutation
-                let dropInstanceId = (selfDict["dropInstanceID"] as? String) ?? dropId
+                // dropInstanceID is required for the ClaimDropRewards mutation.
+                // If it's absent the drop can't be claimed via this path — skip it rather than
+                // sending the template dropId, which Twitch rejects with an invalid-response error.
+                guard let dropInstanceId = selfDict["dropInstanceID"] as? String else {
+                    print("[TwitchAPIClient] parseDropProgress: skipping '\(dropName)' — dropInstanceID missing from self dict")
+                    continue
+                }
 
                 results.append(Progress(
                     id: dropInstanceId,

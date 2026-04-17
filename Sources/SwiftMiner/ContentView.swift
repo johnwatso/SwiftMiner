@@ -467,6 +467,10 @@ struct OverviewView: View {
                 }
             }
             .scrollClipDisabled()
+
+            if prominence == .feature {
+                MiningQueuePreview(items: items)
+            }
         }
     }
 
@@ -582,7 +586,22 @@ struct OverviewView: View {
     }
 
     private var orderedMiningQueueCampaigns: [CampaignViewData] {
-        activeFeedCampaigns.sorted(by: campaignDisplaySort)
+        let active = activeFeedCampaigns.sorted(by: campaignDisplaySort)
+        if !active.isEmpty {
+            return active
+        }
+
+        // Prioritised campaigns are still meaningful queue entries even before they
+        // have started producing Twitch progress. Without this fallback the queue
+        // collapses to the standby placeholder while the Prioritised rail shows work.
+        let prioritisedQueue = prioritisedCampaigns
+            .filter { !$0.isCompleted }
+            .sorted(by: campaignDisplaySort)
+        if !prioritisedQueue.isEmpty {
+            return prioritisedQueue
+        }
+
+        return []
     }
 
     private var prioritisedCampaigns: [CampaignViewData] {
@@ -604,9 +623,14 @@ struct OverviewView: View {
         campaigns
             .filter { campaign in
                 let state = visualState(for: campaign)
+                let isQueued = state == .idle
+                    && campaign.isAccountConnected
+                    && !campaign.isCompleted
+                    && (campaign.relevance == .active || campaign.relevance == .prioritised)
                 return state == .watching
                     || state == .claimable
                     || state == .inProgress
+                    || isQueued
             }
             .sorted(by: campaignDisplaySort)
     }
@@ -1159,7 +1183,7 @@ struct OverviewView: View {
 
     private var campaignSummarySection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            sectionHeading("Campaign Progress", subtitle: "Drops-backed campaigns with real progress or completed rewards.")
+            sectionHeading("Campaign Progress", subtitle: "Active, queued, and completed drop campaigns.")
 
             if summaryCampaigns.isEmpty {
                 CampaignLibraryAmbientRow()
@@ -1177,16 +1201,15 @@ struct OverviewView: View {
     }
 
     private var summaryCampaigns: [CampaignViewData] {
-        let sourceCampaigns: [CampaignViewData]
+        // Active/queued campaigns are always shown — they don't need Twitch progress yet.
+        // Only fall back to requiring real progress for recent (completed) campaigns.
         if !activeFeedCampaigns.isEmpty {
-            sourceCampaigns = activeFeedCampaigns
-        } else if !prioritisedCampaigns.isEmpty {
-            sourceCampaigns = prioritisedCampaigns
-        } else {
-            sourceCampaigns = recentCampaigns
+            return Array(activeFeedCampaigns.prefix(6))
         }
-
-        return sourceCampaigns
+        if !prioritisedCampaigns.isEmpty {
+            return Array(prioritisedCampaigns.prefix(6))
+        }
+        return recentCampaigns
             .filter { $0.isDisplayableInOverview }
             .prefix(6)
             .map { $0 }
@@ -1939,6 +1962,104 @@ private struct CampaignFeedCard: View {
                 }
             }
         }
+    }
+}
+
+private struct MiningQueuePreview: View {
+    let items: [CampaignRailItem]
+
+    private var queueItems: [CampaignRailItem] {
+        items.filter { !$0.isPlaceholder }
+    }
+
+    var body: some View {
+        if !queueItems.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Image(systemName: "list.bullet.rectangle.portrait.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    Text("Upcoming Mines")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    Spacer()
+
+                    Text("\(queueItems.count) queued")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+
+                VStack(spacing: 8) {
+                    ForEach(queueItems.prefix(8)) { item in
+                        MiningQueuePreviewRow(item: item)
+                    }
+                }
+            }
+            .padding(14)
+            .background(.thinMaterial.opacity(0.42), in: RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
+                    .strokeBorder(.white.opacity(0.10), lineWidth: 1)
+            }
+        }
+    }
+}
+
+private struct MiningQueuePreviewRow: View {
+    let item: CampaignRailItem
+
+    private var label: String {
+        item.queueLabel ?? "Queued"
+    }
+
+    private var detail: String {
+        if !item.campaignName.isEmpty {
+            return item.campaignName
+        }
+        return item.progressText
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(label)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(item.visualState.accent)
+                .frame(width: 72, alignment: .leading)
+
+            ZStack {
+                Circle()
+                    .fill(item.visualState.accent.opacity(0.14))
+                Image(systemName: item.visualState.symbol)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(item.visualState.accent)
+            }
+            .frame(width: 24, height: 24)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.gameName)
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+
+                Text(detail)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 12)
+
+            Text(item.visualState == .idle ? "Queued" : item.visualState.label)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(item.visualState.accent)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(item.visualState.accent.opacity(0.12), in: Capsule())
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(.ultraThinMaterial.opacity(0.46), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
     }
 }
 
