@@ -700,8 +700,8 @@ public final class MinerManager {
                     continue
                 }
 
-                // Check if campaign is actively earnable
-                if campaign.isTimeActive && campaign.isAccountConnected && campaign.hasEligibleDrops {
+                // Check if campaign is actively earnable for this account.
+                if campaign.isMiningEligible {
                     if activeCampaign == nil {
                         activeCampaign = campaign
                     }
@@ -732,15 +732,7 @@ public final class MinerManager {
             let isWaitingForStream = miner.status == .waitingForStream
                 && relevant.contains(where: { $0.id == miner.currentCampaignId })
 
-            if let reason = blockedReason {
-                states.append(MinerGameState(
-                    minerId: miner.id,
-                    gameId: gameId,
-                    gameName: gameName,
-                    state: .blocked,
-                    reason: reason
-                ))
-            } else if isWaitingForStream, let campaignId = miner.currentCampaignId {
+            if isWaitingForStream, let campaignId = miner.currentCampaignId {
                 states.append(MinerGameState(
                     minerId: miner.id,
                     gameId: gameId,
@@ -766,6 +758,14 @@ public final class MinerManager {
                     state: .idle,
                     reason: .none,
                     campaignId: campaign.id
+                ))
+            } else if let reason = blockedReason {
+                states.append(MinerGameState(
+                    minerId: miner.id,
+                    gameId: gameId,
+                    gameName: gameName,
+                    state: .blocked,
+                    reason: reason
                 ))
             } else {
                 states.append(MinerGameState(
@@ -821,7 +821,9 @@ public final class MinerManager {
                 let currentId = await engine.currentCampaignId
                 
                 // Update current campaign info
-                if let first = campaigns.first {
+                if let currentId, let current = all.first(where: { $0.id == currentId }) {
+                    self.updateMinerStatus(minerId: minerId, currentCampaign: current.name, currentCampaignId: .some(currentId), allCampaigns: all)
+                } else if let first = campaigns.first {
                     self.updateMinerStatus(minerId: minerId, currentCampaign: first.name, currentCampaignId: .some(currentId), allCampaigns: all)
                 } else {
                     self.updateMinerStatus(minerId: minerId, currentCampaignId: .some(currentId), allCampaigns: all)

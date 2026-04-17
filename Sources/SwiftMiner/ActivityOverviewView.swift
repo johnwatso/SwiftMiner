@@ -86,15 +86,17 @@ struct ActivityOverviewView: View {
     @ViewBuilder
     private var selectedMinerPane: some View {
         if let miner = selectedMiner {
+            let activeCampaigns = activePrioritisedCampaigns(for: miner)
+
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    MinerStateCard(miner: miner) {
+                    MinerStateCard(miner: miner, activityCampaigns: activeCampaigns) {
                         if case .blocked(let reasons) = miner.primaryState, reasons.contains(.accountNotLinked) {
                             Task { try? await navigation.minerManager.startMiner(minerId: miner.id, priorityGames: [], excludedGames: [], strategy: .mineAll) }
                         }
                     }
 
-                    queuedCampaignsSection(for: miner)
+                    campaignActivitySection(campaigns: activeCampaigns)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(24)
@@ -139,26 +141,61 @@ struct ActivityOverviewView: View {
     }
 
     @ViewBuilder
-    private func queuedCampaignsSection(for miner: MinerManager.ManagedMiner) -> some View {
-        let queued = miner.allCampaigns.filter { 
-            $0.id != miner.currentCampaignId && $0.isMiningEligible 
-        }
-        
-        if !queued.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("UP NEXT")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.tertiary)
-                    .padding(.leading, 4)
+    private func campaignActivitySection(campaigns: [Campaign]) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("CAMPAIGNS")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.tertiary)
+                .padding(.leading, 4)
 
-                VStack(spacing: 8) {
-                    ForEach(queued.prefix(3)) { campaign in
-                        QueuedCampaignRow(campaign: campaign)
+            VStack(spacing: 8) {
+                if campaigns.isEmpty {
+                    NoActiveCampaignsRow()
+                } else {
+                    ForEach(campaigns) { campaign in
+                        CampaignActivityRow(campaign: campaign)
                     }
                 }
             }
-            .padding(.horizontal, 2)
         }
+        .padding(.horizontal, 2)
+    }
+
+    private func activePrioritisedCampaigns(for miner: MinerManager.ManagedMiner) -> [Campaign] {
+        let priorityKeys = miner.priorityGames
+            .map { normalizedGameKey($0) }
+            .filter { !$0.isEmpty }
+
+        guard !priorityKeys.isEmpty else { return [] }
+
+        let prioritySet = Set(priorityKeys)
+
+        return miner.allCampaigns
+            .filter { campaign in
+                campaign.isTimeActive &&
+                campaign.status != .disabled &&
+                (
+                    prioritySet.contains(normalizedGameKey(campaign.game.name)) ||
+                    prioritySet.contains(normalizedGameKey(campaign.game.id))
+                )
+            }
+            .sorted { lhs, rhs in
+                let leftPriority = priorityIndex(for: lhs, priorityKeys: priorityKeys)
+                let rightPriority = priorityIndex(for: rhs, priorityKeys: priorityKeys)
+                if leftPriority != rightPriority { return leftPriority < rightPriority }
+                if lhs.endDate != rhs.endDate { return lhs.endDate < rhs.endDate }
+                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+            }
+    }
+
+    private func priorityIndex(for campaign: Campaign, priorityKeys: [String]) -> Int {
+        let gameName = normalizedGameKey(campaign.game.name)
+        let gameId = normalizedGameKey(campaign.game.id)
+        return priorityKeys.firstIndex { $0 == gameName || $0 == gameId } ?? Int.max
+    }
+
+    private func normalizedGameKey(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 }
 
@@ -223,8 +260,14 @@ private struct MinerSourceListRow: View {
                 if resolved.reason == .notLinked {
                     return "Needs Link"
                 }
+                if let campaign = firstActivePrioritisedCampaign {
+                    return campaign.activityStatusMessage
+                }
                 return "No active campaigns"
             case .idle:
+                if let campaign = firstActivePrioritisedCampaign {
+                    return campaign.activityStatusMessage
+                }
                 return "No active campaigns"
             }
         }
@@ -234,34 +277,90 @@ private struct MinerSourceListRow: View {
         }
         return "No active campaigns"
     }
+
+    private var firstActivePrioritisedCampaign: Campaign? {
+        let priorityKeys = miner.priorityGames
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty }
+
+        guard !priorityKeys.isEmpty else { return nil }
+
+        let prioritySet = Set(priorityKeys)
+        return miner.allCampaigns.first { campaign in
+            campaign.isTimeActive &&
+            campaign.status != .disabled &&
+            (
+                prioritySet.contains(campaign.game.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()) ||
+                prioritySet.contains(campaign.game.id.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
+            )
+        }
+    }
 }
 
-private struct QueuedCampaignRow: View {
+private struct CampaignActivityRow: View {
     let campaign: Campaign
 
     var body: some View {
-        HStack(spacing: 10) {
-            Circle()
-                .fill(.blue.opacity(0.3))
-                .frame(width: 6, height: 6)
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(campaign.game.name)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
 
-            Text(campaign.game.name)
-                .font(.subheadline.weight(.medium))
-                .lineLimit(1)
+                Text(campaign.name)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
 
-            Text("·")
+            Spacer(minLength: 12)
+
+            Text(campaign.activityStatusMessage)
+                .font(.caption)
                 .foregroundStyle(.tertiary)
-
-            Text(campaign.name)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
                 .lineLimit(1)
-
-            Spacer()
+                .frame(minWidth: 150, alignment: .trailing)
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.vertical, 9)
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
+    }
+}
+
+private struct NoActiveCampaignsRow: View {
+    var body: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("No active campaigns")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.primary)
+
+                Text("Prioritised games will appear here when drops are live.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 12)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(.quaternary.opacity(0.22), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
+    }
+}
+
+extension Campaign {
+    var activityStatusMessage: String {
+        if !isAccountConnected {
+            return "Account not linked"
+        }
+
+        if !hasDropsEnabled {
+            return "Waiting for eligible stream"
+        }
+
+        return "Mining"
     }
 }
 

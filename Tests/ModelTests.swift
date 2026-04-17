@@ -137,6 +137,26 @@ final class ModelTests: XCTestCase {
         XCTAssertTrue(campaign.hasDropsEnabled)
     }
 
+    func testCampaignMiningEligibilityRequiresAllowEnabled() {
+        let game = Game(id: "g1", name: "Test Game")
+        let now = Date()
+        let drop = Drop(id: "d1", name: "Drop", requiredMinutes: 60)
+        let campaign = Campaign(
+            id: "c1",
+            name: "Blocked Campaign",
+            game: game,
+            status: .active,
+            startDate: now.addingTimeInterval(-3600),
+            endDate: now.addingTimeInterval(3600),
+            drops: [drop],
+            isAccountConnected: true,
+            allowIsEnabled: false
+        )
+
+        XCTAssertFalse(campaign.hasDropsEnabled)
+        XCTAssertFalse(campaign.isMiningEligible)
+    }
+
     // MARK: - Progress
 
     func testProgressPartial() {

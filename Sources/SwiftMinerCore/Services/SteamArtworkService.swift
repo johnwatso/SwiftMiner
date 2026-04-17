@@ -36,11 +36,34 @@ public actor SteamArtworkService {
 
     // MARK: - Public API
 
+    /// Whether a Twitch category should use Steam artwork lookup/overrides.
+    public nonisolated static func supportsSteamArtwork(forGameName gameName: String, gameId: String? = nil) -> Bool {
+        if gameId?.trimmingCharacters(in: .whitespacesAndNewlines) == "509658" {
+            return false
+        }
+
+        let normalizedName = gameName
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+
+        return normalizedName != "just chatting"
+    }
+
     /// Manually pin a Steam App ID to a game name.
     /// Persists across launches and takes priority over auto-lookup.
     /// Pass an empty string to remove an existing override.
     public func setManualAppId(for gameName: String, appId: String) {
         let key = gameName.lowercased().trimmingCharacters(in: .whitespaces)
+        guard Self.supportsSteamArtwork(forGameName: gameName) else {
+            manualOverrides.removeValue(forKey: key)
+            appIdCache.removeValue(forKey: key)
+            failedLookups.insert(key)
+            UserDefaults.standard.set(manualOverrides, forKey: Self.manualOverridesDefaultsKey)
+            UserDefaults.standard.set(appIdCache, forKey: Self.appIdCacheDefaultsKey)
+            print("[SteamArtworkService] Ignoring Steam override for unsupported category '\(gameName)'")
+            return
+        }
+
         if appId.trimmingCharacters(in: .whitespaces).isEmpty {
             manualOverrides.removeValue(forKey: key)
         } else {
@@ -152,6 +175,16 @@ public actor SteamArtworkService {
         let normalizedName = gameName.lowercased().trimmingCharacters(in: .whitespaces)
         
         print("[SteamArtworkService] Looking up: '\(gameName)' (normalized: '\(normalizedName)')")
+
+        guard Self.supportsSteamArtwork(forGameName: gameName) else {
+            manualOverrides.removeValue(forKey: normalizedName)
+            appIdCache.removeValue(forKey: normalizedName)
+            failedLookups.insert(normalizedName)
+            UserDefaults.standard.set(manualOverrides, forKey: Self.manualOverridesDefaultsKey)
+            UserDefaults.standard.set(appIdCache, forKey: Self.appIdCacheDefaultsKey)
+            print("[SteamArtworkService] Skipping Steam artwork for unsupported category '\(gameName)'")
+            return nil
+        }
         
         // Manual overrides take priority — always used, never skipped
         if let manualId = manualOverrides[normalizedName] {

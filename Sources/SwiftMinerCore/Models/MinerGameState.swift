@@ -87,7 +87,7 @@ public struct MinerGameState: Equatable, Sendable {
 
 /// The resolved primary state for a miner, derived from the full per-game state list.
 ///
-/// Priority order: **blocked > watching > idle**
+/// Priority order: **watching > blocked > idle**
 public struct ResolvedPrimaryState: Equatable, Sendable {
     /// The single resolved game state that should be shown as the primary visible state.
     public let resolved: MinerGameState?
@@ -97,7 +97,8 @@ public struct ResolvedPrimaryState: Equatable, Sendable {
     public init(gameStates: [MinerGameState]) {
         self.allStates = gameStates
 
-        // Priority: blocked > watching > idle
+        // Priority: watching > blocked > idle. Blocked campaigns are still listed per game,
+        // but an account that is successfully mining should present as mining.
         var blocked: MinerGameState?
         var watching: MinerGameState?
 
@@ -112,10 +113,10 @@ public struct ResolvedPrimaryState: Equatable, Sendable {
             }
         }
 
-        if let blocked {
-            self.resolved = blocked
-        } else if let watching {
+        if let watching {
             self.resolved = watching
+        } else if let blocked {
+            self.resolved = blocked
         } else {
             // Return the first idle state (or first game state if none match)
             self.resolved = gameStates.first { $0.isIdle } ?? gameStates.first
