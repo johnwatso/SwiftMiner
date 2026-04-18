@@ -80,6 +80,12 @@ public final class Settings: ObservableObject {
     /// JSON-encoded custom game name list for debug fake queue generation.
     @AppStorage("debugFakeQueueCustomGamesData")
     private var debugFakeQueueCustomGamesData: String = "[]"
+
+    /// Bypass account-link/eligibility gates so the miner watches a random live channel
+    /// for any time-active campaign. For exercising the watch pipeline only — drops
+    /// won't actually credit for unlinked accounts.
+    @AppStorage("debugBypassLinkRequirement")
+    public var debugBypassLinkRequirement: Bool = false
 #endif
 
     /// Preferred stream quality (for future use)

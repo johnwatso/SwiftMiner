@@ -45,6 +45,10 @@ public actor MinerEngine {
     private var showClaimNotifications: Bool = false
     private var ignoredAccountLinkWarningGames: Set<String> = []
     private var warnedUnlinkedPriorityGames: Set<String> = []
+    /// Debug-only: when true, accepts any time-active campaign and picks any live channel
+    /// without requiring account linkage or GQL drop verification. Exercises the watch
+    /// pipeline for testing; drops won't credit for unlinked accounts.
+    private var debugBypassLinkRequirement: Bool = false
 
     /// Returns this engine's DropsService so callers on other actors can create an AccountStateStore.
     func getDropsService() -> DropsService { dropsService }
@@ -97,6 +101,16 @@ public actor MinerEngine {
         Task {
             await notificationService?.configure(enabled: showClaimNotifications)
         }
+    }
+
+    /// Debug-only toggle. When enabled, the miner ignores account-link/eligibility gates
+    /// and picks a random live channel for any time-active campaign. For testing only.
+    public func setDebugBypassLinkRequirement(_ enabled: Bool) {
+        if debugBypassLinkRequirement != enabled {
+            log(enabled ? "🧪 Debug: bypassing link requirement — will watch any live channel" : "🧪 Debug: link requirement re-enabled")
+        }
+        debugBypassLinkRequirement = enabled
+        shouldRescanCampaigns = true
     }
 
     /// Update the prioritised games list.
@@ -610,14 +624,28 @@ public actor MinerEngine {
 
                 var selectedCampaign: Campaign?
                 var selectedChannel: Channel?
+
+                // Group candidates by game so a single live-channel fetch and GQL probe per
+                // channel can be matched against every candidate for that game. Preserves the
+                // order established by `candidateCampaigns` so priority games are tried first.
+                var gameOrder: [String] = []
+                var candidatesByGame: [String: [Campaign]] = [:]
                 for candidate in candidates {
-                    log("Checking campaign: \(candidate.name) (\(candidate.gameName))")
-                    if let channel = await selectBestChannel(from: candidate) {
-                        selectedCampaign = candidate
+                    let key = normalizedGameKey(candidate.gameName)
+                    if candidatesByGame[key] == nil { gameOrder.append(key) }
+                    candidatesByGame[key, default: []].append(candidate)
+                }
+
+                for gameKey in gameOrder {
+                    guard let gameCandidates = candidatesByGame[gameKey], !gameCandidates.isEmpty else { continue }
+                    let gameName = gameCandidates[0].gameName
+                    log("Checking game: \(gameName) (\(gameCandidates.count) candidate campaign(s))")
+                    if let (campaign, channel) = await selectBestChannel(forGameCandidates: gameCandidates) {
+                        selectedCampaign = campaign
                         selectedChannel = channel
                         break
                     }
-                    log("No eligible channels available for \(candidate.name); trying next candidate.")
+                    log("No eligible channels available for \(gameName); trying next game.")
                 }
 
                 guard let campaign = selectedCampaign, let channel = selectedChannel else {
@@ -953,26 +981,30 @@ public actor MinerEngine {
                 filteredOutReasons["inactive", default: 0] += 1
                 return false
             }
-            guard campaign.isAccountConnected else {
-                filteredOutReasons["not_connected", default: 0] += 1
-                return false
-            }
-            guard campaign.hasDropsEnabled else {
-                filteredOutReasons["not_eligible_for_account", default: 0] += 1
-                return false
-            }
-            guard !campaign.eligibleDrops.isEmpty else {
-                filteredOutReasons["no_eligible_drops", default: 0] += 1
-                return false
-            }
-            if !enableBadgesEmotes && campaign.hasOnlyBadgesOrEmotes {
-                filteredOutReasons["badge_emote_only", default: 0] += 1
-                return false
-            }
-            let status = campaign.miningStatus
-            guard status == .available || status == .inProgress || status == .claimable else {
-                filteredOutReasons["status_\(status.rawValue)", default: 0] += 1
-                return false
+            // Debug bypass: skip linkage/eligibility gates so the watch pipeline can be
+            // exercised without a linked account. Drops won't actually credit.
+            if !debugBypassLinkRequirement {
+                guard campaign.isAccountConnected else {
+                    filteredOutReasons["not_connected", default: 0] += 1
+                    return false
+                }
+                guard campaign.hasDropsEnabled else {
+                    filteredOutReasons["not_eligible_for_account", default: 0] += 1
+                    return false
+                }
+                guard !campaign.eligibleDrops.isEmpty else {
+                    filteredOutReasons["no_eligible_drops", default: 0] += 1
+                    return false
+                }
+                if !enableBadgesEmotes && campaign.hasOnlyBadgesOrEmotes {
+                    filteredOutReasons["badge_emote_only", default: 0] += 1
+                    return false
+                }
+                let status = campaign.miningStatus
+                guard status == .available || status == .inProgress || status == .claimable else {
+                    filteredOutReasons["status_\(status.rawValue)", default: 0] += 1
+                    return false
+                }
             }
             return true
         }
@@ -1027,6 +1059,145 @@ public actor MinerEngine {
         value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
     
+    /// Select the best live channel across all same-game candidate campaigns.
+    ///
+    /// Each live channel's active-drops list is fetched once and matched against every
+    /// candidate for the game. This pivots to whichever candidate a channel is actively
+    /// running, so the miner isn't stuck when the "active" campaign on live streams is a
+    /// lower-priority (but still eligible) candidate.
+    private func selectBestChannel(forGameCandidates candidates: [Campaign]) async -> (Campaign, Channel)? {
+        guard let primary = candidates.first else { return nil }
+        let gameName = primary.gameName
+        log("[ChannelSelect] Game: \(gameName) — candidates: \(candidates.map(\.name).joined(separator: ", "))")
+
+        let liveChannels: [Channel]
+        do {
+            var fetched = try await dropsService.findLiveChannels(forGame: gameName)
+            if fetched.isEmpty, candidates.contains(where: { $0.game.isSpecialEvents }) {
+                log("[ChannelSelect]   Special Event bypass: no directory channels for '\(gameName)', using ACL list")
+                fetched = candidates.flatMap(\.channels)
+            }
+            liveChannels = fetched
+        } catch {
+            log("[ChannelSelect]   Failed to fetch live channels for '\(gameName)': \(error.localizedDescription)")
+            // Fallback: if any candidate has approved channels, use the first
+            for candidate in candidates {
+                if let fallback = candidate.channels.first {
+                    currentChannelName = fallback.displayName
+                    currentChannelId = fallback.id
+                    return (candidate, fallback)
+                }
+            }
+            return nil
+        }
+
+        log("[ChannelSelect]   Found \(liveChannels.count) live candidate channel(s)")
+        guard !liveChannels.isEmpty else { return nil }
+
+        // Debug bypass: skip GQL verification and grab the top live channel paired with a
+        // random candidate. Purely for exercising the watch pipeline in testing.
+        if debugBypassLinkRequirement {
+            let bestLive = liveChannels
+                .sorted { ($0.viewerCount ?? 0) > ($1.viewerCount ?? 0) }
+                .first!
+            let resolved = await resolveChannelIdIfNeeded(bestLive)
+            let randomCandidate = candidates.randomElement() ?? primary
+            log("[ChannelSelect]   🧪 Debug bypass: picking \(resolved.displayName) for random candidate \(randomCandidate.name)")
+            currentChannelName = resolved.displayName
+            currentChannelId = resolved.id
+            return (randomCandidate, resolved)
+        }
+
+        let sortedChannels = liveChannels.sorted { a, b in
+            let aPriorityIndex = priorityGames.firstIndex(of: a.gameName ?? "")
+            let bPriorityIndex = priorityGames.firstIndex(of: b.gameName ?? "")
+            if aPriorityIndex != bPriorityIndex {
+                return (aPriorityIndex ?? Int.max) < (bPriorityIndex ?? Int.max)
+            }
+            if a.aclBased != b.aclBased { return a.aclBased && !b.aclBased }
+            return (a.viewerCount ?? 0) > (b.viewerCount ?? 0)
+        }
+
+        // Pre-compute which candidates each channel could serve (by ACL).
+        let candidateIds = Set(candidates.map(\.id))
+
+        var anyVerificationSucceeded = false
+        var fallbackPair: (Campaign, Channel)? = nil
+
+        for ch in sortedChannels.prefix(50) {
+            let eligibleForChannel = candidates.filter { candidate in
+                !candidate.hasChannelRestrictions
+                    || Self.channelMatchesCampaignACL(ch, campaign: candidate)
+            }
+            guard !eligibleForChannel.isEmpty else { continue }
+
+            let channel = await resolveChannelIdIfNeeded(ch)
+            log("[ChannelSelect]   Verifying \(channel.displayName) (viewers: \(channel.viewerCount ?? 0), id: \(channel.id))...")
+
+            do {
+                let activeCampaignIds = try await apiClient.fetchAvailableDrops(channelId: channel.id)
+                anyVerificationSucceeded = true
+
+                // Match channel's active campaigns against our candidates in priority order.
+                if let match = eligibleForChannel.first(where: { activeCampaignIds.contains($0.id) }) {
+                    log("[ChannelSelect]     ✓ Verified! Campaign \(match.name) (\(match.id)) active on \(channel.displayName)")
+                    currentChannelName = channel.displayName
+                    currentChannelId = channel.id
+                    return (match, channel)
+                }
+
+                let activeKnown = activeCampaignIds.filter { candidateIds.contains($0) }
+                if activeKnown.isEmpty {
+                    log("[ChannelSelect]     ✗ None of our candidates active here. Channel drops: \(activeCampaignIds.joined(separator: ", "))")
+                } else {
+                    log("[ChannelSelect]     ✗ ACL blocked match on \(channel.displayName) (active ids: \(activeKnown.joined(separator: ", ")))")
+                }
+            } catch {
+                log("[ChannelSelect]     ⚠️ Verification failed for \(channel.displayName): \(error.localizedDescription)")
+                if fallbackPair == nil, let best = eligibleForChannel.first {
+                    fallbackPair = (best, channel)
+                }
+            }
+        }
+
+        // ACL approved-channel probe: for any candidate with restrictions where the directory
+        // didn't surface a matching channel, probe approved channels directly.
+        for candidate in candidates where candidate.hasChannelRestrictions {
+            let directoryHadMatch = sortedChannels.contains { Self.channelMatchesCampaignACL($0, campaign: candidate) }
+            if directoryHadMatch { continue }
+            let probed = await liveACLChannels(for: candidate)
+            for ch in probed {
+                let channel = await resolveChannelIdIfNeeded(ch)
+                log("[ChannelSelect]   Probing ACL channel \(channel.displayName) for \(candidate.name)...")
+                do {
+                    let activeCampaignIds = try await apiClient.fetchAvailableDrops(channelId: channel.id)
+                    anyVerificationSucceeded = true
+                    if activeCampaignIds.contains(candidate.id) {
+                        log("[ChannelSelect]     ✓ Verified! \(candidate.name) active on approved channel \(channel.displayName)")
+                        currentChannelName = channel.displayName
+                        currentChannelId = channel.id
+                        return (candidate, channel)
+                    }
+                } catch {
+                    log("[ChannelSelect]     ⚠️ Approved-channel verification failed: \(error.localizedDescription)")
+                    if fallbackPair == nil { fallbackPair = (candidate, channel) }
+                }
+            }
+        }
+
+        // Only fall back to an unverified channel when the verification itself errored for
+        // every candidate. If GQL responded cleanly and just didn't match, the campaigns are
+        // genuinely not active on any live stream — return nil so the miner waits.
+        if !anyVerificationSucceeded, let fallback = fallbackPair {
+            log("[ChannelSelect]   ! All verifications errored. Falling back to \(fallback.1.displayName) for \(fallback.0.name)")
+            currentChannelName = fallback.1.displayName
+            currentChannelId = fallback.1.id
+            return fallback
+        }
+
+        return nil
+    }
+
     private func selectBestChannel(from campaign: Campaign) async -> Channel? {
         log("[ChannelSelect] Campaign: \(campaign.name) (game: \(campaign.gameName))")
         log("[ChannelSelect]   ACL restrictions: \(campaign.hasChannelRestrictions ? "YES (\(campaign.channels.count) channels)" : "NO")")
