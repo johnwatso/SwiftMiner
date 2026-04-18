@@ -28,6 +28,8 @@ final class PrimaryStateResolverTests: XCTestCase {
 
     private func createCampaign(
         id: String,
+        gameId: String = "game1",
+        gameName: String = "Test Game",
         isTimeActive: Bool = true,
         isAccountConnected: Bool = true,
         drops: [Drop] = []
@@ -36,7 +38,7 @@ final class PrimaryStateResolverTests: XCTestCase {
         return Campaign(
             id: id,
             name: "Campaign \(id)",
-            game: Game(id: "game1", name: "Test Game"),
+            game: Game(id: gameId, name: gameName),
             startDate: isTimeActive ? now.addingTimeInterval(-3600) : now.addingTimeInterval(3600),
             endDate: isTimeActive ? now.addingTimeInterval(3600) : now.addingTimeInterval(7200),
             drops: drops,
@@ -145,6 +147,31 @@ final class PrimaryStateResolverTests: XCTestCase {
         if case .mining = state {} else {
             XCTFail("Should be .mining")
         }
+    }
+
+    func testPriority_ReadyOverBlockedWhenAnotherPrioritisedGameIsEarnable() {
+        let blockedCampaign = createCampaign(
+            id: "c1",
+            gameId: "blocked-game",
+            gameName: "Blocked Game",
+            isAccountConnected: false,
+            drops: [createDrop(id: "d1")]
+        )
+        let earnableCampaign = createCampaign(
+            id: "c2",
+            gameId: "earnable-game",
+            gameName: "Earnable Game",
+            drops: [createDrop(id: "d2")]
+        )
+        let miner = createMiner(
+            allCampaigns: [blockedCampaign, earnableCampaign],
+            priorityGames: ["Blocked Game", "Earnable Game"]
+        )
+
+        XCTAssertEqual(miner.primaryState, .ready)
+        XCTAssertEqual(miner.resolvedPrimaryState?.resolved?.gameName, "Earnable Game")
+        XCTAssertEqual(miner.resolvedPrimaryState?.resolved?.state, .idle)
+        XCTAssertEqual(miner.resolvedPrimaryState?.resolved?.reason, .none)
     }
 
     func testPriority_MiningOverReady() {
