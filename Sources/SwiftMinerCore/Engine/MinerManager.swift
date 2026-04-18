@@ -210,6 +210,9 @@ public final class MinerManager {
     
     /// Track notification preference
     public var showClaimNotifications: Bool = false
+    /// Debug-only: broadcast to every engine to bypass link/eligibility gates. Stored here
+    /// so engines attached later (e.g. newly added accounts) pick up the current value.
+    public var debugBypassLinkRequirement: Bool = false
     /// Scoped warnings: [accountId: Set<gameId>]
     private var ignoredAccountLinkWarnings: [String: Set<String>] = [:]
 
@@ -247,6 +250,15 @@ public final class MinerManager {
         self.showClaimNotifications = enabled
         for engine in engines.values {
             await engine.updateNotificationPreference(enabled: enabled)
+        }
+    }
+
+    /// Debug-only: broadcast the link-bypass flag to every engine. Stored so engines
+    /// added later (new accounts during a session) pick up the current value on start.
+    public func setDebugBypassLinkRequirement(_ enabled: Bool) async {
+        self.debugBypassLinkRequirement = enabled
+        for engine in engines.values {
+            await engine.setDebugBypassLinkRequirement(enabled)
         }
     }
 
@@ -498,6 +510,7 @@ public final class MinerManager {
             ignoredAccountLinkWarningGames: ignoredGames
         )
         await engine.updateMiningStrategy(strategy)
+        await engine.setDebugBypassLinkRequirement(debugBypassLinkRequirement)
 
         // Update status and sync priority games
         await dataCoordinator.updateAccountNeedsAuth(accountId: miner.accountId, needsAuth: false)
@@ -751,12 +764,13 @@ public final class MinerManager {
                     campaignId: campaign.id
                 ))
             } else if let campaign = activeCampaign {
+                let waitingForStream = miner.status == .waitingForStream
                 states.append(MinerGameState(
                     minerId: miner.id,
                     gameId: gameId,
                     gameName: gameName,
-                    state: .idle,
-                    reason: .none,
+                    state: waitingForStream ? .blocked : .idle,
+                    reason: waitingForStream ? .noLiveStreams : .none,
                     campaignId: campaign.id
                 ))
             } else if let reason = blockedReason {
