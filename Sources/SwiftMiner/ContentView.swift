@@ -217,7 +217,6 @@ struct OverviewView: View {
                 metricsSection
                 campaignFeedSection
                 nextActionSection
-                campaignSummarySection
             }
             .padding(24)
         }
@@ -1108,6 +1107,19 @@ struct OverviewView: View {
                 detail: "Once the session is valid, the miner resumes campaign selection automatically.",
                 badge: "Authenticating",
                 color: .orange
+            )
+        }
+
+        if miners.contains(where: { $0.status == .waitingForStream }) {
+            let gameName = miners.first(where: { $0.status == .waitingForStream })
+                .flatMap { $0.resolvedPrimaryState?.resolved?.gameName }
+            let gameText = gameName.map { " for \($0)" } ?? ""
+            return StatusReason(
+                title: "Waiting for a live stream",
+                summary: "Campaigns are available\(gameText), but no eligible channels are live right now.",
+                detail: "The miner will pick up automatically as soon as a qualifying stream goes live.",
+                badge: "Waiting",
+                color: .cyan
             )
         }
 

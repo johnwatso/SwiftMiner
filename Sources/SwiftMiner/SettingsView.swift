@@ -356,6 +356,7 @@ private struct MiningSettingsView: View {
 
 private struct AdvancedSettingsView: View {
     @ObservedObject var settings: Settings
+    @Environment(NavigationModel.self) private var navigation
     @State private var showResetConfirmation = false
     @State private var showClientIdAlert = false
     @State private var tempClientId = ""
@@ -463,6 +464,13 @@ private struct AdvancedSettingsView: View {
                         }
                     }
                 }
+
+                Toggle("Bypass Link Requirement", isOn: $settings.debugBypassLinkRequirement)
+                    .onChange(of: settings.debugBypassLinkRequirement) { _, newValue in
+                        Task { await navigation.minerManager.setDebugBypassLinkRequirement(newValue) }
+                    }
+
+                SettingsSecondaryText("Mines a random live channel for any time-active campaign, ignoring account linkage. Drops won't actually credit — for exercising the watch pipeline only.")
 
                 SettingsSecondaryText("Testing only. Overview renders a synthetic queue for screenshots. The debug badge is optional.")
             } header: {
