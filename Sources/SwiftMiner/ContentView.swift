@@ -630,6 +630,7 @@ struct OverviewView: View {
                     || state == .claimable
                     || state == .inProgress
                     || isQueued
+                    || isBeingWatched(campaign)
             }
             .sorted(by: campaignDisplaySort)
     }
@@ -671,7 +672,10 @@ struct OverviewView: View {
     }
 
     private func makeRailItem(for campaign: CampaignViewData, section: CampaignFeedSection) -> CampaignRailItem {
-        let state = visualState(for: campaign)
+        var state = visualState(for: campaign)
+        if state == .idle && isBeingWatched(campaign) {
+            state = .watching
+        }
         let hasPriorityLinkIssue = hasPriorityLinkIssue(for: campaign, section: section)
         let game = Game(id: campaign.gameId ?? campaign.id, name: campaign.gameName, boxArtURL: campaign.artworkURL)
         let artworkURL = SteamArtworkService.supportsSteamArtwork(forGameName: campaign.gameName, gameId: campaign.gameId)
@@ -832,12 +836,8 @@ struct OverviewView: View {
             return .claimable
         }
 
-        if isBeingWatched(campaign) {
-            return .watching
-        }
-
         if campaign.hasValidProgress {
-            return .inProgress
+            return isBeingWatched(campaign) ? .watching : .inProgress
         }
 
         return .idle
