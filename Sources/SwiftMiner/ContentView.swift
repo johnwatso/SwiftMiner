@@ -832,8 +832,12 @@ struct OverviewView: View {
             return .claimable
         }
 
+        if isBeingWatched(campaign) {
+            return .watching
+        }
+
         if campaign.hasValidProgress {
-            return isBeingWatched(campaign) ? .watching : .inProgress
+            return .inProgress
         }
 
         return .idle
