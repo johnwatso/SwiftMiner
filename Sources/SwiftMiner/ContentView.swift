@@ -188,12 +188,12 @@ struct EventRow: View {
 
 struct OverviewView: View {
     @Environment(NavigationModel.self) private var navigation
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var settings = Settings.shared
     @State private var progress: AggregateProgress?
     @State private var overviewCampaigns: [CampaignViewData] = []
     @State private var isRefreshing = false
     @State private var steamIdSheetPresentation: SteamIdSheetPresentation?
+    @State private var isShowingGameManagement = false
 
     private var campaigns: [CampaignViewData] {
         overviewCampaigns
@@ -207,16 +207,9 @@ struct OverviewView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                let miners = navigation.minerManager.miners
-                if !miners.isEmpty {
-                    MinerHealthCard(miners: miners) { minerId in
-                        navigation.selectedMinerId = minerId
-                        navigation.selectedItem = .activity
-                    }
-                }
+                minerActivitySection
                 metricsSection
                 campaignFeedSection
-                nextActionSection
             }
             .padding(24)
         }
@@ -240,6 +233,12 @@ struct OverviewView: View {
                 applySteamAppId(appId, for: presentation.gameName)
             }
             .presentationBackground(.clear)
+        }
+        .sheet(isPresented: $isShowingGameManagement) {
+            GamePreferenceManagementView(
+                settings: settings,
+                minerManager: navigation.minerManager
+            )
         }
     }
 
@@ -300,6 +299,50 @@ struct OverviewView: View {
         }
     }
 
+    // MARK: - Miner Activity
+
+    private var minerActivitySection: some View {
+        let miners = navigation.minerManager.miners
+
+        return VStack(alignment: .leading, spacing: 14) {
+            sectionHeading(
+                "Miner Activity",
+                subtitle: "Current work is shown first; likely follow-up targets stay secondary."
+            )
+
+            if miners.isEmpty {
+                MaterialEmptyStatePanel(
+                    "No Twitch accounts connected",
+                    systemImage: "person.badge.plus",
+                    description: "Add an account to see what each miner is mining now."
+                ) {
+                    Button {
+                        navigation.showAddAccountSheet = true
+                    } label: {
+                        Label("Add Account", systemImage: "plus")
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+                .frame(maxWidth: .infinity, minHeight: 180)
+            } else {
+                LazyVGrid(columns: minerActivityColumns, spacing: 14) {
+                    ForEach(miners) { miner in
+                        MinerActivityCard(miner: miner, prominence: .compact, onSelect: {
+                            navigation.selectedMinerId = miner.id
+                            navigation.selectedItem = .activity
+                        }, onLinkAccount: {
+                            startLinkAccountFlow(for: miner)
+                        })
+                    }
+                }
+            }
+        }
+    }
+
+    private var minerActivityColumns: [GridItem] {
+        [GridItem(.adaptive(minimum: 300), spacing: 14, alignment: .top)]
+    }
+
     // MARK: - Metrics
 
     private var metricsSection: some View {
@@ -311,9 +354,9 @@ struct OverviewView: View {
                 spacing: 14
             ) {
                 OverviewMetricCard(
-                    title: "Active Miners",
-                    value: "\(progress?.activeMiners ?? navigation.minerManager.miners.filter { $0.isRunning }.count)",
-                    subtitle: "\(navigation.minerManager.miners.count) online accounts",
+                    title: "Configured Accounts",
+                    value: "\(navigation.minerManager.miners.count)",
+                    subtitle: "\(progress?.activeMiners ?? navigation.minerManager.miners.filter { $0.isRunning }.count) running or waiting",
                     icon: "person.2.fill",
                     color: .blue
                 )
@@ -353,49 +396,20 @@ struct OverviewView: View {
                 campaignRailSection(
                     title: "Prioritised",
                     items: displayedPrioritisedFeedItems,
-                    prominence: .standard
+                    prominence: .standard,
+                    showsEditButton: true
                 )
             }
 
-            if !displayedMiningFeedItems.isEmpty {
+            if !displayedActiveFeedItems.isEmpty {
                 campaignRailSection(
-                    title: "Mining / Queued",
-                    items: displayedMiningFeedItems,
-                    prominence: .feature,
-                    displayStyle: effectiveQueueDisplayStyle
+                    title: "Campaigns In Motion",
+                    items: displayedActiveFeedItems,
+                    prominence: .feature
                 )
             }
         }
         .padding(.vertical, 2)
-    }
-
-    private var displayedMiningFeedItems: [CampaignRailItem] {
-#if DEBUG
-        if settings.debugFakeQueueEnabled {
-            return debugFakeQueueItems
-        }
-#endif
-        let orderedCampaigns = orderedMiningQueueCampaigns
-        guard !orderedCampaigns.isEmpty else {
-            return [placeholderRailItem(for: .active)]
-        }
-
-        let firstIsActive = orderedCampaigns.first.map(isBeingWatched(_:)) ?? false
-
-        return Array(orderedCampaigns.prefix(8).enumerated()).map { index, campaign in
-            var item = makeRailItem(for: campaign, section: .active)
-            item.queuePosition = index
-
-            if index == 0 {
-                item.queueLabel = firstIsActive ? "Now Mining" : "Next Up"
-            } else if index == 1 && firstIsActive {
-                item.queueLabel = "Next Up"
-            } else {
-                item.queueLabel = "Queue #\(index + 1)"
-            }
-
-            return item
-        }
     }
 
     @ViewBuilder
@@ -403,218 +417,67 @@ struct OverviewView: View {
         title: String,
         items: [CampaignRailItem],
         prominence: CampaignCardProminence,
-        displayStyle: Settings.QueueDisplayStyle = .classic
+        showsEditButton: Bool = false
     ) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            sectionHeading(title)
+            HStack(alignment: .firstTextBaseline) {
+                sectionHeading(title)
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                if displayStyle == .classic {
-                    LazyHStack(alignment: .top, spacing: prominence.spacing) {
-                        ForEach(items) { item in
-                            CampaignFeedCard(
-                                item: item,
-                                prominence: prominence,
-                                onSetSteamId: presentSteamIdSheet(for:)
-                            )
-                        }
-                    }
-                    .padding(.horizontal, 2)
-                    .padding(.vertical, 6)
-                } else {
-                    LazyHStack(
-                        alignment: .top,
-                        spacing: displayStyle == .stacked ? -prominence.size.width * 0.52 : prominence.spacing * 0.55
-                    ) {
-                        ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                            let clampedDepth = min(index, 4)
-                            let scale = displayStyle == .stacked
-                                ? max(0.62, 1.0 - (Double(clampedDepth) * 0.12))
-                                : max(0.72, 1.0 - (Double(clampedDepth) * 0.10))
-                            let opacity = displayStyle == .stacked
-                                ? max(0.52, 1.0 - (Double(clampedDepth) * 0.16))
-                                : max(0.58, 1.0 - (Double(clampedDepth) * 0.13))
-                            let xOffset = displayStyle == .stacked
-                                ? CGFloat(clampedDepth) * 16
-                                : CGFloat(clampedDepth) * 6
-                            let yOffset = displayStyle == .stacked
-                                ? CGFloat(clampedDepth) * 4
-                                : CGFloat(clampedDepth) * 1.5
-                            let rotation = displayStyle == .coverFlow
-                                ? min(Double(clampedDepth) * 14, 36)
-                                : 0
+                Spacer()
 
-                            CampaignFeedCard(
-                                item: item,
-                                prominence: prominence,
-                                onSetSteamId: presentSteamIdSheet(for:)
-                            )
-                                .scaleEffect(scale)
-                                .opacity(opacity)
-                                .offset(x: xOffset, y: yOffset)
-                                .rotation3DEffect(
-                                    .degrees(rotation),
-                                    axis: (x: 0, y: 1, z: 0),
-                                    perspective: 0.7
-                                )
-                                .zIndex(Double(120 - index))
-                                .animation(.spring(response: 0.34, dampingFraction: 0.82), value: items.map(\.id).joined(separator: ","))
-                        }
+                if showsEditButton {
+                    Button {
+                        isShowingGameManagement = true
+                    } label: {
+                        Label("Edit", systemImage: "slider.horizontal.3")
                     }
-                    .padding(.horizontal, 2)
-                    .padding(.vertical, 10)
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
                 }
             }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(alignment: .top, spacing: prominence.spacing) {
+                    ForEach(items) { item in
+                        CampaignFeedCard(
+                            item: item,
+                            prominence: prominence,
+                            onSetSteamId: presentSteamIdSheet(for:)
+                        )
+                    }
+                }
+                .padding(.horizontal, 2)
+                .padding(.vertical, 6)
+            }
             .scrollClipDisabled()
-
-            if prominence == .feature {
-                MiningQueuePreview(items: items)
-            }
         }
     }
-
-    private var effectiveQueueDisplayStyle: Settings.QueueDisplayStyle {
-        if reduceMotion && settings.queueDisplayStyle == .coverFlow {
-            return .stacked
-        }
-        return settings.queueDisplayStyle
-    }
-
-#if DEBUG
-    private var debugFakeQueueItems: [CampaignRailItem] {
-        let maxCount = settings.clampedDebugFakeQueueLength
-        let seedNames = debugQueueSeedGameNames
-
-        guard !seedNames.isEmpty else {
-            var placeholder = placeholderRailItem(for: .active)
-            placeholder.queueLabel = "Now Mining"
-            placeholder.isDebugPreview = true
-            return [placeholder]
-        }
-
-        return Array((0..<maxCount)).map { index in
-            let name = seedNames[index % seedNames.count]
-            var item: CampaignRailItem
-
-            if let existingCampaign = campaigns.first(where: { $0.gameName.localizedCaseInsensitiveCompare(name) == .orderedSame }) {
-                item = makeRailItem(for: existingCampaign, section: .active)
-            } else {
-                item = makeSyntheticDebugQueueItem(gameName: name, index: index)
-            }
-
-            item.queuePosition = index
-            if index == 0 {
-                item.queueLabel = "Now Mining"
-            } else if index == 1 {
-                item.queueLabel = "Next Up"
-            } else {
-                item.queueLabel = "Queue #\(index + 1)"
-            }
-            item.isDebugPreview = true
-            return item
-        }
-    }
-
-    private var debugQueueSeedGameNames: [String] {
-        let sourceNames: [String]
-        switch settings.debugFakeQueueSource {
-        case .prioritisedGames:
-            sourceNames = settings.priorityGames
-        case .customGames:
-            sourceNames = settings.debugFakeQueueCustomGames
-        }
-
-        let normalized = sourceNames
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-
-        if !normalized.isEmpty {
-            return deduplicatedGameNames(normalized)
-        }
-
-        let fallback = campaigns.map(\.gameName)
-        return deduplicatedGameNames(fallback).prefix(8).map { $0 }
-    }
-
-    private func deduplicatedGameNames(_ names: [String]) -> [String] {
-        var seen = Set<String>()
-        var result: [String] = []
-        for name in names {
-            let key = name.lowercased()
-            if seen.insert(key).inserted {
-                result.append(name)
-            }
-        }
-        return result
-    }
-
-    private func makeSyntheticDebugQueueItem(gameName: String, index: Int) -> CampaignRailItem {
-        let subtitle = index == 0 ? "Debug queue simulation" : "Queued in debug preview"
-        let detail = index == 0 ? "Testing card hierarchy and screenshot layouts." : "Synthetic queue card for testing."
-        let tint: Color = index == 0 ? .orange : .yellow
-
-        return CampaignRailItem(
-            id: "debug-queue-\(index)-\(gameName.lowercased())",
-            section: .active,
-            gameName: gameName,
-            campaignName: subtitle,
-            eyebrow: "Debug",
-            progressText: detail,
-            progressPercent: index == 0 ? 42 : 0,
-            artworkURL: SteamArtworkService.supportsSteamArtwork(forGameName: gameName)
-                ? navigation.minerManager.dataCoordinator.steamArtworkOverrides[gameName]
-                : nil,
-            tint: tint,
-            hasOnlyBadgesOrEmotes: false,
-            visualState: index == 0 ? .inProgress : .idle,
-            watchers: [],
-            isDimmed: false,
-            isPlaceholder: false,
-            showsLiveMotion: index == 0,
-            game: Game(id: "debug-\(gameName.lowercased())", name: gameName, boxArtURL: nil)
-        )
-    }
-#endif
 
     private var preferredGames: [GamePreference] {
         settings.gamePreferences.filter { $0.state == .preferred }
-    }
-
-    private var currentlyMiningCampaigns: [CampaignViewData] {
-        campaigns.filter(isBeingWatched(_:))
-    }
-
-    private var orderedMiningQueueCampaigns: [CampaignViewData] {
-        let active = activeFeedCampaigns.sorted(by: campaignDisplaySort)
-        if !active.isEmpty {
-            return active
-        }
-
-        // Prioritised campaigns are still meaningful queue entries even before they
-        // have started producing Twitch progress. Without this fallback the queue
-        // collapses to the standby placeholder while the Prioritised rail shows work.
-        let prioritisedQueue = prioritisedCampaigns
-            .filter { !$0.isCompleted }
-            .sorted(by: campaignDisplaySort)
-        if !prioritisedQueue.isEmpty {
-            return prioritisedQueue
-        }
-
-        return []
     }
 
     private var prioritisedCampaigns: [CampaignViewData] {
         campaigns
             .filter { campaign in
                 (campaign.relevance == .prioritised || preferredGames.contains(where: { matches(campaign, preference: $0) }))
-                    && campaign.isDisplayableInOverview
+                    && (campaign.isDisplayableInOverview || isQueueEligible(campaign))
             }
             .sorted(by: campaignDisplaySort)
     }
 
     private var preferredGameFallbacks: [GamePreference] {
         preferredGames.filter { preference in
-            !prioritisedCampaigns.contains(where: { matches($0, preference: preference) })
+            !uniquePrioritisedCampaigns.contains(where: { matches($0, preference: preference) })
+        }
+    }
+
+    private var uniquePrioritisedCampaigns: [CampaignViewData] {
+        var seen = Set<String>()
+        return prioritisedCampaigns.filter { campaign in
+            let normalizedName = normalizedGameKey(campaign.gameName)
+            let key = normalizedName.isEmpty ? normalizedGameKey(campaign.gameId ?? campaign.id) : normalizedName
+            return seen.insert(key).inserted
         }
     }
 
@@ -622,16 +485,21 @@ struct OverviewView: View {
         campaigns
             .filter { campaign in
                 let state = visualState(for: campaign)
-                let isQueued = state == .idle
-                    && campaign.isAccountConnected
-                    && !campaign.isCompleted
-                    && (campaign.relevance == .active || campaign.relevance == .prioritised)
                 return state == .watching
                     || state == .claimable
                     || state == .inProgress
-                    || isQueued
+                    || isQueueEligible(campaign)
             }
             .sorted(by: campaignDisplaySort)
+    }
+
+    private func isQueueEligible(_ campaign: CampaignViewData) -> Bool {
+        visualState(for: campaign) == .idle
+            && campaign.isAccountConnected
+            && !campaign.isCompleted
+            && campaign.startDate <= Date()
+            && campaign.endDate > Date()
+            && campaign.overviewRemainingRewardCount > 0
     }
 
     private var recentCampaigns: [CampaignViewData] {
@@ -643,7 +511,7 @@ struct OverviewView: View {
     }
 
     private var prioritisedFeedItems: [CampaignRailItem] {
-        var items = prioritisedCampaigns.prefix(8).map { makeRailItem(for: $0, section: .prioritised) }
+        var items = uniquePrioritisedCampaigns.prefix(8).map { makeRailItem(for: $0, section: .prioritised) }
         items.append(contentsOf: preferredGameFallbacks.prefix(4).map(makePreferredGameItem))
         return items
     }
@@ -661,13 +529,7 @@ struct OverviewView: View {
     }
 
     private var displayedActiveFeedItems: [CampaignRailItem] {
-        if !activeFeedItems.isEmpty {
-            return activeFeedItems
-        }
-        if !recentFeedItems.isEmpty {
-            return recentFeedItems
-        }
-        return Array(prioritisedFeedItems.prefix(6))
+        activeFeedItems
     }
 
     private func makeRailItem(for campaign: CampaignViewData, section: CampaignFeedSection) -> CampaignRailItem {
@@ -713,6 +575,21 @@ struct OverviewView: View {
 
     private func priorityOrderIndex(for gameName: String) -> Int {
         settings.priorityGames.firstIndex(where: { $0.localizedCaseInsensitiveCompare(gameName) == .orderedSame }) ?? Int.max
+    }
+
+    private func normalizedGameKey(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private func startLinkAccountFlow(for miner: MinerManager.ManagedMiner) {
+        Task {
+            try? await navigation.minerManager.startMiner(
+                minerId: miner.id,
+                priorityGames: [],
+                excludedGames: [],
+                strategy: .mineAll
+            )
+        }
     }
 
     private func isGameExcluded(_ gameName: String) -> Bool {
@@ -1011,186 +888,6 @@ struct OverviewView: View {
         return String(username.prefix(2)).uppercased()
     }
 
-    // MARK: - Next Action
-
-    private var nextActionSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            sectionHeading("Next Action", subtitle: primaryStatusReason.detail)
-
-            HStack(alignment: .top, spacing: 18) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(primaryStatusReason.title)
-                        .font(.title3.weight(.semibold))
-
-                    Text(primaryStatusReason.summary)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Spacer(minLength: 0)
-
-                Text(primaryStatusReason.badge)
-                    .font(.caption.weight(.semibold))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .foregroundStyle(primaryStatusReason.color)
-                    .background(
-                        primaryStatusReason.color.opacity(0.12),
-                        in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
-                    )
-                    .overlay {
-                        RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
-                            .strokeBorder(primaryStatusReason.color.opacity(0.22), lineWidth: 1)
-                    }
-            }
-
-            if !statusReasonRows.isEmpty {
-                VStack(spacing: 10) {
-                    ForEach(statusReasonRows) { row in
-                        StatusReasonRow(row: row)
-                    }
-                }
-            }
-        }
-        .padding(22)
-        .glassCard()
-    }
-
-    private var primaryStatusReason: StatusReason {
-        let miners = navigation.minerManager.miners
-        if miners.isEmpty {
-            return StatusReason(
-                title: "Waiting for accounts",
-                summary: "The dashboard is ready, but it needs a Twitch account before it can begin watching for drops.",
-                detail: "Add an account to wake up the system and start populating campaign activity.",
-                badge: "Standby",
-                color: .secondary
-            )
-        }
-
-        if let miner = miners.first(where: { $0.status == .claiming }) {
-            return StatusReason(
-                title: "Collecting completed drops",
-                summary: "\(miner.username) is wrapping up rewards from \(miner.currentCampaign ?? "an active campaign").",
-                detail: "Claiming is prioritized before returning the miner to watching.",
-                badge: "Claiming",
-                color: .purple
-            )
-        }
-
-        if let miner = miners.first(where: { $0.status == .watching }) {
-            let campaignName = miner.currentCampaign ?? "the current drop rotation"
-            return StatusReason(
-                title: "Watching live channels",
-                summary: "\(miner.username) is actively mining \(campaignName).",
-                detail: "The miner is staying on eligible streams and tracking progress in real time.",
-                badge: "Watching",
-                color: .green
-            )
-        }
-
-        if miners.contains(where: { $0.status == .fetchingCampaigns }) {
-            return StatusReason(
-                title: "Refreshing campaign availability",
-                summary: "The miner is scanning Twitch for new eligible campaigns and updated drop progress.",
-                detail: "This is where upcoming or newly linked campaigns enter the feed.",
-                badge: "Refreshing",
-                color: .blue
-            )
-        }
-
-        if miners.contains(where: { $0.status == .authenticating }) {
-            return StatusReason(
-                title: "Reconnecting account session",
-                summary: "An account needs fresh authentication before mining can continue.",
-                detail: "Once the session is valid, the miner resumes campaign selection automatically.",
-                badge: "Authenticating",
-                color: .orange
-            )
-        }
-
-        if miners.contains(where: { $0.status == .waitingForStream }) {
-            let gameName = miners.first(where: { $0.status == .waitingForStream })
-                .flatMap { $0.resolvedPrimaryState?.resolved?.gameName }
-            let gameText = gameName.map { " for \($0)" } ?? ""
-            return StatusReason(
-                title: "Waiting for a live stream",
-                summary: "Campaigns are available\(gameText), but no eligible channels are live right now.",
-                detail: "The miner will pick up automatically as soon as a qualifying stream goes live.",
-                badge: "Waiting",
-                color: .cyan
-            )
-        }
-
-        if miners.contains(where: { $0.status == .paused }) {
-            return StatusReason(
-                title: "Standing by between campaigns",
-                summary: "The miner is waiting for an eligible campaign or live channel to become available.",
-                detail: "Upcoming and eligible cards above show the next opportunities in line.",
-                badge: "Standby",
-                color: .orange
-            )
-        }
-
-        if miners.contains(where: { $0.status == .error }) {
-            return StatusReason(
-                title: "Needs attention",
-                summary: "One or more miners hit an error and may need a refresh or reconnect.",
-                detail: "Review the Events screen for the most recent issue details.",
-                badge: "Error",
-                color: .red
-            )
-        }
-
-        return StatusReason(
-            title: "Standing by",
-            summary: "Miners are configured, but nothing is actively being watched right now.",
-            detail: "Refreshing campaigns or starting miners will move the system back into motion.",
-            badge: "Idle",
-            color: .secondary
-        )
-    }
-
-    private var statusReasonRows: [StatusReasonRowModel] {
-        navigation.minerManager.miners.map { miner in
-            StatusReasonRowModel(
-                id: miner.id,
-                title: miner.username,
-                subtitle: miner.currentCampaign ?? fallbackSubtitle(for: miner),
-                status: miner.statusLabel,
-                color: statusColor(for: miner)
-            )
-        }
-    }
-
-    private func statusColor(for miner: MinerManager.ManagedMiner) -> Color {
-        guard let resolved = miner.resolvedPrimaryState?.resolved else {
-            return fallbackStatusColor(for: miner)
-        }
-        switch resolved.state {
-        case .watching:                          return .green
-        case .blocked:
-            switch resolved.reason {
-            case .notLinked:                        return .orange
-            case .noLiveStreams:                    return .cyan
-            default:                                return .secondary
-            }
-        case .idle:                              return .gray
-        }
-    }
-
-    private func fallbackStatusColor(for miner: MinerManager.ManagedMiner) -> Color {
-        switch miner.status {
-        case .watching:                          return .green
-        case .waitingForStream:                  return .yellow
-        case .claiming:                          return .purple
-        case .authenticating, .fetchingCampaigns, .paused: return .orange
-        case .error:                             return .red
-        case .idle:                              return .gray
-        }
-    }
-
     // MARK: - Campaign Summary
 
     private var campaignSummarySection: some View {
@@ -1269,6 +966,7 @@ struct OverviewView: View {
     private func sectionHeading(_ title: String) -> some View {
         Text(title)
             .font(.title3.weight(.medium))
+            .padding(.top, 10)
     }
 
     @ViewBuilder
@@ -1280,6 +978,7 @@ struct OverviewView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
+        .padding(.top, 10)
     }
 }
 
@@ -1324,7 +1023,12 @@ struct OverviewMetricCard: View {
         }
         .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
         .padding(16)
-        .glassCard()
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
+                .strokeBorder(.white.opacity(0.16), lineWidth: 1)
+        }
+        .shadow(color: .black.opacity(0.06), radius: 5, y: 2)
     }
 }
 
@@ -1713,9 +1417,6 @@ private struct CampaignRailItem: Identifiable {
     let showsLiveMotion: Bool
     var issueBadge: CampaignIssueBadge? = nil
     var game: Game? = nil
-    var queuePosition: Int? = nil
-    var queueLabel: String? = nil
-    var isDebugPreview: Bool = false
 }
 
 private enum CampaignIssueBadge {
@@ -1740,7 +1441,6 @@ private struct CampaignFeedCard: View {
     let item: CampaignRailItem
     let prominence: CampaignCardProminence
     let onSetSteamId: (String) -> Void
-    @ObservedObject private var settings = Settings.shared
     @State private var isHovering = false
 
     private var usesStandbyMotionStyle: Bool {
@@ -1751,18 +1451,6 @@ private struct CampaignFeedCard: View {
         item.section == .active && !item.campaignName.isEmpty
     }
 
-    private var showsQueueBadge: Bool {
-        item.section == .active && !item.isPlaceholder && item.queueLabel != nil
-    }
-
-    private var showsDebugPreviewBadge: Bool {
-#if DEBUG
-        item.isDebugPreview && item.section == .active && settings.debugShowPreviewBadge
-#else
-        item.isDebugPreview && item.section == .active
-#endif
-    }
-
     private var showsIssueBadge: Bool {
         !item.isPlaceholder && item.issueBadge != nil
     }
@@ -1770,9 +1458,6 @@ private struct CampaignFeedCard: View {
     private var accessibilityTitle: String {
         if let issue = item.issueBadge {
             return "\(issue.title). \(item.gameName)"
-        }
-        if let queueLabel = item.queueLabel {
-            return "\(queueLabel). \(item.gameName)"
         }
         return item.gameName
     }
@@ -1840,35 +1525,11 @@ private struct CampaignFeedCard: View {
                     )
                 }
 
-            if let queueLabel = item.queueLabel, showsQueueBadge {
-                VStack {
-                    HStack {
-                        Label(queueLabel, systemImage: "line.3.horizontal.decrease.circle.fill")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.white.opacity(0.95))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(.ultraThinMaterial, in: Capsule())
-                        Spacer()
-                    }
-                    Spacer(minLength: 0)
-                }
-                .padding(12)
-            }
-
-            if showsDebugPreviewBadge || showsIssueBadge {
+            if showsIssueBadge {
                 VStack {
                     HStack {
                         Spacer()
                         VStack(alignment: .trailing, spacing: 6) {
-                            if showsDebugPreviewBadge {
-                                Label("Debug Preview", systemImage: "wrench.and.screwdriver.fill")
-                                    .font(.caption2.weight(.semibold))
-                                    .foregroundStyle(.white.opacity(0.95))
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
-                                    .background(.orange.opacity(0.8), in: Capsule())
-                            }
                             if let issue = item.issueBadge, showsIssueBadge {
                                 Label(issue.title, systemImage: issue.symbol)
                                     .font(.caption2.weight(.semibold))
@@ -1974,104 +1635,6 @@ private struct CampaignFeedCard: View {
                 }
             }
         }
-    }
-}
-
-private struct MiningQueuePreview: View {
-    let items: [CampaignRailItem]
-
-    private var queueItems: [CampaignRailItem] {
-        items.filter { !$0.isPlaceholder }
-    }
-
-    var body: some View {
-        if !queueItems.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 8) {
-                    Image(systemName: "list.bullet.rectangle.portrait.fill")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-
-                    Text("Upcoming Mines")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-
-                    Spacer()
-
-                    Text("\(queueItems.count) queued")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                }
-
-                VStack(spacing: 8) {
-                    ForEach(queueItems.prefix(8)) { item in
-                        MiningQueuePreviewRow(item: item)
-                    }
-                }
-            }
-            .padding(14)
-            .background(.thinMaterial.opacity(0.42), in: RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
-                    .strokeBorder(.white.opacity(0.10), lineWidth: 1)
-            }
-        }
-    }
-}
-
-private struct MiningQueuePreviewRow: View {
-    let item: CampaignRailItem
-
-    private var label: String {
-        item.queueLabel ?? "Queued"
-    }
-
-    private var detail: String {
-        if !item.campaignName.isEmpty {
-            return item.campaignName
-        }
-        return item.progressText
-    }
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Text(label)
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(item.visualState.accent)
-                .frame(width: 72, alignment: .leading)
-
-            ZStack {
-                Circle()
-                    .fill(item.visualState.accent.opacity(0.14))
-                Image(systemName: item.visualState.symbol)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(item.visualState.accent)
-            }
-            .frame(width: 24, height: 24)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.gameName)
-                    .font(.caption.weight(.semibold))
-                    .lineLimit(1)
-
-                Text(detail)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: 12)
-
-            Text(item.visualState == .idle ? "Queued" : item.visualState.label)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(item.visualState.accent)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(item.visualState.accent.opacity(0.12), in: Capsule())
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(.ultraThinMaterial.opacity(0.46), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
     }
 }
 
@@ -2673,53 +2236,6 @@ private extension URL {
         }
 
         return URL(string: resolved) ?? self
-    }
-}
-
-private struct StatusReason {
-    let title: String
-    let summary: String
-    let detail: String
-    let badge: String
-    let color: Color
-}
-
-private struct StatusReasonRowModel: Identifiable {
-    let id: String
-    let title: String
-    let subtitle: String
-    let status: String
-    let color: Color
-}
-
-private struct StatusReasonRow: View {
-    let row: StatusReasonRowModel
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Circle()
-                .fill(row.color)
-                .frame(width: 8, height: 8)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(row.title)
-                    .font(.subheadline.weight(.semibold))
-                Text(row.subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-
-            Spacer()
-
-            Text(row.status)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(row.color)
-        }
-        .frame(maxWidth: .infinity, minHeight: 68, alignment: .leading)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .glassCard()
     }
 }
 
