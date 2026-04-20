@@ -89,25 +89,6 @@ private struct GeneralSettingsView: View {
             }
 
             Section {
-                HStack(spacing: 12) {
-                    Text("Queue Display Style")
-                    Spacer(minLength: 8)
-                    Picker("", selection: $settings.queueDisplayStyle) {
-                        ForEach(Settings.QueueDisplayStyle.allCases) { style in
-                            Text(style.displayName).tag(style)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
-                    .frame(width: 260)
-                }
-
-                SettingsSecondaryText("Controls the Mining/Queued rail style in Overview. Stacked is the default, with Classic and Cover Flow available.")
-            } header: {
-                Text("Queue Display")
-            }
-
-            Section {
                 Toggle("Show notifications when drops are claimed", isOn: $settings.showClaimNotifications)
                     .onChange(of: settings.showClaimNotifications) { _, newValue in
                         Task { await navigation.minerManager.updateNotificationPreference(enabled: newValue) }
@@ -360,9 +341,6 @@ private struct AdvancedSettingsView: View {
     @State private var showResetConfirmation = false
     @State private var showClientIdAlert = false
     @State private var tempClientId = ""
-#if DEBUG
-    @State private var debugGameDraft = ""
-#endif
 
     var body: some View {
         Form {
@@ -414,65 +392,12 @@ private struct AdvancedSettingsView: View {
 
 #if DEBUG
             Section {
-                Toggle("Enable Fake Queue", isOn: $settings.debugFakeQueueEnabled)
-
-                if settings.debugFakeQueueEnabled {
-                    Toggle("Show Debug Preview Badge", isOn: $settings.debugShowPreviewBadge)
-
-                    HStack(spacing: 12) {
-                        Text("Queue Source")
-                        Spacer(minLength: 8)
-                        Picker("", selection: $settings.debugFakeQueueSource) {
-                            ForEach(Settings.DebugFakeQueueSource.allCases) { source in
-                                Text(source.displayName).tag(source)
-                            }
-                        }
-                        .labelsHidden()
-                        .pickerStyle(.segmented)
-                        .frame(width: 240)
-                    }
-
-                    Stepper(
-                        "Queue Length: \(settings.clampedDebugFakeQueueLength)",
-                        value: $settings.debugFakeQueueLength,
-                        in: 1...8
-                    )
-
-                    if settings.debugFakeQueueSource == .customGames {
-                        HStack(spacing: 10) {
-                            TextField("Add custom game", text: $debugGameDraft)
-                                .textFieldStyle(.roundedBorder)
-
-                            Button("Add") {
-                                settings.addDebugFakeQueueGame(debugGameDraft)
-                                debugGameDraft = ""
-                            }
-                            .disabled(debugGameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        }
-
-                        if settings.debugFakeQueueCustomGames.isEmpty {
-                            SettingsSecondaryText("No custom games yet. Add game names for screenshot queue previews.")
-                        } else {
-                            List {
-                                ForEach(Array(settings.debugFakeQueueCustomGames.enumerated()), id: \.offset) { _, gameName in
-                                    Text(gameName)
-                                }
-                                .onDelete(perform: settings.removeDebugFakeQueueGames)
-                                .onMove(perform: settings.moveDebugFakeQueueGames)
-                            }
-                            .frame(minHeight: 120, maxHeight: 180)
-                        }
-                    }
-                }
-
                 Toggle("Bypass Link Requirement", isOn: $settings.debugBypassLinkRequirement)
                     .onChange(of: settings.debugBypassLinkRequirement) { _, newValue in
                         Task { await navigation.minerManager.setDebugBypassLinkRequirement(newValue) }
                     }
 
                 SettingsSecondaryText("Mines a random live channel for any time-active campaign, ignoring account linkage. Drops won't actually credit — for exercising the watch pipeline only.")
-
-                SettingsSecondaryText("Testing only. Overview renders a synthetic queue for screenshots. The debug badge is optional.")
             } header: {
                 Text("Debug Testing")
             }

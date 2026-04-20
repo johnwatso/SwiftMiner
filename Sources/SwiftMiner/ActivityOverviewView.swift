@@ -90,11 +90,11 @@ struct ActivityOverviewView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    MinerStateCard(miner: miner, activityCampaigns: activeCampaigns) {
-                        if case .blocked(let reasons) = miner.primaryState, reasons.contains(.accountNotLinked) {
-                            Task { try? await navigation.minerManager.startMiner(minerId: miner.id, priorityGames: [], excludedGames: [], strategy: .mineAll) }
-                        }
-                    }
+                    MinerActivityCard(miner: miner, prominence: .expanded, onSelect: {
+                        navigation.selectedMinerId = miner.id
+                    }, onLinkAccount: {
+                        startLinkAccountFlow(for: miner)
+                    })
 
                     campaignActivitySection(for: miner, campaigns: activeCampaigns)
                 }
@@ -140,10 +140,21 @@ struct ActivityOverviewView: View {
         aggregateProgress = await navigation.minerManager.getAggregateProgress()
     }
 
+    private func startLinkAccountFlow(for miner: MinerManager.ManagedMiner) {
+        Task {
+            try? await navigation.minerManager.startMiner(
+                minerId: miner.id,
+                priorityGames: [],
+                excludedGames: [],
+                strategy: .mineAll
+            )
+        }
+    }
+
     @ViewBuilder
     private func campaignActivitySection(for miner: MinerManager.ManagedMiner, campaigns: [Campaign]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("CAMPAIGNS")
+            Text("LIKELY TARGETS")
                 .font(.caption2.weight(.bold))
                 .foregroundStyle(.tertiary)
                 .padding(.leading, 4)
@@ -163,7 +174,8 @@ struct ActivityOverviewView: View {
     }
 
     private func activePrioritisedCampaigns(for miner: MinerManager.ManagedMiner) -> [Campaign] {
-        let priorityKeys = miner.priorityGames
+        let configuredPriorityGames = miner.priorityGames.isEmpty ? Settings.shared.priorityGames : miner.priorityGames
+        let priorityKeys = configuredPriorityGames
             .map { normalizedGameKey($0) }
             .filter { !$0.isEmpty }
 
@@ -203,6 +215,17 @@ struct ActivityOverviewView: View {
 private struct MinerSourceListRow: View {
     let miner: MinerManager.ManagedMiner
     let compact: Bool
+    @ObservedObject private var settings = Settings.shared
+
+    private var snapshot: MinerActivitySnapshot {
+        MinerActivitySnapshot.resolve(
+            for: miner,
+            priorityGames: settings.priorityGames,
+            excludedGames: settings.excludedGames,
+            strategy: settings.miningStrategy,
+            includesBadgeAndEmoteCampaigns: settings.enableBadgesEmotes
+        )
+    }
 
     var body: some View {
         HStack(spacing: 10) {
@@ -237,64 +260,17 @@ private struct MinerSourceListRow: View {
     }
 
     private var statusColor: Color {
-        guard let resolved = miner.resolvedPrimaryState?.resolved else {
-            if miner.needsAuth { return .orange }
-            return miner.status == .watching ? .green : .gray
-        }
-
-        switch resolved.state {
-        case .watching:
-            return .green
-        case .blocked:
-            return resolved.reason == .notLinked ? .orange : .cyan
-        case .idle:
-            return .gray
-        }
+        snapshot.statusColor
     }
 
     private var activityLabel: String {
-        if let resolved = miner.resolvedPrimaryState?.resolved {
-            switch resolved.state {
-            case .watching:
-                return "Watching \(resolved.gameName)"
-            case .blocked:
-                if resolved.reason == .notLinked {
-                    return "Needs Link"
-                }
-                if let campaign = firstActivePrioritisedCampaign {
-                    return campaign.activityStatusMessage
-                }
-                return "No active campaigns"
-            case .idle:
-                if let campaign = firstActivePrioritisedCampaign {
-                    return campaign.activityStatusMessage
-                }
-                return "No active campaigns"
-            }
+        if snapshot.now.campaignId != nil {
+            return "Mining \(snapshot.now.title)"
         }
-
-        if miner.needsAuth {
-            return "Needs Link"
+        if let next = snapshot.upNext {
+            return "Likely next: \(next.title)"
         }
-        return "No active campaigns"
-    }
-
-    private var firstActivePrioritisedCampaign: Campaign? {
-        let priorityKeys = miner.priorityGames
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
-            .filter { !$0.isEmpty }
-
-        guard !priorityKeys.isEmpty else { return nil }
-
-        let prioritySet = Set(priorityKeys)
-        return miner.allCampaigns.first { campaign in
-            campaign.isTimeActive &&
-            campaign.status != .disabled &&
-            (
-                prioritySet.contains(campaign.game.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()) ||
-                prioritySet.contains(campaign.game.id.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
-            )
-        }
+        return snapshot.statusText
     }
 }
 
@@ -362,9 +338,9 @@ extension Campaign {
             return "Account not linked"
         }
         if isWatching {
-            return "Mining"
+            return "Mining now"
         }
-        return "Waiting for eligible stream"
+        return "Eligible when live"
     }
 }
 
