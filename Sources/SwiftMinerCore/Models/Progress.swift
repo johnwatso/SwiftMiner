@@ -230,6 +230,10 @@ public enum SessionStatus: String, Codable, Sendable, Equatable {
     case paused = "PAUSED"
     case stopped = "STOPPED"
     case error = "ERROR"
+    /// No eligible campaigns exist for this account to mine (Task 3).
+    case idleNoEligibleCampaigns = "IDLE_NO_ELIGIBLE_CAMPAIGNS"
+    /// Campaigns exist but account is not linked, preventing mining (Task 4).
+    case blockedAccountNotLinked = "BLOCKED_ACCOUNT_NOT_LINKED"
 
     public var displayName: String {
         switch self {
@@ -242,6 +246,8 @@ public enum SessionStatus: String, Codable, Sendable, Equatable {
         case .paused: return "Standby"
         case .stopped: return "Stopped"
         case .error: return "Error"
+        case .idleNoEligibleCampaigns: return "Idle — No Eligible Campaigns"
+        case .blockedAccountNotLinked: return "Link Required"
         }
     }
 }

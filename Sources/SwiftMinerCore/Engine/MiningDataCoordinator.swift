@@ -190,8 +190,15 @@ public final class MiningDataCoordinator {
         }
         
         // Update override caches
+        let previousArtworkCount = steamArtworkOverrides.count
+        let previousHeroCount = steamHeroOverrides.count
+
         steamArtworkOverrides.merge(portraitURLs) { _, new in new }
         steamHeroOverrides.merge(heroURLs) { _, new in new }
+        
+        if steamArtworkOverrides.count > previousArtworkCount || steamHeroOverrides.count > previousHeroCount {
+            NotificationCenter.default.post(name: .steamArtworkDidUpdate, object: self)
+        }
         
         // Apply to campaigns
         return campaigns.map { campaign in
@@ -225,9 +232,16 @@ public final class MiningDataCoordinator {
             for await result in group { results.append(result) }
             return results
         }
+        let previousArtworkCount = steamArtworkOverrides.count
+        let previousHeroCount = steamHeroOverrides.count
+
         for result in results {
             if let url = result.portraitURL { steamArtworkOverrides[result.gameName] = url }
             if let url = result.heroURL { steamHeroOverrides[result.gameName] = url }
+        }
+        
+        if steamArtworkOverrides.count > previousArtworkCount || steamHeroOverrides.count > previousHeroCount {
+            NotificationCenter.default.post(name: .steamArtworkDidUpdate, object: self)
         }
     }
 

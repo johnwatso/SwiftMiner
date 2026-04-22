@@ -82,6 +82,13 @@ final class OnboardingPresentationTests: XCTestCase {
         XCTAssertNil(navigation.onboardingPresentation)
     }
 
+    func test_SettingsUseIsolatedDefaultsStoreDuringTests() {
+        XCTAssertFalse(
+            Settings.appStorageStore === UserDefaults.standard,
+            "App-hosted tests must not write Settings changes into the production app defaults domain"
+        )
+    }
+
     func test_SyncInProgress_SetupStatusVisible() {
         // Given
         let account = Account(id: "1", username: "test", accessToken: "token", refreshToken: "refresh", tokenExpiry: Date().addingTimeInterval(3600), scopes: [])

@@ -11,14 +11,14 @@ public final class NavigationModel {
     
     public enum SidebarItem: Hashable, Identifiable {
         case overview
-        case activity
+        case miners
         case drops
         case events
         
         public var id: String {
             switch self {
             case .overview: return "overview"
-            case .activity: return "activity"
+            case .miners: return "miners"
             case .drops: return "drops"
             case .events: return "events"
             }
@@ -27,11 +27,15 @@ public final class NavigationModel {
         public var displayName: String {
             switch self {
             case .overview: return "Overview"
-            case .activity: return "Activity"
+            case .miners: return "Miners"
             case .drops: return "Drops"
             case .events: return "Events"
             }
         }
+    }
+
+    public enum DropsFilterIntent: Hashable {
+        case upcoming
     }
 
     public enum OnboardingAccountState: Equatable {
@@ -66,6 +70,8 @@ public final class NavigationModel {
     
     public var selectedItem: SidebarItem? = .overview
     public var columnVisibility: NavigationSplitViewVisibility = .automatic
+    public var requestedDropsFilter: DropsFilterIntent?
+
 
     // MARK: - Onboarding State
 
@@ -84,6 +90,15 @@ public final class NavigationModel {
 
     public var selectedMinerId: String?
     public var selectedCampaignId: String?
+
+    public func requestDropsFilter(_ intent: DropsFilterIntent) {
+        requestedDropsFilter = intent
+    }
+
+    public func consumeDropsFilterIntent() -> DropsFilterIntent? {
+        defer { requestedDropsFilter = nil }
+        return requestedDropsFilter
+    }
 
     // MARK: - Events
 
@@ -124,7 +139,7 @@ public final class NavigationModel {
         let settings = Settings.shared
         minerManager.updateClientId(settings.resolvedClientId)
         await minerManager.setup(
-            autoStart: true,
+            autoStart: settings.autoStartOnLaunch,
             priorityGames: settings.priorityGames,
             excludedGames: settings.excludedGames,
             strategy: settings.miningStrategy,

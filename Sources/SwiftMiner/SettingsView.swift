@@ -292,6 +292,19 @@ private struct MiningSettingsView: View {
             }
 
             Section {
+                Picker("Queue Source", selection: $settings.overviewQueueMinerId) {
+                    Text("All Miners").tag("")
+                    ForEach(navigation.minerManager.miners) { miner in
+                        Text(miner.username).tag(miner.id)
+                    }
+                }
+
+                SettingsSecondaryText("Choose whether Overview shows the aggregate mining queue or one account's queue.")
+            } header: {
+                Text("Overview Queue")
+            }
+
+            Section {
                 Button("Manage Game Rules\u{2026}") {
                     isShowingGameManagement = true
                 }
@@ -307,6 +320,12 @@ private struct MiningSettingsView: View {
         }
         .formStyle(.grouped)
         .padding(24)
+        .task {
+            clearStaleOverviewQueueMinerSelection()
+        }
+        .onChange(of: navigation.minerManager.miners.map(\.id)) { _, _ in
+            clearStaleOverviewQueueMinerSelection()
+        }
         .sheet(isPresented: $isShowingGameManagement) {
             GamePreferenceManagementView(
                 settings: settings,
@@ -330,6 +349,12 @@ private struct MiningSettingsView: View {
         let count = settings.gamePreferences.count
         guard count > 0 else { return nil }
         return "\(count)"
+    }
+
+    private func clearStaleOverviewQueueMinerSelection() {
+        guard !settings.overviewQueueMinerId.isEmpty else { return }
+        guard !navigation.minerManager.miners.contains(where: { $0.id == settings.overviewQueueMinerId }) else { return }
+        settings.overviewQueueMinerId = ""
     }
 }
 
@@ -398,6 +423,28 @@ private struct AdvancedSettingsView: View {
                     }
 
                 SettingsSecondaryText("Mines a random live channel for any time-active campaign, ignoring account linkage. Drops won't actually credit — for exercising the watch pipeline only.")
+                
+                Divider()
+                
+                Toggle("Enable Fake Queue", isOn: $settings.debugFakeQueueEnabled)
+                
+                if settings.debugFakeQueueEnabled {
+                    Toggle("Show Debug Preview Badge", isOn: $settings.debugShowPreviewBadge)
+                    
+                    Picker("Data Source", selection: $settings.debugFakeQueueSource) {
+                        ForEach(Settings.DebugFakeQueueSource.allCases) { source in
+                            Text(source.displayName).tag(source)
+                        }
+                    }
+                    
+                    Stepper("Queue Length: \(settings.debugFakeQueueLength)", value: $settings.debugFakeQueueLength, in: 1...8)
+                    
+                    if settings.debugFakeQueueSource == .customGames {
+                        NavigationLink("Manage Custom Games") {
+                            DebugCustomGamesView(settings: settings)
+                        }
+                    }
+                }
             } header: {
                 Text("Debug Testing")
             }
@@ -440,6 +487,45 @@ private struct SettingsSecondaryText: View {
             .padding(.vertical, 1)
     }
 }
+
+#if DEBUG
+private struct DebugCustomGamesView: View {
+    @ObservedObject var settings: Settings
+    @State private var newGameName = ""
+
+    var body: some View {
+        List {
+            Section {
+                HStack {
+                    TextField("Game Name", text: $newGameName)
+                        .onSubmit { addGame() }
+                    
+                    Button("Add") { addGame() }
+                        .disabled(newGameName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            } footer: {
+                Text("These names will be used to generate fake campaign cards.")
+            }
+
+            Section {
+                ForEach(settings.debugFakeQueueCustomGames, id: \.self) { game in
+                    Text(game)
+                }
+                .onDelete { settings.removeDebugFakeQueueGames(atOffsets: $0) }
+                .onMove { settings.moveDebugFakeQueueGames(fromOffsets: $0, toOffset: $1) }
+            }
+        }
+        .navigationTitle("Debug Custom Games")
+    }
+
+    private func addGame() {
+        let name = newGameName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        settings.addDebugFakeQueueGame(name)
+        newGameName = ""
+    }
+}
+#endif
 
 // MARK: - Preview
 
