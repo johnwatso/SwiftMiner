@@ -117,14 +117,29 @@ public enum PrimaryStateResolver {
         
         // 1b. Specific Campaign Block (Disconnected)
         // John: "disconnected campaign account... must show 'Link Required'"
-        // Only blocks if the campaign is active, needs linking, and isn't already earned.
-        let disconnected = relevantCampaigns.filter { campaign in
+        // Task 1 UPDATE: Miners only reason about what they can actually do.
+        // We only show blocked if the user is TRYING to mine something prioritised
+        // that is blocked, OR if they have no eligible work but have prioritised games.
+        
+        let priorityGamesLower = Set(miner.priorityGames.map { $0.lowercased() })
+        
+        // Find prioritised games that are active but unlinked.
+        let blockedPriority = relevantCampaigns.filter { campaign in
             campaign.isTimeActive && 
             !campaign.isAccountConnected && 
+            priorityGamesLower.contains(campaign.gameName.lowercased()) &&
             campaign.drops.contains { !isEarned($0) }
         }
-        if !disconnected.isEmpty {
-            print("[PrimaryStateResolver] \(disconnected.count) disconnected active campaign(s) → .blocked(.accountNotLinked)")
+        
+        // Find any active, linked, earnable campaign.
+        let hasEarnableWork = relevantCampaigns.contains { campaign in
+            campaign.isTimeActive && campaign.isAccountConnected && campaign.drops.contains { !isEarned($0) }
+        }
+        
+        // Only block if a prioritised game is unlinked AND we have no other earnable work.
+        // If we have other work, we should be .ready for that work instead.
+        if !blockedPriority.isEmpty && !hasEarnableWork {
+            print("[PrimaryStateResolver] prioritised campaign(s) unlinked and no other work → .blocked(.accountNotLinked)")
             return .blocked(reasons: [.accountNotLinked])
         }
         

@@ -87,7 +87,7 @@ struct GamePreferenceManagementView: View {
 private struct PreferenceRow: View {
     let preference: GamePreference
     @ObservedObject var settings: Settings
-    @AppStorage("preferSteamArtwork") private var preferSteamArtwork: Bool = true
+    @AppStorage("preferSteamArtwork", store: Settings.appStorageStore) private var preferSteamArtwork: Bool = true
     @State private var resolvedArtworkURL: URL?
 
     var body: some View {

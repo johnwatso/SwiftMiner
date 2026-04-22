@@ -6,36 +6,14 @@ import CoreImage
 
 struct DropsListView: View {
     @Environment(NavigationModel.self) private var navigation
-    @State private var selectedFilters: Set<DropFilter> = [.active]
     @State private var campaigns: [CampaignViewData] = []
     @State private var isRefreshing = false
-    @AppStorage("preferSteamArtwork") private var preferSteamArtwork: Bool = false
+    @AppStorage("preferSteamArtwork", store: Settings.appStorageStore) private var preferSteamArtwork: Bool = false
+    @ObservedObject private var settings = Settings.shared
 
-    enum DropFilter: String, CaseIterable, Identifiable, Hashable {
-        case active
-        case needsSetup
-        case upcoming
-        case completed
-
-        var id: String { rawValue }
-
-        var title: String {
-            switch self {
-            case .active: return "Active"
-            case .needsSetup: return "Needs Setup"
-            case .upcoming: return "Upcoming"
-            case .completed: return "Completed"
-            }
-        }
-
-        var symbol: String {
-            switch self {
-            case .active: return "dot.radiowaves.left.and.right"
-            case .needsSetup: return "link.badge.plus"
-            case .upcoming: return "calendar.badge.clock"
-            case .completed: return "checkmark.circle.fill"
-            }
-        }
+    private var selectedFilters: Set<DropFilter> {
+        get { settings.selectedDropsFilters }
+        nonmutating set { settings.selectedDropsFilters = newValue }
     }
 
     private var miners: [MinerManager.ManagedMiner] { navigation.minerManager.miners }
@@ -102,7 +80,11 @@ struct DropsListView: View {
         }
         .navigationTitle("Drops")
         .task(id: accountSignature) {
+            applyRequestedDropsFilter()
             await loadCampaignFeed()
+        }
+        .onChange(of: navigation.requestedDropsFilter) { _, _ in
+            applyRequestedDropsFilter()
         }
         .onChange(of: preferSteamArtwork) { _, _ in
             Task {
@@ -113,6 +95,15 @@ struct DropsListView: View {
     }
 
     // MARK: - States
+
+    private func applyRequestedDropsFilter() {
+        guard let intent = navigation.consumeDropsFilterIntent() else { return }
+
+        switch intent {
+        case .upcoming:
+            selectedFilters = [.upcoming]
+        }
+    }
 
     private var noAccountsState: some View {
         MaterialEmptyStatePanel(
@@ -187,11 +178,13 @@ struct DropsListView: View {
                     let isSelected = selectedFilters.contains(option)
                     Button {
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                            var current = selectedFilters
                             if isSelected {
-                                selectedFilters.remove(option)
+                                current.remove(option)
                             } else {
-                                selectedFilters.insert(option)
+                                current.insert(option)
                             }
+                            selectedFilters = current
                         }
                     } label: {
                         HStack(spacing: 6) {

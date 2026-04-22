@@ -20,7 +20,10 @@ public final class MinerManager {
         public var allCampaigns: [Campaign] = []
         public var dropsClaimed: Int
         public var isRunning: Bool
-        public var priorityGames: [String] = []
+        public var priorityGames: [String]
+        
+        /// Ordered list of candidate campaigns from the last selection pass (Debug only).
+        public var debugWinningQueue: [Campaign] = []
 
         /// Resolved "Primary State" for the user-facing activity UI (Phase 4).
         @MainActor
@@ -54,18 +57,18 @@ public final class MinerManager {
             case .blocked:
                 switch resolved.reason {
                 case .notLinked:
-                    return "Link Required — \(resolved.gameName)"
+                    return "Blocked — Account not linked"
                 case .noLiveStreams:
-                    return "Waiting for Stream — \(resolved.gameName)"
+                    return "Waiting — No live stream"
                 case .noCampaign, .noEligibleCampaign, .campaignExpired, .noDropsAvailable, .none:
-                    return "Idle — no eligible campaigns"
+                    return "Idle — No eligible campaigns"
                 }
             case .idle:
                 switch resolved.reason {
                 case .noDropsAvailable, .noCampaign, .noEligibleCampaign, .campaignExpired:
-                    return "Idle — no eligible campaigns"
+                    return "Idle — No eligible campaigns"
                 case .none, .notLinked, .noLiveStreams:
-                    return "Idle — \(resolved.gameName)"
+                    return "Idle — No eligible campaigns"
                 }
             }
         }
@@ -87,7 +90,8 @@ public final class MinerManager {
             allCampaigns: [Campaign] = [],
             dropsClaimed: Int = 0,
             isRunning: Bool = false,
-            priorityGames: [String] = []
+            priorityGames: [String] = [],
+            debugWinningQueue: [Campaign] = []
         ) {
             self.id = id
             self.accountId = accountId
@@ -101,6 +105,7 @@ public final class MinerManager {
             self.dropsClaimed = dropsClaimed
             self.isRunning = isRunning
             self.priorityGames = priorityGames
+            self.debugWinningQueue = debugWinningQueue
         }
     }    
     public enum MinerStatus: String, Sendable, Equatable {
@@ -112,17 +117,23 @@ public final class MinerManager {
         case waitingForStream = "WAITING_FOR_STREAM"
         case paused = "PAUSED"
         case error = "ERROR"
+        /// No eligible campaigns exist for this account to mine (Task 3).
+        case idleNoEligibleCampaigns = "IDLE_NO_ELIGIBLE_CAMPAIGNS"
+        /// Campaigns exist but account is not linked, preventing mining (Task 4).
+        case blockedAccountNotLinked = "BLOCKED_ACCOUNT_NOT_LINKED"
 
         public var displayName: String {
             switch self {
-            case .idle: return "Waiting"
-            case .authenticating: return "Authenticating"
-            case .fetchingCampaigns: return "Fetching Campaigns"
+            case .idle: return "Idle — No eligible campaigns"
+            case .authenticating: return "Waiting — Authenticating"
+            case .fetchingCampaigns: return "Waiting — Refreshing campaigns"
             case .watching: return "Watching"
             case .claiming: return "Claiming"
-            case .waitingForStream: return "Waiting for Stream"
-            case .paused: return "Standby"
-            case .error: return "Error"
+            case .waitingForStream: return "Waiting — No live stream"
+            case .paused: return "Paused"
+            case .error: return "Blocked — Needs attention"
+            case .idleNoEligibleCampaigns: return "Idle — No eligible campaigns"
+            case .blockedAccountNotLinked: return "Blocked — Account not linked"
             }
         }
     }
@@ -845,6 +856,13 @@ public final class MinerManager {
             }
         }
         
+        await engine.setDebugWinningQueueHandler { [weak self] winningQueue in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                self.updateMinerStatus(minerId: minerId, debugWinningQueue: winningQueue)
+            }
+        }
+        
         await engine.setDropClaimedHandler { [weak self] drop in
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
@@ -884,6 +902,8 @@ public final class MinerManager {
         case .paused: return .paused
         case .stopped: return .idle
         case .error: return .error
+        case .idleNoEligibleCampaigns: return .idleNoEligibleCampaigns
+        case .blockedAccountNotLinked: return .blockedAccountNotLinked
         }
     }
     
@@ -911,7 +931,8 @@ public final class MinerManager {
         allCampaigns: [Campaign]? = nil,
         isRunning: Bool? = nil,
         priorityGames: [String]? = nil,
-        needsAuth: Bool? = nil
+        needsAuth: Bool? = nil,
+        debugWinningQueue: [Campaign]? = nil
     ) {
         guard let index = miners.firstIndex(where: { $0.id == minerId }) else { return }
 
@@ -929,9 +950,9 @@ public final class MinerManager {
         if let running = isRunning { miner.isRunning = running }
         if let needsAuth = needsAuth { miner.needsAuth = needsAuth }
         if let priorityGames = priorityGames { miner.priorityGames = priorityGames }
-        miners[index] = miner
+        if let winningQueue = debugWinningQueue { miner.debugWinningQueue = winningQueue }
 
-        onMinerStatusChange?(miner)
+        miners[index] = miner
         onMinersChanged?()
     }
     

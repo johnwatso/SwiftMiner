@@ -60,6 +60,7 @@ public actor MinerEngine {
     
     public var onStatusChange: (@Sendable (SessionStatus) -> Void)?
     public var onCampaignUpdate: (@Sendable ([Campaign]) -> Void)?
+    public var onDebugWinningQueueUpdate: (@Sendable ([Campaign]) -> Void)?
     public var onProgressUpdate: (@Sendable (OverallProgress) -> Void)?
     public var onDropClaimed: (@Sendable (Drop) -> Void)?
     public var onError: (@Sendable (TwitchMinerError) -> Void)?
@@ -73,6 +74,10 @@ public actor MinerEngine {
 
     public func setCampaignUpdateHandler(_ handler: (@Sendable ([Campaign]) -> Void)?) {
         self.onCampaignUpdate = handler
+    }
+
+    public func setDebugWinningQueueHandler(_ handler: (@Sendable ([Campaign]) -> Void)?) {
+        self.onDebugWinningQueueUpdate = handler
     }
 
     public func setProgressUpdateHandler(_ handler: (@Sendable (OverallProgress) -> Void)?) {
@@ -582,6 +587,8 @@ public actor MinerEngine {
                     excludedGames: excludedGames,
                     strategy: miningStrategy
                 )
+                
+                onDebugWinningQueueUpdate?(candidates)
 
                 log("Campaigns: \(allCampaigns.count) total, \(candidates.count) account-eligible")
                 for c in allEnriched {
@@ -609,7 +616,13 @@ public actor MinerEngine {
                 guard !candidates.isEmpty else {
                     log("No account-eligible campaigns matching strategy '\(miningStrategy.displayName)'")
                     session?.currentCampaignId = nil
-                    onStatusChange?(.idle)
+                    let emptyState = resolveEmptyCandidateState(
+                        from: allEnriched,
+                        priorityGames: priorityGames,
+                        excludedGames: excludedGames,
+                        strategy: miningStrategy
+                    )
+                    onStatusChange?(emptyState)
                     // Wait up to campaignCheckInterval in 10s ticks, breaking early on triggerRescan()
                     shouldRescanCampaigns = false
                     let tickNs: UInt64 = 10 * 1_000_000_000
@@ -969,43 +982,51 @@ public actor MinerEngine {
             let gameName = normalizedGameKey(campaign.gameName)
             let gameId = normalizedGameKey(campaign.game.id)
 
-            if excludedSet.contains(gameName) || excludedSet.contains(gameId) {
-                filteredOutReasons["excluded_game", default: 0] += 1
-                return false
-            }
-            if strategy == .onlyPriority && !prioritySet.contains(gameName) && !prioritySet.contains(gameId) {
-                filteredOutReasons["not_prioritised", default: 0] += 1
-                return false
-            }
-            guard campaign.isTimeActive, campaign.status != .disabled else {
+            // 1. Core Eligibility (Task 1)
+            // MUST be active, account-linked, and have eligible drops (precondition-aware).
+            guard campaign.isTimeActive && campaign.status != .disabled else {
                 filteredOutReasons["inactive", default: 0] += 1
                 return false
             }
-            // Debug bypass: skip linkage/eligibility gates so the watch pipeline can be
-            // exercised without a linked account. Drops won't actually credit.
+
+            // Task 1: account is linked to the campaign/game
+            // Debug bypass allows testing watch pipeline without link (drops won't credit)
             if !debugBypassLinkRequirement {
                 guard campaign.isAccountConnected else {
                     filteredOutReasons["not_connected", default: 0] += 1
                     return false
                 }
-                guard campaign.hasDropsEnabled else {
-                    filteredOutReasons["not_eligible_for_account", default: 0] += 1
-                    return false
-                }
-                guard !campaign.eligibleDrops.isEmpty else {
-                    filteredOutReasons["no_eligible_drops", default: 0] += 1
-                    return false
-                }
-                if !enableBadgesEmotes && campaign.hasOnlyBadgesOrEmotes {
-                    filteredOutReasons["badge_emote_only", default: 0] += 1
-                    return false
-                }
-                let status = campaign.miningStatus
-                guard status == .available || status == .inProgress || status == .claimable else {
-                    filteredOutReasons["status_\(status.rawValue)", default: 0] += 1
-                    return false
-                }
             }
+
+            // Task 1: campaign has eligible drops (linked + precondition-met)
+            guard campaign.hasDropsEnabled && !campaign.eligibleDrops.isEmpty else {
+                filteredOutReasons["no_eligible_drops", default: 0] += 1
+                return false
+            }
+
+            // 2. User Preferences
+            if excludedSet.contains(gameName) || excludedSet.contains(gameId) {
+                filteredOutReasons["excluded_game", default: 0] += 1
+                return false
+            }
+
+            if strategy == .onlyPriority && !prioritySet.contains(gameName) && !prioritySet.contains(gameId) {
+                filteredOutReasons["not_prioritised", default: 0] += 1
+                return false
+            }
+
+            if !enableBadgesEmotes && campaign.hasOnlyBadgesOrEmotes {
+                filteredOutReasons["badge_emote_only", default: 0] += 1
+                return false
+            }
+
+            // Final safety check on mining status
+            let status = campaign.miningStatus
+            guard status == .available || status == .inProgress || status == .claimable else {
+                filteredOutReasons["status_\(status.rawValue)", default: 0] += 1
+                return false
+            }
+
             return true
         }
 
@@ -1019,6 +1040,49 @@ public actor MinerEngine {
             log("[CampaignSelect]   Best candidate: \(campaign.name) (\(campaign.gameName), status: \(campaign.miningStatus.rawValue))")
         }
         return sorted
+    }
+
+    /// Resolves the appropriate session status when no candidate campaigns remain after
+    /// filtering (Tasks 3 & 4). Distinguishes between "nothing to mine" and "blocked by link".
+    /// Scoped to the same "candidate universe" as selection (active, not excluded, strategy-compatible).
+    private func resolveEmptyCandidateState(
+        from campaigns: [Campaign],
+        priorityGames: [String],
+        excludedGames: [String],
+        strategy: MiningStrategy
+    ) -> SessionStatus {
+        let priorityKeys = priorityGames.map { normalizedGameKey($0) }.filter { !$0.isEmpty }
+        let prioritySet = Set(priorityKeys)
+        let excludedSet = Set(excludedGames.map { normalizedGameKey($0) }.filter { !$0.isEmpty })
+
+        // 1. Define the "Universe" (Active, Enabled, Preferred)
+        // We only care about campaigns that the user hasn't explicitly excluded or filtered out by strategy.
+        let universe = campaigns.filter { campaign in
+            let gameName = normalizedGameKey(campaign.gameName)
+            let gameId = normalizedGameKey(campaign.game.id)
+
+            // Basic availability
+            guard campaign.isTimeActive && campaign.status != .disabled else { return false }
+            
+            // User preferences
+            if excludedSet.contains(gameName) || excludedSet.contains(gameId) { return false }
+            if strategy == .onlyPriority && !prioritySet.contains(gameName) && !prioritySet.contains(gameId) { return false }
+            if !enableBadgesEmotes && campaign.hasOnlyBadgesOrEmotes { return false }
+            
+            return true
+        }
+
+        guard !universe.isEmpty else {
+            // Nothing in the user's preferred/available universe exists to mine.
+            return .idleNoEligibleCampaigns
+        }
+
+        // 2. Distinguish Blocked from Idle within that Universe
+        // If we have campaigns the user WANTS to mine, but they aren't linked, we are blocked.
+        // If we have linked campaigns but they have no eligible drops (e.g. precondition locked), we are idle.
+        let hasLinked = universe.contains(where: { $0.isAccountConnected })
+        
+        return hasLinked ? .idleNoEligibleCampaigns : .blockedAccountNotLinked
     }
 
     private func sortedCandidates(

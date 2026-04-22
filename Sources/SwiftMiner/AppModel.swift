@@ -284,10 +284,10 @@ public final class AppModel {
 
     private func reconcileManagerState(_ manager: MinerManager) {
         isAuthenticated = !manager.miners.isEmpty
-        updateAccountLinkIssueBadge(using: manager)
+        updateMinerLinkIssueBadge(using: manager)
     }
 
-    private func updateAccountLinkIssueBadge(using manager: MinerManager) {
+    private func updateMinerLinkIssueBadge(using manager: MinerManager) {
         let settings = Settings.shared
         let priorityGames = Set(
             settings.priorityGames

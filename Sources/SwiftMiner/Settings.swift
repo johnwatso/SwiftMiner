@@ -7,98 +7,138 @@ import SwiftMinerCore
 public final class Settings: ObservableObject {
     
     // MARK: - Shared Instance
+
+    static let appStorageStore: UserDefaults = {
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+            let suiteName = "com.swiftminer.app.tests.\(ProcessInfo.processInfo.globallyUniqueString)"
+            guard let defaults = UserDefaults(suiteName: suiteName) else {
+                return .standard
+            }
+            defaults.removePersistentDomain(forName: suiteName)
+            return defaults
+        }
+        return .standard
+    }()
     
     public static let shared = Settings()
     
     // MARK: - @AppStorage Properties
     
     /// Whether auto-claim is enabled for completed drops
-    @AppStorage("autoClaimEnabled")
+    @AppStorage("autoClaimEnabled", store: Settings.appStorageStore)
     public var autoClaimEnabled: Bool = true
     
     /// Whether to auto-claim community points bonuses
-    @AppStorage("autoClaimPointsEnabled")
+    @AppStorage("autoClaimPointsEnabled", store: Settings.appStorageStore)
     public var autoClaimPointsEnabled: Bool = true
     
     /// Log level for console output
-    @AppStorage("logLevel")
+    @AppStorage("logLevel", store: Settings.appStorageStore)
     public var logLevel: LogLevel = .info
     
     /// Whether to show the log console in the UI
-    @AppStorage("showLogConsole")
+    @AppStorage("showLogConsole", store: Settings.appStorageStore)
     public var showLogConsole: Bool = true
     
     /// Maximum number of log entries to keep in memory
-    @AppStorage("maxLogEntries")
+    @AppStorage("maxLogEntries", store: Settings.appStorageStore)
     public var maxLogEntries: Int = 500
     
     /// Whether to minimize to menu bar instead of dock
-    @AppStorage("minimizeToMenuBar")
+    @AppStorage("minimizeToMenuBar", store: Settings.appStorageStore)
     public var minimizeToMenuBar: Bool = false
     
     /// Whether to start mining automatically on launch (if authenticated)
-    @AppStorage("autoStartOnLaunch")
+    @AppStorage("autoStartOnLaunch", store: Settings.appStorageStore)
     public var autoStartOnLaunch: Bool = false
 
     /// Whether to include campaigns that only give non-drop rewards (badges/emotes)
-    @AppStorage("enableBadgesEmotes")
+    @AppStorage("enableBadgesEmotes", store: Settings.appStorageStore)
     public var enableBadgesEmotes: Bool = false
 
     /// Whether to sync all miners state (start/stop together)
-    @AppStorage("syncMinersState")
+    @AppStorage("syncMinersState", store: Settings.appStorageStore)
     public var syncMinersState: Bool = true
 
     /// Whether to use Steam CDN artwork instead of Twitch game artwork
-    @AppStorage("preferSteamArtwork")
+    @AppStorage("preferSteamArtwork", store: Settings.appStorageStore)
     public var preferSteamArtwork: Bool = true
 
     /// Whether to run in background when window is closed
-    @AppStorage("runInBackground")
+    @AppStorage("runInBackground", store: Settings.appStorageStore)
     public var runInBackground: Bool = true
 
     /// Display style used for the Mining/Queued queue rail in Overview.
-    @AppStorage("queueDisplayStyle")
+    @AppStorage("queueDisplayStyle", store: Settings.appStorageStore)
     public var queueDisplayStyle: QueueDisplayStyle = .stacked
+
+    /// Miner whose queue should be shown on Overview. Empty means aggregate/all miners.
+    @AppStorage("overviewQueueMinerId", store: Settings.appStorageStore)
+    public var overviewQueueMinerId: String = ""
+
+    /// JSON-encoded array of DropFilter for the Drops list view.
+    @AppStorage("selectedDropsFiltersData", store: Settings.appStorageStore)
+    private var selectedDropsFiltersData: String = "[\"active\"]"
+
+    /// Persistent filter selection for the Drops list view.
+    public var selectedDropsFilters: Set<DropFilter> {
+        get {
+            guard let data = selectedDropsFiltersData.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode([DropFilter].self, from: data) else {
+                return [.active]
+            }
+            return Set(decoded)
+        }
+        set {
+            let encoded = Array(newValue).sorted { $0.rawValue < $1.rawValue }
+            if let data = try? JSONEncoder().encode(encoded),
+               let string = String(data: data, encoding: .utf8),
+               selectedDropsFiltersData != string {
+                objectWillChange.send()
+                selectedDropsFiltersData = string
+            }
+        }
+    }
 
 #if DEBUG
     /// Whether Overview should render a synthetic queue for testing/screenshots.
-    @AppStorage("debugFakeQueueEnabled")
+    @AppStorage("debugFakeQueueEnabled", store: Settings.appStorageStore)
     public var debugFakeQueueEnabled: Bool = false
 
     /// Whether fake queue cards should show the "Debug Preview" badge.
-    @AppStorage("debugShowPreviewBadge")
+    @AppStorage("debugShowPreviewBadge", store: Settings.appStorageStore)
     public var debugShowPreviewBadge: Bool = false
 
     /// Data source used for fake queue generation in debug builds.
-    @AppStorage("debugFakeQueueSource")
+    @AppStorage("debugFakeQueueSource", store: Settings.appStorageStore)
     public var debugFakeQueueSource: DebugFakeQueueSource = .prioritisedGames
 
     /// Number of cards to render in the fake queue.
-    @AppStorage("debugFakeQueueLength")
+    @AppStorage("debugFakeQueueLength", store: Settings.appStorageStore)
     public var debugFakeQueueLength: Int = 3
 
     /// JSON-encoded custom game name list for debug fake queue generation.
-    @AppStorage("debugFakeQueueCustomGamesData")
+    @AppStorage("debugFakeQueueCustomGamesData", store: Settings.appStorageStore)
     private var debugFakeQueueCustomGamesData: String = "[]"
 
     /// Bypass account-link/eligibility gates so the miner watches a random live channel
     /// for any time-active campaign. For exercising the watch pipeline only — drops
     /// won't actually credit for unlinked accounts.
-    @AppStorage("debugBypassLinkRequirement")
+    @AppStorage("debugBypassLinkRequirement", store: Settings.appStorageStore)
     public var debugBypassLinkRequirement: Bool = false
 #endif
 
     /// Preferred stream quality (for future use)
-    @AppStorage("preferredQuality")
+    @AppStorage("preferredQuality", store: Settings.appStorageStore)
     public var preferredQuality: StreamQuality = .auto
     
     /// Whether to show notifications for drop claims
-    @AppStorage("showClaimNotifications")
+    @AppStorage("showClaimNotifications", store: Settings.appStorageStore)
     public var showClaimNotifications: Bool = false // Disabled by default per user request
 
     /// JSON-encoded warnings that should be suppressed.
     /// Format: "accountId:gameId:warningType"
-    @AppStorage("ignoredWarningsData")
+    @AppStorage("ignoredWarningsData", store: Settings.appStorageStore)
     private var ignoredWarningsData: String = "[]"
 
     public enum WarningType: String, Codable, Sendable {
@@ -179,31 +219,31 @@ public final class Settings: ObservableObject {
     }
 
     /// Last selected game/category (for UI restoration)
-    @AppStorage("lastSelectedGameId")
+    @AppStorage("lastSelectedGameId", store: Settings.appStorageStore)
     public var lastSelectedGameId: String = ""
 
     /// Whether the user explicitly dismissed the optional onboarding surface.
-    @AppStorage("hasDismissedOnboarding")
+    @AppStorage("hasDismissedOnboarding", store: Settings.appStorageStore)
     public var hasDismissedOnboarding: Bool = false
 
     /// Twitch application Client ID (set once; used by all miners)
-    @AppStorage("twitchClientId")
+    @AppStorage("twitchClientId", store: Settings.appStorageStore)
     public var twitchClientId: String = ""
     
     /// JSON-encoded array of GamePreference for selected games
-    @AppStorage("gamePreferencesData")
+    @AppStorage("gamePreferencesData", store: Settings.appStorageStore)
     public var gamePreferencesData: String = "[]"
 
     /// Legacy storage (kept for migration only)
-    @AppStorage("priorityGamesString")
+    @AppStorage("priorityGamesString", store: Settings.appStorageStore)
     private var priorityGamesString: String = ""
 
     /// Legacy storage (kept for migration only)
-    @AppStorage("excludedGamesString")
+    @AppStorage("excludedGamesString", store: Settings.appStorageStore)
     private var excludedGamesString: String = ""
 
     /// Mining strategy selection
-    @AppStorage("miningStrategy")
+    @AppStorage("miningStrategy", store: Settings.appStorageStore)
     public var miningStrategy: MiningStrategy = .mineAll
 
     // MARK: - Game Preferences
@@ -578,6 +618,7 @@ public final class Settings: ObservableObject {
         gamePreferencesData = "[]"
         miningStrategy = .mineAll
         preferSteamArtwork = true
+        overviewQueueMinerId = ""
         ignoredWarningsData = "[]"
     }
 }
