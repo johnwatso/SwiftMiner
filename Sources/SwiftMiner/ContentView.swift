@@ -455,7 +455,8 @@ struct OverviewView: View {
                 campaignRailSection(
                     title: overviewQueueTitle,
                     items: displayedActiveFeedItems,
-                    prominence: .feature
+                    prominence: .feature,
+                    layout: .staggered
                 )
             }
         }
@@ -467,7 +468,8 @@ struct OverviewView: View {
         title: String,
         items: [CampaignRailItem],
         prominence: CampaignCardProminence,
-        showsEditButton: Bool = false
+        showsEditButton: Bool = false,
+        layout: CampaignRailLayout = .horizontal
     ) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .firstTextBaseline) {
@@ -486,20 +488,31 @@ struct OverviewView: View {
                 }
             }
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(alignment: .top, spacing: prominence.spacing) {
-                    ForEach(items) { item in
-                        CampaignFeedCard(
-                            item: item,
-                            prominence: prominence,
-                            onSetSteamId: presentSteamIdSheet(for:)
-                        )
+            switch layout {
+            case .horizontal:
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(alignment: .top, spacing: prominence.spacing) {
+                        ForEach(items) { item in
+                            CampaignFeedCard(
+                                item: item,
+                                prominence: prominence,
+                                onSetSteamId: presentSteamIdSheet(for:)
+                            )
+                        }
                     }
+                    .padding(.horizontal, 2)
+                    .padding(.vertical, 6)
                 }
+                .scrollClipDisabled()
+            case .staggered:
+                StaggeredCampaignRail(
+                    items: items,
+                    prominence: prominence,
+                    onSetSteamId: presentSteamIdSheet(for:)
+                )
                 .padding(.horizontal, 2)
                 .padding(.vertical, 6)
             }
-            .scrollClipDisabled()
         }
     }
 
@@ -586,7 +599,8 @@ struct OverviewView: View {
     }
 
     private var displayedActiveFeedItems: [CampaignRailItem] {
-        overviewQueueFeedItems
+        guard settings.showOverviewQueue else { return [] }
+        return overviewQueueFeedItems
     }
 
     private var selectedOverviewQueueMiner: MinerManager.ManagedMiner? {
@@ -611,8 +625,7 @@ struct OverviewView: View {
 
         let items = selectedMinerQueueCampaigns(for: miner)
             .prefix(8)
-            .enumerated()
-            .map { index, campaign in makeQueueRailItem(for: campaign, miner: miner, index: index) }
+            .map { campaign in makeQueueRailItem(for: campaign, miner: miner) }
 
         return Array(items)
     }
@@ -623,16 +636,11 @@ struct OverviewView: View {
         let artworkURL = SteamArtworkService.supportsSteamArtwork(forGameName: campaign.gameName, gameId: campaign.gameId)
             ? navigation.minerManager.dataCoordinator.steamArtworkOverrides[campaign.gameName] ?? campaign.artworkURL
             : campaign.artworkURL
-        let eyebrow = section == .prioritised
-            ? prioritisedEyebrowText(for: campaign, state: state)
-            : eyebrowText(for: campaign, section: section, state: state)
-
         return CampaignRailItem(
             id: "\(section.rawValue)-\(campaign.id)",
             section: section,
             gameName: campaign.gameName,
             campaignName: campaign.campaignName,
-            eyebrow: eyebrow,
             progressText: campaignDetailText(for: campaign, state: state),
             progressPercent: campaignProgressPercent(for: campaign),
             artworkURL: artworkURL,
@@ -643,56 +651,8 @@ struct OverviewView: View {
             isDimmed: state == .claimed,
             isPlaceholder: false,
             showsLiveMotion: section == .active && (state == .watching || state == .inProgress || state == .claimable),
-            isDebugPreview: false,
-            queueLabel: nil,
-            queuePosition: nil,
             game: game
         )
-    }
-
-    /// Eyebrow text for prioritised cards. Uses intent-failure badges when the system
-    /// wants to mine a campaign but cannot, otherwise falls back to neutral "Pinned".
-    private func prioritisedEyebrowText(for campaign: CampaignViewData, state: CampaignVisualState) -> String {
-        switch state {
-        case .watching, .inProgress:
-            return "In Progress"
-        case .claimable:
-            return "Claimable"
-        case .claimed:
-            return "Claimed"
-        case .idle:
-            if let badge = intentFailureBadge(for: campaign) {
-                return badge
-            }
-            return "Pinned"
-        }
-    }
-
-    /// Returns an intent-failure badge when a prioritised campaign exists but no miner
-    /// can currently mine it. Returns `nil` when the campaign is minable or completed.
-    private func intentFailureBadge(for campaign: CampaignViewData) -> String? {
-        let now = Date()
-
-        // Completed campaigns are a success state, not a failure
-        guard !campaign.isCompleted else { return nil }
-
-        // Time window checks — campaign exists but cannot be mined now
-        if campaign.startDate > now || campaign.endDate <= now {
-            return "Cannot be mined"
-        }
-
-        // Account linkage — no miner can mine without a linked account
-        guard campaign.isAccountConnected else {
-            return "Requires setup"
-        }
-
-        // Eligible drops — nothing left to earn
-        guard campaign.overviewRemainingRewardCount > 0 else {
-            return "Unavailable on all miners"
-        }
-
-        // Campaign is minable — no badge needed
-        return nil
     }
 
     private func selectedMinerQueueCampaigns(for miner: MinerManager.ManagedMiner) -> [Campaign] {
@@ -756,7 +716,6 @@ struct OverviewView: View {
                 section: .active,
                 gameName: name,
                 campaignName: campaignName,
-                eyebrow: isWatching ? "WATCHING NOW" : "QUEUED",
                 progressText: isWatching ? "42% reward progress" : "Scheduled to start soon",
                 progressPercent: isWatching ? 0.42 : 0,
                 artworkURL: navigation.minerManager.dataCoordinator.steamArtworkOverrides[name],
@@ -766,36 +725,23 @@ struct OverviewView: View {
                 watchers: isWatching ? [CampaignWatcher(id: "debug", username: "DebugUser", initials: "DB")] : [],
                 isDimmed: false,
                 isPlaceholder: true,
-                showsLiveMotion: isWatching,
-                isDebugPreview: settings.debugShowPreviewBadge,
-                queueLabel: isWatching ? "NOW MINING" : (index == 1 ? "NEXT UP" : "QUEUE #\(index)"),
-                queuePosition: index + 1,
+                showsLiveMotion: false,
                 game: Game(id: "debug-\(index)", name: name, boxArtURL: nil)
             )
         }
     }
 #endif
 
-    private func makeQueueRailItem(for campaign: Campaign, miner: MinerManager.ManagedMiner, index: Int) -> CampaignRailItem {
+    private func makeQueueRailItem(for campaign: Campaign, miner: MinerManager.ManagedMiner) -> CampaignRailItem {
         let state = queueVisualState(for: campaign, miner: miner)
         let artworkURL = queueArtworkURL(for: campaign)
         let watchers = queueWatchers(for: campaign, miner: miner)
-        
-        let label: String
-        if miner.status == .watching, miner.currentCampaignId == campaign.id {
-            label = "NOW MINING"
-        } else if index == 0 {
-            label = "NEXT UP"
-        } else {
-            label = "QUEUE #\(index + 1)"
-        }
 
         return CampaignRailItem(
             id: "queue-\(miner.id)-\(campaign.id)",
             section: .active,
             gameName: campaign.game.name,
             campaignName: campaign.name,
-            eyebrow: queueEyebrowText(for: state),
             progressText: queueDetailText(for: campaign, state: state, watchers: watchers),
             progressPercent: queueProgressPercent(for: campaign, state: state),
             artworkURL: artworkURL,
@@ -806,9 +752,6 @@ struct OverviewView: View {
             isDimmed: false,
             isPlaceholder: false,
             showsLiveMotion: state == .watching || state == .inProgress || state == .claimable,
-            isDebugPreview: false,
-            queueLabel: label,
-            queuePosition: index + 1,
             game: campaign.game
         )
     }
@@ -836,21 +779,6 @@ struct OverviewView: View {
             return .claimed
         case .expired:
             return .idle
-        }
-    }
-
-    private func queueEyebrowText(for state: CampaignVisualState) -> String {
-        switch state {
-        case .watching:
-            return "Now Mining"
-        case .claimable:
-            return "Claimable"
-        case .inProgress:
-            return "In Progress"
-        case .claimed:
-            return "Claimed"
-        case .idle:
-            return "Queued"
         }
     }
 
@@ -982,7 +910,6 @@ struct OverviewView: View {
             section: .prioritised,
             gameName: preference.gameName,
             campaignName: "",
-            eyebrow: "Pinned",
             progressText: "Your preferred games are ready for the next campaign.",
             progressPercent: 0,
             artworkURL: artworkURL,
@@ -1005,7 +932,6 @@ struct OverviewView: View {
                 section: .prioritised,
                 gameName: settings.priorityGames.isEmpty ? "Pin favourites" : "Prioritised",
                 campaignName: settings.priorityGames.isEmpty ? "Choose games to keep anchored here" : "Selected games stay surfaced first",
-                eyebrow: "Pinned",
                 progressText: settings.priorityGames.isEmpty
                     ? "Add preferred games in Settings."
                     : "Your preferred games are ready for the next campaign.",
@@ -1033,7 +959,6 @@ struct OverviewView: View {
                 section: .active,
                 gameName: "No eligible campaigns",
                 campaignName: "No campaign is mineable right now",
-                eyebrow: "No eligible campaigns",
                 progressText: "No eligible campaigns are available right now.",
                 progressPercent: 0,
                 artworkURL: nil,
@@ -1051,7 +976,6 @@ struct OverviewView: View {
                 section: .recent,
                 gameName: "Recent",
                 campaignName: "Freshly claimed campaigns land here",
-                eyebrow: "History",
                 progressText: "Completed campaigns stay visible for a while.",
                 progressPercent: 0,
                 artworkURL: nil,
@@ -1114,32 +1038,6 @@ struct OverviewView: View {
 
     private func matches(_ campaign: CampaignViewData, preference: GamePreference) -> Bool {
         campaign.gameName.localizedCaseInsensitiveCompare(preference.gameName) == .orderedSame
-    }
-
-    private func eyebrowText(
-        for campaign: CampaignViewData,
-        section: CampaignFeedSection,
-        state: CampaignVisualState
-    ) -> String {
-        switch state {
-        case .watching:
-            return "In Progress"
-        case .claimable:
-            return "Claimable"
-        case .inProgress:
-            return "In Progress"
-        case .claimed:
-            return section == .recent ? "Recent" : "Claimed"
-        case .idle:
-            switch section {
-            case .prioritised:
-                return "Pinned"
-            case .active:
-                return "Available"
-            case .recent:
-                return "Recent"
-            }
-        }
     }
 
     private func campaignDetailText(
@@ -1606,6 +1504,11 @@ private enum CampaignFeedSection: String {
     case recent
 }
 
+private enum CampaignRailLayout {
+    case horizontal
+    case staggered
+}
+
 private enum CampaignCardProminence {
     case feature
     case standard
@@ -1858,7 +1761,6 @@ private struct CampaignRailItem: Identifiable {
     let section: CampaignFeedSection
     let gameName: String
     let campaignName: String
-    let eyebrow: String
     let progressText: String
     let progressPercent: Double
     let artworkURL: URL?
@@ -1869,9 +1771,6 @@ private struct CampaignRailItem: Identifiable {
     let isDimmed: Bool
     let isPlaceholder: Bool
     let showsLiveMotion: Bool
-    var isDebugPreview: Bool = false
-    var queueLabel: String? = nil
-    var queuePosition: Int? = nil
     var game: Game? = nil
 }
 
@@ -1902,6 +1801,8 @@ private struct CampaignFeedCard: View {
                 tint: item.tint,
                 useGhostArtworkPlaceholder: usesStandbyMotionStyle
             )
+            .frame(width: prominence.size.width, height: prominence.size.height)
+            .clipped()
 
             if item.showsLiveMotion {
                 if usesStandbyMotionStyle {
@@ -1916,40 +1817,13 @@ private struct CampaignFeedCard: View {
             LinearGradient(
                 colors: [
                     .clear,
-                    Color.black.opacity(0.12),
+                    Color.black.opacity(0.08),
                     Color.black.opacity(0.36),
                     Color.black.opacity(item.section == .recent ? 0.56 : 0.66)
                 ],
                 startPoint: .top,
                 endPoint: .bottom
             )
-
-            // Top Content Overlay
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(alignment: .top) {
-                    Text(item.queueLabel ?? item.eyebrow)
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.85))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(.black.opacity(0.33), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
-                        .glassControlSurface()
-                    
-                    Spacer()
-                    
-                    if item.isDebugPreview {
-                        Text("DEBUG PREVIEW")
-                            .font(.system(size: 9, weight: .black))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 3)
-                            .background(Color.orange, in: Capsule())
-                    }
-                }
-                .padding(12)
-                
-                Spacer()
-            }
 
             Rectangle()
                 .fill(
@@ -1990,22 +1864,6 @@ private struct CampaignFeedCard: View {
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(.white)
                     .lineLimit(2)
-
-                if showsCampaignSubtitle {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(item.campaignName)
-                            .font(.caption)
-                            .foregroundStyle(.white.opacity(usesStandbyMotionStyle ? 0.44 : 0.78))
-                            .lineLimit(1)
-                        
-                        if !item.progressText.isEmpty {
-                            Text(item.progressText)
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundStyle(.white.opacity(0.55))
-                                .lineLimit(1)
-                        }
-                    }
-                }
             }
             .padding(.horizontal, 14)
             .padding(.top, 12)
@@ -2029,18 +1887,21 @@ private struct CampaignFeedCard: View {
                         }
                 }
             }
+            .zIndex(2)
         }
         .frame(width: prominence.size.width, height: prominence.size.height, alignment: .topLeading)
         .clipShape(RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
-                .strokeBorder(.white.opacity(0.12), lineWidth: 1)
+                .strokeBorder(.white.opacity(item.visualState == .watching ? 0.22 : 0.12), lineWidth: 1)
         }
         .opacity(item.section == .recent ? 0.88 : (item.isDimmed ? 0.7 : 1))
         .saturation(item.isDimmed ? 0.82 : 1)
-        .brightness(isHovering ? 0.015 : 0)
+        .brightness(item.visualState == .watching ? 0.04 : (isHovering ? 0.015 : 0))
         .scaleEffect(isHovering ? 1.03 : 1)
-        .shadow(color: .black.opacity(isHovering ? 0.10 : 0.05), radius: isHovering ? 8 : 3, y: isHovering ? 4 : 1)
+        .shadow(color: .black.opacity(item.visualState == .watching ? 0.16 : (isHovering ? 0.10 : 0.05)), 
+                radius: item.visualState == .watching ? 10 : (isHovering ? 8 : 3), 
+                y: item.visualState == .watching ? 5 : (isHovering ? 4 : 1))
         .animation(.easeInOut(duration: 0.2), value: isHovering)
         .animation(.easeInOut(duration: 0.7), value: usesStandbyMotionStyle)
         .accessibilityElement(children: .ignore)
@@ -2084,6 +1945,40 @@ private struct CampaignFeedCard: View {
                 }
             }
         }
+    }
+}
+
+private struct StaggeredCampaignRail: View {
+    let items: [CampaignRailItem]
+    let prominence: CampaignCardProminence
+    let onSetSteamId: (String) -> Void
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(alignment: .top, spacing: -prominence.size.width * 0.52) {
+                ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                    let clampedDepth = min(index, 4)
+                    let scale = max(0.62, 1.0 - (Double(clampedDepth) * 0.12))
+                    let opacity = max(0.52, 1.0 - (Double(clampedDepth) * 0.16))
+                    let xOffset = CGFloat(clampedDepth) * 16
+                    let yOffset = CGFloat(clampedDepth) * 4
+
+                    CampaignFeedCard(
+                        item: item,
+                        prominence: prominence,
+                        onSetSteamId: onSetSteamId
+                    )
+                    .scaleEffect(scale)
+                    .opacity(opacity)
+                    .offset(x: xOffset, y: yOffset)
+                    .zIndex(Double(120 - index))
+                    .animation(.spring(response: 0.34, dampingFraction: 0.82), value: item.id)
+                }
+            }
+            .padding(.horizontal, 2)
+            .padding(.vertical, 10)
+        }
+        .scrollClipDisabled()
     }
 }
 
