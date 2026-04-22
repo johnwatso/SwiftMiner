@@ -89,6 +89,14 @@ private struct GeneralSettingsView: View {
             }
 
             Section {
+                Toggle("Show Up Next queue", isOn: $settings.showOverviewQueue)
+
+                SettingsSecondaryText("Displays the staggered campaign deck on the Overview page.")
+            } header: {
+                Text("Overview")
+            }
+
+            Section {
                 Toggle("Show notifications when drops are claimed", isOn: $settings.showClaimNotifications)
                     .onChange(of: settings.showClaimNotifications) { _, newValue in
                         Task { await navigation.minerManager.updateNotificationPreference(enabled: newValue) }
@@ -298,8 +306,9 @@ private struct MiningSettingsView: View {
                         Text(miner.username).tag(miner.id)
                     }
                 }
+                .disabled(!settings.showOverviewQueue)
 
-                SettingsSecondaryText("Choose whether Overview shows the aggregate mining queue or one account's queue.")
+                SettingsSecondaryText("Choose whether the Overview queue uses all miners or one account.")
             } header: {
                 Text("Overview Queue")
             }
@@ -429,8 +438,6 @@ private struct AdvancedSettingsView: View {
                 Toggle("Enable Fake Queue", isOn: $settings.debugFakeQueueEnabled)
                 
                 if settings.debugFakeQueueEnabled {
-                    Toggle("Show Debug Preview Badge", isOn: $settings.debugShowPreviewBadge)
-                    
                     Picker("Data Source", selection: $settings.debugFakeQueueSource) {
                         ForEach(Settings.DebugFakeQueueSource.allCases) { source in
                             Text(source.displayName).tag(source)

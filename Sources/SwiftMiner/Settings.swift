@@ -72,6 +72,10 @@ public final class Settings: ObservableObject {
     @AppStorage("queueDisplayStyle", store: Settings.appStorageStore)
     public var queueDisplayStyle: QueueDisplayStyle = .stacked
 
+    /// Whether Overview should show the Up Next queue rail.
+    @AppStorage("showOverviewQueue", store: Settings.appStorageStore)
+    public var showOverviewQueue: Bool = true
+
     /// Miner whose queue should be shown on Overview. Empty means aggregate/all miners.
     @AppStorage("overviewQueueMinerId", store: Settings.appStorageStore)
     public var overviewQueueMinerId: String = ""
@@ -104,10 +108,6 @@ public final class Settings: ObservableObject {
     /// Whether Overview should render a synthetic queue for testing/screenshots.
     @AppStorage("debugFakeQueueEnabled", store: Settings.appStorageStore)
     public var debugFakeQueueEnabled: Bool = false
-
-    /// Whether fake queue cards should show the "Debug Preview" badge.
-    @AppStorage("debugShowPreviewBadge", store: Settings.appStorageStore)
-    public var debugShowPreviewBadge: Bool = false
 
     /// Data source used for fake queue generation in debug builds.
     @AppStorage("debugFakeQueueSource", store: Settings.appStorageStore)
@@ -618,6 +618,7 @@ public final class Settings: ObservableObject {
         gamePreferencesData = "[]"
         miningStrategy = .mineAll
         preferSteamArtwork = true
+        showOverviewQueue = true
         overviewQueueMinerId = ""
         ignoredWarningsData = "[]"
     }
