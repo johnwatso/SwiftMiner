@@ -381,39 +381,54 @@ private struct AdvancedSettingsView: View {
     var body: some View {
         Form {
             Section {
-                HStack {
-                    Text("SwiftBot Endpoint")
-                    Spacer()
-                    
-                    if settings.swiftBotEndpoint.isEmpty {
-                        Button("Configure Integration\u{2026}") {
-                            tempEndpoint = "http://127.0.0.1:8080"
-                            showEndpointAlert = true
+                Toggle("Enable Discord Integration", isOn: $settings.swiftBotEnabled)
+                    .onChange(of: settings.swiftBotEnabled) { _, enabled in
+                        if enabled {
+                            Task { await navigation.checkSwiftBotConnection() }
+                        } else {
+                            navigation.swiftBotState = .notConfigured
                         }
-                        .buttonStyle(.link)
-                    } else {
-                        HStack(spacing: 8) {
-                            Text(settings.swiftBotEndpoint)
-                                .font(.caption.monospaced())
-                                .foregroundStyle(.secondary)
-                            
-                            Button("Edit\u{2026}") {
-                                tempEndpoint = settings.swiftBotEndpoint
+                    }
+
+                SettingsSecondaryText("Shows the Admin panel and enables SwiftBot account linking and notifications.")
+
+                if settings.swiftBotEnabled {
+                    Divider()
+
+                    HStack {
+                        Text("SwiftBot Endpoint")
+                        Spacer()
+
+                        if settings.swiftBotEndpoint.isEmpty {
+                            Button("Configure\u{2026}") {
+                                tempEndpoint = "http://127.0.0.1:8080"
                                 showEndpointAlert = true
                             }
                             .buttonStyle(.link)
-                            
-                            Button("Reset") {
-                                settings.swiftBotEndpoint = ""
-                                Task { await navigation.updateSwiftBotEndpoint("") }
+                        } else {
+                            HStack(spacing: 8) {
+                                Text(settings.swiftBotEndpoint)
+                                    .font(.caption.monospaced())
+                                    .foregroundStyle(.secondary)
+
+                                Button("Edit\u{2026}") {
+                                    tempEndpoint = settings.swiftBotEndpoint
+                                    showEndpointAlert = true
+                                }
+                                .buttonStyle(.link)
+
+                                Button("Reset") {
+                                    settings.swiftBotEndpoint = ""
+                                    Task { await navigation.updateSwiftBotEndpoint("") }
+                                }
+                                .buttonStyle(.link)
+                                .foregroundStyle(.red)
                             }
-                            .buttonStyle(.link)
-                            .foregroundStyle(.red)
                         }
                     }
-                }
 
-                SettingsSecondaryText("Address of the SwiftBot REST API (e.g. http://127.0.0.1:8080). Required for identity management and notifications.")
+                    SettingsSecondaryText("Address of the SwiftBot REST API (e.g. http://127.0.0.1:8080). Must be a localhost address.")
+                }
             } header: {
                 Text("Integration")
             }
