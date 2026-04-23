@@ -8,7 +8,7 @@ struct MinerTableView: View {
     
     var body: some View {
         Table(miners, selection: .constant(navigation.selectedMinerId)) {
-            TableColumn("Account") { miner in
+            TableColumn("Miner") { miner in
                 HStack(spacing: 8) {
                     Image(systemName: "person.circle.fill")
                         .foregroundStyle(.purple)
@@ -114,6 +114,8 @@ struct StatusBadge: View {
         case .waitingForStream: return .yellow
         case .claiming: return .purple
         case .paused: return .orange
+        case .idleNoEligibleCampaigns: return .gray
+        case .blockedAccountNotLinked: return .orange
         case .error: return .red
         }
     }

@@ -394,6 +394,8 @@ struct StatusIndicatorView: View {
         case .error:             return .red
         case .stopped, .idle:    return .gray
         case .paused:            return .orange
+        case .idleNoEligibleCampaigns: return .gray
+        case .blockedAccountNotLinked: return .orange
         }
     }
 }

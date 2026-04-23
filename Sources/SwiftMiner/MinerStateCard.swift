@@ -159,8 +159,8 @@ struct MinerStateCard: View {
         case .blocked(let reasons):
             if reasons.contains(.accountNotLinked) {
                 return StateConfig(
-                    headline: gameName ?? "Account",
-                    subtitle: "Not linked",
+                    headline: "Blocked — Account not linked",
+                    subtitle: gameName ?? "Link your account to earn drops.",
                     icon: "link.badge.plus",
                     color: .orange
                 )
@@ -168,22 +168,22 @@ struct MinerStateCard: View {
                 if let campaign = firstActivityCampaign {
                     return StateConfig(
                         headline: campaign.game.name,
-                        subtitle: campaign.activityStatusMessage,
+                        subtitle: campaign.activityStatus(for: miner).label,
                         icon: "list.bullet.rectangle",
                         color: .secondary
                     )
                 }
 
                 return StateConfig(
-                    headline: "No active campaigns",
-                    subtitle: "No drops available for prioritised games",
+                    headline: "Idle — No eligible campaigns",
+                    subtitle: "No drops available for prioritised games.",
                     icon: "archivebox",
                     color: .secondary
                 )
             } else {
                 return StateConfig(
-                    headline: gameName ?? "No live streams",
-                    subtitle: "No participating channels are live right now.",
+                    headline: "Waiting — No live stream",
+                    subtitle: gameName ?? "No participating channels are live right now.",
                     icon: "antenna.radiowaves.left.and.right",
                     color: .cyan
                 )
@@ -192,7 +192,7 @@ struct MinerStateCard: View {
         case .ready:
             if let campaign = firstActivityCampaign {
                 return StateConfig(
-                    headline: "Campaigns available",
+                    headline: "Waiting — Campaign available",
                     subtitle: campaign.game.name,
                     icon: "list.bullet.rectangle",
                     color: .blue
@@ -200,7 +200,7 @@ struct MinerStateCard: View {
             }
 
             return StateConfig(
-                headline: "No active campaigns",
+                headline: "Idle — No eligible campaigns",
                 subtitle: "No drops available for prioritised games",
                 icon: "waveform.path.ecg",
                 color: .blue
@@ -225,7 +225,7 @@ struct MinerStateCard: View {
             }
 
             return StateConfig(
-                headline: "No active campaigns",
+                headline: "Idle — All campaigns completed",
                 subtitle: "All currently available drops are completed.",
                 icon: "checkmark.seal.fill",
                 color: .purple
@@ -239,4 +239,778 @@ struct MinerStateCard: View {
         let icon: String
         let color: Color
     }
+}
+
+// MARK: - Per-Miner Activity Card
+
+enum MinerActivityCardProminence {
+    case compact
+    case expanded
+}
+
+struct MinerActivityCard: View {
+    let miner: MinerManager.ManagedMiner
+    var prominence: MinerActivityCardProminence = .compact
+    var onSelect: (() -> Void)? = nil
+    var onLinkAccount: (() -> Void)? = nil
+
+    @ObservedObject private var settings = Settings.shared
+
+    private var snapshot: MinerActivitySnapshot {
+        MinerActivitySnapshot.resolve(
+            for: miner,
+            priorityGames: settings.priorityGames,
+            excludedGames: settings.excludedGames,
+            strategy: settings.miningStrategy,
+            includesBadgeAndEmoteCampaigns: settings.enableBadgesEmotes
+        )
+    }
+
+    private var showsLinkAccountButton: Bool {
+        snapshot.now.requiresAccountLink || snapshot.upNext?.requiresAccountLink == true
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: prominence == .expanded ? 18 : 14) {
+            header
+
+            VStack(alignment: .leading, spacing: 10) {
+                ActivityLabel("Now Mining", color: snapshot.now.accent)
+                currentActivity
+            }
+
+            if showsLinkAccountButton {
+                Button {
+                    onLinkAccount?()
+                } label: {
+                    Label("Link Account", systemImage: "link.badge.plus")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(onLinkAccount == nil)
+            }
+
+            Divider()
+                .opacity(0.6)
+
+            VStack(alignment: .leading, spacing: 8) {
+                ActivityLabel("Up Next", color: .secondary)
+                if let next = snapshot.upNext {
+                    nextActivity(next)
+                } else {
+                    emptyNextActivity
+                }
+            }
+            .opacity(0.82)
+
+            if !snapshot.blockedPriority.isEmpty {
+                Divider()
+                    .opacity(0.6)
+
+                VStack(alignment: .leading, spacing: 10) {
+                    ActivityLabel("Needs Linking", color: .orange)
+                    
+                    ForEach(snapshot.blockedPriority) { item in
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: item.symbol)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(item.accent)
+                                .frame(width: 18, height: 18)
+
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(item.title)
+                                    .font(.subheadline.weight(.medium))
+                                    .lineLimit(1)
+
+                                Text(item.subtitle ?? "Account not linked")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+
+                            Spacer(minLength: 6)
+                            
+                            Button {
+                                onLinkAccount?()
+                            } label: {
+                                Text("Link")
+                                    .font(.caption2.weight(.bold))
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.mini)
+                            .tint(.orange)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(prominence == .expanded ? 22 : 16)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .glassCard()
+        .contentShape(RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
+        .onTapGesture {
+            onSelect?()
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(miner.username), now mining \(snapshot.now.title)")
+    }
+
+    private var header: some View {
+        HStack(alignment: .center, spacing: 10) {
+            ZStack {
+                Circle()
+                    .fill(snapshot.now.accent.opacity(0.14))
+
+                Image(systemName: snapshot.now.symbol)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(snapshot.now.accent)
+            }
+            .frame(width: 30, height: 30)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(miner.username)
+                    .font(.headline.weight(.semibold))
+                    .lineLimit(1)
+
+                Text(snapshot.statusText)
+                    .font(.caption)
+                    .foregroundStyle(snapshot.statusColor)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            HStack(spacing: 5) {
+                Image(systemName: snapshot.statusSymbol)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(snapshot.statusColor)
+                    .accessibilityHidden(true)
+
+                Circle()
+                    .fill(snapshot.statusColor)
+                    .frame(width: 7, height: 7)
+                    .accessibilityHidden(true)
+            }
+                .help(snapshot.statusText)
+        }
+    }
+
+    private var currentActivity: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(snapshot.now.title)
+                .font(prominence == .expanded ? .title2.weight(.semibold) : .title3.weight(.semibold))
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let subtitle = snapshot.now.subtitle {
+                Text(subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let progress = snapshot.now.progressFraction {
+                ProgressView(value: progress)
+                    .progressViewStyle(.linear)
+                    .tint(snapshot.now.accent)
+                    .padding(.top, 2)
+            }
+
+            if let detail = snapshot.now.detail {
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func nextActivity(_ item: MinerActivityItem) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: item.symbol)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(item.accent)
+                .frame(width: 18, height: 18)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(item.title)
+                    .font(.subheadline.weight(.medium))
+                    .lineLimit(1)
+
+                if let subtitle = item.subtitle {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                if let detail = item.detail {
+                    Text(detail)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: 6)
+        }
+    }
+
+    private var emptyNextActivity: some View {
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: "clock")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
+                .frame(width: 18, height: 18)
+
+            Text("No likely follow-up yet")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            Spacer(minLength: 6)
+        }
+    }
+}
+
+private struct ActivityLabel: View {
+    let text: String
+    let color: Color
+
+    init(_ text: String, color: Color) {
+        self.text = text
+        self.color = color
+    }
+
+    var body: some View {
+        Text(text.uppercased())
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(color)
+    }
+}
+
+struct MinerActivitySnapshot {
+    let now: MinerActivityItem
+    let upNext: MinerActivityItem?
+    let blockedPriority: [MinerActivityItem]
+    let statusText: String
+    let statusColor: Color
+    let statusSymbol: String
+
+    @MainActor
+    static func resolve(
+        for miner: MinerManager.ManagedMiner,
+        priorityGames: [String],
+        excludedGames: [String],
+        strategy: MiningStrategy,
+        includesBadgeAndEmoteCampaigns: Bool
+    ) -> MinerActivitySnapshot {
+        let currentCampaign = currentCampaign(for: miner)
+        let now = currentActivityItem(for: miner, campaign: currentCampaign)
+        
+        let activePriorityGames = miner.priorityGames.isEmpty ? priorityGames : miner.priorityGames
+        
+        let next = likelyNextItem(
+            for: miner,
+            excludingCampaignId: currentCampaign?.id ?? miner.currentCampaignId,
+            priorityGames: activePriorityGames,
+            excludedGames: excludedGames,
+            strategy: strategy,
+            includesBadgeAndEmoteCampaigns: includesBadgeAndEmoteCampaigns
+        )
+
+        let blocked = blockedPriorityItems(
+            for: miner,
+            excludingCampaignId: currentCampaign?.id ?? miner.currentCampaignId,
+            priorityGames: activePriorityGames,
+            excludedGames: excludedGames,
+            strategy: strategy,
+            includesBadgeAndEmoteCampaigns: includesBadgeAndEmoteCampaigns
+        )
+
+        return MinerActivitySnapshot(
+            now: now,
+            upNext: next,
+            blockedPriority: blocked,
+            statusText: statusText(for: miner, now: now),
+            statusColor: statusColor(for: miner, now: now),
+            statusSymbol: statusSymbol(for: miner, now: now)
+        )
+    }
+
+    @MainActor
+    private static func currentCampaign(for miner: MinerManager.ManagedMiner) -> Campaign? {
+        if let campaignId = miner.currentCampaignId,
+           let campaign = miner.allCampaigns.first(where: { $0.id == campaignId }) {
+            return campaign
+        }
+
+        guard let campaignName = miner.currentCampaign else {
+            return nil
+        }
+
+        return miner.allCampaigns.first { campaign in
+            campaign.name == campaignName
+        }
+    }
+
+    @MainActor
+    private static func currentActivityItem(for miner: MinerManager.ManagedMiner, campaign: Campaign?) -> MinerActivityItem {
+        if miner.status == .watching, let campaign {
+            let progress = activeDropProgress(for: campaign, miner: miner)
+            let detail = progress.map { item in
+                item.remainingMinutes > 0
+                    ? "\(item.dropName) · \(item.remainingMinutes) min remaining"
+                    : "\(item.dropName) ready to claim"
+            } ?? "Tracking eligible stream progress"
+
+            return MinerActivityItem(
+                id: "now-\(campaign.id)",
+                title: campaign.game.name,
+                subtitle: campaign.name,
+                detail: detail,
+                symbol: "play.fill",
+                accent: .green,
+                progressFraction: progress?.fraction,
+                campaignId: campaign.id
+            )
+        }
+
+        if miner.status == .claiming, let campaign {
+            return MinerActivityItem(
+                id: "claiming-\(campaign.id)",
+                title: campaign.game.name,
+                subtitle: campaign.name,
+                detail: "Claiming completed reward",
+                symbol: "gift.fill",
+                accent: .purple,
+                campaignId: campaign.id
+            )
+        }
+
+        if miner.needsAuth {
+            return MinerActivityItem(
+                id: "needs-auth-\(miner.id)",
+                title: "Blocked — Authentication expired",
+                subtitle: "Reconnect account to resume mining.",
+                detail: nil,
+                symbol: "person.crop.circle.badge.exclamationmark",
+                accent: .orange,
+                requiresAccountLink: true
+            )
+        }
+
+        if let resolved = miner.resolvedPrimaryState?.resolved {
+            switch resolved.state {
+            case .blocked:
+                return blockedCurrentItem(for: miner, resolved: resolved)
+            case .idle:
+                if resolved.reason == .noDropsAvailable {
+                    return MinerActivityItem(
+                        id: "complete-\(miner.id)-\(resolved.gameId)",
+                        title: "Caught up",
+                        subtitle: "No rewards need progress for \(resolved.gameName).",
+                        detail: nil,
+                        symbol: "checkmark.seal.fill",
+                        accent: .secondary
+                    )
+                }
+            case .watching:
+                break
+            }
+        }
+
+        switch miner.status {
+        case .authenticating:
+            return waitingItem(
+                id: "auth-\(miner.id)",
+                title: "Waiting — Authenticating",
+                subtitle: "Reconnecting account...",
+                symbol: "key.fill",
+                accent: .orange
+            )
+        case .fetchingCampaigns:
+            return waitingItem(
+                id: "fetch-\(miner.id)",
+                title: "Waiting — Refreshing campaigns",
+                subtitle: "Checking for active campaigns...",
+                symbol: "arrow.clockwise",
+                accent: .blue
+            )
+        case .waitingForStream:
+            return waitingItem(
+                id: "stream-\(miner.id)",
+                title: "Waiting — No channels live",
+                subtitle: "Waiting for an eligible live stream.",
+                symbol: "antenna.radiowaves.left.and.right",
+                accent: .cyan
+            )
+        case .blockedAccountNotLinked:
+            return waitingItem(
+                id: "link-\(miner.id)",
+                title: "Blocked — Account not linked",
+                subtitle: "Link your account to earn drops.",
+                symbol: "link.badge.plus",
+                accent: .orange
+            )
+        case .idleNoEligibleCampaigns:
+            return waitingItem(
+                id: "idle-\(miner.id)",
+                title: "Idle — No eligible campaigns",
+                subtitle: "Nothing is available to mine for this account.",
+                symbol: "pause.circle",
+                accent: .secondary
+            )
+        case .error:
+            return waitingItem(
+                id: "error-\(miner.id)",
+                title: "Blocked — Needs attention",
+                subtitle: "Check Events for the latest issue.",
+                symbol: "exclamationmark.triangle.fill",
+                accent: .red
+            )
+        case .paused:
+            return waitingItem(
+                id: "paused-\(miner.id)",
+                title: "Paused",
+                subtitle: "Mining is paused for this account.",
+                symbol: "pause.fill",
+                accent: .secondary
+            )
+        case .idle, .watching, .claiming:
+            return waitingItem(
+                id: "idle-\(miner.id)",
+                title: "Idle — No eligible campaigns",
+                subtitle: "Nothing is available to mine for this account.",
+                symbol: "clock",
+                accent: .secondary
+            )
+        }
+    }
+
+    private static func waitingItem(
+        id: String,
+        title: String,
+        subtitle: String,
+        symbol: String,
+        accent: Color
+    ) -> MinerActivityItem {
+        MinerActivityItem(
+            id: id,
+            title: title,
+            subtitle: subtitle,
+            detail: nil,
+            symbol: symbol,
+            accent: accent
+        )
+    }
+
+    private static func blockedCurrentItem(for miner: MinerManager.ManagedMiner, resolved: MinerGameState) -> MinerActivityItem {
+        switch resolved.reason {
+        case .notLinked:
+            return MinerActivityItem(
+                id: "blocked-link-\(miner.id)-\(resolved.gameId)",
+                title: "Blocked — Account not linked",
+                subtitle: resolved.gameName,
+                detail: "Link this game account to earn drops.",
+                symbol: "link.badge.plus",
+                accent: .orange,
+                campaignId: resolved.campaignId,
+                requiresAccountLink: true
+            )
+        case .noLiveStreams:
+            return MinerActivityItem(
+                id: "blocked-stream-\(miner.id)-\(resolved.gameId)",
+                title: "Waiting — No live stream",
+                subtitle: resolved.gameName,
+                detail: "Waiting for an eligible live stream.",
+                symbol: "antenna.radiowaves.left.and.right",
+                accent: .cyan,
+                campaignId: resolved.campaignId
+            )
+        default:
+            return MinerActivityItem(
+                id: "blocked-empty-\(miner.id)-\(resolved.gameId)",
+                title: "Idle — No eligible campaigns",
+                subtitle: "No eligible campaign is available for \(resolved.gameName).",
+                detail: nil,
+                symbol: "clock",
+                accent: .secondary,
+                campaignId: resolved.campaignId
+            )
+        }
+    }
+
+    @MainActor
+    private static func activeDropProgress(
+        for campaign: Campaign,
+        miner: MinerManager.ManagedMiner
+    ) -> (dropName: String, fraction: Double, remainingMinutes: Int)? {
+        guard let drop = campaign.drops.first(where: { !$0.isClaimed && !$0.isClaimable })
+            ?? campaign.drops.first(where: { !$0.isClaimed }) else {
+            return nil
+        }
+
+        let dropState = miner.stateStore?.dropStates.first { $0.dropId == drop.id }
+        let currentMinutes = dropState?.progressMinutes ?? drop.progress?.currentMinutes ?? 0
+        let requiredMinutes = dropState?.requiredMinutes ?? drop.requiredMinutes
+        guard requiredMinutes > 0 else { return nil }
+
+        let fraction = min(1.0, max(0.0, Double(currentMinutes) / Double(requiredMinutes)))
+        return (
+            dropName: drop.name,
+            fraction: fraction,
+            remainingMinutes: max(0, requiredMinutes - currentMinutes)
+        )
+    }
+
+    private static func likelyNextItem(
+        for miner: MinerManager.ManagedMiner,
+        excludingCampaignId activeCampaignId: String?,
+        priorityGames: [String],
+        excludedGames: [String],
+        strategy: MiningStrategy,
+        includesBadgeAndEmoteCampaigns: Bool
+    ) -> MinerActivityItem? {
+        let priorityKeys = priorityGames.map(normalizedGameKey).filter { !$0.isEmpty }
+        let prioritySet = Set(priorityKeys)
+        let excludedSet = Set(excludedGames.map(normalizedGameKey).filter { !$0.isEmpty })
+
+        let candidates = miner.allCampaigns.filter { campaign in
+            guard campaign.id != activeCampaignId else { return false }
+            guard !isSpecialEventsCampaign(campaign) else { return false }
+            guard !campaign.drops.isEmpty else { return false }
+            guard campaign.isTimeActive, campaign.status != .disabled else { return false }
+            guard !campaign.drops.allSatisfy(\.isClaimed) else { return false }
+
+            let gameName = normalizedGameKey(campaign.game.name)
+            let gameId = normalizedGameKey(campaign.game.id)
+            guard !excludedSet.contains(gameName), !excludedSet.contains(gameId) else { return false }
+            guard strategy != .onlyPriority || prioritySet.contains(gameName) || prioritySet.contains(gameId) else { return false }
+            return true
+        }
+
+        let eligible = candidates.filter { campaign in
+            guard campaign.isAccountConnected,
+                  campaign.hasDropsEnabled,
+                  !campaign.eligibleDrops.isEmpty else {
+                return false
+            }
+            if !includesBadgeAndEmoteCampaigns && campaign.hasOnlyBadgesOrEmotes {
+                return false
+            }
+            switch campaign.miningStatus {
+            case .available, .inProgress, .claimable:
+                return true
+            case .claimed, .expired:
+                return false
+            }
+        }
+
+        if let campaign = sortedCandidates(eligible, priorityKeys: priorityKeys, strategy: strategy).first {
+            return MinerActivityItem(
+                id: "next-\(campaign.id)",
+                title: campaign.game.name,
+                subtitle: campaign.name,
+                detail: "Likely based on current priority rules",
+                symbol: "arrow.forward.circle",
+                accent: .secondary,
+                campaignId: campaign.id
+            )
+        }
+
+        return nil
+    }
+
+    private static func blockedPriorityItems(
+        for miner: MinerManager.ManagedMiner,
+        excludingCampaignId activeCampaignId: String?,
+        priorityGames: [String],
+        excludedGames: [String],
+        strategy: MiningStrategy,
+        includesBadgeAndEmoteCampaigns: Bool
+    ) -> [MinerActivityItem] {
+        let priorityKeys = priorityGames.map(normalizedGameKey).filter { !$0.isEmpty }
+        let prioritySet = Set(priorityKeys)
+        let excludedSet = Set(excludedGames.map(normalizedGameKey).filter { !$0.isEmpty })
+
+        let activePriorityUnlinked = miner.allCampaigns.filter { campaign in
+            guard campaign.id != activeCampaignId else { return false }
+            guard !isSpecialEventsCampaign(campaign) else { return false }
+            guard !campaign.drops.isEmpty else { return false }
+            guard campaign.isTimeActive, campaign.status != .disabled else { return false }
+            guard !campaign.drops.allSatisfy(\.isClaimed) else { return false }
+
+            let gameName = normalizedGameKey(campaign.game.name)
+            let gameId = normalizedGameKey(campaign.game.id)
+            
+            // 1. Must NOT be excluded
+            guard !excludedSet.contains(gameName), !excludedSet.contains(gameId) else { return false }
+            
+            // 2. Must be prioritized
+            guard prioritySet.contains(gameName) || prioritySet.contains(gameId) else { return false }
+            
+            // 3. Must be UNLINKED
+            guard !campaign.isAccountConnected else { return false }
+            
+            // 4. Badge/Emote preference
+            if !includesBadgeAndEmoteCampaigns && campaign.hasOnlyBadgesOrEmotes {
+                return false
+            }
+
+            return true
+        }
+
+        let sorted = sortedCandidates(activePriorityUnlinked, priorityKeys: priorityKeys, strategy: strategy)
+        
+        return sorted.map { campaign in
+            MinerActivityItem(
+                id: "blocked-\(campaign.id)",
+                title: campaign.game.name,
+                subtitle: campaign.name,
+                detail: "Account not linked",
+                symbol: "link.badge.plus",
+                accent: .orange,
+                campaignId: campaign.id,
+                requiresAccountLink: true
+            )
+        }
+    }
+
+    private static func sortedCandidates(
+        _ campaigns: [Campaign],
+        priorityKeys: [String],
+        strategy: MiningStrategy
+    ) -> [Campaign] {
+        campaigns.enumerated().sorted { lhs, rhs in
+            let left = lhs.element
+            let right = rhs.element
+            let leftPriority = priorityIndex(for: left, priorityKeys: priorityKeys)
+            let rightPriority = priorityIndex(for: right, priorityKeys: priorityKeys)
+            let leftIsPriority = leftPriority != Int.max
+            let rightIsPriority = rightPriority != Int.max
+
+            switch strategy {
+            case .mineAll:
+                if left.endDate != right.endDate { return left.endDate < right.endDate }
+                if leftIsPriority != rightIsPriority { return leftIsPriority }
+                if leftPriority != rightPriority { return leftPriority < rightPriority }
+            case .prioritiseSelected, .onlyPriority:
+                if leftIsPriority != rightIsPriority { return leftIsPriority }
+                if leftPriority != rightPriority { return leftPriority < rightPriority }
+                if left.endDate != right.endDate { return left.endDate < right.endDate }
+            }
+
+            return lhs.offset < rhs.offset
+        }
+        .map(\.element)
+    }
+
+    private static func priorityIndex(for campaign: Campaign, priorityKeys: [String]) -> Int {
+        let gameName = normalizedGameKey(campaign.game.name)
+        let gameId = normalizedGameKey(campaign.game.id)
+        return priorityKeys.firstIndex { $0 == gameName || $0 == gameId } ?? Int.max
+    }
+
+    private static func normalizedGameKey(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private static func isSpecialEventsCampaign(_ campaign: Campaign) -> Bool {
+        let name = campaign.game.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let id = campaign.game.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.localizedCaseInsensitiveCompare("Just Chatting") == .orderedSame || id == "509658"
+    }
+
+    private static func statusText(for miner: MinerManager.ManagedMiner, now: MinerActivityItem) -> String {
+        switch miner.status {
+        case .watching:
+            return "Watching \(now.title)"
+        case .claiming:
+            return "Claiming"
+        case .waitingForStream:
+            return "Waiting — No channels live"
+        case .fetchingCampaigns:
+            return "Waiting — Refreshing campaigns"
+        case .authenticating:
+            return "Waiting — Authenticating"
+        case .paused:
+            return "Paused"
+        case .error:
+            return "Blocked — Needs attention"
+        case .idleNoEligibleCampaigns:
+            return "Idle — No eligible campaigns"
+        case .blockedAccountNotLinked:
+            return "Blocked — Account not linked"
+        case .idle:
+            return "Idle — No eligible campaigns"
+        }
+    }
+
+    private static func statusSymbol(for miner: MinerManager.ManagedMiner, now: MinerActivityItem) -> String {
+        if now.requiresAccountLink || miner.needsAuth {
+            return "exclamationmark.triangle.fill"
+        }
+
+        switch miner.status {
+        case .watching:
+            return "play.circle.fill"
+        case .claiming:
+            return "gift.circle.fill"
+        case .waitingForStream:
+            return "antenna.radiowaves.left.and.right.circle.fill"
+        case .fetchingCampaigns:
+            return "arrow.triangle.2.circlepath.circle.fill"
+        case .authenticating:
+            return "key.circle.fill"
+        case .paused:
+            return "pause.circle.fill"
+        case .error:
+            return "exclamationmark.triangle.fill"
+        case .idleNoEligibleCampaigns:
+            return "pause.circle"
+        case .blockedAccountNotLinked:
+            return "link.badge.plus"
+        case .idle:
+            return "pause.circle"
+        }
+    }
+
+    private static func statusColor(for miner: MinerManager.ManagedMiner, now: MinerActivityItem) -> Color {
+        switch miner.status {
+        case .watching:
+            return .green
+        case .claiming:
+            return .purple
+        case .waitingForStream:
+            return .cyan
+        case .fetchingCampaigns:
+            return .blue
+        case .authenticating:
+            return .orange
+        case .paused:
+            return .secondary
+        case .error:
+            return .red
+        case .idleNoEligibleCampaigns:
+            return .secondary
+        case .blockedAccountNotLinked:
+            return .orange
+        case .idle:
+            return now.accent
+        }
+    }
+}
+
+struct MinerActivityItem: Identifiable {
+    let id: String
+    let title: String
+    let subtitle: String?
+    let detail: String?
+    let symbol: String
+    let accent: Color
+    var progressFraction: Double? = nil
+    var campaignId: String? = nil
+    var requiresAccountLink: Bool = false
 }

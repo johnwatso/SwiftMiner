@@ -6,36 +6,14 @@ import CoreImage
 
 struct DropsListView: View {
     @Environment(NavigationModel.self) private var navigation
-    @State private var selectedFilters: Set<DropFilter> = [.active]
     @State private var campaigns: [CampaignViewData] = []
     @State private var isRefreshing = false
-    @AppStorage("preferSteamArtwork") private var preferSteamArtwork: Bool = false
+    @AppStorage("preferSteamArtwork", store: Settings.appStorageStore) private var preferSteamArtwork: Bool = false
+    @ObservedObject private var settings = Settings.shared
 
-    enum DropFilter: String, CaseIterable, Identifiable, Hashable {
-        case active
-        case needsSetup
-        case upcoming
-        case completed
-
-        var id: String { rawValue }
-
-        var title: String {
-            switch self {
-            case .active: return "Active"
-            case .needsSetup: return "Needs Setup"
-            case .upcoming: return "Upcoming"
-            case .completed: return "Completed"
-            }
-        }
-
-        var symbol: String {
-            switch self {
-            case .active: return "dot.radiowaves.left.and.right"
-            case .needsSetup: return "link.badge.plus"
-            case .upcoming: return "calendar.badge.clock"
-            case .completed: return "checkmark.circle.fill"
-            }
-        }
+    private var selectedFilters: Set<DropFilter> {
+        get { settings.selectedDropsFilters }
+        nonmutating set { settings.selectedDropsFilters = newValue }
     }
 
     private var miners: [MinerManager.ManagedMiner] { navigation.minerManager.miners }
@@ -102,7 +80,11 @@ struct DropsListView: View {
         }
         .navigationTitle("Drops")
         .task(id: accountSignature) {
+            applyRequestedDropsFilter()
             await loadCampaignFeed()
+        }
+        .onChange(of: navigation.requestedDropsFilter) { _, _ in
+            applyRequestedDropsFilter()
         }
         .onChange(of: preferSteamArtwork) { _, _ in
             Task {
@@ -113,6 +95,15 @@ struct DropsListView: View {
     }
 
     // MARK: - States
+
+    private func applyRequestedDropsFilter() {
+        guard let intent = navigation.consumeDropsFilterIntent() else { return }
+
+        switch intent {
+        case .upcoming:
+            selectedFilters = [.upcoming]
+        }
+    }
 
     private var noAccountsState: some View {
         MaterialEmptyStatePanel(
@@ -187,11 +178,13 @@ struct DropsListView: View {
                     let isSelected = selectedFilters.contains(option)
                     Button {
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                            var current = selectedFilters
                             if isSelected {
-                                selectedFilters.remove(option)
+                                current.remove(option)
                             } else {
-                                selectedFilters.insert(option)
+                                current.insert(option)
                             }
+                            selectedFilters = current
                         }
                     } label: {
                         HStack(spacing: 6) {
@@ -803,7 +796,8 @@ private struct CampaignDeckCard: View {
                     ForEach(shownDrops) { drop in
                         CampaignDropPreviewRow(
                             drop: drop,
-                            activity: activity
+                            activity: activity,
+                            fallbackURL: campaign.artworkURL
                         )
                     }
                 }
@@ -1044,6 +1038,17 @@ private struct GroupedCampaignSubItem: View {
     let item: GameAggregateCampaign
     let activity: CampaignActivitySnapshot
 
+    private var representativeDrop: DropViewData? {
+        item.campaign.drops.first { $0.isClaimable && !$0.isClaimed }
+            ?? item.campaign.drops.first { $0.progress > 0 && !$0.isClaimed }
+            ?? item.campaign.drops.first { !$0.isClaimed }
+            ?? item.campaign.drops.first
+    }
+
+    private var imageURLToUse: URL? {
+        (representativeDrop?.imageURL ?? item.campaign.artworkURL)?.highResolutionArtworkURL
+    }
+
     private var progressPercent: Int {
         Int((item.campaign.progress * 100).rounded())
     }
@@ -1071,6 +1076,8 @@ private struct GroupedCampaignSubItem: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
+            thumbnail
+
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.campaign.campaignName)
                     .font(.subheadline.weight(.medium))
@@ -1100,6 +1107,54 @@ private struct GroupedCampaignSubItem: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private var thumbnail: some View {
+        Group {
+            if let imageURLToUse {
+                AsyncImage(url: imageURLToUse) { phase in
+                    switch phase {
+                    case .empty:
+                        thumbnailPlaceholder
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .interpolation(.high)
+                            .scaledToFill()
+                    case .failure:
+                        thumbnailPlaceholder
+                    @unknown default:
+                        thumbnailPlaceholder
+                    }
+                }
+            } else {
+                thumbnailPlaceholder
+            }
+        }
+        .frame(width: 34, height: 34)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(.white.opacity(0.10), lineWidth: 1)
+        }
+    }
+
+    private var thumbnailPlaceholder: some View {
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(item.state.tint.opacity(0.12))
+            .overlay {
+                Image(systemName: rewardIcon)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(item.state.tint)
+            }
+    }
+
+    private var rewardIcon: String {
+        switch representativeDrop?.rewardType ?? .inGame {
+        case .badge: return "person.badge.shield.check.fill"
+        case .emote: return "face.smiling.fill"
+        case .inGame: return "gift.fill"
+        }
     }
 }
 
@@ -1203,6 +1258,11 @@ private struct CampaignRequirementBanner: View {
 private struct CampaignDropPreviewRow: View {
     let drop: DropViewData
     let activity: CampaignActivitySnapshot
+    let fallbackURL: URL?
+
+    private var imageURLToUse: URL? {
+        (drop.imageURL ?? fallbackURL)?.highResolutionArtworkURL
+    }
 
     private var status: DropPreviewState {
         if activity.state == .blocked {
@@ -1268,14 +1328,21 @@ private struct CampaignDropPreviewRow: View {
 
     private var thumbnail: some View {
         Group {
-            if let url = drop.imageURL {
-                AsyncImage(url: url) { image in
-                    image
-                        .resizable()
-                        .interpolation(.high)
-                        .scaledToFill()
-                } placeholder: {
-                    thumbnailPlaceholder
+            if let url = imageURLToUse {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .empty:
+                        thumbnailPlaceholder
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .interpolation(.high)
+                            .scaledToFill()
+                    case .failure:
+                        thumbnailPlaceholder
+                    @unknown default:
+                        thumbnailPlaceholder
+                    }
                 }
             } else {
                 thumbnailPlaceholder
@@ -1291,12 +1358,20 @@ private struct CampaignDropPreviewRow: View {
 
     private var thumbnailPlaceholder: some View {
         RoundedRectangle(cornerRadius: 9, style: .continuous)
-            .fill(.thinMaterial)
+            .fill(status.tint.opacity(0.12))
             .overlay {
-                Image(systemName: "gift.fill")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.secondary)
+                Image(systemName: rewardIcon)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(status.tint)
             }
+    }
+
+    private var rewardIcon: String {
+        switch drop.rewardType {
+        case .badge: return "person.badge.shield.check.fill"
+        case .emote: return "face.smiling.fill"
+        case .inGame: return "gift.fill"
+        }
     }
 }
 
