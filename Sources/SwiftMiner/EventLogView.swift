@@ -293,6 +293,12 @@ private struct CampaignFeedRow: View {
 
 // MARK: - Log Feed Row
 
+private let relativeDateFormatter: RelativeDateTimeFormatter = {
+    let f = RelativeDateTimeFormatter()
+    f.unitsStyle = .abbreviated
+    return f
+}()
+
 private struct LogFeedRow: View {
     let event: EventEntry
     @Environment(NavigationModel.self) private var navigation
@@ -313,9 +319,7 @@ private struct LogFeedRow: View {
     }
 
     private var relativeTime: String {
-        let f = RelativeDateTimeFormatter()
-        f.unitsStyle = .abbreviated
-        return f.localizedString(for: event.timestamp, relativeTo: Date())
+        relativeDateFormatter.localizedString(for: event.timestamp, relativeTo: Date())
     }
 
     var body: some View {
