@@ -190,6 +190,8 @@ struct MenuBarContent: View {
         case .waitingForStream:  return "clock.fill"
         case .stopped, .idle:    return "stop.fill"
         case .paused:            return "clock.fill"
+        case .idleNoEligibleCampaigns: return "pause.circle"
+        case .blockedAccountNotLinked: return "link.badge.plus"
         }
     }
 }

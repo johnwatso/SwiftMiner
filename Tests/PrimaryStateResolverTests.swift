@@ -171,7 +171,7 @@ final class PrimaryStateResolverTests: XCTestCase {
         XCTAssertEqual(miner.primaryState, .ready)
         XCTAssertEqual(miner.resolvedPrimaryState?.resolved?.gameName, "Earnable Game")
         XCTAssertEqual(miner.resolvedPrimaryState?.resolved?.state, .idle)
-        XCTAssertEqual(miner.resolvedPrimaryState?.resolved?.reason, .none)
+        XCTAssertEqual(miner.resolvedPrimaryState?.resolved?.reason, MinerGameStateReason.none)
     }
 
     func testPriority_MiningOverReady() {

@@ -89,22 +89,11 @@ private struct GeneralSettingsView: View {
             }
 
             Section {
-                HStack(spacing: 12) {
-                    Text("Queue Display Style")
-                    Spacer(minLength: 8)
-                    Picker("", selection: $settings.queueDisplayStyle) {
-                        ForEach(Settings.QueueDisplayStyle.allCases) { style in
-                            Text(style.displayName).tag(style)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
-                    .frame(width: 260)
-                }
+                Toggle("Show Up Next queue", isOn: $settings.showOverviewQueue)
 
-                SettingsSecondaryText("Controls the Mining/Queued rail style in Overview. Stacked is the default, with Classic and Cover Flow available.")
+                SettingsSecondaryText("Displays the staggered campaign deck on the Overview page.")
             } header: {
-                Text("Queue Display")
+                Text("Overview")
             }
 
             Section {
@@ -259,7 +248,7 @@ private struct AccountSettingsView: View {
         Task {
             do {
                 let token = try TDMCookieParser.parseToken(from: url)
-                let authService = TwitchAuthService(clientId: ClientConfiguration.clientId)
+                let authService = TwitchAuthService(clientId: ClientConfiguration.clientId, tokenStore: KeychainTokenStore())
                 let account = try await authService.importTDMSession(token: token)
 
                 let minerId = navigation.minerManager.addAccount(account)
@@ -311,6 +300,20 @@ private struct MiningSettingsView: View {
             }
 
             Section {
+                Picker("Queue Source", selection: $settings.overviewQueueMinerId) {
+                    Text("All Miners").tag("")
+                    ForEach(navigation.minerManager.miners) { miner in
+                        Text(miner.username).tag(miner.id)
+                    }
+                }
+                .disabled(!settings.showOverviewQueue)
+
+                SettingsSecondaryText("Choose whether the Overview queue uses all miners or one account.")
+            } header: {
+                Text("Overview Queue")
+            }
+
+            Section {
                 Button("Manage Game Rules\u{2026}") {
                     isShowingGameManagement = true
                 }
@@ -326,6 +329,12 @@ private struct MiningSettingsView: View {
         }
         .formStyle(.grouped)
         .padding(24)
+        .task {
+            clearStaleOverviewQueueMinerSelection()
+        }
+        .onChange(of: navigation.minerManager.miners.map(\.id)) { _, _ in
+            clearStaleOverviewQueueMinerSelection()
+        }
         .sheet(isPresented: $isShowingGameManagement) {
             GamePreferenceManagementView(
                 settings: settings,
@@ -350,6 +359,12 @@ private struct MiningSettingsView: View {
         guard count > 0 else { return nil }
         return "\(count)"
     }
+
+    private func clearStaleOverviewQueueMinerSelection() {
+        guard !settings.overviewQueueMinerId.isEmpty else { return }
+        guard !navigation.minerManager.miners.contains(where: { $0.id == settings.overviewQueueMinerId }) else { return }
+        settings.overviewQueueMinerId = ""
+    }
 }
 
 // MARK: - Advanced Settings
@@ -360,12 +375,49 @@ private struct AdvancedSettingsView: View {
     @State private var showResetConfirmation = false
     @State private var showClientIdAlert = false
     @State private var tempClientId = ""
-#if DEBUG
-    @State private var debugGameDraft = ""
-#endif
+    @State private var showEndpointAlert = false
+    @State private var tempEndpoint = ""
 
     var body: some View {
         Form {
+            Section {
+                HStack {
+                    Text("SwiftBot Endpoint")
+                    Spacer()
+                    
+                    if settings.swiftBotEndpoint.isEmpty {
+                        Button("Configure Integration\u{2026}") {
+                            tempEndpoint = "http://127.0.0.1:8080"
+                            showEndpointAlert = true
+                        }
+                        .buttonStyle(.link)
+                    } else {
+                        HStack(spacing: 8) {
+                            Text(settings.swiftBotEndpoint)
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.secondary)
+                            
+                            Button("Edit\u{2026}") {
+                                tempEndpoint = settings.swiftBotEndpoint
+                                showEndpointAlert = true
+                            }
+                            .buttonStyle(.link)
+                            
+                            Button("Reset") {
+                                settings.swiftBotEndpoint = ""
+                                Task { await navigation.updateSwiftBotEndpoint("") }
+                            }
+                            .buttonStyle(.link)
+                            .foregroundStyle(.red)
+                        }
+                    }
+                }
+
+                SettingsSecondaryText("Address of the SwiftBot REST API (e.g. http://127.0.0.1:8080). Required for identity management and notifications.")
+            } header: {
+                Text("Integration")
+            }
+
             Section {
                 HStack {
                     Text("Twitch Client ID")
@@ -414,65 +466,32 @@ private struct AdvancedSettingsView: View {
 
 #if DEBUG
             Section {
-                Toggle("Enable Fake Queue", isOn: $settings.debugFakeQueueEnabled)
-
-                if settings.debugFakeQueueEnabled {
-                    Toggle("Show Debug Preview Badge", isOn: $settings.debugShowPreviewBadge)
-
-                    HStack(spacing: 12) {
-                        Text("Queue Source")
-                        Spacer(minLength: 8)
-                        Picker("", selection: $settings.debugFakeQueueSource) {
-                            ForEach(Settings.DebugFakeQueueSource.allCases) { source in
-                                Text(source.displayName).tag(source)
-                            }
-                        }
-                        .labelsHidden()
-                        .pickerStyle(.segmented)
-                        .frame(width: 240)
-                    }
-
-                    Stepper(
-                        "Queue Length: \(settings.clampedDebugFakeQueueLength)",
-                        value: $settings.debugFakeQueueLength,
-                        in: 1...8
-                    )
-
-                    if settings.debugFakeQueueSource == .customGames {
-                        HStack(spacing: 10) {
-                            TextField("Add custom game", text: $debugGameDraft)
-                                .textFieldStyle(.roundedBorder)
-
-                            Button("Add") {
-                                settings.addDebugFakeQueueGame(debugGameDraft)
-                                debugGameDraft = ""
-                            }
-                            .disabled(debugGameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        }
-
-                        if settings.debugFakeQueueCustomGames.isEmpty {
-                            SettingsSecondaryText("No custom games yet. Add game names for screenshot queue previews.")
-                        } else {
-                            List {
-                                ForEach(Array(settings.debugFakeQueueCustomGames.enumerated()), id: \.offset) { _, gameName in
-                                    Text(gameName)
-                                }
-                                .onDelete(perform: settings.removeDebugFakeQueueGames)
-                                .onMove(perform: settings.moveDebugFakeQueueGames)
-                            }
-                            .frame(minHeight: 120, maxHeight: 180)
-                        }
-                    }
-                }
-
                 Toggle("Bypass Link Requirement", isOn: $settings.debugBypassLinkRequirement)
                     .onChange(of: settings.debugBypassLinkRequirement) { _, newValue in
                         Task { await navigation.minerManager.setDebugBypassLinkRequirement(newValue) }
                     }
 
                 SettingsSecondaryText("Mines a random live channel for any time-active campaign, ignoring account linkage. Drops won't actually credit — for exercising the watch pipeline only.")
-
-                SettingsSecondaryText("Testing only. Overview renders a synthetic queue for screenshots. The debug badge is optional.")
+                
+                Divider()
+                
+                Toggle("Enable Fake Queue", isOn: $settings.debugFakeQueueEnabled)
+                
+                if settings.debugFakeQueueEnabled {
+                    Picker("Data Source", selection: $settings.debugFakeQueueSource) {
+                        ForEach(Settings.DebugFakeQueueSource.allCases) { source in
+                            Text(source.displayName).tag(source)
+                        }
+                    }
+                    
+                    Stepper("Queue Length: \(settings.debugFakeQueueLength)", value: $settings.debugFakeQueueLength, in: 1...8)
+                    
+                    if settings.debugFakeQueueSource == .customGames {
+                        NavigationLink("Manage Custom Games") {
+                            DebugCustomGamesView(settings: settings)
+                        }
+                    }
+                }
             } header: {
                 Text("Debug Testing")
             }
@@ -493,6 +512,23 @@ private struct AdvancedSettingsView: View {
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("Enter a custom Twitch Client ID to use for API requests. Leave blank to reset to default.")
+        }
+        .alert("SwiftBot Integration", isPresented: $showEndpointAlert) {
+            TextField("Endpoint URL", text: $tempEndpoint)
+            Button("Save") {
+                let cleanUrl = tempEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+                // Only save if URL passes localhost-only validation (mirrors service constraint)
+                guard let url = URL(string: cleanUrl),
+                      let scheme = url.scheme, scheme == "http" || scheme == "https",
+                      let host = url.host, host == "localhost" || host == "127.0.0.1" else {
+                    return
+                }
+                settings.swiftBotEndpoint = cleanUrl
+                Task { await navigation.updateSwiftBotEndpoint(cleanUrl) }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Enter the SwiftBot REST API address (e.g. http://127.0.0.1:8080).")
         }
     }
 }
@@ -515,6 +551,45 @@ private struct SettingsSecondaryText: View {
             .padding(.vertical, 1)
     }
 }
+
+#if DEBUG
+private struct DebugCustomGamesView: View {
+    @ObservedObject var settings: Settings
+    @State private var newGameName = ""
+
+    var body: some View {
+        List {
+            Section {
+                HStack {
+                    TextField("Game Name", text: $newGameName)
+                        .onSubmit { addGame() }
+                    
+                    Button("Add") { addGame() }
+                        .disabled(newGameName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            } footer: {
+                Text("These names will be used to generate fake campaign cards.")
+            }
+
+            Section {
+                ForEach(settings.debugFakeQueueCustomGames, id: \.self) { game in
+                    Text(game)
+                }
+                .onDelete { settings.removeDebugFakeQueueGames(atOffsets: $0) }
+                .onMove { settings.moveDebugFakeQueueGames(fromOffsets: $0, toOffset: $1) }
+            }
+        }
+        .navigationTitle("Debug Custom Games")
+    }
+
+    private func addGame() {
+        let name = newGameName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        settings.addDebugFakeQueueGame(name)
+        newGameName = ""
+    }
+}
+#endif
 
 // MARK: - Preview
 

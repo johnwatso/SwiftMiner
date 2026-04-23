@@ -1,10 +1,11 @@
 import SwiftUI
 import SwiftMinerCore
 
-/// Activity Overview - scalable multi-account workspace.
-struct ActivityOverviewView: View {
+/// Execution layer overview - scalable multi-miner workspace.
+struct MinersOverviewView: View {
     @Environment(NavigationModel.self) private var navigation
     @State private var aggregateProgress: AggregateProgress?
+    @State private var statsExpanded = true
 
     private var miners: [MinerManager.ManagedMiner] {
         navigation.minerManager.miners
@@ -22,7 +23,7 @@ struct ActivityOverviewView: View {
     var body: some View {
         Group {
             if miners.isEmpty {
-                EmptyActivityStateView()
+                EmptyMinersStateView()
             } else if hasMultipleMiners {
                 HSplitView {
                     minerListPane
@@ -32,7 +33,7 @@ struct ActivityOverviewView: View {
                 selectedMinerPane
             }
         }
-        .navigationTitle("Activity")
+        .navigationTitle("Miners")
         .task {
             syncSelection()
             await refresh()
@@ -48,7 +49,7 @@ struct ActivityOverviewView: View {
                 Text(hasMultipleMiners ? "Miners" : "Miner")
                     .font(.headline)
 
-                Text(hasMultipleMiners ? "Select an account to inspect its live state." : "Single-account focus mode.")
+                Text(hasMultipleMiners ? "Select a miner to inspect its state." : "Single-miner focus mode.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -90,13 +91,15 @@ struct ActivityOverviewView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    MinerStateCard(miner: miner, activityCampaigns: activeCampaigns) {
-                        if case .blocked(let reasons) = miner.primaryState, reasons.contains(.accountNotLinked) {
-                            Task { try? await navigation.minerManager.startMiner(minerId: miner.id, priorityGames: [], excludedGames: [], strategy: .mineAll) }
-                        }
-                    }
+                    MinerActivityCard(miner: miner, prominence: .expanded, onSelect: {
+                        navigation.selectedMinerId = miner.id
+                    }, onLinkAccount: {
+                        startLinkAccountFlow(for: miner)
+                    })
 
-                    campaignActivitySection(for: miner, campaigns: activeCampaigns)
+                    minerCampaignsSection(for: miner, campaigns: activeCampaigns)
+
+                    acrossAllAccountsSection
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(24)
@@ -108,11 +111,67 @@ struct ActivityOverviewView: View {
             MaterialEmptyStatePanel(
                 "Select a miner",
                 systemImage: "person.crop.square",
-                description: "Pick an account from the list to inspect its live control panel and activity feed."
+                description: "Pick a miner from the list to inspect its live control panel and activity feed."
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(24)
         }
+    }
+
+    private var acrossAllAccountsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    statsExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Text("ACROSS ALL ACCOUNTS")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.tertiary)
+
+                    Image(systemName: statsExpanded ? "chevron.up" : "chevron.down")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.tertiary)
+
+                    Spacer()
+                }
+                .padding(.leading, 4)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if statsExpanded {
+                LazyVGrid(
+                    columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: 3),
+                    spacing: 14
+                ) {
+                    MetricCard(
+                        title: "Configured Accounts",
+                        value: "\(miners.count)",
+                        subtitle: "\(aggregateProgress?.activeMiners ?? miners.filter { $0.isRunning }.count) running or waiting",
+                        icon: "person.2.fill",
+                        color: .blue
+                    )
+                    MetricCard(
+                        title: "Eligible Campaigns",
+                        value: "\(aggregateProgress?.totalCampaigns ?? 0)",
+                        subtitle: "across all accounts",
+                        icon: "play.fill",
+                        color: .green
+                    )
+                    MetricCard(
+                        title: "Claimed Today",
+                        value: "\(aggregateProgress?.claimedToday ?? 0)",
+                        subtitle: "\(aggregateProgress?.claimedDrops ?? 0) total claimed",
+                        icon: "sparkles.tv.fill",
+                        color: .orange
+                    )
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .padding(.horizontal, 2)
     }
 
     private var selectionBinding: Binding<String?> {
@@ -140,10 +199,21 @@ struct ActivityOverviewView: View {
         aggregateProgress = await navigation.minerManager.getAggregateProgress()
     }
 
+    private func startLinkAccountFlow(for miner: MinerManager.ManagedMiner) {
+        Task {
+            try? await navigation.minerManager.startMiner(
+                minerId: miner.id,
+                priorityGames: [],
+                excludedGames: [],
+                strategy: .mineAll
+            )
+        }
+    }
+
     @ViewBuilder
-    private func campaignActivitySection(for miner: MinerManager.ManagedMiner, campaigns: [Campaign]) -> some View {
+    private func minerCampaignsSection(for miner: MinerManager.ManagedMiner, campaigns: [Campaign]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("CAMPAIGNS")
+            Text("PRIORITISED CAMPAIGNS")
                 .font(.caption2.weight(.bold))
                 .foregroundStyle(.tertiary)
                 .padding(.leading, 4)
@@ -153,8 +223,7 @@ struct ActivityOverviewView: View {
                     NoActiveCampaignsRow()
                 } else {
                     ForEach(campaigns) { campaign in
-                        let isWatching = miner.status == .watching && miner.currentCampaignId == campaign.id
-                        CampaignActivityRow(campaign: campaign, isWatching: isWatching)
+                        CampaignStatusRow(miner: miner, campaign: campaign)
                     }
                 }
             }
@@ -163,7 +232,8 @@ struct ActivityOverviewView: View {
     }
 
     private func activePrioritisedCampaigns(for miner: MinerManager.ManagedMiner) -> [Campaign] {
-        let priorityKeys = miner.priorityGames
+        let configuredPriorityGames = miner.priorityGames.isEmpty ? Settings.shared.priorityGames : miner.priorityGames
+        let priorityKeys = configuredPriorityGames
             .map { normalizedGameKey($0) }
             .filter { !$0.isEmpty }
 
@@ -203,12 +273,36 @@ struct ActivityOverviewView: View {
 private struct MinerSourceListRow: View {
     let miner: MinerManager.ManagedMiner
     let compact: Bool
+    @ObservedObject private var settings = Settings.shared
+
+    private var snapshot: MinerActivitySnapshot {
+        MinerActivitySnapshot.resolve(
+            for: miner,
+            priorityGames: settings.priorityGames,
+            excludedGames: settings.excludedGames,
+            strategy: settings.miningStrategy,
+            includesBadgeAndEmoteCampaigns: settings.enableBadgesEmotes
+        )
+    }
+
+    private var hasBlockingIssues: Bool {
+        miner.status == .blockedAccountNotLinked || miner.status == .error || miner.needsAuth
+    }
 
     var body: some View {
         HStack(spacing: 10) {
-            Circle()
-                .fill(statusColor)
-                .frame(width: 8, height: 8)
+            ZStack(alignment: .topTrailing) {
+                Circle()
+                    .fill(statusColor)
+                    .frame(width: 8, height: 8)
+                
+                if hasBlockingIssues {
+                    Circle()
+                        .fill(Color.orange)
+                        .frame(width: 4, height: 4)
+                        .offset(x: 2, y: -2)
+                }
+            }
 
             VStack(alignment: .leading, spacing: compact ? 1 : 2) {
                 Text(miner.username)
@@ -237,70 +331,31 @@ private struct MinerSourceListRow: View {
     }
 
     private var statusColor: Color {
-        guard let resolved = miner.resolvedPrimaryState?.resolved else {
-            if miner.needsAuth { return .orange }
-            return miner.status == .watching ? .green : .gray
-        }
-
-        switch resolved.state {
-        case .watching:
-            return .green
-        case .blocked:
-            return resolved.reason == .notLinked ? .orange : .cyan
-        case .idle:
-            return .gray
-        }
+        snapshot.statusColor
     }
 
     private var activityLabel: String {
-        if let resolved = miner.resolvedPrimaryState?.resolved {
-            switch resolved.state {
-            case .watching:
-                return "Watching \(resolved.gameName)"
-            case .blocked:
-                if resolved.reason == .notLinked {
-                    return "Needs Link"
-                }
-                if let campaign = firstActivePrioritisedCampaign {
-                    return campaign.activityStatusMessage
-                }
-                return "No active campaigns"
-            case .idle:
-                if let campaign = firstActivePrioritisedCampaign {
-                    return campaign.activityStatusMessage
-                }
-                return "No active campaigns"
-            }
+        if snapshot.now.campaignId != nil {
+            return "Watching \(snapshot.now.title)"
         }
-
-        if miner.needsAuth {
-            return "Needs Link"
+        if let next = snapshot.upNext {
+            return "Likely next: \(next.title)"
         }
-        return "No active campaigns"
-    }
-
-    private var firstActivePrioritisedCampaign: Campaign? {
-        let priorityKeys = miner.priorityGames
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
-            .filter { !$0.isEmpty }
-
-        guard !priorityKeys.isEmpty else { return nil }
-
-        let prioritySet = Set(priorityKeys)
-        return miner.allCampaigns.first { campaign in
-            campaign.isTimeActive &&
-            campaign.status != .disabled &&
-            (
-                prioritySet.contains(campaign.game.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()) ||
-                prioritySet.contains(campaign.game.id.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
-            )
-        }
+        return snapshot.statusText
     }
 }
 
-private struct CampaignActivityRow: View {
+private struct CampaignStatusRow: View {
+    let miner: MinerManager.ManagedMiner
     let campaign: Campaign
-    let isWatching: Bool
+
+    private var status: CampaignActivityStatus {
+        campaign.activityStatus(for: miner)
+    }
+
+    private var isWatching: Bool {
+        status == .watching
+    }
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
@@ -318,7 +373,7 @@ private struct CampaignActivityRow: View {
 
             Spacer(minLength: 12)
 
-            Text(campaign.activityStatusMessage(isWatching: isWatching))
+            Text(status.label)
                 .font(.caption)
                 .foregroundStyle(isWatching ? AnyShapeStyle(Color.green) : AnyShapeStyle(.tertiary))
                 .lineLimit(1)
@@ -334,11 +389,11 @@ private struct NoActiveCampaignsRow: View {
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
-                Text("No active campaigns")
+                Text("Idle — No eligible campaigns")
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(.primary)
 
-                Text("Prioritised games will appear here when drops are live.")
+                Text("No prioritised drops are available for this account right now.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -352,30 +407,62 @@ private struct NoActiveCampaignsRow: View {
     }
 }
 
-extension Campaign {
-    var activityStatusMessage: String {
-        activityStatusMessage(isWatching: false)
-    }
+// MARK: - Metric Card
 
-    func activityStatusMessage(isWatching: Bool) -> String {
-        if !isAccountConnected {
-            return "Account not linked"
+struct MetricCard: View {
+    let title: String
+    let value: String
+    let subtitle: String
+    let icon: String
+    let color: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(color.opacity(0.12))
+
+                    Image(systemName: icon)
+                        .foregroundStyle(color)
+                        .font(.system(size: 13, weight: .semibold))
+                }
+                .frame(width: 28, height: 28)
+
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                Spacer(minLength: 0)
+            }
+
+            Text(value)
+                .font(.system(size: 32, weight: .semibold, design: .rounded))
+
+            Text(subtitle)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
         }
-        if isWatching {
-            return "Mining"
+        .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
+        .padding(16)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
+                .strokeBorder(.white.opacity(0.16), lineWidth: 1)
         }
-        return "Waiting for eligible stream"
+        .shadow(color: .black.opacity(0.06), radius: 5, y: 2)
     }
 }
 
-private struct EmptyActivityStateView: View {
+private struct EmptyMinersStateView: View {
     @Environment(NavigationModel.self) private var navigation
 
     var body: some View {
         MaterialEmptyStatePanel(
             "No Twitch accounts connected",
             systemImage: "person.badge.plus",
-            description: "Add an account to turn this space into a live activity dashboard."
+            description: "Add an account to turn this space into a live miner dashboard."
         ) {
             Button {
                 navigation.showAddAccountSheet = true
@@ -391,6 +478,6 @@ private struct EmptyActivityStateView: View {
 }
 
 #Preview {
-    ActivityOverviewView()
+    MinersOverviewView()
         .environment(NavigationModel(clientId: "preview"))
 }

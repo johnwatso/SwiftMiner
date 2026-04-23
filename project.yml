@@ -35,6 +35,7 @@ targets:
         buildPhase: resources
     dependencies:
       - target: SwiftMinerCore
+      - target: SwiftMinerService
       - package: Sparkle
         product: Sparkle
     info:
@@ -66,6 +67,37 @@ targets:
           - "@executable_path/../Frameworks"
         SPARKLE_FEED_URL: https://johnwatso.github.io/SwiftMiner/appcast.xml
         SPARKLE_PUBLIC_ED_KEY: "OTycmeGRCsewFd9QUCV93CiC40oE+iiewSfWMptLeLI="
+
+  SwiftMinerService:
+    type: library.static
+    platform: macOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: Sources/SwiftMinerService
+        excludes:
+          - main.swift
+    dependencies:
+      - target: SwiftMinerCore
+    settings:
+      base:
+        PRODUCT_NAME: SwiftMinerService
+        PRODUCT_BUNDLE_IDENTIFIER: com.swiftminer.service
+        SWIFT_VERSION: "6.0"
+        SWIFT_STRICT_CONCURRENCY: complete
+
+  SwiftMinerServiceTool:
+    type: tool
+    platform: macOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: Sources/SwiftMinerService/main.swift
+    dependencies:
+      - target: SwiftMinerCore
+      - target: SwiftMinerService
+    settings:
+      base:
+        PRODUCT_NAME: SwiftMinerServiceTool
+        SWIFT_VERSION: "6.0"
 
   SwiftMinerCLI:
     type: tool

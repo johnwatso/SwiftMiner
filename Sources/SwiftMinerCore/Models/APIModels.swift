@@ -57,6 +57,31 @@ public struct TwitchUser: Codable, Sendable {
         self.viewCount = viewCount
         self.createdAt = createdAt
     }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        login = try container.decode(String.self, forKey: .login)
+        displayName = try container.decode(String.self, forKey: .displayName)
+        type = try container.decode(String.self, forKey: .type)
+        broadcasterType = try container.decode(String.self, forKey: .broadcasterType)
+        description = try container.decode(String.self, forKey: .description)
+        viewCount = try container.decode(Int.self, forKey: .viewCount)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+
+        // Handle empty strings in URL fields by treating them as nil
+        if let profileStr = try container.decodeIfPresent(String.self, forKey: .profileImageUrl), !profileStr.isEmpty {
+            profileImageUrl = URL(string: profileStr)
+        } else {
+            profileImageUrl = nil
+        }
+
+        if let offlineStr = try container.decodeIfPresent(String.self, forKey: .offlineImageUrl), !offlineStr.isEmpty {
+            offlineImageUrl = URL(string: offlineStr)
+        } else {
+            offlineImageUrl = nil
+        }
+    }
 }
 
 /// Response containing user information

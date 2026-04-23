@@ -1,11 +1,11 @@
 import SwiftUI
 import SwiftMinerCore
 
-// MARK: - Account Detail (Content Panel)
+// MARK: - Miner Detail (Content Panel)
 
 /// Full-panel view for a single managed miner.
 /// Shows status, stats, controls, and a live log console.
-struct AccountDetailView: View {
+struct MinerDetailView: View {
     let miner: MinerManager.ManagedMiner
 
     @Environment(NavigationModel.self) private var navigation
@@ -27,6 +27,13 @@ struct AccountDetailView: View {
 
                 secondaryStatsSection
                 controlsSection
+                
+#if DEBUG
+                if !miner.debugWinningQueue.isEmpty {
+                    debugWinningQueueSection
+                }
+#endif
+                
                 logSection
             }
             .padding(24)
@@ -39,7 +46,7 @@ struct AccountDetailView: View {
                 } label: {
                     Image(systemName: "trash")
                 }
-                .help("Remove account")
+                .help("Remove miner")
             }
         }
     }
@@ -114,7 +121,7 @@ struct AccountDetailView: View {
             let events = minerEvents
 
             if events.isEmpty {
-                Text(miner.isRunning ? "Waiting for activity…" : "This account will resume automatically when campaigns are available.")
+                Text(miner.isRunning ? "Waiting for activity…" : "This miner will resume automatically when campaigns are available.")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     .padding(.horizontal, 14)
@@ -128,6 +135,52 @@ struct AccountDetailView: View {
         .padding(20)
         .glassCard()
     }
+
+#if DEBUG
+    private var debugWinningQueueSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Winning Queue")
+                    .font(.headline)
+                
+                Spacer()
+                
+                Text("DEBUG ONLY")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(.orange.opacity(0.12), in: Capsule())
+            }
+
+            VStack(spacing: 8) {
+                ForEach(miner.debugWinningQueue) { campaign in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(campaign.game.name)
+                                .font(.subheadline.weight(.medium))
+                            Text(campaign.name)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        
+                        Spacer()
+                        
+                        Text(campaign.miningStatus.rawValue)
+                            .font(.caption2.monospaced())
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
+                    }
+                    .padding(10)
+                    .glassControlSurface()
+                }
+            }
+        }
+        .padding(20)
+        .glassCard()
+    }
+#endif
 }
 
 private struct MinerStatCard: View {
@@ -209,7 +262,7 @@ struct MinerLogConsole: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 1) {
                         ForEach(visibleEntries) { entry in
-                            EventRow(event: entry, showRaw: false)
+                            MinerEventRow(event: entry, showRaw: false)
                                 .id(entry.id)
                         }
                     }
@@ -232,9 +285,9 @@ struct MinerLogConsole: View {
     }
 }
 
-// MARK: - Account Inspector (third column)
+// MARK: - Miner Inspector (third column)
 
-struct AccountInspectorView: View {
+struct MinerInspectorView: View {
     let miner: MinerManager.ManagedMiner
     @Environment(NavigationModel.self) private var navigation
 
@@ -247,7 +300,7 @@ struct AccountInspectorView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    inspectorSection(title: "Account") {
+                    inspectorSection(title: "Miner") {
                         LabeledContent("Username", value: miner.username)
                         LabeledContent("Status", value: miner.statusLabel)
                         LabeledContent("Running", value: miner.isRunning ? "Yes" : "No")
@@ -305,7 +358,7 @@ struct SystemInspectorView: View {
                     let totalDrops = miners.reduce(0) { $0 + $1.dropsClaimed }
 
                     inspectorSection(title: "Overview") {
-                        LabeledContent("Total Accounts", value: "\(miners.count)")
+                        LabeledContent("Total Miners", value: "\(miners.count)")
                         LabeledContent("Active Miners", value: "\(running.count)")
                         LabeledContent("Total Drops", value: "\(totalDrops)")
                     }
@@ -367,8 +420,8 @@ struct StatusDot: View {
 
 // MARK: - Preview
 
-#Preview("Account Detail") {
-    AccountDetailView(miner: MinerManager.ManagedMiner(
+#Preview("Miner Detail") {
+    MinerDetailView(miner: MinerManager.ManagedMiner(
         id: "preview",
         accountId: "acc1",
         username: "JohnStreamer",
@@ -381,8 +434,8 @@ struct StatusDot: View {
     .frame(width: 600, height: 700)
 }
 
-#Preview("Account Inspector") {
-    AccountInspectorView(miner: MinerManager.ManagedMiner(
+#Preview("Miner Inspector") {
+    MinerDetailView(miner: MinerManager.ManagedMiner(
         id: "preview",
         accountId: "acc1",
         username: "JohnStreamer",
