@@ -23,32 +23,16 @@ struct EventLogView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            headerSection
-            
-            ScrollView {
-                VStack(spacing: 24) {
-                    SystemStatusCard()
-                    
-                    CampaignGroupedSections()
-                    
-                    detailedEventsSection
-                }
-                .padding(24)
+        ScrollView {
+            VStack(spacing: 16) {
+                SystemStatusCard()
+                CampaignGroupedSections()
+                detailedEventsSection
             }
+            .padding(24)
         }
         .navigationTitle("Events")
         .toolbar {
-            ToolbarItemGroup {
-                Picker("Level", selection: $levelFilter) {
-                    Text("All Levels").tag(nil as EventLevel?)
-                    Text("Info").tag(EventLevel.info as EventLevel?)
-                    Text("Warning").tag(EventLevel.warning as EventLevel?)
-                    Text("Error").tag(EventLevel.error as EventLevel?)
-                }
-                .pickerStyle(.menu)
-            }
-
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     navigation.clearEvents()
@@ -61,64 +45,74 @@ struct EventLogView: View {
         }
     }
 
-    private var headerSection: some View {
-        HStack {
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
-                TextField("Search events...", text: $searchText)
-                    .textFieldStyle(.plain)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .glassControlSurface()
-
-            Spacer()
-        }
-        .padding(.horizontal, 24)
-        .padding(.top, 24)
-    }
-
     private var detailedEventsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 0) {
             Button {
                 withAnimation(.spring(duration: 0.3)) {
                     detailedEventsExpanded.toggle()
                 }
             } label: {
                 HStack {
-                    Text("Detailed Events")
-                        .font(.headline)
+                    Text("Detailed Logs")
+                        .font(.subheadline.weight(.semibold))
                     Spacer()
                     Image(systemName: "chevron.right")
                         .font(.caption.weight(.bold))
                         .rotationEffect(.degrees(detailedEventsExpanded ? 90 : 0))
                 }
                 .foregroundStyle(.secondary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
             if detailedEventsExpanded {
-                if filteredEvents.isEmpty {
-                    Text("No recent activity")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .padding(.leading, 12)
-                        .padding(.top, 8)
-                } else {
-                    VStack(spacing: 8) {
-                        ForEach(filteredEvents) { event in
-                            SimplifiedEventRow(event: event)
+                VStack(spacing: 8) {
+                    // Search + filter only visible when the section is open
+                    HStack(spacing: 8) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "magnifyingglass")
+                                .foregroundStyle(.secondary)
+                                .font(.caption)
+                            TextField("Search logs…", text: $searchText)
+                                .textFieldStyle(.plain)
+                                .font(.subheadline)
                         }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .glassControlSurface()
+
+                        Picker("Level", selection: $levelFilter) {
+                            Text("All").tag(nil as EventLevel?)
+                            Text("Info").tag(EventLevel.info as EventLevel?)
+                            Text("Warn").tag(EventLevel.warning as EventLevel?)
+                            Text("Error").tag(EventLevel.error as EventLevel?)
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
                     }
-                    .transition(.opacity.combined(with: .move(edge: .top)))
+                    .padding(.horizontal, 14)
+
+                    if filteredEvents.isEmpty {
+                        Text(navigation.events.isEmpty ? "No events recorded this session." : "No results for '\(searchText)'.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 14)
+                            .padding(.bottom, 10)
+                    } else {
+                        VStack(spacing: 4) {
+                            ForEach(filteredEvents) { event in
+                                SimplifiedEventRow(event: event)
+                            }
+                        }
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                        .padding(.bottom, 8)
+                    }
                 }
             }
         }
-        .padding(.top, 8)
+        .background(Color.secondary.opacity(0.07), in: RoundedRectangle(cornerRadius: 12))
     }
 }
 
