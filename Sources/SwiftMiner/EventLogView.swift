@@ -293,7 +293,7 @@ private struct CampaignFeedRow: View {
 
 // MARK: - Log Feed Row
 
-private let relativeDateFormatter: RelativeDateTimeFormatter = {
+@MainActor private let relativeDateFormatter: RelativeDateTimeFormatter = {
     let f = RelativeDateTimeFormatter()
     f.unitsStyle = .abbreviated
     return f
