@@ -229,6 +229,10 @@ public final class Settings: ObservableObject {
     /// Twitch application Client ID (set once; used by all miners)
     @AppStorage("twitchClientId", store: Settings.appStorageStore)
     public var twitchClientId: String = ""
+
+    /// SwiftBot integration endpoint (e.g. http://127.0.0.1:8080)
+    @AppStorage("swiftBotEndpoint", store: Settings.appStorageStore)
+    public var swiftBotEndpoint: String = ""
     
     /// JSON-encoded array of GamePreference for selected games
     @AppStorage("gamePreferencesData", store: Settings.appStorageStore)

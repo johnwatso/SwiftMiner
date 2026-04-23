@@ -262,7 +262,7 @@ struct MinerLogConsole: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 1) {
                         ForEach(visibleEntries) { entry in
-                            EventRow(event: entry, showRaw: false)
+                            MinerEventRow(event: entry, showRaw: false)
                                 .id(entry.id)
                         }
                     }

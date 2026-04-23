@@ -49,7 +49,8 @@ struct SwiftMinerCLI {
 
         // Check for existing auth
         do {
-            let authService = TwitchAuthService(clientId: clientId)
+            let tokenStore = KeychainTokenStore()
+            let authService = TwitchAuthService(clientId: clientId, tokenStore: tokenStore)
             if let account = try await authService.loadSavedAccount() {
                 print("Found saved account: \(account.username)")
                 print("Token valid: \(account.isTokenValid)")

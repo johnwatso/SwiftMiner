@@ -22,7 +22,8 @@ struct SidebarView: View {
             GlassSelectionItem(id: .overview, title: "Overview", systemImage: "waveform.path.ecg"),
             GlassSelectionItem(id: .miners, title: "Miners", systemImage: "cpu"),
             GlassSelectionItem(id: .drops, title: "Drops", systemImage: "gamecontroller.fill"),
-            GlassSelectionItem(id: .events, title: "Events", systemImage: "bell.fill")
+            GlassSelectionItem(id: .events, title: "Events", systemImage: "bell.fill"),
+            GlassSelectionItem(id: .admin, title: "Admin", systemImage: "lock.shield.fill")
         ]
     }
 
