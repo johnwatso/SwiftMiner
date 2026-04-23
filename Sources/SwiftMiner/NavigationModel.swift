@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftMinerCore
+import SwiftMinerService
 
 /// Navigation model for the multi-miner dashboard
 /// Manages sidebar selection and view routing
@@ -8,28 +9,30 @@ import SwiftMinerCore
 public final class NavigationModel {
     
     // MARK: - Navigation State
-    
     public enum SidebarItem: Hashable, Identifiable {
         case overview
         case miners
         case drops
         case events
-        
+        case admin
+
         public var id: String {
             switch self {
             case .overview: return "overview"
             case .miners: return "miners"
             case .drops: return "drops"
             case .events: return "events"
+            case .admin: return "admin"
             }
         }
-        
+
         public var displayName: String {
             switch self {
             case .overview: return "Overview"
-            case .miners: return "Miners"
+            case .miners: return "miners"
             case .drops: return "Drops"
             case .events: return "Events"
+            case .admin: return "Admin"
             }
         }
     }
@@ -90,6 +93,8 @@ public final class NavigationModel {
 
     public var selectedMinerId: String?
     public var selectedCampaignId: String?
+    public var unownedAccounts: [Account] = []
+    public var swiftBotState: SwiftBotConnectionState = .notConfigured
 
     public func requestDropsFilter(_ intent: DropsFilterIntent) {
         requestedDropsFilter = intent
@@ -98,6 +103,38 @@ public final class NavigationModel {
     public func consumeDropsFilterIntent() -> DropsFilterIntent? {
         defer { requestedDropsFilter = nil }
         return requestedDropsFilter
+    }
+
+    public func refreshUnownedAccounts() async {
+        unownedAccounts = await adminLinkingService.getUnownedAccounts()
+    }
+
+    // MARK: - SwiftBot Integration
+
+    /// Trigger a SwiftBot connectivity check and update local state.
+    public func checkSwiftBotConnection() async {
+        let newState = await swiftBotConnectionService.checkHealth()
+        self.swiftBotState = newState
+    }
+
+    /// Update the SwiftBot endpoint and refresh connectivity.
+    public func updateSwiftBotEndpoint(_ urlString: String) async {
+        await swiftBotConnectionService.updateEndpoint(urlString)
+        await checkSwiftBotConnection()
+    }
+
+    private func startSwiftBotStateSync() {
+        // Periodically sync state to UI
+        Task {
+            while !Task.isCancelled {
+                // We use checkHealth() as the sync mechanism (30s interval)
+                let newState = await swiftBotConnectionService.checkHealth()
+                await MainActor.run {
+                    self.swiftBotState = newState
+                }
+                try? await Task.sleep(nanoseconds: 30_000_000_000) // 30 seconds
+            }
+        }
     }
 
     // MARK: - Events
@@ -115,6 +152,9 @@ public final class NavigationModel {
     // MARK: - Miner Manager
 
     public let minerManager: MinerManager
+    public let adminLinkingService: any AdminLinkingService
+    public let swiftBotConnectionService: any SwiftBotConnectionService
+    private let sqliteManager: SQLiteManager
     private var onboardingSetupTask: Task<Void, Never>?
     private var lastKnownAccountCount = 0
     private var hasConfiguredOnboardingBaseline = false
@@ -123,6 +163,21 @@ public final class NavigationModel {
 
     public init(clientId: String, minerManager: MinerManager? = nil) {
         self.minerManager = minerManager ?? MinerManager(clientId: clientId)
+        
+        let folderURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("SwiftMiner")
+        
+        // Create directory synchronously to avoid races in Phase 1
+        try? FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
+        
+        let dbURL = folderURL.appendingPathComponent("miner.db")
+        let manager = SQLiteManager(databaseURL: dbURL)
+        self.sqliteManager = manager
+        self.adminLinkingService = SQLiteAdminLinkingService(manager: manager)
+        
+        // Initialize SwiftBot connection service
+        let endpoint = Settings.shared.swiftBotEndpoint
+        self.swiftBotConnectionService = RestSwiftBotConnectionService(endpoint: endpoint)
     }
 
     // MARK: - Setup
@@ -130,6 +185,16 @@ public final class NavigationModel {
     /// Wire MinerManager callbacks and load saved accounts.
     /// Must be awaited before `AppModel.setup()` so `miners` is populated.
     public func setup() async {
+        // Phase 1: Open DB before any service calls
+        do {
+            try await sqliteManager.open()
+        } catch {
+            print("[NavigationModel] Failed to open database: \(error)")
+        }
+
+        await checkSwiftBotConnection()
+        startSwiftBotStateSync()
+
         minerManager.onLogMessage = { [weak self] minerId, message in
             Task { @MainActor [weak self] in
                 guard let self else { return }

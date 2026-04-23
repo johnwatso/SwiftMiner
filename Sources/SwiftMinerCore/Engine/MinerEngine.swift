@@ -183,9 +183,9 @@ public actor MinerEngine {
 
     // MARK: - Initialization
 
-    public init(clientId: String) {
+    public init(clientId: String, tokenStore: any TokenStore = KeychainTokenStore()) {
         self.clientId = clientId
-        self.authService = TwitchAuthService(clientId: clientId)
+        self.authService = TwitchAuthService(clientId: clientId, tokenStore: tokenStore)
         self.apiClient = TwitchAPIClient(authService: authService, clientId: clientId)
         self.dropsService = DropsService(apiClient: apiClient)
         self.watchSessionManager = WatchSessionManager(apiClient: apiClient)

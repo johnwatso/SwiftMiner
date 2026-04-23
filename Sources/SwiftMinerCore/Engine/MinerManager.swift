@@ -13,6 +13,7 @@ public final class MinerManager {
         public let id: String
         public let accountId: String
         public let username: String
+        public var ownerDiscordId: String?
         public var status: MinerStatus
         public var needsAuth: Bool
         public var currentCampaign: String?
@@ -82,6 +83,7 @@ public final class MinerManager {
             id: String,
             accountId: String,
             username: String,
+            ownerDiscordId: String? = nil,
             stateStore: AccountStateStore? = nil,
             status: MinerStatus = .idle,
             needsAuth: Bool = false,
@@ -96,6 +98,7 @@ public final class MinerManager {
             self.id = id
             self.accountId = accountId
             self.username = username
+            self.ownerDiscordId = ownerDiscordId
             self.stateStore = stateStore
             self.status = status
             self.needsAuth = needsAuth
@@ -237,7 +240,10 @@ public final class MinerManager {
     
     /// Client ID for Twitch API (mutable so it can be updated before first account is added)
     private var clientId: String
-    
+
+    /// Persistent store for account tokens (Phase: Managed Platform)
+    private let tokenStore: any TokenStore
+
     /// Track drop IDs claimed today (locally)
     private var claimedTodayIds: Set<String> = []
     private var lastClaimDate: Date = Date()
@@ -250,9 +256,14 @@ public final class MinerManager {
     
     // MARK: - Initialization
     
-    public init(clientId: String, campaignStore: CampaignStore = CampaignStore()) {
+    public init(
+        clientId: String, 
+        campaignStore: CampaignStore = CampaignStore(),
+        tokenStore: any TokenStore = KeychainTokenStore()
+    ) {
         self.clientId = clientId
         self.campaignStore = campaignStore
+        self.tokenStore = tokenStore
         self.dataCoordinator = MiningDataCoordinator(campaignStore: campaignStore)
     }
     
@@ -333,10 +344,10 @@ public final class MinerManager {
         guard !isSetup else { return }
         isSetup = true
 
-        let authService = TwitchAuthService(clientId: clientId)
+        let authService = TwitchAuthService(clientId: clientId, tokenStore: tokenStore)
         do {
             let accounts = try await authService.loadAllAccounts()
-            print("[MinerManager] Loading \(accounts.count) saved accounts from keychain")
+            print("[MinerManager] Loading \(accounts.count) saved accounts from store")
             for account in accounts {
                 addAccount(account)
             }
@@ -383,7 +394,8 @@ public final class MinerManager {
         let miner = ManagedMiner(
             id: minerId,
             accountId: account.id,
-            username: account.username
+            username: account.username,
+            ownerDiscordId: account.ownerDiscordId
         )
         miners.append(miner)
         onMinersChanged?()
@@ -440,8 +452,8 @@ public final class MinerManager {
         // Unregister from data coordinator
         dataCoordinator.unregisterMiner(minerId: minerId, accountId: miner.accountId)
         
-        // Remove from keychain
-        let authService = TwitchAuthService(clientId: clientId)
+        // Remove from persistent store
+        let authService = TwitchAuthService(clientId: clientId, tokenStore: tokenStore)
         try? await authService.logout(accountId: miner.accountId)
         
         // Remove from collections
@@ -607,7 +619,7 @@ public final class MinerManager {
             await forceRefreshMiner(minerId: miner.id)
         }
     }
-    
+
     // MARK: - Progress Aggregation
     
     /// Get aggregated progress across all miners
@@ -932,7 +944,8 @@ public final class MinerManager {
         isRunning: Bool? = nil,
         priorityGames: [String]? = nil,
         needsAuth: Bool? = nil,
-        debugWinningQueue: [Campaign]? = nil
+        debugWinningQueue: [Campaign]? = nil,
+        ownerDiscordId: String? = nil
     ) {
         guard let index = miners.firstIndex(where: { $0.id == minerId }) else { return }
 
@@ -951,6 +964,7 @@ public final class MinerManager {
         if let needsAuth = needsAuth { miner.needsAuth = needsAuth }
         if let priorityGames = priorityGames { miner.priorityGames = priorityGames }
         if let winningQueue = debugWinningQueue { miner.debugWinningQueue = winningQueue }
+        if let ownerId = ownerDiscordId { miner.ownerDiscordId = ownerId }
 
         miners[index] = miner
         onMinersChanged?()

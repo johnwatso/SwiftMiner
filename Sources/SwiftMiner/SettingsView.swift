@@ -248,7 +248,7 @@ private struct AccountSettingsView: View {
         Task {
             do {
                 let token = try TDMCookieParser.parseToken(from: url)
-                let authService = TwitchAuthService(clientId: ClientConfiguration.clientId)
+                let authService = TwitchAuthService(clientId: ClientConfiguration.clientId, tokenStore: KeychainTokenStore())
                 let account = try await authService.importTDMSession(token: token)
 
                 let minerId = navigation.minerManager.addAccount(account)
@@ -375,9 +375,49 @@ private struct AdvancedSettingsView: View {
     @State private var showResetConfirmation = false
     @State private var showClientIdAlert = false
     @State private var tempClientId = ""
+    @State private var showEndpointAlert = false
+    @State private var tempEndpoint = ""
 
     var body: some View {
         Form {
+            Section {
+                HStack {
+                    Text("SwiftBot Endpoint")
+                    Spacer()
+                    
+                    if settings.swiftBotEndpoint.isEmpty {
+                        Button("Configure Integration\u{2026}") {
+                            tempEndpoint = "http://127.0.0.1:8080"
+                            showEndpointAlert = true
+                        }
+                        .buttonStyle(.link)
+                    } else {
+                        HStack(spacing: 8) {
+                            Text(settings.swiftBotEndpoint)
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.secondary)
+                            
+                            Button("Edit\u{2026}") {
+                                tempEndpoint = settings.swiftBotEndpoint
+                                showEndpointAlert = true
+                            }
+                            .buttonStyle(.link)
+                            
+                            Button("Reset") {
+                                settings.swiftBotEndpoint = ""
+                                Task { await navigation.updateSwiftBotEndpoint("") }
+                            }
+                            .buttonStyle(.link)
+                            .foregroundStyle(.red)
+                        }
+                    }
+                }
+
+                SettingsSecondaryText("Address of the SwiftBot REST API (e.g. http://127.0.0.1:8080). Required for identity management and notifications.")
+            } header: {
+                Text("Integration")
+            }
+
             Section {
                 HStack {
                     Text("Twitch Client ID")
@@ -472,6 +512,23 @@ private struct AdvancedSettingsView: View {
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("Enter a custom Twitch Client ID to use for API requests. Leave blank to reset to default.")
+        }
+        .alert("SwiftBot Integration", isPresented: $showEndpointAlert) {
+            TextField("Endpoint URL", text: $tempEndpoint)
+            Button("Save") {
+                let cleanUrl = tempEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+                // Only save if URL passes localhost-only validation (mirrors service constraint)
+                guard let url = URL(string: cleanUrl),
+                      let scheme = url.scheme, scheme == "http" || scheme == "https",
+                      let host = url.host, host == "localhost" || host == "127.0.0.1" else {
+                    return
+                }
+                settings.swiftBotEndpoint = cleanUrl
+                Task { await navigation.updateSwiftBotEndpoint(cleanUrl) }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Enter the SwiftBot REST API address (e.g. http://127.0.0.1:8080).")
         }
     }
 }

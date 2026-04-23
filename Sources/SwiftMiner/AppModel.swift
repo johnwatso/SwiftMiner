@@ -191,7 +191,7 @@ public final class AppModel {
             return
         }
         await engine.stop()
-        let authService = TwitchAuthService(clientId: clientId)
+        let authService = TwitchAuthService(clientId: clientId, tokenStore: KeychainTokenStore())
         try? await authService.logout()
         isAuthenticated = false
         authInfo = nil
