@@ -230,6 +230,10 @@ public final class Settings: ObservableObject {
     @AppStorage("twitchClientId", store: Settings.appStorageStore)
     public var twitchClientId: String = ""
 
+    /// Whether SwiftBot Discord integration is enabled
+    @AppStorage("swiftBotEnabled", store: Settings.appStorageStore)
+    public var swiftBotEnabled: Bool = false
+
     /// SwiftBot integration endpoint (e.g. http://127.0.0.1:8080)
     @AppStorage("swiftBotEndpoint", store: Settings.appStorageStore)
     public var swiftBotEndpoint: String = ""
@@ -622,6 +626,7 @@ public final class Settings: ObservableObject {
         lastSelectedGameId = ""
         hasDismissedOnboarding = false
         twitchClientId = ""
+        swiftBotEnabled = false
         swiftBotEndpoint = ""
         gamePreferencesData = "[]"
         selectedDropsFiltersData = "[\"active\"]"

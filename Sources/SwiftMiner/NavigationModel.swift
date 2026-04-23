@@ -113,26 +113,30 @@ public final class NavigationModel {
 
     /// Trigger a SwiftBot connectivity check and update local state.
     public func checkSwiftBotConnection() async {
+        guard Settings.shared.swiftBotEnabled else {
+            self.swiftBotState = .notConfigured
+            return
+        }
         let newState = await swiftBotConnectionService.checkHealth()
         self.swiftBotState = newState
     }
 
     /// Update the SwiftBot endpoint and refresh connectivity.
     public func updateSwiftBotEndpoint(_ urlString: String) async {
+        guard Settings.shared.swiftBotEnabled else { return }
         await swiftBotConnectionService.updateEndpoint(urlString)
         await checkSwiftBotConnection()
     }
 
     private func startSwiftBotStateSync() {
-        // Periodically sync state to UI
         Task {
             while !Task.isCancelled {
-                // We use checkHealth() as the sync mechanism (30s interval)
+                try? await Task.sleep(nanoseconds: 30_000_000_000) // 30 seconds
+                guard Settings.shared.swiftBotEnabled else { continue }
                 let newState = await swiftBotConnectionService.checkHealth()
                 await MainActor.run {
                     self.swiftBotState = newState
                 }
-                try? await Task.sleep(nanoseconds: 30_000_000_000) // 30 seconds
             }
         }
     }
@@ -192,7 +196,9 @@ public final class NavigationModel {
             print("[NavigationModel] Failed to open database: \(error)")
         }
 
-        await checkSwiftBotConnection()
+        if Settings.shared.swiftBotEnabled {
+            await checkSwiftBotConnection()
+        }
         startSwiftBotStateSync()
 
         minerManager.onLogMessage = { [weak self] minerId, message in

@@ -10,6 +10,7 @@ import SwiftMinerCore
 ///   Events
 struct SidebarView: View {
     @Environment(NavigationModel.self) private var navigation
+    @ObservedObject private var settings = Settings.shared
 
     private var blockedMinerCount: Int {
         navigation.minerManager.miners.filter {
@@ -18,13 +19,16 @@ struct SidebarView: View {
     }
 
     private var sidebarItems: [GlassSelectionItem<NavigationModel.SidebarItem>] {
-        [
+        var items: [GlassSelectionItem<NavigationModel.SidebarItem>] = [
             GlassSelectionItem(id: .overview, title: "Overview", systemImage: "waveform.path.ecg"),
             GlassSelectionItem(id: .miners, title: "Miners", systemImage: "cpu"),
             GlassSelectionItem(id: .drops, title: "Drops", systemImage: "gamecontroller.fill"),
             GlassSelectionItem(id: .events, title: "Events", systemImage: "bell.fill"),
-            GlassSelectionItem(id: .admin, title: "Admin", systemImage: "lock.shield.fill")
         ]
+        if settings.swiftBotEnabled {
+            items.append(GlassSelectionItem(id: .admin, title: "Admin", systemImage: "lock.shield.fill"))
+        }
+        return items
     }
 
     private var selectionBinding: Binding<NavigationModel.SidebarItem> {
@@ -78,6 +82,11 @@ struct SidebarView: View {
             .padding(.top, 8)
         }
         .navigationTitle("SwiftMiner")
+        .onChange(of: settings.swiftBotEnabled) { _, enabled in
+            if !enabled && navigation.selectedItem == .admin {
+                navigation.selectedItem = .overview
+            }
+        }
     }
 }
 
