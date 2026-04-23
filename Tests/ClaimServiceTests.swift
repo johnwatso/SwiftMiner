@@ -17,7 +17,7 @@ final class ClaimServiceTests: XCTestCase {
         config.protocolClasses = [MockURLProtocol.self]
         mockSession = URLSession(configuration: config)
         
-        authService = TwitchAuthService(clientId: "test_client")
+        authService = TwitchAuthService(clientId: "test_client", tokenStore: TestTokenStore())
         apiClient = TwitchAPIClient(authService: authService, clientId: "test_client", session: mockSession)
         dropsService = DropsService(apiClient: apiClient)
         claimService = ClaimService(apiClient: apiClient, dropsService: dropsService)

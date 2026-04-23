@@ -89,6 +89,7 @@ public actor KeychainTokenStore: TokenStore {
         let updated = Account(
             id: existing.id,
             username: existing.username,
+            ownerDiscordId: existing.ownerDiscordId,
             accessToken: accessToken,
             refreshToken: refreshToken ?? existing.refreshToken,
             tokenExpiry: expiry,

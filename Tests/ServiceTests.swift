@@ -15,7 +15,7 @@ final class ServiceTests: XCTestCase {
         config.protocolClasses = [MockURLProtocol.self]
         mockSession = URLSession(configuration: config)
         
-        authService = TwitchAuthService(clientId: "test_client")
+        authService = TwitchAuthService(clientId: "test_client", tokenStore: TestTokenStore())
         apiClient = TwitchAPIClient(authService: authService, clientId: "test_client", session: mockSession)
     }
     
