@@ -17,7 +17,7 @@ final class TwitchAuthServiceTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        service = TwitchAuthService(clientId: "test_client_id")
+        service = TwitchAuthService(clientId: "test_client_id", tokenStore: TestTokenStore())
     }
 
     override func tearDown() {

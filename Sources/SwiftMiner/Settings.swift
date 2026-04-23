@@ -613,18 +613,30 @@ public final class Settings: ObservableObject {
         maxLogEntries = 500
         minimizeToMenuBar = false
         autoStartOnLaunch = false
+        enableBadgesEmotes = false
         syncMinersState = true
         runInBackground = true
+        queueDisplayStyle = .stacked
         preferredQuality = .auto
         showClaimNotifications = false
         lastSelectedGameId = ""
         hasDismissedOnboarding = false
+        twitchClientId = ""
+        swiftBotEndpoint = ""
         gamePreferencesData = "[]"
+        selectedDropsFiltersData = "[\"active\"]"
         miningStrategy = .mineAll
         preferSteamArtwork = true
         showOverviewQueue = true
         overviewQueueMinerId = ""
         ignoredWarningsData = "[]"
+#if DEBUG
+        debugFakeQueueEnabled = false
+        debugFakeQueueSource = .prioritisedGames
+        debugFakeQueueLength = 3
+        debugFakeQueueCustomGamesData = "[]"
+        debugBypassLinkRequirement = false
+#endif
     }
 }
 
