@@ -231,6 +231,9 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
     public let channels: [Channel]
     /// Whether the user's game account is connected for this campaign
     public let isAccountConnected: Bool
+    /// Twitch's allow.isEnabled value for this campaign/account when present.
+    /// Nil means the source did not include allow state, so callers should treat it as enabled.
+    public let allowIsEnabled: Bool?
     
     /// User preference context (used for relevance calculation)
     public let isPrioritised: Bool
@@ -245,6 +248,7 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
         drops: [Drop] = [],
         channels: [Channel] = [],
         isAccountConnected: Bool = false,
+        allowIsEnabled: Bool? = nil,
         isPrioritised: Bool = false
     ) {
         self.id = id
@@ -256,6 +260,7 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
         self.drops = drops
         self.channels = channels
         self.isAccountConnected = isAccountConnected
+        self.allowIsEnabled = allowIsEnabled
         self.isPrioritised = isPrioritised
     }
 
@@ -366,7 +371,7 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
     /// Whether the campaign is currently eligible for mining (active, linked, and has eligible drops).
     /// Eligible includes: earnable drops + claimable drops (ready to claim).
     public var isMiningEligible: Bool {
-        isTimeActive && isAccountConnected && !eligibleDrops.isEmpty
+        isTimeActive && status != .disabled && isAccountConnected && hasDropsEnabled && !eligibleDrops.isEmpty
     }
 
     /// Returns drops that can be earned now (not claimed, NOT yet claimable, and all preconditions met).
@@ -399,7 +404,7 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
     public var gameImageUrl: URL? { game.boxArtURL }
     public var startAt: Date { startDate }
     public var endAt: Date { endDate }
-    public var hasDropsEnabled: Bool { true }
+    public var hasDropsEnabled: Bool { allowIsEnabled ?? true }
 }
 
 // MARK: - Phase 3: Merge Layer Models

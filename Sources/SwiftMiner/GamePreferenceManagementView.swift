@@ -87,7 +87,7 @@ struct GamePreferenceManagementView: View {
 private struct PreferenceRow: View {
     let preference: GamePreference
     @ObservedObject var settings: Settings
-    @AppStorage("preferSteamArtwork") private var preferSteamArtwork: Bool = true
+    @AppStorage("preferSteamArtwork", store: Settings.appStorageStore) private var preferSteamArtwork: Bool = true
     @State private var resolvedArtworkURL: URL?
 
     var body: some View {
@@ -101,7 +101,11 @@ private struct PreferenceRow: View {
             .frame(width: 24, height: 32)
             .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
             .task(id: preferSteamArtwork) {
-                if preferSteamArtwork {
+                if preferSteamArtwork,
+                   SteamArtworkService.supportsSteamArtwork(
+                       forGameName: preference.gameName,
+                       gameId: preference.gameId
+                   ) {
                     // Prefer Steam portrait; leave nil (shows placeholder) if lookup fails — never falls back to Twitch URL
                     resolvedArtworkURL = await SteamArtworkService.shared.portraitURL(for: preference.gameName)
                 } else {

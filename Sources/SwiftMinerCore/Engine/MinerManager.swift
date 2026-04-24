@@ -13,6 +13,7 @@ public final class MinerManager {
         public let id: String
         public let accountId: String
         public let username: String
+        public var ownerDiscordId: String?
         public var status: MinerStatus
         public var needsAuth: Bool
         public var currentCampaign: String?
@@ -20,13 +21,59 @@ public final class MinerManager {
         public var allCampaigns: [Campaign] = []
         public var dropsClaimed: Int
         public var isRunning: Bool
+        public var priorityGames: [String]
         
+        /// Ordered list of candidate campaigns from the last selection pass (Debug only).
+        public var debugWinningQueue: [Campaign] = []
+
         /// Resolved "Primary State" for the user-facing activity UI (Phase 4).
         @MainActor
         public var primaryState: PrimaryState {
             PrimaryStateResolver.resolve(for: self)
         }
-        
+
+        /// Per-miner, per-game state breakdown (Phase: MinerGameState refactor).
+        @MainActor
+        public var gameStates: [MinerGameState] {
+            MinerManager.evaluateGameStates(for: self, priorityGames: priorityGames)
+        }
+
+        /// The resolved primary state from the per-game list (Phase: MinerGameState refactor).
+        @MainActor
+        public var resolvedPrimaryState: ResolvedPrimaryState? {
+            let states = gameStates
+            guard !states.isEmpty else { return nil }
+            return ResolvedPrimaryState(gameStates: states)
+        }
+
+        /// A concise, deterministic status label for UI badges and list rows.
+        @MainActor
+        public var statusLabel: String {
+            guard let resolved = resolvedPrimaryState?.resolved else {
+                return status.displayName
+            }
+            switch resolved.state {
+            case .watching:
+                return "Watching \(resolved.gameName)"
+            case .blocked:
+                switch resolved.reason {
+                case .notLinked:
+                    return "Blocked — Account not linked"
+                case .noLiveStreams:
+                    return "Waiting — No live stream"
+                case .noCampaign, .noEligibleCampaign, .campaignExpired, .noDropsAvailable, .none:
+                    return "Idle — No eligible campaigns"
+                }
+            case .idle:
+                switch resolved.reason {
+                case .noDropsAvailable, .noCampaign, .noEligibleCampaign, .campaignExpired:
+                    return "Idle — No eligible campaigns"
+                case .none, .notLinked, .noLiveStreams:
+                    return "Idle — No eligible campaigns"
+                }
+            }
+        }
+
         /// Account-specific drop state store (Phase 2). Set asynchronously after engine is ready.
         public var stateStore: AccountStateStore?
         /// When the miner last transitioned to its current status. Used for stuck-detection in health UI.
@@ -36,6 +83,7 @@ public final class MinerManager {
             id: String,
             accountId: String,
             username: String,
+            ownerDiscordId: String? = nil,
             stateStore: AccountStateStore? = nil,
             status: MinerStatus = .idle,
             needsAuth: Bool = false,
@@ -43,11 +91,14 @@ public final class MinerManager {
             currentCampaignId: String? = nil,
             allCampaigns: [Campaign] = [],
             dropsClaimed: Int = 0,
-            isRunning: Bool = false
+            isRunning: Bool = false,
+            priorityGames: [String] = [],
+            debugWinningQueue: [Campaign] = []
         ) {
             self.id = id
             self.accountId = accountId
             self.username = username
+            self.ownerDiscordId = ownerDiscordId
             self.stateStore = stateStore
             self.status = status
             self.needsAuth = needsAuth
@@ -56,6 +107,8 @@ public final class MinerManager {
             self.allCampaigns = allCampaigns
             self.dropsClaimed = dropsClaimed
             self.isRunning = isRunning
+            self.priorityGames = priorityGames
+            self.debugWinningQueue = debugWinningQueue
         }
     }    
     public enum MinerStatus: String, Sendable, Equatable {
@@ -67,17 +120,23 @@ public final class MinerManager {
         case waitingForStream = "WAITING_FOR_STREAM"
         case paused = "PAUSED"
         case error = "ERROR"
+        /// No eligible campaigns exist for this account to mine (Task 3).
+        case idleNoEligibleCampaigns = "IDLE_NO_ELIGIBLE_CAMPAIGNS"
+        /// Campaigns exist but account is not linked, preventing mining (Task 4).
+        case blockedAccountNotLinked = "BLOCKED_ACCOUNT_NOT_LINKED"
 
         public var displayName: String {
             switch self {
-            case .idle: return "Waiting"
-            case .authenticating: return "Authenticating"
-            case .fetchingCampaigns: return "Fetching Campaigns"
+            case .idle: return "Idle — No eligible campaigns"
+            case .authenticating: return "Waiting — Authenticating"
+            case .fetchingCampaigns: return "Waiting — Refreshing campaigns"
             case .watching: return "Watching"
             case .claiming: return "Claiming"
-            case .waitingForStream: return "Waiting for Stream"
-            case .paused: return "Standby"
-            case .error: return "Error"
+            case .waitingForStream: return "Waiting — No live stream"
+            case .paused: return "Paused"
+            case .error: return "Blocked — Needs attention"
+            case .idleNoEligibleCampaigns: return "Idle — No eligible campaigns"
+            case .blockedAccountNotLinked: return "Blocked — Account not linked"
             }
         }
     }
@@ -165,7 +224,11 @@ public final class MinerManager {
     
     /// Track notification preference
     public var showClaimNotifications: Bool = false
-    private var ignoredAccountLinkWarningAccountIds: Set<String> = []
+    /// Debug-only: broadcast to every engine to bypass link/eligibility gates. Stored here
+    /// so engines attached later (e.g. newly added accounts) pick up the current value.
+    public var debugBypassLinkRequirement: Bool = false
+    /// Scoped warnings: [accountId: Set<gameId>]
+    private var ignoredAccountLinkWarnings: [String: Set<String>] = [:]
 
     /// The actual engine instances (by miner ID)
     private var engines: [String: MinerEngine] = [:]
@@ -177,7 +240,10 @@ public final class MinerManager {
     
     /// Client ID for Twitch API (mutable so it can be updated before first account is added)
     private var clientId: String
-    
+
+    /// Persistent store for account tokens (Phase: Managed Platform)
+    private let tokenStore: any TokenStore
+
     /// Track drop IDs claimed today (locally)
     private var claimedTodayIds: Set<String> = []
     private var lastClaimDate: Date = Date()
@@ -190,9 +256,14 @@ public final class MinerManager {
     
     // MARK: - Initialization
     
-    public init(clientId: String, campaignStore: CampaignStore = CampaignStore()) {
+    public init(
+        clientId: String, 
+        campaignStore: CampaignStore = CampaignStore(),
+        tokenStore: any TokenStore = KeychainTokenStore()
+    ) {
         self.clientId = clientId
         self.campaignStore = campaignStore
+        self.tokenStore = tokenStore
         self.dataCoordinator = MiningDataCoordinator(campaignStore: campaignStore)
     }
     
@@ -204,33 +275,57 @@ public final class MinerManager {
         }
     }
 
+    /// Debug-only: broadcast the link-bypass flag to every engine. Stored so engines
+    /// added later (new accounts during a session) pick up the current value on start.
+    public func setDebugBypassLinkRequirement(_ enabled: Bool) async {
+        self.debugBypassLinkRequirement = enabled
+        for engine in engines.values {
+            await engine.setDebugBypassLinkRequirement(enabled)
+        }
+    }
+
     /// Replace the ignored-account set used to suppress account-link-required warnings.
-    /// Applies immediately to all active engines and persists in app settings at the caller layer.
-    public func updateIgnoredAccountLinkWarningAccounts(_ accountIds: [String]) async {
-        ignoredAccountLinkWarningAccountIds = Set(accountIds)
+    /// - Parameter ignoredWarnings: Scoped warnings in "accountId:gameId:type" format.
+    public func updateIgnoredAccountLinkWarnings(_ ignoredWarnings: [String]) async {
+        self.ignoredAccountLinkWarnings = [:]
+        for warning in ignoredWarnings {
+            let parts = warning.components(separatedBy: ":")
+            guard parts.count >= 2 else { continue }
+            let accountId = parts[0]
+            let gameId = parts[1]
+            // We only care about accountLink type here for now, as that's what MinerEngine handles
+            if parts.count >= 3 && parts[2] != "accountLink" { continue }
+            
+            var games = self.ignoredAccountLinkWarnings[accountId] ?? []
+            games.insert(gameId)
+            self.ignoredAccountLinkWarnings[accountId] = games
+        }
+
         for miner in miners {
             guard let engine = engines[miner.id] else { continue }
-            let ignored = ignoredAccountLinkWarningAccountIds.contains(miner.accountId)
-            await engine.updateAccountLinkWarningPreference(ignored: ignored)
+            let ignoredGames = Array(self.ignoredAccountLinkWarnings[miner.accountId] ?? [])
+            await engine.updateAccountLinkWarningPreference(games: ignoredGames)
         }
         onMinersChanged?()
     }
 
-    /// Toggle account-link warning suppression for a specific miner.
-    public func setAccountLinkWarningIgnored(minerId: String, ignored: Bool) async {
+    /// Toggle account-link warning suppression for a specific miner and game.
+    public func setAccountLinkWarningIgnored(minerId: String, gameId: String = "all", ignored: Bool) async {
         guard let miner = getMiner(id: minerId) else { return }
 
+        var games = ignoredAccountLinkWarnings[miner.accountId] ?? []
         if ignored {
-            ignoredAccountLinkWarningAccountIds.insert(miner.accountId)
+            games.insert(gameId)
         } else {
-            ignoredAccountLinkWarningAccountIds.remove(miner.accountId)
+            games.remove(gameId)
         }
+        ignoredAccountLinkWarnings[miner.accountId] = games
 
         guard let engine = engines[minerId] else {
             onMinersChanged?()
             return
         }
-        await engine.updateAccountLinkWarningPreference(ignored: ignored)
+        await engine.updateAccountLinkWarningPreference(games: Array(games))
         onMinersChanged?()
     }
     
@@ -249,10 +344,10 @@ public final class MinerManager {
         guard !isSetup else { return }
         isSetup = true
 
-        let authService = TwitchAuthService(clientId: clientId)
+        let authService = TwitchAuthService(clientId: clientId, tokenStore: tokenStore)
         do {
             let accounts = try await authService.loadAllAccounts()
-            print("[MinerManager] Loading \(accounts.count) saved accounts from keychain")
+            print("[MinerManager] Loading \(accounts.count) saved accounts from store")
             for account in accounts {
                 addAccount(account)
             }
@@ -269,9 +364,9 @@ public final class MinerManager {
         excludedGames: [String],
         strategy: MiningStrategy,
         enableBadgesEmotes: Bool,
-        ignoredAccountLinkWarningAccountIds: [String] = []
+        ignoredWarnings: [String] = []
     ) async {
-        self.ignoredAccountLinkWarningAccountIds = Set(ignoredAccountLinkWarningAccountIds)
+        await updateIgnoredAccountLinkWarnings(ignoredWarnings)
         await setup()
         if autoStart && !miners.isEmpty {
             print("[MinerManager] Auto-starting \(miners.count) miner(s) on launch")
@@ -299,15 +394,16 @@ public final class MinerManager {
         let miner = ManagedMiner(
             id: minerId,
             accountId: account.id,
-            username: account.username
+            username: account.username,
+            ownerDiscordId: account.ownerDiscordId
         )
         miners.append(miner)
         onMinersChanged?()
 
         let setupTask = Task {
             await engine.setAccount(account)
-            let ignored = self.ignoredAccountLinkWarningAccountIds.contains(account.id)
-            await engine.updateAccountLinkWarningPreference(ignored: ignored)
+            let ignoredGames = Array(self.ignoredAccountLinkWarnings[account.id] ?? [])
+            await engine.updateAccountLinkWarningPreference(games: ignoredGames)
             await setupEngineCallbacks(engine: engine, minerId: minerId)
 
             // Get DropsService and InventoryService from engine for data coordination
@@ -356,8 +452,8 @@ public final class MinerManager {
         // Unregister from data coordinator
         dataCoordinator.unregisterMiner(minerId: minerId, accountId: miner.accountId)
         
-        // Remove from keychain
-        let authService = TwitchAuthService(clientId: clientId)
+        // Remove from persistent store
+        let authService = TwitchAuthService(clientId: clientId, tokenStore: tokenStore)
         try? await authService.logout(accountId: miner.accountId)
         
         // Remove from collections
@@ -428,27 +524,29 @@ public final class MinerManager {
         self.showClaimNotifications = showClaimNotifications
 
         // Update mining preferences
+        let ignoredGames = Array(ignoredAccountLinkWarnings[miner.accountId] ?? [])
         await engine.updateMiningPreferences(
             priorityGames: priorityGames,
             excludedGames: excludedGames,
             enableBadgesEmotes: enableBadgesEmotes,
             showClaimNotifications: self.showClaimNotifications,
-            ignoreAccountLinkWarnings: ignoredAccountLinkWarningAccountIds.contains(miner.accountId)
+            ignoredAccountLinkWarningGames: ignoredGames
         )
         await engine.updateMiningStrategy(strategy)
+        await engine.setDebugBypassLinkRequirement(debugBypassLinkRequirement)
 
-        // Update status
+        // Update status and sync priority games
         await dataCoordinator.updateAccountNeedsAuth(accountId: miner.accountId, needsAuth: false)
-        updateMinerStatus(minerId: minerId, status: .authenticating, needsAuth: false)
+        updateMinerStatus(minerId: minerId, status: .authenticating, priorityGames: priorityGames, needsAuth: false)
 
         do {
             try await engine.start()
             await dataCoordinator.updateAccountNeedsAuth(accountId: miner.accountId, needsAuth: false)
-            updateMinerStatus(minerId: minerId, isRunning: true, needsAuth: false)
+            updateMinerStatus(minerId: minerId, isRunning: true, priorityGames: priorityGames, needsAuth: false)
         } catch {
             let needsAuth = Self.requiresManualReauth(for: error)
             await dataCoordinator.updateAccountNeedsAuth(accountId: miner.accountId, needsAuth: needsAuth)
-            updateMinerStatus(minerId: minerId, status: .error, needsAuth: needsAuth)
+            updateMinerStatus(minerId: minerId, status: .error, priorityGames: priorityGames, needsAuth: needsAuth)
             throw error
         }
     }
@@ -521,7 +619,7 @@ public final class MinerManager {
             await forceRefreshMiner(minerId: miner.id)
         }
     }
-    
+
     // MARK: - Progress Aggregation
     
     /// Get aggregated progress across all miners
@@ -565,7 +663,161 @@ public final class MinerManager {
             pendingDrops: totalPendingCount
         )
     }
-    
+
+    // MARK: - Per-Miner, Per-Game State Evaluation (MinerGameState Refactor)
+
+    /// Evaluate the per-game state for a miner.
+    /// Iterates over `priorityGames` to ensure every prioritised game produces a state,
+    /// even when no campaigns are returned for that game.
+    @MainActor
+    public static func evaluateGameStates(for miner: ManagedMiner, priorityGames: [String]) -> [MinerGameState] {
+        if priorityGames.isEmpty { return [] }
+
+        var states: [MinerGameState] = []
+        var seenGames = Set<String>()
+
+        for priorityGame in priorityGames {
+            let gameKey = priorityGame.lowercased()
+            guard seenGames.insert(gameKey).inserted else { continue }
+
+            // Gather all campaigns for this prioritised game (used for linkage check)
+            let campaignsForGame = miner.allCampaigns.filter {
+                $0.gameName.lowercased() == gameKey || $0.game.id.lowercased() == gameKey
+            }
+
+            // 1. Identify the stable game metadata
+            let gameId = campaignsForGame.first?.game.id ?? gameKey
+            let gameName = campaignsForGame.first?.game.name ?? priorityGame
+
+            // 2. Filter out irrelevant campaigns (no drops, Just Chatting)
+            let relevant = campaignsForGame.filter { campaign in
+                if campaign.drops.isEmpty { return false }
+                let name = campaign.game.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                let id = campaign.game.id.trimmingCharacters(in: .whitespacesAndNewlines)
+                if name.localizedCaseInsensitiveCompare("Just Chatting") == .orderedSame || id == "509658" {
+                    return false
+                }
+                return true
+            }
+
+            if relevant.isEmpty {
+                // Check if any of the EXCLUDED or NO-DROP campaigns are not linked.
+                // John wants "Not linked -> .blocked(.notLinked)" to be driven by prioritised games.
+                let isNotLinked = !campaignsForGame.isEmpty && campaignsForGame.contains { !$0.isAccountConnected }
+                
+                if isNotLinked {
+                    states.append(MinerGameState(
+                        minerId: miner.id,
+                        gameId: gameId,
+                        gameName: gameName,
+                        state: .blocked,
+                        reason: .notLinked
+                    ))
+                } else {
+                    states.append(MinerGameState(
+                        minerId: miner.id,
+                        gameId: gameId,
+                        gameName: gameName,
+                        state: .idle,
+                        reason: .noEligibleCampaign
+                    ))
+                }
+                continue
+            }
+
+            var activeCampaign: Campaign?
+            var blockedReason: MinerGameStateReason?
+            var allClaimed = true
+
+            for campaign in relevant {
+                if !campaign.drops.allSatisfy({ $0.isClaimed }) {
+                    allClaimed = false
+                } else {
+                    continue
+                }
+
+                // Check if campaign is actively earnable for this account.
+                if campaign.isMiningEligible {
+                    if activeCampaign == nil {
+                        activeCampaign = campaign
+                    }
+                }
+
+                // Collect blocking reasons (scan all campaigns; blocked wins)
+                if campaign.isTimeActive && !campaign.isAccountConnected {
+                    if blockedReason == nil { blockedReason = .notLinked }
+                } else if !campaign.isActive {
+                    if blockedReason == nil { blockedReason = .campaignExpired }
+                }
+            }
+
+            if allClaimed {
+                states.append(MinerGameState(
+                    minerId: miner.id,
+                    gameId: gameId,
+                    gameName: gameName,
+                    state: .idle,
+                    reason: .noDropsAvailable
+                ))
+                continue
+            }
+
+            // Determine session context for this game
+            let isWatchingThisGame = miner.status == .watching
+                && relevant.contains(where: { $0.id == miner.currentCampaignId })
+            let isWaitingForStream = miner.status == .waitingForStream
+                && relevant.contains(where: { $0.id == miner.currentCampaignId })
+
+            if isWaitingForStream, let campaignId = miner.currentCampaignId {
+                states.append(MinerGameState(
+                    minerId: miner.id,
+                    gameId: gameId,
+                    gameName: gameName,
+                    state: .blocked,
+                    reason: .noLiveStreams,
+                    campaignId: campaignId
+                ))
+            } else if isWatchingThisGame, let campaign = activeCampaign ?? relevant.first {
+                states.append(MinerGameState(
+                    minerId: miner.id,
+                    gameId: gameId,
+                    gameName: gameName,
+                    state: .watching,
+                    reason: .none,
+                    campaignId: campaign.id
+                ))
+            } else if let campaign = activeCampaign {
+                let waitingForStream = miner.status == .waitingForStream
+                states.append(MinerGameState(
+                    minerId: miner.id,
+                    gameId: gameId,
+                    gameName: gameName,
+                    state: waitingForStream ? .blocked : .idle,
+                    reason: waitingForStream ? .noLiveStreams : .none,
+                    campaignId: campaign.id
+                ))
+            } else if let reason = blockedReason {
+                states.append(MinerGameState(
+                    minerId: miner.id,
+                    gameId: gameId,
+                    gameName: gameName,
+                    state: .blocked,
+                    reason: reason
+                ))
+            } else {
+                states.append(MinerGameState(
+                    minerId: miner.id,
+                    gameId: gameId,
+                    gameName: gameName,
+                    state: .idle,
+                    reason: .noEligibleCampaign
+                ))
+            }
+        }
+
+        return states
+    }
+
     // MARK: - Private Methods
     
     private func resetDailyClaimsIfNeeded() {
@@ -606,11 +858,20 @@ public final class MinerManager {
                 let currentId = await engine.currentCampaignId
                 
                 // Update current campaign info
-                if let first = campaigns.first {
+                if let currentId, let current = all.first(where: { $0.id == currentId }) {
+                    self.updateMinerStatus(minerId: minerId, currentCampaign: current.name, currentCampaignId: .some(currentId), allCampaigns: all)
+                } else if let first = campaigns.first {
                     self.updateMinerStatus(minerId: minerId, currentCampaign: first.name, currentCampaignId: .some(currentId), allCampaigns: all)
                 } else {
                     self.updateMinerStatus(minerId: minerId, currentCampaignId: .some(currentId), allCampaigns: all)
                 }
+            }
+        }
+        
+        await engine.setDebugWinningQueueHandler { [weak self] winningQueue in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                self.updateMinerStatus(minerId: minerId, debugWinningQueue: winningQueue)
             }
         }
         
@@ -653,9 +914,27 @@ public final class MinerManager {
         case .paused: return .paused
         case .stopped: return .idle
         case .error: return .error
+        case .idleNoEligibleCampaigns: return .idleNoEligibleCampaigns
+        case .blockedAccountNotLinked: return .blockedAccountNotLinked
         }
     }
     
+    /// Update the priority games for all miners. Call this when settings change.
+    public func updatePriorityGames(_ priorityGames: [String]) {
+        for index in miners.indices {
+            miners[index].priorityGames = priorityGames
+            
+            // Sync with active engine if it exists
+            if let engine = engines[miners[index].id] {
+                Task {
+                    await engine.updatePriorityGames(priorityGames)
+                    await engine.updateAccountLinkWarningPreference(games: Array(ignoredAccountLinkWarnings[miners[index].accountId] ?? []))
+                }
+            }
+        }
+        onMinersChanged?()
+    }
+
     private func updateMinerStatus(
         minerId: String,
         status: MinerStatus? = nil,
@@ -663,7 +942,10 @@ public final class MinerManager {
         currentCampaignId: String?? = .none, // .none = don't touch; .some(x) = always set (x may be nil)
         allCampaigns: [Campaign]? = nil,
         isRunning: Bool? = nil,
-        needsAuth: Bool? = nil
+        priorityGames: [String]? = nil,
+        needsAuth: Bool? = nil,
+        debugWinningQueue: [Campaign]? = nil,
+        ownerDiscordId: String? = nil
     ) {
         guard let index = miners.firstIndex(where: { $0.id == minerId }) else { return }
 
@@ -680,9 +962,11 @@ public final class MinerManager {
         if let campaigns = allCampaigns { miner.allCampaigns = campaigns }
         if let running = isRunning { miner.isRunning = running }
         if let needsAuth = needsAuth { miner.needsAuth = needsAuth }
-        miners[index] = miner
+        if let priorityGames = priorityGames { miner.priorityGames = priorityGames }
+        if let winningQueue = debugWinningQueue { miner.debugWinningQueue = winningQueue }
+        if let ownerId = ownerDiscordId { miner.ownerDiscordId = ownerId }
 
-        onMinerStatusChange?(miner)
+        miners[index] = miner
         onMinersChanged?()
     }
     

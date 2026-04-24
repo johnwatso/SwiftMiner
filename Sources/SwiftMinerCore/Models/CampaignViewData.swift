@@ -30,6 +30,8 @@ public enum CampaignCuratedBucket: String, Sendable, Equatable {
 public struct CampaignViewData: Codable, Sendable, Identifiable, Equatable {
     /// The unique campaign ID from Twitch
     public let id: String
+    /// The game/category ID from Twitch (used for grouping related campaigns).
+    public let gameId: String?
     /// The name of the game/category (e.g. "The Finals")
     public let gameName: String
     /// The name of the campaign (e.g. "Season 2 Launch Drops")
@@ -139,6 +141,7 @@ public struct CampaignViewData: Codable, Sendable, Identifiable, Equatable {
     public func withArtworkURL(_ url: URL?) -> CampaignViewData {
         CampaignViewData(
             id: id,
+            gameId: gameId,
             gameName: gameName,
             campaignName: campaignName,
             artworkURL: url,
@@ -160,6 +163,7 @@ public struct CampaignViewData: Codable, Sendable, Identifiable, Equatable {
 
     public init(
         id: String,
+        gameId: String? = nil,
         gameName: String,
         campaignName: String,
         artworkURL: URL?,
@@ -178,6 +182,7 @@ public struct CampaignViewData: Codable, Sendable, Identifiable, Equatable {
         accountStates: [AccountState] = []
     ) {
         self.id = id
+        self.gameId = gameId
         self.gameName = gameName
         self.campaignName = campaignName
         self.artworkURL = artworkURL
@@ -295,5 +300,54 @@ public extension CampaignViewData {
 
     var overviewRemainingRewardCount: Int {
         max(totalDrops - overviewClaimedRewardCount, 0)
+    }
+
+    /// Grouping key for game-level aggregation.
+    /// Prefers `gameId`, then falls back to a normalized game name.
+    var aggregateGameGroupKey: String {
+        if let gameId, !gameId.isEmpty {
+            return gameId
+        }
+        let fallbackName = gameName
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        return "name:\(fallbackName)"
+    }
+
+    /// Campaign-level state used by `GameAggregate`.
+    /// Priority: actionRequired > inProgress > ready > completed > unavailable
+    func gameAggregateState(now: Date = Date()) -> GameAggregateState {
+        let isComplete = isCompleted || miningStatus == .claimed
+        let isWithinActiveWindow = startDate <= now && endDate > now
+        let isExpired = endDate <= now
+        let needsAuth = accountStates.contains { $0.miningStatus == .needsAuth }
+        let hasLinkIssue = !isAccountConnected || needsAuth
+        let isBlocked = !isComplete && isWithinActiveWindow && hasLinkIssue
+        if isBlocked {
+            return .actionRequired
+        }
+
+        if !isComplete && isExpired {
+            return .unavailable
+        }
+
+        let hasClaimableRewards = drops.contains { $0.isClaimable && !$0.isClaimed } || miningStatus == .claimable
+        let hasProgress = hasValidProgress
+            || progress > 0
+            || drops.contains { $0.currentMinutes > 0 && !$0.isClaimed }
+            || miningStatus == .inProgress
+        if !isComplete && (hasClaimableRewards || hasProgress) {
+            return .inProgress
+        }
+
+        if !isComplete && isWithinActiveWindow && isAccountConnected {
+            return .ready
+        }
+
+        if isComplete {
+            return .completed
+        }
+
+        return .unavailable
     }
 }

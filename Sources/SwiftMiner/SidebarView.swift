@@ -10,14 +10,25 @@ import SwiftMinerCore
 ///   Events
 struct SidebarView: View {
     @Environment(NavigationModel.self) private var navigation
+    @ObservedObject private var settings = Settings.shared
+
+    private var blockedMinerCount: Int {
+        navigation.minerManager.miners.filter {
+            $0.status == .blockedAccountNotLinked || $0.status == .error || $0.needsAuth
+        }.count
+    }
 
     private var sidebarItems: [GlassSelectionItem<NavigationModel.SidebarItem>] {
-        [
-            GlassSelectionItem(id: .overview, title: "Overview", systemImage: "house.fill"),
-            GlassSelectionItem(id: .activity, title: "Activity", systemImage: "chart.bar.fill"),
+        var items: [GlassSelectionItem<NavigationModel.SidebarItem>] = [
+            GlassSelectionItem(id: .overview, title: "Overview", systemImage: "waveform.path.ecg"),
+            GlassSelectionItem(id: .miners, title: "Miners", systemImage: "cpu"),
             GlassSelectionItem(id: .drops, title: "Drops", systemImage: "gamecontroller.fill"),
-            GlassSelectionItem(id: .events, title: "Events", systemImage: "bell.fill")
+            GlassSelectionItem(id: .events, title: "Events", systemImage: "bell.fill"),
         ]
+        if settings.swiftBotEnabled {
+            items.append(GlassSelectionItem(id: .admin, title: "Admin", systemImage: "lock.shield.fill"))
+        }
+        return items
     }
 
     private var selectionBinding: Binding<NavigationModel.SidebarItem> {
@@ -50,6 +61,17 @@ struct SidebarView: View {
 
                         Text(item.title)
                             .font(.system(size: 14, weight: isSelected ? .semibold : .medium))
+
+                        Spacer(minLength: 0)
+
+                        if item.id == .miners && blockedMinerCount > 0 {
+                            Text("\(blockedMinerCount)")
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.orange, in: Capsule())
+                        }
                     }
                     .foregroundStyle(.primary)
                 }
@@ -60,6 +82,11 @@ struct SidebarView: View {
             .padding(.top, 8)
         }
         .navigationTitle("SwiftMiner")
+        .onChange(of: settings.swiftBotEnabled) { _, enabled in
+            if !enabled && navigation.selectedItem == .admin {
+                navigation.selectedItem = .overview
+            }
+        }
     }
 }
 

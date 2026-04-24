@@ -7,119 +7,251 @@ import SwiftMinerCore
 public final class Settings: ObservableObject {
     
     // MARK: - Shared Instance
+
+    static let appStorageStore: UserDefaults = {
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+            let suiteName = "com.swiftminer.app.tests.\(ProcessInfo.processInfo.globallyUniqueString)"
+            guard let defaults = UserDefaults(suiteName: suiteName) else {
+                return .standard
+            }
+            defaults.removePersistentDomain(forName: suiteName)
+            return defaults
+        }
+        return .standard
+    }()
     
     public static let shared = Settings()
     
     // MARK: - @AppStorage Properties
     
     /// Whether auto-claim is enabled for completed drops
-    @AppStorage("autoClaimEnabled")
+    @AppStorage("autoClaimEnabled", store: Settings.appStorageStore)
     public var autoClaimEnabled: Bool = true
     
     /// Whether to auto-claim community points bonuses
-    @AppStorage("autoClaimPointsEnabled")
+    @AppStorage("autoClaimPointsEnabled", store: Settings.appStorageStore)
     public var autoClaimPointsEnabled: Bool = true
     
     /// Log level for console output
-    @AppStorage("logLevel")
+    @AppStorage("logLevel", store: Settings.appStorageStore)
     public var logLevel: LogLevel = .info
     
     /// Whether to show the log console in the UI
-    @AppStorage("showLogConsole")
+    @AppStorage("showLogConsole", store: Settings.appStorageStore)
     public var showLogConsole: Bool = true
     
     /// Maximum number of log entries to keep in memory
-    @AppStorage("maxLogEntries")
+    @AppStorage("maxLogEntries", store: Settings.appStorageStore)
     public var maxLogEntries: Int = 500
     
     /// Whether to minimize to menu bar instead of dock
-    @AppStorage("minimizeToMenuBar")
+    @AppStorage("minimizeToMenuBar", store: Settings.appStorageStore)
     public var minimizeToMenuBar: Bool = false
     
     /// Whether to start mining automatically on launch (if authenticated)
-    @AppStorage("autoStartOnLaunch")
+    @AppStorage("autoStartOnLaunch", store: Settings.appStorageStore)
     public var autoStartOnLaunch: Bool = false
 
     /// Whether to include campaigns that only give non-drop rewards (badges/emotes)
-    @AppStorage("enableBadgesEmotes")
+    @AppStorage("enableBadgesEmotes", store: Settings.appStorageStore)
     public var enableBadgesEmotes: Bool = false
 
     /// Whether to sync all miners state (start/stop together)
-    @AppStorage("syncMinersState")
+    @AppStorage("syncMinersState", store: Settings.appStorageStore)
     public var syncMinersState: Bool = true
 
     /// Whether to use Steam CDN artwork instead of Twitch game artwork
-    @AppStorage("preferSteamArtwork")
+    @AppStorage("preferSteamArtwork", store: Settings.appStorageStore)
     public var preferSteamArtwork: Bool = true
 
     /// Whether to run in background when window is closed
-    @AppStorage("runInBackground")
+    @AppStorage("runInBackground", store: Settings.appStorageStore)
     public var runInBackground: Bool = true
 
     /// Display style used for the Mining/Queued queue rail in Overview.
-    @AppStorage("queueDisplayStyle")
+    @AppStorage("queueDisplayStyle", store: Settings.appStorageStore)
     public var queueDisplayStyle: QueueDisplayStyle = .stacked
+
+    /// Whether Overview should show the Up Next queue rail.
+    @AppStorage("showOverviewQueue", store: Settings.appStorageStore)
+    public var showOverviewQueue: Bool = true
+
+    /// Miner whose queue should be shown on Overview. Empty means aggregate/all miners.
+    @AppStorage("overviewQueueMinerId", store: Settings.appStorageStore)
+    public var overviewQueueMinerId: String = ""
+
+    /// JSON-encoded array of DropFilter for the Drops list view.
+    @AppStorage("selectedDropsFiltersData", store: Settings.appStorageStore)
+    private var selectedDropsFiltersData: String = "[\"active\"]"
+
+    /// Persistent filter selection for the Drops list view.
+    public var selectedDropsFilters: Set<DropFilter> {
+        get {
+            guard let data = selectedDropsFiltersData.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode([DropFilter].self, from: data) else {
+                return [.active]
+            }
+            return Set(decoded)
+        }
+        set {
+            let encoded = Array(newValue).sorted { $0.rawValue < $1.rawValue }
+            if let data = try? JSONEncoder().encode(encoded),
+               let string = String(data: data, encoding: .utf8),
+               selectedDropsFiltersData != string {
+                objectWillChange.send()
+                selectedDropsFiltersData = string
+            }
+        }
+    }
 
 #if DEBUG
     /// Whether Overview should render a synthetic queue for testing/screenshots.
-    @AppStorage("debugFakeQueueEnabled")
+    @AppStorage("debugFakeQueueEnabled", store: Settings.appStorageStore)
     public var debugFakeQueueEnabled: Bool = false
 
-    /// Whether fake queue cards should show the "Debug Preview" badge.
-    @AppStorage("debugShowPreviewBadge")
-    public var debugShowPreviewBadge: Bool = false
-
     /// Data source used for fake queue generation in debug builds.
-    @AppStorage("debugFakeQueueSource")
+    @AppStorage("debugFakeQueueSource", store: Settings.appStorageStore)
     public var debugFakeQueueSource: DebugFakeQueueSource = .prioritisedGames
 
     /// Number of cards to render in the fake queue.
-    @AppStorage("debugFakeQueueLength")
+    @AppStorage("debugFakeQueueLength", store: Settings.appStorageStore)
     public var debugFakeQueueLength: Int = 3
 
     /// JSON-encoded custom game name list for debug fake queue generation.
-    @AppStorage("debugFakeQueueCustomGamesData")
+    @AppStorage("debugFakeQueueCustomGamesData", store: Settings.appStorageStore)
     private var debugFakeQueueCustomGamesData: String = "[]"
+
+    /// Bypass account-link/eligibility gates so the miner watches a random live channel
+    /// for any time-active campaign. For exercising the watch pipeline only — drops
+    /// won't actually credit for unlinked accounts.
+    @AppStorage("debugBypassLinkRequirement", store: Settings.appStorageStore)
+    public var debugBypassLinkRequirement: Bool = false
 #endif
 
     /// Preferred stream quality (for future use)
-    @AppStorage("preferredQuality")
+    @AppStorage("preferredQuality", store: Settings.appStorageStore)
     public var preferredQuality: StreamQuality = .auto
     
     /// Whether to show notifications for drop claims
-    @AppStorage("showClaimNotifications")
+    @AppStorage("showClaimNotifications", store: Settings.appStorageStore)
     public var showClaimNotifications: Bool = false // Disabled by default per user request
 
-    /// JSON-encoded account IDs that should ignore account-link-required warnings.
-    @AppStorage("ignoredAccountLinkWarningAccountIdsData")
-    private var ignoredAccountLinkWarningAccountIdsData: String = "[]"
-    
+    /// JSON-encoded warnings that should be suppressed.
+    /// Format: "accountId:gameId:warningType"
+    @AppStorage("ignoredWarningsData", store: Settings.appStorageStore)
+    private var ignoredWarningsData: String = "[]"
+
+    public enum WarningType: String, Codable, Sendable {
+        case accountLink = "accountLink"
+    }
+
+    /// Scoped warnings that should be suppressed.
+    public var ignoredWarnings: [String] {
+        get {
+            guard let data = ignoredWarningsData.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode([String].self, from: data) else {
+                return []
+            }
+            return decoded
+        }
+        set {
+            if let data = try? JSONEncoder().encode(newValue),
+               let encoded = String(data: data, encoding: .utf8),
+               ignoredWarningsData != encoded {
+                objectWillChange.send()
+                ignoredWarningsData = encoded
+            }
+        }
+    }
+
+    /// Account IDs that should suppress account-link-required warnings (Legacy/Global).
+    public var ignoredAccountLinkWarningAccountIds: [String] {
+        get {
+            let ids = ignoredWarnings
+                .filter { $0.contains(":all:accountLink") || !$0.contains(":") }
+                .map { $0.components(separatedBy: ":").first ?? $0 }
+            return Array(Set(ids)).sorted()
+        }
+        set {
+            var current = ignoredWarnings
+            // Remove all global accountLink warnings for these IDs
+            current.removeAll { warning in
+                let parts = warning.components(separatedBy: ":")
+                return parts.count <= 1 || (parts.count >= 3 && parts[1] == "all" && parts[2] == WarningType.accountLink.rawValue)
+            }
+            // Add them back as global
+            for id in newValue {
+                current.append("\(id):all:accountLink")
+            }
+            ignoredWarnings = Array(Set(current)).sorted()
+        }
+    }
+
+    public func isIgnoringWarning(accountId: String, gameId: String = "all", type: WarningType) -> Bool {
+        let specific = "\(accountId):\(gameId):\(type.rawValue)"
+        let global = "\(accountId):all:\(type.rawValue)"
+        return ignoredWarnings.contains(specific) || ignoredWarnings.contains(global)
+    }
+
+    public func setIgnoreWarning(_ ignored: Bool, accountId: String, gameId: String = "all", type: WarningType) {
+        let key = "\(accountId):\(gameId):\(type.rawValue)"
+        var current = ignoredWarnings
+        if ignored {
+            if !current.contains(key) {
+                current.append(key)
+            }
+        } else {
+            current.removeAll { $0 == key }
+        }
+        ignoredWarnings = current
+    }
+
+    public func isIgnoringAccountLinkWarnings(for accountId: String) -> Bool {
+        isIgnoringWarning(accountId: accountId, type: .accountLink)
+    }
+
+    public func isIgnoringAccountLinkWarnings(for accountId: String, gameId: String) -> Bool {
+        isIgnoringWarning(accountId: accountId, gameId: gameId, type: .accountLink)
+    }
+
+    public func setIgnoreAccountLinkWarnings(_ ignored: Bool, for accountId: String, gameId: String = "all") {
+        setIgnoreWarning(ignored, accountId: accountId, gameId: gameId, type: .accountLink)
+    }
+
     /// Last selected game/category (for UI restoration)
-    @AppStorage("lastSelectedGameId")
+    @AppStorage("lastSelectedGameId", store: Settings.appStorageStore)
     public var lastSelectedGameId: String = ""
 
     /// Whether the user explicitly dismissed the optional onboarding surface.
-    @AppStorage("hasDismissedOnboarding")
+    @AppStorage("hasDismissedOnboarding", store: Settings.appStorageStore)
     public var hasDismissedOnboarding: Bool = false
 
     /// Twitch application Client ID (set once; used by all miners)
-    @AppStorage("twitchClientId")
+    @AppStorage("twitchClientId", store: Settings.appStorageStore)
     public var twitchClientId: String = ""
+
+    /// Whether SwiftBot Discord integration is enabled
+    @AppStorage("swiftBotEnabled", store: Settings.appStorageStore)
+    public var swiftBotEnabled: Bool = false
+
+    /// SwiftBot integration endpoint (e.g. http://127.0.0.1:8080)
+    @AppStorage("swiftBotEndpoint", store: Settings.appStorageStore)
+    public var swiftBotEndpoint: String = ""
     
     /// JSON-encoded array of GamePreference for selected games
-    @AppStorage("gamePreferencesData")
+    @AppStorage("gamePreferencesData", store: Settings.appStorageStore)
     public var gamePreferencesData: String = "[]"
 
     /// Legacy storage (kept for migration only)
-    @AppStorage("priorityGamesString")
+    @AppStorage("priorityGamesString", store: Settings.appStorageStore)
     private var priorityGamesString: String = ""
 
     /// Legacy storage (kept for migration only)
-    @AppStorage("excludedGamesString")
+    @AppStorage("excludedGamesString", store: Settings.appStorageStore)
     private var excludedGamesString: String = ""
 
     /// Mining strategy selection
-    @AppStorage("miningStrategy")
+    @AppStorage("miningStrategy", store: Settings.appStorageStore)
     public var miningStrategy: MiningStrategy = .mineAll
 
     // MARK: - Game Preferences
@@ -152,53 +284,6 @@ public final class Settings: ObservableObject {
     /// Excluded game names derived from preferences (backward compat for MinerEngine)
     public var excludedGames: [String] {
         gameNames(for: .excluded)
-    }
-
-    /// Account IDs that should suppress account-link-required warnings.
-    public var ignoredAccountLinkWarningAccountIds: [String] {
-        get {
-            guard let data = ignoredAccountLinkWarningAccountIdsData.data(using: .utf8),
-                  let decoded = try? JSONDecoder().decode([String].self, from: data) else {
-                return []
-            }
-            var seen = Set<String>()
-            return decoded
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-                .filter { seen.insert($0).inserted }
-        }
-        set {
-            let normalized = Array(
-                Set(
-                    newValue
-                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                        .filter { !$0.isEmpty }
-                )
-            ).sorted()
-
-            if let data = try? JSONEncoder().encode(normalized),
-               let encoded = String(data: data, encoding: .utf8),
-               ignoredAccountLinkWarningAccountIdsData != encoded {
-                objectWillChange.send()
-                ignoredAccountLinkWarningAccountIdsData = encoded
-            }
-        }
-    }
-
-    public func isIgnoringAccountLinkWarnings(for accountId: String) -> Bool {
-        ignoredAccountLinkWarningAccountIds.contains(accountId)
-    }
-
-    public func setIgnoreAccountLinkWarnings(_ ignored: Bool, for accountId: String) {
-        var ids = ignoredAccountLinkWarningAccountIds
-        if ignored {
-            if !ids.contains(accountId) {
-                ids.append(accountId)
-            }
-        } else {
-            ids.removeAll { $0 == accountId }
-        }
-        ignoredAccountLinkWarningAccountIds = ids
     }
 
 #if DEBUG
@@ -532,16 +617,31 @@ public final class Settings: ObservableObject {
         maxLogEntries = 500
         minimizeToMenuBar = false
         autoStartOnLaunch = false
+        enableBadgesEmotes = false
         syncMinersState = true
         runInBackground = true
+        queueDisplayStyle = .stacked
         preferredQuality = .auto
         showClaimNotifications = false
         lastSelectedGameId = ""
         hasDismissedOnboarding = false
+        twitchClientId = ""
+        swiftBotEnabled = false
+        swiftBotEndpoint = ""
         gamePreferencesData = "[]"
+        selectedDropsFiltersData = "[\"active\"]"
         miningStrategy = .mineAll
         preferSteamArtwork = true
-        ignoredAccountLinkWarningAccountIdsData = "[]"
+        showOverviewQueue = true
+        overviewQueueMinerId = ""
+        ignoredWarningsData = "[]"
+#if DEBUG
+        debugFakeQueueEnabled = false
+        debugFakeQueueSource = .prioritisedGames
+        debugFakeQueueLength = 3
+        debugFakeQueueCustomGamesData = "[]"
+        debugBypassLinkRequirement = false
+#endif
     }
 }
 
