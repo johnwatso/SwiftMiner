@@ -77,6 +77,9 @@ public final class AppModel {
             // Drive isAuthenticated from MinerManager's miner list.
             reconcileManagerState(manager)
 
+            // Sync priority games so state evaluation uses the current preferences
+            manager.updatePriorityGames(Settings.shared.priorityGames)
+
             // Sync notification preference
             await manager.updateNotificationPreference(enabled: Settings.shared.showClaimNotifications)
 
@@ -188,7 +191,7 @@ public final class AppModel {
             return
         }
         await engine.stop()
-        let authService = TwitchAuthService(clientId: clientId)
+        let authService = TwitchAuthService(clientId: clientId, tokenStore: KeychainTokenStore())
         try? await authService.logout()
         isAuthenticated = false
         authInfo = nil
@@ -281,10 +284,10 @@ public final class AppModel {
 
     private func reconcileManagerState(_ manager: MinerManager) {
         isAuthenticated = !manager.miners.isEmpty
-        updateAccountLinkIssueBadge(using: manager)
+        updateMinerLinkIssueBadge(using: manager)
     }
 
-    private func updateAccountLinkIssueBadge(using manager: MinerManager) {
+    private func updateMinerLinkIssueBadge(using manager: MinerManager) {
         let settings = Settings.shared
         let priorityGames = Set(
             settings.priorityGames
@@ -297,16 +300,20 @@ public final class AppModel {
             return
         }
 
-        let ignoredAccountIds = Set(settings.ignoredAccountLinkWarningAccountIds)
         let hasUnresolvedIssue = manager.miners.contains { miner in
             guard miner.isRunning else { return false }
-            guard !ignoredAccountIds.contains(miner.accountId) else { return false }
 
             return miner.allCampaigns.contains { campaign in
-                campaign.isTimeActive
+                // Only consider active, unlinked campaigns for prioritised games
+                guard campaign.isTimeActive
                     && !campaign.isAccountConnected
                     && priorityGames.contains(campaign.gameName.lowercased())
-                    && campaign.drops.contains(where: { !$0.isClaimed })
+                    && campaign.drops.contains(where: { !$0.isClaimed }) else {
+                    return false
+                }
+
+                // Check if this specific game warning is suppressed for this account
+                return !settings.isIgnoringAccountLinkWarnings(for: miner.accountId, gameId: campaign.game.id)
             }
         }
 

@@ -1,18 +1,98 @@
 import Foundation
 
 /// Standalone utility to resolve the PrimaryState for a miner.
-/// Used to unify multiple internal states into a single, consistent user-facing model.
+/// Uses the per-game state list (MinerGameState) as the source of truth,
+/// then maps to the user-facing PrimaryState enum.
 public enum PrimaryStateResolver {
-    
+
     /// Resolves the PrimaryState for a given miner.
-    /// 
-    /// Precedence Rules (Task 2):
-    /// 1. `.blocked`: If ANY active campaign is blocked (auth, connection).
-    /// 2. `.mining`: If ANY campaign is actively mining an incomplete drop.
-    /// 3. `.ready`: If ANY campaign has work to do (earnable drops < 100% progress).
-    /// 4. `.completed`: If ALL drops across all relevant campaigns are earned (100% progress).
+    ///
+    /// Derives from the per-game state list to ensure a single, consistent resolution:
+    /// 1. `.mining`: If ANY game state is actively watching with progress.
+    /// 2. `.ready`: If ANY game state is idle but earnable.
+    /// 3. `.blocked`: If no game is earnable and a game state is blocked.
+    /// 4. `.completed`: If ALL game states have earned drops.
     @MainActor
     public static func resolve(for miner: MinerManager.ManagedMiner) -> PrimaryState {
+        // Global auth block takes precedence
+        if miner.needsAuth {
+            return .blocked(reasons: [.accountNotLinked])
+        }
+
+        // Empty prioritised list → idle/ready with no warnings
+        if miner.priorityGames.isEmpty {
+            return .ready
+        }
+
+        let gameStates = miner.gameStates
+
+        // No games at all → derive from raw miner state
+        guard !gameStates.isEmpty else {
+            return fallbackResolve(for: miner)
+        }
+
+        let resolved = ResolvedPrimaryState(gameStates: gameStates)
+        guard let primary = resolved.resolved else {
+            return fallbackResolve(for: miner)
+        }
+
+        switch primary.state {
+        case .blocked:
+            switch primary.reason {
+            case .notLinked:
+                return .blocked(reasons: [.accountNotLinked])
+            case .noCampaign, .noEligibleCampaign, .campaignExpired:
+                return .blocked(reasons: [.noEligibleCampaign])
+            case .noLiveStreams:
+                return .blocked(reasons: [.noLiveStreams])
+            case .noDropsAvailable:
+                return .blocked(reasons: [.noEligibleCampaign])
+            case .none:
+                return .blocked(reasons: [.noEligibleCampaign])
+            }
+
+        case .watching:
+            // Map to .mining with progress details
+            if let campaign = miner.allCampaigns.first(where: { $0.id == primary.campaignId }),
+               let activeDrop = campaign.drops.first(where: { !$0.isClaimed }) {
+                let dropState = miner.stateStore?.dropStates.first { $0.dropId == activeDrop.id }
+                let currentMinutes = dropState?.progressMinutes ?? activeDrop.progress?.currentMinutes ?? 0
+                let requiredMinutes = dropState?.requiredMinutes ?? activeDrop.requiredMinutes
+
+                if currentMinutes < requiredMinutes {
+                    let fraction = requiredMinutes > 0 ? Double(currentMinutes) / Double(requiredMinutes) : 0
+                    let progress = MiningProgress(
+                        gameName: campaign.game.name,
+                        campaignName: campaign.name,
+                        dropName: activeDrop.name,
+                        progressFraction: min(1.0, max(0.0, fraction)),
+                        minutesRemaining: max(0, requiredMinutes - currentMinutes)
+                    )
+                    return .mining(progress: progress)
+                }
+            }
+            // Watching but drop complete → ready
+            return .ready
+
+        case .idle:
+            // All games have no drops available (all claimed) → completed
+            if gameStates.allSatisfy({ $0.reason == .noDropsAvailable }) {
+                return .completed
+            }
+            // Any idle game with an available campaign → ready
+            let hasEarnable = gameStates.contains { gs in
+                gs.isIdle && gs.reason == .none
+            }
+            if hasEarnable {
+                return .ready
+            }
+            return .blocked(reasons: [.noEligibleCampaign])
+        }
+    }
+
+    /// Legacy fallback: resolves from raw miner fields when no game-state list is available.
+    @MainActor
+    private static func fallbackResolve(for miner: MinerManager.ManagedMiner) -> PrimaryState {
         // Filter out irrelevant campaigns (no drops) AND hard exclude "Just Chatting"
         let relevantCampaigns = miner.allCampaigns.filter { campaign in
             if campaign.drops.isEmpty { return false }
@@ -37,14 +117,29 @@ public enum PrimaryStateResolver {
         
         // 1b. Specific Campaign Block (Disconnected)
         // John: "disconnected campaign account... must show 'Link Required'"
-        // Only blocks if the campaign is active, needs linking, and isn't already earned.
-        let disconnected = relevantCampaigns.filter { campaign in
+        // Task 1 UPDATE: Miners only reason about what they can actually do.
+        // We only show blocked if the user is TRYING to mine something prioritised
+        // that is blocked, OR if they have no eligible work but have prioritised games.
+        
+        let priorityGamesLower = Set(miner.priorityGames.map { $0.lowercased() })
+        
+        // Find prioritised games that are active but unlinked.
+        let blockedPriority = relevantCampaigns.filter { campaign in
             campaign.isTimeActive && 
             !campaign.isAccountConnected && 
+            priorityGamesLower.contains(campaign.gameName.lowercased()) &&
             campaign.drops.contains { !isEarned($0) }
         }
-        if !disconnected.isEmpty {
-            print("[PrimaryStateResolver] \(disconnected.count) disconnected active campaign(s) → .blocked(.accountNotLinked)")
+        
+        // Find any active, linked, earnable campaign.
+        let hasEarnableWork = relevantCampaigns.contains { campaign in
+            campaign.isTimeActive && campaign.isAccountConnected && campaign.drops.contains { !isEarned($0) }
+        }
+        
+        // Only block if a prioritised game is unlinked AND we have no other earnable work.
+        // If we have other work, we should be .ready for that work instead.
+        if !blockedPriority.isEmpty && !hasEarnableWork {
+            print("[PrimaryStateResolver] prioritised campaign(s) unlinked and no other work → .blocked(.accountNotLinked)")
             return .blocked(reasons: [.accountNotLinked])
         }
         

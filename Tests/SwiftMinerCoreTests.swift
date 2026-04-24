@@ -119,4 +119,83 @@ final class SwiftMinerCoreTests: XCTestCase {
         XCTAssertNotNil(TwitchMinerError.dropAlreadyClaimed.errorDescription)
         XCTAssertNotNil(TwitchMinerError.unknown("boom").errorDescription)
     }
+
+    // MARK: - Token storage
+
+    func testSQLiteTokenStoreRoundTripsOwnerAndEmptyScopes() async throws {
+        let databaseURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftMinerTests-\(UUID().uuidString).sqlite")
+        let manager = SQLiteManager(databaseURL: databaseURL)
+        try await manager.open()
+        defer {
+            try? FileManager.default.removeItem(at: databaseURL)
+        }
+
+        let store = SQLiteTokenStore(manager: manager)
+        let account = Account(
+            id: "twitch-1",
+            username: "miner",
+            ownerDiscordId: "123456789012345678",
+            accessToken: "access",
+            refreshToken: "refresh",
+            tokenExpiry: Date().addingTimeInterval(3600),
+            scopes: []
+        )
+
+        try await store.save(account: account)
+
+        let loadedAccount = try await store.loadAccount(twitchUserId: account.id)
+        let loaded = try XCTUnwrap(loadedAccount)
+        XCTAssertEqual(loaded.ownerDiscordId, account.ownerDiscordId)
+        XCTAssertEqual(loaded.scopes, [])
+
+        try await store.updateTokenMaterial(
+            twitchUserId: account.id,
+            accessToken: "new-access",
+            refreshToken: nil,
+            expiry: Date().addingTimeInterval(7200)
+        )
+
+        let refreshedAccount = try await store.loadAccount(twitchUserId: account.id)
+        let refreshed = try XCTUnwrap(refreshedAccount)
+        XCTAssertEqual(refreshed.ownerDiscordId, account.ownerDiscordId)
+        XCTAssertEqual(refreshed.accessToken, "new-access")
+        XCTAssertEqual(refreshed.refreshToken, "refresh")
+        XCTAssertEqual(refreshed.scopes, [])
+
+        await manager.close()
+    }
+}
+
+actor TestTokenStore: TokenStore {
+    private var accounts: [String: Account] = [:]
+
+    func save(account: Account) async throws {
+        accounts[account.id] = account
+    }
+
+    func loadAllAccounts() async throws -> [Account] {
+        Array(accounts.values)
+    }
+
+    func loadAccount(twitchUserId: String) async throws -> Account? {
+        accounts[twitchUserId]
+    }
+
+    func updateTokenMaterial(twitchUserId: String, accessToken: String, refreshToken: String?, expiry: Date) async throws {
+        guard let existing = accounts[twitchUserId] else { return }
+        accounts[twitchUserId] = Account(
+            id: existing.id,
+            username: existing.username,
+            ownerDiscordId: existing.ownerDiscordId,
+            accessToken: accessToken,
+            refreshToken: refreshToken ?? existing.refreshToken,
+            tokenExpiry: expiry,
+            scopes: existing.scopes
+        )
+    }
+
+    func deleteAccount(twitchUserId: String) async throws {
+        accounts.removeValue(forKey: twitchUserId)
+    }
 }

@@ -156,7 +156,7 @@ public actor ClaimService {
                 try? await Task.sleep(nanoseconds: 500_000_000)
             }
         } catch {
-            // Return empty on error
+            traceClaim("claimAllDrops(from:) failed fetching inventory: \(error.localizedDescription)")
         }
 
         return (successful, failed)

@@ -7,6 +7,7 @@ public actor TwitchAuthService {
     public static let twitchAndroidClientId = "kd1unb4b3q4t58fwlpcbzcbnm76a8fp"
 
     private let clientId: String
+    private let tokenStore: any TokenStore
     private let tokenURL = URL(string: "https://id.twitch.tv/oauth2/token")!
     private let deviceCodeURL = URL(string: "https://id.twitch.tv/oauth2/device")!
     private let validateURL = URL(string: "https://id.twitch.tv/oauth2/validate")!
@@ -31,8 +32,9 @@ public actor TwitchAuthService {
         self.onTokenRefresh = handler
     }
 
-    public init(clientId: String) {
+    public init(clientId: String, tokenStore: any TokenStore) {
         self.clientId = clientId
+        self.tokenStore = tokenStore
     }
 
     // MARK: - Device Code Flow
@@ -94,7 +96,7 @@ public actor TwitchAuthService {
             do {
                 let account = try await requestToken(deviceCode: deviceCode)
                 print("[TwitchAuthService] Token received! User: \(account.username)")
-                try await KeychainStorage.save(account: account)
+                try await tokenStore.save(account: account)
                 self.currentAccount = account
                 return account
             } catch let error as TwitchMinerError {
@@ -234,7 +236,7 @@ public actor TwitchAuthService {
             scopes: tokenResponse.scope
         )
 
-        try await KeychainStorage.save(account: refreshedAccount)
+        try await tokenStore.save(account: refreshedAccount)
         self.currentAccount = refreshedAccount
         
         onTokenRefresh?(refreshedAccount.accessToken)
@@ -268,7 +270,8 @@ public actor TwitchAuthService {
         )
 
         // 3. Save to secure storage
-        try await KeychainStorage.save(account: account)
+        try await tokenStore.save(account: account)
+        self.currentAccount = account
         return account
     }
 
@@ -300,26 +303,26 @@ public actor TwitchAuthService {
     }
 
     public func loadSavedAccount() async throws -> Account? {
-        if let account = try await KeychainStorage.loadFirstAccount() {
+        if let account = (try await tokenStore.loadAllAccounts()).first {
             self.currentAccount = account
             return account
         }
         return nil
     }
     
-    /// Loads all accounts saved in the keychain.
+    /// Loads all accounts saved in the persistent store.
     public func loadAllAccounts() async throws -> [Account] {
-        return try await KeychainStorage.loadAllAccounts()
+        return try await tokenStore.loadAllAccounts()
     }
 
     public func logout(accountId: String? = nil) async throws {
         if let id = accountId {
-            try await KeychainStorage.deleteAccount(id: id)
+            try await tokenStore.deleteAccount(twitchUserId: id)
             if currentAccount?.id == id {
                 currentAccount = nil
             }
         } else if let account = currentAccount {
-            try await KeychainStorage.deleteAccount(id: account.id)
+            try await tokenStore.deleteAccount(twitchUserId: account.id)
             currentAccount = nil
         }
     }
@@ -358,102 +361,6 @@ public actor TwitchAuthService {
 // causing accounts to "disappear" after each Xcode build.
 
 import CryptoKit
-
-private actor KeychainStorage {
-    private static let directoryName = "com.swiftminer"
-    private static let fileName = "accounts.enc"
-
-    private static var storageDir: URL {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let dir = appSupport.appendingPathComponent(directoryName, isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir
-    }
-
-    private static var storageURL: URL {
-        storageDir.appendingPathComponent(fileName)
-    }
-
-    // MARK: - Encryption key (derived from hardware UUID)
-
-    private static var encryptionKey: SymmetricKey {
-        let uuid = hardwareUUID()
-        let inputKey = SymmetricKey(data: Data(uuid.utf8))
-        // HKDF-SHA256 derive a proper 256-bit key
-        let derived = HKDF<SHA256>.deriveKey(
-            inputKeyMaterial: inputKey,
-            salt: Data("com.swiftminer.accounts".utf8),
-            info: Data("aes-256-gcm".utf8),
-            outputByteCount: 32
-        )
-        return derived
-    }
-
-    private static func hardwareUUID() -> String {
-        let service = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("IOPlatformExpertDevice"))
-        defer { IOObjectRelease(service) }
-        guard let uuidData = IORegistryEntryCreateCFProperty(service, "IOPlatformUUID" as CFString, kCFAllocatorDefault, 0),
-              let uuid = uuidData.takeRetainedValue() as? String else {
-            // Fallback — still stable per-machine
-            return ProcessInfo.processInfo.hostName
-        }
-        return uuid
-    }
-
-    // MARK: - Read / Write helpers
-
-    private static func readAll() -> [Account] {
-        guard let encrypted = try? Data(contentsOf: storageURL) else { return [] }
-        do {
-            let box = try AES.GCM.SealedBox(combined: encrypted)
-            let plaintext = try AES.GCM.open(box, using: encryptionKey)
-            return try JSONDecoder().decode([Account].self, from: plaintext)
-        } catch {
-            print("[AccountStorage] Decryption failed: \(error.localizedDescription)")
-            return []
-        }
-    }
-
-    private static func writeAll(_ accounts: [Account]) throws {
-        let plaintext = try JSONEncoder().encode(accounts)
-        let sealed = try AES.GCM.seal(plaintext, using: encryptionKey)
-        guard let combined = sealed.combined else {
-            throw TwitchMinerError.authenticationFailed("Encryption failed")
-        }
-        try combined.write(to: storageURL, options: .atomic)
-        // Restrict file to owner-only read/write
-        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: storageURL.path)
-    }
-
-    // MARK: - Public API
-
-    static func save(account: Account) async throws {
-        var accounts = readAll()
-        accounts.removeAll { $0.id == account.id }
-        accounts.append(account)
-        try writeAll(accounts)
-        print("[AccountStorage] Saved account \(account.username) (\(accounts.count) total)")
-    }
-
-    static func loadFirstAccount() async throws -> Account? {
-        let accounts = readAll()
-        print("[AccountStorage] loadFirstAccount: \(accounts.count) stored")
-        return accounts.first
-    }
-
-    static func loadAllAccounts() async throws -> [Account] {
-        let accounts = readAll()
-        print("[AccountStorage] loadAllAccounts: \(accounts.count) stored")
-        return accounts
-    }
-
-    static func deleteAccount(id: String) async throws {
-        var accounts = readAll()
-        accounts.removeAll { $0.id == id }
-        try writeAll(accounts)
-        print("[AccountStorage] Deleted account \(id), \(accounts.count) remaining")
-    }
-}
 
 // MARK: - URL Encoding Helper
 

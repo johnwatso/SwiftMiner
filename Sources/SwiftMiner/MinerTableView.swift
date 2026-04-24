@@ -8,7 +8,7 @@ struct MinerTableView: View {
     
     var body: some View {
         Table(miners, selection: .constant(navigation.selectedMinerId)) {
-            TableColumn("Account") { miner in
+            TableColumn("Miner") { miner in
                 HStack(spacing: 8) {
                     Image(systemName: "person.circle.fill")
                         .foregroundStyle(.purple)
@@ -20,7 +20,7 @@ struct MinerTableView: View {
             .width(min: 100, ideal: 120)
             
             TableColumn("Status") { miner in
-                StatusBadge(status: miner.status)
+                StatusBadge(miner: miner)
             }
             .width(min: 80, ideal: 100)
             
@@ -56,15 +56,15 @@ struct MinerTableView: View {
 // MARK: - Status Badge
 
 struct StatusBadge: View {
-    let status: MinerManager.MinerStatus
-    
+    let miner: MinerManager.ManagedMiner
+
     var body: some View {
         HStack(spacing: 5) {
             Circle()
                 .fill(statusColor)
                 .frame(width: 7, height: 7)
-            
-            Text(status.displayName)
+
+            Text(label)
                 .font(.caption2)
                 .fontWeight(.bold)
                 .textCase(.uppercase)
@@ -80,27 +80,43 @@ struct StatusBadge: View {
                 }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Status: \(status.displayName)")
+        .accessibilityLabel("Status: \(label)")
     }
-    
+
+    private var label: String {
+        miner.statusLabel
+    }
+
     private var statusColor: Color {
-        switch status {
-        case .idle:
-            return .gray
-        case .authenticating:
-            return .blue
-        case .fetchingCampaigns:
-            return .cyan
+        guard let resolved = miner.resolvedPrimaryState?.resolved else {
+            return fallbackColor
+        }
+        switch resolved.state {
         case .watching:
             return .green
-        case .waitingForStream:
-            return .yellow
-        case .claiming:
-            return .purple
-        case .paused:
-            return .orange
-        case .error:
-            return .red
+        case .blocked:
+            switch resolved.reason {
+            case .notLinked: return .orange
+            case .noLiveStreams: return .cyan
+            default: return .secondary
+            }
+        case .idle:
+            return .gray
+        }
+    }
+
+    private var fallbackColor: Color {
+        switch miner.status {
+        case .idle: return .gray
+        case .authenticating: return .blue
+        case .fetchingCampaigns: return .cyan
+        case .watching: return .green
+        case .waitingForStream: return .yellow
+        case .claiming: return .purple
+        case .paused: return .orange
+        case .idleNoEligibleCampaigns: return .gray
+        case .blockedAccountNotLinked: return .orange
+        case .error: return .red
         }
     }
 }
