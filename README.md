@@ -5,48 +5,20 @@
 <h1 align="center">SwiftMiner</h1>
 
 <p align="center">
-  Native macOS Twitch Drops supervisor for multi-account mining
+  Native macOS supervisor for Twitch Drops across multiple accounts
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/platform-macOS%2026+-blue">
-  <img src="https://img.shields.io/badge/swift-6.0-orange">
-  <img src="https://img.shields.io/badge/architecture-Universal%20(Apple%20Silicon%20%2B%20Intel)-black">
-  <img src="https://img.shields.io/badge/license-GPLv3-blue">
-  <img src="https://img.shields.io/badge/status-active%20development-orange">
+  <img src="https://img.shields.io/badge/platform-macOS%2026+-blue" alt="Platform badge">
+  <img src="https://img.shields.io/badge/swift-6.0-orange" alt="Swift badge">
+  <img src="https://img.shields.io/badge/architecture-Universal%20(Apple%20Silicon%20%2B%20Intel)-black" alt="Architecture badge">
+  <img src="https://img.shields.io/badge/license-GPLv3-blue" alt="License badge">
+  <img src="https://img.shields.io/badge/status-active%20development-orange" alt="Status badge">
 </p>
 
----
+SwiftMiner is a native SwiftUI app for managing Twitch Drops mining from one macOS dashboard. It runs each account as its own isolated miner, then aggregates campaigns, progress, and claim state into one view so you can see what is worth watching and what is ready to claim without juggling multiple windows.
 
-## Why SwiftMiner Exists
-
-Managing Twitch Drops across multiple accounts is messy.
-
-- Progress is fragmented  
-- Campaigns disappear once completed  
-- Running multiple miners is clunky
-
-SwiftMiner was built to fix that, especially for people who just want this running on their own Mac.
-
-- Native macOS app  
-- Easy multi-account management in one place  
-
-It acts as a **supervisor layer**, giving you a single, consistent view of everything.
-
-> Built on the ideas and groundwork of  
-> https://github.com/DevilXD/TwitchDropsMiner
-
----
-
-## Usage Notes
-
-- Tested with up to **5 concurrent miner instances**
-- Running more than this is **untested**
-- Excessive automation **may violate Twitch policies**
-
-Use this tool at your own risk. You are responsible for how you use it.
-
----
+It is built for personal use on macOS and is heavily inspired by the groundwork in [DevilXD/TwitchDropsMiner](https://github.com/DevilXD/TwitchDropsMiner).
 
 ## Preview
 
@@ -54,142 +26,139 @@ Use this tool at your own risk. You are responsible for how you use it.
   <img src="assets/readme/v0.0.1 UI Example.png" alt="SwiftMiner Dashboard Preview">
 </p>
 
----
+## What SwiftMiner Does
 
-## One Dashboard. All Drops.
+- Aggregates campaigns from all connected accounts into one dashboard
+- Keeps completed, in-progress, and claimable drops visible in a consistent view
+- Runs multiple miner engines independently instead of blending account state together
+- Automatically tracks watch progress and claims completed drops
+- Exposes app controls in both the main window and a menu bar extra
+- Uses Twitch device-code login so accounts can be added without embedding a web view
+- Ships with Sparkle-based in-app updates for release builds
 
-SwiftMiner aggregates every campaign across every account into a single view.
+## Why It Exists
 
-- Always shows campaigns, even if already claimed  
-- Prioritised ordering: **Claimable -> In Progress -> Available**  
-- Drops stay attached to campaigns with no disappearing UI  
+Managing Twitch Drops across several accounts is usually messy:
 
-This becomes your **source of truth**.
+- progress is split across accounts
+- completed campaigns disappear from the UI
+- automation tools tend to expose raw miner state, not a clean supervisor view
 
----
-
-## Multi-Account, Done Properly
-
-Each account runs as its own isolated miner.
-
-SwiftMiner brings them together:
-
-- Start or stop individually or all at once  
-- See which accounts are actively mining  
-- Track contribution per account  
-
-No more juggling multiple apps or windows.
-
----
-
-## Smart Progress, Not Noise
-
-Instead of duplicating or averaging data, SwiftMiner shows:
-
-- **Best Progress** across all miners  
-- **Active Miners** per drop  
-- **Clear completion state**  
-
-You know exactly where you stand, instantly.
-
----
-
-## Fully Automated
-
-Once running, SwiftMiner handles the rest:
-
-- Selects the best available stream  
-- Tracks watch progress  
-- Automatically claims drops  
-
-Set it up once, let it run.
-
----
-
-## Native macOS Experience
-
-Built in SwiftUI for macOS 26+.
-
-- Designed around modern macOS UI patterns  
-- Menu bar integration  
-- Fast, minimal, and responsive  
-
-This is not a wrapper or port.
-
----
+SwiftMiner sits above the per-account miner engines and gives you a single control surface for the whole setup.
 
 ## Install
 
-Download from https://github.com/johnwatso/SwiftMiner/releases
+Download the latest release from [GitHub Releases](https://github.com/johnwatso/SwiftMiner/releases).
 
-1. Download the latest `.zip`  
-2. Move `SwiftMiner.app` to `/Applications`  
-3. Launch the app and add your account  
+1. Download the latest `.zip`.
+2. Move `SwiftMiner.app` to `/Applications`.
+3. Open the app and add an account.
+4. Allow notifications if you want claim alerts.
 
-Updates are handled via Sparkle.
+Release builds are universal macOS binaries and support both Apple Silicon (`arm64`) and Intel (`x86_64`).
 
-### System Requirements
+## First Run
 
-- macOS 26+
-- Internet access
-- A Twitch account for device login
-- Release builds are universal macOS binaries and support both Apple Silicon (`arm64`) and Intel (`x86_64`)
+SwiftMiner uses Twitch OAuth device-code authentication.
 
----
+1. Click `Add Account`.
+2. Visit [twitch.tv/activate](https://www.twitch.tv/activate).
+3. Enter the code shown by SwiftMiner.
+4. Sign in and approve the device login.
 
-## Authentication
-
-Uses Twitch OAuth device flow.
-
-1. Click **Add Account**  
-2. Visit https://www.twitch.tv/activate  
-3. Enter code and log in  
-
-Supports multiple accounts.
-
----
-
-## Architecture (High-Level)
-
-```
-SwiftUI App (Dashboard + Control)
-        ↓
-Multi-Miner Manager
-        ↓
-Per-Account Miner Engines
-        ↓
-Auth • API • Drops • Watch • Claim • PubSub
-```
-
----
+After that, SwiftMiner can restore saved accounts and manage them from the main dashboard.
 
 ## Requirements
 
 - macOS 26+
-- Apple Silicon or Intel Mac
-- Xcode 16+ (for building)
+- Xcode 16+ for local builds
 - [XcodeGen](https://github.com/yonaskolb/XcodeGen)
+- Internet access
 
-### Architecture Notes
+## Building From Source
 
-- Debug builds in Xcode use the active architecture on the current Mac
-- Release and Archive builds use the standard macOS universal architecture set (`arm64` + `x86_64`)
+Generate the Xcode project, then open or build it normally:
 
----
+```bash
+xcodegen generate
+open SwiftMiner.xcodeproj
+```
 
-## Status
+You can also build from the command line:
 
-Active development. Expect iteration and change.
+```bash
+xcodebuild -project SwiftMiner.xcodeproj -scheme SwiftMiner -destination 'platform=macOS' build
+```
 
----
+Run tests with:
+
+```bash
+xcodebuild -project SwiftMiner.xcodeproj -scheme SwiftMiner -destination 'platform=macOS' test
+```
+
+## Configuration
+
+The app resolves `TWITCH_CLIENT_ID` from the environment first and falls back to the bundled client ID when it is not set. The `SwiftMinerCLI` target is stricter and expects `TWITCH_CLIENT_ID` to be provided explicitly.
+
+Example:
+
+```bash
+export TWITCH_CLIENT_ID=your_client_id
+```
+
+## Project Layout
+
+```text
+Sources/
+  SwiftMiner/       SwiftUI macOS app, onboarding, dashboard, settings, menu bar UI
+  SwiftMinerCore/   Actor-based mining engine, Twitch services, models, aggregation logic
+  SwiftMinerCLI/    Headless CLI runner for engine debugging
+Tests/              Unit tests for services, engine behavior, routing, and presentation
+Documentation/      Architecture notes, release process, audits, and implementation docs
+scripts/            Build and Sparkle release automation
+```
+
+## Architecture
+
+SwiftMiner is split into two layers:
+
+1. `SwiftMiner`
+   The macOS app layer. It owns the SwiftUI dashboard, onboarding flow, settings, notifications, and menu bar integration.
+2. `SwiftMinerCore`
+   The mining layer. It contains the actor-based engine, account state, Twitch API/auth services, watch session management, drop claiming, and campaign aggregation.
+
+High-level flow:
+
+```text
+SwiftUI App
+  -> AppModel / NavigationModel
+  -> MinerManager
+  -> per-account MinerEngine actors
+  -> Twitch auth, API, watch session, campaign, inventory, and claim services
+```
+
+That separation keeps the UI relatively thin while the mining logic stays testable in `SwiftMinerCore`.
+
+## CLI Target
+
+The repository also includes `SwiftMinerCLI`, a small headless runner that exercises the same core engine used by the app. It is mainly useful for debugging authentication, logging, and mining behavior outside the GUI.
+
+## Notes And Risk
+
+- SwiftMiner is intended for personal use on your own machines.
+- Any automation against Twitch carries account and policy risk.
+- Use it at your own risk and make sure you understand Twitch's current rules before running unattended automation.
+- The project has been exercised with several concurrent miners, but your own limits will depend on your machine, network, and account setup.
+
+## Related Docs
+
+- [Architecture Overview](Documentation/ARCHITECTURE.md)
+- [Engine Architecture](Documentation/EngineArchitecture.md)
+- [Release Runbook](Documentation/RELEASING.md)
 
 ## Contributing
 
-- Keep PRs small and focused  
-- Include screenshots for UI changes  
-- Write clear summaries  
-
----
+Small, focused pull requests are easiest to review. If you change the UI, include screenshots. If you change engine behavior, include or update tests where practical.
 
 ## License
 
