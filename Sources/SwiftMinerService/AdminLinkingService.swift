@@ -152,14 +152,14 @@ public actor SQLiteAdminLinkingService: AdminLinkingService {
 
                 let auditId = UUID().uuidString
                 let auditSql = """
-                INSERT INTO admin_audit_log (id, operator_id, twitch_id, from_discord_id, to_discord_id, metadata_json)
-                VALUES (?, ?, ?, ?, ?, ?);
+                INSERT INTO admin_audit_log (id, action_type, operator_id, twitch_id, from_discord_id, to_discord_id, metadata_json)
+                VALUES (?, 'account_assigned', ?, ?, ?, ?, ?);
                 """
                 var auditStmt: OpaquePointer?
                 guard sqlite3_prepare_v2(db, auditSql, -1, &auditStmt, nil) == SQLITE_OK else { throw self.dbError(db) }
                 defer { sqlite3_finalize(auditStmt) }
                 sqlite3_bind_text(auditStmt, 1, auditId, -1, SQLITE_TRANSIENT)
-                sqlite3_bind_text(auditStmt, 2, assignment.operatorId, -1, SQLITE_TRANSIENT)
+                sqlite3_bind_text(auditStmt, 2, assignment.operatorIdentity.stringValue, -1, SQLITE_TRANSIENT)
                 sqlite3_bind_text(auditStmt, 3, assignment.twitchAccountId, -1, SQLITE_TRANSIENT)
                 sqlite3_bind_text(auditStmt, 4, previousOwner, -1, SQLITE_TRANSIENT)
                 sqlite3_bind_text(auditStmt, 5, assignment.discordId, -1, SQLITE_TRANSIENT)
@@ -181,9 +181,10 @@ public actor SQLiteAdminLinkingService: AdminLinkingService {
 
                 let eventId = UUID().uuidString
                 let eventType = "user.linked"
+                let idempotencyKey = "user.linked:discord:\(assignment.discordId):twitch:\(assignment.twitchAccountId)"
                 let eventSql = """
-                INSERT INTO event_outbox (id, event_type, payload, status)
-                VALUES (?, ?, ?, 'pending');
+                INSERT INTO event_outbox (id, event_type, payload, idempotency_key, status)
+                VALUES (?, ?, ?, ?, 'pending');
                 """
                 var eventStmt: OpaquePointer?
                 guard sqlite3_prepare_v2(db, eventSql, -1, &eventStmt, nil) == SQLITE_OK else { throw self.dbError(db) }
@@ -191,6 +192,7 @@ public actor SQLiteAdminLinkingService: AdminLinkingService {
                 sqlite3_bind_text(eventStmt, 1, eventId, -1, SQLITE_TRANSIENT)
                 sqlite3_bind_text(eventStmt, 2, eventType, -1, SQLITE_TRANSIENT)
                 sqlite3_bind_text(eventStmt, 3, payloadString, -1, SQLITE_TRANSIENT)
+                sqlite3_bind_text(eventStmt, 4, idempotencyKey, -1, SQLITE_TRANSIENT)
                 guard sqlite3_step(eventStmt) == SQLITE_DONE else { throw self.dbError(db) }
 
                 return .linked(
@@ -205,7 +207,7 @@ public actor SQLiteAdminLinkingService: AdminLinkingService {
         }
     }
 
-    public func registerUser(discordId: String, operatorId: String) async -> AdminUserRegistrationResult {
+    public func registerUser(discordId: String, operatorIdentity: OperatorIdentity) async -> AdminUserRegistrationResult {
         // Discord ID validation (17-19 digits)
         guard discordId.count >= 17 && discordId.count <= 19,
               discordId.allSatisfy({ $0.isNumber }) else {
@@ -220,7 +222,7 @@ public actor SQLiteAdminLinkingService: AdminLinkingService {
                 guard sqlite3_prepare_v2(db, userCheckSql, -1, &userStmt, nil) == SQLITE_OK else { throw self.dbError(db) }
                 defer { sqlite3_finalize(userStmt) }
                 sqlite3_bind_text(userStmt, 1, discordId, -1, SQLITE_TRANSIENT)
-                
+
                 if sqlite3_step(userStmt) == SQLITE_ROW {
                     return .alreadyRegistered(discordId: discordId)
                 }
@@ -233,10 +235,130 @@ public actor SQLiteAdminLinkingService: AdminLinkingService {
                 sqlite3_bind_text(insertUserStmt, 1, discordId, -1, SQLITE_TRANSIENT)
                 guard sqlite3_step(insertUserStmt) == SQLITE_DONE else { throw self.dbError(db) }
 
+                // 3. Write audit row
+                let auditId = UUID().uuidString
+                let auditSql = """
+                INSERT INTO admin_audit_log (id, action_type, operator_id, twitch_id, from_discord_id, to_discord_id, metadata_json)
+                VALUES (?, 'user_registered', ?, NULL, NULL, ?, NULL);
+                """
+                var auditStmt: OpaquePointer?
+                guard sqlite3_prepare_v2(db, auditSql, -1, &auditStmt, nil) == SQLITE_OK else { throw self.dbError(db) }
+                defer { sqlite3_finalize(auditStmt) }
+                sqlite3_bind_text(auditStmt, 1, auditId, -1, SQLITE_TRANSIENT)
+                sqlite3_bind_text(auditStmt, 2, operatorIdentity.stringValue, -1, SQLITE_TRANSIENT)
+                sqlite3_bind_text(auditStmt, 3, discordId, -1, SQLITE_TRANSIENT)
+                guard sqlite3_step(auditStmt) == SQLITE_DONE else { throw self.dbError(db) }
+
+                // 4. Emit user.registered event
+                let eventPayload = UserRegisteredEventPayload(
+                    discordId: discordId,
+                    registeredBy: operatorIdentity.stringValue
+                )
+                let payloadData = try self.encoder.encode(eventPayload)
+                let payloadString = String(data: payloadData, encoding: .utf8) ?? "{}"
+
+                let eventId = UUID().uuidString
+                let registeredIdempotencyKey = "user.registered:discord:\(discordId)"
+                let eventSql = """
+                INSERT INTO event_outbox (id, event_type, payload, idempotency_key, status)
+                VALUES (?, 'user.registered', ?, ?, 'pending');
+                """
+                var eventStmt: OpaquePointer?
+                guard sqlite3_prepare_v2(db, eventSql, -1, &eventStmt, nil) == SQLITE_OK else { throw self.dbError(db) }
+                defer { sqlite3_finalize(eventStmt) }
+                sqlite3_bind_text(eventStmt, 1, eventId, -1, SQLITE_TRANSIENT)
+                sqlite3_bind_text(eventStmt, 2, payloadString, -1, SQLITE_TRANSIENT)
+                sqlite3_bind_text(eventStmt, 3, registeredIdempotencyKey, -1, SQLITE_TRANSIENT)
+                guard sqlite3_step(eventStmt) == SQLITE_DONE else { throw self.dbError(db) }
+
                 return .registered(discordId: discordId)
             }
         } catch {
             return .internalError(error.localizedDescription)
+        }
+    }
+
+    public func getAllUsers() async -> [MinerUser] {
+        do {
+            return try await manager.query { db in
+                let sql = "SELECT discord_id, status, created_at FROM miner_users ORDER BY created_at DESC;"
+                var statement: OpaquePointer?
+                guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+                    return []
+                }
+                defer { sqlite3_finalize(statement) }
+
+                let dateFormatter = DateFormatter()
+                dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+                dateFormatter.timeZone = TimeZone(secondsFromGMT: 0)
+
+                var users: [MinerUser] = []
+                while sqlite3_step(statement) == SQLITE_ROW {
+                    let discordId = String(cString: sqlite3_column_text(statement, 0))
+                    let statusString = String(cString: sqlite3_column_text(statement, 1))
+                    let status = MinerUser.UserStatus(rawValue: statusString) ?? .registered
+                    let createdAtString = String(cString: sqlite3_column_text(statement, 2))
+                    let createdAt = dateFormatter.date(from: createdAtString) ?? Date()
+
+                    users.append(MinerUser(
+                        discordId: discordId,
+                        status: status,
+                        createdAt: createdAt
+                    ))
+                }
+                return users
+            }
+        } catch {
+            return []
+        }
+    }
+
+    public func getAccounts(for discordId: String) async -> [Account] {
+        do {
+            return try await manager.query { db in
+                let sql = "SELECT twitch_id, username, owner_discord_id, access_token, refresh_token, token_expiry, scopes FROM twitch_accounts WHERE owner_discord_id = ?;"
+                var statement: OpaquePointer?
+                guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+                    return []
+                }
+                defer { sqlite3_finalize(statement) }
+                sqlite3_bind_text(statement, 1, discordId, -1, SQLITE_TRANSIENT)
+
+                let dateFormatter = DateFormatter()
+                dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+                dateFormatter.timeZone = TimeZone(secondsFromGMT: 0)
+
+                var accounts: [Account] = []
+                while sqlite3_step(statement) == SQLITE_ROW {
+                    let id = String(cString: sqlite3_column_text(statement, 0))
+                    let username = String(cString: sqlite3_column_text(statement, 1))
+                    let ownerId: String? = {
+                        if let ptr = sqlite3_column_text(statement, 2) {
+                            return String(cString: ptr)
+                        }
+                        return nil
+                    }()
+                    let accessToken = String(cString: sqlite3_column_text(statement, 3))
+                    let refreshToken = sqlite3_column_text(statement, 4).map { String(cString: $0) } ?? ""
+                    let expiryString = String(cString: sqlite3_column_text(statement, 5))
+                    let tokenExpiry = dateFormatter.date(from: expiryString) ?? Date()
+                    let scopesString = sqlite3_column_text(statement, 6).map { String(cString: $0) } ?? ""
+                    let scopes = scopesString.components(separatedBy: ",")
+
+                    accounts.append(Account(
+                        id: id,
+                        username: username,
+                        ownerDiscordId: ownerId,
+                        accessToken: accessToken,
+                        refreshToken: refreshToken,
+                        tokenExpiry: tokenExpiry,
+                        scopes: scopes
+                    ))
+                }
+                return accounts
+            }
+        } catch {
+            return []
         }
     }
 

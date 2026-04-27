@@ -1,17 +1,31 @@
 import Foundation
 import SwiftMinerCore
 
+// MARK: - Operator Identity
+
+public enum OperatorIdentity: Sendable, Equatable {
+    case localAdmin
+    case bot(apiKeyId: String)
+
+    public var stringValue: String {
+        switch self {
+        case .localAdmin: return "local_admin"
+        case .bot(let apiKeyId): return "bot:\(apiKeyId)"
+        }
+    }
+}
+
 // MARK: - Models
 
 public struct AdminAccountAssignment: Sendable {
     public let twitchAccountId: String      // maps to twitch_accounts.twitch_id
     public let discordId: String            // maps to miner_users.discord_id
-    public let operatorId: String
+    public let operatorIdentity: OperatorIdentity
 
-    public init(twitchAccountId: String, discordId: String, operatorId: String) {
+    public init(twitchAccountId: String, discordId: String, operatorIdentity: OperatorIdentity) {
         self.twitchAccountId = twitchAccountId
         self.discordId = discordId
-        self.operatorId = operatorId
+        self.operatorIdentity = operatorIdentity
     }
 }
 
@@ -51,8 +65,14 @@ public protocol AdminLinkingService: Sendable {
     /// Manually register a Discord user in the system.
     /// - Parameters:
     ///   - discordId: The Discord Snowflake ID.
-    ///   - operatorId: The ID of the admin performing the registration.
-    func registerUser(discordId: String, operatorId: String) async -> AdminUserRegistrationResult
+    ///   - operatorIdentity: Who is performing the registration.
+    func registerUser(discordId: String, operatorIdentity: OperatorIdentity) async -> AdminUserRegistrationResult
+
+    /// Returns all registered users in the system.
+    func getAllUsers() async -> [MinerUser]
+
+    /// Returns all accounts owned by a specific Discord user.
+    func getAccounts(for discordId: String) async -> [Account]
 }
 
 // MARK: - Event Payloads
@@ -86,5 +106,15 @@ public struct AdminAuditMetadata: Codable, Sendable {
         case twitchUsername = "twitch_username"
         case userWasCreated = "user_was_created"
         case wasReassignment = "was_reassignment"
+    }
+}
+
+public struct UserRegisteredEventPayload: Codable, Sendable {
+    public let discordId: String
+    public let registeredBy: String
+
+    enum CodingKeys: String, CodingKey {
+        case discordId = "discord_id"
+        case registeredBy = "registered_by"
     }
 }

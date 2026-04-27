@@ -13,7 +13,7 @@ public struct MinerUser: Codable, Sendable, Equatable, Identifiable {
         self.createdAt = createdAt
     }
 
-    public enum UserStatus: String, Codable, Sendable {
+    public enum UserStatus: String, Codable, Sendable, CaseIterable {
         case registered
         case active
         case suspended

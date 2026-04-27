@@ -16,4 +16,7 @@ public protocol SwiftBotConnectionService: Sendable {
 
     /// Trigger a manual health check and return the result.
     func checkHealth() async -> SwiftBotConnectionState
+
+    /// Sends a test webhook event to the bot.
+    func sendTestEvent() async -> Bool
 }

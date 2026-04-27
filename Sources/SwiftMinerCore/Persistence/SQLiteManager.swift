@@ -17,6 +17,7 @@ public actor SQLiteManager {
             throw NSError(domain: "SQLiteManager", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to open DB: \(error)"])
         }
         try createSchema()
+        try applyMigrations()
     }
 
     public func close() {
@@ -32,6 +33,7 @@ public actor SQLiteManager {
             status TEXT NOT NULL CHECK(status IN ('registered', 'active', 'suspended')),
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
+        CREATE INDEX IF NOT EXISTS idx_miner_users_status ON miner_users(status);
 
         -- 2. twitch_accounts
         CREATE TABLE IF NOT EXISTS twitch_accounts (
@@ -73,16 +75,21 @@ public actor SQLiteManager {
             FOREIGN KEY(discord_id) REFERENCES miner_users(discord_id) ON DELETE CASCADE
         );
 
-        -- 6. event_outbox (Renamed from webhook_deliveries)
+        -- 6. event_outbox
         CREATE TABLE IF NOT EXISTS event_outbox (
             id TEXT PRIMARY KEY,
             event_type TEXT NOT NULL,
             payload TEXT NOT NULL,
-            status TEXT NOT NULL, -- 'pending', 'sent', 'failed'
+            idempotency_key TEXT,
+            status TEXT NOT NULL, -- 'pending', 'delivering', 'sent', 'failed_retryable', 'failed_terminal'
             retry_count INTEGER DEFAULT 0,
             last_attempt DATETIME,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
+        CREATE INDEX IF NOT EXISTS idx_outbox_status_created ON event_outbox(status, created_at);
+        CREATE INDEX IF NOT EXISTS idx_outbox_event_type ON event_outbox(event_type);
+        CREATE INDEX IF NOT EXISTS idx_outbox_retry ON event_outbox(retry_count);
+        CREATE INDEX IF NOT EXISTS idx_twitch_accounts_owner ON twitch_accounts(owner_discord_id);
 
         -- 7. user_issues
         CREATE TABLE IF NOT EXISTS user_issues (
@@ -111,15 +118,32 @@ public actor SQLiteManager {
             PRIMARY KEY(campaign_id, twitch_id)
         );
 
-        -- 10. admin_audit_log (Locked spec requirement)
+        -- 10. admin_audit_log
         CREATE TABLE IF NOT EXISTS admin_audit_log (
             id TEXT PRIMARY KEY,
+            action_type TEXT NOT NULL DEFAULT 'account_assigned',
             operator_id TEXT NOT NULL,
-            twitch_id TEXT NOT NULL,
+            twitch_id TEXT,
             from_discord_id TEXT,
-            to_discord_id TEXT NOT NULL,
+            to_discord_id TEXT,
             metadata_json TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_audit_operator ON admin_audit_log(operator_id);
+        CREATE INDEX IF NOT EXISTS idx_audit_twitch_id ON admin_audit_log(twitch_id);
+        CREATE INDEX IF NOT EXISTS idx_audit_to_discord ON admin_audit_log(to_discord_id);
+        CREATE INDEX IF NOT EXISTS idx_audit_action_type ON admin_audit_log(action_type);
+        CREATE INDEX IF NOT EXISTS idx_audit_created_at ON admin_audit_log(created_at);
+
+        -- 11. user_campaign_decisions
+        CREATE TABLE IF NOT EXISTS user_campaign_decisions (
+            discord_id TEXT,
+            campaign_id TEXT,
+            decision TEXT NOT NULL CHECK(decision IN ('ignored', 'prioritised')),
+            scope TEXT NOT NULL CHECK(scope IN ('temporary', 'permanent')),
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY(discord_id, campaign_id),
+            FOREIGN KEY(discord_id) REFERENCES miner_users(discord_id) ON DELETE CASCADE
         );
         """
         try execute(schema)
@@ -161,6 +185,102 @@ public actor SQLiteManager {
         return try block(db)
     }
     
+    // MARK: - Migrations
+
+    private func applyMigrations() throws {
+        try execute("""
+        CREATE TABLE IF NOT EXISTS _schema_migrations (
+            version INTEGER PRIMARY KEY,
+            applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+
+        if !isMigrationApplied(1) {
+            if !columnExists("action_type", in: "admin_audit_log") {
+                try migration1_recreateAdminAuditLog()
+            }
+            try execute("INSERT OR IGNORE INTO _schema_migrations (version) VALUES (1);")
+        }
+
+        if !isMigrationApplied(2) {
+            if !columnExists("idempotency_key", in: "event_outbox") {
+                try execute("ALTER TABLE event_outbox ADD COLUMN idempotency_key TEXT;")
+            }
+            try execute("""
+            CREATE INDEX IF NOT EXISTS idx_outbox_status_created ON event_outbox(status, created_at);
+            CREATE INDEX IF NOT EXISTS idx_outbox_event_type ON event_outbox(event_type);
+            CREATE INDEX IF NOT EXISTS idx_outbox_retry ON event_outbox(retry_count);
+            CREATE INDEX IF NOT EXISTS idx_twitch_accounts_owner ON twitch_accounts(owner_discord_id);
+            """)
+            try execute("INSERT OR IGNORE INTO _schema_migrations (version) VALUES (2);")
+        }
+
+        if !isMigrationApplied(3) {
+            try execute("""
+            CREATE TABLE IF NOT EXISTS user_campaign_decisions (
+                discord_id TEXT,
+                campaign_id TEXT,
+                decision TEXT NOT NULL CHECK(decision IN ('ignored', 'prioritised')),
+                scope TEXT NOT NULL CHECK(scope IN ('temporary', 'permanent')),
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY(discord_id, campaign_id),
+                FOREIGN KEY(discord_id) REFERENCES miner_users(discord_id) ON DELETE CASCADE
+            );
+            """)
+            try execute("INSERT OR IGNORE INTO _schema_migrations (version) VALUES (3);")
+        }
+    }
+
+    private func isMigrationApplied(_ version: Int) -> Bool {
+        guard let db else { return false }
+        let sql = "SELECT COUNT(*) FROM _schema_migrations WHERE version = \(version);"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return false }
+        defer { sqlite3_finalize(stmt) }
+        guard sqlite3_step(stmt) == SQLITE_ROW else { return false }
+        return sqlite3_column_int(stmt, 0) > 0
+    }
+
+    private func columnExists(_ column: String, in table: String) -> Bool {
+        guard let db else { return false }
+        let sql = "SELECT COUNT(*) FROM pragma_table_info('\(table)') WHERE name = '\(column)';"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return false }
+        defer { sqlite3_finalize(stmt) }
+        guard sqlite3_step(stmt) == SQLITE_ROW else { return false }
+        return sqlite3_column_int(stmt, 0) > 0
+    }
+
+    private func migration1_recreateAdminAuditLog() throws {
+        try execute("""
+        CREATE TABLE admin_audit_log_new (
+            id TEXT PRIMARY KEY,
+            action_type TEXT NOT NULL DEFAULT 'account_assigned',
+            operator_id TEXT NOT NULL,
+            twitch_id TEXT,
+            from_discord_id TEXT,
+            to_discord_id TEXT,
+            metadata_json TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+        try execute("""
+        INSERT INTO admin_audit_log_new
+            (id, action_type, operator_id, twitch_id, from_discord_id, to_discord_id, metadata_json, created_at)
+        SELECT id, 'account_assigned', operator_id, twitch_id, from_discord_id, to_discord_id, metadata_json, created_at
+        FROM admin_audit_log;
+        """)
+        try execute("DROP TABLE admin_audit_log;")
+        try execute("ALTER TABLE admin_audit_log_new RENAME TO admin_audit_log;")
+        try execute("""
+        CREATE INDEX IF NOT EXISTS idx_audit_operator ON admin_audit_log(operator_id);
+        CREATE INDEX IF NOT EXISTS idx_audit_twitch_id ON admin_audit_log(twitch_id);
+        CREATE INDEX IF NOT EXISTS idx_audit_to_discord ON admin_audit_log(to_discord_id);
+        CREATE INDEX IF NOT EXISTS idx_audit_action_type ON admin_audit_log(action_type);
+        CREATE INDEX IF NOT EXISTS idx_audit_created_at ON admin_audit_log(created_at);
+        """)
+    }
+
     // Internal helper for raw pointer access (for TokenStore)
     internal var dbPointer: OpaquePointer? { db }
 }
