@@ -25,7 +25,6 @@ struct AdminOverviewView: View {
             }
             .padding(24)
         }
-        .navigationTitle("Admin")
         .task {
             await refresh()
         }
@@ -280,7 +279,7 @@ private struct AssignUserSheet: View {
         let assignment = AdminAccountAssignment(
             twitchAccountId: account.id,
             discordId: cleanId,
-            operatorId: "local_admin"
+            operatorIdentity: .localAdmin
         )
         let result = await navigation.adminLinkingService.assignAccount(assignment, policy: policy)
 

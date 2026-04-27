@@ -5,9 +5,11 @@ import SwiftMinerCore
 public actor RestSwiftBotConnectionService: SwiftBotConnectionService {
     private var endpoint: URL?
     private(set) public var state: SwiftBotConnectionState = .notConfigured
+    private let outboxProvider: @Sendable () -> EventOutboxService?
     
-    public init(endpoint: String) {
+    public init(endpoint: String, outboxProvider: @escaping @Sendable () -> EventOutboxService?) {
         self.endpoint = Self.validatedURL(from: endpoint)
+        self.outboxProvider = outboxProvider
         if self.endpoint == nil {
             self.state = .notConfigured
         } else {
@@ -48,6 +50,11 @@ public actor RestSwiftBotConnectionService: SwiftBotConnectionService {
         }
         
         return self.state
+    }
+
+    public func sendTestEvent() async -> Bool {
+        guard let outbox = outboxProvider() else { return false }
+        return await outbox.sendTestWebhook()
     }
 
     // MARK: - Private Helpers

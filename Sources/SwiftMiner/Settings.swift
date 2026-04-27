@@ -237,6 +237,18 @@ public final class Settings: ObservableObject {
     /// SwiftBot integration endpoint (e.g. http://127.0.0.1:8080)
     @AppStorage("swiftBotEndpoint", store: Settings.appStorageStore)
     public var swiftBotEndpoint: String = ""
+
+    /// Webhook URL SwiftMiner POSTs events to (e.g. http://127.0.0.1:8080/webhooks/swiftminer/events)
+    @AppStorage("swiftBotWebhookURL", store: Settings.appStorageStore)
+    public var swiftBotWebhookURL: String = ""
+
+    /// Shared HMAC-SHA256 secret for webhook request signing
+    @AppStorage("swiftBotHmacSecret", store: Settings.appStorageStore)
+    public var swiftBotHmacSecret: String = ""
+
+    /// API Key for the SwiftMiner HTTP service (used by SwiftBot)
+    @AppStorage("swiftMinerAPIKey", store: Settings.appStorageStore)
+    public var swiftMinerAPIKey: String = "dev-key-change-in-production"
     
     /// JSON-encoded array of GamePreference for selected games
     @AppStorage("gamePreferencesData", store: Settings.appStorageStore)
@@ -628,6 +640,9 @@ public final class Settings: ObservableObject {
         twitchClientId = ""
         swiftBotEnabled = false
         swiftBotEndpoint = ""
+        swiftBotWebhookURL = ""
+        swiftBotHmacSecret = ""
+        swiftMinerAPIKey = "dev-key-change-in-production"
         gamePreferencesData = "[]"
         selectedDropsFiltersData = "[\"active\"]"
         miningStrategy = .mineAll

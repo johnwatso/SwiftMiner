@@ -6,11 +6,39 @@ import SwiftMinerService
 struct AdminView: View {
     @Environment(NavigationModel.self) private var navigation
     @State private var showAddUserSheet = false
+    @State private var selectedTab = AdminTab.accounts
+
+    enum AdminTab: String, CaseIterable, Identifiable {
+        case accounts = "Unlinked Accounts"
+        case users = "Registered Users"
+        case integration = "Bot Integration"
+        var id: String { self.rawValue }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
-            AdminOverviewView()
+            Picker("Admin View", selection: $selectedTab) {
+                ForEach(AdminTab.allCases) { tab in
+                    Text(tab.rawValue).tag(tab)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, 24)
+            .padding(.top, 16)
+            .padding(.bottom, 8)
+
+            Divider()
+
+            switch selectedTab {
+            case .accounts:
+                AdminOverviewView()
+            case .users:
+                UserListView()
+            case .integration:
+                IntegrationSettingsView()
+            }
         }
+        .navigationTitle("Admin")
         .toolbar {
             ToolbarItem {
                 Button {
@@ -23,6 +51,158 @@ struct AdminView: View {
         }
         .sheet(isPresented: $showAddUserSheet) {
             AddUserSheet()
+        }
+    }
+}
+
+private struct IntegrationSettingsView: View {
+    @ObservedObject private var settings = Settings.shared
+    @Environment(NavigationModel.self) private var navigation
+    @State private var showKey = false
+    @State private var isTestingConnection = false
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("SwiftBot Integration")
+                        .font(.title2.weight(.bold))
+                    
+                    Text("Configure the connection between this SwiftMiner instance and your Discord bot.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                VStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Label("Service API Key", systemImage: "key.fill")
+                            .font(.headline)
+                        
+                        Text("This key must be entered into the SwiftBot 'Advanced' settings for the bot to fetch your miner status.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+
+                        HStack {
+                            Group {
+                                if showKey {
+                                    Text(settings.swiftMinerAPIKey)
+                                } else {
+                                    Text(String(repeating: "•", count: settings.swiftMinerAPIKey.count))
+                                }
+                            }
+                            .font(.system(.body, design: .monospaced))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.black.opacity(0.1))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                            Button {
+                                showKey.toggle()
+                            } label: {
+                                Image(systemName: showKey ? "eye.slash" : "eye")
+                                    .frame(width: 20)
+                            }
+                            .buttonStyle(.bordered)
+
+                            Button {
+                                let pasteboard = NSPasteboard.general
+                                pasteboard.clearContents()
+                                pasteboard.setString(settings.swiftMinerAPIKey, forType: .string)
+                            } label: {
+                                Image(systemName: "doc.on.doc")
+                                    .frame(width: 20)
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                    }
+
+                    Divider()
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Label("Webhook Events", systemImage: "bell.badge.fill")
+                            .font(.headline)
+                        
+                        Text("SwiftMiner sends real-time notifications to SwiftBot when drops are claimed or status changes.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+
+                        VStack(alignment: .leading, spacing: 16) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Bot Webhook URL")
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(.secondary)
+                                
+                                TextField("e.g. http://127.0.0.1:38787/api/v1/webhooks/swiftminer", text: $settings.swiftBotWebhookURL)
+                                    .textFieldStyle(.roundedBorder)
+                            }
+
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("HMAC Secret")
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(.secondary)
+                                
+                                SecureField("Shared secret for signing", text: $settings.swiftBotHmacSecret)
+                                    .textFieldStyle(.roundedBorder)
+                            }
+
+                            Button {
+                                Task {
+                                    _ = await navigation.swiftBotConnectionService.sendTestEvent()
+                                }
+                            } label: {
+                                Label("Send Test Webhook", systemImage: "paperplane.fill")
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(!settings.swiftBotEnabled || settings.swiftBotWebhookURL.isEmpty)
+                        }
+                    }
+
+                    Divider()
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Label("Connection Status", systemImage: "network")
+                            .font(.headline)
+
+                        HStack {
+                            let state = navigation.swiftBotState
+                            Image(systemName: state == .connected ? "checkmark.circle.fill" : (state == .disconnected ? "xmark.circle.fill" : "exclamationmark.triangle.fill"))
+                                .foregroundStyle(state == .connected ? .green : (state == .disconnected ? .red : .orange))
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(state == .connected ? "Connected" : (state == .disconnected ? "Disconnected" : "Not Configured"))
+                                    .font(.subheadline.weight(.medium))
+                                Text(state == .connected ? "SwiftBot is reachable" : (state == .disconnected ? "SwiftBot endpoint is unreachable" : "Enable SwiftBot and set endpoint"))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Spacer()
+
+                            Button {
+                                Task {
+                                    isTestingConnection = true
+                                    await navigation.checkSwiftBotConnection()
+                                    isTestingConnection = false
+                                }
+                            } label: {
+                                if isTestingConnection {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                } else {
+                                    Label("Test", systemImage: "arrow.clockwise")
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .disabled(isTestingConnection)
+                        }
+                    }
+                }
+                .padding(24)
+                .glassCard()
+            }
+            .padding(24)
         }
     }
 }
@@ -92,7 +272,7 @@ private struct AddUserSheet: View {
         errorMessage = nil
 
         Task {
-            let result = await navigation.adminLinkingService.registerUser(discordId: cleanId, operatorId: "local_admin")
+            let result = await navigation.adminLinkingService.registerUser(discordId: cleanId, operatorIdentity: .localAdmin)
             
             await MainActor.run {
                 isProcessing = false

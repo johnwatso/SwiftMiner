@@ -94,6 +94,7 @@ public final class NavigationModel {
     public var selectedMinerId: String?
     public var selectedCampaignId: String?
     public var unownedAccounts: [Account] = []
+    public var registeredUsers: [MinerUser] = []
     public var swiftBotState: SwiftBotConnectionState = .notConfigured
 
     public func requestDropsFilter(_ intent: DropsFilterIntent) {
@@ -107,6 +108,10 @@ public final class NavigationModel {
 
     public func refreshUnownedAccounts() async {
         unownedAccounts = await adminLinkingService.getUnownedAccounts()
+    }
+
+    public func refreshRegisteredUsers() async {
+        registeredUsers = await adminLinkingService.getAllUsers()
     }
 
     // MARK: - SwiftBot Integration
@@ -158,6 +163,7 @@ public final class NavigationModel {
     public let minerManager: MinerManager
     public let adminLinkingService: any AdminLinkingService
     public let swiftBotConnectionService: any SwiftBotConnectionService
+    public let eventOutboxService: EventOutboxService
     private let sqliteManager: SQLiteManager
     private var onboardingSetupTask: Task<Void, Never>?
     private var lastKnownAccountCount = 0
@@ -179,9 +185,20 @@ public final class NavigationModel {
         self.sqliteManager = manager
         self.adminLinkingService = SQLiteAdminLinkingService(manager: manager)
         
+        // Initialize event outbox delivery service first so connection service can reference it
+        let webhookURL = URL(string: Settings.shared.swiftBotWebhookURL)
+        let outboxService = EventOutboxService(
+            manager: manager,
+            webhookURL: webhookURL,
+            hmacSecret: Settings.shared.swiftBotHmacSecret
+        )
+        self.eventOutboxService = outboxService
+
         // Initialize SwiftBot connection service
         let endpoint = Settings.shared.swiftBotEndpoint
-        self.swiftBotConnectionService = RestSwiftBotConnectionService(endpoint: endpoint)
+        self.swiftBotConnectionService = RestSwiftBotConnectionService(endpoint: endpoint) {
+            outboxService
+        }
     }
 
     // MARK: - Setup
@@ -198,6 +215,11 @@ public final class NavigationModel {
 
         if Settings.shared.swiftBotEnabled {
             await checkSwiftBotConnection()
+            await eventOutboxService.updateConfig(
+                webhookURL: URL(string: Settings.shared.swiftBotWebhookURL),
+                hmacSecret: Settings.shared.swiftBotHmacSecret
+            )
+            await eventOutboxService.start()
         }
         startSwiftBotStateSync()
 
