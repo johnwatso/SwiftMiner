@@ -59,6 +59,9 @@ Download the latest release from [GitHub Releases](https://github.com/johnwatso/
 
 Release builds are universal macOS binaries and support both Apple Silicon (`arm64`) and Intel (`x86_64`).
 
+> [!NOTE]
+> Intel support is provided as long as the current macOS toolchain ships it. Once a future macOS release drops Intel from its SDK, SwiftMiner will follow suit and continue as an Apple Silicon-only build going forward.
+
 ## First Run
 
 SwiftMiner uses Twitch OAuth device-code authentication.
