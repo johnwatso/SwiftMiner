@@ -44,7 +44,7 @@ struct MinersOverviewView: View {
     }
 
     private var minerListPane: some View {
-        VStack(spacing: 0) {
+        VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(hasMultipleMiners ? "Miners" : "Miner")
                     .font(.headline)
@@ -55,30 +55,48 @@ struct MinersOverviewView: View {
                     .lineLimit(2)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
+            .padding(.horizontal, 12)
+            .padding(.top, 14)
 
-            List(selection: selectionBinding) {
-                ForEach(miners) { miner in
-                    MinerSourceListRow(miner: miner, compact: !hasMultipleMiners)
-                        .tag(Optional(miner.id))
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(Array(miners.enumerated()), id: \.element.id) { index, miner in
+                        VStack(spacing: 0) {
+                            Button {
+                                navigation.selectedMinerId = miner.id
+                            } label: {
+                                MinerSourceListRow(
+                                    miner: miner,
+                                    compact: !hasMultipleMiners,
+                                    isSelected: selectionBinding.wrappedValue == miner.id
+                                )
+                            }
+                            .buttonStyle(.plain)
+
+                            if index < miners.count - 1 {
+                                Divider()
+                                    .padding(.leading, 38)
+                                    .padding(.trailing, 10)
+                            }
+                        }
+                    }
                 }
+                .padding(3)
+                .background(.background.opacity(0.24), in: RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
+                        .strokeBorder(.separator.opacity(0.18), lineWidth: 1)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
+                .padding(.horizontal, 8)
             }
-            .listStyle(.sidebar)
-            .scrollContentBackground(.hidden)
+            .scrollIndicators(.never)
         }
         .frame(
             minWidth: hasMultipleMiners ? 220 : 148,
             idealWidth: hasMultipleMiners ? 248 : 164,
             maxWidth: hasMultipleMiners ? 280 : 176
         )
-        .background {
-            RoundedRectangle(cornerRadius: GlassRadius.subtle, style: .continuous)
-                .fill(.thinMaterial)
-        }
-        .clipShape(RoundedRectangle(cornerRadius: GlassRadius.subtle, style: .continuous))
         .padding(.leading, 24)
         .padding(.vertical, 24)
         .padding(.trailing, hasMultipleMiners ? 12 : 8)
@@ -90,7 +108,7 @@ struct MinersOverviewView: View {
             let activeCampaigns = activePrioritisedCampaigns(for: miner)
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: 20) {
                     MinerActivityCard(miner: miner, prominence: .expanded, onSelect: {
                         navigation.selectedMinerId = miner.id
                     }, onLinkAccount: {
@@ -101,8 +119,10 @@ struct MinersOverviewView: View {
 
                     acrossAllAccountsSection
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(24)
+                .frame(maxWidth: 1180, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .padding(.horizontal, 28)
+                .padding(.vertical, 24)
             }
             .id(miner.id)
             .transition(.opacity.combined(with: .move(edge: .trailing)))
@@ -212,13 +232,22 @@ struct MinersOverviewView: View {
 
     @ViewBuilder
     private func minerCampaignsSection(for miner: MinerManager.ManagedMiner, campaigns: [Campaign]) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("PRIORITISED CAMPAIGNS")
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(.tertiary)
-                .padding(.leading, 4)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Text("PRIORITISED CAMPAIGNS")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.tertiary)
 
-            VStack(spacing: 8) {
+                Text("\(campaigns.count)")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.tertiary)
+
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+
+            VStack(spacing: 1) {
                 if campaigns.isEmpty {
                     NoActiveCampaignsRow()
                 } else {
@@ -228,7 +257,11 @@ struct MinersOverviewView: View {
                 }
             }
         }
-        .padding(.horizontal, 2)
+        .background(.background.opacity(0.62), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
+                .strokeBorder(.separator.opacity(0.32), lineWidth: 1)
+        }
     }
 
     private func activePrioritisedCampaigns(for miner: MinerManager.ManagedMiner) -> [Campaign] {
@@ -273,6 +306,7 @@ struct MinersOverviewView: View {
 private struct MinerSourceListRow: View {
     let miner: MinerManager.ManagedMiner
     let compact: Bool
+    let isSelected: Bool
     @ObservedObject private var settings = Settings.shared
 
     private var snapshot: MinerActivitySnapshot {
@@ -289,24 +323,28 @@ private struct MinerSourceListRow: View {
         miner.status == .blockedAccountNotLinked || miner.status == .error || miner.needsAuth
     }
 
+    private var statusSymbol: String {
+        if snapshot.statusText == "Drops complete" {
+            return "checkmark.circle.fill"
+        }
+        if hasBlockingIssues {
+            return "exclamationmark.triangle.fill"
+        }
+        return snapshot.statusSymbol
+    }
+
     var body: some View {
-        HStack(spacing: 10) {
-            ZStack(alignment: .topTrailing) {
-                Circle()
-                    .fill(statusColor)
-                    .frame(width: 8, height: 8)
-                
-                if hasBlockingIssues {
-                    Circle()
-                        .fill(Color.orange)
-                        .frame(width: 4, height: 4)
-                        .offset(x: 2, y: -2)
-                }
-            }
+        HStack(spacing: 9) {
+            Image(systemName: statusSymbol)
+                .font(.system(size: 12, weight: .semibold))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(statusColor)
+                .frame(width: 18, height: 18)
 
             VStack(alignment: .leading, spacing: compact ? 1 : 2) {
                 Text(miner.username)
-                    .font(.body.weight(.medium))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
                     .lineLimit(1)
 
                 if !compact {
@@ -318,16 +356,25 @@ private struct MinerSourceListRow: View {
             }
 
             Spacer(minLength: 6)
-
-            if miner.isRunning {
-                Image(systemName: "play.fill")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, compact ? 7 : 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            if isSelected {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color.accentColor.opacity(0.13))
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, compact ? 8 : 10)
-        .contentShape(Rectangle())
+        .overlay {
+            if isSelected {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .strokeBorder(Color.accentColor.opacity(0.18), lineWidth: 1)
+            }
+        }
+        .contentShape(RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 
     private var statusColor: Color {
@@ -353,12 +400,43 @@ private struct CampaignStatusRow: View {
         campaign.activityStatus(for: miner)
     }
 
-    private var isWatching: Bool {
-        status == .watching
+    private var statusIcon: String {
+        switch status {
+        case .watching:
+            return "play.fill"
+        case .completed:
+            return "checkmark"
+        case .requiresLink:
+            return "link.badge.plus"
+        case .waitingForStream:
+            return "antenna.radiowaves.left.and.right"
+        case .upcoming:
+            return "calendar"
+        case .expired:
+            return "clock.badge.xmark"
+        }
+    }
+
+    private var statusColor: Color {
+        switch status {
+        case .watching, .completed:
+            return .green
+        case .requiresLink:
+            return .orange
+        case .waitingForStream:
+            return .cyan
+        case .upcoming, .expired:
+            return .secondary
+        }
     }
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
+            Image(systemName: statusIcon)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(statusColor)
+                .frame(width: 18, height: 18)
+
             VStack(alignment: .leading, spacing: 3) {
                 Text(campaign.game.name)
                     .font(.subheadline.weight(.medium))
@@ -374,14 +452,19 @@ private struct CampaignStatusRow: View {
             Spacer(minLength: 12)
 
             Text(status.label)
-                .font(.caption)
-                .foregroundStyle(isWatching ? AnyShapeStyle(Color.green) : AnyShapeStyle(.tertiary))
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(statusColor)
                 .lineLimit(1)
-                .frame(minWidth: 150, alignment: .trailing)
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
+        .padding(.vertical, 10)
+        .background(.background.opacity(0.001))
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(.separator.opacity(0.28))
+                .frame(height: 1)
+                .padding(.leading, 42)
+        }
     }
 }
 
@@ -403,7 +486,7 @@ private struct NoActiveCampaignsRow: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(.quaternary.opacity(0.22), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
+        .background(.background.opacity(0.001))
     }
 }
 
@@ -446,12 +529,11 @@ struct MetricCard: View {
         }
         .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
         .padding(16)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
+        .background(.background.opacity(0.62), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
-                .strokeBorder(.white.opacity(0.16), lineWidth: 1)
+            RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
+                .strokeBorder(.separator.opacity(0.26), lineWidth: 1)
         }
-        .shadow(color: .black.opacity(0.06), radius: 5, y: 2)
     }
 }
 

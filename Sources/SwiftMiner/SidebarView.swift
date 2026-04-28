@@ -26,7 +26,7 @@ struct SidebarView: View {
             GlassSelectionItem(id: .events, title: "Events", systemImage: "bell.fill"),
         ]
         if settings.swiftBotEnabled {
-            items.append(GlassSelectionItem(id: .admin, title: "Admin", systemImage: "lock.shield.fill"))
+            items.append(GlassSelectionItem(id: .admin, title: "Admin Beta", systemImage: "lock.shield.fill"))
         }
         return items
     }
@@ -61,6 +61,7 @@ struct SidebarView: View {
 
                         Text(item.title)
                             .font(.system(size: 14, weight: isSelected ? .semibold : .medium))
+                            .lineLimit(1)
 
                         Spacer(minLength: 0)
 
@@ -79,7 +80,7 @@ struct SidebarView: View {
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 8)
-            .padding(.top, 8)
+            .padding(.top, 4)
         }
         .navigationTitle("SwiftMiner")
         .onChange(of: settings.swiftBotEnabled) { _, enabled in

@@ -7,6 +7,8 @@ import UserNotifications
 struct MinerApp: App {
 
     @StateObject private var updater = AppUpdater()
+    @StateObject private var settings = Settings.shared
+    @StateObject private var presentationController = AppPresentationController()
     @State private var minerManager = MinerManager(clientId: ClientConfiguration.clientId)
     @State private var appModel: AppModel
     @State private var navigation: NavigationModel
@@ -22,7 +24,7 @@ struct MinerApp: App {
 
     var body: some Scene {
         // Main window
-        WindowGroup {
+        WindowGroup(id: AppWindowID.main) {
             ContentView()
                 .environment(appModel)
                 .environment(navigation)
@@ -36,6 +38,10 @@ struct MinerApp: App {
                     UNUserNotificationCenter.current().delegate = notificationDelegate
                     await requestNotificationPermission()
                     updater.checkForUpdatesInBackground()
+                    presentationController.configure(mode: settings.appPresenceMode)
+                }
+                .onChange(of: settings.appPresenceMode) { _, newValue in
+                    presentationController.configure(mode: newValue)
                 }
                 .onReceive(
                     NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)
@@ -65,9 +71,8 @@ struct MinerApp: App {
             }
         }
 
-        // Menu bar extra
-        MenuBarExtra {
-            MenuBarContent()
+        MenuBarExtra(isInserted: menuBarExtraIsInserted) {
+            MenuBarContent(presentationController: presentationController)
                 .environment(appModel)
                 .environment(navigation)
         } label: {
@@ -87,6 +92,68 @@ struct MinerApp: App {
 
     private func requestNotificationPermission() async {
         _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
+    }
+
+    private var menuBarExtraIsInserted: Binding<Bool> {
+        Binding {
+            settings.appPresenceMode.showsMenuBarExtra
+        } set: { _ in
+        }
+    }
+}
+
+private enum AppWindowID {
+    static let main = "main"
+}
+
+@MainActor
+fileprivate final class AppPresentationController: ObservableObject {
+    private var mode: AppPresenceMode = .dockOnly
+    private var observers: [NSObjectProtocol] = []
+
+    init() {
+        let center = NotificationCenter.default
+        let notifications: [NSNotification.Name] = [
+            NSWindow.didBecomeMainNotification,
+            NSWindow.didBecomeKeyNotification,
+            NSWindow.didMiniaturizeNotification,
+            NSWindow.didDeminiaturizeNotification,
+            NSWindow.willCloseNotification,
+            NSWindow.didResizeNotification
+        ]
+
+        observers = notifications.map { name in
+            center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor in
+                    self?.applyCurrentMode()
+                }
+            }
+        }
+    }
+
+    func configure(mode: AppPresenceMode) {
+        self.mode = mode
+        applyCurrentMode()
+    }
+
+    func prepareToOpenWindow() {
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func applyCurrentMode() {
+        switch mode {
+        case .dockOnly, .dockAndMenuBar:
+            NSApp.setActivationPolicy(.regular)
+        case .menuBarWhenClosed:
+            NSApp.setActivationPolicy(hasOpenUserWindow ? .regular : .accessory)
+        }
+    }
+
+    private var hasOpenUserWindow: Bool {
+        NSApp.windows.contains { window in
+            window.canBecomeMain && window.isVisible && !window.isMiniaturized
+        }
     }
 }
 
@@ -114,6 +181,9 @@ struct MenuBarLabel: View {
 struct MenuBarContent: View {
     @Environment(AppModel.self) private var appModel
     @Environment(NavigationModel.self) private var navigation
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
+    fileprivate let presentationController: AppPresentationController
 
     var body: some View {
         Group {
@@ -154,8 +224,12 @@ struct MenuBarContent: View {
             Divider()
 
             Button("Open Dashboard") {
-                NSApp.activate(ignoringOtherApps: true)
-                NSApp.windows.first?.makeKeyAndOrderFront(nil)
+                openDashboard()
+            }
+
+            Button("Settings...") {
+                presentationController.prepareToOpenWindow()
+                openSettings()
             }
 
             Divider()
@@ -192,6 +266,17 @@ struct MenuBarContent: View {
         case .paused:            return "clock.fill"
         case .idleNoEligibleCampaigns: return "pause.circle"
         case .blockedAccountNotLinked: return "link.badge.plus"
+        }
+    }
+
+    private func openDashboard() {
+        presentationController.prepareToOpenWindow()
+
+        if let window = NSApp.windows.first(where: { $0.canBecomeMain }) {
+            window.deminiaturize(nil)
+            window.makeKeyAndOrderFront(nil)
+        } else {
+            openWindow(id: AppWindowID.main)
         }
     }
 }

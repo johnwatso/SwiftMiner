@@ -34,6 +34,16 @@ build_setting_value() {
         | tr -d '"'
 }
 
+resolve_build_setting_reference() {
+    local value="$1"
+    if [[ "$value" =~ ^\$\(([A-Za-z0-9_]+)\)$ ]]; then
+        load_build_settings
+        build_setting_value "${BASH_REMATCH[1]}"
+    else
+        echo "$value"
+    fi
+}
+
 echo "Validating Sparkle release pipeline..."
 
 if [[ ! -f "$INFO_PLIST" ]]; then
@@ -43,6 +53,9 @@ fi
 
 FEED_URL=$(plutil -extract SUFeedURL raw "$INFO_PLIST" 2>/dev/null || true)
 PUBLIC_KEY=$(plutil -extract SUPublicEDKey raw "$INFO_PLIST" 2>/dev/null || true)
+
+FEED_URL=$(resolve_build_setting_reference "$FEED_URL")
+PUBLIC_KEY=$(resolve_build_setting_reference "$PUBLIC_KEY")
 
 if [[ -z "$FEED_URL" || -z "$PUBLIC_KEY" ]]; then
     load_build_settings

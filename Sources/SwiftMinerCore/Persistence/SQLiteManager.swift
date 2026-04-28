@@ -229,6 +229,23 @@ public actor SQLiteManager {
             """)
             try execute("INSERT OR IGNORE INTO _schema_migrations (version) VALUES (3);")
         }
+
+        if !isMigrationApplied(4) {
+            try execute("""
+            DELETE FROM event_outbox
+            WHERE idempotency_key IS NOT NULL
+              AND rowid NOT IN (
+                SELECT MIN(rowid)
+                FROM event_outbox
+                WHERE idempotency_key IS NOT NULL
+                GROUP BY idempotency_key
+              );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_outbox_idempotency_key_unique
+                ON event_outbox(idempotency_key)
+                WHERE idempotency_key IS NOT NULL;
+            """)
+            try execute("INSERT OR IGNORE INTO _schema_migrations (version) VALUES (4);")
+        }
     }
 
     private func isMigrationApplied(_ version: Int) -> Bool {

@@ -66,7 +66,9 @@ public final class MinerManager {
                 }
             case .idle:
                 switch resolved.reason {
-                case .noDropsAvailable, .noCampaign, .noEligibleCampaign, .campaignExpired:
+                case .noDropsAvailable:
+                    return "Drops complete"
+                case .noCampaign, .noEligibleCampaign, .campaignExpired:
                     return "Idle — No eligible campaigns"
                 case .none, .notLinked, .noLiveStreams:
                     return "Idle — No eligible campaigns"

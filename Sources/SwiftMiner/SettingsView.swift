@@ -74,7 +74,13 @@ private struct GeneralSettingsView: View {
     var body: some View {
         Form {
             Section {
-                Toggle("Minimize to menu bar", isOn: $settings.minimizeToMenuBar)
+                Picker("App Presence", selection: $settings.appPresenceMode) {
+                    ForEach(AppPresenceMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+                SettingsSecondaryText(settings.appPresenceMode.detail)
+
                 Toggle("Run in background when closed", isOn: $settings.runInBackground)
             } header: {
                 Text("Application")
@@ -381,16 +387,17 @@ private struct AdvancedSettingsView: View {
     var body: some View {
         Form {
             Section {
-                Toggle("Enable Discord Integration", isOn: $settings.swiftBotEnabled)
+                Toggle("Enable Discord Integration (Beta / Dev)", isOn: $settings.swiftBotEnabled)
                     .onChange(of: settings.swiftBotEnabled) { _, enabled in
                         if enabled {
+                            settings.ensureSwiftBotSecrets()
                             Task { await navigation.checkSwiftBotConnection() }
                         } else {
                             navigation.swiftBotState = .notConfigured
                         }
                     }
 
-                SettingsSecondaryText("Shows the Admin panel and enables SwiftBot account linking and notifications.")
+                SettingsSecondaryText("Experimental local-only Discord/SwiftBot tools for development. Keep this off unless you are actively testing the bot integration.")
 
                 if settings.swiftBotEnabled {
                     Divider()
@@ -427,10 +434,10 @@ private struct AdvancedSettingsView: View {
                         }
                     }
 
-                    SettingsSecondaryText("Address of the SwiftBot REST API (e.g. http://127.0.0.1:8080). Must be a localhost address.")
+                    SettingsSecondaryText("Address of the SwiftBot REST API (e.g. http://127.0.0.1:8080). Localhost only.")
                 }
             } header: {
-                Text("Integration")
+                Text("Beta / Dev Integration")
             }
 
             Section {

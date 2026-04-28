@@ -115,6 +115,24 @@ public actor EventOutboxService {
                     }
                 }
 
+                let staleDeliveringSql = """
+                SELECT id, event_type, payload, retry_count, idempotency_key, last_attempt
+                FROM event_outbox
+                WHERE status = 'delivering'
+                  AND (last_attempt IS NULL OR last_attempt <= datetime('now', '-5 minutes'))
+                ORDER BY COALESCE(last_attempt, created_at) ASC
+                LIMIT 10;
+                """
+                var staleStmt: OpaquePointer?
+                if sqlite3_prepare_v2(db, staleDeliveringSql, -1, &staleStmt, nil) == SQLITE_OK {
+                    defer { sqlite3_finalize(staleStmt) }
+                    while sqlite3_step(staleStmt) == SQLITE_ROW {
+                        if let row = OutboxRow(statement: staleStmt) {
+                            rows.append(row)
+                        }
+                    }
+                }
+
                 return rows
             }
         } catch {

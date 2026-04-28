@@ -5,7 +5,12 @@ import SwiftMinerService
 // MARK: - Configuration
 
 let port = UInt16(ProcessInfo.processInfo.environment["SWIFTMINER_API_PORT"] ?? "8080") ?? 8080
-let apiKey = ProcessInfo.processInfo.environment["SWIFTMINER_API_KEY"] ?? "dev-key-change-in-production"
+let apiKey = ProcessInfo.processInfo.environment["SWIFTMINER_API_KEY"] ?? ""
+
+guard apiKey.count >= 32, apiKey != "dev-key-change-in-production" else {
+    print("[SwiftMinerService] SWIFTMINER_API_KEY must be set to a non-default secret of at least 32 characters.")
+    exit(1)
+}
 
 // MARK: - Database Setup
 

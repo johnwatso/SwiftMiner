@@ -183,7 +183,7 @@ public actor SQLiteAdminLinkingService: AdminLinkingService {
                 let eventType = "user.linked"
                 let idempotencyKey = "user.linked:discord:\(assignment.discordId):twitch:\(assignment.twitchAccountId)"
                 let eventSql = """
-                INSERT INTO event_outbox (id, event_type, payload, idempotency_key, status)
+                INSERT OR IGNORE INTO event_outbox (id, event_type, payload, idempotency_key, status)
                 VALUES (?, ?, ?, ?, 'pending');
                 """
                 var eventStmt: OpaquePointer?
@@ -260,7 +260,7 @@ public actor SQLiteAdminLinkingService: AdminLinkingService {
                 let eventId = UUID().uuidString
                 let registeredIdempotencyKey = "user.registered:discord:\(discordId)"
                 let eventSql = """
-                INSERT INTO event_outbox (id, event_type, payload, idempotency_key, status)
+                INSERT OR IGNORE INTO event_outbox (id, event_type, payload, idempotency_key, status)
                 VALUES (?, 'user.registered', ?, ?, 'pending');
                 """
                 var eventStmt: OpaquePointer?
