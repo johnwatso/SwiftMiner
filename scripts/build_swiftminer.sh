@@ -7,6 +7,12 @@ SCHEME="${SWIFTMINER_SCHEME:-SwiftMiner}"
 CONFIGURATION="${SWIFTMINER_CONFIGURATION:-Release}"
 DESTINATION="${SWIFTMINER_DESTINATION:-platform=macOS}"
 
+# Sync to origin/main before building — handles diverged state on persistent runners.
+git -C "$ROOT_DIR" fetch origin
+git -C "$ROOT_DIR" checkout main
+git -C "$ROOT_DIR" reset --hard origin/main
+git -C "$ROOT_DIR" clean -fdx
+
 # Some CI providers reuse workspaces between runs. If an old SwiftPM-generated
 # workspace is still hanging around, remove it so xcodebuild can't auto-pick it.
 rm -rf "$ROOT_DIR/.swiftpm"
