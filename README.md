@@ -23,7 +23,9 @@ It is built for personal use on macOS and is heavily inspired by the groundwork 
 ## Preview
 
 <p align="center">
-  <img src="assets/readme/v0.0.1 UI Example.png" alt="SwiftMiner Dashboard Preview">
+  <img src="Documentation/Images/1_Overview UI Example.png" alt="Overview">
+  <img src="Documentation/Images/2_Miners UI Example.png" alt="Miners">
+  <img src="Documentation/Images/3_Drops UI Example.png" alt="Drops">
 </p>
 
 ## What SwiftMiner Does
