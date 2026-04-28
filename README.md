@@ -70,6 +70,9 @@ SwiftMiner uses Twitch OAuth device-code authentication.
 
 After that, SwiftMiner can restore saved accounts and manage them from the main dashboard.
 
+> [!CAUTION]
+> SwiftMiner saves OAuth tokens to an encrypted file in `~/Library/Application Support/com.swiftminer/`. The encryption key is tied to your Mac's hardware UUID — not to your macOS login password. Physical or remote access to your machine is enough to decrypt this file and use the stored tokens to access your Twitch accounts.
+
 ## Requirements
 
 - macOS 26+
@@ -142,9 +145,13 @@ That separation keeps the UI relatively thin while the mining logic stays testab
 
 ## Notes And Risk
 
+> [!WARNING]
+> SwiftMiner sends watch beacons to Twitch presenting as an Android TV client (`tv.twitch.android.app`). If you open the same channel in a browser on a mining account, Twitch may start crediting watch time to the browser session instead. This can stall drop progress or cause the engine to switch channels unnecessarily. Avoid watching on the same account while SwiftMiner has it active.
+
+> [!WARNING]
+> SwiftMiner automates interactions with Twitch using the same client ID as the official Android app. Twitch's policies on third-party automation can change at any time, and accounts could be flagged. Use it at your own risk and review Twitch's current rules before running it unattended.
+
 - SwiftMiner is intended for personal use on your own machines.
-- Any automation against Twitch carries account and policy risk.
-- Use it at your own risk and make sure you understand Twitch's current rules before running unattended automation.
 - The project has been exercised with several concurrent miners, but your own limits will depend on your machine, network, and account setup.
 
 ## Related Docs
