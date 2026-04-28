@@ -16,7 +16,7 @@
   <img src="https://img.shields.io/badge/status-active%20development-orange" alt="Status badge">
 </p>
 
-SwiftMiner is a native SwiftUI app for managing Twitch Drops mining from one macOS dashboard. It runs each account as its own isolated miner, then aggregates campaigns, progress, and claim state into one view so you can see what is worth watching and what is ready to claim without juggling multiple windows.
+SwiftMiner is a SwiftUI macOS app for running Twitch Drops mining across multiple accounts. Each account runs in its own isolated miner engine, and the app shows campaigns, progress, and claim state for all of them in a single window.
 
 It is built for personal use on macOS and is heavily inspired by the groundwork in [DevilXD/TwitchDropsMiner](https://github.com/DevilXD/TwitchDropsMiner).
 
@@ -40,13 +40,9 @@ It is built for personal use on macOS and is heavily inspired by the groundwork 
 
 ## Why It Exists
 
-Managing Twitch Drops across several accounts is usually messy:
+I built SwiftMiner to solve a problem I kept running into while mining Twitch Drops for friends: progress was scattered across accounts, completed campaigns dropped out of the UI, and the existing tooling exposed raw miner state instead of something I could actually supervise at a glance.
 
-- progress is split across accounts
-- completed campaigns disappear from the UI
-- automation tools tend to expose raw miner state, not a clean supervisor view
-
-SwiftMiner sits above the per-account miner engines and gives you a single control surface for the whole setup.
+SwiftMiner sits on top of the per-account miner engines and gives one control surface for the whole setup.
 
 ## Install
 
