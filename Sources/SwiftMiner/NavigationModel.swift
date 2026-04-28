@@ -32,7 +32,7 @@ public final class NavigationModel {
             case .miners: return "miners"
             case .drops: return "Drops"
             case .events: return "Events"
-            case .admin: return "Admin"
+            case .admin: return "Admin Beta"
             }
         }
     }

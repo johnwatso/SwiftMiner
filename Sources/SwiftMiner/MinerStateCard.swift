@@ -275,7 +275,7 @@ struct MinerActivityCard: View {
             header
 
             VStack(alignment: .leading, spacing: 10) {
-                ActivityLabel("Now Mining", color: snapshot.now.accent)
+                ActivityLabel("Current Status", color: snapshot.now.accent)
                 currentActivity
             }
 
@@ -303,49 +303,20 @@ struct MinerActivityCard: View {
             }
             .opacity(0.82)
 
-            if !snapshot.blockedPriority.isEmpty {
+            if prominence == .expanded, !snapshot.blockedPriority.isEmpty {
                 Divider()
                     .opacity(0.6)
 
-                VStack(alignment: .leading, spacing: 10) {
-                    ActivityLabel("Needs Linking", color: .orange)
-                    
-                    ForEach(snapshot.blockedPriority) { item in
-                        HStack(alignment: .top, spacing: 10) {
-                            Image(systemName: item.symbol)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(item.accent)
-                                .frame(width: 18, height: 18)
-
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(item.title)
-                                    .font(.subheadline.weight(.medium))
-                                    .lineLimit(1)
-
-                                Text(item.subtitle ?? "Account not linked")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-
-                            Spacer(minLength: 6)
-                            
-                            Button {
-                                onLinkAccount?()
-                            } label: {
-                                Text("Link")
-                                    .font(.caption2.weight(.bold))
-                            }
-                            .buttonStyle(.bordered)
-                            .controlSize(.mini)
-                            .tint(.orange)
-                        }
-                    }
-                }
+                blockedPriorityList
             }
         }
         .padding(prominence == .expanded ? 22 : 16)
-        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .frame(
+            maxWidth: .infinity,
+            minHeight: prominence == .compact ? 264 : nil,
+            maxHeight: prominence == .compact ? 264 : nil,
+            alignment: .topLeading
+        )
         .glassCard()
         .contentShape(RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
         .onTapGesture {
@@ -472,6 +443,46 @@ struct MinerActivityCard: View {
             Spacer(minLength: 6)
         }
     }
+
+    private var blockedPriorityList: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ActivityLabel("Needs Linking", color: .orange)
+
+            ForEach(snapshot.blockedPriority) { item in
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: item.symbol)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(item.accent)
+                        .frame(width: 18, height: 18)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(item.title)
+                            .font(.subheadline.weight(.medium))
+                            .lineLimit(1)
+
+                        Text(item.subtitle ?? "Account not linked")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: 6)
+
+                    Button {
+                        onLinkAccount?()
+                    } label: {
+                        Text("Link")
+                            .font(.caption2.weight(.bold))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
+                    .tint(.orange)
+                    .disabled(onLinkAccount == nil)
+                }
+            }
+        }
+    }
+
 }
 
 private struct ActivityLabel: View {
@@ -609,11 +620,11 @@ struct MinerActivitySnapshot {
                 if resolved.reason == .noDropsAvailable {
                     return MinerActivityItem(
                         id: "complete-\(miner.id)-\(resolved.gameId)",
-                        title: "Caught up",
-                        subtitle: "No rewards need progress for \(resolved.gameName).",
+                        title: "Drops complete",
+                        subtitle: "All available drops are complete for \(resolved.gameName).",
                         detail: nil,
                         symbol: "checkmark.seal.fill",
-                        accent: .secondary
+                        accent: .green
                     )
                 }
             case .watching:
@@ -924,6 +935,10 @@ struct MinerActivitySnapshot {
     }
 
     private static func statusText(for miner: MinerManager.ManagedMiner, now: MinerActivityItem) -> String {
+        if now.id.hasPrefix("complete-") {
+            return "Drops complete"
+        }
+
         switch miner.status {
         case .watching:
             return "Watching \(now.title)"

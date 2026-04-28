@@ -1,4 +1,5 @@
 import SwiftUI
+import Security
 import SwiftMinerCore
 
 /// User settings managed via @AppStorage.
@@ -21,7 +22,7 @@ public final class Settings: ObservableObject {
     }()
     
     public static let shared = Settings()
-    
+
     // MARK: - @AppStorage Properties
     
     /// Whether auto-claim is enabled for completed drops
@@ -44,9 +45,13 @@ public final class Settings: ObservableObject {
     @AppStorage("maxLogEntries", store: Settings.appStorageStore)
     public var maxLogEntries: Int = 500
     
-    /// Whether to minimize to menu bar instead of dock
+    /// Legacy preference retained for users upgrading from the old boolean setting.
     @AppStorage("minimizeToMenuBar", store: Settings.appStorageStore)
     public var minimizeToMenuBar: Bool = false
+
+    /// Where SwiftMiner should appear while it is running.
+    @AppStorage("appPresenceMode", store: Settings.appStorageStore)
+    public var appPresenceMode: AppPresenceMode = .dockOnly
     
     /// Whether to start mining automatically on launch (if authenticated)
     @AppStorage("autoStartOnLaunch", store: Settings.appStorageStore)
@@ -248,7 +253,7 @@ public final class Settings: ObservableObject {
 
     /// API Key for the SwiftMiner HTTP service (used by SwiftBot)
     @AppStorage("swiftMinerAPIKey", store: Settings.appStorageStore)
-    public var swiftMinerAPIKey: String = "dev-key-change-in-production"
+    public var swiftMinerAPIKey: String = ""
     
     /// JSON-encoded array of GamePreference for selected games
     @AppStorage("gamePreferencesData", store: Settings.appStorageStore)
@@ -489,6 +494,9 @@ public final class Settings: ObservableObject {
     // MARK: - Initialization
     
     private init() {
+        if minimizeToMenuBar && appPresenceMode == .dockOnly {
+            appPresenceMode = .menuBarWhenClosed
+        }
         migrateFromLegacyIfNeeded()
     }
 
@@ -628,6 +636,7 @@ public final class Settings: ObservableObject {
         showLogConsole = true
         maxLogEntries = 500
         minimizeToMenuBar = false
+        appPresenceMode = .dockOnly
         autoStartOnLaunch = false
         enableBadgesEmotes = false
         syncMinersState = true
@@ -642,7 +651,7 @@ public final class Settings: ObservableObject {
         swiftBotEndpoint = ""
         swiftBotWebhookURL = ""
         swiftBotHmacSecret = ""
-        swiftMinerAPIKey = "dev-key-change-in-production"
+        swiftMinerAPIKey = ""
         gamePreferencesData = "[]"
         selectedDropsFiltersData = "[\"active\"]"
         miningStrategy = .mineAll
@@ -658,9 +667,68 @@ public final class Settings: ObservableObject {
         debugBypassLinkRequirement = false
 #endif
     }
+
+    public func ensureSwiftBotSecrets() {
+        if swiftMinerAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).count < 32 ||
+            swiftMinerAPIKey == "dev-key-change-in-production" {
+            swiftMinerAPIKey = Self.generateSecret()
+        }
+        if swiftBotHmacSecret.trimmingCharacters(in: .whitespacesAndNewlines).count < 32 {
+            swiftBotHmacSecret = Self.generateSecret()
+        }
+    }
+
+    private static func generateSecret(byteCount: Int = 32) -> String {
+        var bytes = [UInt8](repeating: 0, count: byteCount)
+        let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        if status == errSecSuccess {
+            return bytes.map { String(format: "%02x", $0) }.joined()
+        }
+        return UUID().uuidString.replacingOccurrences(of: "-", with: "") +
+            UUID().uuidString.replacingOccurrences(of: "-", with: "")
+    }
 }
 
 // MARK: - Extensions
+
+public enum AppPresenceMode: String, CaseIterable, Identifiable {
+    case dockOnly
+    case dockAndMenuBar
+    case menuBarWhenClosed
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .dockOnly:
+            return "Dock only"
+        case .dockAndMenuBar:
+            return "Dock + menu bar icon"
+        case .menuBarWhenClosed:
+            return "Minimise to menu bar"
+        }
+    }
+
+    public var detail: String {
+        switch self {
+        case .dockOnly:
+            return "Default macOS app behavior with no menu bar icon."
+        case .dockAndMenuBar:
+            return "Keep SwiftMiner visible in the Dock and add a menu bar icon."
+        case .menuBarWhenClosed:
+            return "Show the Dock icon while a window is open, then keep SwiftMiner in the menu bar when windows are closed or minimised."
+        }
+    }
+
+    public var showsMenuBarExtra: Bool {
+        switch self {
+        case .dockOnly:
+            return false
+        case .dockAndMenuBar, .menuBarWhenClosed:
+            return true
+        }
+    }
+}
 
 extension Settings.LogLevel {
     /// Check if this log level should display messages of a given level

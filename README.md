@@ -98,7 +98,7 @@ xcodebuild -project SwiftMiner.xcodeproj -scheme SwiftMiner -destination 'platfo
 
 ## Configuration
 
-The app resolves `TWITCH_CLIENT_ID` from the environment first and falls back to the bundled client ID when it is not set. The `SwiftMinerCLI` target is stricter and expects `TWITCH_CLIENT_ID` to be provided explicitly.
+The app resolves `TWITCH_CLIENT_ID` from the environment first and falls back to the bundled client ID when it is not set.
 
 Example:
 
@@ -112,7 +112,6 @@ export TWITCH_CLIENT_ID=your_client_id
 Sources/
   SwiftMiner/       SwiftUI macOS app, onboarding, dashboard, settings, menu bar UI
   SwiftMinerCore/   Actor-based mining engine, Twitch services, models, aggregation logic
-  SwiftMinerCLI/    Headless CLI runner for engine debugging
 Tests/              Unit tests for services, engine behavior, routing, and presentation
 Documentation/      Architecture notes, release process, audits, and implementation docs
 scripts/            Build and Sparkle release automation
@@ -138,10 +137,6 @@ SwiftUI App
 ```
 
 That separation keeps the UI relatively thin while the mining logic stays testable in `SwiftMinerCore`.
-
-## CLI Target
-
-The repository also includes `SwiftMinerCLI`, a small headless runner that exercises the same core engine used by the app. It is mainly useful for debugging authentication, logging, and mining behavior outside the GUI.
 
 ## Notes And Risk
 

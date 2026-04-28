@@ -15,38 +15,23 @@ ALTER TABLE admin_audit_log RENAME TO admin_audit_log_old;
 
 CREATE TABLE admin_audit_log (
     id TEXT PRIMARY KEY,
+    action_type TEXT NOT NULL DEFAULT 'account_assigned',
     operator_id TEXT NOT NULL,
-    action_type TEXT NOT NULL CHECK(action_type IN (
-        'account.assigned',
-        'account.reassigned',
-        'user.registered',
-        'user.activated',
-        'user.suspended',
-        'event.retry',
-        'event.marked_sent',
-        'event.marked_failed',
-        'operator.login',
-        'operator.logout'
-    )),
-    -- Generic nullable targets (at least one should usually be populated)
-    target_twitch_id TEXT,
-    target_discord_id TEXT,
-    -- Assignment-specific context (populated for account.assigned / account.reassigned)
+    twitch_id TEXT,
     from_discord_id TEXT,
     to_discord_id TEXT,
-    -- Flexible metadata per action type
     metadata_json TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Copy existing assignment-shaped rows into the new action-shaped table.
--- Legacy rows are treated as 'account.assigned' (or 'account.reassigned' if from_discord_id IS NOT NULL).
+-- Legacy rows are treated as 'account_assigned'. Historical reassignment
+-- granularity is not recoverable from older rows.
 INSERT INTO admin_audit_log (
     id,
-    operator_id,
     action_type,
-    target_twitch_id,
-    target_discord_id,
+    operator_id,
+    twitch_id,
     from_discord_id,
     to_discord_id,
     metadata_json,
@@ -54,10 +39,9 @@ INSERT INTO admin_audit_log (
 )
 SELECT
     id,
+    'account_assigned',
     operator_id,
-    CASE WHEN from_discord_id IS NOT NULL THEN 'account.reassigned' ELSE 'account.assigned' END,
-    twitch_id,           -- maps to target_twitch_id
-    to_discord_id,       -- maps to target_discord_id (the new owner)
+    twitch_id,
     from_discord_id,
     to_discord_id,
     metadata_json,
@@ -68,10 +52,10 @@ DROP TABLE admin_audit_log_old;
 
 -- Indices for viewer / query performance
 CREATE INDEX IF NOT EXISTS idx_audit_created_at ON admin_audit_log(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_audit_target_discord ON admin_audit_log(target_discord_id);
-CREATE INDEX IF NOT EXISTS idx_audit_target_twitch ON admin_audit_log(target_twitch_id);
+CREATE INDEX IF NOT EXISTS idx_audit_twitch_id ON admin_audit_log(twitch_id);
+CREATE INDEX IF NOT EXISTS idx_audit_to_discord ON admin_audit_log(to_discord_id);
 CREATE INDEX IF NOT EXISTS idx_audit_operator ON admin_audit_log(operator_id);
-CREATE INDEX IF NOT EXISTS idx_audit_action_created ON admin_audit_log(action_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_action_type ON admin_audit_log(action_type);
 
 -- ---------------------------------------------------------------------------
 -- 2. event_outbox — add indices for monitor UI + poller performance

@@ -11,12 +11,22 @@ struct AdminView: View {
     enum AdminTab: String, CaseIterable, Identifiable {
         case accounts = "Unlinked Accounts"
         case users = "Registered Users"
-        case integration = "Bot Integration"
+        case integration = "Bot Integration (Beta)"
         var id: String { self.rawValue }
     }
 
     var body: some View {
         VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: "testtube.2")
+                Text("Discord / SwiftBot integration is beta developer functionality.")
+                    .font(.caption.weight(.semibold))
+                Spacer()
+            }
+            .foregroundStyle(.orange)
+            .padding(.horizontal, 24)
+            .padding(.top, 12)
+
             Picker("Admin View", selection: $selectedTab) {
                 ForEach(AdminTab.allCases) { tab in
                     Text(tab.rawValue).tag(tab)
@@ -68,7 +78,7 @@ private struct IntegrationSettingsView: View {
                     Text("SwiftBot Integration")
                         .font(.title2.weight(.bold))
                     
-                    Text("Configure the connection between this SwiftMiner instance and your Discord bot.")
+                    Text("Beta developer settings for the local Discord bot bridge.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }

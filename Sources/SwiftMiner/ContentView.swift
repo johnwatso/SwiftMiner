@@ -11,9 +11,11 @@ struct ContentView: View {
         @Bindable var nav = navigation
         NavigationSplitView {
             SidebarView()
+                .navigationSplitViewColumnWidth(min: 168, ideal: 180, max: 240)
         } detail: {
             detailView
         }
+        .background(WindowZoomConfigurator())
         .overlay {
             if nav.showOnboarding {
                 ZStack {
@@ -62,7 +64,11 @@ struct ContentView: View {
             EventLogView()
 
         case .admin:
-            AdminView()
+            if Settings.shared.swiftBotEnabled {
+                AdminView()
+            } else {
+                OverviewView()
+            }
         }
     }
 }
@@ -2485,6 +2491,27 @@ private extension URL {
         }
 
         return URL(string: resolved) ?? self
+    }
+}
+
+// MARK: - Window Configuration
+
+private struct WindowZoomConfigurator: NSViewRepresentable {
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            guard let window = view.window else { return }
+            window.delegate = context.coordinator
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    final class Coordinator: NSObject, NSWindowDelegate {
+        func windowShouldEnterFullScreen(_ window: NSWindow) -> Bool { false }
     }
 }
 

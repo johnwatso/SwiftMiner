@@ -99,18 +99,6 @@ targets:
         PRODUCT_NAME: SwiftMinerServiceTool
         SWIFT_VERSION: "6.0"
 
-  SwiftMinerCLI:
-    type: tool
-    platform: macOS
-    deploymentTarget: "26.0"
-    sources:
-      - Sources/SwiftMinerCLI
-    dependencies:
-      - target: SwiftMinerCore
-    settings:
-      base:
-        SWIFT_VERSION: "6.0"
-
   SwiftMinerCoreTests:
     type: bundle.unit-test
     platform: macOS
@@ -156,18 +144,6 @@ schemes:
       config: Debug
       targets:
         - SwiftMinerCoreTests
-    archive:
-      config: Release
-
-  SwiftMinerCLI:
-    build:
-      targets:
-        SwiftMinerCLI: all
-    run:
-      config: Debug
-      commandLineArguments: []
-      environmentVariables:
-        TWITCH_CLIENT_ID: ""
     archive:
       config: Release
 

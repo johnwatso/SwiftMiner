@@ -116,14 +116,6 @@ xcodebuild -project SwiftMiner.xcodeproj -scheme SwiftMiner -destination 'platfo
 
 ## Usage
 
-### CLI
-```bash
-export TWITCH_CLIENT_ID=your_client_id
-open SwiftMiner.xcodeproj
-```
-
-Run the `SwiftMinerCLI` scheme from Xcode when you need the headless debug runner.
-
 ### As a Library
 ```swift
 import SwiftMinerCore

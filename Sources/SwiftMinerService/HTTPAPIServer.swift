@@ -131,6 +131,7 @@ public actor HTTPAPIServer {
         guard let nwPort = NWEndpoint.Port(rawValue: port) else {
             throw NSError(domain: "HTTPAPIServer", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid port"])
         }
+        parameters.requiredLocalEndpoint = NWEndpoint.hostPort(host: .ipv4(IPv4Address("127.0.0.1")!), port: nwPort)
         let listener = try NWListener(using: parameters, on: nwPort)
         self.listener = listener
 

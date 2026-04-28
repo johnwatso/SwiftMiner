@@ -27,7 +27,7 @@ public enum CampaignActivityStatus: Sendable, Equatable {
         case .requiresLink: return "Requires linked account"
         case .upcoming: return "Campaign upcoming"
         case .expired: return "Campaign expired"
-        case .completed: return "Not eligible for this account"
+        case .completed: return "Completed"
         case .waitingForStream: return "Waiting — No channels live"
         }
     }
@@ -37,10 +37,24 @@ public enum CampaignActivityStatus: Sendable, Equatable {
 
 extension Campaign {
     /// Resolves the activity status for this campaign relative to a specific miner.
+    @MainActor
     public func activityStatus(for miner: MinerManager.ManagedMiner) -> CampaignActivityStatus {
         // 1. Account linkage (highest priority issue)
         if !isAccountConnected {
             return .requiresLink
+        }
+
+        let statesByDropId = Dictionary(
+            uniqueKeysWithValues: (miner.stateStore?.dropStates ?? []).map { ($0.dropId, $0) }
+        )
+        let allDropsComplete = !drops.isEmpty && drops.allSatisfy { drop in
+            if drop.isClaimed { return true }
+            guard let state = statesByDropId[drop.id] else { return false }
+            return state.isClaimed || state.isComplete
+        }
+
+        if allDropsComplete {
+            return .completed
         }
         
         // 2. Time window
