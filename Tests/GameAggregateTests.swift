@@ -403,7 +403,7 @@ final class GameAggregateTests: XCTestCase {
 
     // MARK: - Drops Grouping Aggregates (CampaignViewData)
 
-    func testBuildDrops_AggregatesByGameId_WithBlockedPrecedence() {
+    func testBuildDrops_AggregatesByGameId_UsesSetupPrecedence() {
         let now = Date()
         let blocked = makeCampaignViewData(
             id: "c-blocked",
@@ -455,7 +455,7 @@ final class GameAggregateTests: XCTestCase {
             isClaimed: true,
             isAccountConnected: true,
             startDate: now.addingTimeInterval(-3600),
-            endDate: now.addingTimeInterval(-60),
+            endDate: now.addingTimeInterval(3600),
             drops: [makeDrop(id: "d-complete", progress: 1, isClaimed: true, isClaimable: false)],
             dropsClaimed: 1,
             totalDrops: 1
@@ -506,8 +506,8 @@ final class GameAggregateTests: XCTestCase {
         let grouped = GameAggregateBuilder.buildDrops(from: [expiredUnclaimed, expiredClaimed], now: now)
         let states = grouped.first?.campaigns.map(\.state)
 
-        XCTAssertEqual(grouped.first?.aggregateState, .completed)
-        XCTAssertEqual(states, [.completed, .unavailable])
+        XCTAssertEqual(grouped.first?.aggregateState, .unavailable)
+        XCTAssertEqual(states, [.unavailable, .unavailable])
     }
 
     private func makeCampaignViewData(
