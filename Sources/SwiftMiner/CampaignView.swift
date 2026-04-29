@@ -249,7 +249,37 @@ struct DropsListView: View {
     }
 
     private var groupedCampaigns: [GameAggregate] {
-        GameAggregateBuilder.buildDrops(from: renderedCampaigns)
+        let activeCampaigns = renderedCampaigns.filter { !$0.isExpired() }
+        let endedCampaigns = renderedCampaigns.filter { $0.isExpired() }
+
+        let activeGroups = GameAggregateBuilder.buildDrops(from: activeCampaigns)
+        let endedGroups = endedCampaigns.map(endedCampaignGroup)
+
+        return (activeGroups + endedGroups).sorted { lhs, rhs in
+            if lhs.aggregateState.priority != rhs.aggregateState.priority {
+                return lhs.aggregateState.priority < rhs.aggregateState.priority
+            }
+            return lhs.gameName.localizedCaseInsensitiveCompare(rhs.gameName) == .orderedAscending
+        }
+    }
+
+    private func endedCampaignGroup(for campaign: CampaignViewData) -> GameAggregate {
+        GameAggregate(
+            id: "\(campaign.aggregateGameGroupKey):ended:\(campaign.id)",
+            gameName: campaign.gameName,
+            artworkURL: campaign.artworkURL,
+            totalDrops: campaign.totalDrops,
+            earnedDrops: campaign.drops.filter { $0.isClaimed || $0.isClaimable || $0.progress >= 0.995 }.count,
+            claimedDrops: campaign.overviewClaimedRewardCount,
+            claimableDrops: campaign.drops.filter { $0.isClaimable && !$0.isClaimed }.count,
+            campaigns: [
+                GameAggregateCampaign(
+                    campaign: campaign,
+                    state: campaign.gameAggregateState()
+                )
+            ],
+            aggregateState: campaign.gameAggregateState()
+        )
     }
 
     private var contextualBannerMessage: String? {
@@ -284,7 +314,7 @@ struct DropsListView: View {
         }
 
         if selectedFilters == [.completed] {
-            return "No fully claimed campaigns yet."
+            return "No completed or ended campaigns yet."
         }
 
         return "No campaigns match the selected filters."
@@ -477,17 +507,12 @@ struct DropsListView: View {
             return false
         }
 
-        if campaign.endDate <= Date() {
-            // Ended but unclaimed and not blocked: keep visible for recovery.
-            return true
-        }
-
         guard campaign.startDate <= Date(), campaign.endDate > Date() else {
             return false
         }
 
         switch activity.state {
-        case .active, .inProgress, .claimable, .idle:
+        case .active, .inProgress, .claimable, .ready, .waiting, .idle:
             return true
         case .blocked, .claimed, .expired:
             return false
@@ -495,13 +520,13 @@ struct DropsListView: View {
     }
 
     private func matchesNeedsSetupFilter(_ campaign: CampaignViewData, activity: CampaignActivitySnapshot) -> Bool {
-        guard !matchesCompletedFilter(campaign, activity: activity) else {
-            return false
-        }
         return isBlockedCampaign(campaign, activity: activity)
     }
 
     private func matchesUpcomingFilter(_ campaign: CampaignViewData, activity: CampaignActivitySnapshot) -> Bool {
+        guard !isBlockedCampaign(campaign, activity: activity) else {
+            return false
+        }
         guard campaign.startDate > Date() else {
             return false
         }
@@ -509,20 +534,24 @@ struct DropsListView: View {
     }
 
     private func matchesCompletedFilter(_ campaign: CampaignViewData, activity: CampaignActivitySnapshot) -> Bool {
-        activity.state == .claimed
+        guard !isBlockedCampaign(campaign, activity: activity) else {
+            return false
+        }
+        return campaign.isExpired() || activity.state == .claimed
     }
 
     private func isBlockedCampaign(_ campaign: CampaignViewData, activity: CampaignActivitySnapshot) -> Bool {
-        !campaign.isAccountConnected || !activity.needsAuthAccounts.isEmpty
+        !campaign.isAccountConnected || !activity.blockedAccounts.isEmpty
     }
 
     private func filters(for campaign: CampaignViewData, activity: CampaignActivitySnapshot) -> Set<DropFilter> {
+        if matchesNeedsSetupFilter(campaign, activity: activity) {
+            return [.needsSetup]
+        }
+
         var filters: Set<DropFilter> = []
         if matchesActiveFilter(campaign, activity: activity) {
             filters.insert(.active)
-        }
-        if matchesNeedsSetupFilter(campaign, activity: activity) {
-            filters.insert(.needsSetup)
         }
         if matchesUpcomingFilter(campaign, activity: activity) {
             filters.insert(.upcoming)
@@ -544,43 +573,28 @@ struct DropsListView: View {
         let activeMiners = activeMiners(for: campaign)
         let claimedAccounts = campaign.accountStates.filter { $0.miningStatus == .claimed }
         let needsAuthAccounts = campaign.accountStates.filter { $0.miningStatus == .needsAuth }
+        let blockedAccounts = campaign.accountStates.filter { $0.miningStatus == .blocked || $0.miningStatus == .needsAuth }
         let claimableDropCount = campaign.drops.filter { $0.isClaimable && !$0.isClaimed }.count
         let claimedRewardCount = max(
             campaign.dropsClaimed,
             campaign.drops.filter(\.isClaimed).count
         )
         let remainingRewardCount = max(campaign.totalDrops - claimedRewardCount, 0)
-        let allRewardsClaimed = remainingRewardCount == 0 && max(campaign.totalDrops, campaign.drops.count) > 0
-        let isExpired = !allRewardsClaimed && Date() >= campaign.endDate
-        let isBlocked = !allRewardsClaimed
-            && campaign.startDate <= Date()
-            && (!campaign.isAccountConnected || !needsAuthAccounts.isEmpty)
-        let hasProgressStarted = campaign.progress > 0
-            || campaign.drops.contains { drop in
-                drop.currentMinutes > 0 && !drop.isClaimed
-            }
+        let isExpired = campaign.isExpired()
+        let combinedProgress = campaign.combinedProgressFraction
 
         let state: CampaignCardState
-        // Strict precedence to avoid conflicting UI signals:
-        // blocked > active > claimable > claimed > inProgress > idle
-        if isBlocked {
+
+        if !campaign.isAccountConnected || !blockedAccounts.isEmpty {
             state = .blocked
         } else if isExpired {
             state = .expired
-        } else if !activeMiners.isEmpty {
-            state = .active
-        } else if claimableDropCount > 0 {
-            state = .claimable
-        } else if allRewardsClaimed {
-            // Must check before hasProgressStarted — a 100%-progress claimed
-            // campaign would otherwise be misclassified as .inProgress.
+        } else if combinedProgress >= 0.995 {
             state = .claimed
-        } else if hasProgressStarted {
+        } else if combinedProgress > 0 {
             state = .inProgress
-        } else if remainingRewardCount > 0 {
-            state = .idle
         } else {
-            state = .claimed
+            state = .ready
         }
 
         return CampaignActivitySnapshot(
@@ -588,6 +602,7 @@ struct DropsListView: View {
             activeMiners: activeMiners,
             claimedAccounts: claimedAccounts,
             needsAuthAccounts: needsAuthAccounts,
+            blockedAccounts: blockedAccounts,
             claimableDropCount: claimableDropCount,
             claimedRewardCount: claimedRewardCount,
             remainingRewardCount: remainingRewardCount
@@ -619,7 +634,7 @@ private struct CampaignDeckCard: View {
     }
 
     private var hasAccountLinkIssue: Bool {
-        activity.state == .blocked && !campaign.isAccountConnected
+        activity.state == .blocked && activity.blockedAccounts.contains { $0.miningStatus == .blocked }
     }
 
     private var hasBlockedNeedsAuthIssue: Bool {
@@ -630,45 +645,72 @@ private struct CampaignDeckCard: View {
         activity.state == .active
     }
 
-    private var statusSummary: String? {
-        if activity.state == .blocked {
+    private var rewardOutcomeText: String? {
+        let totalRewards = max(campaign.totalDrops, campaign.drops.count)
+        let claimedRewards = min(activity.claimedRewardCount, totalRewards)
+
+        guard totalRewards > 0 else { return nil }
+
+        if claimedRewards == totalRewards && allRelevantMinersComplete {
             return nil
         }
 
-        switch activity.state {
-        case .blocked:
-            return nil
-        case .active:
-            let minerCount = activity.activeMiners.count
-            let minerCopy = "\(minerCount) miner\(minerCount == 1 ? "" : "s") watching now"
-            if campaign.progress > 0 {
-                return "\(minerCopy) • \(Int((campaign.progress * 100).rounded()))% complete"
-            }
-            return minerCopy
-        case .claimable:
-            return activity.claimableDropCount == 1
-                ? "1 reward ready to claim"
-                : "\(activity.claimableDropCount) rewards ready to claim"
-        case .claimed:
-            return "All campaign rewards claimed"
-        case .expired:
-            return "Campaign ended with unclaimed rewards"
-        case .inProgress:
-            return campaign.progress > 0
-                ? "\(Int((campaign.progress * 100).rounded()))% campaign progress"
-                : nil
-        case .idle:
-            return activity.remainingRewardCount > 0
-                ? "\(activity.remainingRewardCount) reward\(activity.remainingRewardCount == 1 ? "" : "s") still available"
-                : nil
+        return "\(claimedRewards) / \(totalRewards) rewards claimed"
+    }
+
+    private var endedOutcomeText: String? {
+        let totalRewards = max(campaign.totalDrops, campaign.drops.count)
+        let claimedRewards = min(activity.claimedRewardCount, totalRewards)
+        let unclaimedRewards = max(totalRewards - claimedRewards, activity.remainingRewardCount)
+
+        guard totalRewards > 0 else { return "Ended" }
+        guard unclaimedRewards > 0 else {
+            return allRelevantMinersComplete ? nil : "\(claimedRewards) / \(totalRewards) rewards claimed"
         }
+
+        return "Ended · \(unclaimedRewards) unclaimed"
+    }
+
+    private var outcomeText: String? {
+        if activity.state == .expired {
+            return endedOutcomeText
+        }
+
+        if let minerConsistencyText {
+            return minerConsistencyText
+        }
+
+        return rewardOutcomeText
+    }
+
+    private var minerConsistencyText: String? {
+        let totalMiners = totalMinerCount
+        guard totalMiners > 0 else { return nil }
+
+        let completedMiners = completedMinerCount
+        guard completedMiners < totalMiners else { return nil }
+
+        return "\(completedMiners) / \(totalMiners) miners complete"
+    }
+
+    private var totalMinerCount: Int {
+        campaign.accountStates.count
+    }
+
+    private var completedMinerCount: Int {
+        campaign.accountStates.filter { $0.miningStatus == .claimed }.count
+    }
+
+    private var allRelevantMinersComplete: Bool {
+        totalMinerCount == 0 || completedMinerCount == totalMinerCount
     }
 
     private var requirementBannerCopy: (title: String, message: String, systemImage: String, tint: Color)? {
         if hasAccountLinkIssue {
+            let accountCount = activity.blockedAccounts.filter { $0.miningStatus == .blocked }.count
             return (
-                title: "Action Required",
-                message: "Link the game account on Twitch to let miners earn these rewards.",
+                title: "Link required",
+                message: "Link the game account on Twitch for the affected miner\(accountCount == 1 ? "" : "s") before mining can continue.",
                 systemImage: "link.badge.plus",
                 tint: .orange
             )
@@ -677,18 +719,8 @@ private struct CampaignDeckCard: View {
         if hasBlockedNeedsAuthIssue {
             let accountCount = activity.needsAuthAccounts.count
             return (
-                title: "Action Required",
+                title: "Needs setup",
                 message: "Reconnect the affected Twitch account\(accountCount == 1 ? "" : "s") before mining can continue.",
-                systemImage: "exclamationmark.triangle.fill",
-                tint: .orange
-            )
-        }
-
-        if activity.state == .expired && activity.remainingRewardCount > 0 {
-            let rewardCount = activity.remainingRewardCount
-            return (
-                title: rewardCount == 1 ? "1 reward is still unclaimed" : "\(rewardCount) rewards are still unclaimed",
-                message: "This campaign ended before everything was claimed. Recover any remaining rewards if Twitch still allows claim.",
                 systemImage: "exclamationmark.triangle.fill",
                 tint: .orange
             )
@@ -757,10 +789,14 @@ private struct CampaignDeckCard: View {
                         }
                     }
 
-                    if let statusSummary {
-                        Text(statusSummary)
+                    if let outcomeText {
+                        Text(outcomeText)
                             .font(.caption)
                             .foregroundStyle(activity.state == .expired ? .orange : .secondary)
+                    }
+
+                    if !campaign.accountStates.isEmpty {
+                        CampaignMinerAttributionRow(accountStates: campaign.accountStates)
                     }
 
                     if isActive && campaign.progress > 0 {
@@ -906,6 +942,7 @@ private struct CampaignDeckCard: View {
     private var materialTint: Color {
         extractedArtworkTint ?? Color.gray
     }
+
 }
 
 // MARK: - Grouped Game Card
@@ -1071,7 +1108,7 @@ private struct GroupedCampaignSubItem: View {
         if item.state == .completed {
             return "Completed"
         }
-        return "Unavailable"
+        return "Ended"
     }
 
     var body: some View {
@@ -1165,6 +1202,7 @@ private struct CampaignActivitySnapshot {
     let activeMiners: [MinerManager.ManagedMiner]
     let claimedAccounts: [AccountState]
     let needsAuthAccounts: [AccountState]
+    let blockedAccounts: [AccountState]
     let claimableDropCount: Int
     let claimedRewardCount: Int
     let remainingRewardCount: Int
@@ -1409,40 +1447,135 @@ private struct CampaignQueueBadge: View {
     }
 }
 
-private struct CampaignAccountStrip: View {
+private struct CampaignMinerAttributionRow: View {
     let accountStates: [AccountState]
-    private let avatarDiameter: CGFloat = 21
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: -avatarDiameter * 0.24) {
-                ForEach(Array(accountStates.enumerated()), id: \.element.id) { index, account in
-                    accountCircle(for: account)
-                        .help("\(account.username) — \(statusTitle(for: account.miningStatus))")
-                        .zIndex(Double(accountStates.count - index))
+        HStack(spacing: 7) {
+            Text("Miners")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            CampaignAccountAttribution(accountStates: accountStates)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct CampaignAccountAttribution: View {
+    let accountStates: [AccountState]
+
+    var body: some View {
+        if let onlyAccount = accountStates.first, accountStates.count == 1 {
+            CampaignAccountStatusItem(account: onlyAccount)
+        } else {
+            HStack(spacing: 8) {
+                ForEach(Array(accountStates.prefix(3))) { account in
+                    CampaignAccountStatusItem(account: account)
+                }
+
+                let overflowCount = max(accountStates.count - 3, 0)
+                if overflowCount > 0 {
+                    Text("+\(overflowCount)")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .help("\(overflowCount) more miner\(overflowCount == 1 ? "" : "s")")
                 }
             }
-            .padding(.trailing, 6) // Breathing room for the last avatar
+        }
+    }
+}
+
+private struct CampaignAccountStatusItem: View {
+    let account: AccountState
+
+    var body: some View {
+        HStack(spacing: 5) {
+            CampaignAccountAvatar(account: account)
+
+            Text(account.username)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+
+            Text(statusLabel)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(statusTint)
+                .lineLimit(1)
+        }
+    }
+
+    private var statusLabel: String {
+        switch account.miningStatus {
+        case .mining: return "mining"
+        case .claimed: return "claimed"
+        case .needsAuth: return "needs setup"
+        case .blocked: return "link required"
+        case .ready: return "ready"
+        case .idle: return "waiting"
+        }
+    }
+
+    private var statusTint: Color {
+        switch account.miningStatus {
+        case .mining: return .green
+        case .claimed: return .blue
+        case .needsAuth, .blocked: return .orange
+        case .ready, .idle: return .secondary
+        }
+    }
+}
+
+private struct CampaignAccountStrip: View {
+    let accountStates: [AccountState]
+    var maxVisibleCount: Int? = nil
+    var showsOverflow = false
+    private let avatarDiameter: CGFloat = 21
+
+    private var visibleAccounts: [AccountState] {
+        guard let maxVisibleCount else { return accountStates }
+        return Array(accountStates.prefix(maxVisibleCount))
+    }
+
+    private var overflowCount: Int {
+        guard let maxVisibleCount else { return 0 }
+        return max(accountStates.count - maxVisibleCount, 0)
+    }
+
+    var body: some View {
+        HStack(spacing: -avatarDiameter * 0.24) {
+            ForEach(Array(visibleAccounts.enumerated()), id: \.element.id) { index, account in
+                CampaignAccountAvatar(account: account)
+                    .zIndex(Double(visibleAccounts.count - index))
+            }
+
+            if showsOverflow && overflowCount > 0 {
+                Text("+\(overflowCount)")
+                    .font(.system(size: 9, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.secondary)
+                    .frame(width: avatarDiameter, height: avatarDiameter)
+                    .background(.regularMaterial, in: Circle())
+                    .overlay {
+                        Circle()
+                            .strokeBorder(.white.opacity(0.58), lineWidth: 1)
+                    }
+                    .help("\(overflowCount) more miner\(overflowCount == 1 ? "" : "s")")
+                    .zIndex(0)
+            }
         }
         .frame(height: avatarDiameter + 4)
     }
+}
 
-    @ViewBuilder
-    private func accountCircle(for account: AccountState) -> some View {
+private struct CampaignAccountAvatar: View {
+    let account: AccountState
+    private let avatarDiameter: CGFloat = 21
+
+    var body: some View {
         let swatch = AvatarColorPalette.swatch(for: account.accountId, username: account.username)
-
         ZStack(alignment: .bottomTrailing) {
-            Text(account.initials)
-                .font(.system(size: avatarDiameter * 0.34, weight: .semibold, design: .rounded))
-                .tracking(0.16)
-                .foregroundStyle(swatch.text)
-                .frame(width: avatarDiameter, height: avatarDiameter)
-                .background(.ultraThinMaterial, in: Circle())
-                .overlay {
-                    Circle()
-                        .fill(swatch.gradient)
-                        .opacity(0.9)
-                }
+            Circle()
+                .fill(swatch.gradient)
                 .overlay {
                     Circle()
                         .fill(
@@ -1455,9 +1588,16 @@ private struct CampaignAccountStrip: View {
                         .opacity(0.72)
                 }
                 .overlay {
+                    Text(account.initials)
+                        .font(.system(size: avatarDiameter * 0.34, weight: .semibold, design: .rounded))
+                        .tracking(0.16)
+                        .foregroundStyle(swatch.text)
+                }
+                .overlay {
                     Circle()
                         .strokeBorder(.white.opacity(0.68), lineWidth: 1)
                 }
+                .frame(width: avatarDiameter, height: avatarDiameter)
                 .shadow(color: .black.opacity(0.045), radius: 2, y: 1)
 
             if account.miningStatus == .mining {
@@ -1465,6 +1605,13 @@ private struct CampaignAccountStrip: View {
                     .offset(x: 1.5, y: 1.5)
             } else if account.miningStatus == .needsAuth {
                 Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 7))
+                    .foregroundStyle(.orange)
+                    .padding(1.5)
+                    .background(.regularMaterial, in: Circle())
+                    .offset(x: 1.5, y: 1.5)
+            } else if account.miningStatus == .blocked {
+                Image(systemName: "link.badge.plus")
                     .font(.system(size: 7))
                     .foregroundStyle(.orange)
                     .padding(1.5)
@@ -1479,6 +1626,7 @@ private struct CampaignAccountStrip: View {
                     .offset(x: 1.5, y: 1.5)
             }
         }
+        .help("\(account.username) — \(statusTitle(for: account.miningStatus))")
     }
 
     private func statusTitle(for status: AccountMiningStatus) -> String {
@@ -1486,6 +1634,8 @@ private struct CampaignAccountStrip: View {
         case .mining: return "Watching"
         case .claimed: return "Claimed"
         case .needsAuth: return "Needs Re-auth"
+        case .blocked: return "Link required"
+        case .ready: return "Ready"
         case .idle: return "Idle"
         }
     }
@@ -1684,11 +1834,11 @@ private extension Double {
 private extension GameAggregateState {
     var title: String {
         switch self {
-        case .actionRequired: return "Action Required"
+        case .actionRequired: return "Link required"
         case .inProgress: return "In Progress"
         case .ready: return "Ready"
         case .completed: return "Completed"
-        case .unavailable: return "Unavailable"
+        case .unavailable: return "Ended"
         }
     }
 
@@ -1719,7 +1869,7 @@ private extension GameAggregateState {
         case .inProgress:
             return .inProgress
         case .ready:
-            return .idle
+            return .ready
         case .completed:
             return .claimed
         case .unavailable:
@@ -1733,6 +1883,8 @@ private enum CampaignCardState: String {
     case active
     case inProgress
     case claimable
+    case ready
+    case waiting
     case claimed
     case expired
     case idle
@@ -1743,20 +1895,24 @@ private enum CampaignCardState: String {
         case .active: return 1
         case .claimable: return 2
         case .inProgress: return 3
-        case .idle: return 4
-        case .claimed: return 5
-        case .expired: return 6
+        case .ready: return 4
+        case .waiting: return 5
+        case .idle: return 6
+        case .claimed: return 7
+        case .expired: return 8
         }
     }
 
     var title: String {
         switch self {
-        case .blocked: return "Action Required"
+        case .blocked: return "Link required"
         case .active: return "Watching now"
         case .inProgress: return "In progress"
         case .claimable: return "Reward ready"
-        case .claimed: return "All rewards claimed"
-        case .expired: return "Needs attention"
+        case .ready: return "Ready"
+        case .waiting: return "Waiting"
+        case .claimed: return "Completed"
+        case .expired: return "Ended"
         case .idle: return "Queued"
         }
     }
@@ -1767,6 +1923,8 @@ private enum CampaignCardState: String {
         case .active: return "dot.radiowaves.left.and.right"
         case .inProgress: return "chart.bar.fill"
         case .claimable: return "sparkles"
+        case .ready: return "clock.badge.checkmark.fill"
+        case .waiting: return "antenna.radiowaves.left.and.right.slash"
         case .claimed: return "checkmark.circle.fill"
         case .expired: return "clock.badge.exclamationmark"
         case .idle: return "clock.badge.checkmark.fill"
@@ -1779,6 +1937,8 @@ private enum CampaignCardState: String {
         case .active: return .green
         case .inProgress: return .blue
         case .claimable: return .secondary
+        case .ready: return .secondary
+        case .waiting: return .secondary
         case .claimed: return .green
         case .expired: return .orange
         case .idle: return .secondary
@@ -1795,6 +1955,8 @@ private enum CampaignCardState: String {
             return .white.opacity(0.12)
         case .inProgress:
             return .blue.opacity(0.20)
+        case .ready, .waiting:
+            return .white.opacity(0.12)
         case .claimed:
             return .green.opacity(0.14)
         case .expired:

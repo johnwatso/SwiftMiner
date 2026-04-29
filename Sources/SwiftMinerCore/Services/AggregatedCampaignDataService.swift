@@ -523,7 +523,10 @@ public actor AggregatedCampaignDataService {
         let allClaimed = !accountCampaigns.isEmpty && accountCampaigns.allSatisfy { $0.1.isClaimed }
         let anyConnected = accountCampaigns.contains { $0.1.isAccountConnected }
 
-        let accountStates = buildCampaignAccountStates(for: data.id, accountCampaigns: accountCampaigns)
+        let accountStates = buildCampaignAccountStates(
+            for: data.id,
+            accountCampaigns: accountCampaigns
+        )
         let drops = mergeDrops(from: accountCampaigns.map(\.1))
         let miningStatus = mergedMiningStatus(
             for: data,
@@ -565,29 +568,47 @@ public actor AggregatedCampaignDataService {
         for campaignId: String,
         accountCampaigns: [(String, CampaignViewData)]
     ) -> [AccountState] {
-        accountCampaigns.map { accountId, campaign in
+        let campaignsByAccount = Dictionary(uniqueKeysWithValues: accountCampaigns)
+
+        return accountUsernames.keys.map { accountId in
             let username = accountUsernames[accountId] ?? accountId
+            let campaign = campaignsByAccount[accountId]
             let state: AccountMiningStatus
+            let claimedDropCount: Int
 
             if accountNeedsAuth[accountId] == true {
                 state = .needsAuth
+            } else if campaign?.isClaimed == true || campaign?.miningStatus == .claimed {
+                state = .claimed
             } else if activeCampaignIds[accountId] == campaignId {
                 state = .mining
-            } else if campaign.isClaimed || campaign.miningStatus == .claimed {
-                state = .claimed
+            } else if campaign?.isAccountConnected == false {
+                state = .blocked
+            } else if campaign?.miningStatus == .available || campaign?.miningStatus == .inProgress || campaign?.miningStatus == .claimable {
+                state = .ready
             } else {
                 state = .idle
+            }
+
+            if let campaign {
+                claimedDropCount = max(
+                    campaign.dropsClaimed,
+                    campaign.drops.filter(\.isClaimed).count
+                )
+            } else {
+                claimedDropCount = 0
             }
 
             return AccountState(
                 accountId: accountId,
                 username: username,
                 initials: Self.initials(from: username),
-                miningStatus: state
+                miningStatus: state,
+                claimedDropCount: claimedDropCount
             )
         }
         .sorted { lhs, rhs in
-            let order: [AccountMiningStatus: Int] = [.needsAuth: 0, .mining: 1, .claimed: 2, .idle: 3]
+            let order: [AccountMiningStatus: Int] = [.needsAuth: 0, .blocked: 1, .mining: 2, .ready: 3, .claimed: 4, .idle: 5]
             return (order[lhs.miningStatus] ?? 4) < (order[rhs.miningStatus] ?? 4)
         }
     }

@@ -98,15 +98,55 @@ final class CampaignTabRoutingTests: XCTestCase {
         XCTAssertTrue(campaign.showsInClaimedTab, "Claimed account state should surface the campaign in Claimed")
     }
 
+    func test_BlockedAccountState_PreventsCompletedProjection() {
+        let campaign = CampaignViewData(
+            id: "test",
+            gameName: "Test Game",
+            campaignName: "Test Campaign",
+            artworkURL: nil,
+            progress: 1.0,
+            isClaimed: true,
+            dropsClaimed: 1,
+            totalDrops: 1,
+            status: "ACTIVE",
+            miningStatus: .claimed,
+            isAccountConnected: true,
+            relevance: .recent,
+            startDate: now.addingTimeInterval(-3600),
+            endDate: now.addingTimeInterval(3600),
+            accountStates: [
+                AccountState(
+                    accountId: "a1",
+                    username: "claimed",
+                    initials: "C",
+                    miningStatus: .claimed
+                ),
+                AccountState(
+                    accountId: "a2",
+                    username: "blocked",
+                    initials: "B",
+                    miningStatus: .blocked
+                )
+            ]
+        )
+
+        XCTAssertFalse(campaign.isCompleted, "Claimed drops must not mark a campaign complete while a miner is blocked")
+        XCTAssertFalse(campaign.showsInClaimedTab, "Mixed claimed+blocked campaign should not route as claimed")
+    }
+
     func test_AccountState_MiningStatus_Logic() {
         let mining = AccountState(accountId: "1", username: "U1", initials: "U1", miningStatus: .mining)
         let claimed = AccountState(accountId: "2", username: "U2", initials: "U2", miningStatus: .claimed)
         let needsAuth = AccountState(accountId: "3", username: "U3", initials: "U3", miningStatus: .needsAuth)
+        let blocked = AccountState(accountId: "5", username: "U5", initials: "U5", miningStatus: .blocked)
+        let ready = AccountState(accountId: "6", username: "U6", initials: "U6", miningStatus: .ready)
         let idle = AccountState(accountId: "4", username: "U4", initials: "U4", miningStatus: .idle)
         
         XCTAssertEqual(mining.miningStatus, .mining)
         XCTAssertEqual(claimed.miningStatus, .claimed)
         XCTAssertEqual(needsAuth.miningStatus, .needsAuth)
+        XCTAssertEqual(blocked.miningStatus, .blocked)
+        XCTAssertEqual(ready.miningStatus, .ready)
         XCTAssertEqual(idle.miningStatus, .idle)
     }
 

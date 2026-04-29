@@ -161,8 +161,12 @@ struct OverviewView: View {
             return .blockedAuthenticationExpired
         }
 
-        if miners.contains(where: { $0.status == .blockedAccountNotLinked }) {
-            return .blockedAccountNotLinked
+        let accountLinkBlockedMiners = miners.filter { $0.status == .blockedAccountNotLinked }
+        if !accountLinkBlockedMiners.isEmpty {
+            return .blockedAccountNotLinked(
+                minerName: accountLinkBlockedMiners.count == 1 ? accountLinkBlockedMiners[0].username : nil,
+                blockedCount: accountLinkBlockedMiners.count
+            )
         }
 
         if miners.contains(where: { $0.status == .error }) {
@@ -1116,7 +1120,7 @@ private enum OverviewSystemState: Equatable {
     case waitingForLiveStream
     case waitingRefreshingCampaigns
     case waitingAuthenticating
-    case blockedAccountNotLinked
+    case blockedAccountNotLinked(minerName: String?, blockedCount: Int)
     case blockedAuthenticationExpired
     case blockedNeedsAttention
     case mining(gameName: String)
@@ -1127,7 +1131,12 @@ private enum OverviewSystemState: Equatable {
             return "Idle"
         case .waitingForLiveStream, .waitingRefreshingCampaigns, .waitingAuthenticating:
             return "Waiting"
-        case .blockedAccountNotLinked, .blockedAuthenticationExpired, .blockedNeedsAttention:
+        case .blockedAccountNotLinked(let minerName, let blockedCount):
+            if let minerName {
+                return "\(minerName) is blocked"
+            }
+            return "\(blockedCount) miners blocked"
+        case .blockedAuthenticationExpired, .blockedNeedsAttention:
             return "Blocked"
         case .mining:
             return "Mining"
@@ -1146,8 +1155,11 @@ private enum OverviewSystemState: Equatable {
             return "Checking for new campaign opportunities..."
         case .waitingAuthenticating:
             return "Reconnecting account..."
-        case .blockedAccountNotLinked:
-            return "Link your account to start mining drops."
+        case .blockedAccountNotLinked(let minerName, let blockedCount):
+            if let minerName {
+                return "Account not linked. Link \(minerName)'s account to start mining drops."
+            }
+            return "\(blockedCount) miners need account linking before they can mine drops."
         case .blockedAuthenticationExpired:
             return "Account authentication expired. Please re-connect."
         case .blockedNeedsAttention:

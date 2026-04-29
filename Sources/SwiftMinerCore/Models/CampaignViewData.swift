@@ -74,6 +74,14 @@ public struct CampaignViewData: Codable, Sendable, Identifiable, Equatable {
         (endDate <= Date() && isFullyClaimedByUser)
     }
 
+    /// Lifecycle-only expiry. Keep this separate from reward progress and miner
+    /// state so ended Twitch campaigns cannot render as actively mineable.
+    public func isExpired(now: Date = Date()) -> Bool {
+        endDate <= now ||
+        status.uppercased() == "EXPIRED" ||
+        relevance == .closed
+    }
+
     /// Single source of truth for Drops tab membership.
     public var tabVisibility: CampaignTabVisibility {
         var visibility: CampaignTabVisibility = [.all]
@@ -211,17 +219,37 @@ public struct AccountState: Codable, Sendable, Equatable, Identifiable {
     public let username: String
     public let initials: String
     public let miningStatus: AccountMiningStatus
+    public let claimedDropCount: Int
+
+    private enum CodingKeys: String, CodingKey {
+        case accountId
+        case username
+        case initials
+        case miningStatus
+        case claimedDropCount
+    }
     
     public init(
         accountId: String,
         username: String,
         initials: String,
-        miningStatus: AccountMiningStatus
+        miningStatus: AccountMiningStatus,
+        claimedDropCount: Int = 0
     ) {
         self.accountId = accountId
         self.username = username
         self.initials = initials
         self.miningStatus = miningStatus
+        self.claimedDropCount = claimedDropCount
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        accountId = try container.decode(String.self, forKey: .accountId)
+        username = try container.decode(String.self, forKey: .username)
+        initials = try container.decode(String.self, forKey: .initials)
+        miningStatus = try container.decode(AccountMiningStatus.self, forKey: .miningStatus)
+        claimedDropCount = try container.decodeIfPresent(Int.self, forKey: .claimedDropCount) ?? 0
     }
 }
 
@@ -233,6 +261,10 @@ public enum AccountMiningStatus: String, Codable, Sendable, Equatable {
     case claimed = "CLAIMED"
     /// Account needs manual re-authentication before mining can continue
     case needsAuth = "NEEDS_AUTH"
+    /// Account needs game/account linking before this campaign can be mined
+    case blocked = "BLOCKED"
+    /// Account is linked and eligible to mine this campaign
+    case ready = "READY"
     /// Account is linked but not currently mining this campaign
     case idle = "IDLE"
 }
@@ -253,8 +285,12 @@ public extension CampaignViewData {
         overviewProgressFraction != nil
     }
 
-    /// True when all drops are claimed, using inventory-backed claimed state.
+    /// True when all miner campaign states are terminal, falling back to
+    /// inventory-backed drop state only for older data without account states.
     var isCompleted: Bool {
+        if !accountStates.isEmpty {
+            return accountStates.allSatisfy { $0.miningStatus == .claimed }
+        }
         if totalDrops > 0 {
             return dropsClaimed >= totalDrops
         }
@@ -279,6 +315,21 @@ public extension CampaignViewData {
                 return min(max(drop.progress, 0), 1)
             }
             .max()
+    }
+
+    /// Combined campaign progress used for primary Drops status. This stays
+    /// independent of miner activity so a 100% campaign cannot render as active.
+    var combinedProgressFraction: Double {
+        let dropProgress = drops
+            .map { drop -> Double in
+                if drop.isClaimed || drop.isClaimable {
+                    return 1
+                }
+                return min(max(drop.progress, 0), 1)
+            }
+            .max() ?? 0
+
+        return min(max(max(progress, dropProgress), 0), 1)
     }
 
     var overviewState: CampaignOverviewState {
@@ -315,39 +366,28 @@ public extension CampaignViewData {
     }
 
     /// Campaign-level state used by `GameAggregate`.
-    /// Priority: actionRequired > inProgress > ready > completed > unavailable
+    /// Primary Drops state: expired > completed > in progress > ready.
     func gameAggregateState(now: Date = Date()) -> GameAggregateState {
-        let isComplete = isCompleted || miningStatus == .claimed
-        let isWithinActiveWindow = startDate <= now && endDate > now
-        let isExpired = endDate <= now
-        let needsAuth = accountStates.contains { $0.miningStatus == .needsAuth }
-        let hasLinkIssue = !isAccountConnected || needsAuth
-        let isBlocked = !isComplete && isWithinActiveWindow && hasLinkIssue
-        if isBlocked {
+        let needsSetup = !isAccountConnected || accountStates.contains {
+            $0.miningStatus == .blocked || $0.miningStatus == .needsAuth
+        }
+        if needsSetup {
             return .actionRequired
         }
 
-        if !isComplete && isExpired {
+        let hasExpired = self.isExpired(now: now)
+        if hasExpired {
             return .unavailable
         }
 
-        let hasClaimableRewards = drops.contains { $0.isClaimable && !$0.isClaimed } || miningStatus == .claimable
-        let hasProgress = hasValidProgress
-            || progress > 0
-            || drops.contains { $0.currentMinutes > 0 && !$0.isClaimed }
-            || miningStatus == .inProgress
-        if !isComplete && (hasClaimableRewards || hasProgress) {
-            return .inProgress
-        }
-
-        if !isComplete && isWithinActiveWindow && isAccountConnected {
-            return .ready
-        }
-
-        if isComplete {
+        if combinedProgressFraction >= 0.995 {
             return .completed
         }
 
-        return .unavailable
+        if combinedProgressFraction > 0 {
+            return .inProgress
+        }
+
+        return .ready
     }
 }
