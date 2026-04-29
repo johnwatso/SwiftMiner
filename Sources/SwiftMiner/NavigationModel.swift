@@ -354,13 +354,8 @@ public final class NavigationModel {
     private func deriveOnboardingPresentation() -> OnboardingPresentation? {
         let accountCount = minerManager.miners.count
         let hasAccounts = accountCount > 0
-        let hasGamePreferences = !settings.gamePreferences.isEmpty
 
         if settings.hasDismissedOnboarding {
-            return nil
-        }
-
-        if hasAccounts && hasGamePreferences && !isRunningOnboardingSetup {
             return nil
         }
 
@@ -370,8 +365,8 @@ public final class NavigationModel {
 
         if !hasAccounts {
             return OnboardingPresentation(
-                title: "Connect an account when you're ready",
-                subtitle: "SwiftMiner is already usable. Add a Twitch account here or later from the dashboard.",
+                title: "Connect Twitch",
+                subtitle: "Sign in once to start discovering eligible drop campaigns.",
                 accountState: accountState,
                 showsGamePreferences: false,
                 showsPreferences: false,
@@ -391,13 +386,11 @@ public final class NavigationModel {
         }
 
         return OnboardingPresentation(
-            title: hasGamePreferences ? "SwiftMiner is ready" : "Refine what SwiftMiner should prioritize",
-            subtitle: hasGamePreferences
-                ? "Everything here stays editable from the dashboard and settings."
-                : "Game selection is optional and saves immediately. Leave it empty to mine any eligible campaign.",
+            title: "SwiftMiner is ready",
+            subtitle: "Preferences, notifications, and privacy controls stay available from the dashboard and settings.",
             accountState: accountState,
-            showsGamePreferences: !hasGamePreferences,
-            showsPreferences: true,
+            showsGamePreferences: false,
+            showsPreferences: false,
             setupStage: nil
         )
     }

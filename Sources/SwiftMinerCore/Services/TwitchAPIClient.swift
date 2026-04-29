@@ -1,4 +1,5 @@
 import Foundation
+import zlib
 
 /// Twitch API Client supporting both GraphQL and REST endpoints
 public actor TwitchAPIClient {
@@ -664,6 +665,67 @@ public actor TwitchAPIClient {
 
         _ = try await makeGraphQLRequest(request: request)
     }
+
+    /// Send Twitch's current watch event payload used to advance active drop sessions.
+    ///
+    /// TwitchDropsMiner currently uses this `sendSpadeEvents` mutation rather than only
+    /// POSTing to the legacy Spade endpoint. The payload is gzip-compressed JSON, then
+    /// base64 encoded inside the GraphQL input.
+    public func sendSpadeEvents(
+        channelLogin: String,
+        channelId: String,
+        broadcastId: String,
+        userId: String,
+        gameName: String,
+        gameId: String
+    ) async throws {
+        let event: [String: Any] = [
+            "event": "minute-watched",
+            "properties": [
+                "broadcast_id": broadcastId,
+                "channel_id": channelId,
+                "channel": channelLogin,
+                "client_time": ISO8601DateFormatter().string(from: Date()),
+                "game": gameName,
+                "game_id": gameId,
+                "hidden": false,
+                "is_live": true,
+                "live": true,
+                "logged_in": true,
+                "minutes_logged": 1,
+                "muted": false,
+                "user_id": userId
+            ]
+        ]
+
+        let jsonData = try JSONSerialization.data(withJSONObject: [event], options: [])
+        let gzipped = try gzipCompress(jsonData)
+        let encoded = gzipped.base64EncodedString()
+        let body: [String: Any] = [
+            "query": """
+             mutation SendEvents($input: SendSpadeEventsInput!) {
+              sendSpadeEvents(input: $input) {
+               statusCode
+              }
+             }
+            """,
+            "variables": [
+                "input": [
+                    "data": encoded,
+                    "repository": "twilight",
+                    "encoding": "GZIP_B64"
+                ]
+            ]
+        ]
+
+        let data = try await makeRawGraphQLRequest(body: body, operationName: "SendSpadeEvents")
+        let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        let statusCode = (((json?["data"] as? [String: Any])?["sendSpadeEvents"] as? [String: Any])?["statusCode"] as? Int)
+        guard statusCode == 204 || statusCode == 200 else {
+            let raw = String(data: data, encoding: .utf8) ?? "unknown response"
+            throw TwitchMinerError.apiError(statusCode: statusCode ?? -1, message: "SendSpadeEvents failed: \(raw)")
+        }
+    }
     
     /// Get live channels for a specific game
     public func getLiveChannels(gameSlug: String, limit: Int = 100) async throws -> [Channel] {
@@ -990,6 +1052,94 @@ public actor TwitchAPIClient {
             print("[TwitchAPIClient] [GQL] \(request.operationName): token expired, forcing refresh and retrying once")
             _ = try await refreshAccessTokenAfterExpiry()
             return try await makeGraphQLRequest(request: request, allowRefreshRetry: false)
+        }
+    }
+
+    private func makeRawGraphQLRequest(
+        body: [String: Any],
+        operationName: String,
+        allowRefreshRetry: Bool = true
+    ) async throws -> Data {
+        await rateLimiter.wait()
+        traceGQL(operationName)
+
+        guard let requestURL = URL(string: gqlUrl) else {
+            throw TwitchMinerError.networkError("Invalid URL")
+        }
+
+        var urlRequest = URLRequest(url: requestURL)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("OAuth \(accessToken)", forHTTPHeaderField: "Authorization")
+        urlRequest.setValue(clientId, forHTTPHeaderField: "Client-Id")
+        urlRequest.setValue("application/json; charset=UTF-8", forHTTPHeaderField: "Content-Type")
+        urlRequest.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15", forHTTPHeaderField: "User-Agent")
+        urlRequest.setValue("*/*", forHTTPHeaderField: "Accept")
+        urlRequest.setValue("en-US", forHTTPHeaderField: "Accept-Language")
+        urlRequest.setValue("https://www.twitch.tv", forHTTPHeaderField: "Origin")
+        urlRequest.setValue("https://www.twitch.tv", forHTTPHeaderField: "Referer")
+
+        if let integrity = try? await getIntegrityToken() {
+            urlRequest.setValue(integrity, forHTTPHeaderField: "Client-Integrity")
+        }
+
+        urlRequest.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        do {
+            return try await makeRequestWithRetry(urlRequest, operationName: operationName)
+        } catch TwitchMinerError.tokenExpired where allowRefreshRetry {
+            print("[TwitchAPIClient] [GQL] \(operationName): token expired, forcing refresh and retrying once")
+            _ = try await refreshAccessTokenAfterExpiry()
+            return try await makeRawGraphQLRequest(
+                body: body,
+                operationName: operationName,
+                allowRefreshRetry: false
+            )
+        }
+    }
+
+    private func gzipCompress(_ data: Data) throws -> Data {
+        var stream = z_stream()
+        let status = deflateInit2_(
+            &stream,
+            Z_DEFAULT_COMPRESSION,
+            Z_DEFLATED,
+            MAX_WBITS + 16,
+            8,
+            Z_DEFAULT_STRATEGY,
+            ZLIB_VERSION,
+            Int32(MemoryLayout<z_stream>.size)
+        )
+        guard status == Z_OK else {
+            throw TwitchMinerError.networkError("Failed to initialize gzip compressor")
+        }
+        defer { deflateEnd(&stream) }
+
+        return try data.withUnsafeBytes { inputBuffer in
+            guard let inputBase = inputBuffer.bindMemory(to: Bytef.self).baseAddress else {
+                return Data()
+            }
+            stream.next_in = UnsafeMutablePointer<Bytef>(mutating: inputBase)
+            stream.avail_in = uInt(data.count)
+
+            var output = Data()
+            let chunkSize = 16 * 1024
+            let buffer = UnsafeMutablePointer<Bytef>.allocate(capacity: chunkSize)
+            defer { buffer.deallocate() }
+
+            repeat {
+                stream.next_out = buffer
+                stream.avail_out = uInt(chunkSize)
+
+                let result = deflate(&stream, Z_FINISH)
+                guard result == Z_OK || result == Z_STREAM_END else {
+                    throw TwitchMinerError.networkError("Failed to gzip watch event payload")
+                }
+
+                output.append(buffer, count: chunkSize - Int(stream.avail_out))
+                if result == Z_STREAM_END { break }
+            } while true
+
+            return output
         }
     }
 
@@ -1368,16 +1518,18 @@ public actor TwitchAPIClient {
 
                 let currentMinutes = selfDict["currentMinutesWatched"] as? Int ?? 0
                 let isClaimed = selfDict["isClaimed"] as? Bool ?? false
-                // dropInstanceID is required for the ClaimDropRewards mutation.
-                // If it's absent the drop can't be claimed via this path — skip it rather than
-                // sending the template dropId, which Twitch rejects with an invalid-response error.
-                guard let dropInstanceId = selfDict["dropInstanceID"] as? String else {
-                    print("[TwitchAPIClient] parseDropProgress: skipping '\(dropName)' — dropInstanceID missing from self dict")
+                let dropInstanceId = selfDict["dropInstanceID"] as? String
+
+                // Twitch can omit dropInstanceID while a drop is still earning. Keep those
+                // rows for progress display, but avoid creating a synthetic claim target
+                // once a drop is complete.
+                if dropInstanceId == nil && currentMinutes >= requiredMinutes {
+                    print("[TwitchAPIClient] parseDropProgress: skipping claimable '\(dropName)' — dropInstanceID missing from self dict")
                     continue
                 }
 
                 results.append(Progress(
-                    id: dropInstanceId,
+                    id: dropInstanceId ?? "\(campaignId)_\(dropId)",
                     dropId: dropId,
                     dropName: dropName,
                     campaignId: campaignId,

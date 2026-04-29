@@ -37,6 +37,8 @@ public class WatchSession: @unchecked Sendable {
     public let channelId: String
     public let channelName: String
     public let campaignId: String
+    public let gameName: String
+    public let gameId: String
     /// Live stream broadcast ID — included in the Spade beacon payload.
     /// Nil when the stream ID isn't available; beacon falls back to "0".
     public var broadcastId: String?
@@ -44,27 +46,34 @@ public class WatchSession: @unchecked Sendable {
     public var state: WatchSessionState
     public var totalWatchTimeSeconds: TimeInterval
     public var lastHeartbeatAt: Date?
+    public var lastHeartbeatTransport: String?
 
     public init(
         id: String,
         channelId: String,
         channelName: String,
         campaignId: String,
+        gameName: String = "",
+        gameId: String = "",
         broadcastId: String? = nil,
         startedAt: Date = Date(),
         state: WatchSessionState = .connecting,
         totalWatchTimeSeconds: TimeInterval = 0,
-        lastHeartbeatAt: Date? = nil
+        lastHeartbeatAt: Date? = nil,
+        lastHeartbeatTransport: String? = nil
     ) {
         self.id = id
         self.channelId = channelId
         self.channelName = channelName
         self.campaignId = campaignId
+        self.gameName = gameName
+        self.gameId = gameId
         self.broadcastId = broadcastId
         self.startedAt = startedAt
         self.state = state
         self.totalWatchTimeSeconds = totalWatchTimeSeconds
         self.lastHeartbeatAt = lastHeartbeatAt
+        self.lastHeartbeatTransport = lastHeartbeatTransport
     }
 }
 
@@ -92,6 +101,15 @@ public func setUserId(_ id: String) { userId = id }
 public var onProgressUpdate: (@Sendable (Progress) -> Void)?
 public var onStatusChange: (@Sendable (WatchSessionStatus) -> Void)?
 public var onError: (@Sendable (TwitchMinerError) -> Void)?
+public var onHeartbeatSent: (@Sendable (WatchSession) -> Void)?
+
+public func setErrorHandler(_ handler: (@Sendable (TwitchMinerError) -> Void)?) {
+    onError = handler
+}
+
+public func setHeartbeatSentHandler(_ handler: (@Sendable (WatchSession) -> Void)?) {
+    onHeartbeatSent = handler
+}
 
 public init(
     apiClient: TwitchAPIClient,
@@ -109,7 +127,12 @@ public init(
     ///   - channel: The channel to watch
     ///   - campaignId: The campaign ID we're watching for
     /// - Returns: The created WatchSession
-    public func startWatching(channel: Channel, campaignId: String) async throws -> WatchSession {
+    public func startWatching(
+        channel: Channel,
+        campaignId: String,
+        gameName: String = "",
+        gameId: String = ""
+    ) async throws -> WatchSession {
         // Check if session is already active
         if activeSession != nil {
             throw TwitchMinerError.watchSessionFailed("Session already active")
@@ -138,21 +161,21 @@ public init(
             channelId: channel.id,
             channelName: channel.login,
             campaignId: campaignId,
+            gameName: gameName,
+            gameId: gameId,
             broadcastId: broadcastId ?? "0",
             state: .connecting
         )
 
+        session.state = .watching
+        session.lastHeartbeatAt = Date()
         activeSession = session
 
-        // Start heartbeat loop
+        // Start heartbeat loop once the session is watchable so the first beacon is sent immediately.
         startHeartbeatLoop()
 
         // Start community points auto-claim
         await communityPointsService.startAutoClaim(channelLogin: channel.login, channelId: channel.id)
-
-        // Update session state to watching
-        activeSession?.state = .watching
-        activeSession?.lastHeartbeatAt = Date()
 
         return activeSession!
     }
@@ -220,23 +243,23 @@ public init(
             channelId: channel.id,
             channelName: channel.login,
             campaignId: campaign.id,
+            gameName: campaign.game.name,
+            gameId: campaign.game.id,
             state: .connecting
         )
-
-        activeSession = session
 
         // Notify status change
         onStatusChange?(.connecting)
 
-        // Start heartbeat loop
+        session.state = .watching
+        session.lastHeartbeatAt = Date()
+        activeSession = session
+
+        // Start heartbeat loop once the session is watchable so the first beacon is sent immediately.
         startHeartbeatLoop()
 
         // Start community points auto-claim
         await communityPointsService.startAutoClaim(channelLogin: channel.login, channelId: channel.id)
-
-        // Update session state to watching
-        activeSession?.state = .watching
-        activeSession?.lastHeartbeatAt = Date()
 
         // Notify watching status
         onStatusChange?(.watching(channel, drop, 0.0))
@@ -248,6 +271,8 @@ public init(
         heartbeatTask?.cancel()
 
         heartbeatTask = Task {
+            await sendHeartbeat()
+
             while !Task.isCancelled {
                 do {
                     try await Task.sleep(nanoseconds: UInt64(heartbeatInterval * 1_000_000_000))
@@ -268,18 +293,34 @@ public init(
         }
 
         do {
-            // Send Spade beacon — the real mechanism Twitch uses to credit watch time
-            try await spadeBeacon.sendBeacon(
-                channelLogin: session.channelName,
-                channelId:    session.channelId,
-                broadcastId:  session.broadcastId ?? "0",
-                userId:       userId
-            )
+            do {
+                // Current TwitchDropsMiner path: send the watch event through GQL.
+                try await apiClient.sendSpadeEvents(
+                    channelLogin: session.channelName,
+                    channelId: session.channelId,
+                    broadcastId: session.broadcastId ?? "0",
+                    userId: userId,
+                    gameName: session.gameName,
+                    gameId: session.gameId
+                )
+                session.lastHeartbeatTransport = "Twitch GQL"
+            } catch {
+                // Legacy Spade endpoint fallback. Twitch may still accept it even when it
+                // doesn't advance Drops, but it's useful as a backup if GQL is transiently down.
+                try await spadeBeacon.sendBeacon(
+                    channelLogin: session.channelName,
+                    channelId:    session.channelId,
+                    broadcastId:  session.broadcastId ?? "0",
+                    userId:       userId
+                )
+                session.lastHeartbeatTransport = "legacy Spade"
+            }
 
             // Update session stats
             session.lastHeartbeatAt = Date()
             session.totalWatchTimeSeconds += heartbeatInterval
             activeSession = session
+            onHeartbeatSent?(session)
 
         } catch {
             // Non-fatal: log the failure but keep the session alive.

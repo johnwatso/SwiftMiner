@@ -867,6 +867,11 @@ public final class MinerManager {
                 } else {
                     self.updateMinerStatus(minerId: minerId, currentCampaignId: .some(currentId), allCampaigns: all)
                 }
+
+                if currentId != nil {
+                    await self.getMiner(id: minerId)?.stateStore?.refresh()
+                    self.onMinersChanged?()
+                }
             }
         }
         

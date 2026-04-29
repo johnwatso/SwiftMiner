@@ -19,12 +19,12 @@ struct ContentView: View {
         .overlay {
             if nav.showOnboarding {
                 ZStack {
-                    Color.black.opacity(0.28)
+                    Color.black.opacity(0.16)
                         .ignoresSafeArea()
                         .transition(.opacity)
 
                     OnboardingView()
-                        .padding(24)
+                        .padding(28)
                         .transition(.scale(scale: 0.96).combined(with: .opacity))
                 }
                 .zIndex(100)
