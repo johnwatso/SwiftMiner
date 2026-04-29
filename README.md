@@ -16,17 +16,17 @@
   <img src="https://img.shields.io/badge/status-active%20development-orange" alt="Status badge">
 </p>
 
-SwiftMiner is a native macOS app that watches Twitch streams to farm Drops automatically while running in the background.
+SwiftMiner is a macOS app that watches Twitch streams to farm Drops automatically while running in the background.
 
-It is written in Swift using SwiftUI and standard macOS frameworks. Each account runs in its own isolated miner, and the app provides one interface to monitor progress, claim state, and activity across single-account or multi-account setups.
+It is written in Swift using SwiftUI and standard macOS frameworks. Each account runs in its own isolated miner, and the app provides a single interface to monitor progress, claim state, and activity.
 
-## Preview
+It can be used for a single account or multiple accounts.
 
-<p align="center">
-  <img src="Documentation/Images/1_Overview UI Example.png" alt="SwiftMiner overview screen">
-  <img src="Documentation/Images/2_Miners UI Example.png" alt="SwiftMiner miners screen">
-  <img src="Documentation/Images/3_Drops UI Example.png" alt="SwiftMiner drops screen">
-</p>
+## Acknowledgements
+
+SwiftMiner was developed using [TwitchDropsMiner](https://github.com/DevilXD/TwitchDropsMiner) as a reference for expected behavior and edge cases.
+
+That project established a working model for automating Twitch Drops progression. SwiftMiner implements a similar idea as a native macOS application, with a focus on multi-account management and a consolidated interface.
 
 ## Overview
 
@@ -58,6 +58,14 @@ SwiftMiner provides a single interface to manage multiple accounts, with release
 - Uses Twitch device-code login, with no embedded browser
 - Runs as a native macOS app built with Swift and SwiftUI
 
+## Preview
+
+<p align="center">
+  <img src="Documentation/Images/1_Overview UI Example.png" alt="SwiftMiner overview screen">
+  <img src="Documentation/Images/2_Miners UI Example.png" alt="SwiftMiner miners screen">
+  <img src="Documentation/Images/3_Drops UI Example.png" alt="SwiftMiner drops screen">
+</p>
+
 ## How It Works
 
 - Each account runs its own miner engine
@@ -71,7 +79,7 @@ The app sits on top of these engines and presents their state in a single interf
 
 ## Install
 
-Download the latest release from GitHub Releases.
+Download the latest release from [GitHub Releases](https://github.com/johnwatso/SwiftMiner/releases).
 
 1. Download the latest `.zip`
 2. Move `SwiftMiner.app` to `/Applications`
@@ -94,7 +102,7 @@ Building from the current `main` branch includes newer changes that have not bee
 SwiftMiner uses Twitch device-code authentication.
 
 1. Click `Add Account`
-2. Visit <https://www.twitch.tv/activate>
+2. Visit [twitch.tv/activate](https://www.twitch.tv/activate)
 3. Enter the code shown in the app
 4. Sign in and approve access
 
@@ -199,12 +207,6 @@ SwiftUI App
 <!-- markdownlint-disable-next-line MD028 -->
 > [!NOTE]
 > Performance depends on system resources, network conditions, and the number of accounts being managed.
-
-## Acknowledgements
-
-SwiftMiner was developed using [TwitchDropsMiner](https://github.com/DevilXD/TwitchDropsMiner) as a reference for expected behavior and edge cases.
-
-That project established a working model for automating Twitch Drops progression. SwiftMiner implements a similar idea as a native macOS application, with a focus on multi-account management and a consolidated interface.
 
 ## Related Docs
 
