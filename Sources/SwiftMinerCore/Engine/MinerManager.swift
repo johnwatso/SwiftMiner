@@ -7,12 +7,24 @@ import Foundation
 public final class MinerManager {
     
     // MARK: - Types
+
+    public enum AccountError: LocalizedError, Equatable {
+        case duplicateAccount(username: String)
+
+        public var errorDescription: String? {
+            switch self {
+            case .duplicateAccount(let username):
+                return "\(username) is already added to SwiftMiner."
+            }
+        }
+    }
     
     /// Represents a managed miner instance
     public struct ManagedMiner: Identifiable, Sendable {
         public let id: String
         public let accountId: String
         public let username: String
+        public var nickname: String?
         public var ownerDiscordId: String?
         public var status: MinerStatus
         public var needsAuth: Bool
@@ -85,6 +97,7 @@ public final class MinerManager {
             id: String,
             accountId: String,
             username: String,
+            nickname: String? = nil,
             ownerDiscordId: String? = nil,
             stateStore: AccountStateStore? = nil,
             status: MinerStatus = .idle,
@@ -100,6 +113,7 @@ public final class MinerManager {
             self.id = id
             self.accountId = accountId
             self.username = username
+            self.nickname = Account.normalizedNickname(nickname)
             self.ownerDiscordId = ownerDiscordId
             self.stateStore = stateStore
             self.status = status
@@ -111,6 +125,10 @@ public final class MinerManager {
             self.isRunning = isRunning
             self.priorityGames = priorityGames
             self.debugWinningQueue = debugWinningQueue
+        }
+
+        public var displayName: String {
+            nickname ?? username
         }
     }    
     public enum MinerStatus: String, Sendable, Equatable {
@@ -351,7 +369,13 @@ public final class MinerManager {
             let accounts = try await authService.loadAllAccounts()
             print("[MinerManager] Loading \(accounts.count) saved accounts from store")
             for account in accounts {
-                addAccount(account)
+                do {
+                    try addAccount(account)
+                } catch AccountError.duplicateAccount {
+                    print("[MinerManager] Skipping duplicate saved account: \(account.username)")
+                } catch {
+                    print("[MinerManager] Failed to add saved account \(account.username): \(error)")
+                }
             }
         } catch {
             print("[MinerManager] Failed to load saved accounts: \(error)")
@@ -386,7 +410,11 @@ public final class MinerManager {
     /// Add a new account to manage
     /// - Returns: The ID of the created miner
     @discardableResult
-    public func addAccount(_ account: Account) -> String {
+    public func addAccount(_ account: Account) throws -> String {
+        guard !miners.contains(where: { $0.accountId == account.id }) else {
+            throw AccountError.duplicateAccount(username: account.displayName)
+        }
+
         let minerId = UUID().uuidString
         
         // Create engine for this account
@@ -397,6 +425,7 @@ public final class MinerManager {
             id: minerId,
             accountId: account.id,
             username: account.username,
+            nickname: account.nickname,
             ownerDiscordId: account.ownerDiscordId
         )
         miners.append(miner)
@@ -467,6 +496,20 @@ public final class MinerManager {
     /// Get a specific miner by ID
     public func getMiner(id: String) -> ManagedMiner? {
         miners.first { $0.id == id }
+    }
+
+    public func updateMinerNickname(minerId: String, nickname: String?) async {
+        guard let index = miners.firstIndex(where: { $0.id == minerId }) else { return }
+        let normalized = Account.normalizedNickname(nickname)
+        miners[index].nickname = normalized
+
+        do {
+            try await tokenStore.updateNickname(twitchUserId: miners[index].accountId, nickname: normalized)
+        } catch {
+            print("[MinerManager] Failed to update nickname for \(miners[index].accountId): \(error)")
+        }
+
+        onMinersChanged?()
     }
     
     /// Get the engine for a specific miner

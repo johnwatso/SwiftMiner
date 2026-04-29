@@ -37,7 +37,7 @@ final class OnboardingPresentationTests: XCTestCase {
     func test_1PlusAccounts_NoPreferences_PanelVisible_ReadyState() {
         // Given
         let account = Account(id: "1", username: "test", accessToken: "token", refreshToken: "refresh", tokenExpiry: Date().addingTimeInterval(3600), scopes: [])
-        minerManager.addAccount(account)
+        try! minerManager.addAccount(account)
         XCTAssertFalse(minerManager.miners.isEmpty)
         XCTAssertTrue(settings.gamePreferences.isEmpty)
         
@@ -54,7 +54,7 @@ final class OnboardingPresentationTests: XCTestCase {
     func test_1PlusAccounts_Preferences_NotRequiredForReadyState() {
         // Given
         let account = Account(id: "1", username: "test", accessToken: "token", refreshToken: "refresh", tokenExpiry: Date().addingTimeInterval(3600), scopes: [])
-        minerManager.addAccount(account)
+        try! minerManager.addAccount(account)
         
         let game = Game(id: "g1", name: "Test Game")
         settings.addGamePreference(game, state: .preferred)
@@ -70,6 +70,18 @@ final class OnboardingPresentationTests: XCTestCase {
         XCTAssertTrue(navigation.showOnboarding)
         XCTAssertFalse(navigation.onboardingPresentation?.showsGamePreferences ?? true)
         XCTAssertEqual(navigation.onboardingPresentation?.title, "SwiftMiner is ready")
+    }
+
+    func test_DuplicateAccount_IsRejected() {
+        // Given
+        let account = Account(id: "1", username: "test", accessToken: "token", refreshToken: "refresh", tokenExpiry: Date().addingTimeInterval(3600), scopes: [])
+        try! minerManager.addAccount(account)
+
+        // Then
+        XCTAssertThrowsError(try minerManager.addAccount(account)) { error in
+            XCTAssertEqual(error as? MinerManager.AccountError, .duplicateAccount(username: "test"))
+        }
+        XCTAssertEqual(minerManager.miners.count, 1)
     }
 
     func test_Dismissed_PanelHidden() {
@@ -94,7 +106,7 @@ final class OnboardingPresentationTests: XCTestCase {
     func test_SyncInProgress_SetupStatusVisible() {
         // Given
         let account = Account(id: "1", username: "test", accessToken: "token", refreshToken: "refresh", tokenExpiry: Date().addingTimeInterval(3600), scopes: [])
-        minerManager.addAccount(account)
+        try! minerManager.addAccount(account)
         
         // When
         navigation.isRunningOnboardingSetup = true
@@ -114,9 +126,9 @@ final class OnboardingPresentationTests: XCTestCase {
         let account2 = Account(id: "2", username: "two", accessToken: "token", refreshToken: "refresh", tokenExpiry: Date().addingTimeInterval(3600), scopes: [])
 
         // Simulate startup account restoration (before configureOnboardingPresentation is called)
-        minerManager.addAccount(account1)
+        try! minerManager.addAccount(account1)
         navigation.handleAccountCountChange()
-        minerManager.addAccount(account2)
+        try! minerManager.addAccount(account2)
         navigation.handleAccountCountChange()
 
         // When

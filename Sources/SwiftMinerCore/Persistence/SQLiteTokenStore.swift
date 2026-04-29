@@ -17,10 +17,11 @@ public final class SQLiteTokenStore: TokenStore, Sendable {
     public func save(account: Account) async throws {
         try await manager.execute { db in
             let sql = """
-            INSERT INTO twitch_accounts (twitch_id, username, access_token, refresh_token, token_expiry, scopes, owner_discord_id, link_state)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO twitch_accounts (twitch_id, username, nickname, access_token, refresh_token, token_expiry, scopes, owner_discord_id, link_state)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(twitch_id) DO UPDATE SET
                 username=excluded.username,
+                nickname=excluded.nickname,
                 access_token=excluded.access_token,
                 refresh_token=excluded.refresh_token,
                 token_expiry=excluded.token_expiry,
@@ -39,16 +40,17 @@ public final class SQLiteTokenStore: TokenStore, Sendable {
 
             sqlite3_bind_text(statement, 1, account.id, -1, SQLITE_TRANSIENT)
             sqlite3_bind_text(statement, 2, account.username, -1, SQLITE_TRANSIENT)
-            sqlite3_bind_text(statement, 3, account.accessToken, -1, SQLITE_TRANSIENT)
-            sqlite3_bind_text(statement, 4, account.refreshToken, -1, SQLITE_TRANSIENT)
-            sqlite3_bind_text(statement, 5, self.dateFormatter.string(from: account.tokenExpiry), -1, SQLITE_TRANSIENT)
-            sqlite3_bind_text(statement, 6, account.scopes.joined(separator: ","), -1, SQLITE_TRANSIENT)
+            Self.bindOptionalText(statement, 3, account.nickname)
+            sqlite3_bind_text(statement, 4, account.accessToken, -1, SQLITE_TRANSIENT)
+            sqlite3_bind_text(statement, 5, account.refreshToken, -1, SQLITE_TRANSIENT)
+            sqlite3_bind_text(statement, 6, self.dateFormatter.string(from: account.tokenExpiry), -1, SQLITE_TRANSIENT)
+            sqlite3_bind_text(statement, 7, account.scopes.joined(separator: ","), -1, SQLITE_TRANSIENT)
             if let ownerDiscordId = account.ownerDiscordId {
-                sqlite3_bind_text(statement, 7, ownerDiscordId, -1, SQLITE_TRANSIENT)
-                sqlite3_bind_text(statement, 8, "linked", -1, SQLITE_TRANSIENT)
+                sqlite3_bind_text(statement, 8, ownerDiscordId, -1, SQLITE_TRANSIENT)
+                sqlite3_bind_text(statement, 9, "linked", -1, SQLITE_TRANSIENT)
             } else {
-                sqlite3_bind_null(statement, 7)
-                sqlite3_bind_text(statement, 8, "unowned", -1, SQLITE_TRANSIENT)
+                sqlite3_bind_null(statement, 8)
+                sqlite3_bind_text(statement, 9, "unowned", -1, SQLITE_TRANSIENT)
             }
 
             guard sqlite3_step(statement) == SQLITE_DONE else {
@@ -59,7 +61,7 @@ public final class SQLiteTokenStore: TokenStore, Sendable {
 
     public func loadAllAccounts() async throws -> [Account] {
         return try await manager.query { db in
-            let sql = "SELECT twitch_id, username, access_token, refresh_token, token_expiry, scopes, owner_discord_id FROM twitch_accounts;"
+            let sql = "SELECT twitch_id, username, nickname, access_token, refresh_token, token_expiry, scopes, owner_discord_id FROM twitch_accounts;"
             var statement: OpaquePointer?
             guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
                 throw self.dbError(db)
@@ -76,7 +78,7 @@ public final class SQLiteTokenStore: TokenStore, Sendable {
 
     public func loadAccount(twitchUserId: String) async throws -> Account? {
         return try await manager.query { db in
-            let sql = "SELECT twitch_id, username, access_token, refresh_token, token_expiry, scopes, owner_discord_id FROM twitch_accounts WHERE twitch_id = ?;"
+            let sql = "SELECT twitch_id, username, nickname, access_token, refresh_token, token_expiry, scopes, owner_discord_id FROM twitch_accounts WHERE twitch_id = ?;"
             var statement: OpaquePointer?
             guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
                 throw self.dbError(db)
@@ -116,6 +118,24 @@ public final class SQLiteTokenStore: TokenStore, Sendable {
         }
     }
 
+    public func updateNickname(twitchUserId: String, nickname: String?) async throws {
+        try await manager.execute { db in
+            let sql = "UPDATE twitch_accounts SET nickname = ? WHERE twitch_id = ?;"
+            var statement: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+                throw self.dbError(db)
+            }
+            defer { sqlite3_finalize(statement) }
+
+            Self.bindOptionalText(statement, 1, Account.normalizedNickname(nickname))
+            sqlite3_bind_text(statement, 2, twitchUserId, -1, SQLITE_TRANSIENT)
+
+            guard sqlite3_step(statement) == SQLITE_DONE else {
+                throw self.dbError(db)
+            }
+        }
+    }
+
     public func deleteAccount(twitchUserId: String) async throws {
         try await manager.execute { db in
             let sql = "DELETE FROM twitch_accounts WHERE twitch_id = ?;"
@@ -136,11 +156,12 @@ public final class SQLiteTokenStore: TokenStore, Sendable {
     private func parseAccount(_ statement: OpaquePointer) -> Account {
         let id = String(cString: sqlite3_column_text(statement, 0))
         let username = String(cString: sqlite3_column_text(statement, 1))
-        let accessToken = String(cString: sqlite3_column_text(statement, 2))
-        let refreshToken = sqlite3_column_text(statement, 3).map { String(cString: $0) }
-        let expiryStr = String(cString: sqlite3_column_text(statement, 4))
-        let scopesStr = String(cString: sqlite3_column_text(statement, 5))
-        let ownerDiscordId = sqlite3_column_text(statement, 6).map { String(cString: $0) }
+        let nickname = sqlite3_column_text(statement, 2).map { String(cString: $0) }
+        let accessToken = String(cString: sqlite3_column_text(statement, 3))
+        let refreshToken = sqlite3_column_text(statement, 4).map { String(cString: $0) }
+        let expiryStr = String(cString: sqlite3_column_text(statement, 5))
+        let scopesStr = String(cString: sqlite3_column_text(statement, 6))
+        let ownerDiscordId = sqlite3_column_text(statement, 7).map { String(cString: $0) }
         
         let expiry = dateFormatter.date(from: expiryStr) ?? Date()
         let scopes = Self.parseScopes(scopesStr)
@@ -148,6 +169,7 @@ public final class SQLiteTokenStore: TokenStore, Sendable {
         return Account(
             id: id,
             username: username,
+            nickname: nickname,
             ownerDiscordId: ownerDiscordId,
             accessToken: accessToken,
             refreshToken: refreshToken ?? "",
@@ -166,6 +188,14 @@ public final class SQLiteTokenStore: TokenStore, Sendable {
     private func dbError(_ db: OpaquePointer?) -> Error {
         let message = sqlite3_errmsg(db).map { String(cString: $0) } ?? "Unknown SQLite error"
         return NSError(domain: "SQLiteTokenStore", code: 3, userInfo: [NSLocalizedDescriptionKey: message])
+    }
+
+    private static func bindOptionalText(_ statement: OpaquePointer?, _ index: Int32, _ value: String?) {
+        if let value = Account.normalizedNickname(value) {
+            sqlite3_bind_text(statement, index, value, -1, SQLITE_TRANSIENT)
+        } else {
+            sqlite3_bind_null(statement, index)
+        }
     }
 }
 

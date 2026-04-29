@@ -4,8 +4,6 @@ import SwiftMinerCore
 /// Execution layer overview - scalable multi-miner workspace.
 struct MinersOverviewView: View {
     @Environment(NavigationModel.self) private var navigation
-    @State private var aggregateProgress: AggregateProgress?
-    @State private var statsExpanded = true
 
     private var miners: [MinerManager.ManagedMiner] {
         navigation.minerManager.miners
@@ -36,7 +34,6 @@ struct MinersOverviewView: View {
         .navigationTitle("Miners")
         .task {
             syncSelection()
-            await refresh()
         }
         .onChange(of: miners.map(\.id)) { _, _ in
             syncSelection()
@@ -91,6 +88,14 @@ struct MinersOverviewView: View {
                 .padding(.horizontal, 8)
             }
             .scrollIndicators(.never)
+
+            if hasMultipleMiners {
+                Spacer(minLength: 18)
+
+                compactAcrossAllAccountsSection
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 8)
+            }
         }
         .frame(
             minWidth: hasMultipleMiners ? 220 : 148,
@@ -117,7 +122,9 @@ struct MinersOverviewView: View {
 
                     minerCampaignsSection(for: miner, campaigns: activeCampaigns)
 
-                    acrossAllAccountsSection
+                    if !hasMultipleMiners {
+                        acrossAllAccountsSection
+                    }
                 }
                 .frame(maxWidth: 1180, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -140,58 +147,112 @@ struct MinersOverviewView: View {
 
     private var acrossAllAccountsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    statsExpanded.toggle()
-                }
-            } label: {
-                HStack(spacing: 6) {
-                    Text("ACROSS ALL ACCOUNTS")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(.tertiary)
-
-                    Image(systemName: statsExpanded ? "chevron.up" : "chevron.down")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(.tertiary)
-
-                    Spacer()
-                }
+            Text("ACROSS ALL ACCOUNTS")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.tertiary)
                 .padding(.leading, 4)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
 
-            if statsExpanded {
-                LazyVGrid(
-                    columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: 3),
-                    spacing: 14
-                ) {
-                    MetricCard(
-                        title: "Configured Accounts",
-                        value: "\(miners.count)",
-                        subtitle: "\(aggregateProgress?.activeMiners ?? miners.filter { $0.isRunning }.count) running or waiting",
-                        icon: "person.2.fill",
-                        color: .blue
-                    )
-                    MetricCard(
-                        title: "Eligible Campaigns",
-                        value: "\(aggregateProgress?.totalCampaigns ?? 0)",
-                        subtitle: "across all accounts",
-                        icon: "play.fill",
-                        color: .green
-                    )
-                    MetricCard(
-                        title: "Claimed Today",
-                        value: "\(aggregateProgress?.claimedToday ?? 0)",
-                        subtitle: "\(aggregateProgress?.claimedDrops ?? 0) total claimed",
-                        icon: "sparkles.tv.fill",
-                        color: .orange
-                    )
-                }
-                .transition(.opacity.combined(with: .move(edge: .top)))
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: 3),
+                spacing: 14
+            ) {
+                MetricCard(
+                    title: "Watching Now",
+                    value: "\(activeMinerCount)",
+                    subtitle: "\(miners.count) configured accounts",
+                    icon: "play.fill",
+                    color: .blue
+                )
+                MetricCard(
+                    title: "Prioritised Campaigns",
+                    value: "\(prioritisedCampaignCount)",
+                    subtitle: "active in the queue",
+                    icon: "list.bullet.rectangle",
+                    color: .green
+                )
+                MetricCard(
+                    title: "Ready to Claim",
+                    value: "\(claimableDropCount)",
+                    subtitle: "\(earningDropCount) drops earning",
+                    icon: "tray.and.arrow.down.fill",
+                    color: .orange
+                )
             }
         }
         .padding(.horizontal, 2)
+    }
+
+    private var compactAcrossAllAccountsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("ACROSS ALL ACCOUNTS")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.tertiary)
+
+            VStack(spacing: 8) {
+                CompactMetricCard(
+                    title: "Watching",
+                    value: "\(activeMinerCount)",
+                    subtitle: "\(miners.count) accounts",
+                    icon: "play.fill",
+                    color: .blue
+                )
+                CompactMetricCard(
+                    title: "Prioritised",
+                    value: "\(prioritisedCampaignCount)",
+                    subtitle: "active campaigns",
+                    icon: "list.bullet.rectangle",
+                    color: .green
+                )
+                CompactMetricCard(
+                    title: "Ready",
+                    value: "\(claimableDropCount)",
+                    subtitle: "\(earningDropCount) earning",
+                    icon: "tray.and.arrow.down.fill",
+                    color: .orange
+                )
+            }
+        }
+        .padding(12)
+        .background(.background.opacity(0.40), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
+                .strokeBorder(.separator.opacity(0.22), lineWidth: 1)
+        }
+    }
+
+    private var activeMinerCount: Int {
+        miners.filter { miner in
+            miner.status == .watching || miner.status == .claiming
+        }.count
+    }
+
+    private var prioritisedCampaignCount: Int {
+        var campaignIds = Set<String>()
+        for miner in miners {
+            for campaign in activePrioritisedCampaigns(for: miner) {
+                campaignIds.insert(campaign.id)
+            }
+        }
+        return campaignIds.count
+    }
+
+    private var claimableDropCount: Int {
+        miners.reduce(0) { total, miner in
+            total + miner.allCampaigns.reduce(0) { campaignTotal, campaign in
+                campaignTotal + campaign.drops.filter(\.isClaimable).count
+            }
+        }
+    }
+
+    private var earningDropCount: Int {
+        miners.reduce(0) { total, miner in
+            total + miner.allCampaigns.reduce(0) { campaignTotal, campaign in
+                campaignTotal + campaign.drops.filter { drop in
+                    guard !drop.isClaimed, !drop.isClaimable else { return false }
+                    return (drop.progress?.currentMinutes ?? 0) > 0
+                }.count
+            }
+        }
     }
 
     private var selectionBinding: Binding<String?> {
@@ -213,10 +274,6 @@ struct MinersOverviewView: View {
         }
 
         navigation.selectedMinerId = miners.first?.id
-    }
-
-    private func refresh() async {
-        aggregateProgress = await navigation.minerManager.getAggregateProgress()
     }
 
     private func startLinkAccountFlow(for miner: MinerManager.ManagedMiner) {
@@ -342,7 +399,7 @@ private struct MinerSourceListRow: View {
                 .frame(width: 18, height: 18)
 
             VStack(alignment: .leading, spacing: compact ? 1 : 2) {
-                Text(miner.username)
+                Text(miner.displayName)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
@@ -533,6 +590,55 @@ struct MetricCard: View {
         .overlay {
             RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
                 .strokeBorder(.separator.opacity(0.26), lineWidth: 1)
+        }
+    }
+}
+
+private struct CompactMetricCard: View {
+    let title: String
+    let value: String
+    let subtitle: String
+    let icon: String
+    let color: Color
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(color.opacity(0.12))
+
+                Image(systemName: icon)
+                    .foregroundStyle(color)
+                    .font(.system(size: 11, weight: .semibold))
+            }
+            .frame(width: 24, height: 24)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+
+                Text(subtitle)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 6)
+
+            Text(value)
+                .font(.system(size: 22, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(.background.opacity(0.50), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .strokeBorder(.separator.opacity(0.18), lineWidth: 1)
         }
     }
 }

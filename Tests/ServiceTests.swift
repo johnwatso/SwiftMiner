@@ -226,10 +226,11 @@ final class ServiceTests: XCTestCase {
         XCTAssertEqual(campaign.game.name, "THE FINALS")
         XCTAssertEqual(campaign.game.boxArtURL?.absoluteString, boxArtURL)
         XCTAssertTrue(campaign.isAccountConnected)
-        XCTAssertFalse(campaign.hasDropsEnabled)
+        XCTAssertFalse(campaign.allowIsEnabled ?? true)
+        XCTAssertTrue(campaign.hasDropsEnabled)
         XCTAssertTrue(campaign.channels.isEmpty)
         XCTAssertEqual(campaign.drops.map(\.name), ["Tangerine Spear"])
-        XCTAssertFalse(campaign.isMiningEligible)
+        XCTAssertTrue(campaign.isMiningEligible)
     }
 
     func testJustChattingDoesNotSupportSteamArtwork() {

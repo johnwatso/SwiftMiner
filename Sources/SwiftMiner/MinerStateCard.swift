@@ -274,11 +274,15 @@ struct MinerActivityCard: View {
         snapshot.now.requiresAccountLink || snapshot.upNext?.requiresAccountLink == true
     }
 
+    private var isExpanded: Bool {
+        prominence == .expanded
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: prominence == .expanded ? 18 : 14) {
+        VStack(alignment: .leading, spacing: isExpanded ? 14 : 12) {
             header
 
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: isExpanded ? 7 : 10) {
                 ActivityLabel("Current Status", color: snapshot.now.accent)
                 currentActivity
             }
@@ -295,9 +299,9 @@ struct MinerActivityCard: View {
             }
 
             Divider()
-                .opacity(0.6)
+                .opacity(0.45)
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 6) {
                 ActivityLabel("Up Next", color: .secondary)
                 if let next = snapshot.upNext {
                     nextActivity(next)
@@ -314,7 +318,7 @@ struct MinerActivityCard: View {
                 blockedPriorityList
             }
         }
-        .padding(prominence == .expanded ? 22 : 16)
+        .padding(isExpanded ? 18 : 16)
         .frame(
             maxWidth: .infinity,
             minHeight: prominence == .compact ? 264 : nil,
@@ -327,7 +331,7 @@ struct MinerActivityCard: View {
             onSelect?()
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(miner.username), now mining \(snapshot.now.title)")
+        .accessibilityLabel("\(miner.displayName), now mining \(snapshot.now.title)")
     }
 
     private var header: some View {
@@ -337,13 +341,13 @@ struct MinerActivityCard: View {
                     .fill(snapshot.now.accent.opacity(0.14))
 
                 Image(systemName: snapshot.now.symbol)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: isExpanded ? 12 : 13, weight: .semibold))
                     .foregroundStyle(snapshot.now.accent)
             }
-            .frame(width: 30, height: 30)
+            .frame(width: isExpanded ? 28 : 30, height: isExpanded ? 28 : 30)
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(miner.username)
+                Text(miner.displayName)
                     .font(.headline.weight(.semibold))
                     .lineLimit(1)
 
@@ -371,15 +375,15 @@ struct MinerActivityCard: View {
     }
 
     private var currentActivity: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: isExpanded ? 4 : 6) {
             Text(snapshot.now.title)
-                .font(prominence == .expanded ? .title2.weight(.semibold) : .title3.weight(.semibold))
+                .font(.title3.weight(.semibold))
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
 
             if let subtitle = snapshot.now.subtitle {
                 Text(subtitle)
-                    .font(.subheadline)
+                    .font(isExpanded ? .callout : .subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
@@ -389,27 +393,28 @@ struct MinerActivityCard: View {
                 ProgressView(value: progress)
                     .progressViewStyle(.linear)
                     .tint(snapshot.now.accent)
-                    .padding(.top, 2)
+                    .padding(.top, isExpanded ? 0 : 2)
             }
 
             if let detail = snapshot.now.detail {
                 Text(detail)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                    .lineLimit(isExpanded ? 1 : 2)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
 
     private func nextActivity(_ item: MinerActivityItem) -> some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: 9) {
             Image(systemName: item.symbol)
-                .font(.caption.weight(.semibold))
+                .font(.caption2.weight(.semibold))
                 .foregroundStyle(item.accent)
-                .frame(width: 18, height: 18)
+                .frame(width: 16, height: 16)
+                .padding(.top, 1)
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(item.title)
                     .font(.subheadline.weight(.medium))
                     .lineLimit(1)
@@ -421,7 +426,7 @@ struct MinerActivityCard: View {
                         .lineLimit(1)
                 }
 
-                if let detail = item.detail {
+                if prominence == .expanded, let detail = item.detail {
                     Text(detail)
                         .font(.caption2)
                         .foregroundStyle(.tertiary)

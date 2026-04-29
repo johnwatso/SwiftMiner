@@ -40,6 +40,7 @@ public actor SQLiteManager {
             twitch_id TEXT PRIMARY KEY,
             owner_discord_id TEXT,
             username TEXT NOT NULL,
+            nickname TEXT,
             access_token TEXT NOT NULL,
             refresh_token TEXT,
             token_expiry DATETIME NOT NULL,
@@ -245,6 +246,13 @@ public actor SQLiteManager {
                 WHERE idempotency_key IS NOT NULL;
             """)
             try execute("INSERT OR IGNORE INTO _schema_migrations (version) VALUES (4);")
+        }
+
+        if !isMigrationApplied(5) {
+            if !columnExists("nickname", in: "twitch_accounts") {
+                try execute("ALTER TABLE twitch_accounts ADD COLUMN nickname TEXT;")
+            }
+            try execute("INSERT OR IGNORE INTO _schema_migrations (version) VALUES (5);")
         }
     }
 

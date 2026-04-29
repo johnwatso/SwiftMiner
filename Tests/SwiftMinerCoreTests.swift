@@ -135,6 +135,7 @@ final class SwiftMinerCoreTests: XCTestCase {
         let account = Account(
             id: "twitch-1",
             username: "miner",
+            nickname: "Drop Runner",
             ownerDiscordId: "123456789012345678",
             accessToken: "access",
             refreshToken: "refresh",
@@ -146,6 +147,8 @@ final class SwiftMinerCoreTests: XCTestCase {
 
         let loadedAccount = try await store.loadAccount(twitchUserId: account.id)
         let loaded = try XCTUnwrap(loadedAccount)
+        XCTAssertEqual(loaded.nickname, account.nickname)
+        XCTAssertEqual(loaded.displayName, "Drop Runner")
         XCTAssertEqual(loaded.ownerDiscordId, account.ownerDiscordId)
         XCTAssertEqual(loaded.scopes, [])
 
@@ -158,10 +161,17 @@ final class SwiftMinerCoreTests: XCTestCase {
 
         let refreshedAccount = try await store.loadAccount(twitchUserId: account.id)
         let refreshed = try XCTUnwrap(refreshedAccount)
+        XCTAssertEqual(refreshed.nickname, account.nickname)
         XCTAssertEqual(refreshed.ownerDiscordId, account.ownerDiscordId)
         XCTAssertEqual(refreshed.accessToken, "new-access")
         XCTAssertEqual(refreshed.refreshToken, "refresh")
         XCTAssertEqual(refreshed.scopes, [])
+
+        try await store.updateNickname(twitchUserId: account.id, nickname: "Boss Miner")
+        let renamedAccount = try await store.loadAccount(twitchUserId: account.id)
+        let renamed = try XCTUnwrap(renamedAccount)
+        XCTAssertEqual(renamed.nickname, "Boss Miner")
+        XCTAssertEqual(renamed.accessToken, "new-access")
 
         await manager.close()
     }
@@ -187,10 +197,25 @@ actor TestTokenStore: TokenStore {
         accounts[twitchUserId] = Account(
             id: existing.id,
             username: existing.username,
+            nickname: existing.nickname,
             ownerDiscordId: existing.ownerDiscordId,
             accessToken: accessToken,
             refreshToken: refreshToken ?? existing.refreshToken,
             tokenExpiry: expiry,
+            scopes: existing.scopes
+        )
+    }
+
+    func updateNickname(twitchUserId: String, nickname: String?) async throws {
+        guard let existing = accounts[twitchUserId] else { return }
+        accounts[twitchUserId] = Account(
+            id: existing.id,
+            username: existing.username,
+            nickname: nickname,
+            ownerDiscordId: existing.ownerDiscordId,
+            accessToken: existing.accessToken,
+            refreshToken: existing.refreshToken,
+            tokenExpiry: existing.tokenExpiry,
             scopes: existing.scopes
         )
     }

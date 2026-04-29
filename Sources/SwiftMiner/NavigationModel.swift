@@ -166,6 +166,7 @@ public final class NavigationModel {
     public let eventOutboxService: EventOutboxService
     private let sqliteManager: SQLiteManager
     private var onboardingSetupTask: Task<Void, Never>?
+    @ObservationIgnored private var dropsPreloadTask: Task<Void, Never>?
     private var lastKnownAccountCount = 0
     private var hasConfiguredOnboardingBaseline = false
 
@@ -239,6 +240,42 @@ public final class NavigationModel {
             enableBadgesEmotes: settings.enableBadgesEmotes,
             ignoredWarnings: settings.ignoredWarnings
         )
+        preloadDropsTab()
+    }
+
+    public func preloadDropsTab(force: Bool = false) {
+        guard !minerManager.miners.isEmpty else { return }
+
+        let coordinator = minerManager.dataCoordinator
+        if !force, !coordinator.lastKnownAllCampaigns.isEmpty {
+            return
+        }
+        if !force, dropsPreloadTask != nil {
+            return
+        }
+
+        dropsPreloadTask?.cancel()
+        dropsPreloadTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.dropsPreloadTask = nil }
+
+            let coordinator = self.minerManager.dataCoordinator
+            if !force, !coordinator.lastKnownAllCampaigns.isEmpty {
+                return
+            }
+
+            _ = await coordinator.allCampaigns(
+                preferSteamArtwork: Settings.shared.preferSteamArtwork
+            )
+            guard !Task.isCancelled else { return }
+
+            await coordinator.refreshAll()
+            guard !Task.isCancelled else { return }
+
+            _ = await coordinator.allCampaigns(
+                preferSteamArtwork: Settings.shared.preferSteamArtwork
+            )
+        }
     }
 
     public func configureOnboardingPresentation() {

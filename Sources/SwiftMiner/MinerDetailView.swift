@@ -38,7 +38,7 @@ struct MinerDetailView: View {
             }
             .padding(24)
         }
-        .navigationTitle(miner.username)
+        .navigationTitle(miner.displayName)
         .toolbar {
             ToolbarItem {
                 Button(role: .destructive) {
@@ -301,6 +301,9 @@ struct MinerInspectorView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     inspectorSection(title: "Miner") {
+                        if miner.nickname != nil {
+                            LabeledContent("Nickname", value: miner.displayName)
+                        }
                         LabeledContent("Username", value: miner.username)
                         LabeledContent("Status", value: miner.statusLabel)
                         LabeledContent("Running", value: miner.isRunning ? "Yes" : "No")
@@ -368,7 +371,7 @@ struct SystemInspectorView: View {
                             ForEach(running) { miner in
                                 HStack {
                                     StatusDot(isActive: true)
-                                    Text(miner.username)
+                                    Text(miner.displayName)
                                         .font(.callout)
                                     Spacer()
                                     Text(miner.currentCampaign ?? "—")
