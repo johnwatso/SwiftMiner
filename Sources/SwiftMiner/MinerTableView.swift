@@ -13,8 +13,15 @@ struct MinerTableView: View {
                     Image(systemName: "person.circle.fill")
                         .foregroundStyle(.purple)
                     
-                    Text(miner.username)
-                        .fontWeight(.medium)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(miner.displayName)
+                            .fontWeight(.medium)
+                        if miner.nickname != nil {
+                            Text("@\(miner.username)")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
             }
             .width(min: 100, ideal: 120)

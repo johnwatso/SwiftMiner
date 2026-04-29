@@ -37,12 +37,14 @@ struct ContentView: View {
         }
         .onAppear {
             navigation.refreshOnboardingPresentation()
+            navigation.preloadDropsTab()
         }
         .onChange(of: settings.gamePreferencesData) { _, _ in
             navigation.refreshOnboardingPresentation()
         }
         .onChange(of: navigation.minerManager.miners.count) { _, _ in
             navigation.handleAccountCountChange()
+            navigation.preloadDropsTab(force: true)
         }
     }
 
@@ -280,10 +282,7 @@ struct OverviewView: View {
         let miners = navigation.minerManager.miners
 
         return VStack(alignment: .leading, spacing: 14) {
-            sectionHeading(
-                "Miner Activity",
-                subtitle: "Current work is shown first; likely follow-up targets stay secondary."
-            )
+            sectionHeading("Miner Activity")
 
             if miners.isEmpty {
                 MaterialEmptyStatePanel(

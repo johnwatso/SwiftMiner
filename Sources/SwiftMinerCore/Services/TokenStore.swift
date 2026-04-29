@@ -14,6 +14,9 @@ public protocol TokenStore: Sendable {
     
     /// Explicitly update token material during refresh cycles.
     func updateTokenMaterial(twitchUserId: String, accessToken: String, refreshToken: String?, expiry: Date) async throws
+
+    /// Update an account's local display nickname without changing token material.
+    func updateNickname(twitchUserId: String, nickname: String?) async throws
     
     /// Remove an account and its tokens from the store.
     func deleteAccount(twitchUserId: String) async throws

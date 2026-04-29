@@ -185,34 +185,35 @@ private struct AccountSettingsView: View {
     @State private var alertMessage = ""
 
     var body: some View {
-        Form {
-            Section {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 28) {
+                settingsSection("Accounts") {
                 if navigation.minerManager.miners.isEmpty {
-                    SettingsSecondaryText("No accounts connected yet.")
+                    SettingsSecondaryText("No accounts connected yet. Add or import an account to start mining.")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(14)
+                        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 } else {
-                    List {
+                    VStack(spacing: 0) {
                         ForEach(navigation.minerManager.miners) { miner in
-                            HStack {
-                                Text(miner.username)
-                                Spacer()
-                                Button("Remove") {
-                                    Task { await navigation.minerManager.removeAccount(minerId: miner.id) }
-                                }
-                                .buttonStyle(.borderless)
-                                .foregroundStyle(.red)
+                            AccountSettingsAccountRow(miner: miner, navigation: navigation)
+
+                            if miner.id != navigation.minerManager.miners.last?.id {
+                                Divider()
+                                    .padding(.leading, 14)
                             }
                         }
                     }
-                    .frame(minHeight: 120)
-                    .cornerRadius(6)
-                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.2), lineWidth: 1))
+                    .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(.secondary.opacity(0.16), lineWidth: 1)
+                    )
                 }
-            } header: {
-                Text("Accounts")
-            }
+                }
 
-            Section {
-                HStack {
+                settingsSection("Management") {
+                    HStack(spacing: 10) {
                     Button("Import from TDM\u{2026}") {
                         showImporter = true
                     }
@@ -220,13 +221,13 @@ private struct AccountSettingsView: View {
                     Button("Add Account\u{2026}") {
                         navigation.showAddAccountSheet = true
                     }
+
+                        Spacer(minLength: 0)
+                    }
                 }
-            } header: {
-                Text("Management")
             }
         }
-        .formStyle(.grouped)
-        .padding(24)
+        .contentMargins(24, for: .scrollContent)
         .fileImporter(
             isPresented: $showImporter,
             allowedContentTypes: [.data],
@@ -247,6 +248,18 @@ private struct AccountSettingsView: View {
         }
     }
 
+    private func settingsSection<Content: View>(
+        _ title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(.headline)
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     private func importCookies(from url: URL) {
         guard url.startAccessingSecurityScopedResource() else { return }
         defer { url.stopAccessingSecurityScopedResource() }
@@ -257,7 +270,7 @@ private struct AccountSettingsView: View {
                 let authService = TwitchAuthService(clientId: ClientConfiguration.clientId, tokenStore: KeychainTokenStore())
                 let account = try await authService.importTDMSession(token: token)
 
-                let minerId = navigation.minerManager.addAccount(account)
+                let minerId = try navigation.minerManager.addAccount(account)
                 let settings = Settings.shared
                 try? await navigation.minerManager.startMiner(
                     minerId: minerId,
@@ -273,6 +286,90 @@ private struct AccountSettingsView: View {
                 alertMessage = "Import failed: \(error.localizedDescription)"
                 showAlert = true
             }
+        }
+    }
+}
+
+private struct AccountSettingsAccountRow: View {
+    let miner: MinerManager.ManagedMiner
+    let navigation: NavigationModel
+
+    @State private var nickname: String
+    @FocusState private var isNicknameFocused: Bool
+
+    init(miner: MinerManager.ManagedMiner, navigation: NavigationModel) {
+        self.miner = miner
+        self.navigation = navigation
+        self._nickname = State(initialValue: miner.nickname ?? "")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(miner.displayName)
+                        .font(.body.weight(.semibold))
+                    if miner.nickname != nil {
+                        Text("@\(miner.username)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Spacer(minLength: 12)
+
+                Button(role: .destructive) {
+                    Task { await navigation.minerManager.removeAccount(minerId: miner.id) }
+                } label: {
+                    Label("Remove", systemImage: "trash")
+                }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.borderless)
+                .help("Remove account")
+            }
+
+            HStack(spacing: 8) {
+                Text("Nickname")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 62, alignment: .leading)
+
+                TextField("Optional", text: $nickname)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($isNicknameFocused)
+                    .onSubmit { saveNickname() }
+                    .onChange(of: isNicknameFocused) { _, focused in
+                        if !focused {
+                            saveNickname()
+                        }
+                    }
+
+                if !nickname.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Button {
+                        nickname = ""
+                        saveNickname()
+                    } label: {
+                        Label("Clear nickname", systemImage: "xmark.circle.fill")
+                    }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(.secondary)
+                    .help("Clear nickname")
+                }
+            }
+        }
+        .padding(14)
+        .onChange(of: miner.nickname) { _, newValue in
+            nickname = newValue ?? ""
+        }
+    }
+
+    private func saveNickname() {
+        let normalized = Account.normalizedNickname(nickname)
+        guard normalized != miner.nickname else { return }
+
+        Task {
+            await navigation.minerManager.updateMinerNickname(minerId: miner.id, nickname: normalized)
         }
     }
 }

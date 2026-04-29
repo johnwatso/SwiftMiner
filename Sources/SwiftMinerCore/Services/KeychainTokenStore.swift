@@ -89,6 +89,7 @@ public actor KeychainTokenStore: TokenStore {
         let updated = Account(
             id: existing.id,
             username: existing.username,
+            nickname: existing.nickname,
             ownerDiscordId: existing.ownerDiscordId,
             accessToken: accessToken,
             refreshToken: refreshToken ?? existing.refreshToken,
@@ -96,6 +97,24 @@ public actor KeychainTokenStore: TokenStore {
             scopes: existing.scopes
         )
         accounts[index] = updated
+        try writeAll(accounts)
+    }
+
+    public func updateNickname(twitchUserId: String, nickname: String?) async throws {
+        var accounts = readAll()
+        guard let index = accounts.firstIndex(where: { $0.id == twitchUserId }) else { return }
+
+        let existing = accounts[index]
+        accounts[index] = Account(
+            id: existing.id,
+            username: existing.username,
+            nickname: nickname,
+            ownerDiscordId: existing.ownerDiscordId,
+            accessToken: existing.accessToken,
+            refreshToken: existing.refreshToken,
+            tokenExpiry: existing.tokenExpiry,
+            scopes: existing.scopes
+        )
         try writeAll(accounts)
     }
 

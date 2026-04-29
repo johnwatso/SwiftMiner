@@ -4,6 +4,7 @@ import Foundation
 public struct Account: Codable, Sendable, Equatable, Identifiable {
     public let id: String
     public let username: String
+    public let nickname: String?
     public let ownerDiscordId: String?
     public let accessToken: String
     public let refreshToken: String
@@ -13,6 +14,7 @@ public struct Account: Codable, Sendable, Equatable, Identifiable {
     public init(
         id: String,
         username: String,
+        nickname: String? = nil,
         ownerDiscordId: String? = nil,
         accessToken: String,
         refreshToken: String,
@@ -21,6 +23,7 @@ public struct Account: Codable, Sendable, Equatable, Identifiable {
     ) {
         self.id = id
         self.username = username
+        self.nickname = Self.normalizedNickname(nickname)
         self.ownerDiscordId = ownerDiscordId
         self.accessToken = accessToken
         self.refreshToken = refreshToken
@@ -31,5 +34,15 @@ public struct Account: Codable, Sendable, Equatable, Identifiable {
     /// Check if the access token is valid (not expired, with 5 minute buffer)
     public var isTokenValid: Bool {
         Date() < tokenExpiry.addingTimeInterval(-300)
+    }
+
+    public var displayName: String {
+        nickname ?? username
+    }
+
+    public static func normalizedNickname(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }

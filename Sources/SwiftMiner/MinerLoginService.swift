@@ -101,6 +101,12 @@ public final class MinerLoginService {
         state = .idle
     }
 
+    public func fail(message: String) {
+        pollingTask?.cancel()
+        pollingTask = nil
+        state = .failed(message: message)
+    }
+
     // MARK: - Polling
 
     private func beginPolling(authService: TwitchAuthService, deviceCode: String, interval: Int) {

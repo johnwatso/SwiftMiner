@@ -214,7 +214,7 @@ struct AuthRequiredSheet: View {
                 .font(.system(size: 44))
                 .foregroundStyle(.orange)
 
-            Text("Authentication Failed")
+            Text(failureTitle(for: message))
                 .font(.headline)
 
             Text(message)
@@ -271,6 +271,12 @@ struct AuthRequiredSheet: View {
         isPresented = false
     }
 
+    private func failureTitle(for message: String) -> String {
+        message.localizedCaseInsensitiveContains("already added")
+            ? "Account Not Added"
+            : "Authentication Failed"
+    }
+
     // MARK: - Handlers
 
     private func handleSuccess(account: Account) {
@@ -280,7 +286,14 @@ struct AuthRequiredSheet: View {
         // This matters when the client ID was supplied via Settings rather than env var.
         navigation.minerManager.updateClientId(Settings.shared.resolvedClientId)
 
-        let minerId = navigation.minerManager.addAccount(account)
+        let minerId: String
+        do {
+            minerId = try navigation.minerManager.addAccount(account)
+        } catch {
+            loginService.fail(message: error.localizedDescription)
+            return
+        }
+
         Task {
             let settings = Settings.shared
             try? await navigation.minerManager.startMiner(

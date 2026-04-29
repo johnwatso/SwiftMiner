@@ -7,6 +7,7 @@ struct EventLogView: View {
     @ObservedObject private var settings = Settings.shared
     @State private var searchText = ""
     @State private var selectedMinerFilterId = Self.allMinersFilterId
+    @State private var isFilterHelpPresented = false
 
     private static let allMinersFilterId = "__all_miners__"
 
@@ -76,7 +77,23 @@ struct EventLogView: View {
                 }
             }
 
-            filterChipsRow
+            HStack(alignment: .center, spacing: 8) {
+                filterChipsRow
+
+                Button {
+                    isFilterHelpPresented.toggle()
+                } label: {
+                    Image(systemName: "questionmark.circle")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Explain event filters")
+                .accessibilityLabel("Explain event filters")
+                .popover(isPresented: $isFilterHelpPresented, arrowEdge: .bottom) {
+                    EventFilterHelpPopover()
+                }
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -127,7 +144,7 @@ struct EventLogView: View {
         Picker("Miner", selection: $selectedMinerFilterId) {
             Text("All miners").tag(Self.allMinersFilterId)
             ForEach(miners) { miner in
-                Text(miner.username).tag(miner.id)
+                Text(miner.displayName).tag(miner.id)
             }
         }
         .pickerStyle(.menu)
@@ -226,36 +243,72 @@ struct EventLogView: View {
     }
 }
 
+private struct EventFilterHelpPopover: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Event Filters")
+                .font(.headline)
+
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(EventFilter.allCases) { filter in
+                    HStack(alignment: .top, spacing: 9) {
+                        Image(systemName: filter.symbol)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(filter.eventColor)
+                            .frame(width: 18)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(filter.title)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(.primary)
+
+                            Text(filter.description)
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(14)
+        .frame(width: 360, alignment: .leading)
+    }
+}
+
 private struct EventLogRow: View {
     let event: EventEntry
     @Environment(NavigationModel.self) private var navigation
 
-    private var levelColor: Color {
-        if isHeartbeatEvent(eventSearchText(for: event)) {
-            return .pink
-        }
+    private var displayText: EventDisplayText {
+        eventDisplayText(for: event)
+    }
 
-        switch event.level {
-        case .info: return .blue
-        case .warning: return .orange
-        case .error: return .red
-        }
+    private var eventColor: Color {
+        primaryEventFilter(for: event).eventColor
     }
 
     private var messageText: String {
-        if let raw = event.rawMessage,
-           let campaignSummary = campaignStatusSummary(from: raw) {
-            return campaignSummary
-        }
-        return simplifyMessage(event.message)
+        displayText.title
     }
 
     private var metadataText: String? {
-        guard let minerId = event.minerId else { return nil }
-        if let miner = navigation.minerManager.miners.first(where: { $0.id == minerId }) {
-            return miner.username
+        var parts: [String] = []
+        if let detail = displayText.detail {
+            parts.append(detail)
         }
-        return "Miner \(minerId.prefix(4))"
+
+        guard let minerId = event.minerId else {
+            return parts.isEmpty ? nil : parts.joined(separator: " • ")
+        }
+
+        if let miner = navigation.minerManager.miners.first(where: { $0.id == minerId }) {
+            parts.append(miner.username)
+        } else {
+            parts.append("Miner \(minerId.prefix(4))")
+        }
+
+        return parts.joined(separator: " • ")
     }
 
     private var relativeTime: String {
@@ -265,7 +318,7 @@ private struct EventLogRow: View {
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
             Circle()
-                .fill(levelColor)
+                .fill(eventColor)
                 .frame(width: 7, height: 7)
 
             VStack(alignment: .leading, spacing: 1) {
@@ -294,6 +347,141 @@ private struct EventLogRow: View {
 }
 
 // MARK: - Message Formatting
+
+private struct EventDisplayText {
+    let title: String
+    let detail: String?
+}
+
+private func eventDisplayText(for event: EventEntry) -> EventDisplayText {
+    let source = event.rawMessage ?? event.message
+    let cleaned = cleanedEventText(source)
+    let lowercased = cleaned.lowercased()
+
+    if let campaignSummary = campaignStatusSummary(from: cleaned) {
+        return campaignSummary
+    }
+
+    if let channel = value(after: "Selected channel:", in: cleaned) {
+        return EventDisplayText(title: "Selected channel \(channel)", detail: nil)
+    }
+
+    if let channel = watchHeartbeatChannel(from: cleaned) {
+        return EventDisplayText(title: "Watch signal sent", detail: channel)
+    }
+
+    if lowercased.contains("pubsub watching started") {
+        return EventDisplayText(title: "Drop notifications started", detail: nil)
+    }
+
+    if let channel = value(after: "Started watching", in: cleaned) {
+        return EventDisplayText(title: "Started watching", detail: trimmedSentence(channel))
+    }
+
+    if let game = checkingGameName(from: cleaned) {
+        return EventDisplayText(title: "Checking \(game)", detail: nil)
+    }
+
+    if let channel = verifyingChannel(from: cleaned) {
+        return channel
+    }
+
+    if let channelSearch = noEligibleChannels(from: cleaned) {
+        return channelSearch
+    }
+
+    if lowercased.contains("none of our candidates active here")
+        || lowercased.contains("campaign mismatch")
+        || lowercased.contains("acl blocked match") {
+        return EventDisplayText(title: "Channel does not have this drop", detail: "Trying another channel")
+    }
+
+    if lowercased.contains("no candidate channels matched campaign requirements") {
+        return EventDisplayText(title: "No matching channels found", detail: nil)
+    }
+
+    if lowercased.contains("no live channels found") {
+        return EventDisplayText(title: "No live channels found", detail: gameFromQuotedText(cleaned))
+    }
+
+    if lowercased.contains("found") && lowercased.contains("live candidate channel") {
+        return EventDisplayText(title: "Live channels found", detail: liveChannelCount(from: cleaned))
+    }
+
+    if lowercased.contains("fetching active campaigns") {
+        return EventDisplayText(title: "Refreshing campaigns", detail: nil)
+    }
+
+    if let counts = campaignCounts(from: cleaned) {
+        return EventDisplayText(title: "Campaign scan completed", detail: counts)
+    }
+
+    if lowercased.contains("no claimable drops found") {
+        return EventDisplayText(title: "No drops ready to claim", detail: nil)
+    }
+
+    if let drops = foundClaimableDrops(from: cleaned) {
+        return EventDisplayText(title: "Drops ready to claim", detail: drops)
+    }
+
+    if let drop = value(after: "Claimed drop:", in: cleaned) {
+        return EventDisplayText(title: "Drop claimed", detail: trimmedSentence(drop))
+    }
+
+    if lowercased.contains("auto-claimed drop") || lowercased.contains("drop claimed successfully") {
+        return EventDisplayText(title: "Drop claimed", detail: nil)
+    }
+
+    if lowercased.contains("drop claim event received") {
+        return EventDisplayText(title: "Drop claim received", detail: nil)
+    }
+
+    if let drop = dropClaimIssue(from: cleaned) {
+        return EventDisplayText(title: "Drop could not be claimed", detail: drop)
+    }
+
+    if let progress = progressUpdate(from: cleaned) {
+        return EventDisplayText(title: "Drop progress updated", detail: progress)
+    }
+
+    if lowercased.contains("account linking is required")
+        || lowercased.contains("account not linked")
+        || lowercased.contains("link required")
+        || lowercased.contains("not connected")
+        || lowercased.contains("unlinked") {
+        return EventDisplayText(title: "Account link required", detail: accountLinkDetail(from: cleaned))
+    }
+
+    if lowercased.contains("progress stalled") {
+        return EventDisplayText(title: "Progress stalled", detail: "Switching channels")
+    }
+
+    if lowercased.contains("switching channel") {
+        return EventDisplayText(title: "Switching channel", detail: nil)
+    }
+
+    if lowercased.contains("inventory refreshed") {
+        return EventDisplayText(title: "Inventory refreshed", detail: inventoryCounts(from: cleaned))
+    }
+
+    if lowercased.contains("maintenance") && lowercased.contains("token") {
+        return EventDisplayText(title: "Authentication checked", detail: nil)
+    }
+
+    if lowercased.hasPrefix("error:") {
+        return EventDisplayText(title: "Something went wrong", detail: trimmedSentence(cleaned.replacingOccurrences(of: "Error:", with: "")))
+    }
+
+    if lowercased.contains("failed to") || lowercased.contains("could not") {
+        return EventDisplayText(title: failureTitle(from: cleaned), detail: failureDetail(from: cleaned))
+    }
+
+    if lowercased.contains("warning:") || lowercased.contains("watch session warning") || lowercased.contains("maintenance task warning") {
+        return EventDisplayText(title: "Attention needed", detail: warningDetail(from: cleaned))
+    }
+
+    return EventDisplayText(title: humanReadableFallback(cleaned), detail: nil)
+}
 
 private func eventFilters(for event: EventEntry) -> Set<EventFilter> {
     let text = eventSearchText(for: event)
@@ -327,6 +515,37 @@ private func eventFilters(for event: EventEntry) -> Set<EventFilter> {
     }
 
     return [.system]
+}
+
+private func primaryEventFilter(for event: EventEntry) -> EventFilter {
+    let filters = eventFilters(for: event)
+    let displayOrder: [EventFilter] = [
+        .errors,
+        .warnings,
+        .accountLink,
+        .drops,
+        .heartbeats,
+        .mining,
+        .scan,
+        .system
+    ]
+
+    return displayOrder.first { filters.contains($0) } ?? .system
+}
+
+private extension EventFilter {
+    var eventColor: Color {
+        switch self {
+        case .mining: return .blue
+        case .heartbeats: return .pink
+        case .drops: return .green
+        case .warnings: return .orange
+        case .errors: return .red
+        case .accountLink: return .purple
+        case .scan: return .teal
+        case .system: return .gray
+        }
+    }
 }
 
 private func eventSearchText(for event: EventEntry) -> String {
@@ -378,33 +597,165 @@ private func isMiningEvent(_ text: String) -> Bool {
         || text.contains("switching channel")
 }
 
-private func simplifyMessage(_ message: String) -> String {
+private func cleanedEventText(_ message: String) -> String {
     var text = message
         .replacingOccurrences(of: #"\[[^\]]+\]\s*"#, with: "", options: .regularExpression)
         .replacingOccurrences(of: #"^Miner\s+[A-Za-z0-9_-]+:\s*"#, with: "", options: .regularExpression)
         .replacingOccurrences(of: #"^\s*[•·]\s*"#, with: "", options: .regularExpression)
 
-    for marker in ["⚠️", "❌", "✅", "🔄"] {
+    for marker in ["⚠️", "❌", "✅", "🔄", "📋", "🧪", "✓", "✗"] {
         text = text.replacingOccurrences(of: marker, with: "")
     }
 
-    if let campaignSummary = campaignStatusSummary(from: text) {
-        return campaignSummary
-    }
-
-    if text.localizedCaseInsensitiveContains("Watch heartbeat sent for ") {
-        return text.replacingOccurrences(
-            of: #"(?i)^.*Watch heartbeat sent for\s+"#,
-            with: "Heartbeat sent to ",
-            options: .regularExpression
-        )
+    return text
+        .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
         .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    return text.trimmingCharacters(in: .whitespacesAndNewlines)
 }
 
-private func campaignStatusSummary(from text: String) -> String? {
+private func value(after prefix: String, in text: String) -> String? {
+    guard let range = text.range(of: prefix, options: .caseInsensitive) else { return nil }
+    let value = text[range.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+    return value.isEmpty ? nil : value
+}
+
+private func matchGroups(_ pattern: String, in text: String) -> [String]? {
+    guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+        return nil
+    }
+
+    let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
+    guard let match = regex.firstMatch(in: text, range: nsRange) else { return nil }
+
+    return (1..<match.numberOfRanges).compactMap { index in
+        let range = match.range(at: index)
+        guard let swiftRange = Range(range, in: text) else { return nil }
+        return String(text[swiftRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+private func watchHeartbeatChannel(from text: String) -> String? {
+    matchGroups(#"Watch heartbeat sent for\s+(.+?)(?:\s+via\s+.+)?$"#, in: text)?.first
+}
+
+private func checkingGameName(from text: String) -> String? {
+    matchGroups(#"Checking game:\s+(.+?)(?:\s+\(\d+\s+candidate campaign\(s\)\))?$"#, in: text)?.first
+}
+
+private func verifyingChannel(from text: String) -> EventDisplayText? {
+    guard let groups = matchGroups(#"Verifying\s+(.+?)\s+\(viewers:\s+(\d+),\s+id:\s+\d+\)"#, in: text),
+          groups.count == 2
+    else { return nil }
+
+    let viewerText = groups[1] == "1" ? "1 viewer" : "\(groups[1]) viewers"
+    return EventDisplayText(title: "Checking channel \(groups[0])", detail: viewerText)
+}
+
+private func noEligibleChannels(from text: String) -> EventDisplayText? {
+    guard let target = matchGroups(#"No eligible channels available for\s+(.+?)(?:; trying next game\.)?$"#, in: text)?.first else {
+        return nil
+    }
+
+    let detail = text.localizedCaseInsensitiveContains("trying next game")
+        ? "Trying the next game"
+        : nil
+
+    if let count = matchGroups(#"^(\d+)\s+account-eligible campaign\(s\)$"#, in: target)?.first {
+        let campaignText = count == "1" ? "1 available campaign" : "\(count) available campaigns"
+        return EventDisplayText(title: "No channels found", detail: [campaignText, detail].compactMap(\.self).joined(separator: " • "))
+    }
+
+    return EventDisplayText(title: "No channels found for \(target)", detail: detail)
+}
+
+private func gameFromQuotedText(_ text: String) -> String? {
+    matchGroups(#"'([^']+)'"#, in: text)?.first
+}
+
+private func liveChannelCount(from text: String) -> String? {
+    guard let count = matchGroups(#"Found\s+(\d+)\s+live candidate channel"#, in: text)?.first else {
+        return nil
+    }
+    return count == "1" ? "1 channel" : "\(count) channels"
+}
+
+private func campaignCounts(from text: String) -> String? {
+    guard let groups = matchGroups(#"Campaigns:\s+(\d+)\s+total,\s+(\d+)\s+account-eligible"#, in: text),
+          groups.count == 2
+    else { return nil }
+    return "\(groups[0]) total, \(groups[1]) available"
+}
+
+private func foundClaimableDrops(from text: String) -> String? {
+    matchGroups(#"Found\s+\d+\s+claimable drop\(s\):\s+(.+)$"#, in: text)?.first
+}
+
+private func dropClaimIssue(from text: String) -> String? {
+    matchGroups(#"Drop claim returned not-success for\s+(.+)$"#, in: text)?.first
+        ?? matchGroups(#"Failed to auto-claim drop:\s+(.+)$"#, in: text)?.first
+}
+
+private func progressUpdate(from text: String) -> String? {
+    if let progress = matchGroups(#"(.+?)\s+from Twitch inventory$"#, in: text)?.first {
+        return progress
+    }
+    if text.localizedCaseInsensitiveContains("progress +") || text.localizedCaseInsensitiveContains("drop-progress") {
+        return humanReadableFallback(text)
+    }
+    return nil
+}
+
+private func accountLinkDetail(from text: String) -> String? {
+    if let groups = matchGroups(#"Priority game blocked:\s+(.+?)\s+is prioritised"#, in: text),
+       let game = groups.first {
+        return game
+    }
+    return nil
+}
+
+private func inventoryCounts(from text: String) -> String? {
+    guard let groups = matchGroups(#"Inventory refreshed:\s+(\d+)\s+claimed benefits,\s+(\d+)\s+in-progress drops"#, in: text),
+          groups.count == 2
+    else { return nil }
+    return "\(groups[0]) claimed, \(groups[1]) in progress"
+}
+
+private func failureTitle(from text: String) -> String {
+    let lowercased = text.lowercased()
+    if lowercased.contains("pubsub") {
+        return "Drop notifications failed"
+    }
+    if lowercased.contains("fetch live channels") {
+        return "Could not load live channels"
+    }
+    if lowercased.contains("verify") || lowercased.contains("verification") {
+        return "Could not verify channel"
+    }
+    if lowercased.contains("inventory") {
+        return "Could not refresh inventory"
+    }
+    if lowercased.contains("claim") {
+        return "Could not claim drop"
+    }
+    return "Action failed"
+}
+
+private func failureDetail(from text: String) -> String? {
+    if let detail = matchGroups(#"(?:failed to|could not)\s+.+?:\s+(.+)$"#, in: text)?.first {
+        return trimmedSentence(detail)
+    }
+    return nil
+}
+
+private func warningDetail(from text: String) -> String? {
+    let detail = text
+        .replacingOccurrences(of: #"(?i)^warning:\s*"#, with: "", options: .regularExpression)
+        .replacingOccurrences(of: #"(?i)^watch session warning:\s*"#, with: "", options: .regularExpression)
+        .replacingOccurrences(of: #"(?i)^maintenance task warning:\s*"#, with: "", options: .regularExpression)
+    let trimmed = trimmedSentence(detail)
+    return trimmed.isEmpty ? nil : trimmed
+}
+
+private func campaignStatusSummary(from text: String) -> EventDisplayText? {
     let parts = text
         .components(separatedBy: "→")
         .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -419,7 +770,7 @@ private func campaignStatusSummary(from text: String) -> String? {
         .trimmingCharacters(in: .whitespacesAndNewlines)
 
     guard !gameName.isEmpty, !status.isEmpty else { return nil }
-    return "\(gameName) — \(humanStatus(status))"
+    return EventDisplayText(title: gameName, detail: humanStatus(status))
 }
 
 private func campaignDisplayName(from text: String) -> String {
@@ -447,6 +798,31 @@ private func humanStatus(_ status: String) -> String {
         .joined(separator: " ")
 }
 
+private func trimmedSentence(_ text: String) -> String {
+    text
+        .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        .trimmingCharacters(in: CharacterSet(charactersIn: " .").union(.whitespacesAndNewlines))
+}
+
+private func humanReadableFallback(_ text: String) -> String {
+    var readable = text
+        .replacingOccurrences(of: #"(?i)^debug:\s*"#, with: "", options: .regularExpression)
+        .replacingOccurrences(of: #"(?i)^warning:\s*"#, with: "", options: .regularExpression)
+        .replacingOccurrences(of: #"(?i)^error:\s*"#, with: "", options: .regularExpression)
+        .replacingOccurrences(of: #"\bPubSub\b"#, with: "Drop notifications", options: .regularExpression)
+        .replacingOccurrences(of: #"\bSpade\b"#, with: "watch signal", options: .regularExpression)
+        .replacingOccurrences(of: #"dropInstanceId=[A-Za-z0-9_-]+"#, with: "drop", options: .regularExpression)
+        .replacingOccurrences(of: #"user:[A-Za-z0-9_-]+\s+channel:[A-Za-z0-9_-]+"#, with: "", options: .regularExpression)
+        .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+
+    guard !readable.isEmpty else { return "Event recorded" }
+
+    let first = readable.prefix(1).uppercased()
+    readable = first + readable.dropFirst()
+    return readable
+}
+
 @MainActor private let relativeDateFormatter: RelativeDateTimeFormatter = {
     let formatter = RelativeDateTimeFormatter()
     formatter.unitsStyle = .abbreviated
@@ -460,6 +836,10 @@ struct MinerEventRow: View {
     let showRaw: Bool
     @Environment(NavigationModel.self) private var navigation
 
+    private var displayText: EventDisplayText {
+        eventDisplayText(for: event)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .center, spacing: 10) {
@@ -467,7 +847,7 @@ struct MinerEventRow: View {
                     .fill(levelColor)
                     .frame(width: 7, height: 7)
 
-                Text(showRaw ? (event.rawMessage ?? event.message) : event.message)
+                Text(showRaw ? (event.rawMessage ?? event.message) : displayText.title)
                     .font(.system(size: 12))
                     .lineLimit(1)
 
@@ -478,8 +858,8 @@ struct MinerEventRow: View {
                     .foregroundStyle(.tertiary)
             }
 
-            if let minerId = event.minerId {
-                Text(minerName(for: minerId))
+            if let metadataText {
+                Text(metadataText)
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .padding(.leading, 17)
@@ -498,15 +878,22 @@ struct MinerEventRow: View {
     }
 
     private var levelColor: Color {
-        switch event.level {
-        case .info: return .blue
-        case .warning: return .orange
-        case .error: return .red
+        primaryEventFilter(for: event).eventColor
+    }
+
+    private var metadataText: String? {
+        var parts: [String] = []
+        if !showRaw, let detail = displayText.detail {
+            parts.append(detail)
         }
+        if let minerId = event.minerId {
+            parts.append(minerName(for: minerId))
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " • ")
     }
 
     private func minerName(for minerId: String) -> String {
-        navigation.minerManager.miners.first(where: { $0.id == minerId }).map(\.username)
+        navigation.minerManager.miners.first(where: { $0.id == minerId }).map(\.displayName)
             ?? "Miner \(minerId.prefix(4))"
     }
 }

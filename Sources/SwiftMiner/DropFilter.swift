@@ -66,4 +66,25 @@ public enum EventFilter: String, CaseIterable, Identifiable, Hashable, Codable {
         case .system: return "gearshape"
         }
     }
+
+    public var description: String {
+        switch self {
+        case .mining:
+            return "Channel selection, watch sessions, switching, and mining progress checks."
+        case .heartbeats:
+            return "Watch heartbeat and Spade activity used to keep drop progress moving."
+        case .drops:
+            return "Drop progress, claimable drops, and successful claim updates."
+        case .warnings:
+            return "Recoverable issues that may need attention but did not stop the app."
+        case .errors:
+            return "Failures that blocked an action or need troubleshooting."
+        case .accountLink:
+            return "Events where Twitch account linking is missing or blocking campaign progress."
+        case .scan:
+            return "Campaign scan details, filtered campaigns, and background refresh noise."
+        case .system:
+            return "General app lifecycle, setup, and status messages that do not fit another filter."
+        }
+    }
 }

@@ -137,13 +137,13 @@ final class ModelTests: XCTestCase {
         XCTAssertTrue(campaign.hasDropsEnabled)
     }
 
-    func testCampaignMiningEligibilityRequiresAllowEnabled() {
+    func testCampaignMiningEligibilityTreatsDisabledAllowListAsUnrestricted() {
         let game = Game(id: "g1", name: "Test Game")
         let now = Date()
         let drop = Drop(id: "d1", name: "Drop", requiredMinutes: 60)
         let campaign = Campaign(
             id: "c1",
-            name: "Blocked Campaign",
+            name: "Unrestricted Campaign",
             game: game,
             status: .active,
             startDate: now.addingTimeInterval(-3600),
@@ -153,8 +153,9 @@ final class ModelTests: XCTestCase {
             allowIsEnabled: false
         )
 
-        XCTAssertFalse(campaign.hasDropsEnabled)
-        XCTAssertFalse(campaign.isMiningEligible)
+        XCTAssertTrue(campaign.hasDropsEnabled)
+        XCTAssertFalse(campaign.hasChannelRestrictions)
+        XCTAssertTrue(campaign.isMiningEligible)
     }
 
     func testVerificationCandidatesForRestrictedCampaignSkipsNonACLChannels() {
@@ -205,6 +206,45 @@ final class ModelTests: XCTestCase {
         )
 
         XCTAssertTrue(MinerEngine.channelMatchesCampaignACL(directoryChannel, campaign: campaign))
+    }
+
+    func testVerifiedSameGameMatchPrefersEarlierCampaignOverEarlierRestrictedChannel() {
+        let game = Game(id: "g1", name: "THE FINALS")
+        let now = Date()
+        let generalCampaign = Campaign(
+            id: "general-finals",
+            name: "RESPEC ORDER DROPS",
+            game: game,
+            status: .active,
+            startDate: now.addingTimeInterval(-3600),
+            endDate: now.addingTimeInterval(3600),
+            drops: [Drop(id: "d1", name: "Tangerine Spear", requiredMinutes: 60)],
+            isAccountConnected: true
+        )
+        let apeCampaign = Campaign(
+            id: "ape-squad",
+            name: "Ape Squad Classics",
+            game: game,
+            status: .active,
+            startDate: now.addingTimeInterval(-3600),
+            endDate: now.addingTimeInterval(7200),
+            drops: [Drop(id: "d2", name: "APE SQUAD BANANA", requiredMinutes: 240)],
+            channels: [Channel(id: "ape", login: "apesquadorg", displayName: "ApeSquadOrg")],
+            isAccountConnected: true
+        )
+        let apeChannel = Channel(id: "ape", login: "apesquadorg", displayName: "ApeSquadOrg", viewerCount: 10_000)
+        let generalChannel = Channel(id: "main", login: "finals", displayName: "THEFINALS", viewerCount: 500)
+
+        let best = MinerEngine.bestVerifiedCampaignMatch(
+            candidates: [generalCampaign, apeCampaign],
+            matches: [
+                (campaign: apeCampaign, channel: apeChannel),
+                (campaign: generalCampaign, channel: generalChannel)
+            ]
+        )
+
+        XCTAssertEqual(best?.campaign.id, "general-finals")
+        XCTAssertEqual(best?.channel.id, "main")
     }
     
     // MARK: - Progress

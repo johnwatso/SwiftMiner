@@ -230,6 +230,8 @@ public actor TwitchAuthService {
         let refreshedAccount = Account(
             id: account.id,
             username: account.username,
+            nickname: account.nickname,
+            ownerDiscordId: account.ownerDiscordId,
             accessToken: tokenResponse.accessToken,
             refreshToken: tokenResponse.refreshToken,
             tokenExpiry: Date().addingTimeInterval(TimeInterval(tokenResponse.expiresIn)),

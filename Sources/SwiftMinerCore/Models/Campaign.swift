@@ -232,7 +232,8 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
     /// Whether the user's game account is connected for this campaign
     public let isAccountConnected: Bool
     /// Twitch's allow.isEnabled value for this campaign/account when present.
-    /// Nil means the source did not include allow state, so callers should treat it as enabled.
+    /// This describes whether an allow-list is enabled; false means unrestricted,
+    /// not that drops are disabled.
     public let allowIsEnabled: Bool?
     
     /// User preference context (used for relevance calculation)
@@ -404,7 +405,7 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
     public var gameImageUrl: URL? { game.boxArtURL }
     public var startAt: Date { startDate }
     public var endAt: Date { endDate }
-    public var hasDropsEnabled: Bool { allowIsEnabled ?? true }
+    public var hasDropsEnabled: Bool { status != .disabled }
 }
 
 // MARK: - Phase 3: Merge Layer Models

@@ -152,7 +152,7 @@ struct MinerHealthCard: View {
                     .fill(verdict.severity == .error ? Color.red : Color.orange)
                     .frame(width: 7, height: 7)
 
-                Text(miner.username)
+                Text(miner.displayName)
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(.primary)
 

@@ -1282,6 +1282,7 @@ public actor MinerEngine {
 
         var anyVerificationSucceeded = false
         var fallbackPair: (Campaign, Channel)? = nil
+        var verifiedMatches: [(campaign: Campaign, channel: Channel)] = []
 
         for ch in sortedChannels.prefix(50) {
             let eligibleForChannel = candidates.filter { candidate in
@@ -1297,12 +1298,25 @@ public actor MinerEngine {
                 let activeCampaignIds = try await apiClient.fetchAvailableDrops(channelId: channel.id)
                 anyVerificationSucceeded = true
 
-                // Match channel's active campaigns against our candidates in priority order.
-                if let match = eligibleForChannel.first(where: { activeCampaignIds.contains($0.id) }) {
-                    log("[ChannelSelect]     ✓ Verified! Campaign \(match.name) (\(match.id)) active on \(channel.displayName)")
-                    currentChannelName = channel.displayName
-                    currentChannelId = channel.id
-                    return (match, channel)
+                // Record all matching candidates for this channel, then choose by campaign
+                // priority after the directory scan. This prevents restricted side campaigns
+                // from preempting a broader same-game campaign just because their channels
+                // appear earlier in the live directory.
+                let matches = eligibleForChannel.filter { activeCampaignIds.contains($0.id) }
+                if !matches.isEmpty {
+                    let names = matches.map(\.name).joined(separator: ", ")
+                    log("[ChannelSelect]     ✓ Verified! \(names) active on \(channel.displayName)")
+                    for match in matches where !verifiedMatches.contains(where: { $0.campaign.id == match.id }) {
+                        verifiedMatches.append((campaign: match, channel: channel))
+                    }
+                    if let best = Self.bestVerifiedCampaignMatch(candidates: candidates, matches: verifiedMatches),
+                       best.campaign.id == candidates.first?.id {
+                        log("[ChannelSelect]   Selected \(best.campaign.name) on \(best.channel.displayName)")
+                        currentChannelName = best.channel.displayName
+                        currentChannelId = best.channel.id
+                        return (best.campaign, best.channel)
+                    }
+                    continue
                 }
 
                 let activeKnown = activeCampaignIds.filter { candidateIds.contains($0) }
@@ -1333,15 +1347,22 @@ public actor MinerEngine {
                     anyVerificationSucceeded = true
                     if activeCampaignIds.contains(candidate.id) {
                         log("[ChannelSelect]     ✓ Verified! \(candidate.name) active on approved channel \(channel.displayName)")
-                        currentChannelName = channel.displayName
-                        currentChannelId = channel.id
-                        return (candidate, channel)
+                        if !verifiedMatches.contains(where: { $0.campaign.id == candidate.id }) {
+                            verifiedMatches.append((campaign: candidate, channel: channel))
+                        }
                     }
                 } catch {
                     log("[ChannelSelect]     ⚠️ Approved-channel verification failed: \(error.localizedDescription)")
                     if fallbackPair == nil { fallbackPair = (candidate, channel) }
                 }
             }
+        }
+
+        if let best = Self.bestVerifiedCampaignMatch(candidates: candidates, matches: verifiedMatches) {
+            log("[ChannelSelect]   Selected \(best.campaign.name) on \(best.channel.displayName)")
+            currentChannelName = best.channel.displayName
+            currentChannelId = best.channel.id
+            return (best.campaign, best.channel)
         }
 
         // Only fall back to an unverified channel when the verification itself errored for
@@ -1352,6 +1373,19 @@ public actor MinerEngine {
             currentChannelName = fallback.1.displayName
             currentChannelId = fallback.1.id
             return fallback
+        }
+
+        return nil
+    }
+
+    internal static func bestVerifiedCampaignMatch(
+        candidates: [Campaign],
+        matches: [(campaign: Campaign, channel: Channel)]
+    ) -> (campaign: Campaign, channel: Channel)? {
+        for candidate in candidates {
+            if let match = matches.first(where: { $0.campaign.id == candidate.id }) {
+                return match
+            }
         }
 
         return nil
