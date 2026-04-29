@@ -295,6 +295,19 @@ public actor MinerEngine {
         }
         log("Authenticated as \(account.username)")
         
+        await watchSessionManager.setErrorHandler { [weak self] error in
+            guard let self else { return }
+            Task {
+                await self.handleWatchSessionError(error)
+            }
+        }
+        await watchSessionManager.setHeartbeatSentHandler { [weak self] session in
+            guard let self else { return }
+            Task {
+                await self.handleWatchHeartbeatSent(session)
+            }
+        }
+
         // Configure PubSub/DropEventsService
         await configureDropEventsService()
 
@@ -386,7 +399,7 @@ public actor MinerEngine {
             throw TwitchMinerError.sessionNotStarted
         }
 
-        await claimReadyDrops()
+        _ = await claimReadyDrops()
     }
 
     /// Gets current overall progress
@@ -524,11 +537,41 @@ public actor MinerEngine {
         // Check if we're watching this channel
         if session?.currentChannelId == channelId {
             log("Current channel went offline, will switch...")
+            lastSwitchReason = .channelWentOffline
+            lastSwitchAt = Date()
             shouldSwitchChannel = true
 
             // Stop current watch session
-            await watchSessionManager.stopWatching()
+            await cleanupActiveWatchSession(clearTarget: false)
+        }
+    }
+
+    private func handleWatchSessionError(_ error: TwitchMinerError) async {
+        log("⚠️ Watch session warning: \(error.localizedDescription)")
+        onError?(error)
+    }
+
+    private func handleWatchHeartbeatSent(_ session: WatchSession) async {
+        if let transport = session.lastHeartbeatTransport {
+            log("Watch heartbeat sent for \(session.channelName) via \(transport)")
+        } else {
+            log("Watch heartbeat sent for \(session.channelName)")
+        }
+    }
+
+    private func cleanupActiveWatchSession(clearTarget: Bool) async {
+        let channelId = session?.currentChannelId
+
+        await watchSessionManager.stopWatching()
+        if let channelId, !channelId.isEmpty {
             try? await dropEventsService.stopWatchingChannel(channelId)
+        }
+
+        if clearTarget {
+            session?.currentCampaignId = nil
+            session?.currentChannelId = nil
+            currentChannelName = nil
+            currentChannelId = nil
         }
     }
     
@@ -578,10 +621,10 @@ public actor MinerEngine {
                 log("Fetching active campaigns...")
 
                 // 1. Fetch all campaigns (single call — avoids double API hit).
-                let allEnriched = try await dropsService.fetchCampaigns()
+                var allEnriched = try await dropsService.fetchCampaigns()
                 
                 self.allCampaigns = allEnriched
-                let candidates = candidateCampaigns(
+                var candidates = candidateCampaigns(
                     from: allEnriched,
                     priorityGames: priorityGames,
                     excludedGames: excludedGames,
@@ -610,12 +653,24 @@ public actor MinerEngine {
                 onCampaignUpdate?(candidates)
 
                 // 2. Claim any ready drops first (Claimable status handled here)
-                await claimReadyDrops()
+                let didClaimDrops = await claimReadyDrops()
+                if didClaimDrops {
+                    allEnriched = try await dropsService.fetchCampaigns(forceRefresh: true)
+                    self.allCampaigns = allEnriched
+                    candidates = candidateCampaigns(
+                        from: allEnriched,
+                        priorityGames: priorityGames,
+                        excludedGames: excludedGames,
+                        strategy: miningStrategy
+                    )
+                    onDebugWinningQueueUpdate?(candidates)
+                    onCampaignUpdate?(candidates)
+                }
 
                 // 3. Find the best account-eligible campaign that also has a live channel.
                 guard !candidates.isEmpty else {
                     log("No account-eligible campaigns matching strategy '\(miningStrategy.displayName)'")
-                    session?.currentCampaignId = nil
+                    await cleanupActiveWatchSession(clearTarget: true)
                     let emptyState = resolveEmptyCandidateState(
                         from: allEnriched,
                         priorityGames: priorityGames,
@@ -663,7 +718,7 @@ public actor MinerEngine {
 
                 guard let campaign = selectedCampaign, let channel = selectedChannel else {
                     log("No eligible channels available for \(candidates.count) account-eligible campaign(s)")
-                    session?.currentCampaignId = nil
+                    await cleanupActiveWatchSession(clearTarget: true)
                     onStatusChange?(.waitingForStream)
                     shouldRescanCampaigns = false
                     let tickNs: UInt64 = 10 * 1_000_000_000
@@ -695,18 +750,26 @@ public actor MinerEngine {
                     }
                 }
 
-                // 6. Start watching
-                onStatusChange?(.watching)
-                extraMinutesWatched = 0
-                lastProgressUpdateAt = Date()
-                _ = try await watchSessionManager.startWatching(
-                    channel: channel,
-                    campaignId: campaign.id
-                )
+                do {
+                    // 6. Start watching
+                    extraMinutesWatched = 0
+                    lastProgressUpdateAt = Date()
+                    _ = try await watchSessionManager.startWatching(
+                        channel: channel,
+                        campaignId: campaign.id,
+                        gameName: campaign.game.name,
+                        gameId: campaign.game.id
+                    )
+                    onStatusChange?(.watching)
+                } catch {
+                    await cleanupActiveWatchSession(clearTarget: true)
+                    throw error
+                }
 
                 // Wait for watch session while periodically checking progress
                 var lastGqlPoll = Date()
                 var lastCampaignReevaluation = Date()
+                var emptyCurrentDropPolls = 0
                 while await watchSessionManager.isWatching && !shouldSwitchChannel {
                     // Check every 30 seconds for interrupts or polls
                     try? await Task.sleep(nanoseconds: 30 * 1_000_000_000)
@@ -715,35 +778,60 @@ public actor MinerEngine {
                     // If it's been >60s since last PubSub/Poll and we haven't hit 100%
                     if Date().timeIntervalSince(lastGqlPoll) >= 60 {
                         lastGqlPoll = Date()
-                        if let current = try? await apiClient.fetchCurrentDrop(channelId: channel.id) {
-                            let campaignId = session?.currentCampaignId
-                            let observation = DropProgressObservation(
-                                campaignId: campaignId,
-                                dropId: current.dropId,
-                                dropLabel: dropLabel(for: current.dropId, campaignId: campaignId),
-                                currentMinutes: current.currentMinutes,
-                                requiredMinutes: requiredMinutes(for: current.dropId, campaignId: campaignId),
-                                source: .gqlPoll
-                            )
-                            let result = progressEventTracker.observe(observation)
-                            traceGQL(
-                                "DropCurrentSessionContext drop=\(current.dropId) parsedCurrent=\(current.currentMinutes) " +
-                                "previous=\(result.previousMinutes.map(String.init) ?? "nil") transition=\(result.transition.traceDescription)"
-                            )
+                        do {
+                            if let current = try await apiClient.fetchCurrentDrop(channelId: channel.id) {
+                                emptyCurrentDropPolls = 0
+                                let campaignId = session?.currentCampaignId
+                                let observation = DropProgressObservation(
+                                    campaignId: campaignId,
+                                    dropId: current.dropId,
+                                    dropLabel: dropLabel(for: current.dropId, campaignId: campaignId),
+                                    currentMinutes: current.currentMinutes,
+                                    requiredMinutes: requiredMinutes(for: current.dropId, campaignId: campaignId),
+                                    source: .gqlPoll
+                                )
+                                let result = progressEventTracker.observe(observation)
+                                traceGQL(
+                                    "DropCurrentSessionContext drop=\(current.dropId) parsedCurrent=\(current.currentMinutes) " +
+                                    "previous=\(result.previousMinutes.map(String.init) ?? "nil") transition=\(result.transition.traceDescription)"
+                                )
 
-                            if result.shouldAcknowledgeServerProgress {
-                                if let message = formatProgressTransition(result.transition) {
-                                    log(message)
+                                if result.shouldAcknowledgeServerProgress {
+                                    if let message = formatProgressTransition(result.transition) {
+                                        log(message)
+                                    }
+
+                                    // Only treat changed server state as verified progress.
+                                    extraMinutesWatched = 0
+                                    lastProgressUpdateAt = Date()
+
+                                    if let progress = try? await dropsService.getOverallProgress() {
+                                        onProgressUpdate?(progress)
+                                    }
                                 }
+                            } else {
+                                let inventoryService = await dropsService.getInventoryService()
+                                let snapshot = try await inventoryService.fetchInventory(forceRefresh: true)
+                                let acknowledged = await acknowledgeInventoryProgress(
+                                    snapshot,
+                                    campaignId: campaign.id,
+                                    context: "current-session fallback"
+                                )
 
-                                // Only treat changed server state as verified progress.
-                                extraMinutesWatched = 0
-                                lastProgressUpdateAt = Date()
-
-                                if let progress = try? await dropsService.getOverallProgress() {
-                                    onProgressUpdate?(progress)
+                                if acknowledged {
+                                    emptyCurrentDropPolls = 0
+                                } else {
+                                    emptyCurrentDropPolls += 1
+                                    if emptyCurrentDropPolls == 1 {
+                                        log("Awaiting Twitch drop progress confirmation for \(campaign.name) on \(channel.displayName)")
+                                    } else if emptyCurrentDropPolls % 5 == 0 {
+                                        log("⚠️ Twitch still has not reported an active drop session after \(emptyCurrentDropPolls) progress checks")
+                                    }
                                 }
                             }
+                        } catch {
+                            emptyCurrentDropPolls += 1
+                            log("⚠️ Could not verify current drop progress: \(error.localizedDescription)")
                         }
                     }
 
@@ -815,7 +903,7 @@ public actor MinerEngine {
                     }
 
                     // Check if we should claim any drops
-                    await claimReadyDrops()
+                    _ = await claimReadyDrops()
                     
                     // Conditional claim polling: Check every 2 minutes when actively mining
                     // This reduces claim latency without adding background churn when idle
@@ -829,18 +917,21 @@ public actor MinerEngine {
                 // Update session stats
                 let watchTime = await watchSessionManager.totalWatchTime
                 session?.totalWatchTime += watchTime
+                await cleanupActiveWatchSession(clearTarget: shouldSwitchChannel)
 
             } catch let error as TwitchMinerError {
+                await cleanupActiveWatchSession(clearTarget: true)
                 handleError(error)
                 try? await Task.sleep(nanoseconds: campaignCheckInterval)
             } catch {
+                await cleanupActiveWatchSession(clearTarget: true)
                 handleError(.unknown(error.localizedDescription))
                 try? await Task.sleep(nanoseconds: campaignCheckInterval)
             }
         }
     }
     
-    private func claimReadyDrops() async {
+    private func claimReadyDrops() async -> Bool {
         // Conditional check: Only poll for claims when there are potentially claimable drops
         // This avoids unnecessary API calls when all campaigns are either empty or fully claimed
         let hasClaimableCampaigns = allCampaigns.contains { campaign in
@@ -848,9 +939,10 @@ public actor MinerEngine {
         }
         
         guard hasClaimableCampaigns || session?.currentCampaignId != nil else {
-            return // No claimable campaigns, skip polling to reduce churn
+            return false // No claimable campaigns, skip polling to reduce churn
         }
         
+        var didClaimAnyDrop = false
         do {
             let claimable = try await dropsService.getClaimableDrops()
 
@@ -880,6 +972,7 @@ public actor MinerEngine {
                     )
                     onDropClaimed?(drop)
                     session?.dropsClaimed += 1
+                    didClaimAnyDrop = true
 
                     // Send local notification if enabled
                     if showClaimNotifications, let notificationService = notificationService {
@@ -899,6 +992,8 @@ public actor MinerEngine {
         } catch {
             log("Error fetching claimable drops: \(error.localizedDescription)")
         }
+
+        return didClaimAnyDrop
     }
 
     private func warnForUnlinkedPriorityCampaigns(in campaigns: [Campaign]) async {
@@ -1508,6 +1603,64 @@ public actor MinerEngine {
         findDrop(dropId: dropId, campaignId: campaignId)?.requiredMinutes
     }
 
+    private func acknowledgeInventoryProgress(
+        _ snapshot: InventorySnapshot,
+        campaignId: String,
+        context: String
+    ) async -> Bool {
+        let mergedCampaigns = DropsService.mergeInventory(snapshot, into: allCampaigns)
+        allCampaigns = mergedCampaigns
+
+        let updatedCandidates = candidateCampaigns(
+            from: mergedCampaigns,
+            priorityGames: priorityGames,
+            excludedGames: excludedGames,
+            strategy: miningStrategy
+        )
+        onCampaignUpdate?(updatedCandidates)
+        onDebugWinningQueueUpdate?(updatedCandidates)
+
+        let currentCampaignProgress = snapshot.progress.filter { progress in
+            progress.campaignId == campaignId && !progress.isClaimed
+        }
+
+        var acknowledged = false
+        for progress in currentCampaignProgress {
+            let observation = DropProgressObservation(
+                campaignId: progress.campaignId,
+                dropId: progress.dropId,
+                dropLabel: progress.dropName.isEmpty ? dropLabel(for: progress.dropId, campaignId: progress.campaignId) : progress.dropName,
+                currentMinutes: progress.currentMinutes,
+                requiredMinutes: progress.requiredMinutes,
+                source: .inventory
+            )
+            let result = progressEventTracker.observe(observation)
+            traceGQL(
+                "Inventory progress \(context) drop=\(progress.dropId) parsedCurrent=\(progress.currentMinutes) " +
+                "previous=\(result.previousMinutes.map(String.init) ?? "nil") transition=\(result.transition.traceDescription)"
+            )
+
+            guard result.shouldAcknowledgeServerProgress else { continue }
+
+            if let message = formatProgressTransition(result.transition) {
+                log("\(message) from Twitch inventory")
+            }
+
+            acknowledged = true
+        }
+
+        if acknowledged {
+            extraMinutesWatched = 0
+            lastProgressUpdateAt = Date()
+
+            if let progress = try? await dropsService.getOverallProgress() {
+                onProgressUpdate?(progress)
+            }
+        }
+
+        return acknowledged
+    }
+
     private func findDrop(dropId: String, campaignId: String?) -> Drop? {
         if let campaignId,
            let campaign = allCampaigns.first(where: { $0.id == campaignId }),
@@ -1601,6 +1754,7 @@ struct DropProgressCacheKey: Hashable, Sendable {
 enum DropProgressSource: String, Sendable {
     case pubSub
     case gqlPoll
+    case inventory
 }
 
 struct DropProgressObservation: Sendable {

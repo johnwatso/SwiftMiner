@@ -1,22 +1,17 @@
 import AppKit
 import SwiftUI
 import SwiftMinerCore
-import UserNotifications
 
 /// Optional onboarding surface that reflects current app readiness.
-/// Styled as a calm, step-by-step modal with one glass surface.
 struct OnboardingView: View {
     @Environment(NavigationModel.self) private var navigation
-    @StateObject private var settings = Settings.shared
     @State private var currentStepIndex = 0
     @State private var showAccountSuccessState = false
 
     private enum OnboardingStep: String, CaseIterable {
         case welcome
         case account
-        case gamePreferences
-        case settings
-        case privacy
+        case done
     }
 
     private var presentation: NavigationModel.OnboardingPresentation? {
@@ -40,34 +35,30 @@ struct OnboardingView: View {
 
             VStack(alignment: .leading, spacing: 0) {
                 topBar(step: stepIndex + 1, total: steps.count)
-                    .padding(.bottom, 24)
+                    .padding(.bottom, 18)
 
                 stepContentContainer(step: step, presentation: presentation)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .frame(maxWidth: .infinity, minHeight: 282, alignment: .topLeading)
 
                 footer(stepIndex: stepIndex, totalSteps: steps.count, presentation: presentation)
-                    .padding(.top, 20)
+                    .padding(.top, 22)
             }
-            .padding(32)
-            .frame(width: 680)
-            .frame(maxHeight: 760)
+            .padding(.horizontal, 28)
+            .padding(.top, 24)
+            .padding(.bottom, 20)
+            .frame(width: 540)
             .background {
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
                     .fill(.regularMaterial)
             }
             .overlay {
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .strokeBorder(.white.opacity(0.38), lineWidth: 1)
+                    .strokeBorder(.white.opacity(0.32), lineWidth: 1)
             }
-            .shadow(color: .black.opacity(0.24), radius: 30, y: 12)
+            .shadow(color: .black.opacity(0.18), radius: 34, y: 18)
             .onAppear {
                 navigation.refreshOnboardingPresentation()
-                currentStepIndex = clampedStepIndex
-            }
-            .onChange(of: settings.gamePreferencesData) { _, _ in
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    navigation.refreshOnboardingPresentation()
-                }
+                syncStep(with: navigation.onboardingPresentation)
             }
             .onChange(of: navigation.showAddAccountSheet) { _, isShowing in
                 guard !isShowing else { return }
@@ -75,8 +66,8 @@ struct OnboardingView: View {
                     navigation.refreshOnboardingPresentation()
                 }
             }
-            .onChange(of: navigation.onboardingPresentation) { _, _ in
-                currentStepIndex = clampedStepIndex
+            .onChange(of: navigation.onboardingPresentation) { _, presentation in
+                syncStep(with: presentation)
             }
         }
     }
@@ -86,8 +77,8 @@ struct OnboardingView: View {
     private func topBar(step: Int, total: Int) -> some View {
         HStack(spacing: 12) {
             Text("STEP \(step) OF \(total)")
-                .font(.system(size: 11, weight: .semibold))
-                .tracking(1.1)
+                .font(.caption.weight(.semibold))
+                .textCase(.uppercase)
                 .foregroundStyle(.secondary)
 
             Spacer()
@@ -96,9 +87,9 @@ struct OnboardingView: View {
                 dismissOnboarding()
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: 9, weight: .bold))
                     .foregroundStyle(.secondary)
-                    .frame(width: 22, height: 22)
+                    .frame(width: 20, height: 20)
                     .background(Color.secondary.opacity(0.12), in: Circle())
             }
             .buttonStyle(.plain)
@@ -114,9 +105,9 @@ struct OnboardingView: View {
             ZStack(alignment: .topLeading) {
                 stepView(step: step, presentation: presentation)
                     .id(step.rawValue)
-                    .transition(.opacity.combined(with: .offset(y: 10)))
+                    .transition(.opacity.combined(with: .offset(y: 6)))
             }
-            .frame(maxWidth: 540, alignment: .leading)
+            .frame(maxWidth: 484, alignment: .leading)
             .animation(.easeInOut(duration: 0.22), value: step)
         }
     }
@@ -145,16 +136,18 @@ struct OnboardingView: View {
                         }
                     }
                     .buttonStyle(.bordered)
+                    .controlSize(.regular)
                 }
 
                 Button(nextButtonTitle(stepIndex: stepIndex, totalSteps: totalSteps, presentation: presentation)) {
                     advance(stepIndex: stepIndex, totalSteps: totalSteps)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(Color(red: 0.94, green: 0.17, blue: 0.30))
+                .controlSize(.regular)
+                .disabled(isNextButtonDisabled(stepIndex: stepIndex, presentation: presentation))
             }
         }
-        .frame(maxWidth: 540, alignment: .leading)
+        .frame(maxWidth: 484, alignment: .leading)
     }
 
     private func stepDots(stepIndex: Int, totalSteps: Int) -> some View {
@@ -179,45 +172,44 @@ struct OnboardingView: View {
         case .account:
             accountStep(presentation: presentation)
 
-        case .gamePreferences:
-            gamePreferencesStep
-
-        case .settings:
-            settingsStep
-
-        case .privacy:
-            privacyStep
+        case .done:
+            doneStep(presentation: presentation)
         }
     }
 
     private var welcomeStep: some View {
-        VStack(alignment: .leading, spacing: 28) {
-            VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 22) {
+            OnboardingHeader(
+                title: "Welcome to SwiftMiner",
+                subtitle: "Set up mining in a minute. You can skip this now and adjust everything later."
+            ) {
                 Image(nsImage: appIconImage)
                     .resizable()
                     .interpolation(.high)
                     .scaledToFit()
-                    .frame(width: 72, height: 72)
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .frame(width: 58, height: 58)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     .overlay {
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
                             .strokeBorder(.white.opacity(0.35), lineWidth: 1)
                     }
-                    .shadow(color: .black.opacity(0.20), radius: 8, y: 4)
-
-                Text("Welcome to SwiftMiner")
-                    .font(.system(size: 40, weight: .bold))
-                    .foregroundStyle(.primary)
-
-                Text("Set up in a minute. You can skip or change everything later.")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
+                    .shadow(color: .black.opacity(0.16), radius: 8, y: 4)
             }
 
-            VStack(alignment: .leading, spacing: 10) {
-                OnboardingInfoRow(title: "Connect your Twitch account", subtitle: "Start discovering active drop campaigns.")
-                OnboardingInfoRow(title: "Choose game priorities", subtitle: "Optional filters for focused mining.")
-                OnboardingInfoRow(title: "Tune quick settings", subtitle: "Notifications and auto-start behavior.")
+            OnboardingInsetGroup {
+                OnboardingInfoRow(
+                    symbol: "person.crop.circle.badge.plus",
+                    tint: .blue,
+                    title: "Connect Twitch",
+                    subtitle: "Discover active drops for your account."
+                )
+                Divider()
+                OnboardingInfoRow(
+                    symbol: "rectangle.3.group",
+                    tint: .purple,
+                    title: "Open the dashboard",
+                    subtitle: "Manage miners, drops, preferences, and alerts after setup."
+                )
             }
         }
     }
@@ -230,19 +222,12 @@ struct OnboardingView: View {
             return false
         }()
 
-        VStack(alignment: .leading, spacing: 28) {
-            VStack(alignment: .leading, spacing: 10) {
-                if hasConnectedAccount {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(.green)
-                }
-
-                Text(hasConnectedAccount ? "Account connected" : "Connect an account")
-                    .font(.system(size: 40, weight: .bold))
-                Text(hasConnectedAccount ? "You're ready to start mining campaigns." : "Add an account to start mining campaigns.")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 22) {
+            OnboardingHeader(
+                title: hasConnectedAccount ? "Account connected" : "Connect Twitch",
+                subtitle: hasConnectedAccount ? "SwiftMiner is preparing your dashboard." : "Sign in once so SwiftMiner can find and mine eligible drops."
+            ) {
+                OnboardingSymbol(symbol: hasConnectedAccount ? "checkmark.circle.fill" : "person.crop.circle.badge.plus", tint: hasConnectedAccount ? .green : .blue)
             }
 
             VStack(alignment: .leading, spacing: 12) {
@@ -254,25 +239,27 @@ struct OnboardingView: View {
                         Label("Connect Account", systemImage: "person.badge.key.fill")
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(Color(red: 0.94, green: 0.17, blue: 0.30))
+                    .controlSize(.large)
 
                 case .hasAccounts(let count):
-                    if let miner = primaryMiner {
-                        OnboardingConnectedAccountRow(username: miner.username, status: "Connected")
+                    if let stage = presentation.setupStage {
+                        OnboardingSetupProgressRow(stage: stage)
+                    } else {
+                        OnboardingInsetGroup {
+                            if let miner = primaryMiner {
+                                OnboardingConnectedAccountRow(username: miner.username, status: "Connected")
+                            }
+
+                            if count > 1 {
+                                Divider()
+                                Text("\(count) accounts connected")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                    .padding(.vertical, 2)
+                            }
+                        }
                     }
 
-                    if count > 1 {
-                        Text("\(count) accounts connected.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Button("Add Another Account") {
-                        navigation.showAddAccountSheet = true
-                    }
-                    .buttonStyle(.plain)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
                 }
             }
             .scaleEffect(hasConnectedAccount ? (showAccountSuccessState ? 1.0 : 0.985) : 1.0, anchor: .topLeading)
@@ -302,66 +289,33 @@ struct OnboardingView: View {
         }
     }
 
-    private var gamePreferencesStep: some View {
-        VStack(alignment: .leading, spacing: 28) {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Game preferences")
-                    .font(.system(size: 40, weight: .bold))
-                Text("Pick priorities or leave empty to mine all eligible campaigns.")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
+    private func doneStep(presentation: NavigationModel.OnboardingPresentation) -> some View {
+        VStack(alignment: .leading, spacing: 22) {
+            OnboardingHeader(
+                title: "You're ready",
+                subtitle: "Opening your dashboard..."
+            ) {
+                OnboardingSymbol(symbol: "checkmark.circle.fill", tint: .green)
             }
 
-            GamePreferencesSection(settings: settings, minerManager: navigation.minerManager)
-        }
-    }
-
-    private var settingsStep: some View {
-        VStack(alignment: .leading, spacing: 28) {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Quick settings")
-                    .font(.system(size: 40, weight: .bold))
-                Text("These apply instantly and can be changed anytime.")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
-            }
-
-            VStack(alignment: .leading, spacing: 12) {
-                OnboardingToggleRow(
-                    title: "Claim notifications",
-                    subtitle: "Alert me when a drop is secured.",
-                    isOn: $settings.showClaimNotifications
-                )
-            }
-            .onChange(of: settings.showClaimNotifications) { _, newValue in
-                guard newValue else { return }
-                Task {
-                    _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
+            OnboardingInsetGroup {
+                if let miner = navigation.minerManager.miners.first {
+                    OnboardingConnectedAccountRow(username: miner.username, status: "Connected")
+                } else {
+                    OnboardingInfoRow(
+                        symbol: "checkmark.circle.fill",
+                        tint: .green,
+                        title: "Setup complete",
+                        subtitle: "SwiftMiner is ready to use."
+                    )
                 }
             }
         }
-    }
-
-    private var privacyStep: some View {
-        VStack(alignment: .leading, spacing: 28) {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Data & privacy")
-                    .font(.system(size: 40, weight: .bold))
-                Text("Your token stays in the macOS keychain. Remove accounts whenever you want.")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
-            }
-
-            VStack(alignment: .leading, spacing: 12) {
-                PrivacyRow(
-                    title: "Stored securely",
-                    subtitle: "Account credentials are saved in your local keychain."
-                )
-                PrivacyRow(
-                    title: "You stay in control",
-                    subtitle: "Delete accounts from the dashboard at any time."
-                )
-            }
+        .task(id: presentation.accountState) {
+            guard presentation.accountState.hasAccounts, presentation.setupStage == nil else { return }
+            try? await Task.sleep(for: .milliseconds(850))
+            guard !Task.isCancelled else { return }
+            dismissOnboarding()
         }
     }
 
@@ -371,7 +325,31 @@ struct OnboardingView: View {
         min(max(0, currentStepIndex), steps.count - 1)
     }
 
+    private var doneStepIndex: Int {
+        steps.firstIndex(of: .done) ?? max(0, steps.count - 1)
+    }
+
+    private func syncStep(with presentation: NavigationModel.OnboardingPresentation?) {
+        guard let presentation else { return }
+        if presentation.accountState.hasAccounts && presentation.setupStage == nil {
+            withAnimation(.easeInOut(duration: 0.22)) {
+                currentStepIndex = doneStepIndex
+            }
+        } else if presentation.accountState.hasAccounts {
+            withAnimation(.easeInOut(duration: 0.22)) {
+                currentStepIndex = steps.firstIndex(of: .account) ?? clampedStepIndex
+            }
+        } else {
+            currentStepIndex = clampedStepIndex
+        }
+    }
+
     private func advance(stepIndex: Int, totalSteps: Int) {
+        if steps[stepIndex] == .account, case .noAccounts = presentation?.accountState {
+            navigation.showAddAccountSheet = true
+            return
+        }
+
         guard stepIndex < totalSteps - 1 else {
             dismissOnboarding()
             return
@@ -388,6 +366,15 @@ struct OnboardingView: View {
         presentation: NavigationModel.OnboardingPresentation
     ) -> String {
         let isLast = stepIndex >= totalSteps - 1
+        if steps[stepIndex] == .account {
+            switch presentation.accountState {
+            case .noAccounts:
+                return "Connect Twitch"
+            case .hasAccounts:
+                return presentation.setupStage == nil ? "Open Dashboard" : "Preparing..."
+            }
+        }
+
         guard isLast else { return "Continue" }
 
         switch presentation.accountState {
@@ -396,6 +383,13 @@ struct OnboardingView: View {
         case .hasAccounts:
             return "Open Dashboard"
         }
+    }
+
+    private func isNextButtonDisabled(
+        stepIndex: Int,
+        presentation: NavigationModel.OnboardingPresentation
+    ) -> Bool {
+        steps[stepIndex] == .account && presentation.setupStage != nil
     }
 
     private func dismissOnboarding() {
@@ -407,41 +401,81 @@ struct OnboardingView: View {
 
 // MARK: - Rows
 
-private struct OnboardingInfoRow: View {
+private struct OnboardingHeader<Icon: View>: View {
     let title: String
     let subtitle: String
+    @ViewBuilder var icon: Icon
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.headline)
-            Text(subtitle)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 14) {
+            icon
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title)
+                    .font(.title.weight(.bold))
+                    .foregroundStyle(.primary)
+                Text(subtitle)
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 }
 
-private struct OnboardingToggleRow: View {
-    let title: String
-    let subtitle: String
-    @Binding var isOn: Bool
+private struct OnboardingSymbol: View {
+    let symbol: String
+    let tint: Color
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
+        Image(systemName: symbol)
+            .font(.system(size: 20, weight: .semibold))
+            .foregroundStyle(tint)
+            .frame(width: 42, height: 42)
+            .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .strokeBorder(tint.opacity(0.18), lineWidth: 1)
+            }
+    }
+}
+
+private struct OnboardingInsetGroup<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            content
+        }
+        .padding(12)
+        .background(.thinMaterial.opacity(0.72), in: RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+        }
+    }
+}
+
+private struct OnboardingInfoRow: View {
+    let symbol: String
+    let tint: Color
+    let title: String
+    let subtitle: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: symbol)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 24, height: 24)
+
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.headline)
+                    .font(.subheadline.weight(.semibold))
                 Text(subtitle)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
-
-            Spacer(minLength: 12)
-
-            Toggle("", isOn: $isOn)
-                .labelsHidden()
-                .toggleStyle(.switch)
         }
     }
 }
@@ -493,7 +527,7 @@ private struct OnboardingConnectedAccountRow: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(username)
-                    .font(.headline)
+                    .font(.subheadline.weight(.semibold))
                 Text(status)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -508,18 +542,32 @@ private struct OnboardingConnectedAccountRow: View {
     }
 }
 
-private struct PrivacyRow: View {
-    let title: String
-    let subtitle: String
+private struct OnboardingSetupProgressRow: View {
+    let stage: NavigationModel.OnboardingSetupStage
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.headline)
-            Text(subtitle)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+        OnboardingInsetGroup {
+            HStack(alignment: .center, spacing: 10) {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(width: 24, height: 24)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(stage.title)
+                        .font(.subheadline.weight(.semibold))
+                    Text("This only takes a moment.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
+    }
+}
+
+private extension NavigationModel.OnboardingAccountState {
+    var hasAccounts: Bool {
+        if case .hasAccounts = self { return true }
+        return false
     }
 }
 

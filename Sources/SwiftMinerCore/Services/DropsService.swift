@@ -68,12 +68,12 @@ public actor DropsService {
     /// Fetch account-specific drop states for ALL drops in active campaigns.
     /// Returns a DropState for every drop (notStarted, inProgress, claimable, or claimed).
     /// Drops never disappear — state drives display, not presence.
-    public func fetchDropStates(for accountId: String) async throws -> [DropState] {
+    public func fetchDropStates(for accountId: String, forceRefresh: Bool = false) async throws -> [DropState] {
         let campaigns = try await fetchCampaigns()
         // Fetch inventory once with fallback to cached snapshot
         let snapshot: InventorySnapshot
         do {
-            snapshot = try await inventoryService.fetchInventory()
+            snapshot = try await inventoryService.fetchInventory(forceRefresh: forceRefresh)
         } catch {
             snapshot = await inventoryService.currentSnapshot() ?? .empty(accountId: accountId)
         }

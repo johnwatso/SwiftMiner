@@ -56,15 +56,15 @@ public enum PrimaryStateResolver {
             if let campaign = miner.allCampaigns.first(where: { $0.id == primary.campaignId }),
                let activeDrop = campaign.drops.first(where: { !$0.isClaimed }) {
                 let dropState = miner.stateStore?.dropStates.first { $0.dropId == activeDrop.id }
-                let currentMinutes = dropState?.progressMinutes ?? activeDrop.progress?.currentMinutes ?? 0
-                let requiredMinutes = dropState?.requiredMinutes ?? activeDrop.requiredMinutes
+                let currentMinutes = max(dropState?.progressMinutes ?? 0, activeDrop.progress?.currentMinutes ?? 0)
+                let requiredMinutes = max(dropState?.requiredMinutes ?? 0, activeDrop.progress?.requiredMinutes ?? activeDrop.requiredMinutes)
 
                 if currentMinutes < requiredMinutes {
                     let fraction = requiredMinutes > 0 ? Double(currentMinutes) / Double(requiredMinutes) : 0
                     let progress = MiningProgress(
                         gameName: campaign.game.name,
                         campaignName: campaign.name,
-                        dropName: activeDrop.name,
+                        dropName: activeDrop.progress?.dropName.isEmpty == false ? activeDrop.progress?.dropName ?? activeDrop.name : activeDrop.name,
                         progressFraction: min(1.0, max(0.0, fraction)),
                         minutesRemaining: max(0, requiredMinutes - currentMinutes)
                     )
@@ -173,8 +173,8 @@ public enum PrimaryStateResolver {
             // Find the active drop (first unclaimed)
             if let activeDrop = campaign.drops.first(where: { !$0.isClaimed }) {
                 let dropState = miner.stateStore?.dropStates.first { $0.dropId == activeDrop.id }
-                let currentMinutes = dropState?.progressMinutes ?? activeDrop.progress?.currentMinutes ?? 0
-                let requiredMinutes = dropState?.requiredMinutes ?? activeDrop.requiredMinutes
+                let currentMinutes = max(dropState?.progressMinutes ?? 0, activeDrop.progress?.currentMinutes ?? 0)
+                let requiredMinutes = max(dropState?.requiredMinutes ?? 0, activeDrop.progress?.requiredMinutes ?? activeDrop.requiredMinutes)
                 
                 // Only return .mining if there is actual progress left to earn.
                 if currentMinutes < requiredMinutes {
@@ -183,7 +183,7 @@ public enum PrimaryStateResolver {
                     let progress = MiningProgress(
                         gameName: campaign.game.name,
                         campaignName: campaign.name,
-                        dropName: activeDrop.name,
+                        dropName: activeDrop.progress?.dropName.isEmpty == false ? activeDrop.progress?.dropName ?? activeDrop.name : activeDrop.name,
                         progressFraction: min(1.0, max(0.0, fraction)),
                         minutesRemaining: max(0, requiredMinutes - currentMinutes)
                     )

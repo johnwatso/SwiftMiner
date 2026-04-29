@@ -46,7 +46,7 @@ public final class AccountStateStore: Identifiable {
 
     // MARK: - Refresh
     
-    public func refresh() async {
+    public func refresh(forceRefresh: Bool = false) async {
         isLoading = true
         defer { isLoading = false }
         
@@ -54,7 +54,7 @@ public final class AccountStateStore: Identifiable {
             // In Phase 2, we update existing DropsService to provide these states.
             // We need to provide campaigns to mergeInventory to correctly map IDs,
             // so we might still need to fetch campaigns once here or have them passed in.
-            let states = try await dropsService.fetchDropStates(for: accountId)
+            let states = try await dropsService.fetchDropStates(for: accountId, forceRefresh: forceRefresh)
             self.dropStates = states
             self.lastUpdated = Date()
             self.lastError = nil

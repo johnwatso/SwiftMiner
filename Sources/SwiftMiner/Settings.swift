@@ -109,6 +109,48 @@ public final class Settings: ObservableObject {
         }
     }
 
+    /// JSON-encoded array of EventFilter for the Events view.
+    @AppStorage("selectedEventFiltersData", store: Settings.appStorageStore)
+    private var selectedEventFiltersData: String = "[\"drops\",\"errors\",\"heartbeats\",\"mining\",\"system\",\"warnings\"]"
+
+    /// One-time migration so existing users see heartbeat diagnostics after upgrading.
+    @AppStorage("eventFiltersHeartbeatDefaultApplied", store: Settings.appStorageStore)
+    private var eventFiltersHeartbeatDefaultApplied: Bool = false
+
+    /// Persistent filter selection for the Events view.
+    public var selectedEventFilters: Set<EventFilter> {
+        get {
+            guard let data = selectedEventFiltersData.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode([EventFilter].self, from: data) else {
+                return Self.defaultEventFilters
+            }
+            var filters = Set(decoded)
+            if !eventFiltersHeartbeatDefaultApplied {
+                filters.insert(.heartbeats)
+                eventFiltersHeartbeatDefaultApplied = true
+                let encoded = Array(filters).sorted { $0.rawValue < $1.rawValue }
+                if let data = try? JSONEncoder().encode(encoded),
+                   let string = String(data: data, encoding: .utf8) {
+                    selectedEventFiltersData = string
+                }
+            }
+            return filters
+        }
+        set {
+            let encoded = Array(newValue).sorted { $0.rawValue < $1.rawValue }
+            if let data = try? JSONEncoder().encode(encoded),
+               let string = String(data: data, encoding: .utf8),
+               selectedEventFiltersData != string {
+                objectWillChange.send()
+                selectedEventFiltersData = string
+            }
+        }
+    }
+
+    private static var defaultEventFilters: Set<EventFilter> {
+        [.mining, .heartbeats, .drops, .warnings, .errors, .system]
+    }
+
 #if DEBUG
     /// Whether Overview should render a synthetic queue for testing/screenshots.
     @AppStorage("debugFakeQueueEnabled", store: Settings.appStorageStore)

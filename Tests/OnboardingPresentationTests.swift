@@ -31,10 +31,10 @@ final class OnboardingPresentationTests: XCTestCase {
         // Then
         XCTAssertTrue(navigation.showOnboarding)
         XCTAssertEqual(navigation.onboardingPresentation?.accountState, .noAccounts)
-        XCTAssertEqual(navigation.onboardingPresentation?.title, "Connect an account when you're ready")
+        XCTAssertEqual(navigation.onboardingPresentation?.title, "Connect Twitch")
     }
 
-    func test_1PlusAccounts_NoPreferences_PanelVisible_GamePrompt() {
+    func test_1PlusAccounts_NoPreferences_PanelVisible_ReadyState() {
         // Given
         let account = Account(id: "1", username: "test", accessToken: "token", refreshToken: "refresh", tokenExpiry: Date().addingTimeInterval(3600), scopes: [])
         minerManager.addAccount(account)
@@ -46,11 +46,12 @@ final class OnboardingPresentationTests: XCTestCase {
         
         // Then
         XCTAssertTrue(navigation.showOnboarding)
-        XCTAssertTrue(navigation.onboardingPresentation?.showsGamePreferences ?? false)
-        XCTAssertEqual(navigation.onboardingPresentation?.title, "Refine what SwiftMiner should prioritize")
+        XCTAssertFalse(navigation.onboardingPresentation?.showsGamePreferences ?? true)
+        XCTAssertFalse(navigation.onboardingPresentation?.showsPreferences ?? true)
+        XCTAssertEqual(navigation.onboardingPresentation?.title, "SwiftMiner is ready")
     }
 
-    func test_1PlusAccounts_Preferences_NotSyncing_PanelHidden() {
+    func test_1PlusAccounts_Preferences_NotRequiredForReadyState() {
         // Given
         let account = Account(id: "1", username: "test", accessToken: "token", refreshToken: "refresh", tokenExpiry: Date().addingTimeInterval(3600), scopes: [])
         minerManager.addAccount(account)
@@ -66,8 +67,9 @@ final class OnboardingPresentationTests: XCTestCase {
         navigation.refreshOnboardingPresentation()
         
         // Then
-        XCTAssertFalse(navigation.showOnboarding)
-        XCTAssertNil(navigation.onboardingPresentation)
+        XCTAssertTrue(navigation.showOnboarding)
+        XCTAssertFalse(navigation.onboardingPresentation?.showsGamePreferences ?? true)
+        XCTAssertEqual(navigation.onboardingPresentation?.title, "SwiftMiner is ready")
     }
 
     func test_Dismissed_PanelHidden() {

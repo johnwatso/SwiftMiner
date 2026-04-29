@@ -91,7 +91,11 @@ struct MinerStateCard: View {
 
                 Spacer()
 
-                if progress.minutesRemaining > 0 {
+                if progress.progressFraction == 0, progress.minutesRemaining > 0 {
+                    Text("Checking progress with Twitch")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if progress.minutesRemaining > 0 {
                     Text("\(progress.minutesRemaining) min remaining")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -571,7 +575,10 @@ struct MinerActivitySnapshot {
         if miner.status == .watching, let campaign {
             let progress = activeDropProgress(for: campaign, miner: miner)
             let detail = progress.map { item in
-                item.remainingMinutes > 0
+                if item.currentMinutes == 0, item.remainingMinutes > 0 {
+                    return "\(item.dropName) · checking progress with Twitch"
+                }
+                return item.remainingMinutes > 0
                     ? "\(item.dropName) · \(item.remainingMinutes) min remaining"
                     : "\(item.dropName) ready to claim"
             } ?? "Tracking eligible stream progress"
@@ -757,22 +764,24 @@ struct MinerActivitySnapshot {
     private static func activeDropProgress(
         for campaign: Campaign,
         miner: MinerManager.ManagedMiner
-    ) -> (dropName: String, fraction: Double, remainingMinutes: Int)? {
+    ) -> (dropName: String, fraction: Double, remainingMinutes: Int, currentMinutes: Int)? {
         guard let drop = campaign.drops.first(where: { !$0.isClaimed && !$0.isClaimable })
             ?? campaign.drops.first(where: { !$0.isClaimed }) else {
             return nil
         }
 
         let dropState = miner.stateStore?.dropStates.first { $0.dropId == drop.id }
-        let currentMinutes = dropState?.progressMinutes ?? drop.progress?.currentMinutes ?? 0
-        let requiredMinutes = dropState?.requiredMinutes ?? drop.requiredMinutes
+        let currentMinutes = max(dropState?.progressMinutes ?? 0, drop.progress?.currentMinutes ?? 0)
+        let requiredMinutes = max(dropState?.requiredMinutes ?? 0, drop.progress?.requiredMinutes ?? drop.requiredMinutes)
         guard requiredMinutes > 0 else { return nil }
 
         let fraction = min(1.0, max(0.0, Double(currentMinutes) / Double(requiredMinutes)))
+        let dropName = drop.progress?.dropName.isEmpty == false ? drop.progress?.dropName ?? drop.name : drop.name
         return (
-            dropName: drop.name,
+            dropName: dropName,
             fraction: fraction,
-            remainingMinutes: max(0, requiredMinutes - currentMinutes)
+            remainingMinutes: max(0, requiredMinutes - currentMinutes),
+            currentMinutes: currentMinutes
         )
     }
 
