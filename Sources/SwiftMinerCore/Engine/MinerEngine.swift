@@ -913,8 +913,22 @@ public actor MinerEngine {
                         }
                     }
 
-                    // Check if we should claim any drops
+                    // Check if we should claim any drops. If claiming or inventory sync
+                    // removes the current campaign from the mineable set, rescan now.
                     _ = await claimReadyDrops()
+                    if let currentCampaignId = session?.currentCampaignId {
+                        let currentStillMineable = candidateCampaigns(
+                            from: allCampaigns,
+                            priorityGames: priorityGames,
+                            excludedGames: excludedGames,
+                            strategy: miningStrategy
+                        ).contains { $0.id == currentCampaignId }
+
+                        if !currentStillMineable {
+                            log("Current campaign is no longer mineable after claim sync. Switching target.")
+                            shouldSwitchChannel = true
+                        }
+                    }
                     
                     // Conditional claim polling: Check every 2 minutes when actively mining
                     // This reduces claim latency without adding background churn when idle

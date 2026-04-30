@@ -39,6 +39,8 @@ final class AppUpdater: NSObject, ObservableObject {
     @Published private(set) var hasPublicKey = false
     @Published private(set) var bundlePath = Bundle.main.bundlePath
     @Published private(set) var selectedChannel: UpdateChannel = .stable
+    @Published private(set) var automaticallyChecksForUpdates = false
+    @Published private(set) var automaticallyDownloadsUpdates = false
 
 #if canImport(Sparkle)
     private var updaterController: SPUStandardUpdaterController?
@@ -72,16 +74,20 @@ final class AppUpdater: NSObject, ObservableObject {
                 updaterDelegate: self,
                 userDriverDelegate: nil
             )
-            updaterController?.updater.automaticallyChecksForUpdates = true
-            updaterController?.updater.automaticallyDownloadsUpdates = true
+            automaticallyChecksForUpdates = updaterController?.updater.automaticallyChecksForUpdates ?? false
+            automaticallyDownloadsUpdates = updaterController?.updater.automaticallyDownloadsUpdates ?? false
             canCheckForUpdates = true
-            startAutoCheckLoop()
+            updateAutoCheckLoop()
         } else {
             updaterController = nil
             canCheckForUpdates = false
+            automaticallyChecksForUpdates = false
+            automaticallyDownloadsUpdates = false
         }
 #else
         canCheckForUpdates = false
+        automaticallyChecksForUpdates = false
+        automaticallyDownloadsUpdates = false
 #endif
     }
 
@@ -95,6 +101,30 @@ final class AppUpdater: NSObject, ObservableObject {
 #if canImport(Sparkle)
         updaterController?.updater.checkForUpdatesInBackground()
 #endif
+    }
+
+    func setAutomaticallyChecksForUpdates(_ isEnabled: Bool) {
+#if canImport(Sparkle)
+        updaterController?.updater.automaticallyChecksForUpdates = isEnabled
+#endif
+        automaticallyChecksForUpdates = isEnabled
+        updateAutoCheckLoop()
+    }
+
+    func setAutomaticallyDownloadsUpdates(_ isEnabled: Bool) {
+#if canImport(Sparkle)
+        updaterController?.updater.automaticallyDownloadsUpdates = isEnabled
+#endif
+        automaticallyDownloadsUpdates = isEnabled
+    }
+
+    private func updateAutoCheckLoop() {
+        if automaticallyChecksForUpdates {
+            startAutoCheckLoop()
+        } else {
+            autoCheckTask?.cancel()
+            autoCheckTask = nil
+        }
     }
 
     private func startAutoCheckLoop() {

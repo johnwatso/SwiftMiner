@@ -97,60 +97,10 @@ The latest GitHub release is the most stable version.
 
 Building from the current `main` branch includes newer changes that have not been released yet. These builds may contain bugs, incomplete features, or breaking changes.
 
-## First Run
-
-SwiftMiner uses Twitch device-code authentication.
-
-1. Click `Add Account`
-2. Visit [twitch.tv/activate](https://www.twitch.tv/activate)
-3. Enter the code shown in the app
-4. Sign in and approve access
-
-Accounts are restored on launch after being added.
-
-> [!CAUTION]
-> OAuth tokens are stored in `~/Library/Application Support/com.swiftminer/` in encrypted form.
->
-> The encryption key is tied to the machine, not your macOS login. Access to the machine allows decryption and reuse of tokens.
-
 ## Requirements
 
 - macOS 26+
 - Internet access
-
-For building from source:
-
-- Xcode 16+
-- XcodeGen
-
-## Building From Source
-
-Generate the Xcode project:
-
-```bash
-xcodegen generate
-open SwiftMiner.xcodeproj
-```
-
-Build the app:
-
-```bash
-xcodebuild -project SwiftMiner.xcodeproj -scheme SwiftMiner -destination 'platform=macOS' build
-```
-
-Run the tests:
-
-```bash
-xcodebuild -project SwiftMiner.xcodeproj -scheme SwiftMiner -destination 'platform=macOS' test
-```
-
-## Configuration
-
-The app reads `TWITCH_CLIENT_ID` from the environment if provided.
-
-```bash
-export TWITCH_CLIENT_ID=your_client_id
-```
 
 ## Project Layout
 
@@ -165,25 +115,7 @@ scripts/            build and release automation
 
 ## Architecture
 
-SwiftMiner is split into two layers:
-
-1. `SwiftMiner`
-
-   macOS app layer for UI, onboarding, settings, and notifications.
-
-2. `SwiftMinerCore`
-
-   Mining layer for engine state, accounts, Twitch APIs, watch sessions, and claims.
-
-High-level flow:
-
-```text
-SwiftUI App
-  -> AppModel / NavigationModel
-  -> MinerManager
-  -> per-account MinerEngine actors
-  -> Twitch services: auth, API, watch, campaign, inventory, claim
-```
+SwiftMiner is a native Xcode project split between the macOS app and `SwiftMinerCore`, which contains the mining engine, Twitch services, models, and account state.
 
 ## Notes and Risk
 
@@ -208,18 +140,17 @@ SwiftUI App
 > [!NOTE]
 > Performance depends on system resources, network conditions, and the number of accounts being managed.
 
+## Issues
+
+Please raise a GitHub issue if something breaks, behaves unexpectedly, or needs attention.
+
+SwiftMiner depends on Twitch's private behavior for Drops, watch progress, and claiming. Changes on Twitch's side can break the app without warning. To reduce downtime, enable automatic updates or unattended updates where possible so fixes are installed as soon as they are released.
+
 ## Related Docs
 
 - [Architecture Overview](Documentation/ARCHITECTURE.md)
 - [Engine Architecture](Documentation/EngineArchitecture.md)
 - [Release Runbook](Documentation/RELEASING.md)
-
-## Contributing
-
-Keep pull requests small and focused.
-
-- UI changes should include screenshots
-- Engine changes should include or update tests where possible
 
 ## License
 
