@@ -3,15 +3,25 @@
     <channel>
         <title>SwiftMiner</title>
         <item>
-            <title>1.11</title>
+            <title>1.21</title>
             <pubDate>Sun, 29 Mar 2026 12:08:29 +1300</pubDate>
-            <sparkle:version>2026032910</sparkle:version>
-            <sparkle:shortVersionString>1.11</sparkle:shortVersionString>
+            <sparkle:version>2026050109</sparkle:version>
+            <sparkle:shortVersionString>1.21</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-            <sparkle:releaseNotesLink>https://johnwatso.github.io/SwiftMiner/release-notes/1.20.html</sparkle:releaseNotesLink>
+            <sparkle:releaseNotesLink>https://johnwatso.github.io/SwiftMiner/release-notes/1.21.html</sparkle:releaseNotesLink>
             <sparkle:fullReleaseNotesLink>https://johnwatso.github.io/SwiftMiner/release-notes/</sparkle:fullReleaseNotesLink>
             <description><![CDATA[
                 <h2>What Changed</h2>
+                <h3>Version 1.21</h3>
+                <ul>
+                    <li>Adds Software Updates controls for choosing the stable or beta Sparkle feed.</li>
+                    <li>Adds settings for prompting when updates are available and allowing unattended update installs when macOS permits them.</li>
+                    <li>Updates the stable Sparkle appcast and release-note links for SwiftMiner 1.21 build 2026050109.</li>
+                    <li>Improves completed drop history when Twitch no longer exposes an expired campaign.</li>
+                    <li>Uses cached completed campaign data only as a fallback when a campaign is missing from Twitch, while fresh Twitch campaign data continues to win when available.</li>
+                    <li>Fixes completed miner rows that could appear as waiting after both accounts had already claimed the campaign.</li>
+                    <li>Adds a maintenance action in Advanced settings to clear cached drop history without removing accounts or app preferences.</li>
+                </ul>
                 <h3>Version 1.20</h3>
                 <ul>
                     <li>Adds smarter stream selection, including optional stream spreading so multiple miners avoid piling onto the same verified live channel when enough alternatives are available.</li>

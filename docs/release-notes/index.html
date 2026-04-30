@@ -43,6 +43,16 @@
   <main>
     <h1>SwiftMiner Release Notes</h1>
     <p class="meta">Recent Sparkle update history</p>
+    <h2>Version 1.21</h2>
+    <ul>
+      <li>Adds Software Updates controls for choosing the stable or beta Sparkle feed.</li>
+      <li>Adds settings for prompting when updates are available and allowing unattended update installs when macOS permits them.</li>
+      <li>Updates the stable Sparkle appcast and release-note links for SwiftMiner 1.21 build 2026050109.</li>
+      <li>Improves completed drop history when Twitch no longer exposes an expired campaign.</li>
+      <li>Uses cached completed campaign data only as a fallback when a campaign is missing from Twitch, while fresh Twitch campaign data continues to win when available.</li>
+      <li>Fixes completed miner rows that could appear as waiting after both accounts had already claimed the campaign.</li>
+      <li>Adds a maintenance action in Advanced settings to clear cached drop history without removing accounts or app preferences.</li>
+    </ul>
     <h2>Version 1.20</h2>
     <ul>
       <li>Adds smarter stream selection, including optional stream spreading so multiple miners avoid piling onto the same verified live channel when enough alternatives are available.</li>
@@ -77,6 +87,7 @@
       <li>Automatically refreshes expired Twitch tokens where possible and gives clearer re-auth guidance when a session needs attention.</li>
       <li>Polishes onboarding, account details, notification handling, and the Set Steam ID flow.</li>
     </ul>
+    <p><a href="./1.21.html">Version 1.21 release page</a></p>
     <p><a href="./1.20.html">Version 1.20 release page</a></p>
   </main>
 </body>

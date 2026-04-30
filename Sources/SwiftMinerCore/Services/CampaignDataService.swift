@@ -228,6 +228,12 @@ public actor CampaignDataService {
         lastCampaignLoad = nil
         lastInventoryLoad = nil
     }
+
+    /// Clear all cached campaign and inventory snapshots across accounts.
+    public static func clearAllCachedDropData() {
+        CampaignDiskCache.clearAll()
+        InventoryDiskCache.clearAll()
+    }
     
     // MARK: - Private: Cache Management
     
