@@ -9,13 +9,23 @@ struct MinerDetailView: View {
     let miner: MinerManager.ManagedMiner
 
     @Environment(NavigationModel.self) private var navigation
+    @State private var activitySummary: MinerManager.MinerActivitySummary?
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 MinerStateCard(miner: miner, onAction: {
                     if case .blocked(let reasons) = miner.primaryState, reasons.contains(.accountNotLinked) {
-                        Task { try? await navigation.minerManager.startMiner(minerId: miner.id, priorityGames: [], excludedGames: [], strategy: .mineAll) }
+                        Task {
+                            try? await navigation.minerManager.startMiner(
+                                minerId: miner.id,
+                                priorityGames: [],
+                                excludedGames: [],
+                                strategy: .mineAll,
+                                avoidDuplicateStreams: Settings.shared.avoidDuplicateStreams,
+                                prioritiseFollowedStreamers: Settings.shared.prioritiseFollowedStreamers
+                            )
+                        }
                     }
                 }, onDismiss: { gameId in
                     Task {
@@ -26,17 +36,19 @@ struct MinerDetailView: View {
                 })
 
                 secondaryStatsSection
+                watchingStreamerSection
                 controlsSection
-                
-#if DEBUG
-                if !miner.debugWinningQueue.isEmpty {
-                    debugWinningQueueSection
-                }
-#endif
                 
                 logSection
             }
             .padding(24)
+        }
+        .task(id: miner.id) {
+            await refreshActivitySummary()
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 5 * 1_000_000_000)
+                await refreshActivitySummary()
+            }
         }
         .navigationTitle(miner.displayName)
         .toolbar {
@@ -49,6 +61,10 @@ struct MinerDetailView: View {
                 .help("Remove miner")
             }
         }
+    }
+
+    private func refreshActivitySummary() async {
+        activitySummary = await navigation.minerManager.getMinerActivitySummary(minerId: miner.id)
     }
 
     // MARK: Stats
@@ -69,6 +85,25 @@ struct MinerDetailView: View {
                 color: .purple
             )
         }
+    }
+
+    // MARK: Watching Streamer
+
+    private var watchingStreamerSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Watching Streamer")
+                .font(.headline)
+
+            WatchingStreamerCard(
+                streamerName: activitySummary?.currentChannelName,
+                streamerId: activitySummary?.currentChannelId,
+                campaignName: activitySummary?.currentCampaignName ?? miner.currentCampaign,
+                status: miner.status,
+                isRunning: miner.isRunning
+            )
+        }
+        .padding(20)
+        .glassCard()
     }
 
     // MARK: Controls
@@ -136,51 +171,6 @@ struct MinerDetailView: View {
         .glassCard()
     }
 
-#if DEBUG
-    private var debugWinningQueueSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Winning Queue")
-                    .font(.headline)
-                
-                Spacer()
-                
-                Text("DEBUG ONLY")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.orange)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(.orange.opacity(0.12), in: Capsule())
-            }
-
-            VStack(spacing: 8) {
-                ForEach(miner.debugWinningQueue) { campaign in
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(campaign.game.name)
-                                .font(.subheadline.weight(.medium))
-                            Text(campaign.name)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        
-                        Spacer()
-                        
-                        Text(campaign.miningStatus.rawValue)
-                            .font(.caption2.monospaced())
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
-                    }
-                    .padding(10)
-                    .glassControlSurface()
-                }
-            }
-        }
-        .padding(20)
-        .glassCard()
-    }
-#endif
 }
 
 private struct MinerStatCard: View {
@@ -224,6 +214,94 @@ private struct MinerStatCard: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 16)
         .padding(.horizontal, 12)
+        .glassPanel(cornerRadius: GlassRadius.small)
+    }
+}
+
+private struct WatchingStreamerCard: View {
+    let streamerName: String?
+    let streamerId: String?
+    let campaignName: String?
+    let status: MinerManager.MinerStatus
+    let isRunning: Bool
+
+    private var title: String {
+        guard let streamerName, !streamerName.isEmpty else {
+            return isRunning ? "Waiting for stream" : "Not watching"
+        }
+        return streamerName
+    }
+
+    private var subtitle: String {
+        if let campaignName, !campaignName.isEmpty {
+            return campaignName
+        }
+
+        switch status {
+        case .watching:
+            return "Mining active drops"
+        case .waitingForStream:
+            return "No eligible live stream yet"
+        case .fetchingCampaigns:
+            return "Refreshing campaigns"
+        case .paused:
+            return "Miner is paused"
+        case .error, .blockedAccountNotLinked:
+            return "Needs attention"
+        default:
+            return isRunning ? "Ready when a stream is available" : "Start miner to watch"
+        }
+    }
+
+    private var iconName: String {
+        streamerName == nil ? "tv" : "play.tv.fill"
+    }
+
+    private var tint: Color {
+        streamerName == nil ? .secondary : .purple
+    }
+
+    var body: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
+                    .fill(tint.opacity(0.12))
+                    .frame(width: 54, height: 54)
+
+                Image(systemName: iconName)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(tint)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.headline.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+
+                Text(subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+
+                if let streamerId, !streamerId.isEmpty {
+                    Text("Channel ID \(streamerId)")
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            if status == .watching {
+                Label("Live", systemImage: "dot.radiowaves.left.and.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.green)
+                    .labelStyle(.titleAndIcon)
+            }
+        }
+        .padding(16)
         .glassPanel(cornerRadius: GlassRadius.small)
     }
 }

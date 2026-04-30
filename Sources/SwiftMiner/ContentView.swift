@@ -342,15 +342,6 @@ struct OverviewView: View {
                     showsEditButton: true
                 )
             }
-
-            if !displayedActiveFeedItems.isEmpty {
-                campaignRailSection(
-                    title: overviewQueueTitle,
-                    items: displayedActiveFeedItems,
-                    prominence: .feature,
-                    layout: .staggered
-                )
-            }
         }
         .padding(.vertical, 2)
     }
@@ -444,23 +435,12 @@ struct OverviewView: View {
                     || state == .claimable
                     || state == .inProgress
                     || isBeingWatched(campaign)
-                    || isQueueEligible(campaign)
             }
             .sorted(by: campaignDisplaySort)
     }
 
-    private func isQueueEligible(_ campaign: CampaignViewData) -> Bool {
-        visualState(for: campaign) == .idle
-            && campaign.isAccountConnected
-            && !campaign.isCompleted
-            && campaign.startDate <= Date()
-            && campaign.endDate > Date()
-            && campaign.overviewRemainingRewardCount > 0
-    }
-
     private func isPrioritisedRailEligible(_ campaign: CampaignViewData) -> Bool {
         campaign.isDisplayableInOverview
-            || isQueueEligible(campaign)
             || (campaign.relevance == .prioritised && !campaign.isCompleted)
     }
 
@@ -478,49 +458,8 @@ struct OverviewView: View {
         return items
     }
 
-    private var activeFeedItems: [CampaignRailItem] {
-        let items = activeFeedCampaigns.prefix(8).map { makeRailItem(for: $0, section: .active) }
-        return Array(items)
-    }
-
-    private var recentFeedItems: [CampaignRailItem] {
-        recentCampaigns.prefix(8).map { makeRailItem(for: $0, section: .recent) }
-    }
-
     private var displayedPrioritisedFeedItems: [CampaignRailItem] {
         prioritisedFeedItems
-    }
-
-    private var displayedActiveFeedItems: [CampaignRailItem] {
-        guard settings.showOverviewQueue else { return [] }
-        return overviewQueueFeedItems
-    }
-
-    private var selectedOverviewQueueMiner: MinerManager.ManagedMiner? {
-        guard !settings.overviewQueueMinerId.isEmpty else { return nil }
-        return navigation.minerManager.miners.first { $0.id == settings.overviewQueueMinerId }
-    }
-
-    private var overviewQueueTitle: String {
-        "Up Next"
-    }
-
-    private var overviewQueueFeedItems: [CampaignRailItem] {
-#if DEBUG
-        if settings.debugFakeQueueEnabled {
-            return generateFakeQueueItems()
-        }
-#endif
-
-        guard let miner = selectedOverviewQueueMiner else {
-            return activeFeedItems
-        }
-
-        let items = selectedMinerQueueCampaigns(for: miner)
-            .prefix(8)
-            .map { campaign in makeQueueRailItem(for: campaign, miner: miner) }
-
-        return Array(items)
     }
 
     private func makeRailItem(for campaign: CampaignViewData, section: CampaignFeedSection) -> CampaignRailItem {
@@ -551,212 +490,6 @@ struct OverviewView: View {
         )
     }
 
-    private func selectedMinerQueueCampaigns(for miner: MinerManager.ManagedMiner) -> [Campaign] {
-        let configuredPriorityGames = miner.priorityGames.isEmpty ? settings.priorityGames : miner.priorityGames
-        let priorityKeys = configuredPriorityGames.map(normalizedGameKey).filter { !$0.isEmpty }
-        let prioritySet = Set(priorityKeys)
-        let excludedSet = Set(settings.excludedGames.map(normalizedGameKey).filter { !$0.isEmpty })
-
-        let eligible = miner.allCampaigns.filter { campaign in
-            guard !isSpecialEventsCampaign(campaign) else { return false }
-            guard !campaign.drops.isEmpty else { return false }
-            guard campaign.isTimeActive, campaign.status != .disabled else { return false }
-            guard !campaign.drops.allSatisfy(\.isClaimed) else { return false }
-            guard campaign.isAccountConnected, campaign.hasDropsEnabled, !campaign.eligibleDrops.isEmpty else { return false }
-            guard settings.enableBadgesEmotes || !campaign.hasOnlyBadgesOrEmotes else { return false }
-
-            let gameName = normalizedGameKey(campaign.game.name)
-            let gameId = normalizedGameKey(campaign.game.id)
-            guard !excludedSet.contains(gameName), !excludedSet.contains(gameId) else { return false }
-            guard settings.miningStrategy != .onlyPriority || prioritySet.contains(gameName) || prioritySet.contains(gameId) else { return false }
-
-            switch campaign.miningStatus {
-            case .available, .inProgress, .claimable:
-                return true
-            case .claimed, .expired:
-                return false
-            }
-        }
-
-        var sorted = sortedQueueCampaigns(eligible, priorityKeys: priorityKeys)
-        if let currentCampaignId = miner.currentCampaignId,
-           let index = sorted.firstIndex(where: { $0.id == currentCampaignId }) {
-            let current = sorted.remove(at: index)
-            sorted.insert(current, at: 0)
-        }
-        return sorted
-    }
-
-#if DEBUG
-    private func generateFakeQueueItems() -> [CampaignRailItem] {
-        let count = settings.clampedDebugFakeQueueLength
-        let source = settings.debugFakeQueueSource
-        
-        let gameNames: [String]
-        switch source {
-        case .prioritisedGames:
-            gameNames = settings.priorityGames
-        case .customGames:
-            gameNames = settings.debugFakeQueueCustomGames
-        }
-        
-        let names = gameNames.isEmpty ? ["Rust", "Cyberpunk 2077", "Starfield", "Valheim"] : gameNames
-        
-        return (0..<count).map { index in
-            let name = names[index % names.count]
-            let campaignName = "Debug Campaign \(index + 1)"
-            let isWatching = index == 0
-            
-            return CampaignRailItem(
-                id: "fake-\(index)",
-                section: .active,
-                gameName: name,
-                campaignName: campaignName,
-                progressText: isWatching ? "42% reward progress" : "Scheduled to start soon",
-                progressPercent: isWatching ? 0.42 : 0,
-                artworkURL: navigation.minerManager.dataCoordinator.steamArtworkOverrides[name],
-                tint: gameTintColor(forGameName: name),
-                hasOnlyBadgesOrEmotes: false,
-                visualState: isWatching ? .watching : .idle,
-                watchers: isWatching ? [CampaignWatcher(id: "debug", username: "DebugUser", initials: "DB")] : [],
-                isDimmed: false,
-                isPlaceholder: true,
-                showsLiveMotion: false,
-                game: Game(id: "debug-\(index)", name: name, boxArtURL: nil)
-            )
-        }
-    }
-#endif
-
-    private func makeQueueRailItem(for campaign: Campaign, miner: MinerManager.ManagedMiner) -> CampaignRailItem {
-        let state = queueVisualState(for: campaign, miner: miner)
-        let artworkURL = queueArtworkURL(for: campaign)
-        let watchers = queueWatchers(for: campaign, miner: miner)
-
-        return CampaignRailItem(
-            id: "queue-\(miner.id)-\(campaign.id)",
-            section: .active,
-            gameName: campaign.game.name,
-            campaignName: campaign.name,
-            progressText: queueDetailText(for: campaign, state: state, watchers: watchers),
-            progressPercent: queueProgressPercent(for: campaign, state: state),
-            artworkURL: artworkURL,
-            tint: gameTintColor(forGameName: campaign.game.name),
-            hasOnlyBadgesOrEmotes: campaign.hasOnlyBadgesOrEmotes,
-            visualState: state,
-            watchers: watchers,
-            isDimmed: false,
-            isPlaceholder: false,
-            showsLiveMotion: state == .watching || state == .inProgress || state == .claimable,
-            game: campaign.game
-        )
-    }
-
-    private func queueArtworkURL(for campaign: Campaign) -> URL? {
-        if SteamArtworkService.supportsSteamArtwork(forGameName: campaign.game.name, gameId: campaign.game.id) {
-            return navigation.minerManager.dataCoordinator.steamArtworkOverrides[campaign.game.name] ?? campaign.game.boxArtURL
-        }
-        return campaign.game.boxArtURL
-    }
-
-    private func queueVisualState(for campaign: Campaign, miner: MinerManager.ManagedMiner) -> CampaignVisualState {
-        if miner.status == .watching, miner.currentCampaignId == campaign.id {
-            return .watching
-        }
-
-        switch campaign.miningStatus {
-        case .claimable:
-            return .claimable
-        case .inProgress:
-            return .inProgress
-        case .available:
-            return .idle
-        case .claimed:
-            return .claimed
-        case .expired:
-            return .idle
-        }
-    }
-
-    private func queueDetailText(for campaign: Campaign, state: CampaignVisualState, watchers: [CampaignWatcher]) -> String {
-        switch state {
-        case .watching:
-            let watcherCount = watchers.count
-            return "\(watcherCount) miner\(watcherCount == 1 ? "" : "s") watching"
-        case .claimable:
-            return "Ready to claim"
-        case .inProgress:
-            let percent = Int(queueProgressPercent(for: campaign, state: state).rounded())
-            return percent > 0 ? "\(percent)% reward progress" : "Progress synced from Drops"
-        case .claimed:
-            return "All campaign rewards claimed"
-        case .idle:
-            return "Likely target for this miner"
-        }
-    }
-
-    private func queueProgressPercent(for campaign: Campaign, state: CampaignVisualState) -> Double {
-        if state == .claimable {
-            return 100
-        }
-
-        let fractions = campaign.drops.compactMap { drop -> Double? in
-            guard !drop.isClaimed, drop.requiredMinutes > 0 else { return nil }
-            let currentMinutes = drop.progress?.currentMinutes ?? 0
-            return min(1.0, max(0.0, Double(currentMinutes) / Double(drop.requiredMinutes)))
-        }
-
-        return (fractions.max() ?? 0) * 100
-    }
-
-    private func queueWatchers(for campaign: Campaign, miner: MinerManager.ManagedMiner) -> [CampaignWatcher] {
-        guard miner.status == .watching, miner.currentCampaignId == campaign.id else { return [] }
-        return [
-            CampaignWatcher(
-                id: miner.accountId,
-                username: miner.username,
-                initials: initials(for: miner.username)
-            )
-        ]
-    }
-
-    private func sortedQueueCampaigns(_ campaigns: [Campaign], priorityKeys: [String]) -> [Campaign] {
-        campaigns.enumerated().sorted { lhs, rhs in
-            let left = lhs.element
-            let right = rhs.element
-            let leftPriority = queuePriorityIndex(for: left, priorityKeys: priorityKeys)
-            let rightPriority = queuePriorityIndex(for: right, priorityKeys: priorityKeys)
-            let leftIsPriority = leftPriority != Int.max
-            let rightIsPriority = rightPriority != Int.max
-
-            switch settings.miningStrategy {
-            case .mineAll:
-                if left.endDate != right.endDate { return left.endDate < right.endDate }
-                if leftIsPriority != rightIsPriority { return leftIsPriority }
-                if leftPriority != rightPriority { return leftPriority < rightPriority }
-            case .prioritiseSelected, .onlyPriority:
-                if leftIsPriority != rightIsPriority { return leftIsPriority }
-                if leftPriority != rightPriority { return leftPriority < rightPriority }
-                if left.endDate != right.endDate { return left.endDate < right.endDate }
-            }
-
-            return lhs.offset < rhs.offset
-        }
-        .map(\.element)
-    }
-
-    private func queuePriorityIndex(for campaign: Campaign, priorityKeys: [String]) -> Int {
-        let gameName = normalizedGameKey(campaign.game.name)
-        let gameId = normalizedGameKey(campaign.game.id)
-        return priorityKeys.firstIndex { $0 == gameName || $0 == gameId } ?? Int.max
-    }
-
-    private func isSpecialEventsCampaign(_ campaign: Campaign) -> Bool {
-        let name = campaign.game.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let id = campaign.game.id.trimmingCharacters(in: .whitespacesAndNewlines)
-        return name.localizedCaseInsensitiveCompare("Just Chatting") == .orderedSame || id == "509658"
-    }
-
     private func currentCampaign(for miner: MinerManager.ManagedMiner) -> CampaignViewData? {
         if let campaignId = miner.currentCampaignId {
             return campaigns.first(where: { $0.id == campaignId })
@@ -783,7 +516,9 @@ struct OverviewView: View {
                 minerId: miner.id,
                 priorityGames: [],
                 excludedGames: [],
-                strategy: .mineAll
+                strategy: .mineAll,
+                avoidDuplicateStreams: Settings.shared.avoidDuplicateStreams,
+                prioritiseFollowedStreamers: Settings.shared.prioritiseFollowedStreamers
             )
         }
     }
@@ -1020,7 +755,7 @@ struct OverviewView: View {
 
     private var campaignSummarySection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            sectionHeading("Campaign Progress", subtitle: "Active, queued, and completed drop campaigns.")
+            sectionHeading("Campaign Progress", subtitle: "Active and completed drop campaigns.")
 
             if summaryCampaigns.isEmpty {
                 CampaignLibraryAmbientRow()
@@ -1038,7 +773,7 @@ struct OverviewView: View {
     }
 
     private var summaryCampaigns: [CampaignViewData] {
-        // Active/queued campaigns are always shown — they don't need Twitch progress yet.
+        // Active campaigns are always shown — they don't need Twitch progress yet.
         // Only fall back to requiring real progress for recent (completed) campaigns.
         if !activeFeedCampaigns.isEmpty {
             return Array(activeFeedCampaigns.prefix(6))
@@ -1339,9 +1074,7 @@ private struct OverviewCampaignSummaryRow: View {
                     .lineLimit(2)
 
                 if let progressFraction {
-                    ProgressView(value: progressFraction)
-                        .progressViewStyle(.linear)
-                        .tint(tint)
+                    AnimatedLinearProgressView(value: progressFraction, tint: tint)
                         .frame(maxWidth: 220)
                 }
 
@@ -2514,15 +2247,32 @@ private struct WindowZoomConfigurator: NSViewRepresentable {
         let view = NSView()
         DispatchQueue.main.async {
             guard let window = view.window else { return }
-            window.delegate = context.coordinator
+            configure(window, coordinator: context.coordinator)
         }
         return view
     }
 
-    func updateNSView(_ nsView: NSView, context: Context) {}
+    func updateNSView(_ nsView: NSView, context: Context) {
+        guard let window = nsView.window, !context.coordinator.didConfigure else { return }
+        configure(window, coordinator: context.coordinator)
+    }
 
-    final class Coordinator: NSObject, NSWindowDelegate {
-        func windowShouldEnterFullScreen(_ window: NSWindow) -> Bool { false }
+    private func configure(_ window: NSWindow, coordinator: Coordinator) {
+        coordinator.didConfigure = true
+        window.styleMask.insert(.resizable)
+        window.collectionBehavior.remove([
+            .fullScreenPrimary,
+            .fullScreenAuxiliary,
+            .fullScreenAllowsTiling
+        ])
+        window.collectionBehavior.insert([
+            .fullScreenNone,
+            .fullScreenDisallowsTiling
+        ])
+    }
+
+    final class Coordinator: NSObject {
+        var didConfigure = false
     }
 }
 

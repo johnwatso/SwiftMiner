@@ -70,6 +70,7 @@ private struct GeneralSettingsView: View {
     @ObservedObject var settings: Settings
     @EnvironmentObject private var updater: AppUpdater
     @Environment(NavigationModel.self) private var navigation
+    @StateObject private var loginItemSettings = LoginItemSettings()
 
     var body: some View {
         Form {
@@ -82,6 +83,23 @@ private struct GeneralSettingsView: View {
                 SettingsSecondaryText(settings.appPresenceMode.detail)
 
                 Toggle("Run in background when closed", isOn: $settings.runInBackground)
+                Toggle("Start at login", isOn: startAtLoginBinding)
+                    .onAppear {
+                        loginItemSettings.refresh()
+                    }
+                Toggle("Start minimised", isOn: $settings.startMinimized)
+
+                if loginItemSettings.requiresApproval {
+                    Label("Approve SwiftMiner in System Settings to finish enabling login launch.", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+
+                if let errorMessage = loginItemSettings.errorMessage {
+                    Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
             } header: {
                 Text("Application")
             }
@@ -95,11 +113,13 @@ private struct GeneralSettingsView: View {
             }
 
             Section {
-                Toggle("Show Up Next queue", isOn: $settings.showOverviewQueue)
+                Toggle("Show icons in Activity Log", isOn: $settings.showActivityLogIcons)
+                SettingsSecondaryText("Display a category icon next to each row in the Activity Log instead of a plain dot.")
 
-                SettingsSecondaryText("Displays the staggered campaign deck on the Overview page.")
+                Toggle("Animate new rows", isOn: $settings.animateActivityLogRows)
+                SettingsSecondaryText("Slide and fade new entries in as they appear.")
             } header: {
-                Text("Overview")
+                Text("Activity Log")
             }
 
             Section {
@@ -149,6 +169,14 @@ private struct GeneralSettingsView: View {
         }
         .formStyle(.grouped)
         .padding(24)
+    }
+
+    private var startAtLoginBinding: Binding<Bool> {
+        Binding {
+            loginItemSettings.isEnabled
+        } set: { isEnabled in
+            loginItemSettings.setEnabled(isEnabled)
+        }
     }
 
     @ViewBuilder
@@ -278,7 +306,9 @@ private struct AccountSettingsView: View {
                     excludedGames: settings.excludedGames,
                     strategy: settings.miningStrategy,
                     enableBadgesEmotes: settings.enableBadgesEmotes,
-                    showClaimNotifications: settings.showClaimNotifications
+                    showClaimNotifications: settings.showClaimNotifications,
+                    avoidDuplicateStreams: settings.avoidDuplicateStreams,
+                    prioritiseFollowedStreamers: settings.prioritiseFollowedStreamers
                 )
                 alertMessage = "Successfully imported account: \(account.username)"
                 showAlert = true
@@ -398,22 +428,17 @@ private struct MiningSettingsView: View {
                 }
                 
                 SettingsSecondaryText(strategyDetailText)
+
+                Toggle("Spread miners across streams", isOn: $settings.avoidDuplicateStreams)
+                SettingsSecondaryText("Avoids putting multiple miners on the same stream when a campaign has more than four verified live channels. Small restricted campaigns can still share streams.")
+
+                Toggle("Prioritise followed and subscribed streamers", isOn: $settings.prioritiseFollowedStreamers)
+                    .onChange(of: settings.prioritiseFollowedStreamers) { _, newValue in
+                        Task { await navigation.minerManager.updateFollowedStreamerPriority(enabled: newValue) }
+                    }
+                SettingsSecondaryText("When a followed or subscribed streamer is live and verified for a matching campaign, SwiftMiner chooses subscribed channels first, then followed channels, before falling back to normal stream ranking.")
             } header: {
                 Text("Strategy")
-            }
-
-            Section {
-                Picker("Queue Source", selection: $settings.overviewQueueMinerId) {
-                    Text("All Miners").tag("")
-                    ForEach(navigation.minerManager.miners) { miner in
-                        Text(miner.username).tag(miner.id)
-                    }
-                }
-                .disabled(!settings.showOverviewQueue)
-
-                SettingsSecondaryText("Choose whether the Overview queue uses all miners or one account.")
-            } header: {
-                Text("Overview Queue")
             }
 
             Section {
@@ -432,12 +457,6 @@ private struct MiningSettingsView: View {
         }
         .formStyle(.grouped)
         .padding(24)
-        .task {
-            clearStaleOverviewQueueMinerSelection()
-        }
-        .onChange(of: navigation.minerManager.miners.map(\.id)) { _, _ in
-            clearStaleOverviewQueueMinerSelection()
-        }
         .sheet(isPresented: $isShowingGameManagement) {
             GamePreferenceManagementView(
                 settings: settings,
@@ -463,11 +482,6 @@ private struct MiningSettingsView: View {
         return "\(count)"
     }
 
-    private func clearStaleOverviewQueueMinerSelection() {
-        guard !settings.overviewQueueMinerId.isEmpty else { return }
-        guard !navigation.minerManager.miners.contains(where: { $0.id == settings.overviewQueueMinerId }) else { return }
-        settings.overviewQueueMinerId = ""
-    }
 }
 
 // MARK: - Advanced Settings
@@ -591,26 +605,6 @@ private struct AdvancedSettingsView: View {
                     }
 
                 SettingsSecondaryText("Mines a random live channel for any time-active campaign, ignoring account linkage. Drops won't actually credit — for exercising the watch pipeline only.")
-                
-                Divider()
-                
-                Toggle("Enable Fake Queue", isOn: $settings.debugFakeQueueEnabled)
-                
-                if settings.debugFakeQueueEnabled {
-                    Picker("Data Source", selection: $settings.debugFakeQueueSource) {
-                        ForEach(Settings.DebugFakeQueueSource.allCases) { source in
-                            Text(source.displayName).tag(source)
-                        }
-                    }
-                    
-                    Stepper("Queue Length: \(settings.debugFakeQueueLength)", value: $settings.debugFakeQueueLength, in: 1...8)
-                    
-                    if settings.debugFakeQueueSource == .customGames {
-                        NavigationLink("Manage Custom Games") {
-                            DebugCustomGamesView(settings: settings)
-                        }
-                    }
-                }
             } header: {
                 Text("Debug Testing")
             }
@@ -670,45 +664,6 @@ private struct SettingsSecondaryText: View {
             .padding(.vertical, 1)
     }
 }
-
-#if DEBUG
-private struct DebugCustomGamesView: View {
-    @ObservedObject var settings: Settings
-    @State private var newGameName = ""
-
-    var body: some View {
-        List {
-            Section {
-                HStack {
-                    TextField("Game Name", text: $newGameName)
-                        .onSubmit { addGame() }
-                    
-                    Button("Add") { addGame() }
-                        .disabled(newGameName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-            } footer: {
-                Text("These names will be used to generate fake campaign cards.")
-            }
-
-            Section {
-                ForEach(settings.debugFakeQueueCustomGames, id: \.self) { game in
-                    Text(game)
-                }
-                .onDelete { settings.removeDebugFakeQueueGames(atOffsets: $0) }
-                .onMove { settings.moveDebugFakeQueueGames(fromOffsets: $0, toOffset: $1) }
-            }
-        }
-        .navigationTitle("Debug Custom Games")
-    }
-
-    private func addGame() {
-        let name = newGameName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { return }
-        settings.addDebugFakeQueueGame(name)
-        newGameName = ""
-    }
-}
-#endif
 
 // MARK: - Preview
 

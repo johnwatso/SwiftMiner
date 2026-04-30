@@ -99,7 +99,9 @@ public final class AppModel {
         await engine.updateMiningPreferences(
             priorityGames: Settings.shared.priorityGames,
             excludedGames: Settings.shared.excludedGames,
-            showClaimNotifications: Settings.shared.showClaimNotifications
+            showClaimNotifications: Settings.shared.showClaimNotifications,
+            avoidDuplicateStreams: Settings.shared.avoidDuplicateStreams,
+            prioritiseFollowedStreamers: Settings.shared.prioritiseFollowedStreamers
         )
 
         await engine.setStatusChangeHandler { [weak self] status in
@@ -164,7 +166,9 @@ public final class AppModel {
                 excludedGames: settings.excludedGames,
                 strategy: settings.miningStrategy,
                 enableBadgesEmotes: settings.enableBadgesEmotes,
-                showClaimNotifications: settings.showClaimNotifications
+                showClaimNotifications: settings.showClaimNotifications,
+                avoidDuplicateStreams: settings.avoidDuplicateStreams,
+                prioritiseFollowedStreamers: settings.prioritiseFollowedStreamers
             )
             return
         }

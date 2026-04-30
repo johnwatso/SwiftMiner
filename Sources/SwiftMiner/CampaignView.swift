@@ -302,7 +302,7 @@ struct DropsListView: View {
         }
 
         if selectedFilters == [.active] {
-            return "No campaigns are currently mining, in progress, or queued."
+            return "No campaigns are currently mining or in progress."
         }
 
         if selectedFilters == [.needsSetup] {
@@ -1428,25 +1428,6 @@ private struct CampaignStatePill: View {
     }
 }
 
-private struct CampaignQueueBadge: View {
-    let usernames: [String]
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "person.2.fill")
-                .font(.caption2)
-
-            Text(usernames.joined(separator: ", "))
-                .lineLimit(1)
-        }
-        .font(.caption2.weight(.medium))
-        .foregroundStyle(.primary)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(.thinMaterial, in: Capsule())
-    }
-}
-
 private struct CampaignMinerAttributionRow: View {
     let accountStates: [AccountState]
 
@@ -1913,7 +1894,7 @@ private enum CampaignCardState: String {
         case .waiting: return "Waiting"
         case .claimed: return "Completed"
         case .expired: return "Ended"
-        case .idle: return "Queued"
+        case .idle: return "Available"
         }
     }
 

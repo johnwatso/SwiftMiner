@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SwiftMiner 1.20 - Release Notes</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      margin: 0;
+      padding: 32px 20px 48px;
+      font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f4f6f8;
+      color: #0f1720;
+    }
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 28px;
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.86);
+      box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
+    }
+    h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
+    .meta { margin: 0 0 24px; color: #52606d; font-size: 14px; }
+    p { margin: 0 0 16px; }
+    h2 { margin: 28px 0 10px; font-size: 20px; }
+    ul { margin: 0 0 20px; padding-left: 22px; }
+    li { margin: 0 0 8px; }
+    a { color: #0a67a3; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #0b1015; color: #edf2f7; }
+      main {
+        background: rgba(15, 23, 32, 0.88);
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+      }
+      .meta { color: #9fb0c2; }
+      a { color: #73c3ff; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>SwiftMiner 1.20</h1>
+    <p class="meta">Version 1.20</p>
+    <h2>What Changed</h2>
+    <ul>
+      <li>Adds smarter stream selection, including optional stream spreading so multiple miners avoid piling onto the same verified live channel when enough alternatives are available.</li>
+      <li>Adds an option to prioritise followed and subscribed Twitch streamers, with subscriptions ranked ahead of follows during channel selection.</li>
+      <li>Adds a Watching Streamer panel to miner views so each account clearly shows the channel and campaign it is currently using.</li>
+      <li>Refreshes the Activity Log with clearer filters, optional category icons, new-row animation, timestamp formatting, and the new Activity Log navigation name.</li>
+      <li>Adds login launch controls, including Start at login, Start minimised, and approval/error messaging for macOS login item setup.</li>
+      <li>Improves drop claiming by syncing Twitch inventory before and after claims so completed and claimed rewards stay accurate.</li>
+      <li>Cleans up Overview and miner status language by removing the old Up Next/debug queue surfaces and showing waiting states more accurately.</li>
+      <li>Updates the Sparkle appcast and release-note links so the in-app updater can show richer What's New content.</li>
+    </ul>
+  </main>
+</body>
+</html>

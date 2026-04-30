@@ -4,6 +4,7 @@ import SwiftMinerCore
 /// Execution layer overview - scalable multi-miner workspace.
 struct MinersOverviewView: View {
     @Environment(NavigationModel.self) private var navigation
+    @State private var selectedActivitySummary: MinerManager.MinerActivitySummary?
 
     private var miners: [MinerManager.ManagedMiner] {
         navigation.minerManager.miners
@@ -120,6 +121,8 @@ struct MinersOverviewView: View {
                         startLinkAccountFlow(for: miner)
                     })
 
+                    selectedMinerWatchingStreamerSection(for: miner)
+
                     minerCampaignsSection(for: miner, campaigns: activeCampaigns)
 
                     if !hasMultipleMiners {
@@ -132,6 +135,13 @@ struct MinersOverviewView: View {
                 .padding(.vertical, 24)
             }
             .id(miner.id)
+            .task(id: miner.id) {
+                await refreshSelectedActivitySummary(for: miner.id)
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: 5 * 1_000_000_000)
+                    await refreshSelectedActivitySummary(for: miner.id)
+                }
+            }
             .transition(.opacity.combined(with: .move(edge: .trailing)))
             .animation(.easeInOut(duration: 0.22), value: miner.id)
         } else {
@@ -143,6 +153,10 @@ struct MinersOverviewView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(24)
         }
+    }
+
+    private func refreshSelectedActivitySummary(for minerId: String) async {
+        selectedActivitySummary = await navigation.minerManager.getMinerActivitySummary(minerId: minerId)
     }
 
     private var acrossAllAccountsSection: some View {
@@ -166,7 +180,7 @@ struct MinersOverviewView: View {
                 MetricCard(
                     title: "Prioritised Campaigns",
                     value: "\(prioritisedCampaignCount)",
-                    subtitle: "active in the queue",
+                    subtitle: "active campaigns",
                     icon: "list.bullet.rectangle",
                     color: .green
                 )
@@ -282,8 +296,37 @@ struct MinersOverviewView: View {
                 minerId: miner.id,
                 priorityGames: [],
                 excludedGames: [],
-                strategy: .mineAll
+                strategy: .mineAll,
+                avoidDuplicateStreams: Settings.shared.avoidDuplicateStreams,
+                prioritiseFollowedStreamers: Settings.shared.prioritiseFollowedStreamers
             )
+        }
+    }
+
+    private func selectedMinerWatchingStreamerSection(for miner: MinerManager.ManagedMiner) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Text("WATCHING STREAMER")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.tertiary)
+
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+
+            SelectedMinerStreamerRow(
+                streamerName: selectedActivitySummary?.currentChannelName,
+                streamerId: selectedActivitySummary?.currentChannelId,
+                campaignName: selectedActivitySummary?.currentCampaignName ?? miner.currentCampaign,
+                status: miner.status,
+                isRunning: miner.isRunning
+            )
+        }
+        .background(.background.opacity(0.62), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
+                .strokeBorder(.separator.opacity(0.32), lineWidth: 1)
         }
     }
 
@@ -341,12 +384,52 @@ struct MinersOverviewView: View {
                 )
             }
             .sorted { lhs, rhs in
+                let leftStatusRank = campaignSortStatusRank(lhs.activityStatus(for: miner))
+                let rightStatusRank = campaignSortStatusRank(rhs.activityStatus(for: miner))
+                if leftStatusRank != rightStatusRank { return leftStatusRank < rightStatusRank }
+
+                let leftMiningRank = campaignSortMiningRank(lhs.miningStatus)
+                let rightMiningRank = campaignSortMiningRank(rhs.miningStatus)
+                if leftMiningRank != rightMiningRank { return leftMiningRank < rightMiningRank }
+
                 let leftPriority = priorityIndex(for: lhs, priorityKeys: priorityKeys)
                 let rightPriority = priorityIndex(for: rhs, priorityKeys: priorityKeys)
                 if leftPriority != rightPriority { return leftPriority < rightPriority }
                 if lhs.endDate != rhs.endDate { return lhs.endDate < rhs.endDate }
                 return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
             }
+    }
+
+    private func campaignSortStatusRank(_ status: CampaignActivityStatus) -> Int {
+        switch status {
+        case .watching:
+            return 0
+        case .waitingForStream:
+            return 1
+        case .requiresLink:
+            return 2
+        case .completed:
+            return 3
+        case .upcoming:
+            return 4
+        case .expired:
+            return 5
+        }
+    }
+
+    private func campaignSortMiningRank(_ status: MiningCampaignStatus) -> Int {
+        switch status {
+        case .claimable:
+            return 0
+        case .inProgress:
+            return 1
+        case .available:
+            return 2
+        case .claimed:
+            return 3
+        case .expired:
+            return 4
+        }
     }
 
     private func priorityIndex(for campaign: Campaign, priorityKeys: [String]) -> Int {
@@ -381,8 +464,8 @@ private struct MinerSourceListRow: View {
     }
 
     private var statusSymbol: String {
-        if snapshot.statusText == "Drops complete" {
-            return "checkmark.circle.fill"
+        if snapshot.statusText == "Waiting" {
+            return "clock"
         }
         if hasBlockingIssues {
             return "exclamationmark.triangle.fill"
@@ -522,6 +605,88 @@ private struct CampaignStatusRow: View {
                 .frame(height: 1)
                 .padding(.leading, 42)
         }
+    }
+}
+
+private struct SelectedMinerStreamerRow: View {
+    let streamerName: String?
+    let streamerId: String?
+    let campaignName: String?
+    let status: MinerManager.MinerStatus
+    let isRunning: Bool
+
+    private var title: String {
+        guard let streamerName, !streamerName.isEmpty else {
+            return isRunning ? "Waiting for stream" : "Not watching"
+        }
+        return streamerName
+    }
+
+    private var subtitle: String {
+        if let campaignName, !campaignName.isEmpty {
+            return campaignName
+        }
+
+        switch status {
+        case .watching:
+            return "Mining active drops"
+        case .waitingForStream:
+            return "No eligible live stream yet"
+        case .fetchingCampaigns:
+            return "Refreshing campaigns"
+        case .paused:
+            return "Miner is paused"
+        case .error, .blockedAccountNotLinked:
+            return "Needs attention"
+        default:
+            return isRunning ? "Ready when a stream is available" : "Start miner to watch"
+        }
+    }
+
+    private var iconName: String {
+        streamerName == nil ? "tv" : "play.tv.fill"
+    }
+
+    private var iconColor: Color {
+        streamerName == nil ? .secondary : .green
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: iconName)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(iconColor)
+                .frame(width: 18, height: 18)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 12)
+
+            if status == .watching {
+                Text("Live")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.green)
+                    .lineLimit(1)
+            } else if let streamerId, !streamerId.isEmpty {
+                Text(streamerId)
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(.background.opacity(0.001))
     }
 }
 

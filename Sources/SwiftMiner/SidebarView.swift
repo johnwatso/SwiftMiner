@@ -5,9 +5,9 @@ import SwiftMinerCore
 ///
 /// Sections:
 ///   Overview
-///   Activity
+///   Miners
 ///   Drops
-///   Events
+///   Activity Log
 struct SidebarView: View {
     @Environment(NavigationModel.self) private var navigation
     @ObservedObject private var settings = Settings.shared
@@ -23,7 +23,7 @@ struct SidebarView: View {
             GlassSelectionItem(id: .overview, title: "Overview", systemImage: "waveform.path.ecg"),
             GlassSelectionItem(id: .miners, title: "Miners", systemImage: "cpu"),
             GlassSelectionItem(id: .drops, title: "Drops", systemImage: "gamecontroller.fill"),
-            GlassSelectionItem(id: .events, title: "Events", systemImage: "bell.fill"),
+            GlassSelectionItem(id: .events, title: "Activity Log", systemImage: "list.bullet.rectangle.fill"),
         ]
         if settings.swiftBotEnabled {
             items.append(GlassSelectionItem(id: .admin, title: "Admin Beta", systemImage: "lock.shield.fill"))

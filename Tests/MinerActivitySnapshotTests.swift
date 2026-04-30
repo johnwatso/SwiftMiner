@@ -95,4 +95,43 @@ final class MinerActivitySnapshotTests: XCTestCase {
         XCTAssertEqual(blockedSnapshot.now.title, "Blocked — Account not linked")
         XCTAssertNil(blockedSnapshot.upNext)
     }
+
+    func testClaimedPriorityGameWaitsForDropsInsteadOfSayingComplete() {
+        let claimedProgress = Progress(
+            dropId: "drop-1",
+            campaignId: "claimed",
+            currentMinutes: 60,
+            requiredMinutes: 60,
+            isClaimed: true
+        )
+        let claimedDrop = Drop(
+            id: "drop-1",
+            name: "Buoy",
+            requiredMinutes: 60,
+            progress: claimedProgress,
+            isClaimed: true
+        )
+        let campaign = makeCampaign(
+            id: "claimed",
+            gameName: "ARC Raiders",
+            isAccountConnected: true,
+            drops: [claimedDrop]
+        )
+        let miner = makeMiner(
+            campaigns: [campaign],
+            priorityGames: ["ARC Raiders"]
+        )
+
+        let snapshot = MinerActivitySnapshot.resolve(
+            for: miner,
+            priorityGames: ["ARC Raiders"],
+            excludedGames: [],
+            strategy: .prioritiseSelected,
+            includesBadgeAndEmoteCampaigns: false
+        )
+
+        XCTAssertEqual(snapshot.statusText, "Waiting")
+        XCTAssertEqual(snapshot.now.title, "Waiting")
+        XCTAssertEqual(snapshot.now.subtitle, "No active drops are available for this account.")
+    }
 }

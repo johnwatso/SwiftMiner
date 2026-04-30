@@ -7,7 +7,6 @@ public struct DiscordUserProjection: Codable, Sendable {
     public let state: ProjectionState
     public let account: Account?
     public let activeCampaign: ActiveCampaign?
-    public let upNext: UpNext?
     public let issues: [Issue]
 
     public init(
@@ -15,14 +14,12 @@ public struct DiscordUserProjection: Codable, Sendable {
         state: ProjectionState,
         account: Account? = nil,
         activeCampaign: ActiveCampaign? = nil,
-        upNext: UpNext? = nil,
         issues: [Issue] = []
     ) {
         self.discordUserId = discordUserId
         self.state = state
         self.account = account
         self.activeCampaign = activeCampaign
-        self.upNext = upNext
         self.issues = issues
     }
 
@@ -68,20 +65,6 @@ public struct DiscordUserProjection: Codable, Sendable {
             self.required = required
             self.unit = unit
             self.pct = pct
-        }
-    }
-
-    public struct UpNext: Codable, Sendable {
-        public let campaignId: String
-        public let game: String
-        public let available: Bool
-        public let blockReason: String?
-
-        public init(campaignId: String, game: String, available: Bool, blockReason: String? = nil) {
-            self.campaignId = campaignId
-            self.game = game
-            self.available = available
-            self.blockReason = blockReason
         }
     }
 
