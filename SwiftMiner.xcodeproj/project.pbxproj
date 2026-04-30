@@ -105,7 +105,6 @@
 		D9E4B76670DBD16E2DB5EAF1 /* DebugTracer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B8617965DD708EF04CA5A35 /* DebugTracer.swift */; };
 		D9ED48085AC9C519F0FCD0E7 /* CampaignDataService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 011876AF5BD64BEC7BC88B09 /* CampaignDataService.swift */; };
 		E52A43018B32BC80753EB96F /* CampaignMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54D58D6720C5197DA271ECF7 /* CampaignMapper.swift */; };
-		E56D8F7495638677083526BB /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01F54062D0252EA1025A4017 /* OnboardingView.swift */; };
 		E66FEEA86A15D48613576F2D /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 320947611A8A4BB7759DAF7C /* NotificationService.swift */; };
 		E710235205E55957CBF29F95 /* CampaignMergeEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = D12899BD6300ED21BCE6187E /* CampaignMergeEngine.swift */; };
 		E7FCDE6D918A60F6F6DFA5E5 /* SteamArtworkService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5A91BEF2B2404145AB60B1B /* SteamArtworkService.swift */; };
@@ -175,7 +174,6 @@
 
 /* Begin PBXFileReference section */
 		011876AF5BD64BEC7BC88B09 /* CampaignDataService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignDataService.swift; sourceTree = "<group>"; };
-		01F54062D0252EA1025A4017 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		02ED514E82ADDE29F84D41CF /* AppUpdater.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdater.swift; sourceTree = "<group>"; };
 		0374A8D7AF4EC4089222CA3B /* GamePreferenceManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GamePreferenceManagementView.swift; sourceTree = "<group>"; };
 		0658398231AD4B7BD6AF16C5 /* EventEmitterService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventEmitterService.swift; sourceTree = "<group>"; };
@@ -421,7 +419,6 @@
 				0EA664151CCCAF2FE4D6598B /* MinerStateCard.swift */,
 				E783D8A8E6145DE8BED34EED /* MinerTableView.swift */,
 				26908E3B6B9716D33FD72B00 /* NavigationModel.swift */,
-				01F54062D0252EA1025A4017 /* OnboardingView.swift */,
 				FE95137E28DEA812A2D3D1E7 /* Settings.swift */,
 				D8A9E39DA6F930F08E6C1E1E /* SettingsView.swift */,
 				DAF81B3BBAA69FF63BECA50C /* SidebarView.swift */,
@@ -857,7 +854,6 @@
 				156A8D4734DACD633E3CC8BB /* MinerTableView.swift in Sources */,
 				C0C4E5F34012E0CAAE27792A /* MinersOverviewView.swift in Sources */,
 				D40B7D026EB8107BEA8C7996 /* NavigationModel.swift in Sources */,
-				E56D8F7495638677083526BB /* OnboardingView.swift in Sources */,
 				FE498AC922BA6F34D0EFC819 /* Settings.swift in Sources */,
 				25D5E5483F55EA58AE81948A /* SettingsView.swift in Sources */,
 				939EF6722C3666DD63CDC642 /* SidebarView.swift in Sources */,

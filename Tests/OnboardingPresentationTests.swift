@@ -20,7 +20,7 @@ final class OnboardingPresentationTests: XCTestCase {
 
     // MARK: - Tests
 
-    func test_0Accounts_NotDismissed_PanelVisible() {
+    func test_0Accounts_OnboardingHidden() {
         // Given
         XCTAssertTrue(minerManager.miners.isEmpty)
         XCTAssertFalse(settings.hasDismissedOnboarding)
@@ -29,12 +29,11 @@ final class OnboardingPresentationTests: XCTestCase {
         navigation.refreshOnboardingPresentation()
         
         // Then
-        XCTAssertTrue(navigation.showOnboarding)
-        XCTAssertEqual(navigation.onboardingPresentation?.accountState, .noAccounts)
-        XCTAssertEqual(navigation.onboardingPresentation?.title, "Connect Twitch")
+        XCTAssertFalse(navigation.showOnboarding)
+        XCTAssertNil(navigation.onboardingPresentation)
     }
 
-    func test_1PlusAccounts_NoPreferences_PanelVisible_ReadyState() {
+    func test_1PlusAccounts_NoPreferences_OnboardingHidden() {
         // Given
         let account = Account(id: "1", username: "test", accessToken: "token", refreshToken: "refresh", tokenExpiry: Date().addingTimeInterval(3600), scopes: [])
         try! minerManager.addAccount(account)
@@ -45,13 +44,11 @@ final class OnboardingPresentationTests: XCTestCase {
         navigation.refreshOnboardingPresentation()
         
         // Then
-        XCTAssertTrue(navigation.showOnboarding)
-        XCTAssertFalse(navigation.onboardingPresentation?.showsGamePreferences ?? true)
-        XCTAssertFalse(navigation.onboardingPresentation?.showsPreferences ?? true)
-        XCTAssertEqual(navigation.onboardingPresentation?.title, "SwiftMiner is ready")
+        XCTAssertFalse(navigation.showOnboarding)
+        XCTAssertNil(navigation.onboardingPresentation)
     }
 
-    func test_1PlusAccounts_Preferences_NotRequiredForReadyState() {
+    func test_1PlusAccounts_Preferences_OnboardingHidden() {
         // Given
         let account = Account(id: "1", username: "test", accessToken: "token", refreshToken: "refresh", tokenExpiry: Date().addingTimeInterval(3600), scopes: [])
         try! minerManager.addAccount(account)
@@ -67,9 +64,8 @@ final class OnboardingPresentationTests: XCTestCase {
         navigation.refreshOnboardingPresentation()
         
         // Then
-        XCTAssertTrue(navigation.showOnboarding)
-        XCTAssertFalse(navigation.onboardingPresentation?.showsGamePreferences ?? true)
-        XCTAssertEqual(navigation.onboardingPresentation?.title, "SwiftMiner is ready")
+        XCTAssertFalse(navigation.showOnboarding)
+        XCTAssertNil(navigation.onboardingPresentation)
     }
 
     func test_DuplicateAccount_IsRejected() {
@@ -103,7 +99,7 @@ final class OnboardingPresentationTests: XCTestCase {
         )
     }
 
-    func test_SyncInProgress_SetupStatusVisible() {
+    func test_SyncInProgress_OnboardingHidden() {
         // Given
         let account = Account(id: "1", username: "test", accessToken: "token", refreshToken: "refresh", tokenExpiry: Date().addingTimeInterval(3600), scopes: [])
         try! minerManager.addAccount(account)
@@ -113,10 +109,8 @@ final class OnboardingPresentationTests: XCTestCase {
         navigation.updateOnboardingSetupStage(.campaigns)
         
         // Then
-        XCTAssertTrue(navigation.showOnboarding)
-        XCTAssertNotNil(navigation.onboardingPresentation?.setupStage)
-        XCTAssertEqual(navigation.onboardingPresentation?.setupStage, .campaigns)
-        XCTAssertEqual(navigation.onboardingPresentation?.title, "Syncing your account")
+        XCTAssertFalse(navigation.showOnboarding)
+        XCTAssertNil(navigation.onboardingPresentation)
     }
 
     func test_InitialAccountHydration_DoesNotResetDismissedOnboarding() {
