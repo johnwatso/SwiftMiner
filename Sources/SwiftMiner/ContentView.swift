@@ -5,7 +5,6 @@ import AppKit
 /// Root view — 2-column NavigationSplitView (Sidebar | Detail)
 struct ContentView: View {
     @Environment(NavigationModel.self) private var navigation
-    @ObservedObject private var settings = Settings.shared
 
     var body: some View {
         @Bindable var nav = navigation
@@ -16,31 +15,13 @@ struct ContentView: View {
             detailView
         }
         .background(WindowZoomConfigurator())
-        .overlay {
-            if nav.showOnboarding {
-                ZStack {
-                    Color.black.opacity(0.16)
-                        .ignoresSafeArea()
-                        .transition(.opacity)
-
-                    OnboardingView()
-                        .padding(28)
-                        .transition(.scale(scale: 0.96).combined(with: .opacity))
-                }
-                .zIndex(100)
-            }
-        }
         .frame(minWidth: 800, minHeight: 600)
         .sheet(isPresented: $nav.showAddAccountSheet) {
             AuthRequiredSheet(isPresented: $nav.showAddAccountSheet)
                 .environment(navigation)
         }
         .onAppear {
-            navigation.refreshOnboardingPresentation()
             navigation.preloadDropsTab()
-        }
-        .onChange(of: settings.gamePreferencesData) { _, _ in
-            navigation.refreshOnboardingPresentation()
         }
         .onChange(of: navigation.minerManager.miners.count) { _, _ in
             navigation.handleAccountCountChange()
@@ -341,9 +322,31 @@ struct OverviewView: View {
                     prominence: .standard,
                     showsEditButton: true
                 )
+            } else {
+                addPrioritisedGameSection
             }
         }
         .padding(.vertical, 2)
+    }
+
+    private var addPrioritisedGameSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            sectionHeading("Prioritised")
+
+            MaterialEmptyStatePanel(
+                "No prioritised games",
+                systemImage: "star",
+                description: "Add a game to keep it surfaced here and mine it first when drops are available."
+            ) {
+                Button {
+                    isShowingGameManagement = true
+                } label: {
+                    Label("Add Prioritised Game", systemImage: "plus")
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .frame(maxWidth: .infinity, minHeight: 180)
+        }
     }
 
     @ViewBuilder

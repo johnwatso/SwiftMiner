@@ -283,12 +283,11 @@ public final class NavigationModel {
     public func configureOnboardingPresentation() {
         lastKnownAccountCount = minerManager.miners.count
         hasConfiguredOnboardingBaseline = true
-        refreshOnboardingPresentation()
+        clearOnboardingPresentation()
     }
 
     public func refreshOnboardingPresentation() {
-        onboardingPresentation = deriveOnboardingPresentation()
-        showOnboarding = onboardingPresentation != nil
+        clearOnboardingPresentation()
     }
 
     public func dismissOnboarding() {
@@ -296,24 +295,16 @@ public final class NavigationModel {
         onboardingSetupTask = nil
         isRunningOnboardingSetup = false
         settings.hasDismissedOnboarding = true
-        refreshOnboardingPresentation()
+        clearOnboardingPresentation()
     }
 
     public func updateOnboardingSetupStage(_ stage: OnboardingSetupStage) {
         onboardingSetupStage = stage
-        refreshOnboardingPresentation()
+        clearOnboardingPresentation()
     }
 
-    public func handleOnboardingAuthenticationCompleted(resetDismissal: Bool = true) {
-        guard !minerManager.miners.isEmpty else {
-            refreshOnboardingPresentation()
-            return
-        }
-
-        if resetDismissal {
-            settings.hasDismissedOnboarding = false
-        }
-        startOnboardingSetupIfNeeded()
+    public func handleOnboardingAuthenticationCompleted(resetDismissal _: Bool = true) {
+        clearOnboardingPresentation()
     }
 
     public func handleAccountCountChange() {
@@ -329,36 +320,16 @@ public final class NavigationModel {
 
         let previousCount = lastKnownAccountCount
         guard currentCount != previousCount else {
-            refreshOnboardingPresentation()
+            clearOnboardingPresentation()
             return
         }
 
         lastKnownAccountCount = currentCount
-        // Only reset dismissal when a new account is added mid-session (previousCount > 0).
-        // During initial app launch, accounts load from keychain (0 → N) and should not
-        // wipe a previously saved dismissal.
-        if previousCount > 0 {
-            settings.hasDismissedOnboarding = false
-        }
-
-        if currentCount > previousCount, showOnboarding || previousCount == 0 {
-            handleOnboardingAuthenticationCompleted(resetDismissal: previousCount > 0)
-        } else {
-            refreshOnboardingPresentation()
-        }
+        clearOnboardingPresentation()
     }
 
     public func startOnboardingSetupIfNeeded() {
-        guard !minerManager.miners.isEmpty else { return }
-        guard onboardingSetupTask == nil else { return }
-
-        isRunningOnboardingSetup = true
-        updateOnboardingSetupStage(.connecting)
-
-        onboardingSetupTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            await self.runOnboardingSetupSequence()
-        }
+        clearOnboardingPresentation()
     }
 
     private func processLogMessage(minerId: String, message: String) {
@@ -390,48 +361,9 @@ public final class NavigationModel {
 
     private var settings: Settings { Settings.shared }
 
-    private func deriveOnboardingPresentation() -> OnboardingPresentation? {
-        let accountCount = minerManager.miners.count
-        let hasAccounts = accountCount > 0
-
-        if settings.hasDismissedOnboarding {
-            return nil
-        }
-
-        let accountState: OnboardingAccountState = hasAccounts
-            ? .hasAccounts(count: accountCount)
-            : .noAccounts
-
-        if !hasAccounts {
-            return OnboardingPresentation(
-                title: "Connect Twitch",
-                subtitle: "Sign in once to start discovering eligible drop campaigns.",
-                accountState: accountState,
-                showsGamePreferences: false,
-                showsPreferences: false,
-                setupStage: nil
-            )
-        }
-
-        if isRunningOnboardingSetup {
-            return OnboardingPresentation(
-                title: "Syncing your account",
-                subtitle: "The dashboard stays available while SwiftMiner pulls campaign and inventory data.",
-                accountState: accountState,
-                showsGamePreferences: false,
-                showsPreferences: false,
-                setupStage: onboardingSetupStage
-            )
-        }
-
-        return OnboardingPresentation(
-            title: "SwiftMiner is ready",
-            subtitle: "Preferences, notifications, and privacy controls stay available from the dashboard and settings.",
-            accountState: accountState,
-            showsGamePreferences: false,
-            showsPreferences: false,
-            setupStage: nil
-        )
+    private func clearOnboardingPresentation() {
+        onboardingPresentation = nil
+        showOnboarding = false
     }
 
     private func runOnboardingSetupSequence() async {

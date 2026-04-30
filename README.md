@@ -28,6 +28,8 @@ SwiftMiner was developed using [TwitchDropsMiner](https://github.com/DevilXD/Twi
 
 That project established a working model for automating Twitch Drops progression. SwiftMiner implements a similar idea as a native macOS application, with a focus on multi-account management and a consolidated interface.
 
+Release builds are produced with [ShipHook](https://github.com/maxhewett/ShipHook), which handles the build, signing, notarization, Sparkle appcast, and release publishing flow.
+
 ## Overview
 
 SwiftMiner monitors active Twitch Drop campaigns and selects streams to watch based on:
@@ -90,7 +92,7 @@ Download the latest release from [GitHub Releases](https://github.com/johnwatso/
 
 Release builds support both Apple Silicon (`arm64`) and Intel (`x86_64`).
 
-Release builds are signed and notarized by Apple, and SwiftMiner includes Sparkle support for update prompts, automatic background checks, and unattended updates when macOS allows them.
+Release builds are signed and notarized through ShipHook, and SwiftMiner includes Sparkle support for update prompts, automatic background checks, and unattended updates when macOS allows them.
 
 > [!NOTE]
 > Intel support depends on Apple's toolchain. If future macOS SDKs drop Intel support, SwiftMiner will move to Apple Silicon only.
