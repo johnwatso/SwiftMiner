@@ -347,7 +347,14 @@ public final class Settings: ObservableObject {
     public func setGamePreference(_ game: Game, state: PreferenceState) {
         var prefs = gamePreferences
         if let index = prefs.firstIndex(where: { preferenceMatches($0, gameId: game.id, gameName: game.name) }) {
-            prefs[index] = GamePreference(gameId: game.id, gameName: game.name, boxArtURL: game.boxArtURL, state: state)
+            let old = prefs[index]
+            prefs[index] = GamePreference(
+                gameId: game.id,
+                gameName: game.name,
+                boxArtURL: game.boxArtURL ?? old.boxArtURL,
+                customArtworkURL: old.customArtworkURL,
+                state: state
+            )
         } else {
             prefs.append(GamePreference(gameId: game.id, gameName: game.name, boxArtURL: game.boxArtURL, state: state))
         }
@@ -357,15 +364,19 @@ public final class Settings: ObservableObject {
     /// Remove a game preference by game ID
     public func removeGamePreference(gameId: String) {
         var prefs = gamePreferences
+        let removed = prefs.filter { $0.gameId == gameId }
         prefs.removeAll { $0.gameId == gameId }
         gamePreferences = prefs
+        removeCachedArtworkFiles(for: removed)
     }
 
     /// Remove a specific game preference.
     public func removeGamePreference(_ preference: GamePreference) {
         var prefs = gamePreferences
+        let removed = prefs.filter { preferenceMatches($0, gameId: preference.gameId, gameName: preference.gameName) }
         prefs.removeAll { preferenceMatches($0, gameId: preference.gameId, gameName: preference.gameName) }
         gamePreferences = prefs
+        removeCachedArtworkFiles(for: removed)
     }
 
     /// Set a stored preference to a specific state.
@@ -377,9 +388,70 @@ public final class Settings: ObservableObject {
                 gameId: old.gameId,
                 gameName: old.gameName,
                 boxArtURL: old.boxArtURL,
+                customArtworkURL: old.customArtworkURL,
                 state: state
             )
         }
+        gamePreferences = prefs
+    }
+
+    public func setCustomArtwork(from sourceURL: URL, for game: Game) throws {
+        let accessed = sourceURL.startAccessingSecurityScopedResource()
+        defer {
+            if accessed {
+                sourceURL.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        let directory = try customArtworkDirectory()
+        let fileExtension = preferredArtworkExtension(for: sourceURL)
+        let destination = directory
+            .appendingPathComponent(customArtworkFileStem(gameId: game.id, gameName: game.name))
+            .appendingPathExtension(fileExtension)
+
+        if FileManager.default.fileExists(atPath: destination.path) {
+            try FileManager.default.removeItem(at: destination)
+        }
+        try FileManager.default.copyItem(at: sourceURL, to: destination)
+
+        var prefs = gamePreferences
+        if let index = prefs.firstIndex(where: { preferenceMatches($0, gameId: game.id, gameName: game.name) }) {
+            let old = prefs[index]
+            removeCachedArtworkFile(at: old.customArtworkURL)
+            prefs[index] = GamePreference(
+                gameId: old.gameId.isEmpty ? game.id : old.gameId,
+                gameName: game.name,
+                boxArtURL: game.boxArtURL ?? old.boxArtURL,
+                customArtworkURL: destination,
+                state: old.state
+            )
+        } else {
+            prefs.append(GamePreference(
+                gameId: game.id,
+                gameName: game.name,
+                boxArtURL: game.boxArtURL,
+                customArtworkURL: destination,
+                state: .preferred
+            ))
+        }
+        gamePreferences = prefs
+    }
+
+    public func removeCustomArtwork(for game: Game) {
+        var prefs = gamePreferences
+        guard let index = prefs.firstIndex(where: { preferenceMatches($0, gameId: game.id, gameName: game.name) }) else {
+            return
+        }
+
+        let old = prefs[index]
+        removeCachedArtworkFile(at: old.customArtworkURL)
+        prefs[index] = GamePreference(
+            gameId: old.gameId,
+            gameName: old.gameName,
+            boxArtURL: old.boxArtURL,
+            customArtworkURL: nil,
+            state: old.state
+        )
         gamePreferences = prefs
     }
 
@@ -506,6 +578,7 @@ public final class Settings: ObservableObject {
                 gameId: preference.gameId,
                 gameName: trimmedName,
                 boxArtURL: preference.boxArtURL,
+                customArtworkURL: preference.customArtworkURL,
                 state: preference.state
             )
 
@@ -529,6 +602,49 @@ public final class Settings: ObservableObject {
             return gameId
         }
         return gameName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private func customArtworkDirectory() throws -> URL {
+        let base = try FileManager.default.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        let directory = base
+            .appendingPathComponent("SwiftMiner", isDirectory: true)
+            .appendingPathComponent("CustomArtwork", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }
+
+    private func preferredArtworkExtension(for url: URL) -> String {
+        let ext = url.pathExtension.lowercased()
+        let supported = Set(["png", "jpg", "jpeg", "heic", "webp", "tiff", "gif"])
+        return supported.contains(ext) ? ext : "png"
+    }
+
+    private func customArtworkFileStem(gameId: String, gameName: String) -> String {
+        let key = preferenceKey(gameId: gameId, gameName: gameName)
+        let scalars = key.unicodeScalars.map { scalar -> Character in
+            CharacterSet.alphanumerics.contains(scalar) ? Character(scalar) : "-"
+        }
+        let stem = String(scalars)
+            .split(separator: "-")
+            .joined(separator: "-")
+            .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+        return stem.isEmpty ? UUID().uuidString : stem
+    }
+
+    private func removeCachedArtworkFiles(for preferences: [GamePreference]) {
+        for preference in preferences {
+            removeCachedArtworkFile(at: preference.customArtworkURL)
+        }
+    }
+
+    private func removeCachedArtworkFile(at url: URL?) {
+        guard let url, url.isFileURL, FileManager.default.fileExists(atPath: url.path) else { return }
+        try? FileManager.default.removeItem(at: url)
     }
     
     // MARK: - Reset

@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftMinerCore
 import AppKit
+import UniformTypeIdentifiers
 
 /// Root view — 2-column NavigationSplitView (Sidebar | Detail)
 struct ContentView: View {
@@ -65,6 +66,8 @@ struct OverviewView: View {
     @State private var isRefreshing = false
     @State private var steamIdSheetPresentation: SteamIdSheetPresentation?
     @State private var isShowingGameManagement = false
+    @State private var customArtworkImportGame: Game?
+    @State private var isShowingArtworkImporter = false
 
     private var campaigns: [CampaignViewData] {
         overviewCampaigns
@@ -118,6 +121,26 @@ struct OverviewView: View {
                 settings: settings,
                 minerManager: navigation.minerManager
             )
+        }
+        .fileImporter(
+            isPresented: $isShowingArtworkImporter,
+            allowedContentTypes: [.image],
+            allowsMultipleSelection: false
+        ) { result in
+            guard let game = customArtworkImportGame else { return }
+            defer { customArtworkImportGame = nil }
+
+            switch result {
+            case .success(let urls):
+                guard let url = urls.first else { return }
+                do {
+                    try settings.setCustomArtwork(from: url, for: game)
+                } catch {
+                    print("[Overview] Custom artwork import failed: \(error.localizedDescription)")
+                }
+            case .failure(let error):
+                print("[Overview] Custom artwork selection failed: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -241,6 +264,13 @@ struct OverviewView: View {
 
     private func presentSteamIdSheet(for gameName: String) {
         steamIdSheetPresentation = SteamIdSheetPresentation(gameName: gameName)
+    }
+
+    private func presentCustomArtworkImporter(for game: Game) {
+        customArtworkImportGame = game
+        DispatchQueue.main.async {
+            isShowingArtworkImporter = true
+        }
     }
 
     private func applySteamAppId(_ appId: String, for gameName: String) {
@@ -382,7 +412,8 @@ struct OverviewView: View {
                             CampaignFeedCard(
                                 item: item,
                                 prominence: prominence,
-                                onSetSteamId: presentSteamIdSheet(for:)
+                                onSetSteamId: presentSteamIdSheet(for:),
+                                onUploadCustomArtwork: presentCustomArtworkImporter(for:)
                             )
                         }
                     }
@@ -394,7 +425,8 @@ struct OverviewView: View {
                 StaggeredCampaignRail(
                     items: items,
                     prominence: prominence,
-                    onSetSteamId: presentSteamIdSheet(for:)
+                    onSetSteamId: presentSteamIdSheet(for:),
+                    onUploadCustomArtwork: presentCustomArtworkImporter(for:)
                 )
                 .padding(.horizontal, 2)
                 .padding(.vertical, 6)
@@ -471,9 +503,13 @@ struct OverviewView: View {
             state = .watching
         }
         let game = Game(id: campaign.gameId ?? campaign.id, name: campaign.gameName, boxArtURL: campaign.artworkURL)
-        let artworkURL = SteamArtworkService.supportsSteamArtwork(forGameName: campaign.gameName, gameId: campaign.gameId)
-            ? navigation.minerManager.dataCoordinator.steamArtworkOverrides[campaign.gameName] ?? campaign.artworkURL
-            : campaign.artworkURL
+        let preference = settings.gamePreferences.first { matches(campaign, preference: $0) }
+        let artworkURL = preference?.customArtworkURL
+            ?? (
+                SteamArtworkService.supportsSteamArtwork(forGameName: campaign.gameName, gameId: campaign.gameId)
+                    ? navigation.minerManager.dataCoordinator.steamArtworkOverrides[campaign.gameName] ?? campaign.artworkURL
+                    : campaign.artworkURL
+            )
         return CampaignRailItem(
             id: "\(section.rawValue)-\(campaign.id)",
             section: section,
@@ -489,6 +525,7 @@ struct OverviewView: View {
             isDimmed: state == .claimed,
             isPlaceholder: false,
             showsLiveMotion: section == .active && (state == .watching || state == .inProgress || state == .claimable),
+            usesCustomArtwork: preference?.customArtworkURL != nil,
             game: game
         )
     }
@@ -535,10 +572,13 @@ struct OverviewView: View {
             forGameName: preference.gameName,
             gameId: preference.gameId
         )
-        let artworkURL = supportsSteamArtwork
-            ? navigation.minerManager.dataCoordinator.steamArtworkOverrides[preference.gameName]
-                ?? preference.boxArtURL
-            : preference.boxArtURL
+        let artworkURL = preference.customArtworkURL
+            ?? (
+                supportsSteamArtwork
+                    ? navigation.minerManager.dataCoordinator.steamArtworkOverrides[preference.gameName]
+                        ?? preference.boxArtURL
+                    : preference.boxArtURL
+            )
         return CampaignRailItem(
             id: "preferred-\(preference.gameId.isEmpty ? preference.gameName : preference.gameId)",
             section: .prioritised,
@@ -554,6 +594,7 @@ struct OverviewView: View {
             isDimmed: false,
             isPlaceholder: false,
             showsLiveMotion: false,
+            usesCustomArtwork: preference.customArtworkURL != nil,
             game: Game(id: preference.gameId, name: preference.gameName, boxArtURL: artworkURL)
         )
     }
@@ -571,13 +612,16 @@ struct OverviewView: View {
                     : "Your preferred games are ready for the next campaign.",
                 progressPercent: 0,
                 artworkURL: preferredGames.first.flatMap { pref in
-                    (SteamArtworkService.supportsSteamArtwork(
-                        forGameName: pref.gameName,
-                        gameId: pref.gameId
-                    ))
-                    ? navigation.minerManager.dataCoordinator.steamArtworkOverrides[pref.gameName]
-                        ?? (settings.preferSteamArtwork ? nil : pref.boxArtURL)
-                    : pref.boxArtURL
+                    pref.customArtworkURL
+                        ?? (
+                            SteamArtworkService.supportsSteamArtwork(
+                                forGameName: pref.gameName,
+                                gameId: pref.gameId
+                            )
+                            ? navigation.minerManager.dataCoordinator.steamArtworkOverrides[pref.gameName]
+                                ?? (settings.preferSteamArtwork ? nil : pref.boxArtURL)
+                            : pref.boxArtURL
+                        )
                 },
                 tint: .orange,
                 hasOnlyBadgesOrEmotes: false,
@@ -1411,6 +1455,7 @@ private struct CampaignRailItem: Identifiable {
     let isDimmed: Bool
     let isPlaceholder: Bool
     let showsLiveMotion: Bool
+    var usesCustomArtwork = false
     var game: Game? = nil
 }
 
@@ -1419,10 +1464,61 @@ private struct CampaignFeedCard: View {
     let item: CampaignRailItem
     let prominence: CampaignCardProminence
     let onSetSteamId: (String) -> Void
+    let onUploadCustomArtwork: (Game) -> Void
     @State private var isHovering = false
+
+    private var settings: Settings {
+        Settings.shared
+    }
 
     private var usesStandbyMotionStyle: Bool {
         item.isPlaceholder && item.showsLiveMotion
+    }
+
+    private var artworkDimmingStops: [Color] {
+        if item.usesCustomArtwork {
+            return [
+                .clear,
+                Color.black.opacity(0),
+                Color.black.opacity(0.06),
+                Color.black.opacity(item.section == .recent ? 0.24 : 0.30)
+            ]
+        }
+
+        return [
+            .clear,
+            Color.black.opacity(0.08),
+            Color.black.opacity(0.36),
+            Color.black.opacity(item.section == .recent ? 0.56 : 0.66)
+        ]
+    }
+
+    private var cardOpacity: Double {
+        if item.usesCustomArtwork {
+            return item.section == .recent ? 0.94 : 1
+        }
+        return item.section == .recent ? 0.88 : (item.isDimmed ? 0.7 : 1)
+    }
+
+    private var cardSaturation: Double {
+        item.usesCustomArtwork ? 1 : (item.isDimmed ? 0.82 : 1)
+    }
+
+    private var currentPreference: GamePreference? {
+        guard let game = item.game else { return nil }
+        return settings.gamePreferences.first { preference in
+            let idMatches = !game.id.isEmpty && preference.gameId == game.id
+            let nameMatches = preference.gameName.localizedCaseInsensitiveCompare(game.name) == .orderedSame
+            return idMatches || nameMatches
+        }
+    }
+
+    private var hasCustomArtwork: Bool {
+        currentPreference?.customArtworkURL != nil
+    }
+
+    private var canRemoveFromPrioritised: Bool {
+        item.section == .prioritised && currentPreference?.state == .preferred
     }
 
     private var showsCampaignSubtitle: Bool {
@@ -1455,12 +1551,7 @@ private struct CampaignFeedCard: View {
             }
 
             LinearGradient(
-                colors: [
-                    .clear,
-                    Color.black.opacity(0.08),
-                    Color.black.opacity(0.36),
-                    Color.black.opacity(item.section == .recent ? 0.56 : 0.66)
-                ],
+                colors: artworkDimmingStops,
                 startPoint: .top,
                 endPoint: .bottom
             )
@@ -1483,8 +1574,8 @@ private struct CampaignFeedCard: View {
                             LinearGradient(
                                 colors: [
                                     item.tint.opacity(0),
-                                    item.tint.opacity(0.08),
-                                    item.tint.opacity(0.18)
+                                    item.tint.opacity(item.usesCustomArtwork ? 0 : 0.08),
+                                    item.tint.opacity(item.usesCustomArtwork ? 0 : 0.18)
                                 ],
                                 startPoint: .top,
                                 endPoint: .bottom
@@ -1535,8 +1626,8 @@ private struct CampaignFeedCard: View {
             RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
                 .strokeBorder(.white.opacity(item.visualState == .watching ? 0.22 : 0.12), lineWidth: 1)
         }
-        .opacity(item.section == .recent ? 0.88 : (item.isDimmed ? 0.7 : 1))
-        .saturation(item.isDimmed ? 0.82 : 1)
+        .opacity(cardOpacity)
+        .saturation(cardSaturation)
         .brightness(item.visualState == .watching ? 0.04 : (isHovering ? 0.015 : 0))
         .scaleEffect(isHovering ? 1.03 : 1)
         .shadow(color: .black.opacity(item.visualState == .watching ? 0.16 : (isHovering ? 0.10 : 0.05)), 
@@ -1572,6 +1663,42 @@ private struct CampaignFeedCard: View {
 
                 Divider()
 
+                if canRemoveFromPrioritised, let preference = currentPreference {
+                    Button(role: .destructive) {
+                        Settings.shared.removeGamePreference(preference)
+                    } label: {
+                        GameActionMenuLabel(
+                            title: "Remove Game",
+                            subtitle: "Remove this game from the prioritised list.",
+                            systemImage: "trash"
+                        )
+                    }
+                }
+
+                Button {
+                    onUploadCustomArtwork(game)
+                } label: {
+                    GameActionMenuLabel(
+                        title: "Upload Custom Artwork",
+                        subtitle: "Cache a local image in Application Support for this game.",
+                        systemImage: "square.and.arrow.up"
+                    )
+                }
+
+                if hasCustomArtwork {
+                    Button(role: .destructive) {
+                        Settings.shared.removeCustomArtwork(for: game)
+                    } label: {
+                        GameActionMenuLabel(
+                            title: "Remove Custom Artwork",
+                            subtitle: "Return to Steam or Twitch artwork.",
+                            systemImage: "photo.badge.minus"
+                        )
+                    }
+                }
+
+                Divider()
+
                 if SteamArtworkService.supportsSteamArtwork(forGameName: game.name, gameId: game.id) {
                     Button {
                         onSetSteamId(game.name)
@@ -1592,6 +1719,7 @@ private struct StaggeredCampaignRail: View {
     let items: [CampaignRailItem]
     let prominence: CampaignCardProminence
     let onSetSteamId: (String) -> Void
+    let onUploadCustomArtwork: (Game) -> Void
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -1606,7 +1734,8 @@ private struct StaggeredCampaignRail: View {
                     CampaignFeedCard(
                         item: item,
                         prominence: prominence,
-                        onSetSteamId: onSetSteamId
+                        onSetSteamId: onSetSteamId,
+                        onUploadCustomArtwork: onUploadCustomArtwork
                     )
                     .scaleEffect(scale)
                     .opacity(opacity)

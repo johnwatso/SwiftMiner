@@ -16,12 +16,20 @@ public struct GamePreference: Codable, Sendable, Identifiable, Equatable {
     public let gameId: String
     public let gameName: String
     public let boxArtURL: URL?
+    public let customArtworkURL: URL?
     public var state: PreferenceState
 
-    public init(gameId: String, gameName: String, boxArtURL: URL? = nil, state: PreferenceState) {
+    public init(
+        gameId: String,
+        gameName: String,
+        boxArtURL: URL? = nil,
+        customArtworkURL: URL? = nil,
+        state: PreferenceState
+    ) {
         self.gameId = gameId
         self.gameName = gameName
         self.boxArtURL = boxArtURL
+        self.customArtworkURL = customArtworkURL
         self.state = state
     }
 }

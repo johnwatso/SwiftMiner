@@ -100,8 +100,10 @@ private struct PreferenceRow: View {
             }
             .frame(width: 24, height: 32)
             .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-            .task(id: preferSteamArtwork) {
-                if preferSteamArtwork,
+            .task(id: artworkRefreshID) {
+                if let customArtworkURL = preference.customArtworkURL {
+                    resolvedArtworkURL = customArtworkURL
+                } else if preferSteamArtwork,
                    SteamArtworkService.supportsSteamArtwork(
                        forGameName: preference.gameName,
                        gameId: preference.gameId
@@ -138,5 +140,9 @@ private struct PreferenceRow: View {
             .buttonStyle(.plain)
         }
         .padding(.vertical, 2)
+    }
+
+    private var artworkRefreshID: String {
+        "\(preferSteamArtwork)-\(preference.customArtworkURL?.absoluteString ?? "")"
     }
 }
