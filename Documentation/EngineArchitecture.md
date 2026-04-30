@@ -1,127 +1,146 @@
 # SwiftMinerCore Engine Architecture
 
-## Overview
+SwiftMinerCore is built around actor-isolated mining engines. A single `MinerEngine` manages one Twitch account. `MinerManager` owns one engine per account and presents a consolidated, main-actor-safe view to the macOS app.
 
-The SwiftMinerCore engine is built using Swift 6's actor-based concurrency model to ensure thread safety and proper isolation of mutable state.
+## MinerEngine
 
-## Core Components
+`MinerEngine` is an actor that owns the mutable mining state for one account.
 
-### 1. MinerEngine (Actor)
+Main responsibilities:
 
-The main orchestrator that manages the entire mining lifecycle.
+- load or receive an authenticated account
+- refresh Twitch campaign and inventory data
+- apply priority, exclusion, badge/emote, account-link, and stream-avoidance preferences
+- select the next campaign and channel to mine
+- run and stop watch sessions
+- listen for PubSub drop and stream events
+- claim ready drops
+- report status, campaigns, progress, claimed drops, errors, and log messages through callbacks
 
-**Responsibilities:**
-- Lifecycle management (start/stop)
-- Authentication coordination
-- Campaign selection and prioritization
-- Channel selection
-- Watch session management
-- Drop claiming
+The public entry points used by the app are:
 
-**Key Methods:**
-- `start()` - Begins the mining loop
-- `stop()` - Gracefully stops mining
-- `authenticate()` - Initiates device code flow
-- `claimAllDrops()` - Claims all ready drops
+- `setAccount(_:)`
+- `authenticate()`
+- `start()`
+- `stop()`
+- `forceRefresh()`
+- `claimAllDrops()`
+- `getCurrentProgress()`
+- preference update methods such as `updateMiningPreferences(...)`, `updateMiningStrategy(_:)`, and `updateNotificationPreference(enabled:)`
 
-**Callbacks:**
-- `onStatusChange` - Mining status updates
-- `onCampaignUpdate` - New campaign data
-- `onProgressUpdate` - Overall progress
-- `onDropClaimed` - Drop claimed successfully
-- `onError` - Error handling
-- `onLogMessage` - Log output
+## Engine Services
 
-### 2. Services (Actors)
+Each engine creates its own service graph:
 
-Each service is an actor to ensure thread-safe state management.
-
-#### TwitchAuthService
-- Device code flow authentication
-- Token refresh
-- Keychain storage for credentials
-
-#### TwitchAPIClient
-- REST API calls (Helix)
-- GraphQL queries/mutations
-- Rate limiting and retry logic
-
-#### DropsService
-- Campaign fetching
-- Drop prioritization
-- Progress tracking
-
-#### WatchSessionManager
-- Stream watching simulation
-- Progress polling
-- Channel availability monitoring
-
-#### ClaimService
-- Drop claiming
-- Batch claim operations
-- Success/failure tracking
-
-### 3. Models (Sendable)
-
-All models conform to `Sendable` for safe actor-to-actor transfer.
-
-- `Account` - User authentication info
-- `Campaign` - Drop campaign data
-- `Drop` - Individual drop reward
-- `Channel` - Twitch channel/streamer
-- `Progress` - Drop progress tracking
-
-## Mining Lifecycle
-
-```
-1. Authenticate user
-   ↓
-2. Fetch active campaigns
-   ↓
-3. Select best campaign
-   ↓
-4. Select eligible channel
-   ↓
-5. Start watch session
-   ↓
-6. Poll for progress (every minute)
-   ↓
-7. Claim completed drops
-   ↓
-8. Repeat from step 2
+```text
+MinerEngine
+  -> TwitchAuthService
+  -> TwitchAPIClient
+  -> DropsService
+     -> InventoryService
+  -> WatchSessionManager
+     -> SpadeBeaconService
+     -> CommunityPointsService
+  -> PubSubClient
+  -> DropEventsService
+  -> ClaimService
+  -> NotificationService when claim notifications are enabled
 ```
 
-## Concurrency Model
+The services are actor-based where they hold mutable state or perform long-running coordination. Models passed between services conform to `Sendable` where needed.
 
-- All services are actors
-- Main mining loop runs in a Task
-- Callbacks use `@Sendable` closures
-- No shared mutable state outside actors
+## Authentication And Tokens
 
-## Platform Requirements
+Authentication uses Twitch device-code login through `TwitchAuthService`. The app shows the user code and verification URL, then the auth service polls Twitch until the account is approved.
 
-- macOS 26+
-- Apple Silicon
-- Swift 6
-- SwiftUI (for future UI)
+The default client ID is Twitch's Android app client ID, matching the behavior of TwitchDropsMiner. A custom client ID can still be supplied by the app configuration.
 
-## Building
+Tokens are saved through the `TokenStore` protocol. `KeychainTokenStore` is the default app store and preserves the legacy encrypted local token format. `SQLiteTokenStore` is available for database-backed service flows.
 
-### Xcode
-```bash
-xcodegen generate
-open SwiftMiner.xcodeproj
-xcodebuild -project SwiftMiner.xcodeproj -scheme SwiftMiner -destination 'platform=macOS' build
+When a token refresh succeeds, `TwitchAuthService` notifies the engine so `TwitchAPIClient` and `PubSubClient` can receive the fresh access token.
+
+## Mining Loop
+
+The engine loop follows this shape:
+
+```text
+start
+  -> load account or use setAccount(_:)
+  -> configure watch, PubSub, and drop event handlers
+  -> fetch campaigns and inventory
+  -> filter mineable campaigns
+  -> select campaign by strategy and priority settings
+  -> select an eligible live channel
+  -> start WatchSessionManager
+  -> send Spade watch beacons
+  -> update progress from inventory, GraphQL, and PubSub
+  -> claim ready drops
+  -> rescan or switch channel when the target is complete, blocked, offline, or stalled
 ```
 
-## Usage
+The loop periodically refreshes campaigns, polls claimable inventory while actively mining, and uses PubSub stream events to react faster when a stream goes offline.
 
-### As a Library
-```swift
-import SwiftMinerCore
+## Watch Sessions
 
-let engine = MinerEngine(clientId: "your_client_id")
+`WatchSessionManager` owns the active `WatchSession` for an engine.
 
-try await engine.authenticate()
-try await engine.start()
-```
+Before starting a session, it validates the channel and fetches a playback access token. It then fetches the broadcast ID when available, starts a heartbeat loop, and sends Spade beacons at `SpadeBeaconService.watchInterval`.
+
+The active session tracks:
+
+- channel ID and login
+- campaign ID
+- game name and game ID
+- broadcast ID
+- start time
+- session state
+- total local watch time
+- last heartbeat time and transport
+
+Only one watch session can run per engine at a time.
+
+## Campaign Selection
+
+Campaign selection is constrained by account eligibility and app preferences.
+
+The engine considers:
+
+- campaign time window
+- linked-account requirements
+- unclaimed drops
+- drop preconditions
+- priority games
+- excluded games
+- mining strategy
+- badge/emote campaign inclusion
+- live channel availability
+- duplicate stream avoidance across accounts
+- followed/subscribed streamer priority
+
+If a claim or inventory refresh means the current campaign is no longer mineable, the engine marks the session for switching and immediately rescans candidates.
+
+## Status And Callbacks
+
+`MinerEngine` emits `SessionStatus`:
+
+- `idle`
+- `authenticating`
+- `fetchingCampaigns`
+- `watching`
+- `claiming`
+- `waitingForStream`
+- `paused`
+- `stopped`
+- `error`
+- `idleNoEligibleCampaigns`
+- `blockedAccountNotLinked`
+
+Callbacks are set with methods such as `setStatusChangeHandler`, `setCampaignUpdateHandler`, `setProgressUpdateHandler`, `setDropClaimedHandler`, `setErrorHandler`, and `setLogMessageHandler`.
+
+`MinerManager` maps these engine statuses into UI-facing miner state and keeps the app on the main actor.
+
+## Debugging
+
+`setDebugTraceEnabled(_:)` forwards detailed GraphQL, PubSub, Spade, and claim traces into the engine log callback.
+
+`setDebugBypassLinkRequirement(_:)` is a testing-only path that allows the engine to exercise the watch pipeline without normal account-link eligibility checks. It should not be used for normal mining.
