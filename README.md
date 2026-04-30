@@ -123,6 +123,14 @@ SwiftMiner is a native Xcode project split between the macOS app and `SwiftMiner
 
 ## Notes and Risk
 
+> [!CAUTION]
+> This tool automates Twitch Drop viewing.
+>
+> Twitch's policies around automation are not always clearly defined, so there is some risk when using it.
+>
+> Proceed with caution and use at your own discretion.
+
+<!-- markdownlint-disable-next-line MD028 -->
 > [!WARNING]
 > SwiftMiner sends watch activity to Twitch using an Android TV client profile.
 >
