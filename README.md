@@ -132,9 +132,10 @@ SwiftMiner is a native Xcode project split between the macOS app and `SwiftMiner
 
 <!-- markdownlint-disable-next-line MD028 -->
 > [!WARNING]
-> SwiftMiner sends watch activity to Twitch using an Android TV client profile.
->
-> If the same account is used to watch a stream in a browser, Twitch may credit the browser session instead. This can stall drop progress or cause the miner to switch streams.
+> If the same account is used to watch a stream elsewhere (e.g. in a browser or another device),
+> Twitch may prioritise that session instead.
+> 
+> This can stall drop progress or cause the miner to switch streams.
 
 <!-- markdownlint-disable-next-line MD028 -->
 > [!WARNING]
