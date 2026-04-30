@@ -156,4 +156,54 @@ final class CampaignStateTests: XCTestCase {
         // Fully claimed = recent
         XCTAssertEqual(campaign.relevance, CampaignRelevance.recent)
     }
+
+    func testMergePreservesCompletedCachedCampaignOnlyWhenMissingFromTwitch() {
+        let cachedDrop = Drop(
+            id: "d1",
+            name: "Cached Reward",
+            requiredMinutes: 60,
+            benefitID: "benefit-1",
+            isClaimed: true
+        )
+        let cached = Campaign(
+            id: "c1",
+            name: "Cached Campaign",
+            game: game,
+            status: .active,
+            startDate: now.addingTimeInterval(-7200),
+            endDate: now.addingTimeInterval(-3600),
+            drops: [cachedDrop],
+            isAccountConnected: true
+        )
+        let freshShell = Campaign(
+            id: "c1",
+            name: "Cached Campaign",
+            game: game,
+            status: .expired,
+            startDate: now.addingTimeInterval(-7200),
+            endDate: now.addingTimeInterval(-3600),
+            drops: [],
+            isAccountConnected: true
+        )
+
+        let freshWins = CampaignMergeEngine.merge(fresh: [freshShell], cached: [cached], inventory: nil)
+
+        XCTAssertEqual(freshWins.count, 1)
+        XCTAssertTrue(freshWins.first?.drops.isEmpty == true)
+
+        let otherFreshCampaign = Campaign(
+            id: "c2",
+            name: "Other Campaign",
+            game: game,
+            status: .active,
+            startDate: now.addingTimeInterval(-3600),
+            endDate: now.addingTimeInterval(3600),
+            drops: [Drop(id: "d2", name: "Other Reward", requiredMinutes: 30)],
+            isAccountConnected: true
+        )
+        let cachedFallback = CampaignMergeEngine.merge(fresh: [otherFreshCampaign], cached: [cached], inventory: nil)
+
+        XCTAssertEqual(cachedFallback.count, 2)
+        XCTAssertEqual(cachedFallback.first(where: { $0.id == "c1" })?.drops.map(\.name), ["Cached Reward"])
+    }
 }

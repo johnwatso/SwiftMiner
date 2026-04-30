@@ -514,6 +514,7 @@ private struct AdvancedSettingsView: View {
     @ObservedObject var settings: Settings
     @Environment(NavigationModel.self) private var navigation
     @State private var showResetConfirmation = false
+    @State private var showDropCacheConfirmation = false
     @State private var showClientIdAlert = false
     @State private var tempClientId = ""
     @State private var showEndpointAlert = false
@@ -613,6 +614,13 @@ private struct AdvancedSettingsView: View {
             }
 
             Section {
+                Button("Clear Cached Drop History\u{2026}", role: .destructive) {
+                    showDropCacheConfirmation = true
+                }
+                .foregroundStyle(.red)
+
+                SettingsSecondaryText("Removes preserved campaign and inventory snapshots. Use this if old expired drops look wrong; the next refresh will rebuild history from Twitch.")
+
                 Button("Reset All Settings\u{2026}", role: .destructive) {
                     showResetConfirmation = true
                 }
@@ -640,6 +648,17 @@ private struct AdvancedSettingsView: View {
             Button("Reset", role: .destructive) {
                 settings.resetToDefaults()
             }
+        }
+        .confirmationDialog("Clear cached drop history?", isPresented: $showDropCacheConfirmation) {
+            Button("Clear History Cache", role: .destructive) {
+                Task {
+                    await navigation.minerManager.dataCoordinator.clearCachedDropHistory()
+                    await navigation.minerManager.dataCoordinator.refreshAll()
+                }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This clears local drop campaign and inventory snapshots. Account logins and app settings are kept.")
         }
         .alert("Custom Twitch Client ID", isPresented: $showClientIdAlert) {
             TextField("Client ID", text: $tempClientId)

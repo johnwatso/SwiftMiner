@@ -520,14 +520,27 @@ public actor AggregatedCampaignDataService {
             ? data.progress
             : progressValues.max() ?? data.progress  // Use max progress, not average
 
-        let allClaimed = !accountCampaigns.isEmpty && accountCampaigns.allSatisfy { $0.1.isClaimed }
         let anyConnected = accountCampaigns.contains { $0.1.isAccountConnected }
+        let knownComplete = accountCampaigns.contains { _, campaign in
+            campaign.isClaimed ||
+                (campaign.totalDrops > 0 && campaign.dropsClaimed >= campaign.totalDrops) ||
+                (!campaign.drops.isEmpty && campaign.drops.allSatisfy(\.isClaimed))
+        }
 
+        let drops = mergeDrops(from: accountCampaigns.map(\.1))
+        let hasKnownRewards = data.totalDrops > 0 || !drops.isEmpty
+        let inferredComplete = knownComplete ||
+            (data.totalDrops > 0 && data.dropsClaimed >= data.totalDrops) ||
+            (!drops.isEmpty && drops.allSatisfy(\.isClaimed)) ||
+            (!hasKnownRewards && data.isExpired())
         let accountStates = buildCampaignAccountStates(
             for: data.id,
-            accountCampaigns: accountCampaigns
+            accountCampaigns: accountCampaigns,
+            inferMissingAsClaimed: inferredComplete
         )
-        let drops = mergeDrops(from: accountCampaigns.map(\.1))
+        let allClaimed = !accountStates.isEmpty
+            ? accountStates.allSatisfy { $0.miningStatus == .claimed }
+            : (!accountCampaigns.isEmpty && accountCampaigns.allSatisfy { $0.1.isClaimed })
         let miningStatus = mergedMiningStatus(
             for: data,
             campaigns: accountCampaigns.map(\.1),
@@ -566,7 +579,8 @@ public actor AggregatedCampaignDataService {
 
     private func buildCampaignAccountStates(
         for campaignId: String,
-        accountCampaigns: [(String, CampaignViewData)]
+        accountCampaigns: [(String, CampaignViewData)],
+        inferMissingAsClaimed: Bool = false
     ) -> [AccountState] {
         let campaignsByAccount = Dictionary(uniqueKeysWithValues: accountCampaigns)
 
@@ -578,6 +592,8 @@ public actor AggregatedCampaignDataService {
 
             if accountNeedsAuth[accountId] == true {
                 state = .needsAuth
+            } else if inferMissingAsClaimed {
+                state = .claimed
             } else if campaign?.isClaimed == true || campaign?.miningStatus == .claimed {
                 state = .claimed
             } else if activeCampaignIds[accountId] == campaignId {

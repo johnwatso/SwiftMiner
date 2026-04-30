@@ -981,7 +981,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026043016;
+				CURRENT_PROJECT_VERSION = 2026050109;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
@@ -989,8 +989,8 @@
 				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = SwiftMiner;
 				INFOPLIST_KEY_CFBundleName = SwiftMiner;
-				INFOPLIST_KEY_SUEnableAutomaticChecks = YES;
 				INFOPLIST_KEY_SUAutomaticallyUpdate = YES;
+				INFOPLIST_KEY_SUEnableAutomaticChecks = YES;
 				INFOPLIST_KEY_SUFeedURL = "$(SPARKLE_FEED_URL)";
 				INFOPLIST_KEY_SUPublicEDKey = "$(SPARKLE_PUBLIC_ED_KEY)";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -998,7 +998,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 1.20;
+				MARKETING_VERSION = 1.21;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -1154,7 +1154,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026043016;
+				CURRENT_PROJECT_VERSION = 2026050109;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
@@ -1162,8 +1162,8 @@
 				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = SwiftMiner;
 				INFOPLIST_KEY_CFBundleName = SwiftMiner;
-				INFOPLIST_KEY_SUEnableAutomaticChecks = YES;
 				INFOPLIST_KEY_SUAutomaticallyUpdate = YES;
+				INFOPLIST_KEY_SUEnableAutomaticChecks = YES;
 				INFOPLIST_KEY_SUFeedURL = "$(SPARKLE_FEED_URL)";
 				INFOPLIST_KEY_SUPublicEDKey = "$(SPARKLE_PUBLIC_ED_KEY)";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1171,7 +1171,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 1.20;
+				MARKETING_VERSION = 1.21;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",

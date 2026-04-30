@@ -245,6 +245,18 @@ public final class MiningDataCoordinator {
         }
     }
 
+    /// Clears persisted campaign/inventory snapshots used for Drops history.
+    /// The next refresh repopulates from whatever Twitch still exposes.
+    public func clearCachedDropHistory() async {
+        CampaignDataService.clearAllCachedDropData()
+        for service in minerDataServices.values {
+            await service.clearCache()
+        }
+        lastKnownAllCampaigns.removeAll()
+        lastKnownCurrentCampaigns.removeAll()
+        campaignStore.updateCampaigns([])
+    }
+
     /// Get eligible campaigns (active, not fully claimed)
     public func getEligibleCampaigns() async -> [AggregatedCampaignDataService.AggregatedCampaign] {
         await aggregatedService.getEligibleCampaigns()

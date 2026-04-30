@@ -141,4 +141,12 @@ enum InventoryDiskCache {
         guard !accountId.isEmpty else { return }
         try? FileManager.default.removeItem(at: fileURL(accountId: accountId))
     }
+
+    static func clearAll() {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let directory = appSupport
+            .appendingPathComponent(directoryName, isDirectory: true)
+            .appendingPathComponent(folderName, isDirectory: true)
+        try? FileManager.default.removeItem(at: directory)
+    }
 }
