@@ -8,6 +8,45 @@
             <sparkle:version>2026032910</sparkle:version>
             <sparkle:shortVersionString>1.11</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+            <sparkle:releaseNotesLink>https://johnwatso.github.io/SwiftMiner/release-notes/1.20.html</sparkle:releaseNotesLink>
+            <sparkle:fullReleaseNotesLink>https://johnwatso.github.io/SwiftMiner/release-notes/</sparkle:fullReleaseNotesLink>
+            <description><![CDATA[
+                <h2>What Changed</h2>
+                <h3>Version 1.20</h3>
+                <ul>
+                    <li>Adds smarter stream selection, including optional stream spreading so multiple miners avoid piling onto the same verified live channel when enough alternatives are available.</li>
+                    <li>Adds an option to prioritise followed and subscribed Twitch streamers, with subscriptions ranked ahead of follows during channel selection.</li>
+                    <li>Adds a Watching Streamer panel to miner views so each account clearly shows the channel and campaign it is currently using.</li>
+                    <li>Refreshes the Activity Log with clearer filters, optional category icons, new-row animation, timestamp formatting, and the new Activity Log navigation name.</li>
+                    <li>Adds login launch controls, including Start at login, Start minimised, and approval/error messaging for macOS login item setup.</li>
+                    <li>Improves drop claiming by syncing Twitch inventory before and after claims so completed and claimed rewards stay accurate.</li>
+                    <li>Cleans up Overview and miner status language by removing the old Up Next/debug queue surfaces and showing waiting states more accurately.</li>
+                    <li>Updates the Sparkle appcast and release-note links so the in-app updater can show richer What's New content.</li>
+                </ul>
+                <h3>Version 1.11</h3>
+                <ul>
+                    <li>Ships the latest SwiftMiner dashboard, search, and miner workflow improvements through the stable update feed.</li>
+                    <li>Improves update reliability so future SwiftMiner releases can include richer release notes in-app.</li>
+                </ul>
+                <h3>Version 1.10</h3>
+                <ul>
+                    <li>Keeps the update path moving forward after the previous build metadata issue.</li>
+                    <li>No user-facing SwiftMiner behavior changed in this release.</li>
+                </ul>
+                <h3>Version 1.09</h3>
+                <ul>
+                    <li>Continues the update-feed repair work needed for stable auto updates.</li>
+                    <li>No user-facing SwiftMiner behavior changed in this release.</li>
+                </ul>
+                <h3>Version 1.08 and 1.07</h3>
+                <ul>
+                    <li>Adds a richer miner dashboard with activity overview, miner health status, and clearer campaign detail screens.</li>
+                    <li>Adds paused-state handling, ordered Mining/Queued rails, and drag-to-reorder game priority rules.</li>
+                    <li>Improves Twitch game search with better no-drop hints, availability badges, sequel-style query fallback, and clearer empty/error states.</li>
+                    <li>Automatically refreshes expired Twitch tokens where possible and gives clearer re-auth guidance when a session needs attention.</li>
+                    <li>Polishes onboarding, account details, notification handling, and the Set Steam ID flow.</li>
+                </ul>
+            ]]></description>
             <enclosure url="https://github.com/johnwatso/SwiftMiner/releases/download/v1.11/SwiftMiner-1.11.zip" length="6235142" type="application/octet-stream"/>
         </item>
     </channel>

@@ -25,6 +25,9 @@ public actor TwitchAPIClient {
     /// Broadcaster login -> numeric channel ID cache for stream directory results that
     /// only include a login. `AvailableDrops` and PubSub require the numeric ID.
     private var channelIdByLogin: [String: String] = [:]
+    private var followedChannelIdsByUser: [String: (ids: Set<String>, expiresAt: Date)] = [:]
+    private var subscriptionByUserAndBroadcaster: [String: (isSubscribed: Bool, expiresAt: Date)] = [:]
+    private let channelRelationshipCacheTTL: TimeInterval = 10 * 60
 
     /// Metadata for a claimed benefit from inventory.
     /// Used as a fallback to detect claimed drops when `self` is absent from DropCampaignDetails.
@@ -161,6 +164,87 @@ public actor TwitchAPIClient {
             login: user.login,
             displayName: user.displayName
         )
+    }
+
+    /// Returns relationship state between the authenticated user and candidate broadcasters.
+    /// Followed channels are fetched in pages once per cache window; subscriptions are checked
+    /// per broadcaster because Twitch exposes that as a single-channel endpoint.
+    public func getChannelRelationships(userId: String, broadcasterIds: [String]) async -> [String: ChannelRelationship] {
+        let uniqueIds = Array(Set(broadcasterIds.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }))
+        guard !userId.isEmpty, !uniqueIds.isEmpty else { return [:] }
+
+        let followedIds = (try? await getFollowedChannelIds(userId: userId)) ?? []
+        var relationships: [String: ChannelRelationship] = [:]
+
+        for broadcasterId in uniqueIds {
+            let isSubscribed = await isUserSubscribed(userId: userId, broadcasterId: broadcasterId)
+            relationships[broadcasterId] = ChannelRelationship(
+                isFollowed: followedIds.contains(broadcasterId),
+                isSubscribed: isSubscribed
+            )
+        }
+
+        return relationships
+    }
+
+    private func getFollowedChannelIds(userId: String) async throws -> Set<String> {
+        if let cached = followedChannelIdsByUser[userId], cached.expiresAt > Date() {
+            return cached.ids
+        }
+
+        var followedIds = Set<String>()
+        var cursor: String?
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        repeat {
+            var components = URLComponents(string: "\(helixUrl)/channels/followed")!
+            var queryItems = [
+                URLQueryItem(name: "user_id", value: userId),
+                URLQueryItem(name: "first", value: "100")
+            ]
+            if let cursor, !cursor.isEmpty {
+                queryItems.append(URLQueryItem(name: "after", value: cursor))
+            }
+            components.queryItems = queryItems
+
+            let data = try await makeRESTRequest(url: components.string!, method: "GET")
+            let response = try decoder.decode(FollowedChannelsResponse.self, from: data)
+            followedIds.formUnion(response.data.map(\.broadcasterId))
+            cursor = response.pagination?.cursor
+        } while cursor?.isEmpty == false
+
+        followedChannelIdsByUser[userId] = (followedIds, Date().addingTimeInterval(channelRelationshipCacheTTL))
+        return followedIds
+    }
+
+    private func isUserSubscribed(userId: String, broadcasterId: String) async -> Bool {
+        let cacheKey = "\(userId):\(broadcasterId)"
+        if let cached = subscriptionByUserAndBroadcaster[cacheKey], cached.expiresAt > Date() {
+            return cached.isSubscribed
+        }
+
+        var components = URLComponents(string: "\(helixUrl)/subscriptions/user")!
+        components.queryItems = [
+            URLQueryItem(name: "broadcaster_id", value: broadcasterId),
+            URLQueryItem(name: "user_id", value: userId)
+        ]
+
+        let isSubscribed: Bool
+        do {
+            let data = try await makeRESTRequest(url: components.string!, method: "GET")
+            let response = try JSONDecoder().decode(UserSubscriptionResponse.self, from: data)
+            isSubscribed = !response.data.isEmpty
+        } catch TwitchMinerError.apiError(let statusCode, _) where statusCode == 404 || statusCode == 403 {
+            isSubscribed = false
+        } catch TwitchMinerError.authenticationFailed {
+            isSubscribed = false
+        } catch {
+            isSubscribed = false
+        }
+
+        subscriptionByUserAndBroadcaster[cacheKey] = (isSubscribed, Date().addingTimeInterval(channelRelationshipCacheTTL))
+        return isSubscribed
     }
     
     /// Search Twitch categories (games) by name using the Helix REST API.

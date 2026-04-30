@@ -84,7 +84,7 @@ public actor EventEmitterService {
         ))
     }
 
-    /// Emit when the projection gains a meaningful upNext opportunity worth surfacing.
+    /// Emit when the projection gains a meaningful campaign opportunity worth surfacing.
     public func emitUserOpportunityAvailable(
         discordUserId: String,
         campaignId: String,

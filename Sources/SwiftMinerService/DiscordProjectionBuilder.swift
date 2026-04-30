@@ -9,8 +9,6 @@ import SwiftMinerCore
 public protocol ProjectionStateProvider: Sendable {
     /// Returns the active campaign for a Discord user, if any.
     func activeCampaign(for discordUserId: String) async -> DiscordUserProjection.ActiveCampaign?
-    /// Returns the next upcoming campaign for a Discord user, if any.
-    func upNext(for discordUserId: String) async -> DiscordUserProjection.UpNext?
     /// Overrides the projection state derived from DB heuristics. Return `nil` to use DB fallback.
     func projectionState(for discordUserId: String) async -> DiscordUserProjection.ProjectionState?
 }
@@ -19,7 +17,6 @@ public protocol ProjectionStateProvider: Sendable {
 public struct DefaultProjectionStateProvider: ProjectionStateProvider {
     public init() {}
     public func activeCampaign(for discordUserId: String) async -> DiscordUserProjection.ActiveCampaign? { nil }
-    public func upNext(for discordUserId: String) async -> DiscordUserProjection.UpNext? { nil }
     public func projectionState(for discordUserId: String) async -> DiscordUserProjection.ProjectionState? { nil }
 }
 
@@ -45,7 +42,6 @@ public actor DiscordProjectionBuilder {
         let account = await fetchAccount(discordUserId: discordUserId)
         let issues = await fetchIssues(discordUserId: discordUserId)
         let activeCampaign = await stateProvider.activeCampaign(for: discordUserId)
-        let upNext = await stateProvider.upNext(for: discordUserId)
 
         let state: DiscordUserProjection.ProjectionState
         if let providerState = await stateProvider.projectionState(for: discordUserId) {
@@ -65,7 +61,6 @@ public actor DiscordProjectionBuilder {
             state: state,
             account: account,
             activeCampaign: activeCampaign,
-            upNext: upNext,
             issues: issues
         )
     }

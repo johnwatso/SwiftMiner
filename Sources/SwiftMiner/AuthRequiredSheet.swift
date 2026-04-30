@@ -302,7 +302,9 @@ struct AuthRequiredSheet: View {
                 excludedGames: settings.excludedGames,
                 strategy: settings.miningStrategy,
                 enableBadgesEmotes: settings.enableBadgesEmotes,
-                showClaimNotifications: settings.showClaimNotifications
+                showClaimNotifications: settings.showClaimNotifications,
+                avoidDuplicateStreams: settings.avoidDuplicateStreams,
+                prioritiseFollowedStreamers: settings.prioritiseFollowedStreamers
             )
         }
 

@@ -8,6 +8,7 @@ struct EventLogView: View {
     @State private var searchText = ""
     @State private var selectedMinerFilterId = Self.allMinersFilterId
     @State private var isFilterHelpPresented = false
+    @State private var seenEventIds: Set<UUID> = []
 
     private static let allMinersFilterId = "__all_miners__"
 
@@ -35,19 +36,11 @@ struct EventLogView: View {
             if visibleEvents.isEmpty {
                 emptyState
             } else {
-                List(visibleEvents) { event in
-                    EventLogRow(event: event)
-                        .listRowInsets(EdgeInsets(top: 3, leading: 12, bottom: 3, trailing: 12))
-                        .listRowSeparator(.visible, edges: .bottom)
-                        .listRowSeparatorTint(.secondary.opacity(0.14))
-                        .listRowBackground(Color.clear)
-                }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
+                eventList
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .navigationTitle("Events")
+        .navigationTitle("Activity Log")
         .onChange(of: miners.map(\.id)) { _, minerIds in
             guard selectedMinerFilterId != Self.allMinersFilterId,
                   !minerIds.contains(selectedMinerFilterId)
@@ -67,6 +60,25 @@ struct EventLogView: View {
         }
     }
 
+    private var eventList: some View {
+        List(visibleEvents) { event in
+            let isNew = !seenEventIds.contains(event.id)
+            EventLogRow(event: event, isNew: isNew)
+                .listRowInsets(EdgeInsets(top: 3, leading: 12, bottom: 3, trailing: 12))
+                .listRowSeparator(.visible, edges: .bottom)
+                .listRowSeparatorTint(.secondary.opacity(0.14))
+                .listRowBackground(Color.clear)
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .onAppear {
+            seenEventIds = Set(visibleEvents.map(\.id))
+        }
+        .onChange(of: visibleEvents.map(\.id)) { _, ids in
+            seenEventIds.formUnion(ids)
+        }
+    }
+
     private var controlsHeader: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
@@ -77,23 +89,7 @@ struct EventLogView: View {
                 }
             }
 
-            HStack(alignment: .center, spacing: 8) {
-                filterChipsRow
-
-                Button {
-                    isFilterHelpPresented.toggle()
-                } label: {
-                    Image(systemName: "questionmark.circle")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .help("Explain event filters")
-                .accessibilityLabel("Explain event filters")
-                .popover(isPresented: $isFilterHelpPresented, arrowEdge: .bottom) {
-                    EventFilterHelpPopover()
-                }
-            }
+            filterChipsRow
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -111,7 +107,7 @@ struct EventLogView: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.tertiary)
 
-            TextField("Search events", text: $searchText)
+            TextField("Search activity", text: $searchText)
                 .textFieldStyle(.plain)
                 .font(.system(size: 13))
 
@@ -193,16 +189,35 @@ struct EventLogView: View {
                         )
                     }
                     .buttonStyle(.plain)
-                    .help("Toggle \(option.title) events")
+                    .help("Toggle \(option.title) activity")
                     .accessibilityLabel(option.title)
                     .accessibilityValue(isSelected ? "Selected" : "Not selected")
                 }
+
+                filterHelpButton
             }
             .padding(.horizontal, 1)
         }
         .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Event filters")
+        .accessibilityLabel("Activity filters")
+    }
+
+    private var filterHelpButton: some View {
+        Button {
+            isFilterHelpPresented.toggle()
+        } label: {
+            Image(systemName: "questionmark.circle")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 26, height: 26)
+        }
+        .buttonStyle(.plain)
+        .help("Explain event filters")
+        .accessibilityLabel("Explain event filters")
+        .popover(isPresented: $isFilterHelpPresented, arrowEdge: .top) {
+            EventFilterHelpPopover()
+        }
     }
 
     private var emptyState: some View {
@@ -221,7 +236,7 @@ struct EventLogView: View {
             return "Select at least one filter"
         }
         if !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return "No events match your search"
+            return "No activity matches your search"
         }
         return "No matching events"
     }
@@ -245,11 +260,11 @@ struct EventLogView: View {
 
 private struct EventFilterHelpPopover: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Event Filters")
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Activity Filters")
                 .font(.headline)
 
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 11) {
                 ForEach(EventFilter.allCases) { filter in
                     HStack(alignment: .top, spacing: 9) {
                         Image(systemName: filter.symbol)
@@ -265,6 +280,7 @@ private struct EventFilterHelpPopover: View {
                             Text(filter.description)
                                 .font(.system(size: 12))
                                 .foregroundStyle(.secondary)
+                                .lineSpacing(1.5)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }
@@ -272,20 +288,27 @@ private struct EventFilterHelpPopover: View {
             }
         }
         .padding(14)
-        .frame(width: 360, alignment: .leading)
+        .frame(width: 340, alignment: .leading)
     }
 }
 
 private struct EventLogRow: View {
     let event: EventEntry
+    let isNew: Bool
     @Environment(NavigationModel.self) private var navigation
+    @ObservedObject private var settings = Settings.shared
+    @State private var appeared = false
+
+    private var eventFilter: EventFilter {
+        primaryEventFilter(for: event)
+    }
 
     private var displayText: EventDisplayText {
         eventDisplayText(for: event)
     }
 
     private var eventColor: Color {
-        primaryEventFilter(for: event).eventColor
+        eventFilter.eventColor
     }
 
     private var messageText: String {
@@ -312,14 +335,21 @@ private struct EventLogRow: View {
     }
 
     private var relativeTime: String {
-        relativeDateFormatter.localizedString(for: event.timestamp, relativeTo: Date())
+        event.timestamp.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute().second())
     }
 
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
-            Circle()
-                .fill(eventColor)
-                .frame(width: 7, height: 7)
+            if settings.showActivityLogIcons {
+                Image(systemName: eventFilter.symbol)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(eventColor)
+                    .frame(width: 16, alignment: .center)
+            } else {
+                Circle()
+                    .fill(eventColor)
+                    .frame(width: 7, height: 7)
+            }
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(messageText)
@@ -338,11 +368,19 @@ private struct EventLogRow: View {
             Spacer(minLength: 12)
 
             Text(relativeTime)
-                .font(.system(size: 11, design: .monospaced))
+                .font(.system(size: 11, weight: .regular))
                 .foregroundStyle(.tertiary)
                 .lineLimit(1)
         }
         .padding(.vertical, metadataText == nil ? 1 : 2)
+        .opacity(settings.animateActivityLogRows && isNew ? (appeared ? 1 : 0) : 1)
+        .offset(y: settings.animateActivityLogRows && isNew ? (appeared ? 0 : 6) : 0)
+        .onAppear {
+            guard settings.animateActivityLogRows, isNew else { return }
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                appeared = true
+            }
+        }
     }
 }
 
@@ -822,12 +860,6 @@ private func humanReadableFallback(_ text: String) -> String {
     readable = first + readable.dropFirst()
     return readable
 }
-
-@MainActor private let relativeDateFormatter: RelativeDateTimeFormatter = {
-    let formatter = RelativeDateTimeFormatter()
-    formatter.unitsStyle = .abbreviated
-    return formatter
-}()
 
 // MARK: - Legacy row (used by MinerDetailView)
 

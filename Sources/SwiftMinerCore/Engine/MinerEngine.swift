@@ -45,6 +45,9 @@ public actor MinerEngine {
     private var showClaimNotifications: Bool = false
     private var ignoredAccountLinkWarningGames: Set<String> = []
     private var warnedUnlinkedPriorityGames: Set<String> = []
+    private var avoidDuplicateStreams: Bool = false
+    private var prioritiseFollowedStreamers: Bool = false
+    private var channelAssignmentAvoidanceProvider: (@Sendable (_ campaignId: String, _ viableChannelCount: Int) async -> Set<String>)?
     /// Debug-only: when true, accepts any time-active campaign and picks any live channel
     /// without requiring account linkage or GQL drop verification. Exercises the watch
     /// pipeline for testing; drops won't credit for unlinked accounts.
@@ -60,7 +63,6 @@ public actor MinerEngine {
     
     public var onStatusChange: (@Sendable (SessionStatus) -> Void)?
     public var onCampaignUpdate: (@Sendable ([Campaign]) -> Void)?
-    public var onDebugWinningQueueUpdate: (@Sendable ([Campaign]) -> Void)?
     public var onProgressUpdate: (@Sendable (OverallProgress) -> Void)?
     public var onDropClaimed: (@Sendable (Drop) -> Void)?
     public var onError: (@Sendable (TwitchMinerError) -> Void)?
@@ -76,10 +78,6 @@ public actor MinerEngine {
         self.onCampaignUpdate = handler
     }
 
-    public func setDebugWinningQueueHandler(_ handler: (@Sendable ([Campaign]) -> Void)?) {
-        self.onDebugWinningQueueUpdate = handler
-    }
-
     public func setProgressUpdateHandler(_ handler: (@Sendable (OverallProgress) -> Void)?) {
         self.onProgressUpdate = handler
     }
@@ -90,12 +88,16 @@ public actor MinerEngine {
         excludedGames: [String],
         enableBadgesEmotes: Bool = false,
         showClaimNotifications: Bool = false,
+        avoidDuplicateStreams: Bool = false,
+        prioritiseFollowedStreamers: Bool = false,
         ignoredAccountLinkWarningGames: [String] = []
     ) {
         self.priorityGames = priorityGames
         self.excludedGames = excludedGames
         self.enableBadgesEmotes = enableBadgesEmotes
         self.showClaimNotifications = showClaimNotifications
+        self.avoidDuplicateStreams = avoidDuplicateStreams
+        self.prioritiseFollowedStreamers = prioritiseFollowedStreamers
         self.ignoredAccountLinkWarningGames = Set(ignoredAccountLinkWarningGames)
         
         // Configure notification service if enabled
@@ -122,6 +124,12 @@ public actor MinerEngine {
     public func updatePriorityGames(_ priorityGames: [String]) {
         self.priorityGames = priorityGames
         // Waking the engine might be desired, but periodic refresh will handle it too.
+    }
+
+    /// Update followed/subscribed streamer channel ranking without restarting the engine.
+    public func updateFollowedStreamerPriority(enabled: Bool) {
+        self.prioritiseFollowedStreamers = enabled
+        shouldRescanCampaigns = true
     }
 
     /// Update which games should have account-link warnings suppressed for this miner.
@@ -153,6 +161,12 @@ public actor MinerEngine {
     /// Update mining strategy
     public func updateMiningStrategy(_ strategy: MiningStrategy) {
         self.miningStrategy = strategy
+    }
+
+    public func setChannelAssignmentAvoidanceProvider(
+        _ provider: (@Sendable (_ campaignId: String, _ viableChannelCount: Int) async -> Set<String>)?
+    ) {
+        channelAssignmentAvoidanceProvider = provider
     }
 
     private var miningStrategy: MiningStrategy = .mineAll
@@ -631,8 +645,6 @@ public actor MinerEngine {
                     strategy: miningStrategy
                 )
                 
-                onDebugWinningQueueUpdate?(candidates)
-
                 log("Campaigns: \(allCampaigns.count) total, \(candidates.count) account-eligible")
                 for c in allEnriched {
                     // IMPLEMENTATION OF DOMAIN LOGGING REQUIREMENT
@@ -663,7 +675,6 @@ public actor MinerEngine {
                         excludedGames: excludedGames,
                         strategy: miningStrategy
                     )
-                    onDebugWinningQueueUpdate?(candidates)
                     onCampaignUpdate?(candidates)
                 }
 
@@ -944,7 +955,19 @@ public actor MinerEngine {
         
         var didClaimAnyDrop = false
         do {
-            let claimable = try await dropsService.getClaimableDrops()
+            let inventoryService = await dropsService.getInventoryService()
+            let snapshot = try await inventoryService.fetchInventory(forceRefresh: true)
+            syncCampaigns(with: snapshot)
+
+            let claimedDropIds = Set(
+                allCampaigns
+                    .flatMap(\.drops)
+                    .filter(\.isClaimed)
+                    .map(\.id)
+            )
+            let claimable = snapshot.progress.filter {
+                $0.isComplete && !$0.isClaimed && !claimedDropIds.contains($0.dropId)
+            }
 
             if claimable.isEmpty {
                 log("No claimable drops found in inventory")
@@ -989,11 +1012,30 @@ public actor MinerEngine {
                 // Small delay between claims
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
             }
+
+            if didClaimAnyDrop {
+                let refreshedSnapshot = try await inventoryService.fetchInventory(forceRefresh: true)
+                syncCampaigns(with: refreshedSnapshot)
+            }
         } catch {
             log("Error fetching claimable drops: \(error.localizedDescription)")
         }
 
         return didClaimAnyDrop
+    }
+
+    private func syncCampaigns(with snapshot: InventorySnapshot) {
+        let mergedCampaigns = DropsService.mergeInventory(snapshot, into: allCampaigns)
+        guard mergedCampaigns != allCampaigns else { return }
+
+        allCampaigns = mergedCampaigns
+        let updatedCandidates = candidateCampaigns(
+            from: mergedCampaigns,
+            priorityGames: priorityGames,
+            excludedGames: excludedGames,
+            strategy: miningStrategy
+        )
+        onCampaignUpdate?(updatedCandidates)
     }
 
     private func warnForUnlinkedPriorityCampaigns(in campaigns: [Campaign]) async {
@@ -1267,12 +1309,17 @@ public actor MinerEngine {
             return (randomCandidate, resolved)
         }
 
+        let relationshipRanks = await followedStreamerRanks(for: liveChannels)
+
         let sortedChannels = liveChannels.sorted { a, b in
             let aPriorityIndex = priorityGames.firstIndex(of: a.gameName ?? "")
             let bPriorityIndex = priorityGames.firstIndex(of: b.gameName ?? "")
             if aPriorityIndex != bPriorityIndex {
                 return (aPriorityIndex ?? Int.max) < (bPriorityIndex ?? Int.max)
             }
+            let aRelationshipRank = streamerRelationshipRank(for: a, ranks: relationshipRanks)
+            let bRelationshipRank = streamerRelationshipRank(for: b, ranks: relationshipRanks)
+            if aRelationshipRank != bRelationshipRank { return aRelationshipRank > bRelationshipRank }
             if a.aclBased != b.aclBased { return a.aclBased && !b.aclBased }
             return (a.viewerCount ?? 0) > (b.viewerCount ?? 0)
         }
@@ -1306,10 +1353,18 @@ public actor MinerEngine {
                 if !matches.isEmpty {
                     let names = matches.map(\.name).joined(separator: ", ")
                     log("[ChannelSelect]     ✓ Verified! \(names) active on \(channel.displayName)")
-                    for match in matches where !verifiedMatches.contains(where: { $0.campaign.id == match.id }) {
-                        verifiedMatches.append((campaign: match, channel: channel))
+                    for match in matches {
+                        let alreadyRecorded = verifiedMatches.contains {
+                            $0.campaign.id == match.id &&
+                                Self.normalizedChannelIdentity($0.channel.id) == Self.normalizedChannelIdentity(channel.id)
+                        }
+                        let campaignAlreadyRecorded = verifiedMatches.contains { $0.campaign.id == match.id }
+                        if !alreadyRecorded && (avoidDuplicateStreams || !campaignAlreadyRecorded) {
+                            verifiedMatches.append((campaign: match, channel: channel))
+                        }
                     }
-                    if let best = Self.bestVerifiedCampaignMatch(candidates: candidates, matches: verifiedMatches),
+                    if !avoidDuplicateStreams,
+                       let best = await bestVerifiedCampaignMatch(candidates: candidates, matches: verifiedMatches, relationshipRanks: relationshipRanks),
                        best.campaign.id == candidates.first?.id {
                         log("[ChannelSelect]   Selected \(best.campaign.name) on \(best.channel.displayName)")
                         currentChannelName = best.channel.displayName
@@ -1347,7 +1402,12 @@ public actor MinerEngine {
                     anyVerificationSucceeded = true
                     if activeCampaignIds.contains(candidate.id) {
                         log("[ChannelSelect]     ✓ Verified! \(candidate.name) active on approved channel \(channel.displayName)")
-                        if !verifiedMatches.contains(where: { $0.campaign.id == candidate.id }) {
+                        let alreadyRecorded = verifiedMatches.contains {
+                            $0.campaign.id == candidate.id &&
+                                Self.normalizedChannelIdentity($0.channel.id) == Self.normalizedChannelIdentity(channel.id)
+                        }
+                        let campaignAlreadyRecorded = verifiedMatches.contains { $0.campaign.id == candidate.id }
+                        if !alreadyRecorded && (avoidDuplicateStreams || !campaignAlreadyRecorded) {
                             verifiedMatches.append((campaign: candidate, channel: channel))
                         }
                     }
@@ -1358,7 +1418,7 @@ public actor MinerEngine {
             }
         }
 
-        if let best = Self.bestVerifiedCampaignMatch(candidates: candidates, matches: verifiedMatches) {
+        if let best = await bestVerifiedCampaignMatch(candidates: candidates, matches: verifiedMatches, relationshipRanks: relationshipRanks) {
             log("[ChannelSelect]   Selected \(best.campaign.name) on \(best.channel.displayName)")
             currentChannelName = best.channel.displayName
             currentChannelId = best.channel.id
@@ -1389,6 +1449,67 @@ public actor MinerEngine {
         }
 
         return nil
+    }
+
+    private func bestVerifiedCampaignMatch(
+        candidates: [Campaign],
+        matches: [(campaign: Campaign, channel: Channel)],
+        relationshipRanks: [String: Int]
+    ) async -> (campaign: Campaign, channel: Channel)? {
+        let rankedMatches = matches.sorted { left, right in
+            let leftRank = streamerRelationshipRank(for: left.channel, ranks: relationshipRanks)
+            let rightRank = streamerRelationshipRank(for: right.channel, ranks: relationshipRanks)
+            if leftRank != rightRank { return leftRank > rightRank }
+            return (left.channel.viewerCount ?? 0) > (right.channel.viewerCount ?? 0)
+        }
+
+        guard avoidDuplicateStreams, let provider = channelAssignmentAvoidanceProvider else {
+            return Self.bestVerifiedCampaignMatch(candidates: candidates, matches: rankedMatches)
+        }
+
+        for candidate in candidates {
+            let candidateMatches = rankedMatches.filter { $0.campaign.id == candidate.id }
+            guard !candidateMatches.isEmpty else { continue }
+
+            let uniqueChannelCount = Set(candidateMatches.map { Self.normalizedChannelIdentity($0.channel.id) }).count
+            let assignedChannelIds = await provider(candidate.id, uniqueChannelCount)
+            let avoided = Set(assignedChannelIds.map { Self.normalizedChannelIdentity($0) })
+
+            if uniqueChannelCount <= 4 {
+                log("[ChannelSelect]   Stream spreading bypassed for \(candidate.name): only \(uniqueChannelCount) viable channel(s)")
+                return candidateMatches[0]
+            }
+
+            if let unassigned = candidateMatches.first(where: {
+                !avoided.contains(Self.normalizedChannelIdentity($0.channel.id))
+            }) {
+                if !avoided.isEmpty {
+                    log("[ChannelSelect]   Stream spreading: avoiding \(avoided.count) occupied channel(s) for \(candidate.name)")
+                }
+                return unassigned
+            }
+
+            log("[ChannelSelect]   Stream spreading: all \(uniqueChannelCount) viable channel(s) occupied for \(candidate.name); reusing best channel")
+            return candidateMatches[0]
+        }
+
+        return nil
+    }
+
+    private func followedStreamerRanks(for channels: [Channel]) async -> [String: Int] {
+        guard prioritiseFollowedStreamers, let userId = currentAccount?.id else { return [:] }
+        let broadcasterIds = channels.map(\.id).filter { !$0.isEmpty }
+        let relationships = await apiClient.getChannelRelationships(userId: userId, broadcasterIds: broadcasterIds)
+        return relationships.reduce(into: [String: Int]()) { ranks, pair in
+            ranks[Self.normalizedChannelIdentity(pair.key)] = pair.value.rank
+        }
+    }
+
+    private func streamerRelationshipRank(for channel: Channel, ranks: [String: Int]) -> Int {
+        guard prioritiseFollowedStreamers, !ranks.isEmpty else { return 0 }
+        return Self.identityKeys(for: channel)
+            .compactMap { ranks[$0] }
+            .max() ?? 0
     }
 
     private func selectBestChannel(from campaign: Campaign) async -> Channel? {
@@ -1652,7 +1773,6 @@ public actor MinerEngine {
             strategy: miningStrategy
         )
         onCampaignUpdate?(updatedCandidates)
-        onDebugWinningQueueUpdate?(updatedCandidates)
 
         let currentCampaignProgress = snapshot.progress.filter { progress in
             progress.campaignId == campaignId && !progress.isClaimed

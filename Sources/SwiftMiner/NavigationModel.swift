@@ -31,7 +31,7 @@ public final class NavigationModel {
             case .overview: return "Overview"
             case .miners: return "miners"
             case .drops: return "Drops"
-            case .events: return "Events"
+            case .events: return "Activity Log"
             case .admin: return "Admin Beta"
             }
         }
@@ -238,6 +238,8 @@ public final class NavigationModel {
             excludedGames: settings.excludedGames,
             strategy: settings.miningStrategy,
             enableBadgesEmotes: settings.enableBadgesEmotes,
+            avoidDuplicateStreams: settings.avoidDuplicateStreams,
+            prioritiseFollowedStreamers: settings.prioritiseFollowedStreamers,
             ignoredWarnings: settings.ignoredWarnings
         )
         preloadDropsTab()

@@ -1,5 +1,6 @@
 import SwiftUI
 import Security
+import ServiceManagement
 import SwiftMinerCore
 
 /// User settings managed via @AppStorage.
@@ -57,9 +58,21 @@ public final class Settings: ObservableObject {
     @AppStorage("autoStartOnLaunch", store: Settings.appStorageStore)
     public var autoStartOnLaunch: Bool = false
 
+    /// Whether the main window should minimize itself when SwiftMiner launches.
+    @AppStorage("startMinimized", store: Settings.appStorageStore)
+    public var startMinimized: Bool = false
+
     /// Whether to include campaigns that only give non-drop rewards (badges/emotes)
     @AppStorage("enableBadgesEmotes", store: Settings.appStorageStore)
     public var enableBadgesEmotes: Bool = false
+
+    /// Prefer spreading miners across different streams for the same campaign when enough streams are available.
+    @AppStorage("avoidDuplicateStreams", store: Settings.appStorageStore)
+    public var avoidDuplicateStreams: Bool = true
+
+    /// Whether followed or subscribed streamers should be preferred during channel selection.
+    @AppStorage("prioritiseFollowedStreamers", store: Settings.appStorageStore)
+    public var prioritiseFollowedStreamers: Bool = false
 
     /// Whether to sync all miners state (start/stop together)
     @AppStorage("syncMinersState", store: Settings.appStorageStore)
@@ -73,17 +86,13 @@ public final class Settings: ObservableObject {
     @AppStorage("runInBackground", store: Settings.appStorageStore)
     public var runInBackground: Bool = true
 
-    /// Display style used for the Mining/Queued queue rail in Overview.
-    @AppStorage("queueDisplayStyle", store: Settings.appStorageStore)
-    public var queueDisplayStyle: QueueDisplayStyle = .stacked
+    /// Whether to show category icons next to each row in the Activity Log.
+    @AppStorage("showActivityLogIcons", store: Settings.appStorageStore)
+    public var showActivityLogIcons: Bool = true
 
-    /// Whether Overview should show the Up Next queue rail.
-    @AppStorage("showOverviewQueue", store: Settings.appStorageStore)
-    public var showOverviewQueue: Bool = true
-
-    /// Miner whose queue should be shown on Overview. Empty means aggregate/all miners.
-    @AppStorage("overviewQueueMinerId", store: Settings.appStorageStore)
-    public var overviewQueueMinerId: String = ""
+    /// Whether to animate new rows sliding into the Activity Log.
+    @AppStorage("animateActivityLogRows", store: Settings.appStorageStore)
+    public var animateActivityLogRows: Bool = true
 
     /// JSON-encoded array of DropFilter for the Drops list view.
     @AppStorage("selectedDropsFiltersData", store: Settings.appStorageStore)
@@ -152,22 +161,6 @@ public final class Settings: ObservableObject {
     }
 
 #if DEBUG
-    /// Whether Overview should render a synthetic queue for testing/screenshots.
-    @AppStorage("debugFakeQueueEnabled", store: Settings.appStorageStore)
-    public var debugFakeQueueEnabled: Bool = false
-
-    /// Data source used for fake queue generation in debug builds.
-    @AppStorage("debugFakeQueueSource", store: Settings.appStorageStore)
-    public var debugFakeQueueSource: DebugFakeQueueSource = .prioritisedGames
-
-    /// Number of cards to render in the fake queue.
-    @AppStorage("debugFakeQueueLength", store: Settings.appStorageStore)
-    public var debugFakeQueueLength: Int = 3
-
-    /// JSON-encoded custom game name list for debug fake queue generation.
-    @AppStorage("debugFakeQueueCustomGamesData", store: Settings.appStorageStore)
-    private var debugFakeQueueCustomGamesData: String = "[]"
-
     /// Bypass account-link/eligibility gates so the miner watches a random live channel
     /// for any time-active campaign. For exercising the watch pipeline only — drops
     /// won't actually credit for unlinked accounts.
@@ -345,54 +338,6 @@ public final class Settings: ObservableObject {
         gameNames(for: .excluded)
     }
 
-#if DEBUG
-    public var clampedDebugFakeQueueLength: Int {
-        max(1, min(8, debugFakeQueueLength))
-    }
-
-    public var debugFakeQueueCustomGames: [String] {
-        get {
-            guard let data = debugFakeQueueCustomGamesData.data(using: .utf8),
-                  let decoded = try? JSONDecoder().decode([String].self, from: data) else {
-                return []
-            }
-            return decoded
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-        }
-        set {
-            let normalized = newValue
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-            if let data = try? JSONEncoder().encode(normalized),
-               let encoded = String(data: data, encoding: .utf8) {
-                debugFakeQueueCustomGamesData = encoded
-            }
-        }
-    }
-
-    public func addDebugFakeQueueGame(_ gameName: String) {
-        let trimmed = gameName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        var games = debugFakeQueueCustomGames
-        guard !games.contains(where: { $0.localizedCaseInsensitiveCompare(trimmed) == .orderedSame }) else { return }
-        games.append(trimmed)
-        debugFakeQueueCustomGames = games
-    }
-
-    public func removeDebugFakeQueueGames(atOffsets offsets: IndexSet) {
-        var games = debugFakeQueueCustomGames
-        games.remove(atOffsets: offsets)
-        debugFakeQueueCustomGames = games
-    }
-
-    public func moveDebugFakeQueueGames(fromOffsets offsets: IndexSet, toOffset destination: Int) {
-        var games = debugFakeQueueCustomGames
-        games.move(fromOffsets: offsets, toOffset: destination)
-        debugFakeQueueCustomGames = games
-    }
-#endif
-
     /// Add or update a game preference
     public func addGamePreference(_ game: Game, state: PreferenceState) {
         setGamePreference(game, state: state)
@@ -496,43 +441,6 @@ public final class Settings: ObservableObject {
         }
     }
 
-    public enum QueueDisplayStyle: String, CaseIterable, Identifiable, Sendable {
-        case classic = "classic"
-        case stacked = "stacked"
-        case coverFlow = "coverFlow"
-
-        public var id: String { rawValue }
-
-        public var displayName: String {
-            switch self {
-            case .classic:
-                return "Classic"
-            case .stacked:
-                return "Stacked"
-            case .coverFlow:
-                return "Cover Flow"
-            }
-        }
-    }
-
-#if DEBUG
-    public enum DebugFakeQueueSource: String, CaseIterable, Identifiable, Sendable {
-        case prioritisedGames = "prioritisedGames"
-        case customGames = "customGames"
-
-        public var id: String { rawValue }
-
-        public var displayName: String {
-            switch self {
-            case .prioritisedGames:
-                return "Prioritised Games"
-            case .customGames:
-                return "Custom Games"
-            }
-        }
-    }
-#endif
-    
     // MARK: - Initialization
     
     private init() {
@@ -681,9 +589,12 @@ public final class Settings: ObservableObject {
         appPresenceMode = .dockOnly
         autoStartOnLaunch = false
         enableBadgesEmotes = false
+        avoidDuplicateStreams = true
+        prioritiseFollowedStreamers = false
         syncMinersState = true
         runInBackground = true
-        queueDisplayStyle = .stacked
+        showActivityLogIcons = true
+        animateActivityLogRows = true
         preferredQuality = .auto
         showClaimNotifications = false
         lastSelectedGameId = ""
@@ -698,14 +609,8 @@ public final class Settings: ObservableObject {
         selectedDropsFiltersData = "[\"active\"]"
         miningStrategy = .mineAll
         preferSteamArtwork = true
-        showOverviewQueue = true
-        overviewQueueMinerId = ""
         ignoredWarningsData = "[]"
 #if DEBUG
-        debugFakeQueueEnabled = false
-        debugFakeQueueSource = .prioritisedGames
-        debugFakeQueueLength = 3
-        debugFakeQueueCustomGamesData = "[]"
         debugBypassLinkRequirement = false
 #endif
     }
@@ -728,6 +633,39 @@ public final class Settings: ObservableObject {
         }
         return UUID().uuidString.replacingOccurrences(of: "-", with: "") +
             UUID().uuidString.replacingOccurrences(of: "-", with: "")
+    }
+}
+
+@MainActor
+public final class LoginItemSettings: ObservableObject {
+    @Published public private(set) var isEnabled: Bool = false
+    @Published public private(set) var requiresApproval: Bool = false
+    @Published public private(set) var errorMessage: String?
+
+    public init() {
+        refresh()
+    }
+
+    public func refresh() {
+        let status = SMAppService.mainApp.status
+        isEnabled = status == .enabled
+        requiresApproval = status == .requiresApproval
+    }
+
+    public func setEnabled(_ enabled: Bool) {
+        errorMessage = nil
+
+        do {
+            if enabled {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+
+        refresh()
     }
 }
 

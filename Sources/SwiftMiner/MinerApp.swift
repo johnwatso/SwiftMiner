@@ -13,6 +13,7 @@ struct MinerApp: App {
     @State private var appModel: AppModel
     @State private var navigation: NavigationModel
     @State private var notificationDelegate = AppNotificationDelegate()
+    @State private var didApplyLaunchWindowPreference = false
 
     init() {
         let clientId = ClientConfiguration.clientId
@@ -39,6 +40,7 @@ struct MinerApp: App {
                     await requestNotificationPermission()
                     updater.checkForUpdatesInBackground()
                     presentationController.configure(mode: settings.appPresenceMode)
+                    applyLaunchWindowPreferenceIfNeeded()
                 }
                 .onChange(of: settings.appPresenceMode) { _, newValue in
                     presentationController.configure(mode: newValue)
@@ -92,6 +94,20 @@ struct MinerApp: App {
 
     private func requestNotificationPermission() async {
         _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
+    }
+
+    @MainActor
+    private func applyLaunchWindowPreferenceIfNeeded() {
+        guard !didApplyLaunchWindowPreference else { return }
+        didApplyLaunchWindowPreference = true
+
+        guard settings.startMinimized else { return }
+
+        DispatchQueue.main.async {
+            NSApp.windows
+                .filter { $0.canBecomeMain && $0.isVisible }
+                .forEach { $0.miniaturize(nil) }
+        }
     }
 
     private var menuBarExtraIsInserted: Binding<Bool> {

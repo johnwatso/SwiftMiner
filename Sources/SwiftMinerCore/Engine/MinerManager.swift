@@ -35,9 +35,6 @@ public final class MinerManager {
         public var isRunning: Bool
         public var priorityGames: [String]
         
-        /// Ordered list of candidate campaigns from the last selection pass (Debug only).
-        public var debugWinningQueue: [Campaign] = []
-
         /// Resolved "Primary State" for the user-facing activity UI (Phase 4).
         @MainActor
         public var primaryState: PrimaryState {
@@ -107,8 +104,7 @@ public final class MinerManager {
             allCampaigns: [Campaign] = [],
             dropsClaimed: Int = 0,
             isRunning: Bool = false,
-            priorityGames: [String] = [],
-            debugWinningQueue: [Campaign] = []
+            priorityGames: [String] = []
         ) {
             self.id = id
             self.accountId = accountId
@@ -124,7 +120,6 @@ public final class MinerManager {
             self.dropsClaimed = dropsClaimed
             self.isRunning = isRunning
             self.priorityGames = priorityGames
-            self.debugWinningQueue = debugWinningQueue
         }
 
         public var displayName: String {
@@ -244,6 +239,8 @@ public final class MinerManager {
     
     /// Track notification preference
     public var showClaimNotifications: Bool = false
+    public var avoidDuplicateStreams: Bool = true
+    public var prioritiseFollowedStreamers: Bool = false
     /// Debug-only: broadcast to every engine to bypass link/eligibility gates. Stored here
     /// so engines attached later (e.g. newly added accounts) pick up the current value.
     public var debugBypassLinkRequirement: Bool = false
@@ -292,6 +289,14 @@ public final class MinerManager {
         self.showClaimNotifications = enabled
         for engine in engines.values {
             await engine.updateNotificationPreference(enabled: enabled)
+        }
+    }
+
+    /// Broadcast followed/subscribed streamer channel ranking to all active engines.
+    public func updateFollowedStreamerPriority(enabled: Bool) async {
+        self.prioritiseFollowedStreamers = enabled
+        for engine in engines.values {
+            await engine.updateFollowedStreamerPriority(enabled: enabled)
         }
     }
 
@@ -390,9 +395,13 @@ public final class MinerManager {
         excludedGames: [String],
         strategy: MiningStrategy,
         enableBadgesEmotes: Bool,
+        avoidDuplicateStreams: Bool = true,
+        prioritiseFollowedStreamers: Bool = false,
         ignoredWarnings: [String] = []
     ) async {
         await updateIgnoredAccountLinkWarnings(ignoredWarnings)
+        self.avoidDuplicateStreams = avoidDuplicateStreams
+        self.prioritiseFollowedStreamers = prioritiseFollowedStreamers
         await setup()
         if autoStart && !miners.isEmpty {
             print("[MinerManager] Auto-starting \(miners.count) miner(s) on launch")
@@ -400,7 +409,9 @@ public final class MinerManager {
                 priorityGames: priorityGames,
                 excludedGames: excludedGames,
                 strategy: strategy,
-                enableBadgesEmotes: enableBadgesEmotes
+                enableBadgesEmotes: enableBadgesEmotes,
+                avoidDuplicateStreams: avoidDuplicateStreams,
+                prioritiseFollowedStreamers: prioritiseFollowedStreamers
             )
         }
     }
@@ -551,7 +562,7 @@ public final class MinerManager {
     // MARK: - Control Operations
 
     /// Start a specific miner
-    public func startMiner(minerId: String, priorityGames: [String], excludedGames: [String], strategy: MiningStrategy, enableBadgesEmotes: Bool = false, showClaimNotifications: Bool = false) async throws {
+    public func startMiner(minerId: String, priorityGames: [String], excludedGames: [String], strategy: MiningStrategy, enableBadgesEmotes: Bool = false, showClaimNotifications: Bool = false, avoidDuplicateStreams: Bool = true, prioritiseFollowedStreamers: Bool = false) async throws {
         guard let engine = engines[minerId],
               let miner = getMiner(id: minerId) else {
             throw TwitchMinerError.sessionNotStarted
@@ -567,6 +578,8 @@ public final class MinerManager {
 
         // Update notification preference if provided
         self.showClaimNotifications = showClaimNotifications
+        self.avoidDuplicateStreams = avoidDuplicateStreams
+        self.prioritiseFollowedStreamers = prioritiseFollowedStreamers
 
         // Update mining preferences
         let ignoredGames = Array(ignoredAccountLinkWarnings[miner.accountId] ?? [])
@@ -575,6 +588,8 @@ public final class MinerManager {
             excludedGames: excludedGames,
             enableBadgesEmotes: enableBadgesEmotes,
             showClaimNotifications: self.showClaimNotifications,
+            avoidDuplicateStreams: self.avoidDuplicateStreams,
+            prioritiseFollowedStreamers: self.prioritiseFollowedStreamers,
             ignoredAccountLinkWarningGames: ignoredGames
         )
         await engine.updateMiningStrategy(strategy)
@@ -607,8 +622,10 @@ public final class MinerManager {
     }
     
     /// Start all miners with staggered delays to avoid API rate limiting
-    public func startAll(priorityGames: [String], excludedGames: [String], strategy: MiningStrategy, enableBadgesEmotes: Bool = false, showClaimNotifications: Bool = false) async {
+    public func startAll(priorityGames: [String], excludedGames: [String], strategy: MiningStrategy, enableBadgesEmotes: Bool = false, showClaimNotifications: Bool = false, avoidDuplicateStreams: Bool = true, prioritiseFollowedStreamers: Bool = false) async {
         self.showClaimNotifications = showClaimNotifications
+        self.avoidDuplicateStreams = avoidDuplicateStreams
+        self.prioritiseFollowedStreamers = prioritiseFollowedStreamers
         let notRunningMiners = miners.filter { !$0.isRunning }
         let totalToStart = notRunningMiners.count
         
@@ -624,7 +641,10 @@ public final class MinerManager {
                 priorityGames: priorityGames, 
                 excludedGames: excludedGames, 
                 strategy: strategy,
-                enableBadgesEmotes: enableBadgesEmotes
+                enableBadgesEmotes: enableBadgesEmotes,
+                showClaimNotifications: showClaimNotifications,
+                avoidDuplicateStreams: avoidDuplicateStreams,
+                prioritiseFollowedStreamers: prioritiseFollowedStreamers
             )
         }
     }
@@ -874,6 +894,15 @@ public final class MinerManager {
     }
     
     private func setupEngineCallbacks(engine: MinerEngine, minerId: String) async {
+        await engine.setChannelAssignmentAvoidanceProvider { [weak self] campaignId, viableChannelCount in
+            guard let self else { return [] }
+            return await self.assignedChannelIds(
+                campaignId: campaignId,
+                excluding: minerId,
+                viableChannelCount: viableChannelCount
+            )
+        }
+
         await engine.setStatusChangeHandler { [weak self] status in
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
@@ -918,13 +947,6 @@ public final class MinerManager {
             }
         }
         
-        await engine.setDebugWinningQueueHandler { [weak self] winningQueue in
-            Task { @MainActor [weak self] in
-                guard let self = self else { return }
-                self.updateMinerStatus(minerId: minerId, debugWinningQueue: winningQueue)
-            }
-        }
-        
         await engine.setDropClaimedHandler { [weak self] drop in
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
@@ -951,6 +973,25 @@ public final class MinerManager {
                 self.updateMinerStatus(minerId: minerId, status: .error, needsAuth: needsAuth)
             }
         }
+    }
+
+    private func assignedChannelIds(
+        campaignId: String,
+        excluding minerId: String,
+        viableChannelCount: Int
+    ) async -> Set<String> {
+        guard avoidDuplicateStreams, viableChannelCount > 4 else { return [] }
+
+        var assigned = Set<String>()
+        for miner in miners where miner.id != minerId && miner.isRunning && miner.currentCampaignId == campaignId {
+            guard let engine = engines[miner.id] else { continue }
+            let state = await engine.getStallState()
+            if let channelId = state.currentChannelId, !channelId.isEmpty {
+                assigned.insert(channelId)
+            }
+        }
+
+        return assigned
     }
     
     private func mapSessionStatus(_ status: SessionStatus) -> MinerStatus {
@@ -994,7 +1035,6 @@ public final class MinerManager {
         isRunning: Bool? = nil,
         priorityGames: [String]? = nil,
         needsAuth: Bool? = nil,
-        debugWinningQueue: [Campaign]? = nil,
         ownerDiscordId: String? = nil
     ) {
         guard let index = miners.firstIndex(where: { $0.id == minerId }) else { return }
@@ -1013,7 +1053,6 @@ public final class MinerManager {
         if let running = isRunning { miner.isRunning = running }
         if let needsAuth = needsAuth { miner.needsAuth = needsAuth }
         if let priorityGames = priorityGames { miner.priorityGames = priorityGames }
-        if let winningQueue = debugWinningQueue { miner.debugWinningQueue = winningQueue }
         if let ownerId = ownerDiscordId { miner.ownerDiscordId = ownerId }
 
         miners[index] = miner

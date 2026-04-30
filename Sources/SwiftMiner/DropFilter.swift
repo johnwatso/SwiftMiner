@@ -28,7 +28,7 @@ public enum DropFilter: String, CaseIterable, Identifiable, Hashable, Codable {
     }
 }
 
-/// Filter options for the Events view.
+/// Filter options for the Activity Log view.
 public enum EventFilter: String, CaseIterable, Identifiable, Hashable, Codable {
     case mining
     case heartbeats
@@ -62,7 +62,7 @@ public enum EventFilter: String, CaseIterable, Identifiable, Hashable, Codable {
         case .warnings: return "exclamationmark.triangle"
         case .errors: return "xmark.octagon"
         case .accountLink: return "link.badge.plus"
-        case .scan: return "line.3.horizontal.decrease.circle"
+        case .scan: return "barcode.viewfinder"
         case .system: return "gearshape"
         }
     }
@@ -70,21 +70,21 @@ public enum EventFilter: String, CaseIterable, Identifiable, Hashable, Codable {
     public var description: String {
         switch self {
         case .mining:
-            return "Channel selection, watch sessions, switching, and mining progress checks."
+            return "Streams the miner is trying, watching, or switching between."
         case .heartbeats:
-            return "Watch heartbeat and Spade activity used to keep drop progress moving."
+            return "Background watch signals that keep Twitch counting progress."
         case .drops:
-            return "Drop progress, claimable drops, and successful claim updates."
+            return "Progress updates, ready-to-claim rewards, and claims."
         case .warnings:
-            return "Recoverable issues that may need attention but did not stop the app."
+            return "Things to notice, but the miner kept running."
         case .errors:
-            return "Failures that blocked an action or need troubleshooting."
+            return "Problems that stopped something from working."
         case .accountLink:
-            return "Events where Twitch account linking is missing or blocking campaign progress."
+            return "Games that need account linking before drops can count."
         case .scan:
-            return "Campaign scan details, filtered campaigns, and background refresh noise."
+            return "Campaign checks and why some campaigns were skipped."
         case .system:
-            return "General app lifecycle, setup, and status messages that do not fit another filter."
+            return "App startup, setup, and other general messages."
         }
     }
 }

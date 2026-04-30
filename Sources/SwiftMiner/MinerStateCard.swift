@@ -80,9 +80,7 @@ struct MinerStateCard: View {
                     .foregroundStyle(.green)
             }
 
-            ProgressView(value: progress.progressFraction)
-                .progressViewStyle(.linear)
-                .tint(.green)
+            AnimatedLinearProgressView(value: progress.progressFraction, tint: .green)
 
             HStack {
                 Text("\(progress.campaignName)")
@@ -358,19 +356,6 @@ struct MinerActivityCard: View {
             }
 
             Spacer(minLength: 8)
-
-            HStack(spacing: 5) {
-                Image(systemName: snapshot.statusSymbol)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(snapshot.statusColor)
-                    .accessibilityHidden(true)
-
-                Circle()
-                    .fill(snapshot.statusColor)
-                    .frame(width: 7, height: 7)
-                    .accessibilityHidden(true)
-            }
-                .help(snapshot.statusText)
         }
     }
 
@@ -390,9 +375,7 @@ struct MinerActivityCard: View {
             }
 
             if let progress = snapshot.now.progressFraction {
-                ProgressView(value: progress)
-                    .progressViewStyle(.linear)
-                    .tint(snapshot.now.accent)
+                AnimatedLinearProgressView(value: progress, tint: snapshot.now.accent)
                     .padding(.top, isExpanded ? 0 : 2)
             }
 
@@ -510,6 +493,48 @@ private struct ActivityLabel: View {
     }
 }
 
+struct AnimatedLinearProgressView: View {
+    let value: Double
+    let tint: Color
+    var duration: Double = 0.65
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var displayedValue: Double = 0
+
+    private var clampedValue: Double {
+        min(1, max(0, value))
+    }
+
+    var body: some View {
+        ProgressView(value: displayedValue)
+            .progressViewStyle(.linear)
+            .tint(tint)
+            .onAppear {
+                guard !reduceMotion else {
+                    displayedValue = clampedValue
+                    return
+                }
+
+                displayedValue = 0
+                DispatchQueue.main.async {
+                    withAnimation(.easeOut(duration: duration)) {
+                        displayedValue = clampedValue
+                    }
+                }
+            }
+            .onChange(of: clampedValue) { _, newValue in
+                guard !reduceMotion else {
+                    displayedValue = newValue
+                    return
+                }
+
+                withAnimation(.easeInOut(duration: duration)) {
+                    displayedValue = newValue
+                }
+            }
+    }
+}
+
 struct MinerActivitySnapshot {
     let now: MinerActivityItem
     let upNext: MinerActivityItem?
@@ -530,7 +555,7 @@ struct MinerActivitySnapshot {
         let now = currentActivityItem(for: miner, campaign: currentCampaign)
         
         let activePriorityGames = miner.priorityGames.isEmpty ? priorityGames : miner.priorityGames
-        
+
         let next = likelyNextItem(
             for: miner,
             excludingCampaignId: currentCampaign?.id ?? miner.currentCampaignId,
@@ -539,7 +564,7 @@ struct MinerActivitySnapshot {
             strategy: strategy,
             includesBadgeAndEmoteCampaigns: includesBadgeAndEmoteCampaigns
         )
-
+        
         let blocked = blockedPriorityItems(
             for: miner,
             excludingCampaignId: currentCampaign?.id ?? miner.currentCampaignId,
@@ -631,12 +656,12 @@ struct MinerActivitySnapshot {
             case .idle:
                 if resolved.reason == .noDropsAvailable {
                     return MinerActivityItem(
-                        id: "complete-\(miner.id)-\(resolved.gameId)",
-                        title: "Drops complete",
-                        subtitle: "All available drops are complete for \(resolved.gameName).",
+                        id: "waiting-drops-\(miner.id)-\(resolved.gameId)",
+                        title: "Waiting",
+                        subtitle: "No active drops are available for this account.",
                         detail: nil,
-                        symbol: "checkmark.seal.fill",
-                        accent: .green
+                        symbol: "clock",
+                        accent: .secondary
                     )
                 }
             case .watching:
@@ -833,19 +858,19 @@ struct MinerActivitySnapshot {
             }
         }
 
-        if let campaign = sortedCandidates(eligible, priorityKeys: priorityKeys, strategy: strategy).first {
-            return MinerActivityItem(
-                id: "next-\(campaign.id)",
-                title: campaign.game.name,
-                subtitle: campaign.name,
-                detail: "Likely based on current priority rules",
-                symbol: "arrow.forward.circle",
-                accent: .secondary,
-                campaignId: campaign.id
-            )
+        guard let campaign = sortedCandidates(eligible, priorityKeys: priorityKeys, strategy: strategy).first else {
+            return nil
         }
 
-        return nil
+        return MinerActivityItem(
+            id: "next-\(campaign.id)",
+            title: campaign.game.name,
+            subtitle: campaign.name,
+            detail: "Likely based on current priority rules",
+            symbol: "arrow.forward.circle",
+            accent: .secondary,
+            campaignId: campaign.id
+        )
     }
 
     private static func blockedPriorityItems(
@@ -949,8 +974,8 @@ struct MinerActivitySnapshot {
     }
 
     private static func statusText(for miner: MinerManager.ManagedMiner, now: MinerActivityItem) -> String {
-        if now.id.hasPrefix("complete-") {
-            return "Drops complete"
+        if now.id.hasPrefix("waiting-drops-") {
+            return "Waiting"
         }
 
         switch miner.status {

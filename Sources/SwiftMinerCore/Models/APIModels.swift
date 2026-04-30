@@ -89,6 +89,59 @@ public struct TwitchUsersResponse: Codable {
     public let data: [TwitchUser]
 }
 
+public struct FollowedChannel: Codable, Sendable {
+    public let broadcasterId: String
+    public let broadcasterLogin: String
+    public let broadcasterName: String
+
+    enum CodingKeys: String, CodingKey {
+        case broadcasterId = "broadcaster_id"
+        case broadcasterLogin = "broadcaster_login"
+        case broadcasterName = "broadcaster_name"
+    }
+}
+
+public struct FollowedChannelsResponse: Codable, Sendable {
+    public struct Pagination: Codable, Sendable {
+        public let cursor: String?
+    }
+
+    public let data: [FollowedChannel]
+    public let pagination: Pagination?
+}
+
+public struct UserSubscriptionResponse: Codable, Sendable {
+    public struct Subscription: Codable, Sendable {
+        public let broadcasterId: String
+        public let broadcasterLogin: String
+        public let broadcasterName: String
+
+        enum CodingKeys: String, CodingKey {
+            case broadcasterId = "broadcaster_id"
+            case broadcasterLogin = "broadcaster_login"
+            case broadcasterName = "broadcaster_name"
+        }
+    }
+
+    public let data: [Subscription]
+}
+
+public struct ChannelRelationship: Sendable, Equatable {
+    public let isFollowed: Bool
+    public let isSubscribed: Bool
+
+    public init(isFollowed: Bool = false, isSubscribed: Bool = false) {
+        self.isFollowed = isFollowed
+        self.isSubscribed = isSubscribed
+    }
+
+    public var rank: Int {
+        if isSubscribed { return 2 }
+        if isFollowed { return 1 }
+        return 0
+    }
+}
+
 /// Device code response for authentication flow
 public struct DeviceCodeResponse: Codable, Sendable {
     public let deviceCode: String

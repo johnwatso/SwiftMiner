@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>SwiftMiner 1.11 - Release Notes</title>
+  <title>SwiftMiner Release Notes</title>
   <style>
     :root { color-scheme: light dark; }
     body {
@@ -23,7 +23,6 @@
     }
     h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
     .meta { margin: 0 0 24px; color: #52606d; font-size: 14px; }
-    p { margin: 0 0 16px; }
     h2 { margin: 28px 0 10px; font-size: 20px; }
     ul { margin: 0 0 20px; padding-left: 22px; }
     li { margin: 0 0 8px; }
@@ -42,8 +41,19 @@
 </head>
 <body>
   <main>
-    <h1>SwiftMiner 1.11</h1>
-    <p class="meta">Version 1.11</p>
+    <h1>SwiftMiner Release Notes</h1>
+    <p class="meta">Recent Sparkle update history</p>
+    <h2>Version 1.20</h2>
+    <ul>
+      <li>Adds smarter stream selection, including optional stream spreading so multiple miners avoid piling onto the same verified live channel when enough alternatives are available.</li>
+      <li>Adds an option to prioritise followed and subscribed Twitch streamers, with subscriptions ranked ahead of follows during channel selection.</li>
+      <li>Adds a Watching Streamer panel to miner views so each account clearly shows the channel and campaign it is currently using.</li>
+      <li>Refreshes the Activity Log with clearer filters, optional category icons, new-row animation, timestamp formatting, and the new Activity Log navigation name.</li>
+      <li>Adds login launch controls, including Start at login, Start minimised, and approval/error messaging for macOS login item setup.</li>
+      <li>Improves drop claiming by syncing Twitch inventory before and after claims so completed and claimed rewards stay accurate.</li>
+      <li>Cleans up Overview and miner status language by removing the old Up Next/debug queue surfaces and showing waiting states more accurately.</li>
+      <li>Updates the Sparkle appcast and release-note links so the in-app updater can show richer What's New content.</li>
+    </ul>
     <h2>Version 1.11</h2>
     <ul>
       <li>Ships the latest SwiftMiner dashboard, search, and miner workflow improvements through the stable update feed.</li>
@@ -67,7 +77,7 @@
       <li>Automatically refreshes expired Twitch tokens where possible and gives clearer re-auth guidance when a session needs attention.</li>
       <li>Polishes onboarding, account details, notification handling, and the Set Steam ID flow.</li>
     </ul>
-    <p><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/ebbc63a08bb0f1249f21d53f1c59adaac4ab1127">ebbc63a</a></p>
+    <p><a href="./1.20.html">Version 1.20 release page</a></p>
   </main>
 </body>
 </html>
