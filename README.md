@@ -56,6 +56,8 @@ SwiftMiner provides a single interface to manage multiple accounts, with release
 - Supports multiple accounts running in parallel
 - Provides both a main window and a menu bar interface
 - Uses Twitch device-code login, with no embedded browser
+- Ships signed and notarized release builds for macOS
+- Supports Sparkle update checks, automatic updates, and unattended updates
 - Runs as a native macOS app built with Swift and SwiftUI
 
 ## Preview
@@ -87,6 +89,8 @@ Download the latest release from [GitHub Releases](https://github.com/johnwatso/
 4. Allow notifications if you want claim alerts
 
 Release builds support both Apple Silicon (`arm64`) and Intel (`x86_64`).
+
+Release builds are signed and notarized by Apple, and SwiftMiner includes Sparkle support for update prompts, automatic background checks, and unattended updates when macOS allows them.
 
 > [!NOTE]
 > Intel support depends on Apple's toolchain. If future macOS SDKs drop Intel support, SwiftMiner will move to Apple Silicon only.
@@ -150,7 +154,6 @@ SwiftMiner depends on Twitch's private behavior for Drops, watch progress, and c
 
 - [Architecture Overview](Documentation/ARCHITECTURE.md)
 - [Engine Architecture](Documentation/EngineArchitecture.md)
-- [Release Runbook](Documentation/RELEASING.md)
 
 ## License
 
