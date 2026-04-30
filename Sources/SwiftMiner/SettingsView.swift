@@ -146,6 +146,14 @@ private struct GeneralSettingsView: View {
                         .foregroundStyle(.orange)
                 }
 
+                Toggle("Prompt for available updates", isOn: automaticUpdateChecksBinding)
+                    .disabled(!updater.canCheckForUpdates)
+                SettingsSecondaryText("Check in the background and show Sparkle's update prompt when user action is needed.")
+
+                Toggle("Allow unattended updates", isOn: automaticUpdatesBinding)
+                    .disabled(!updater.canCheckForUpdates || !updater.automaticallyChecksForUpdates)
+                SettingsSecondaryText("Download and install eligible updates in the background when macOS does not require authorization.")
+
                 Button("Check for Updates...") {
                     updater.checkForUpdates()
                 }
@@ -176,6 +184,22 @@ private struct GeneralSettingsView: View {
             loginItemSettings.isEnabled
         } set: { isEnabled in
             loginItemSettings.setEnabled(isEnabled)
+        }
+    }
+
+    private var automaticUpdateChecksBinding: Binding<Bool> {
+        Binding {
+            updater.automaticallyChecksForUpdates
+        } set: { isEnabled in
+            updater.setAutomaticallyChecksForUpdates(isEnabled)
+        }
+    }
+
+    private var automaticUpdatesBinding: Binding<Bool> {
+        Binding {
+            updater.automaticallyDownloadsUpdates
+        } set: { isEnabled in
+            updater.setAutomaticallyDownloadsUpdates(isEnabled)
         }
     }
 

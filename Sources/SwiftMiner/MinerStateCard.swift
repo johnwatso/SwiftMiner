@@ -602,7 +602,7 @@ struct MinerActivitySnapshot {
 
     @MainActor
     private static func currentActivityItem(for miner: MinerManager.ManagedMiner, campaign: Campaign?) -> MinerActivityItem {
-        if miner.status == .watching, let campaign {
+        if miner.status == .watching, let campaign, hasUnclaimedDrop(in: campaign) {
             let progress = activeDropProgress(for: campaign, miner: miner)
             let detail = progress.map { item in
                 if item.currentMinutes == 0, item.remainingMinutes > 0 {
@@ -788,6 +788,10 @@ struct MinerActivitySnapshot {
                 campaignId: resolved.campaignId
             )
         }
+    }
+
+    private static func hasUnclaimedDrop(in campaign: Campaign) -> Bool {
+        campaign.drops.contains { !$0.isClaimed }
     }
 
     @MainActor
