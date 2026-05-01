@@ -503,7 +503,7 @@ struct OverviewView: View {
             state = .watching
         }
         let game = Game(id: campaign.gameId ?? campaign.id, name: campaign.gameName, boxArtURL: campaign.artworkURL)
-        let preference = settings.gamePreferences.first { matches(campaign, preference: $0) }
+        let preference = preferredPreference(matching: game)
         let artworkURL = preference?.customArtworkURL
             ?? (
                 SteamArtworkService.supportsSteamArtwork(forGameName: campaign.gameName, gameId: campaign.gameId)
@@ -597,6 +597,16 @@ struct OverviewView: View {
             usesCustomArtwork: preference.customArtworkURL != nil,
             game: Game(id: preference.gameId, name: preference.gameName, boxArtURL: artworkURL)
         )
+    }
+
+    private func preferredPreference(matching game: Game) -> GamePreference? {
+        let matches = settings.gamePreferences.filter { preference in
+            let idMatches = !game.id.isEmpty && preference.gameId == game.id
+            let nameMatches = preference.gameName.localizedCaseInsensitiveCompare(game.name) == .orderedSame
+            return idMatches || nameMatches
+        }
+
+        return matches.first(where: { $0.customArtworkURL != nil }) ?? matches.first
     }
 
     private func placeholderRailItem(for section: CampaignFeedSection) -> CampaignRailItem {
@@ -1506,11 +1516,12 @@ private struct CampaignFeedCard: View {
 
     private var currentPreference: GamePreference? {
         guard let game = item.game else { return nil }
-        return settings.gamePreferences.first { preference in
+        let matches = settings.gamePreferences.filter { preference in
             let idMatches = !game.id.isEmpty && preference.gameId == game.id
             let nameMatches = preference.gameName.localizedCaseInsensitiveCompare(game.name) == .orderedSame
             return idMatches || nameMatches
         }
+        return matches.first(where: { $0.customArtworkURL != nil }) ?? matches.first
     }
 
     private var hasCustomArtwork: Bool {

@@ -4,7 +4,11 @@ import SwiftMinerCore
 /// Execution layer overview - scalable multi-miner workspace.
 struct MinersOverviewView: View {
     @Environment(NavigationModel.self) private var navigation
+    @ObservedObject private var settings = Settings.shared
     @State private var selectedActivitySummary: MinerManager.MinerActivitySummary?
+    @State private var hasCapturedInitialLinkIssues = false
+    @State private var previousLinkIssuesById: [String: PrioritisedLinkIssue] = [:]
+    @State private var linkNotice: LinkNotice?
 
     private var miners: [MinerManager.ManagedMiner] {
         navigation.minerManager.miners
@@ -35,27 +39,18 @@ struct MinersOverviewView: View {
         .navigationTitle("Miners")
         .task {
             syncSelection()
+            captureInitialLinkIssuesIfNeeded()
         }
         .onChange(of: miners.map(\.id)) { _, _ in
             syncSelection()
+        }
+        .onChange(of: rawLinkIssueSignature) { oldValue, newValue in
+            handleLinkIssueSignatureChange(from: oldValue, to: newValue)
         }
     }
 
     private var minerListPane: some View {
         VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(hasMultipleMiners ? "Miners" : "Miner")
-                    .font(.headline)
-
-                Text(hasMultipleMiners ? "Select a miner to inspect its state." : "Single-miner focus mode.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 12)
-            .padding(.top, 14)
-
             ScrollView {
                 LazyVStack(spacing: 0) {
                     ForEach(Array(miners.enumerated()), id: \.element.id) { index, miner in
@@ -89,14 +84,6 @@ struct MinersOverviewView: View {
                 .padding(.horizontal, 8)
             }
             .scrollIndicators(.never)
-
-            if hasMultipleMiners {
-                Spacer(minLength: 18)
-
-                compactAcrossAllAccountsSection
-                    .padding(.horizontal, 8)
-                    .padding(.bottom, 8)
-            }
         }
         .frame(
             minWidth: hasMultipleMiners ? 220 : 148,
@@ -121,13 +108,19 @@ struct MinersOverviewView: View {
                         startLinkAccountFlow(for: miner)
                     })
 
+                    if let linkNotice {
+                        LinkNoticeBanner(notice: linkNotice) {
+                            withAnimation(.easeInOut(duration: 0.18)) {
+                                self.linkNotice = nil
+                            }
+                        }
+                    }
+
+                    selectedMinerLinkIssuesSection(for: miner)
+
                     selectedMinerWatchingStreamerSection(for: miner)
 
                     minerCampaignsSection(for: miner, campaigns: activeCampaigns)
-
-                    if !hasMultipleMiners {
-                        acrossAllAccountsSection
-                    }
                 }
                 .frame(maxWidth: 1180, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -157,116 +150,6 @@ struct MinersOverviewView: View {
 
     private func refreshSelectedActivitySummary(for minerId: String) async {
         selectedActivitySummary = await navigation.minerManager.getMinerActivitySummary(minerId: minerId)
-    }
-
-    private var acrossAllAccountsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("ACROSS ALL ACCOUNTS")
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(.tertiary)
-                .padding(.leading, 4)
-
-            LazyVGrid(
-                columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: 3),
-                spacing: 14
-            ) {
-                MetricCard(
-                    title: "Watching Now",
-                    value: "\(activeMinerCount)",
-                    subtitle: "\(miners.count) configured accounts",
-                    icon: "play.fill",
-                    color: .blue
-                )
-                MetricCard(
-                    title: "Prioritised Campaigns",
-                    value: "\(prioritisedCampaignCount)",
-                    subtitle: "active campaigns",
-                    icon: "list.bullet.rectangle",
-                    color: .green
-                )
-                MetricCard(
-                    title: "Ready to Claim",
-                    value: "\(claimableDropCount)",
-                    subtitle: "\(earningDropCount) drops earning",
-                    icon: "tray.and.arrow.down.fill",
-                    color: .orange
-                )
-            }
-        }
-        .padding(.horizontal, 2)
-    }
-
-    private var compactAcrossAllAccountsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("ACROSS ALL ACCOUNTS")
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(.tertiary)
-
-            VStack(spacing: 8) {
-                CompactMetricCard(
-                    title: "Watching",
-                    value: "\(activeMinerCount)",
-                    subtitle: "\(miners.count) accounts",
-                    icon: "play.fill",
-                    color: .blue
-                )
-                CompactMetricCard(
-                    title: "Prioritised",
-                    value: "\(prioritisedCampaignCount)",
-                    subtitle: "active campaigns",
-                    icon: "list.bullet.rectangle",
-                    color: .green
-                )
-                CompactMetricCard(
-                    title: "Ready",
-                    value: "\(claimableDropCount)",
-                    subtitle: "\(earningDropCount) earning",
-                    icon: "tray.and.arrow.down.fill",
-                    color: .orange
-                )
-            }
-        }
-        .padding(12)
-        .background(.background.opacity(0.40), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
-                .strokeBorder(.separator.opacity(0.22), lineWidth: 1)
-        }
-    }
-
-    private var activeMinerCount: Int {
-        miners.filter { miner in
-            miner.status == .watching || miner.status == .claiming
-        }.count
-    }
-
-    private var prioritisedCampaignCount: Int {
-        var campaignIds = Set<String>()
-        for miner in miners {
-            for campaign in activePrioritisedCampaigns(for: miner) {
-                campaignIds.insert(campaign.id)
-            }
-        }
-        return campaignIds.count
-    }
-
-    private var claimableDropCount: Int {
-        miners.reduce(0) { total, miner in
-            total + miner.allCampaigns.reduce(0) { campaignTotal, campaign in
-                campaignTotal + campaign.drops.filter(\.isClaimable).count
-            }
-        }
-    }
-
-    private var earningDropCount: Int {
-        miners.reduce(0) { total, miner in
-            total + miner.allCampaigns.reduce(0) { campaignTotal, campaign in
-                campaignTotal + campaign.drops.filter { drop in
-                    guard !drop.isClaimed, !drop.isClaimable else { return false }
-                    return (drop.progress?.currentMinutes ?? 0) > 0
-                }.count
-            }
-        }
     }
 
     private var selectionBinding: Binding<String?> {
@@ -331,6 +214,60 @@ struct MinersOverviewView: View {
     }
 
     @ViewBuilder
+    private func selectedMinerLinkIssuesSection(for miner: MinerManager.ManagedMiner) -> some View {
+        let issues = prioritisedLinkIssues(for: miner, includeIgnored: false)
+        let mutedIssues = prioritisedLinkIssues(for: miner, includeIgnored: true)
+            .filter(\.isIgnored)
+
+        if !issues.isEmpty || !mutedIssues.isEmpty {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 8) {
+                    Text("ACCOUNT LINK REMINDERS")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.tertiary)
+
+                    Text("\(issues.count)")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.tertiary)
+
+                    Spacer()
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+
+                VStack(spacing: 1) {
+                    ForEach(issues) { issue in
+                        PrioritisedLinkIssueRow(
+                            issue: issue,
+                            actionTitle: "Dismiss",
+                            actionSystemImage: "bell.slash",
+                            actionRole: nil
+                        ) {
+                            setLinkReminder(false, for: issue)
+                        }
+                    }
+
+                    ForEach(mutedIssues) { issue in
+                        PrioritisedLinkIssueRow(
+                            issue: issue,
+                            actionTitle: "Remind me",
+                            actionSystemImage: "bell",
+                            actionRole: nil
+                        ) {
+                            setLinkReminder(true, for: issue)
+                        }
+                    }
+                }
+            }
+            .background(.orange.opacity(0.07), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
+                    .strokeBorder(.orange.opacity(0.24), lineWidth: 1)
+            }
+        }
+    }
+
+    @ViewBuilder
     private func minerCampaignsSection(for miner: MinerManager.ManagedMiner, campaigns: [Campaign]) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
@@ -352,7 +289,20 @@ struct MinersOverviewView: View {
                     NoActiveCampaignsRow()
                 } else {
                     ForEach(campaigns) { campaign in
-                        CampaignStatusRow(miner: miner, campaign: campaign)
+                        let gameId = warningGameId(for: campaign)
+                        let isIgnored = settings.isIgnoringAccountLinkWarnings(for: miner.accountId, gameId: gameId)
+
+                        CampaignStatusRow(
+                            miner: miner,
+                            campaign: campaign,
+                            isWarningIgnored: isIgnored,
+                            onDismissWarning: {
+                                setLinkReminder(false, for: miner, gameId: gameId, gameName: campaign.game.name)
+                            },
+                            onRemindWarning: {
+                                setLinkReminder(true, for: miner, gameId: gameId, gameName: campaign.game.name)
+                            }
+                        )
                     }
                 }
             }
@@ -365,7 +315,7 @@ struct MinersOverviewView: View {
     }
 
     private func activePrioritisedCampaigns(for miner: MinerManager.ManagedMiner) -> [Campaign] {
-        let configuredPriorityGames = miner.priorityGames.isEmpty ? Settings.shared.priorityGames : miner.priorityGames
+        let configuredPriorityGames = miner.priorityGames.isEmpty ? settings.priorityGames : miner.priorityGames
         let priorityKeys = configuredPriorityGames
             .map { normalizedGameKey($0) }
             .filter { !$0.isEmpty }
@@ -441,6 +391,162 @@ struct MinersOverviewView: View {
     private func normalizedGameKey(_ value: String) -> String {
         value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
+
+    private var rawLinkIssueSignature: String {
+        prioritisedLinkIssues(includeIgnored: true)
+            .map(\.id)
+            .sorted()
+            .joined(separator: "|")
+    }
+
+    private func captureInitialLinkIssuesIfNeeded() {
+        guard !hasCapturedInitialLinkIssues else { return }
+        previousLinkIssuesById = Dictionary(
+            uniqueKeysWithValues: prioritisedLinkIssues(includeIgnored: true).map { ($0.id, $0) }
+        )
+        hasCapturedInitialLinkIssues = true
+    }
+
+    private func handleLinkIssueSignatureChange(from oldValue: String, to newValue: String) {
+        let currentIssues = prioritisedLinkIssues(includeIgnored: true)
+        let currentById = Dictionary(uniqueKeysWithValues: currentIssues.map { ($0.id, $0) })
+
+        guard hasCapturedInitialLinkIssues else {
+            previousLinkIssuesById = currentById
+            hasCapturedInitialLinkIssues = true
+            return
+        }
+
+        let resolvedIds = Set(previousLinkIssuesById.keys).subtracting(currentById.keys)
+        if let resolvedIssue = resolvedIds.sorted().compactMap({ previousLinkIssuesById[$0] }).first,
+           isLinkedNow(resolvedIssue) {
+            showLinkedNotice(for: resolvedIssue)
+        }
+
+        previousLinkIssuesById = currentById
+    }
+
+    private func showLinkedNotice(for issue: PrioritisedLinkIssue) {
+        let notice = LinkNotice(
+            id: UUID(),
+            title: "\(issue.gameName) linked",
+            message: "\(issue.minerName) can mine those prioritised drops now."
+        )
+
+        withAnimation(.easeInOut(duration: 0.18)) {
+            linkNotice = notice
+        }
+
+        Task {
+            let service = NotificationService()
+            await service.configure(enabled: true)
+            await service.notifyAccountLinked(gameName: issue.gameName)
+        }
+
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 8 * 1_000_000_000)
+            guard linkNotice?.id == notice.id else { return }
+            withAnimation(.easeInOut(duration: 0.18)) {
+                linkNotice = nil
+            }
+        }
+    }
+
+    private func prioritisedLinkIssues(includeIgnored: Bool) -> [PrioritisedLinkIssue] {
+        miners.flatMap { prioritisedLinkIssues(for: $0, includeIgnored: includeIgnored) }
+    }
+
+    private func prioritisedLinkIssues(for miner: MinerManager.ManagedMiner, includeIgnored: Bool) -> [PrioritisedLinkIssue] {
+        let grouped = Dictionary(grouping: activePrioritisedCampaigns(for: miner)) { campaign in
+            warningGameId(for: campaign)
+        }
+
+        return grouped.compactMap { gameId, campaigns in
+            let blockedCampaigns = campaigns.filter { $0.activityStatus(for: miner) == .requiresLink }
+            guard !blockedCampaigns.isEmpty, let first = blockedCampaigns.first else { return nil }
+
+            let isIgnored = settings.isIgnoringAccountLinkWarnings(for: miner.accountId, gameId: gameId)
+            guard includeIgnored || !isIgnored else { return nil }
+
+            return PrioritisedLinkIssue(
+                minerId: miner.id,
+                accountId: miner.accountId,
+                minerName: miner.displayName,
+                gameId: gameId,
+                gameName: first.game.name,
+                campaignNames: blockedCampaigns.map(\.name).sorted(),
+                isIgnored: isIgnored
+            )
+        }
+        .sorted {
+            if $0.isIgnored != $1.isIgnored { return !$0.isIgnored }
+            return $0.gameName.localizedCaseInsensitiveCompare($1.gameName) == .orderedAscending
+        }
+    }
+
+    private func setLinkReminder(_ enabled: Bool, for issue: PrioritisedLinkIssue) {
+        guard let miner = miners.first(where: { $0.id == issue.minerId }) else { return }
+        setLinkReminder(enabled, for: miner, gameId: issue.gameId, gameName: issue.gameName)
+    }
+
+    private func setLinkReminder(
+        _ enabled: Bool,
+        for miner: MinerManager.ManagedMiner,
+        gameId: String,
+        gameName: String
+    ) {
+        settings.setIgnoreAccountLinkWarnings(!enabled, for: miner.accountId, gameId: gameId)
+
+        Task {
+            await navigation.minerManager.setAccountLinkWarningIgnored(
+                minerId: miner.id,
+                gameId: gameId,
+                ignored: !enabled
+            )
+        }
+
+        if enabled {
+            linkNotice = LinkNotice(
+                id: UUID(),
+                title: "Reminder restored",
+                message: "\(gameName) will show link reminders again."
+            )
+        }
+    }
+
+    private func isLinkedNow(_ issue: PrioritisedLinkIssue) -> Bool {
+        guard let miner = miners.first(where: { $0.id == issue.minerId }) else { return false }
+
+        return activePrioritisedCampaigns(for: miner).contains { campaign in
+            warningGameId(for: campaign) == issue.gameId && campaign.isAccountConnected
+        }
+    }
+
+    private func warningGameId(for campaign: Campaign) -> String {
+        let id = campaign.game.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !id.isEmpty { return id }
+        return normalizedGameKey(campaign.game.name)
+    }
+}
+
+private struct PrioritisedLinkIssue: Identifiable, Equatable {
+    let minerId: String
+    let accountId: String
+    let minerName: String
+    let gameId: String
+    let gameName: String
+    let campaignNames: [String]
+    let isIgnored: Bool
+
+    var id: String {
+        "\(minerId):\(gameId)"
+    }
+}
+
+private struct LinkNotice: Identifiable, Equatable {
+    let id: UUID
+    let title: String
+    let message: String
 }
 
 private struct MinerSourceListRow: View {
@@ -532,9 +638,110 @@ private struct MinerSourceListRow: View {
     }
 }
 
+private struct LinkNoticeBanner: View {
+    let notice: LinkNotice
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "checkmark.seal.fill")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.green)
+                .frame(width: 20, height: 20)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(notice.title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+
+                Text(notice.message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 12)
+
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .bold))
+                    .frame(width: 22, height: 22)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .help("Dismiss")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(.green.opacity(0.08), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
+                .strokeBorder(.green.opacity(0.22), lineWidth: 1)
+        }
+    }
+}
+
+private struct PrioritisedLinkIssueRow: View {
+    let issue: PrioritisedLinkIssue
+    let actionTitle: String
+    let actionSystemImage: String
+    let actionRole: ButtonRole?
+    let onAction: () -> Void
+
+    private var subtitle: String {
+        let campaigns = issue.campaignNames.prefix(2).joined(separator: ", ")
+        if issue.campaignNames.count > 2 {
+            return "\(campaigns), and more need a linked account."
+        }
+        return "\(campaigns) needs a linked account."
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: issue.isIgnored ? "bell.slash" : "link.badge.plus")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(issue.isIgnored ? Color.secondary : Color.orange)
+                .frame(width: 18, height: 18)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(issue.gameName)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                Text(issue.isIgnored ? "Reminder muted for \(issue.minerName)." : subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 12)
+
+            Button(role: actionRole, action: onAction) {
+                Label(actionTitle, systemImage: actionSystemImage)
+                    .labelStyle(.titleAndIcon)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(.background.opacity(0.001))
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(.separator.opacity(0.24))
+                .frame(height: 1)
+                .padding(.leading, 42)
+        }
+    }
+}
+
 private struct CampaignStatusRow: View {
     let miner: MinerManager.ManagedMiner
     let campaign: Campaign
+    let isWarningIgnored: Bool
+    let onDismissWarning: () -> Void
+    let onRemindWarning: () -> Void
 
     private var status: CampaignActivityStatus {
         campaign.activityStatus(for: miner)
@@ -591,10 +798,24 @@ private struct CampaignStatusRow: View {
 
             Spacer(minLength: 12)
 
-            Text(status.label)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(statusColor)
-                .lineLimit(1)
+            if status == .requiresLink {
+                Button {
+                    isWarningIgnored ? onRemindWarning() : onDismissWarning()
+                } label: {
+                    Label(
+                        isWarningIgnored ? "Remind me" : "Dismiss",
+                        systemImage: isWarningIgnored ? "bell" : "bell.slash"
+                    )
+                    .labelStyle(.titleAndIcon)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            } else {
+                Text(status.label)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(statusColor)
+                    .lineLimit(1)
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -709,102 +930,6 @@ private struct NoActiveCampaignsRow: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .background(.background.opacity(0.001))
-    }
-}
-
-// MARK: - Metric Card
-
-struct MetricCard: View {
-    let title: String
-    let value: String
-    let subtitle: String
-    let icon: String
-    let color: Color
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 5, style: .continuous)
-                        .fill(color.opacity(0.12))
-
-                    Image(systemName: icon)
-                        .foregroundStyle(color)
-                        .font(.system(size: 13, weight: .semibold))
-                }
-                .frame(width: 28, height: 28)
-
-                Text(title)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-
-                Spacer(minLength: 0)
-            }
-
-            Text(value)
-                .font(.system(size: 32, weight: .semibold, design: .rounded))
-
-            Text(subtitle)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-        }
-        .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
-        .padding(16)
-        .background(.background.opacity(0.62), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
-                .strokeBorder(.separator.opacity(0.26), lineWidth: 1)
-        }
-    }
-}
-
-private struct CompactMetricCard: View {
-    let title: String
-    let value: String
-    let subtitle: String
-    let icon: String
-    let color: Color
-
-    var body: some View {
-        HStack(spacing: 10) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 5, style: .continuous)
-                    .fill(color.opacity(0.12))
-
-                Image(systemName: icon)
-                    .foregroundStyle(color)
-                    .font(.system(size: 11, weight: .semibold))
-            }
-            .frame(width: 24, height: 24)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-
-                Text(subtitle)
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: 6)
-
-            Text(value)
-                .font(.system(size: 22, weight: .semibold, design: .rounded))
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(.background.opacity(0.50), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .strokeBorder(.separator.opacity(0.18), lineWidth: 1)
-        }
     }
 }
 

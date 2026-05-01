@@ -156,6 +156,39 @@ public actor NotificationService {
             print("⚠️ Failed to send notification: \(error.localizedDescription)")
         }
     }
+
+    /// Send a notification when a previously blocked game is now linked.
+    /// - Parameters:
+    ///   - gameName: Name of the affected game
+    ///   - sound: Whether to play a sound
+    public func notifyAccountLinked(
+        gameName: String,
+        sound: Bool = false
+    ) async {
+        guard isEnabled else { return }
+
+        let content = UNMutableNotificationContent()
+        content.title = "Account Linked"
+        content.body = "\(gameName) drops can be mined now."
+        content.categoryIdentifier = "account_linked"
+
+        if sound {
+            content.sound = .default
+        }
+
+        let request = UNNotificationRequest(
+            identifier: UUID().uuidString,
+            content: content,
+            trigger: nil
+        )
+
+        do {
+            try await center.add(request)
+            await setDockBadgeVisible(false)
+        } catch {
+            print("⚠️ Failed to send notification: \(error.localizedDescription)")
+        }
+    }
     
     /// Check if notifications are authorized by the user.
     public func isAuthorized() async -> Bool {
