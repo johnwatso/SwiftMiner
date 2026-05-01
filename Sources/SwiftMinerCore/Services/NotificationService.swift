@@ -137,7 +137,6 @@ public actor NotificationService {
         content.title = "Link Required"
         content.body = "Link your Twitch account to \(gameName) to earn drops."
         content.categoryIdentifier = Self.accountLinkRequiredCategoryId
-        content.badge = 1
 
         if sound {
             content.sound = .default
@@ -151,7 +150,6 @@ public actor NotificationService {
 
         do {
             try await center.add(request)
-            await setDockBadgeVisible(true)
         } catch {
             print("⚠️ Failed to send notification: \(error.localizedDescription)")
         }
@@ -184,7 +182,6 @@ public actor NotificationService {
 
         do {
             try await center.add(request)
-            await setDockBadgeVisible(false)
         } catch {
             print("⚠️ Failed to send notification: \(error.localizedDescription)")
         }

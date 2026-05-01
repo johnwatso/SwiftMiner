@@ -12,10 +12,52 @@ struct SidebarView: View {
     @Environment(NavigationModel.self) private var navigation
     @ObservedObject private var settings = Settings.shared
 
-    private var blockedMinerCount: Int {
-        navigation.minerManager.miners.filter {
-            $0.status == .blockedAccountNotLinked || $0.status == .error || $0.needsAuth
-        }.count
+    private var minerAttentionCount: Int {
+        let blockedMinerIds = Set(
+            navigation.minerManager.miners
+                .filter { $0.status == .blockedAccountNotLinked || $0.status == .error || $0.needsAuth }
+                .map(\.id)
+        )
+        let linkIssueMinerIds = Set(
+            navigation.minerManager.miners
+                .filter(hasVisiblePrioritisedLinkIssue)
+                .map(\.id)
+        )
+
+        return blockedMinerIds.union(linkIssueMinerIds).count
+    }
+
+    private func hasVisiblePrioritisedLinkIssue(for miner: MinerManager.ManagedMiner) -> Bool {
+        let priorityKeys = Set(
+            settings.priorityGames
+                .map(normalizedGameKey)
+                .filter { !$0.isEmpty }
+        )
+        guard !priorityKeys.isEmpty else { return false }
+
+        return miner.allCampaigns.contains { campaign in
+            let gameId = warningGameId(for: campaign)
+            guard campaign.isTimeActive,
+                  campaign.status != .disabled,
+                  campaign.activityStatus(for: miner) == .requiresLink,
+                  campaign.drops.contains(where: { !$0.isClaimed }),
+                  priorityKeys.contains(normalizedGameKey(campaign.game.name))
+                    || priorityKeys.contains(normalizedGameKey(campaign.game.id)) else {
+                return false
+            }
+
+            return !settings.isIgnoringAccountLinkWarnings(for: miner.accountId, gameId: gameId)
+        }
+    }
+
+    private func warningGameId(for campaign: Campaign) -> String {
+        let id = campaign.game.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !id.isEmpty { return id }
+        return normalizedGameKey(campaign.game.name)
+    }
+
+    private func normalizedGameKey(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
     private var sidebarItems: [GlassSelectionItem<NavigationModel.SidebarItem>] {
@@ -65,8 +107,8 @@ struct SidebarView: View {
 
                         Spacer(minLength: 0)
 
-                        if item.id == .miners && blockedMinerCount > 0 {
-                            Text("\(blockedMinerCount)")
+                        if item.id == .miners && minerAttentionCount > 0 {
+                            Text("\(minerAttentionCount)")
                                 .font(.system(size: 11, weight: .bold, design: .rounded))
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 6)
