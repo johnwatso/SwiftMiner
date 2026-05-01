@@ -9,6 +9,7 @@ struct MinersOverviewView: View {
     @State private var hasCapturedInitialLinkIssues = false
     @State private var previousLinkIssuesById: [String: PrioritisedLinkIssue] = [:]
     @State private var linkNotice: LinkNotice?
+    @State private var nicknameEditor: MinerNicknameEditorPresentation?
 
     private var miners: [MinerManager.ManagedMiner] {
         navigation.minerManager.miners
@@ -47,6 +48,12 @@ struct MinersOverviewView: View {
         .onChange(of: rawLinkIssueSignature) { oldValue, newValue in
             handleLinkIssueSignatureChange(from: oldValue, to: newValue)
         }
+        .sheet(item: $nicknameEditor) { presentation in
+            MinerNicknameEditorSheet(
+                miner: presentation.miner,
+                navigation: navigation
+            )
+        }
     }
 
     private var minerListPane: some View {
@@ -61,10 +68,15 @@ struct MinersOverviewView: View {
                                 MinerSourceListRow(
                                     miner: miner,
                                     compact: !hasMultipleMiners,
-                                    isSelected: selectionBinding.wrappedValue == miner.id
+                                    isSelected: selectionBinding.wrappedValue == miner.id,
+                                    onEditNickname: { presentNicknameEditor(for: miner) },
+                                    onClearNickname: { clearNickname(for: miner) }
                                 )
                             }
                             .buttonStyle(.plain)
+                            .contextMenu {
+                                nicknameContextMenu(for: miner)
+                            }
 
                             if index < miners.count - 1 {
                                 Divider()
@@ -106,6 +118,10 @@ struct MinersOverviewView: View {
                         navigation.selectedMinerId = miner.id
                     }, onLinkAccount: {
                         startLinkAccountFlow(for: miner)
+                    }, onEditNickname: {
+                        presentNicknameEditor(for: miner)
+                    }, onClearNickname: {
+                        clearNickname(for: miner)
                     })
 
                     if let linkNotice {
@@ -183,6 +199,36 @@ struct MinersOverviewView: View {
                 avoidDuplicateStreams: Settings.shared.avoidDuplicateStreams,
                 prioritiseFollowedStreamers: Settings.shared.prioritiseFollowedStreamers
             )
+        }
+    }
+
+    private func presentNicknameEditor(for miner: MinerManager.ManagedMiner) {
+        nicknameEditor = MinerNicknameEditorPresentation(miner: miner)
+    }
+
+    private func clearNickname(for miner: MinerManager.ManagedMiner) {
+        Task {
+            await navigation.minerManager.updateMinerNickname(
+                minerId: miner.id,
+                nickname: nil
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func nicknameContextMenu(for miner: MinerManager.ManagedMiner) -> some View {
+        Button {
+            presentNicknameEditor(for: miner)
+        } label: {
+            Label(miner.nickname == nil ? "Add Nickname" : "Edit Nickname", systemImage: "pencil")
+        }
+
+        if miner.nickname != nil {
+            Button {
+                clearNickname(for: miner)
+            } label: {
+                Label("Clear Nickname", systemImage: "xmark.circle")
+            }
         }
     }
 
@@ -549,10 +595,20 @@ private struct LinkNotice: Identifiable, Equatable {
     let message: String
 }
 
+private struct MinerNicknameEditorPresentation: Identifiable {
+    let miner: MinerManager.ManagedMiner
+
+    var id: String {
+        miner.id
+    }
+}
+
 private struct MinerSourceListRow: View {
     let miner: MinerManager.ManagedMiner
     let compact: Bool
     let isSelected: Bool
+    let onEditNickname: () -> Void
+    let onClearNickname: () -> Void
     @ObservedObject private var settings = Settings.shared
 
     private var snapshot: MinerActivitySnapshot {
@@ -592,6 +648,17 @@ private struct MinerSourceListRow: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
+                    .contextMenu {
+                        Button(action: onEditNickname) {
+                            Label(miner.nickname == nil ? "Add Nickname" : "Edit Nickname", systemImage: "pencil")
+                        }
+
+                        if miner.nickname != nil {
+                            Button(action: onClearNickname) {
+                                Label("Clear Nickname", systemImage: "xmark.circle")
+                            }
+                        }
+                    }
 
                 if !compact {
                     Text(activityLabel)
@@ -635,6 +702,89 @@ private struct MinerSourceListRow: View {
             return "Likely next: \(next.title)"
         }
         return snapshot.statusText
+    }
+}
+
+private struct MinerNicknameEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let miner: MinerManager.ManagedMiner
+    let navigation: NavigationModel
+    @State private var nickname: String
+    @FocusState private var isNicknameFocused: Bool
+
+    init(miner: MinerManager.ManagedMiner, navigation: NavigationModel) {
+        self.miner = miner
+        self.navigation = navigation
+        self._nickname = State(initialValue: miner.nickname ?? "")
+    }
+
+    private var normalizedNickname: String? {
+        Account.normalizedNickname(nickname)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(miner.nickname == nil ? "Add Nickname" : "Edit Nickname")
+                    .font(.title3.weight(.semibold))
+
+                Text("@\(miner.username)")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            TextField("Nickname", text: $nickname)
+                .textFieldStyle(.roundedBorder)
+                .focused($isNicknameFocused)
+                .onSubmit {
+                    saveAndDismiss()
+                }
+
+            HStack(spacing: 10) {
+                if miner.nickname != nil {
+                    Button {
+                        nickname = ""
+                        saveAndDismiss()
+                    } label: {
+                        Label("Clear", systemImage: "xmark.circle")
+                    }
+                    .buttonStyle(.bordered)
+                }
+
+                Spacer()
+
+                Button("Cancel") {
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+
+                Button("Save") {
+                    saveAndDismiss()
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(22)
+        .frame(width: 360)
+        .onAppear {
+            isNicknameFocused = true
+        }
+    }
+
+    private func saveAndDismiss() {
+        guard normalizedNickname != miner.nickname else {
+            dismiss()
+            return
+        }
+
+        Task {
+            await navigation.minerManager.updateMinerNickname(
+                minerId: miner.id,
+                nickname: normalizedNickname
+            )
+        }
+        dismiss()
     }
 }
 

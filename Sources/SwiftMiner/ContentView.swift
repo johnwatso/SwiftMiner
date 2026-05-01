@@ -350,7 +350,8 @@ struct OverviewView: View {
                     title: "Prioritised",
                     items: displayedPrioritisedFeedItems,
                     prominence: .standard,
-                    showsEditButton: true
+                    showsEditButton: true,
+                    onMoveItem: movePrioritisedItem
                 )
             } else {
                 addPrioritisedGameSection
@@ -385,7 +386,8 @@ struct OverviewView: View {
         items: [CampaignRailItem],
         prominence: CampaignCardProminence,
         showsEditButton: Bool = false,
-        layout: CampaignRailLayout = .horizontal
+        layout: CampaignRailLayout = .horizontal,
+        onMoveItem: ((CampaignRailItem, Int) -> Void)? = nil
     ) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .firstTextBaseline) {
@@ -408,12 +410,20 @@ struct OverviewView: View {
             case .horizontal:
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(alignment: .top, spacing: prominence.spacing) {
-                        ForEach(items) { item in
-                            CampaignFeedCard(
+                        ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                            ReorderableCampaignFeedCard(
                                 item: item,
+                                index: index,
+                                itemCount: items.count,
                                 prominence: prominence,
+                                activeDragIndex: activePriorityDragIndex,
+                                projectedDropIndex: projectedPriorityDropIndex,
+                                activeDragProgress: activePriorityDragProgress,
                                 onSetSteamId: presentSteamIdSheet(for:),
-                                onUploadCustomArtwork: presentCustomArtworkImporter(for:)
+                                onUploadCustomArtwork: presentCustomArtworkImporter(for:),
+                                onDragProjectionChanged: updatePriorityDragProjection,
+                                onDragEnded: clearPriorityDragProjection,
+                                onMoveItem: onMoveItem
                             )
                         }
                     }
@@ -488,9 +498,27 @@ struct OverviewView: View {
     }
 
     private var prioritisedFeedItems: [CampaignRailItem] {
-        var items = uniquePrioritisedCampaigns.prefix(8).map { makeRailItem(for: $0, section: .prioritised) }
-        items.append(contentsOf: preferredGameFallbacks.prefix(4).map(makePreferredGameItem))
-        return items
+        let campaignPool = uniquePrioritisedCampaigns
+        var usedCampaignIds = Set<String>()
+        var items: [CampaignRailItem] = []
+
+        for preference in preferredGames {
+            if let campaign = campaignPool.first(where: { campaign in
+                !usedCampaignIds.contains(campaign.id) && matches(campaign, preference: preference)
+            }) {
+                usedCampaignIds.insert(campaign.id)
+                items.append(makeRailItem(for: campaign, section: .prioritised))
+            } else {
+                items.append(makePreferredGameItem(preference))
+            }
+        }
+
+        let unpinnedCampaigns = campaignPool
+            .filter { !usedCampaignIds.contains($0.id) }
+            .map { makeRailItem(for: $0, section: .prioritised) }
+
+        items.append(contentsOf: unpinnedCampaigns)
+        return Array(deduplicatedPrioritisedItems(items).prefix(12))
     }
 
     private var displayedPrioritisedFeedItems: [CampaignRailItem] {
@@ -550,6 +578,15 @@ struct OverviewView: View {
         value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
+    private func comparableGameName(_ value: String) -> String {
+        value
+            .lowercased()
+            .unicodeScalars
+            .filter { CharacterSet.alphanumerics.contains($0) }
+            .map(String.init)
+            .joined()
+    }
+
     private func startLinkAccountFlow(for miner: MinerManager.ManagedMiner) {
         Task {
             try? await navigation.minerManager.startMiner(
@@ -599,14 +636,91 @@ struct OverviewView: View {
         )
     }
 
+    private func movePrioritisedItem(_ item: CampaignRailItem, to targetIndex: Int) {
+        guard let game = item.game else { return }
+        let preferred = preferredGames
+        guard preferred.count > 1,
+              let sourceIndex = preferred.firstIndex(where: { preferenceMatches($0, game: game) }) else {
+            return
+        }
+
+        let destinationIndex = min(max(targetIndex, 0), preferred.count - 1)
+        guard sourceIndex != destinationIndex else { return }
+
+        let toOffset = sourceIndex < destinationIndex ? destinationIndex + 1 : destinationIndex
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.84)) {
+            settings.moveGamePreferences(
+                fromOffsets: IndexSet(integer: sourceIndex),
+                toOffset: toOffset,
+                inState: .preferred
+            )
+        }
+        navigation.minerManager.updatePriorityGames(settings.priorityGames)
+    }
+
+    @State private var activePriorityDragIndex: Int?
+    @State private var projectedPriorityDropIndex: Int?
+    @State private var activePriorityDragProgress: CGFloat = 0
+
+    private func updatePriorityDragProjection(activeIndex: Int, projectedIndex: Int, progress: CGFloat) {
+        guard activePriorityDragIndex != activeIndex
+                || projectedPriorityDropIndex != projectedIndex
+                || activePriorityDragProgress != progress else {
+            return
+        }
+
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            activePriorityDragIndex = activeIndex
+            projectedPriorityDropIndex = projectedIndex
+            activePriorityDragProgress = progress
+        }
+    }
+
+    private func clearPriorityDragProjection() {
+        withAnimation(.interactiveSpring(response: 0.24, dampingFraction: 0.88, blendDuration: 0.08)) {
+            activePriorityDragIndex = nil
+            projectedPriorityDropIndex = nil
+            activePriorityDragProgress = 0
+        }
+    }
+
     private func preferredPreference(matching game: Game) -> GamePreference? {
         let matches = settings.gamePreferences.filter { preference in
-            let idMatches = !game.id.isEmpty && preference.gameId == game.id
-            let nameMatches = preference.gameName.localizedCaseInsensitiveCompare(game.name) == .orderedSame
-            return idMatches || nameMatches
+            preferenceMatches(preference, game: game)
         }
 
         return matches.first(where: { $0.customArtworkURL != nil }) ?? matches.first
+    }
+
+    private func preferenceMatches(_ preference: GamePreference, game: Game) -> Bool {
+        let idMatches = !game.id.isEmpty && preference.gameId == game.id
+        let nameMatches = preference.gameName.localizedCaseInsensitiveCompare(game.name) == .orderedSame
+            || comparableGameName(preference.gameName) == comparableGameName(game.name)
+        return idMatches || nameMatches
+    }
+
+    private func deduplicatedPrioritisedItems(_ items: [CampaignRailItem]) -> [CampaignRailItem] {
+        var seenIds = Set<String>()
+        var seenNames = Set<String>()
+        return items.filter { item in
+            let id = item.game?.id.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let name = comparableGameName(item.gameName)
+
+            if (!id.isEmpty && seenIds.contains(id)) || (!name.isEmpty && seenNames.contains(name)) {
+                return false
+            }
+
+            if !id.isEmpty {
+                seenIds.insert(id)
+            }
+            if !name.isEmpty {
+                seenNames.insert(name)
+            }
+
+            return true
+        }
     }
 
     private func placeholderRailItem(for section: CampaignFeedSection) -> CampaignRailItem {
@@ -725,7 +839,10 @@ struct OverviewView: View {
     }
 
     private func matches(_ campaign: CampaignViewData, preference: GamePreference) -> Bool {
-        campaign.gameName.localizedCaseInsensitiveCompare(preference.gameName) == .orderedSame
+        let idMatches = campaign.gameId != nil && campaign.gameId == preference.gameId
+        let nameMatches = campaign.gameName.localizedCaseInsensitiveCompare(preference.gameName) == .orderedSame
+            || comparableGameName(campaign.gameName) == comparableGameName(preference.gameName)
+        return idMatches || nameMatches
     }
 
     private func campaignDetailText(
@@ -1519,9 +1636,19 @@ private struct CampaignFeedCard: View {
         let matches = settings.gamePreferences.filter { preference in
             let idMatches = !game.id.isEmpty && preference.gameId == game.id
             let nameMatches = preference.gameName.localizedCaseInsensitiveCompare(game.name) == .orderedSame
+                || comparableGameName(preference.gameName) == comparableGameName(game.name)
             return idMatches || nameMatches
         }
         return matches.first(where: { $0.customArtworkURL != nil }) ?? matches.first
+    }
+
+    private func comparableGameName(_ value: String) -> String {
+        value
+            .lowercased()
+            .unicodeScalars
+            .filter { CharacterSet.alphanumerics.contains($0) }
+            .map(String.init)
+            .joined()
     }
 
     private var hasCustomArtwork: Bool {
@@ -1722,6 +1849,134 @@ private struct CampaignFeedCard: View {
                     }
                 }
             }
+        }
+    }
+}
+
+private struct ReorderableCampaignFeedCard: View {
+    let item: CampaignRailItem
+    let index: Int
+    let itemCount: Int
+    let prominence: CampaignCardProminence
+    let activeDragIndex: Int?
+    let projectedDropIndex: Int?
+    let activeDragProgress: CGFloat
+    let onSetSteamId: (String) -> Void
+    let onUploadCustomArtwork: (Game) -> Void
+    let onDragProjectionChanged: (Int, Int, CGFloat) -> Void
+    let onDragEnded: () -> Void
+    let onMoveItem: ((CampaignRailItem, Int) -> Void)?
+    @State private var dragOffset: CGFloat = 0
+
+    private var travelDistance: CGFloat {
+        prominence.size.width + prominence.spacing
+    }
+
+    private var reorderStep: CGFloat {
+        max(travelDistance * 0.62, 1)
+    }
+
+    private var dragProgress: CGFloat {
+        dragOffset / travelDistance
+    }
+
+    private var isActivelyDragged: Bool {
+        activeDragIndex == index
+    }
+
+    private var neighborOffset: CGFloat {
+        guard let activeDragIndex,
+              let projectedDropIndex,
+              activeDragIndex != index,
+              projectedDropIndex != activeDragIndex else {
+            return 0
+        }
+
+        let progress = activeDragProgress
+        if progress > 0,
+           index > activeDragIndex {
+            let distanceFromActive = CGFloat(index - activeDragIndex)
+            let influence = smoothstep(min(max(progress - (distanceFromActive - 1), 0), 1))
+            return -travelDistance * influence
+        }
+
+        if progress < 0,
+           index < activeDragIndex {
+            let distanceFromActive = CGFloat(activeDragIndex - index)
+            let influence = smoothstep(min(max(abs(progress) - (distanceFromActive - 1), 0), 1))
+            return travelDistance * influence
+        }
+
+        return 0
+    }
+
+    private var liftAmount: CGFloat {
+        min(abs(dragProgress), 1)
+    }
+
+    private func smoothstep(_ value: CGFloat) -> CGFloat {
+        value * value * (3 - (2 * value))
+    }
+
+    private var card: some View {
+        CampaignFeedCard(
+            item: item,
+            prominence: prominence,
+            onSetSteamId: onSetSteamId,
+            onUploadCustomArtwork: onUploadCustomArtwork
+        )
+    }
+
+    var body: some View {
+        if let onMoveItem {
+            card
+                .offset(x: dragOffset + neighborOffset, y: isActivelyDragged ? -6 * liftAmount : 0)
+                .scaleEffect(isActivelyDragged ? 1 + (0.018 * liftAmount) : 1)
+                .rotationEffect(.degrees(isActivelyDragged ? Double(dragProgress) * 0.35 : 0))
+                .shadow(
+                    color: .black.opacity(isActivelyDragged ? 0.14 : 0),
+                    radius: isActivelyDragged ? 12 : 0,
+                    y: isActivelyDragged ? 7 : 0
+                )
+                .zIndex(isActivelyDragged ? 1000 : Double(itemCount - index))
+                .gesture(
+                    DragGesture(minimumDistance: 8)
+                        .onChanged { value in
+                            var transaction = Transaction()
+                            transaction.disablesAnimations = true
+                            withTransaction(transaction) {
+                                dragOffset = value.translation.width
+                            }
+
+                            let rawProjectedIndex = index + Int((value.translation.width / reorderStep).rounded())
+                            let projectedIndex = min(max(rawProjectedIndex, 0), itemCount - 1)
+                            let progress = min(
+                                max(value.translation.width / travelDistance, CGFloat(-index)),
+                                CGFloat(itemCount - index - 1)
+                            )
+                            onDragProjectionChanged(index, projectedIndex, progress)
+                        }
+                        .onEnded { value in
+                            let translation = abs(value.predictedEndTranslation.width) > abs(value.translation.width)
+                                ? value.predictedEndTranslation.width
+                                : value.translation.width
+                            let rawDelta = translation / reorderStep
+                            let delta = Int(rawDelta.rounded())
+                            let targetIndex = min(max(index + delta, 0), itemCount - 1)
+
+                            if targetIndex != index {
+                                onMoveItem(item, targetIndex)
+                            }
+
+                            onDragEnded()
+                            withAnimation(.interactiveSpring(response: 0.30, dampingFraction: 0.86, blendDuration: 0.08)) {
+                                dragOffset = 0
+                            }
+                        }
+                )
+                .help("Drag left or right to reorder priority")
+        } else {
+            card
         }
     }
 }
