@@ -197,6 +197,7 @@ struct MinersOverviewView: View {
                 excludedGames: [],
                 strategy: .mineAll,
                 avoidDuplicateStreams: Settings.shared.avoidDuplicateStreams,
+                antiStallRecoveryEnabled: Settings.shared.antiStallRecoveryEnabled,
                 prioritiseFollowedStreamers: Settings.shared.prioritiseFollowedStreamers
             )
         }
