@@ -255,6 +255,8 @@ struct MinerActivityCard: View {
     var prominence: MinerActivityCardProminence = .compact
     var onSelect: (() -> Void)? = nil
     var onLinkAccount: (() -> Void)? = nil
+    var onEditNickname: (() -> Void)? = nil
+    var onClearNickname: (() -> Void)? = nil
 
     @ObservedObject private var settings = Settings.shared
 
@@ -348,6 +350,9 @@ struct MinerActivityCard: View {
                 Text(miner.displayName)
                     .font(.headline.weight(.semibold))
                     .lineLimit(1)
+                    .contextMenu {
+                        nicknameContextMenu
+                    }
 
                 Text(snapshot.statusText)
                     .font(.caption)
@@ -356,6 +361,24 @@ struct MinerActivityCard: View {
             }
 
             Spacer(minLength: 8)
+        }
+        .contextMenu {
+            nicknameContextMenu
+        }
+    }
+
+    @ViewBuilder
+    private var nicknameContextMenu: some View {
+        if let onEditNickname {
+            Button(action: onEditNickname) {
+                Label(miner.nickname == nil ? "Add Nickname" : "Edit Nickname", systemImage: "pencil")
+            }
+        }
+
+        if miner.nickname != nil, let onClearNickname {
+            Button(action: onClearNickname) {
+                Label("Clear Nickname", systemImage: "xmark.circle")
+            }
         }
     }
 
