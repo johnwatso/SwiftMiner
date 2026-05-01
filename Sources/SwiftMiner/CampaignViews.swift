@@ -32,14 +32,18 @@ struct CampaignSidebarView: View {
 /// One row in the campaign sidebar.
 struct CampaignRowView: View {
     let campaign: Campaign
+    @ObservedObject private var settings = Settings.shared
 
     private var claimedCount: Int { campaign.drops.filter(\.isClaimed).count }
     private var totalCount: Int   { campaign.drops.count }
+    private var artworkURL: URL? {
+        customArtworkURL(for: campaign.game) ?? campaign.game.boxArtURL
+    }
 
     var body: some View {
         HStack(spacing: 10) {
             // Game box art
-            if let url = campaign.game.boxArtURL {
+            if let url = artworkURL {
                 AsyncImage(url: url) { image in
                     image.resizable().scaledToFill()
                 } placeholder: {
@@ -69,6 +73,15 @@ struct CampaignRowView: View {
         }
         .padding(.vertical, 2)
     }
+
+    private func customArtworkURL(for game: Game) -> URL? {
+        let matches = settings.gamePreferences.filter { preference in
+            let idMatches = !game.id.isEmpty && preference.gameId == game.id
+            let nameMatches = preference.gameName.localizedCaseInsensitiveCompare(game.name) == .orderedSame
+            return idMatches || nameMatches
+        }
+        return matches.first(where: { $0.customArtworkURL != nil })?.customArtworkURL
+    }
 }
 
 // MARK: - Campaign Detail
@@ -80,8 +93,19 @@ struct CampaignDetailView: View {
     @ObservedObject private var settings = Settings.shared
 
     private var bannerURL: URL? {
+        if let artworkURL {
+            return artworkURL
+        }
         guard settings.preferSteamArtwork else { return nil }
         return navigation.minerManager.dataCoordinator.steamHeroOverrides[campaign.gameName]
+    }
+
+    private var campaignGame: Game {
+        Game(id: campaign.gameId ?? "", name: campaign.gameName, boxArtURL: campaign.artworkURL)
+    }
+
+    private var artworkURL: URL? {
+        customArtworkURL(for: campaignGame) ?? campaign.artworkURL
     }
 
     var body: some View {
@@ -117,7 +141,7 @@ struct CampaignDetailView: View {
                     } else {
                         VStack(spacing: 12) {
                             ForEach(campaign.drops) { drop in
-                                DropRowView(drop: drop, fallbackURL: campaign.artworkURL)
+                                DropRowView(drop: drop, fallbackURL: artworkURL)
                             }
                         }
                     }
@@ -167,7 +191,7 @@ struct CampaignDetailView: View {
 
     @ViewBuilder
     private var campaignArtwork: some View {
-        if let url = campaign.artworkURL {
+        if let url = artworkURL {
             AsyncImage(url: url) { image in
                 image
                     .resizable()
@@ -188,6 +212,15 @@ struct CampaignDetailView: View {
                 }
                 .frame(width: 72, height: 72)
         }
+    }
+
+    private func customArtworkURL(for game: Game) -> URL? {
+        let matches = settings.gamePreferences.filter { preference in
+            let idMatches = !game.id.isEmpty && preference.gameId == game.id
+            let nameMatches = preference.gameName.localizedCaseInsensitiveCompare(game.name) == .orderedSame
+            return idMatches || nameMatches
+        }
+        return matches.first(where: { $0.customArtworkURL != nil })?.customArtworkURL
     }
 }
 

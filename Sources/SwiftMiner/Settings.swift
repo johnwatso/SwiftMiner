@@ -590,7 +590,14 @@ public final class Settings: ObservableObject {
     }
 
     private func preferenceMatches(_ preference: GamePreference, gameId: String, gameName: String) -> Bool {
-        preferenceKey(gameId: preference.gameId, gameName: preference.gameName) == preferenceKey(gameId: gameId, gameName: gameName)
+        let storedId = preference.gameId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let incomingId = gameId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !storedId.isEmpty && !incomingId.isEmpty && storedId == incomingId {
+            return true
+        }
+
+        return preference.gameName.trimmingCharacters(in: .whitespacesAndNewlines)
+            .localizedCaseInsensitiveCompare(gameName.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame
     }
 
     private func preferenceKey(for preference: GamePreference) -> String {

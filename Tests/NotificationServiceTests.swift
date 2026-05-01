@@ -82,6 +82,18 @@ final class NotificationServiceTests: XCTestCase {
             "Link your Twitch account to The Finals to earn drops."
         )
     }
+
+    func test_NotificationService_NotifyAccountLinked() async {
+        let mockCenter = MockNotificationCenter()
+        let service = NotificationService(center: mockCenter)
+
+        await service.configure(enabled: true)
+        await service.notifyAccountLinked(gameName: "The Finals")
+
+        XCTAssertTrue(mockCenter.addCalled)
+        XCTAssertEqual(mockCenter.lastRequest?.content.title, "Account Linked")
+        XCTAssertEqual(mockCenter.lastRequest?.content.body, "The Finals drops can be mined now.")
+    }
     
     func test_NotificationService_ConfigurationRequestsAuth() async {
         let mockCenter = MockNotificationCenter()

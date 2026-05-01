@@ -226,7 +226,9 @@ struct DropsListView: View {
     // MARK: - Data
 
     private var feedCampaigns: [CampaignViewData] {
-        campaigns.sorted(by: campaignSort)
+        campaigns
+            .map(applyingCustomArtwork)
+            .sorted(by: campaignSort)
             .filter { !isExcludedCampaign($0) }
     }
 
@@ -280,6 +282,24 @@ struct DropsListView: View {
             ],
             aggregateState: campaign.gameAggregateState()
         )
+    }
+
+    private func applyingCustomArtwork(to campaign: CampaignViewData) -> CampaignViewData {
+        let game = Game(id: campaign.gameId ?? "", name: campaign.gameName, boxArtURL: campaign.artworkURL)
+        guard let customArtworkURL = preferredPreference(matching: game)?.customArtworkURL else {
+            return campaign
+        }
+        return campaign.withArtworkURL(customArtworkURL)
+    }
+
+    private func preferredPreference(matching game: Game) -> GamePreference? {
+        let matches = settings.gamePreferences.filter { preference in
+            let idMatches = !game.id.isEmpty && preference.gameId == game.id
+            let nameMatches = preference.gameName.localizedCaseInsensitiveCompare(game.name) == .orderedSame
+            return idMatches || nameMatches
+        }
+
+        return matches.first(where: { $0.customArtworkURL != nil }) ?? matches.first
     }
 
     private var contextualBannerMessage: String? {
