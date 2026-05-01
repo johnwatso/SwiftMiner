@@ -76,6 +76,7 @@ public final class AppModel {
             // Multi-miner mode: don't start our own engine.
             // Drive isAuthenticated from MinerManager's miner list.
             reconcileManagerState(manager)
+            refreshNotificationBadge()
 
             // Sync priority games so state evaluation uses the current preferences
             manager.updatePriorityGames(Settings.shared.priorityGames)
@@ -288,10 +289,19 @@ public final class AppModel {
 
     private func reconcileManagerState(_ manager: MinerManager) {
         isAuthenticated = !manager.miners.isEmpty
-        updateMinerLinkIssueBadge(using: manager)
+        refreshNotificationBadge()
     }
 
-    private func updateMinerLinkIssueBadge(using manager: MinerManager) {
+    public func refreshNotificationBadge() {
+        guard let manager = minerManager else {
+            setDockBadgeCount(0)
+            return
+        }
+
+        setDockBadgeCount(unresolvedMinerIssueCount(using: manager))
+    }
+
+    private func unresolvedMinerIssueCount(using manager: MinerManager) -> Int {
         let settings = Settings.shared
         let priorityGames = Set(
             settings.priorityGames
@@ -300,36 +310,42 @@ public final class AppModel {
         )
 
         guard !priorityGames.isEmpty else {
-            setDockBadgeVisible(false)
-            return
+            return 0
         }
 
-        let hasUnresolvedIssue = manager.miners.contains { miner in
-            guard miner.isRunning else { return false }
-
-            return miner.allCampaigns.contains { campaign in
-                // Only consider active, unlinked campaigns for prioritised games
-                guard campaign.isTimeActive
-                    && !campaign.isAccountConnected
-                    && priorityGames.contains(campaign.gameName.lowercased())
-                    && campaign.drops.contains(where: { !$0.isClaimed }) else {
+        return manager.miners.filter { miner in
+            miner.allCampaigns.contains { campaign in
+                let gameId = warningGameId(for: campaign)
+                guard campaign.isTimeActive,
+                      campaign.status != .disabled,
+                      campaign.activityStatus(for: miner) == .requiresLink,
+                      campaign.drops.contains(where: { !$0.isClaimed }),
+                      priorityGames.contains(campaign.gameName.lowercased())
+                        || priorityGames.contains(campaign.game.id.lowercased()) else {
                     return false
                 }
 
-                // Check if this specific game warning is suppressed for this account
-                return !settings.isIgnoringAccountLinkWarnings(for: miner.accountId, gameId: campaign.game.id)
+                return !settings.isIgnoringAccountLinkWarnings(for: miner.accountId, gameId: gameId)
             }
-        }
-
-        setDockBadgeVisible(hasUnresolvedIssue)
+        }.count
     }
 
-    private func setDockBadgeVisible(_ visible: Bool) {
+    private func warningGameId(for campaign: Campaign) -> String {
+        let id = campaign.game.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !id.isEmpty { return id }
+        return campaign.game.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private func normalizedGameKey(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private func setDockBadgeCount(_ count: Int) {
 #if canImport(AppKit)
-        NSApplication.shared.dockTile.badgeLabel = visible ? "!" : nil
+        NSApplication.shared.dockTile.badgeLabel = count > 0 ? "\(count)" : nil
 #endif
         if #available(macOS 13.0, *) {
-            UNUserNotificationCenter.current().setBadgeCount(visible ? 1 : 0) { error in
+            UNUserNotificationCenter.current().setBadgeCount(count) { error in
                 guard let error else { return }
                 print("⚠️ Failed to update notification badge count: \(error.localizedDescription)")
             }

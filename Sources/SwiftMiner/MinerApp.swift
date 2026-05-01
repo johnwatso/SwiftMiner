@@ -50,6 +50,11 @@ struct MinerApp: App {
                 ) { _ in
                     Task { await appModel.stop() }
                 }
+                .onReceive(
+                    NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+                ) { _ in
+                    appModel.refreshNotificationBadge()
+                }
         }
         .windowStyle(.titleBar)
         .windowToolbarStyle(.unified)
