@@ -83,6 +83,7 @@ public final class AppModel {
 
             // Sync notification preference
             await manager.updateNotificationPreference(enabled: Settings.shared.showClaimNotifications)
+            await manager.updateAntiStallRecovery(enabled: Settings.shared.antiStallRecoveryEnabled)
 
             // Keep app-level state (auth + badge) in sync whenever miners or
             // account-link warning preferences change.
@@ -169,6 +170,7 @@ public final class AppModel {
                 enableBadgesEmotes: settings.enableBadgesEmotes,
                 showClaimNotifications: settings.showClaimNotifications,
                 avoidDuplicateStreams: settings.avoidDuplicateStreams,
+                antiStallRecoveryEnabled: settings.antiStallRecoveryEnabled,
                 prioritiseFollowedStreamers: settings.prioritiseFollowedStreamers
             )
             return

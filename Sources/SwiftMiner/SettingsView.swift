@@ -332,6 +332,7 @@ private struct AccountSettingsView: View {
                     enableBadgesEmotes: settings.enableBadgesEmotes,
                     showClaimNotifications: settings.showClaimNotifications,
                     avoidDuplicateStreams: settings.avoidDuplicateStreams,
+                    antiStallRecoveryEnabled: settings.antiStallRecoveryEnabled,
                     prioritiseFollowedStreamers: settings.prioritiseFollowedStreamers
                 )
                 alertMessage = "Successfully imported account: \(account.username)"
@@ -455,6 +456,12 @@ private struct MiningSettingsView: View {
 
                 Toggle("Spread miners across streams", isOn: $settings.avoidDuplicateStreams)
                 SettingsSecondaryText("Avoids putting multiple miners on the same stream when a campaign has more than four verified live channels. Small restricted campaigns can still share streams.")
+
+                Toggle("Anti-stall recovery", isOn: $settings.antiStallRecoveryEnabled)
+                    .onChange(of: settings.antiStallRecoveryEnabled) { _, newValue in
+                        Task { await navigation.minerManager.updateAntiStallRecovery(enabled: newValue) }
+                    }
+                SettingsSecondaryText("Restarts an individual miner when it appears stuck after a long progress stall or recoverable network error.")
 
                 Toggle("Prioritise followed and subscribed streamers", isOn: $settings.prioritiseFollowedStreamers)
                     .onChange(of: settings.prioritiseFollowedStreamers) { _, newValue in

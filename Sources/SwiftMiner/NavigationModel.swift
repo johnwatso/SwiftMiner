@@ -239,6 +239,7 @@ public final class NavigationModel {
             strategy: settings.miningStrategy,
             enableBadgesEmotes: settings.enableBadgesEmotes,
             avoidDuplicateStreams: settings.avoidDuplicateStreams,
+            antiStallRecoveryEnabled: settings.antiStallRecoveryEnabled,
             prioritiseFollowedStreamers: settings.prioritiseFollowedStreamers,
             ignoredWarnings: settings.ignoredWarnings
         )

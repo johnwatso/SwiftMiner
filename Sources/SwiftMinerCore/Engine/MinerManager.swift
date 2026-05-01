@@ -241,6 +241,7 @@ public final class MinerManager {
     public var showClaimNotifications: Bool = false
     public var avoidDuplicateStreams: Bool = true
     public var prioritiseFollowedStreamers: Bool = false
+    public var antiStallRecoveryEnabled: Bool = true
     /// Debug-only: broadcast to every engine to bypass link/eligibility gates. Stored here
     /// so engines attached later (e.g. newly added accounts) pick up the current value.
     public var debugBypassLinkRequirement: Bool = false
@@ -254,6 +255,17 @@ public final class MinerManager {
     /// `startMiner()` awaits these before starting the engine, eliminating the
     /// race condition where status callbacks were not yet registered on autostart.
     private var engineSetupTasks: [String: Task<Void, Never>] = [:]
+
+    /// Background recovery loop for miners that get wedged after network or progress stalls.
+    private var antiStallMonitorTask: Task<Void, Never>?
+    private var antiStallRecoveryInFlight: Set<String> = []
+    private var lastAntiStallRecoveryAt: [String: Date] = [:]
+
+    /// Last start options, used when anti-stall recovery restarts an individual miner.
+    private var currentPriorityGames: [String] = []
+    private var currentExcludedGames: [String] = []
+    private var currentStrategy: MiningStrategy = .mineAll
+    private var currentEnableBadgesEmotes: Bool = false
     
     /// Client ID for Twitch API (mutable so it can be updated before first account is added)
     private var clientId: String
@@ -297,6 +309,18 @@ public final class MinerManager {
         self.prioritiseFollowedStreamers = enabled
         for engine in engines.values {
             await engine.updateFollowedStreamerPriority(enabled: enabled)
+        }
+    }
+
+    /// Toggle conservative miner restart recovery for persistent stalls/recoverable errors.
+    public func updateAntiStallRecovery(enabled: Bool) async {
+        antiStallRecoveryEnabled = enabled
+        if enabled {
+            startAntiStallMonitorIfNeeded()
+        } else {
+            antiStallMonitorTask?.cancel()
+            antiStallMonitorTask = nil
+            antiStallRecoveryInFlight.removeAll()
         }
     }
 
@@ -396,12 +420,19 @@ public final class MinerManager {
         strategy: MiningStrategy,
         enableBadgesEmotes: Bool,
         avoidDuplicateStreams: Bool = true,
+        antiStallRecoveryEnabled: Bool = true,
         prioritiseFollowedStreamers: Bool = false,
         ignoredWarnings: [String] = []
     ) async {
         await updateIgnoredAccountLinkWarnings(ignoredWarnings)
+        self.currentPriorityGames = priorityGames
+        self.currentExcludedGames = excludedGames
+        self.currentStrategy = strategy
+        self.currentEnableBadgesEmotes = enableBadgesEmotes
         self.avoidDuplicateStreams = avoidDuplicateStreams
+        self.antiStallRecoveryEnabled = antiStallRecoveryEnabled
         self.prioritiseFollowedStreamers = prioritiseFollowedStreamers
+        startAntiStallMonitorIfNeeded()
         await setup()
         if autoStart && !miners.isEmpty {
             print("[MinerManager] Auto-starting \(miners.count) miner(s) on launch")
@@ -411,6 +442,7 @@ public final class MinerManager {
                 strategy: strategy,
                 enableBadgesEmotes: enableBadgesEmotes,
                 avoidDuplicateStreams: avoidDuplicateStreams,
+                antiStallRecoveryEnabled: antiStallRecoveryEnabled,
                 prioritiseFollowedStreamers: prioritiseFollowedStreamers
             )
         }
@@ -562,7 +594,7 @@ public final class MinerManager {
     // MARK: - Control Operations
 
     /// Start a specific miner
-    public func startMiner(minerId: String, priorityGames: [String], excludedGames: [String], strategy: MiningStrategy, enableBadgesEmotes: Bool = false, showClaimNotifications: Bool = false, avoidDuplicateStreams: Bool = true, prioritiseFollowedStreamers: Bool = false) async throws {
+    public func startMiner(minerId: String, priorityGames: [String], excludedGames: [String], strategy: MiningStrategy, enableBadgesEmotes: Bool = false, showClaimNotifications: Bool = false, avoidDuplicateStreams: Bool = true, antiStallRecoveryEnabled: Bool = true, prioritiseFollowedStreamers: Bool = false) async throws {
         guard let engine = engines[minerId],
               let miner = getMiner(id: minerId) else {
             throw TwitchMinerError.sessionNotStarted
@@ -577,9 +609,15 @@ public final class MinerManager {
         }
 
         // Update notification preference if provided
+        self.currentPriorityGames = priorityGames
+        self.currentExcludedGames = excludedGames
+        self.currentStrategy = strategy
+        self.currentEnableBadgesEmotes = enableBadgesEmotes
         self.showClaimNotifications = showClaimNotifications
         self.avoidDuplicateStreams = avoidDuplicateStreams
+        self.antiStallRecoveryEnabled = antiStallRecoveryEnabled
         self.prioritiseFollowedStreamers = prioritiseFollowedStreamers
+        startAntiStallMonitorIfNeeded()
 
         // Update mining preferences
         let ignoredGames = Array(ignoredAccountLinkWarnings[miner.accountId] ?? [])
@@ -622,10 +660,16 @@ public final class MinerManager {
     }
     
     /// Start all miners with staggered delays to avoid API rate limiting
-    public func startAll(priorityGames: [String], excludedGames: [String], strategy: MiningStrategy, enableBadgesEmotes: Bool = false, showClaimNotifications: Bool = false, avoidDuplicateStreams: Bool = true, prioritiseFollowedStreamers: Bool = false) async {
+    public func startAll(priorityGames: [String], excludedGames: [String], strategy: MiningStrategy, enableBadgesEmotes: Bool = false, showClaimNotifications: Bool = false, avoidDuplicateStreams: Bool = true, antiStallRecoveryEnabled: Bool = true, prioritiseFollowedStreamers: Bool = false) async {
+        self.currentPriorityGames = priorityGames
+        self.currentExcludedGames = excludedGames
+        self.currentStrategy = strategy
+        self.currentEnableBadgesEmotes = enableBadgesEmotes
         self.showClaimNotifications = showClaimNotifications
         self.avoidDuplicateStreams = avoidDuplicateStreams
+        self.antiStallRecoveryEnabled = antiStallRecoveryEnabled
         self.prioritiseFollowedStreamers = prioritiseFollowedStreamers
+        startAntiStallMonitorIfNeeded()
         let notRunningMiners = miners.filter { !$0.isRunning }
         let totalToStart = notRunningMiners.count
         
@@ -644,6 +688,7 @@ public final class MinerManager {
                 enableBadgesEmotes: enableBadgesEmotes,
                 showClaimNotifications: showClaimNotifications,
                 avoidDuplicateStreams: avoidDuplicateStreams,
+                antiStallRecoveryEnabled: antiStallRecoveryEnabled,
                 prioritiseFollowedStreamers: prioritiseFollowedStreamers
             )
         }
@@ -972,6 +1017,88 @@ public final class MinerManager {
                 await self.dataCoordinator.updateAccountNeedsAuth(accountId: miner.accountId, needsAuth: needsAuth)
                 self.updateMinerStatus(minerId: minerId, status: .error, needsAuth: needsAuth)
             }
+        }
+    }
+
+    private func startAntiStallMonitorIfNeeded() {
+        guard antiStallRecoveryEnabled, antiStallMonitorTask == nil else { return }
+
+        antiStallMonitorTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 60 * 1_000_000_000)
+                if Task.isCancelled { break }
+                await self?.runAntiStallCheck()
+            }
+        }
+    }
+
+    private func runAntiStallCheck() async {
+        guard antiStallRecoveryEnabled else { return }
+
+        for miner in miners where miner.isRunning {
+            guard !antiStallRecoveryInFlight.contains(miner.id),
+                  let reason = await antiStallRecoveryReason(for: miner) else {
+                continue
+            }
+
+            if let lastRecovery = lastAntiStallRecoveryAt[miner.id],
+               Date().timeIntervalSince(lastRecovery) < 10 * 60 {
+                continue
+            }
+
+            antiStallRecoveryInFlight.insert(miner.id)
+            lastAntiStallRecoveryAt[miner.id] = Date()
+            onLogMessage?(miner.id, "Anti-stall recovery: restarting miner because \(reason).")
+
+            await restartMinerForAntiStallRecovery(minerId: miner.id)
+            antiStallRecoveryInFlight.remove(miner.id)
+        }
+    }
+
+    private func antiStallRecoveryReason(for miner: ManagedMiner) async -> String? {
+        guard let engine = engines[miner.id] else { return nil }
+
+        let stuckDuration = Date().timeIntervalSince(miner.statusChangedAt)
+        let stallState = await engine.getStallState()
+
+        if miner.status == .watching, stallState.minutesSinceLastProgress >= 20 {
+            return "no confirmed progress has arrived for \(stallState.minutesSinceLastProgress) minutes"
+        }
+
+        if miner.status == .error, !miner.needsAuth, stuckDuration >= 5 * 60 {
+            return "it has been in a recoverable error state for \(Int(stuckDuration / 60)) minutes"
+        }
+
+        if (miner.status == .authenticating || miner.status == .fetchingCampaigns), stuckDuration >= 10 * 60 {
+            return "it has been stuck at \(miner.status.displayName.lowercased()) for \(Int(stuckDuration / 60)) minutes"
+        }
+
+        return nil
+    }
+
+    private func restartMinerForAntiStallRecovery(minerId: String) async {
+        await stopMiner(minerId: minerId)
+
+        do {
+            try await startMiner(
+                minerId: minerId,
+                priorityGames: currentPriorityGames,
+                excludedGames: currentExcludedGames,
+                strategy: currentStrategy,
+                enableBadgesEmotes: currentEnableBadgesEmotes,
+                showClaimNotifications: showClaimNotifications,
+                avoidDuplicateStreams: avoidDuplicateStreams,
+                antiStallRecoveryEnabled: antiStallRecoveryEnabled,
+                prioritiseFollowedStreamers: prioritiseFollowedStreamers
+            )
+            onLogMessage?(minerId, "Anti-stall recovery: miner relaunched.")
+        } catch {
+            let needsAuth = Self.requiresManualReauth(for: error)
+            if let miner = getMiner(id: minerId) {
+                await dataCoordinator.updateAccountNeedsAuth(accountId: miner.accountId, needsAuth: needsAuth)
+            }
+            updateMinerStatus(minerId: minerId, status: .error, needsAuth: needsAuth)
+            onLogMessage?(minerId, "Anti-stall recovery failed: \(error.localizedDescription)")
         }
     }
 

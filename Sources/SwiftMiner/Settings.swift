@@ -70,6 +70,10 @@ public final class Settings: ObservableObject {
     @AppStorage("avoidDuplicateStreams", store: Settings.appStorageStore)
     public var avoidDuplicateStreams: Bool = true
 
+    /// Whether SwiftMiner should restart a miner that appears stuck after a stall or recoverable error.
+    @AppStorage("antiStallRecoveryEnabled", store: Settings.appStorageStore)
+    public var antiStallRecoveryEnabled: Bool = true
+
     /// Whether followed or subscribed streamers should be preferred during channel selection.
     @AppStorage("prioritiseFollowedStreamers", store: Settings.appStorageStore)
     public var prioritiseFollowedStreamers: Bool = false
@@ -713,6 +717,7 @@ public final class Settings: ObservableObject {
         autoStartOnLaunch = false
         enableBadgesEmotes = false
         avoidDuplicateStreams = true
+        antiStallRecoveryEnabled = true
         prioritiseFollowedStreamers = false
         syncMinersState = true
         runInBackground = true

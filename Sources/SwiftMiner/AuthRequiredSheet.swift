@@ -304,6 +304,7 @@ struct AuthRequiredSheet: View {
                 enableBadgesEmotes: settings.enableBadgesEmotes,
                 showClaimNotifications: settings.showClaimNotifications,
                 avoidDuplicateStreams: settings.avoidDuplicateStreams,
+                antiStallRecoveryEnabled: settings.antiStallRecoveryEnabled,
                 prioritiseFollowedStreamers: settings.prioritiseFollowedStreamers
             )
         }
