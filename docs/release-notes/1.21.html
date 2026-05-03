@@ -10,7 +10,9 @@
       margin: 0;
       padding: 32px 20px 48px;
       font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #f4f6f8;
+      background:
+        radial-gradient(circle at top left, rgba(17, 124, 182, 0.18), transparent 32rem),
+        linear-gradient(135deg, #f7fbff 0%, #f4f7fb 46%, #f7f2ff 100%);
       color: #0f1720;
     }
     main {
@@ -20,6 +22,7 @@
       border-radius: 22px;
       background: rgba(255, 255, 255, 0.86);
       box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
+      border: 1px solid rgba(82, 96, 109, 0.12);
     }
     h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
     .meta { margin: 0 0 10px; color: #52606d; font-size: 14px; }
@@ -31,8 +34,31 @@
       border: 1px solid rgba(82, 96, 109, 0.18);
       border-radius: 16px;
       background: rgba(255, 255, 255, 0.42);
+      border-left: 5px solid var(--accent, #0a67a3);
     }
-    h2 { margin: 0 0 4px; font-size: 18px; }
+    section.priority { --accent: #0a7cbb; }
+    section.artwork { --accent: #b64b9b; }
+    section.accounts { --accent: #1c8c73; }
+    section.history { --accent: #b76710; }
+    section.updates { --accent: #5f5ac8; }
+    section.status { --accent: #0b7894; }
+    h2 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 4px;
+      color: var(--accent, #0a67a3);
+      font-size: 18px;
+    }
+    .badge {
+      display: inline-grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--accent, #0a67a3) 15%, transparent);
+      font-size: 16px;
+    }
     .summary { margin: 0 0 12px; color: #52606d; font-size: 14px; }
     ul { margin: 0; padding-left: 22px; }
     li { margin: 0 0 8px; }
@@ -40,10 +66,16 @@
     a { color: #0a67a3; text-decoration: none; }
     a:hover { text-decoration: underline; }
     @media (prefers-color-scheme: dark) {
-      body { background: #0b1015; color: #edf2f7; }
+      body {
+        background:
+          radial-gradient(circle at top left, rgba(89, 185, 255, 0.16), transparent 32rem),
+          linear-gradient(135deg, #081019 0%, #101520 52%, #171427 100%);
+        color: #edf2f7;
+      }
       main {
         background: rgba(15, 23, 32, 0.88);
         box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+        border-color: rgba(159, 176, 194, 0.14);
       }
       .meta { color: #9fb0c2; }
       .intro { color: #c8d3df; }
@@ -60,10 +92,10 @@
   <main>
     <h1>SwiftMiner 1.21</h1>
     <p class="meta">Version 1.21 · Build 2026050109</p>
-    <p class="intro">A quality-of-life release focused on clearer priority control, steadier artwork, account reminders, easier miner naming, and richer in-app update notes.</p>
+    <p class="intro">A brighter quality-of-life release for smoother priorities, steadier artwork, clearer account reminders, easier miner naming, and release notes you can open right inside SwiftMiner.</p>
 
-    <section>
-      <h2>Prioritised Games</h2>
+    <section class="priority">
+      <h2><span class="badge" aria-hidden="true">✨</span> Prioritised Games</h2>
       <p class="summary">Priority cards are easier to manage directly from the Overview.</p>
       <ul>
         <li>Drag prioritised cards left or right to change their mining priority.</li>
@@ -73,8 +105,8 @@
       </ul>
     </section>
 
-    <section>
-      <h2>Artwork & Drops</h2>
+    <section class="artwork">
+      <h2><span class="badge" aria-hidden="true">🎨</span> Artwork & Drops</h2>
       <p class="summary">Custom game artwork is more reliable and appears in more places.</p>
       <ul>
         <li>Caches uploaded custom artwork in Application Support so it survives refreshes.</li>
@@ -83,8 +115,8 @@
       </ul>
     </section>
 
-    <section>
-      <h2>Miner Accounts</h2>
+    <section class="accounts">
+      <h2><span class="badge" aria-hidden="true">👤</span> Miner Accounts</h2>
       <p class="summary">Account names and link problems are easier to handle from the Miners screen.</p>
       <ul>
         <li>Adds right-click nickname editing from miner rows and miner activity cards.</li>
@@ -94,8 +126,8 @@
       </ul>
     </section>
 
-    <section>
-      <h2>Drop History</h2>
+    <section class="history">
+      <h2><span class="badge" aria-hidden="true">✅</span> Drop History</h2>
       <p class="summary">Completed drops remain clearer when Twitch removes old campaign data.</p>
       <ul>
         <li>Improves completed drop history when Twitch no longer exposes an expired campaign.</li>
@@ -104,8 +136,8 @@
       </ul>
     </section>
 
-    <section>
-      <h2>Updates & Maintenance</h2>
+    <section class="updates">
+      <h2><span class="badge" aria-hidden="true">🔄</span> Updates & Maintenance</h2>
       <p class="summary">Update controls and cache maintenance are easier to manage.</p>
       <ul>
         <li>Adds a What's New window in the app menu so the current release notes can be opened directly from SwiftMiner.</li>
@@ -118,8 +150,8 @@
       </ul>
     </section>
 
-    <section>
-      <h2>Mining Status</h2>
+    <section class="status">
+      <h2><span class="badge" aria-hidden="true">⛏️</span> Mining Status</h2>
       <p class="summary">Miner status stays clearer while multiple accounts are running.</p>
       <ul>
         <li>Summarises how many miners are currently mining instead of naming only the first active campaign.</li>
