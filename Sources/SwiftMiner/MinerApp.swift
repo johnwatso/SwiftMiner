@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 import SwiftMinerCore
 import UserNotifications
+import WebKit
 
 @main
 struct MinerApp: App {
@@ -14,6 +15,7 @@ struct MinerApp: App {
     @State private var navigation: NavigationModel
     @State private var notificationDelegate = AppNotificationDelegate()
     @State private var didApplyLaunchWindowPreference = false
+    @Environment(\.openWindow) private var openWindow
 
     init() {
         let clientId = ClientConfiguration.clientId
@@ -64,6 +66,11 @@ struct MinerApp: App {
                     updater.checkForUpdates()
                 }
                 .disabled(!updater.canCheckForUpdates)
+
+                Button("What's New") {
+                    openWindow(id: AppWindowID.releaseNotes)
+                }
+                .disabled(updater.releaseNotesURL == nil)
             }
             CommandGroup(after: .appSettings) {
                 Button("Claim All Drops") {
@@ -77,6 +84,11 @@ struct MinerApp: App {
                 .keyboardShortcut("r", modifiers: [.command])
             }
         }
+
+        Window("What's New", id: AppWindowID.releaseNotes) {
+            ReleaseNotesWindow(releaseNotesURL: updater.releaseNotesURL)
+        }
+        .defaultSize(width: 760, height: 680)
 
         MenuBarExtra(isInserted: menuBarExtraIsInserted) {
             MenuBarContent(presentationController: presentationController)
@@ -125,6 +137,43 @@ struct MinerApp: App {
 
 private enum AppWindowID {
     static let main = "main"
+    static let releaseNotes = "releaseNotes"
+}
+
+private struct ReleaseNotesWindow: View {
+    let releaseNotesURL: URL?
+
+    var body: some View {
+        Group {
+            if let releaseNotesURL {
+                ReleaseNotesWebView(url: releaseNotesURL)
+            } else {
+                ContentUnavailableView(
+                    "Release Notes Unavailable",
+                    systemImage: "doc.text.magnifyingglass",
+                    description: Text("Configure the Sparkle feed URL to show What's New.")
+                )
+            }
+        }
+        .navigationTitle("What's New")
+    }
+}
+
+private struct ReleaseNotesWebView: NSViewRepresentable {
+    let url: URL
+
+    func makeNSView(context: Context) -> WKWebView {
+        let configuration = WKWebViewConfiguration()
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.allowsBackForwardNavigationGestures = true
+        webView.load(URLRequest(url: url))
+        return webView
+    }
+
+    func updateNSView(_ webView: WKWebView, context: Context) {
+        guard webView.url != url else { return }
+        webView.load(URLRequest(url: url))
+    }
 }
 
 @MainActor
@@ -234,13 +283,6 @@ struct MenuBarContent: View {
                 }
             }
             .padding(.vertical, 4)
-
-            Divider()
-
-            Button("Claim All Drops") {
-                Task { await appModel.claimAllDrops() }
-            }
-            .keyboardShortcut("k", modifiers: [.command, .shift])
 
             Divider()
 

@@ -155,12 +155,13 @@ struct OverviewView: View {
 
     private var overviewSystemState: OverviewSystemState {
         let miners = navigation.minerManager.miners
+        let miningMinerCount = miners.filter { $0.status == .watching }.count
 
-        if let miningMiner = miners.first(where: { $0.status == .watching }) {
-            let gameName = currentCampaign(for: miningMiner)?.gameName
-                ?? miningMiner.currentCampaign
-                ?? "an active campaign"
-            return .mining(gameName: gameName)
+        if miningMinerCount > 0 {
+            return .mining(
+                activeMinerCount: miningMinerCount,
+                totalMinerCount: miners.count
+            )
         }
 
         if miners.contains(where: { $0.needsAuth }) {
@@ -1032,7 +1033,7 @@ private enum OverviewSystemState: Equatable {
     case blockedAccountNotLinked(minerName: String?, blockedCount: Int)
     case blockedAuthenticationExpired
     case blockedNeedsAttention
-    case mining(gameName: String)
+    case mining(activeMinerCount: Int, totalMinerCount: Int)
 
     var title: String {
         switch self {
@@ -1073,8 +1074,14 @@ private enum OverviewSystemState: Equatable {
             return "Account authentication expired. Please re-connect."
         case .blockedNeedsAttention:
             return "Check Events for the latest issue before mining can continue."
-        case .mining(let gameName):
-            return "Actively earning drops for \(gameName)."
+        case .mining(let activeMinerCount, let totalMinerCount):
+            if totalMinerCount <= 1 {
+                return "Miner is currently mining."
+            }
+            if activeMinerCount == totalMinerCount {
+                return "All miners are currently mining."
+            }
+            return "\(activeMinerCount) of \(totalMinerCount) miners are currently mining."
         }
     }
 
