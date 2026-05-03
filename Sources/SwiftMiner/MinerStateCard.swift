@@ -259,9 +259,11 @@ struct MinerActivityCard: View {
     var onClearNickname: (() -> Void)? = nil
 
     @ObservedObject private var settings = Settings.shared
+    @State private var activityRefreshPulse = Date()
 
     private var snapshot: MinerActivitySnapshot {
-        MinerActivitySnapshot.resolve(
+        _ = activityRefreshPulse
+        return MinerActivitySnapshot.resolve(
             for: miner,
             priorityGames: settings.priorityGames,
             excludedGames: settings.excludedGames,
@@ -329,6 +331,12 @@ struct MinerActivityCard: View {
         .contentShape(RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
         .onTapGesture {
             onSelect?()
+        }
+        .task(id: miner.id) {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 15 * 1_000_000_000)
+                activityRefreshPulse = Date()
+            }
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(miner.displayName), now mining \(snapshot.now.title)")

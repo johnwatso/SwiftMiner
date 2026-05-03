@@ -60,7 +60,7 @@
   <main>
     <h1>SwiftMiner 1.21</h1>
     <p class="meta">Version 1.21 · Build 2026050109</p>
-    <p class="intro">A quality-of-life release focused on clearer priority control, steadier artwork, account reminders, and easier miner naming.</p>
+    <p class="intro">A quality-of-life release focused on clearer priority control, steadier artwork, account reminders, easier miner naming, and richer in-app update notes.</p>
 
     <section>
       <h2>Prioritised Games</h2>
@@ -108,11 +108,23 @@
       <h2>Updates & Maintenance</h2>
       <p class="summary">Update controls and cache maintenance are easier to manage.</p>
       <ul>
+        <li>Adds a What's New window in the app menu so the current release notes can be opened directly from SwiftMiner.</li>
+        <li>Derives release-note links from the configured stable or beta Sparkle feed, keeping in-app notes aligned with the selected update channel.</li>
         <li>Adds an Anti-stall recovery setting, enabled by default, that restarts an individual miner when it appears stuck after a long progress stall or recoverable network error.</li>
         <li>Adds Software Updates controls for choosing the stable or beta Sparkle feed.</li>
         <li>Adds settings for update prompts and unattended update installs when macOS permits them.</li>
         <li>Adds an Advanced settings action to clear cached drop history without removing accounts or app preferences.</li>
         <li>Updates the stable Sparkle appcast and release-note links for SwiftMiner 1.21 build 2026050109.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Mining Status</h2>
+      <p class="summary">Miner status stays clearer while multiple accounts are running.</p>
+      <ul>
+        <li>Summarises how many miners are currently mining instead of naming only the first active campaign.</li>
+        <li>Refreshes miner activity cards periodically so the displayed current and upcoming work stays fresh while the app remains open.</li>
+        <li>Keeps Claim All Drops in the app commands while simplifying the menu bar menu around dashboard access.</li>
       </ul>
     </section>
   </main>

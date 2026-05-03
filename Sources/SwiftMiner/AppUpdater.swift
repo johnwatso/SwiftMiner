@@ -46,6 +46,7 @@ final class AppUpdater: NSObject, ObservableObject {
     private var updaterController: SPUStandardUpdaterController?
 #endif
     private let stableFeedURL: String
+    private let currentShortVersion: String
     private var autoCheckTask: Task<Void, Never>?
 
     init(bundle: Bundle = .main) {
@@ -57,8 +58,11 @@ final class AppUpdater: NSObject, ObservableObject {
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let publicKey = (bundle.object(forInfoDictionaryKey: "SUPublicEDKey") as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let shortVersion = (bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let configured = !feedURL.isEmpty && !publicKey.isEmpty
         stableFeedURL = feedURL
+        currentShortVersion = shortVersion
 
         super.init()
 
@@ -101,6 +105,10 @@ final class AppUpdater: NSObject, ObservableObject {
 #if canImport(Sparkle)
         updaterController?.updater.checkForUpdatesInBackground()
 #endif
+    }
+
+    var releaseNotesURL: URL? {
+        Self.releaseNotesURL(from: feedURLString, shortVersion: currentShortVersion)
     }
 
     func setAutomaticallyChecksForUpdates(_ isEnabled: Bool) {
@@ -173,6 +181,30 @@ final class AppUpdater: NSObject, ObservableObject {
 
         components.path = betaPath
         return components.url?.absoluteString ?? stableFeedURL
+    }
+
+    static func releaseNotesURL(from feedURLString: String, shortVersion: String) -> URL? {
+        guard var components = URLComponents(string: feedURLString) else {
+            return nil
+        }
+
+        let sanitizedVersion = shortVersion.trimmingCharacters(in: .whitespacesAndNewlines)
+        let path = components.path
+        if path.hasSuffix("/beta/appcast.xml") {
+            components.path = String(path.dropLast("/beta/appcast.xml".count)) + "/release-notes/"
+        } else if path.hasSuffix("/appcast.xml") {
+            components.path = String(path.dropLast("/appcast.xml".count)) + "/release-notes/"
+        } else if path.hasSuffix("appcast.xml") {
+            components.path = String(path.dropLast("appcast.xml".count)) + "release-notes/"
+        } else {
+            components.path = path.hasSuffix("/") ? path + "release-notes/" : path + "/release-notes/"
+        }
+
+        if !sanitizedVersion.isEmpty {
+            components.path += components.path.hasSuffix("/") ? "\(sanitizedVersion).html" : "/\(sanitizedVersion).html"
+        }
+
+        return components.url
     }
 }
 
