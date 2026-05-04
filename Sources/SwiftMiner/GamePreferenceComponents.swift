@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftMinerCore
+import AsyncAlgorithms
 
 // MARK: - Game Preferences Section
 
@@ -36,6 +37,7 @@ struct GameSearchField: View {
     @State private var twitchSearchRequiresReauth = false
     @State private var isSearchingTwitch = false
     @State private var twitchSearchTask: Task<Void, Never>?
+    @State private var searchQueries = AsyncChannel<String>()
     @FocusState private var isSearchFocused: Bool
 
     private var searchQuery: String {
@@ -166,6 +168,12 @@ struct GameSearchField: View {
                 .task(id: campaignRefreshToken) {
                     await refreshAvailableGames()
                 }
+                .task {
+                    for await query in searchQueries.debounce(for: .milliseconds(500)) {
+                        twitchSearchTask?.cancel()
+                        twitchSearchTask = Task { await runTwitchSearch(query: query) }
+                    }
+                }
 
             if showSuggestions {
                 if allSuggestions.isEmpty {
@@ -291,71 +299,53 @@ struct GameSearchField: View {
         isLoadingGames = false
     }
 
-    /// Triggers a debounced Twitch category search.
-    /// Cancels any in-flight search before starting a new one.
-    /// Sets `isSearchingTwitch = true` immediately to prevent "No results" flash during the debounce window.
+    /// Feeds the debounced search pipeline. The consumer in `.task` applies a
+    /// 500 ms debounce window and then runs the actual search, cancelling any
+    /// in-flight request first. `isSearchingTwitch` is set synchronously so the
+    /// dropdown shows the spinner instead of flashing "no results".
     private func triggerTwitchSearch(query: String) {
-        twitchSearchTask?.cancel()
         guard !query.isEmpty, hasAccounts else {
+            twitchSearchTask?.cancel()
             twitchSearchResults = []
             twitchSearchErrorMessage = nil
             twitchSearchRequiresReauth = false
             isSearchingTwitch = false
             return
         }
-        twitchSearchTask = Task {
-            isSearchingTwitch = true
-            twitchSearchErrorMessage = nil
-            twitchSearchRequiresReauth = false
-            // 500 ms debounce
-            try? await Task.sleep(nanoseconds: 500_000_000)
-            guard !Task.isCancelled else { return }
-            do {
-                let results = try await minerManager.dataCoordinator.searchCategories(query: query)
-                guard !Task.isCancelled else { return }
-                twitchSearchResults = results
-                twitchSearchErrorMessage = nil
-                twitchSearchRequiresReauth = false
-            } catch {
-                guard !Task.isCancelled else { return }
-                if isCancellationError(error) { return }
-                let mappedError = mapSearchError(error, query: query)
-                twitchSearchResults = []
-                twitchSearchErrorMessage = mappedError.message
-                twitchSearchRequiresReauth = mappedError.requiresReauth
-                print("[GameSearchField] Twitch search failed for '\(query)': \(error)")
-            }
-            guard !Task.isCancelled else { return }
-            isSearchingTwitch = false
-        }
+        isSearchingTwitch = true
+        twitchSearchErrorMessage = nil
+        twitchSearchRequiresReauth = false
+        Task { await searchQueries.send(query) }
     }
 
     /// Fires an immediate Twitch search without debounce (used by the fallback row tap).
     private func triggerImmediateTwitchSearch(query: String) {
         twitchSearchTask?.cancel()
         guard !query.isEmpty, hasAccounts else { return }
-        twitchSearchTask = Task {
-            isSearchingTwitch = true
+        twitchSearchTask = Task { await runTwitchSearch(query: query) }
+    }
+
+    private func runTwitchSearch(query: String) async {
+        isSearchingTwitch = true
+        twitchSearchErrorMessage = nil
+        twitchSearchRequiresReauth = false
+        do {
+            let results = try await minerManager.dataCoordinator.searchCategories(query: query)
+            guard !Task.isCancelled else { return }
+            twitchSearchResults = results
             twitchSearchErrorMessage = nil
             twitchSearchRequiresReauth = false
-            do {
-                let results = try await minerManager.dataCoordinator.searchCategories(query: query)
-                guard !Task.isCancelled else { return }
-                twitchSearchResults = results
-                twitchSearchErrorMessage = nil
-                twitchSearchRequiresReauth = false
-            } catch {
-                guard !Task.isCancelled else { return }
-                if isCancellationError(error) { return }
-                let mappedError = mapSearchError(error, query: query)
-                twitchSearchResults = []
-                twitchSearchErrorMessage = mappedError.message
-                twitchSearchRequiresReauth = mappedError.requiresReauth
-                print("[GameSearchField] Twitch search failed for '\(query)': \(error)")
-            }
+        } catch {
             guard !Task.isCancelled else { return }
-            isSearchingTwitch = false
+            if isCancellationError(error) { return }
+            let mappedError = mapSearchError(error, query: query)
+            twitchSearchResults = []
+            twitchSearchErrorMessage = mappedError.message
+            twitchSearchRequiresReauth = mappedError.requiresReauth
+            print("[GameSearchField] Twitch search failed for '\(query)': \(error)")
         }
+        guard !Task.isCancelled else { return }
+        isSearchingTwitch = false
     }
 
     private func mapSearchError(_ error: Error, query: String) -> (message: String, requiresReauth: Bool) {

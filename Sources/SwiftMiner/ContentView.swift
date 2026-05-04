@@ -13,7 +13,7 @@ struct ContentView: View {
             SidebarView()
                 .navigationSplitViewColumnWidth(min: 168, ideal: 180, max: 240)
         } detail: {
-            detailView
+            detailContainer
         }
         .background(WindowZoomConfigurator())
         .frame(minWidth: 800, minHeight: 600)
@@ -31,6 +31,17 @@ struct ContentView: View {
     }
 
     // MARK: - Detail View
+
+    private var detailContainer: some View {
+        ZStack {
+            Color(nsColor: .windowBackgroundColor)
+                .ignoresSafeArea()
+
+            detailView
+                .id(navigation.selectedItem ?? .overview)
+        }
+        .animation(nil, value: navigation.selectedItem)
+    }
 
     @ViewBuilder
     private var detailView: some View {

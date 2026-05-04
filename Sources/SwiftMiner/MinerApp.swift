@@ -73,11 +73,6 @@ struct MinerApp: App {
                 .disabled(updater.releaseNotesURL == nil)
             }
             CommandGroup(after: .appSettings) {
-                Button("Claim All Drops") {
-                    Task { await appModel.claimAllDrops() }
-                }
-                .keyboardShortcut("k", modifiers: [.command, .shift])
-
                 Button("Refresh Progress") {
                     Task { await appModel.refreshProgress() }
                 }
@@ -142,37 +137,81 @@ private enum AppWindowID {
 
 private struct ReleaseNotesWindow: View {
     let releaseNotesURL: URL?
+    @State private var content: ReleaseNotesContent = .loading
 
     var body: some View {
-        Group {
-            if let releaseNotesURL {
-                ReleaseNotesWebView(url: releaseNotesURL)
-            } else {
-                ContentUnavailableView(
-                    "Release Notes Unavailable",
-                    systemImage: "doc.text.magnifyingglass",
-                    description: Text("Configure the Sparkle feed URL to show What's New.")
-                )
+        contentView
+            .navigationTitle("What's New")
+            .task(id: releaseNotesURL) {
+                await loadReleaseNotes()
             }
+    }
+
+    @ViewBuilder
+    private var contentView: some View {
+        switch content {
+        case .loading:
+            ProgressView("Loading release notes...")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .loaded(let html, let baseURL):
+            ReleaseNotesWebView(html: html, baseURL: baseURL)
+        case .failed(let message):
+            ContentUnavailableView(
+                "Release Notes Unavailable",
+                systemImage: "doc.text.magnifyingglass",
+                description: Text(message)
+            )
         }
-        .navigationTitle("What's New")
+    }
+
+    private func loadReleaseNotes() async {
+        guard let releaseNotesURL else {
+            content = .failed("Configure the Sparkle feed URL to show What's New.")
+            return
+        }
+
+        content = .loading
+
+        do {
+            let (data, response) = try await URLSession.shared.data(from: releaseNotesURL)
+            if let httpResponse = response as? HTTPURLResponse,
+               !(200..<300).contains(httpResponse.statusCode) {
+                content = .failed("SwiftMiner could not load \(releaseNotesURL.absoluteString) because the server returned \(httpResponse.statusCode).")
+                return
+            }
+
+            guard let html = String(data: data, encoding: .utf8) else {
+                content = .failed("SwiftMiner loaded the release notes, but the page was not valid UTF-8 HTML.")
+                return
+            }
+
+            content = .loaded(html: html, baseURL: releaseNotesURL)
+        } catch {
+            content = .failed("SwiftMiner could not load \(releaseNotesURL.absoluteString). \(error.localizedDescription)")
+        }
     }
 }
 
+private enum ReleaseNotesContent: Equatable {
+    case loading
+    case loaded(html: String, baseURL: URL)
+    case failed(String)
+}
+
 private struct ReleaseNotesWebView: NSViewRepresentable {
-    let url: URL
+    let html: String
+    let baseURL: URL
 
     func makeNSView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.allowsBackForwardNavigationGestures = true
-        webView.load(URLRequest(url: url))
+        webView.loadHTMLString(html, baseURL: baseURL)
         return webView
     }
 
     func updateNSView(_ webView: WKWebView, context: Context) {
-        guard webView.url != url else { return }
-        webView.load(URLRequest(url: url))
+        webView.loadHTMLString(html, baseURL: baseURL)
     }
 }
 
@@ -257,8 +296,8 @@ struct MenuBarContent: View {
 
     var body: some View {
         Group {
-            Label(statusText, systemImage: statusIcon)
-                .foregroundStyle(.secondary)
+            (Text(Image(systemName: statusIcon)) + Text(" \(statusText)"))
+                .foregroundStyle(statusColor)
 
             Divider()
 
@@ -309,15 +348,23 @@ struct MenuBarContent: View {
 
     private var statusText: String {
         if appModel.activeMiners == 0 {
-            return "No miners active"
+            return "No miners running"
         } else if appModel.activeMiners == appModel.totalMiners {
-            return "All miners active"
+            return "All miners running"
         } else {
-            return "\(appModel.activeMiners) miners active"
+            return "\(appModel.activeMiners) miners running"
         }
     }
 
     private var statusIcon: String {
+        if appModel.totalMiners > 0, appModel.activeMiners == appModel.totalMiners {
+            return appModel.hasMinerAttentionItems ? "exclamationmark.triangle.fill" : "checkmark.circle.fill"
+        }
+
+        if appModel.activeMiners > 0, appModel.activeMiners < appModel.totalMiners {
+            return "exclamationmark.triangle.fill"
+        }
+
         switch appModel.overallStatus {
         case .watching:          return "play.fill"
         case .authenticating:    return "key.fill"
@@ -330,6 +377,18 @@ struct MenuBarContent: View {
         case .idleNoEligibleCampaigns: return "pause.circle"
         case .blockedAccountNotLinked: return "link.badge.plus"
         }
+    }
+
+    private var statusColor: Color {
+        if appModel.totalMiners > 0, appModel.activeMiners == appModel.totalMiners {
+            return appModel.hasMinerAttentionItems ? .orange : .green
+        }
+
+        if appModel.activeMiners > 0, appModel.activeMiners < appModel.totalMiners {
+            return .orange
+        }
+
+        return .secondary
     }
 
     private func openDashboard() {

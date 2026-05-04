@@ -52,6 +52,18 @@ public final class AppModel {
         sessionStatus
     }
 
+    public var hasMinerAttentionItems: Bool {
+        if let manager = minerManager {
+            return manager.miners.contains { miner in
+                miner.needsAuth
+                    || miner.status == .error
+                    || miner.status == .blockedAccountNotLinked
+            }
+        }
+
+        return lastError != nil || sessionStatus == .error || sessionStatus == .blockedAccountNotLinked
+    }
+
     private let maxLogEntries = 500
 
     // MARK: - Engine (used only for device-code auth flow)

@@ -363,13 +363,13 @@ struct DropsListView: View {
             )
 
             DashboardMetricCard(
-                title: "Rewards ready",
+                title: "Claims queued",
                 value: claimableRewardCount == 0 ? "None" : "\(claimableRewardCount)",
                 detail: claimableRewardCount == 0
-                    ? "No rewards ready"
-                    : "\(claimableCampaigns.count) \(claimableCampaigns.count == 1 ? "campaign" : "campaigns") waiting",
+                    ? "No claims pending"
+                    : "\(claimableCampaigns.count) \(claimableCampaigns.count == 1 ? "campaign" : "campaigns") being claimed",
                 tint: .orange,
-                systemImage: "sparkles",
+                systemImage: "tray.and.arrow.down.fill",
                 isMuted: claimableRewardCount == 0
             )
 
@@ -802,8 +802,8 @@ private struct CampaignDeckCard: View {
 
                         if activity.claimableDropCount > 0 && activity.state != .blocked {
                             CampaignMetricPill(
-                                title: "\(activity.claimableDropCount) ready",
-                                systemImage: "sparkles",
+                                title: "\(activity.claimableDropCount) queued",
+                                systemImage: "tray.and.arrow.down.fill",
                                 tint: .orange
                             )
                         }
@@ -1036,8 +1036,8 @@ private struct GameCampaignDeckCard: View {
                         )
                         if group.claimableRewardCount > 0 && group.aggregateState != .actionRequired {
                             CampaignMetricPill(
-                                title: "\(group.claimableRewardCount) ready",
-                                systemImage: "sparkles",
+                                title: "\(group.claimableRewardCount) queued",
+                                systemImage: "tray.and.arrow.down.fill",
                                 tint: .orange
                             )
                         }
@@ -1116,7 +1116,7 @@ private struct GroupedCampaignSubItem: View {
         }
         if activity.claimableDropCount > 0 {
             let count = activity.claimableDropCount
-            return count == 1 ? "1 reward ready" : "\(count) rewards ready"
+            return count == 1 ? "1 claim queued" : "\(count) claims queued"
         }
         if item.state == .inProgress && item.campaign.progress > 0 {
             return "\(progressPercent)% progress • \(activity.claimedRewardCount) claimed"

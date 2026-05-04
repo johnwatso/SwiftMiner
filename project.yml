@@ -8,6 +8,9 @@ packages:
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle
     majorVersion: 2.8.0
+  AsyncAlgorithms:
+    url: https://github.com/apple/swift-async-algorithms
+    from: 1.0.0
 
 targets:
   SwiftMinerCore:
@@ -38,6 +41,8 @@ targets:
       - target: SwiftMinerService
       - package: Sparkle
         product: Sparkle
+      - package: AsyncAlgorithms
+        product: AsyncAlgorithms
     info:
       path: Sources/SwiftMiner/Info.plist
       properties:
@@ -49,8 +54,8 @@ targets:
         SWIFT_STRICT_CONCURRENCY: complete
         PRODUCT_BUNDLE_IDENTIFIER: com.swiftminer.app
         MACOSX_DEPLOYMENT_TARGET: "26.0"
-        MARKETING_VERSION: "1.05"
-        CURRENT_PROJECT_VERSION: "2026032214"
+        MARKETING_VERSION: "1.21"
+        CURRENT_PROJECT_VERSION: "2026050412"
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: SwiftMiner
         INFOPLIST_KEY_CFBundleName: SwiftMiner
