@@ -12,6 +12,7 @@
 		0B2E0AC6FE0D7B1B112DFD02 /* AdminLinkingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9559DA840299AFF90133587 /* AdminLinkingService.swift */; };
 		0F4C7F2D087B2AFAEBDBE260 /* PrimaryStateResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD5023EC681D53196C9F4350 /* PrimaryStateResolverTests.swift */; };
 		156A8D4734DACD633E3CC8BB /* MinerTableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E783D8A8E6145DE8BED34EED /* MinerTableView.swift */; };
+		1843A5CE760FEA47E6E4BAA8 /* AsyncAlgorithms in Frameworks */ = {isa = PBXBuildFile; productRef = D556FD2F54AFA29EBC58E523 /* AsyncAlgorithms */; };
 		19A074814DF20B17C5744B4F /* TDMCookieParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F1E410973A71500C0EA0280 /* TDMCookieParser.swift */; };
 		1A07E9FA650B8CFB69A0D223 /* MinerActivitySnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A62D525DAD95E511F9DA6C90 /* MinerActivitySnapshotTests.swift */; };
 		1EE2734B85C0BF49B0910AF0 /* libSwiftMinerService.a in Frameworks */ = {isa = PBXBuildFile; fileRef = F79E8CD76AF45B0FC7080868 /* libSwiftMinerService.a */; };
@@ -304,6 +305,7 @@
 				8DA23974E71E2FB5922603A6 /* libSwiftMinerCore.a in Frameworks */,
 				05EDE4B6BDADF449C9F36B96 /* libSwiftMinerService.a in Frameworks */,
 				A99DA21D645821C4EFA9D53A /* Sparkle in Frameworks */,
+				1843A5CE760FEA47E6E4BAA8 /* AsyncAlgorithms in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -633,6 +635,7 @@
 			name = SwiftMiner;
 			packageProductDependencies = (
 				2B1CADAC413BEE9A9D77EF7D /* Sparkle */,
+				D556FD2F54AFA29EBC58E523 /* AsyncAlgorithms */,
 			);
 			productName = SwiftMiner;
 			productReference = 14199B9CF6D97675DE0107D4 /* SwiftMiner.app */;
@@ -682,6 +685,7 @@
 			mainGroup = 0B7B09F254CB3AEC3E275EA1;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				18951E513366641D34AE8CD5 /* XCRemoteSwiftPackageReference "swift-async-algorithms" */,
 				96BBB520152AB65916A7AB9A /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -981,7 +985,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026050109;
+				CURRENT_PROJECT_VERSION = 2026050412;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
@@ -1154,7 +1158,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026050109;
+				CURRENT_PROJECT_VERSION = 2026050412;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
@@ -1398,6 +1402,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		18951E513366641D34AE8CD5 /* XCRemoteSwiftPackageReference "swift-async-algorithms" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/apple/swift-async-algorithms";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.0;
+			};
+		};
 		96BBB520152AB65916A7AB9A /* XCRemoteSwiftPackageReference "Sparkle" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/sparkle-project/Sparkle";
@@ -1413,6 +1425,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 96BBB520152AB65916A7AB9A /* XCRemoteSwiftPackageReference "Sparkle" */;
 			productName = Sparkle;
+		};
+		D556FD2F54AFA29EBC58E523 /* AsyncAlgorithms */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 18951E513366641D34AE8CD5 /* XCRemoteSwiftPackageReference "swift-async-algorithms" */;
+			productName = AsyncAlgorithms;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

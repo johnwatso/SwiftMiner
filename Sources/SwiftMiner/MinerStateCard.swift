@@ -641,7 +641,7 @@ struct MinerActivitySnapshot {
                 }
                 return item.remainingMinutes > 0
                     ? "\(item.dropName) · \(item.remainingMinutes) min remaining"
-                    : "\(item.dropName) ready to claim"
+                    : "\(item.dropName) · claiming reward"
             } ?? "Tracking eligible stream progress"
 
             return MinerActivityItem(

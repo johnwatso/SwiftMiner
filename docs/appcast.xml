@@ -5,7 +5,7 @@
         <item>
             <title>1.21</title>
             <pubDate>Sun, 29 Mar 2026 12:08:29 +1300</pubDate>
-            <sparkle:version>2026050109</sparkle:version>
+            <sparkle:version>2026050412</sparkle:version>
             <sparkle:shortVersionString>1.21</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
             <sparkle:releaseNotesLink>https://johnwatso.github.io/SwiftMiner/release-notes/1.21.html</sparkle:releaseNotesLink>
@@ -18,10 +18,13 @@
                     <li>Derives release-note links from the configured stable or beta Sparkle feed, keeping in-app notes aligned with the selected update channel.</li>
                     <li>Summarises how many miners are currently mining instead of naming only the first active campaign.</li>
                     <li>Refreshes miner activity cards periodically so the displayed current and upcoming work stays fresh while the app remains open.</li>
-                    <li>Keeps Claim All Drops in the app commands while simplifying the menu bar menu around dashboard access.</li>
+                    <li>Debounces Twitch category searches, cancels stale requests, and keeps the loading state steady while you type.</li>
+                    <li>Removes the Claim All Drops app command now that ready rewards are claimed automatically.</li>
+                    <li>Shows claiming rewards in activity cards instead of leaving completed drops labelled ready to claim.</li>
+                    <li>Uses a green check for the menu bar status when all miners are running, with warning icons reserved for attention states.</li>
                     <li>Adds Software Updates controls for choosing the stable or beta Sparkle feed.</li>
                     <li>Adds settings for prompting when updates are available and allowing unattended update installs when macOS permits them.</li>
-                    <li>Updates the stable Sparkle appcast and release-note links for SwiftMiner 1.21 build 2026050109.</li>
+                    <li>Updates the stable Sparkle appcast and release-note links for SwiftMiner 1.21 build 2026050412.</li>
                     <li>Improves completed drop history when Twitch no longer exposes an expired campaign.</li>
                     <li>Uses cached completed campaign data only as a fallback when a campaign is missing from Twitch, while fresh Twitch campaign data continues to win when available.</li>
                     <li>Fixes completed miner rows that could appear as waiting after both accounts had already claimed the campaign.</li>

@@ -38,6 +38,7 @@
     }
     section.priority { --accent: #0a7cbb; }
     section.artwork { --accent: #b64b9b; }
+    section.search { --accent: #527400; }
     section.accounts { --accent: #1c8c73; }
     section.history { --accent: #b76710; }
     section.updates { --accent: #5f5ac8; }
@@ -91,8 +92,8 @@
 <body>
   <main>
     <h1>SwiftMiner 1.21</h1>
-    <p class="meta">Version 1.21 · Build 2026050109</p>
-    <p class="intro">A brighter quality-of-life release for smoother priorities, steadier artwork, clearer account reminders, easier miner naming, and release notes you can open right inside SwiftMiner.</p>
+    <p class="meta">Version 1.21 · Build 2026050412</p>
+    <p class="intro">A brighter quality-of-life release for smoother priorities, steadier artwork, calmer Twitch search, clearer account reminders, easier miner naming, and release notes you can open right inside SwiftMiner.</p>
 
     <section class="priority">
       <h2><span class="badge" aria-hidden="true">✨</span> Prioritised Games</h2>
@@ -102,6 +103,16 @@
         <li>Improves drag feel with live card movement, smoother neighbour spacing, and spring settling.</li>
         <li>Deduplicates prioritised cards by game id and normalised game name, fixing cases like repeated Call of Duty Warzone entries.</li>
         <li>Adds context-menu actions for removing prioritised games and managing custom artwork.</li>
+      </ul>
+    </section>
+
+    <section class="search">
+      <h2><span class="badge" aria-hidden="true">🔎</span> Twitch Search</h2>
+      <p class="summary">Finding games feels steadier while you type.</p>
+      <ul>
+        <li>Debounces Twitch category searches so SwiftMiner waits briefly for typing to settle before sending the request.</li>
+        <li>Cancels older in-flight searches when a newer query is ready, keeping the suggestion list focused on the latest text.</li>
+        <li>Keeps the loading state visible during the debounce window so the dropdown does not flash a false "no results" message.</li>
       </ul>
     </section>
 
@@ -146,7 +157,7 @@
         <li>Adds Software Updates controls for choosing the stable or beta Sparkle feed.</li>
         <li>Adds settings for update prompts and unattended update installs when macOS permits them.</li>
         <li>Adds an Advanced settings action to clear cached drop history without removing accounts or app preferences.</li>
-        <li>Updates the stable Sparkle appcast and release-note links for SwiftMiner 1.21 build 2026050109.</li>
+        <li>Updates the stable Sparkle appcast and release-note links for SwiftMiner 1.21 build 2026050412.</li>
       </ul>
     </section>
 
@@ -156,7 +167,9 @@
       <ul>
         <li>Summarises how many miners are currently mining instead of naming only the first active campaign.</li>
         <li>Refreshes miner activity cards periodically so the displayed current and upcoming work stays fresh while the app remains open.</li>
-        <li>Keeps Claim All Drops in the app commands while simplifying the menu bar menu around dashboard access.</li>
+        <li>Removes the Claim All Drops app command now that ready rewards are claimed automatically.</li>
+        <li>Shows claiming rewards in activity cards instead of leaving completed drops labelled ready to claim.</li>
+        <li>Uses a green check for the menu bar status when all miners are running, with warning icons reserved for attention states.</li>
       </ul>
     </section>
   </main>
