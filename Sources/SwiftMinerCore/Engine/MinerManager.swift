@@ -541,6 +541,11 @@ public final class MinerManager {
         miners.first { $0.id == id }
     }
 
+    /// Resolve the user-visible name for an account, preferring the miner's nickname.
+    public func displayName(forAccountId accountId: String, fallback: String) -> String {
+        miners.first(where: { $0.accountId == accountId })?.displayName ?? fallback
+    }
+
     public func updateMinerNickname(minerId: String, nickname: String?) async {
         guard let index = miners.firstIndex(where: { $0.id == minerId }) else { return }
         let normalized = Account.normalizedNickname(nickname)

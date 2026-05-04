@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftMinerCore
+import TipKit
 
 /// macOS Settings window using a Safari-style TabView with a top toolbar.
 struct SettingsView: View {
@@ -106,10 +107,18 @@ private struct GeneralSettingsView: View {
 
             Section {
                 Toggle("Use Steam artwork for game images", isOn: $settings.preferSteamArtwork)
+                    .minerTip(SteamArtworkTip())
 
                 SettingsSecondaryText("Fetches portrait artwork from Steam CDN. Falls back to Twitch artwork when a game is not found on Steam.")
             } header: {
                 Text("Artwork")
+            }
+
+            Section {
+                Toggle("Show in-app tips", isOn: $settings.tipsEnabled)
+                SettingsSecondaryText("Show occasional TipKit hints that explain features like prioritising games or filtering drops.")
+            } header: {
+                Text("Tips")
             }
 
             Section {
@@ -529,124 +538,12 @@ private struct AdvancedSettingsView: View {
 
     var body: some View {
         Form {
-            Section {
-                Toggle("Enable Discord Integration (Beta / Dev)", isOn: $settings.swiftBotEnabled)
-                    .onChange(of: settings.swiftBotEnabled) { _, enabled in
-                        if enabled {
-                            settings.ensureSwiftBotSecrets()
-                            Task { await navigation.checkSwiftBotConnection() }
-                        } else {
-                            navigation.swiftBotState = .notConfigured
-                        }
-                    }
-
-                SettingsSecondaryText("Experimental local-only Discord/SwiftBot tools for development. Keep this off unless you are actively testing the bot integration.")
-
-                if settings.swiftBotEnabled {
-                    Divider()
-
-                    HStack {
-                        Text("SwiftBot Endpoint")
-                        Spacer()
-
-                        if settings.swiftBotEndpoint.isEmpty {
-                            Button("Configure\u{2026}") {
-                                tempEndpoint = "http://127.0.0.1:8080"
-                                showEndpointAlert = true
-                            }
-                            .buttonStyle(.link)
-                        } else {
-                            HStack(spacing: 8) {
-                                Text(settings.swiftBotEndpoint)
-                                    .font(.caption.monospaced())
-                                    .foregroundStyle(.secondary)
-
-                                Button("Edit\u{2026}") {
-                                    tempEndpoint = settings.swiftBotEndpoint
-                                    showEndpointAlert = true
-                                }
-                                .buttonStyle(.link)
-
-                                Button("Reset") {
-                                    settings.swiftBotEndpoint = ""
-                                    Task { await navigation.updateSwiftBotEndpoint("") }
-                                }
-                                .buttonStyle(.link)
-                                .foregroundStyle(.red)
-                            }
-                        }
-                    }
-
-                    SettingsSecondaryText("Address of the SwiftBot REST API (e.g. http://127.0.0.1:8080). Localhost only.")
-                }
-            } header: {
-                Text("Beta / Dev Integration")
-            }
-
-            Section {
-                HStack {
-                    Text("Twitch Client ID")
-                    Spacer()
-                    
-                    if settings.twitchClientId.isEmpty {
-                        Button("Set Custom Client ID\u{2026}") {
-                            tempClientId = ""
-                            showClientIdAlert = true
-                        }
-                        .buttonStyle(.link)
-                    } else {
-                        HStack(spacing: 8) {
-                            Text(settings.twitchClientId)
-                                .font(.caption.monospaced())
-                                .foregroundStyle(.secondary)
-                            
-                            Button("Edit\u{2026}") {
-                                tempClientId = settings.twitchClientId
-                                showClientIdAlert = true
-                            }
-                            .buttonStyle(.link)
-                            
-                            Button("Reset") {
-                                settings.twitchClientId = ""
-                            }
-                            .buttonStyle(.link)
-                            .foregroundStyle(.red)
-                        }
-                    }
-                }
-
-                SettingsSecondaryText("By default, the app uses a built-in client. Only change this if you know what you are doing.")
-            } header: {
-                Text("API Configuration")
-            }
-
-            Section {
-                Button("Clear Cached Drop History\u{2026}", role: .destructive) {
-                    showDropCacheConfirmation = true
-                }
-                .foregroundStyle(.red)
-
-                SettingsSecondaryText("Removes preserved campaign and inventory snapshots. Use this if old expired drops look wrong; the next refresh will rebuild history from Twitch.")
-
-                Button("Reset All Settings\u{2026}", role: .destructive) {
-                    showResetConfirmation = true
-                }
-                .foregroundStyle(.red)
-            } header: {
-                Text("Maintenance")
-            }
+            apiConfigurationSection
+            betaIntegrationSection
+            maintenanceSection
 
 #if DEBUG
-            Section {
-                Toggle("Bypass Link Requirement", isOn: $settings.debugBypassLinkRequirement)
-                    .onChange(of: settings.debugBypassLinkRequirement) { _, newValue in
-                        Task { await navigation.minerManager.setDebugBypassLinkRequirement(newValue) }
-                    }
-
-                SettingsSecondaryText("Mines a random live channel for any time-active campaign, ignoring account linkage. Drops won't actually credit — for exercising the watch pipeline only.")
-            } header: {
-                Text("Debug Testing")
-            }
+            debugTestingSection
 #endif
         }
         .formStyle(.grouped)
@@ -694,6 +591,143 @@ private struct AdvancedSettingsView: View {
             Text("Enter the SwiftBot REST API address (e.g. http://127.0.0.1:8080).")
         }
     }
+
+    // MARK: Sections
+
+    private var apiConfigurationSection: some View {
+        Section {
+            LabeledContent("Twitch Client ID") {
+                if settings.twitchClientId.isEmpty {
+                    Button("Set Custom\u{2026}") {
+                        tempClientId = ""
+                        showClientIdAlert = true
+                    }
+                    .buttonStyle(.link)
+                } else {
+                    HStack(spacing: 8) {
+                        Text(settings.twitchClientId)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+
+                        Button("Edit\u{2026}") {
+                            tempClientId = settings.twitchClientId
+                            showClientIdAlert = true
+                        }
+                        .buttonStyle(.link)
+
+                        Button("Reset", role: .destructive) {
+                            settings.twitchClientId = ""
+                        }
+                        .buttonStyle(.link)
+                    }
+                }
+            }
+
+            SettingsSecondaryText("By default, SwiftMiner uses a built-in Twitch client. Only change this if you know what you are doing.")
+        } header: {
+            Text("API Configuration")
+        }
+    }
+
+    @ViewBuilder
+    private var betaIntegrationSection: some View {
+        Section {
+            Toggle("Enable Discord Integration", isOn: $settings.swiftBotEnabled)
+                .onChange(of: settings.swiftBotEnabled) { _, enabled in
+                    if enabled {
+                        settings.ensureSwiftBotSecrets()
+                        Task { await navigation.checkSwiftBotConnection() }
+                    } else {
+                        navigation.swiftBotState = .notConfigured
+                    }
+                }
+
+            SettingsSecondaryText("Experimental local-only Discord/SwiftBot tools. Keep this off unless you are actively testing the bot integration.")
+
+            if settings.swiftBotEnabled {
+                LabeledContent("SwiftBot Endpoint") {
+                    if settings.swiftBotEndpoint.isEmpty {
+                        Button("Configure\u{2026}") {
+                            tempEndpoint = "http://127.0.0.1:8080"
+                            showEndpointAlert = true
+                        }
+                        .buttonStyle(.link)
+                    } else {
+                        HStack(spacing: 8) {
+                            Text(settings.swiftBotEndpoint)
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.secondary)
+
+                            Button("Edit\u{2026}") {
+                                tempEndpoint = settings.swiftBotEndpoint
+                                showEndpointAlert = true
+                            }
+                            .buttonStyle(.link)
+
+                            Button("Reset", role: .destructive) {
+                                settings.swiftBotEndpoint = ""
+                                Task { await navigation.updateSwiftBotEndpoint("") }
+                            }
+                            .buttonStyle(.link)
+                        }
+                    }
+                }
+
+                SettingsSecondaryText("Address of the SwiftBot REST API (e.g. http://127.0.0.1:8080). Localhost only.")
+            }
+        } header: {
+            Text("Beta Integrations")
+        }
+    }
+
+    private var maintenanceSection: some View {
+        Section {
+            Button("Clear Cached Drop History\u{2026}", role: .destructive) {
+                showDropCacheConfirmation = true
+            }
+
+            SettingsSecondaryText("Removes preserved campaign and inventory snapshots. Use this if old expired drops look wrong; the next refresh rebuilds history from Twitch.")
+
+            Button("Reset All Settings\u{2026}", role: .destructive) {
+                showResetConfirmation = true
+            }
+
+            SettingsSecondaryText("Restores every SwiftMiner preference to its default. Account logins are kept.")
+        } header: {
+            Text("Maintenance")
+        }
+    }
+
+#if DEBUG
+    private var debugTestingSection: some View {
+        Section {
+            Toggle("Bypass Link Requirement", isOn: $settings.debugBypassLinkRequirement)
+                .onChange(of: settings.debugBypassLinkRequirement) { _, newValue in
+                    Task { await navigation.minerManager.setDebugBypassLinkRequirement(newValue) }
+                }
+
+            SettingsSecondaryText("Mines a random live channel for any time-active campaign, ignoring account linkage. Drops won't actually credit — for exercising the watch pipeline only.")
+
+            LabeledContent("TipKit Popovers") {
+                HStack(spacing: 12) {
+                    Button("Force Show") {
+                        Tips.showAllTipsForTesting()
+                    }
+                    .buttonStyle(.link)
+
+                    Button("Hide All") {
+                        Tips.hideAllTipsForTesting()
+                    }
+                    .buttonStyle(.link)
+                }
+            }
+
+            SettingsSecondaryText("Force Show ignores rules so every tip renders immediately. State resets on relaunch.")
+        } header: {
+            Text("Debug Testing")
+        }
+    }
+#endif
 }
 
 // MARK: - Shared Components

@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftMinerCore
 import AppKit
+import TipKit
 import UniformTypeIdentifiers
 
 /// Root view — 2-column NavigationSplitView (Sidebar | Detail)
@@ -182,7 +183,7 @@ struct OverviewView: View {
         let accountLinkBlockedMiners = miners.filter { $0.status == .blockedAccountNotLinked }
         if !accountLinkBlockedMiners.isEmpty {
             return .blockedAccountNotLinked(
-                minerName: accountLinkBlockedMiners.count == 1 ? accountLinkBlockedMiners[0].username : nil,
+                minerName: accountLinkBlockedMiners.count == 1 ? accountLinkBlockedMiners[0].displayName : nil,
                 blockedCount: accountLinkBlockedMiners.count
             )
         }
@@ -365,9 +366,16 @@ struct OverviewView: View {
                     showsEditButton: true,
                     onMoveItem: movePrioritisedItem
                 )
+                .minerTip(DragToReorderTip())
             } else {
                 addPrioritisedGameSection
             }
+        }
+        .onAppear {
+            DragToReorderTip.prioritisedCount = displayedPrioritisedFeedItems.count
+        }
+        .onChange(of: displayedPrioritisedFeedItems.count) { _, newValue in
+            DragToReorderTip.prioritisedCount = newValue
         }
         .padding(.vertical, 2)
     }
@@ -387,6 +395,7 @@ struct OverviewView: View {
                     Label("Add Prioritised Game", systemImage: "plus")
                 }
                 .buttonStyle(.borderedProminent)
+                .minerTip(PrioritiseGameTip())
             }
             .frame(maxWidth: .infinity, minHeight: 180)
         }

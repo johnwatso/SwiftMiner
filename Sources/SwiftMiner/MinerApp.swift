@@ -1,12 +1,14 @@
 import AppKit
 import SwiftUI
 import SwiftMinerCore
+import TipKit
 import UserNotifications
 import WebKit
 
 @main
 struct MinerApp: App {
 
+    @NSApplicationDelegateAdaptor(LaunchContextDelegate.self) private var launchContext
     @StateObject private var updater = AppUpdater()
     @StateObject private var settings = Settings.shared
     @StateObject private var presentationController = AppPresentationController()
@@ -43,6 +45,10 @@ struct MinerApp: App {
                     updater.checkForUpdatesInBackground()
                     presentationController.configure(mode: settings.appPresenceMode)
                     applyLaunchWindowPreferenceIfNeeded()
+                    try? Tips.configure([
+                        .displayFrequency(.immediate),
+                        .datastoreLocation(.applicationDefault)
+                    ])
                 }
                 .onChange(of: settings.appPresenceMode) { _, newValue in
                     presentationController.configure(mode: newValue)
@@ -113,7 +119,9 @@ struct MinerApp: App {
         guard !didApplyLaunchWindowPreference else { return }
         didApplyLaunchWindowPreference = true
 
-        guard settings.startMinimized else { return }
+        // Only auto-minimise when the app was launched at login. Manual launches
+        // (Dock, Finder, Spotlight) should always show the window.
+        guard settings.startMinimized, launchContext.wasLaunchedAtLogin else { return }
 
         DispatchQueue.main.async {
             NSApp.windows
@@ -133,6 +141,19 @@ struct MinerApp: App {
 private enum AppWindowID {
     static let main = "main"
     static let releaseNotes = "releaseNotes"
+}
+
+/// Captures whether the app was launched automatically at login (vs. opened by the user).
+/// The `didFinishLaunching` notification's `launchIsDefaultUserInfoKey` is `false` when the
+/// system launched the app on the user's behalf — login items, reopen-on-restart, etc.
+final class LaunchContextDelegate: NSObject, NSApplicationDelegate, ObservableObject {
+    @Published private(set) var wasLaunchedAtLogin: Bool = false
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        if let isDefault = notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool {
+            wasLaunchedAtLogin = !isDefault
+        }
+    }
 }
 
 private struct ReleaseNotesWindow: View {

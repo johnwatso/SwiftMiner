@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftMinerCore
 import CoreImage
+import TipKit
 
 // MARK: - Drops List View
 
@@ -8,8 +9,12 @@ struct DropsListView: View {
     @Environment(NavigationModel.self) private var navigation
     @State private var campaigns: [CampaignViewData] = []
     @State private var isRefreshing = false
+    @State private var searchText: String = ""
+    @State private var selectedMinerFilterId: String = DropsListView.allMinersFilterId
     @AppStorage("preferSteamArtwork", store: Settings.appStorageStore) private var preferSteamArtwork: Bool = false
     @ObservedObject private var settings = Settings.shared
+
+    fileprivate static let allMinersFilterId = "__all_miners__"
 
     private var selectedFilters: Set<DropFilter> {
         get { settings.selectedDropsFilters }
@@ -41,6 +46,7 @@ struct DropsListView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 18) {
                         dashboardHeader
+                        searchAndMinerControls
                         filterChipsRow
 
                         if let message = contextualBannerMessage {
@@ -82,6 +88,11 @@ struct DropsListView: View {
         .task(id: accountSignature) {
             applyRequestedDropsFilter()
             await loadCampaignFeed()
+            await MinerFilterTip.viewedDropsList.donate()
+            await DropFilterChipsTip.viewedDropsList.donate()
+            if !preferSteamArtwork {
+                await SteamArtworkTip.viewedCampaigns.donate()
+            }
         }
         .onChange(of: navigation.requestedDropsFilter) { _, _ in
             applyRequestedDropsFilter()
@@ -91,6 +102,65 @@ struct DropsListView: View {
                 await navigation.minerManager.dataCoordinator.clearSteamArtworkCache()
                 await loadCampaignFeed()
             }
+        }
+        .onChange(of: miners.map(\.accountId)) { _, accountIds in
+            guard selectedMinerFilterId != Self.allMinersFilterId,
+                  !accountIds.contains(selectedMinerFilterId)
+            else { return }
+            selectedMinerFilterId = Self.allMinersFilterId
+        }
+    }
+
+    private var searchAndMinerControls: some View {
+        HStack(spacing: 10) {
+            HStack(spacing: 7) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+
+                TextField("Search drops", text: $searchText)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13))
+
+                if !searchText.isEmpty {
+                    Button {
+                        searchText = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Clear search")
+                }
+            }
+            .frame(maxWidth: 320)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 7)
+            .background(
+                RoundedRectangle(cornerRadius: 7)
+                    .fill(Color.secondary.opacity(0.08))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 7)
+                    .stroke(Color.secondary.opacity(0.14), lineWidth: 1)
+            )
+
+            if miners.count > 1 {
+                Picker("Miner", selection: $selectedMinerFilterId) {
+                    Text("All miners").tag(Self.allMinersFilterId)
+                    ForEach(miners) { miner in
+                        Text(miner.displayName).tag(miner.accountId)
+                    }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .frame(width: 180)
+                .help("Show campaigns for a specific miner")
+                .minerTip(MinerFilterTip())
+            }
+
+            Spacer(minLength: 0)
         }
     }
 
@@ -177,6 +247,7 @@ struct DropsListView: View {
                 ForEach(DropFilter.allCases) { option in
                     let isSelected = selectedFilters.contains(option)
                     Button {
+                        DropFilterChipsTip().invalidate(reason: .actionPerformed)
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
                             var current = selectedFilters
                             if isSelected {
@@ -221,6 +292,7 @@ struct DropsListView: View {
         .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Campaign filters")
+        .minerTip(DropFilterChipsTip())
     }
 
     // MARK: - Data
@@ -247,7 +319,22 @@ struct DropsListView: View {
     private var renderedCampaigns: [CampaignViewData] {
         feedCampaigns.filter { campaign in
             matchesSelectedFilters(campaign, activity: activity(for: campaign))
+                && matchesSelectedMiner(campaign)
+                && matchesSearch(campaign)
         }
+    }
+
+    private func matchesSelectedMiner(_ campaign: CampaignViewData) -> Bool {
+        guard selectedMinerFilterId != Self.allMinersFilterId else { return true }
+        return campaign.accountStates.contains { $0.accountId == selectedMinerFilterId }
+    }
+
+    private func matchesSearch(_ campaign: CampaignViewData) -> Bool {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return true }
+        let haystack = ([campaign.gameName, campaign.campaignName] + campaign.drops.map(\.name))
+            .joined(separator: " ")
+        return haystack.localizedCaseInsensitiveContains(query)
     }
 
     private var groupedCampaigns: [GameAggregate] {
@@ -317,6 +404,15 @@ struct DropsListView: View {
     }
 
     private var emptyFilterMessage: String {
+        if !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "No campaigns match your search."
+        }
+
+        if selectedMinerFilterId != Self.allMinersFilterId,
+           let miner = miners.first(where: { $0.accountId == selectedMinerFilterId }) {
+            return "No campaigns for \(miner.displayName) match the selected filters."
+        }
+
         if selectedFilters.isEmpty {
             return "Select at least one filter to refine campaigns."
         }
@@ -341,14 +437,9 @@ struct DropsListView: View {
     }
 
     private var renderSignature: [String] {
-        let selectedKeys = selectedFilters.map(\.rawValue).sorted().joined(separator: "|")
-        return groupedCampaigns.flatMap { group in
-            let groupKey = "\(selectedKeys)-\(group.id)-\(group.aggregateState.rawValue)-\(group.campaigns.count)"
-            let itemKeys = group.campaigns.map { item in
-                let snapshot = activity(for: item.campaign)
-                return "\(group.id)-\(item.campaign.id)-\(item.state.rawValue)-\(snapshot.claimableDropCount)-\(snapshot.claimedRewardCount)"
-            }
-            return [groupKey] + itemKeys
+        feedCampaigns.map { campaign in
+            let snapshot = activity(for: campaign)
+            return "\(campaign.id)-\(snapshot.state.rawValue)-\(snapshot.claimableDropCount)-\(snapshot.claimedRewardCount)"
         }
     }
 
@@ -1489,12 +1580,13 @@ private struct CampaignAccountAttribution: View {
 
 private struct CampaignAccountStatusItem: View {
     let account: AccountState
+    @Environment(NavigationModel.self) private var navigation
 
     var body: some View {
         HStack(spacing: 5) {
             CampaignAccountAvatar(account: account)
 
-            Text(account.username)
+            Text(navigation.minerManager.displayName(forAccountId: account.accountId, fallback: account.username))
                 .font(.caption2.weight(.medium))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -1570,6 +1662,7 @@ private struct CampaignAccountStrip: View {
 
 private struct CampaignAccountAvatar: View {
     let account: AccountState
+    @Environment(NavigationModel.self) private var navigation
     private let avatarDiameter: CGFloat = 21
 
     var body: some View {
@@ -1627,7 +1720,7 @@ private struct CampaignAccountAvatar: View {
                     .offset(x: 1.5, y: 1.5)
             }
         }
-        .help("\(account.username) — \(statusTitle(for: account.miningStatus))")
+        .help("\(navigation.minerManager.displayName(forAccountId: account.accountId, fallback: account.username)) — \(statusTitle(for: account.miningStatus))")
     }
 
     private func statusTitle(for status: AccountMiningStatus) -> String {

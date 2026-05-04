@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftMinerCore
+import TipKit
 
 /// Execution layer overview - scalable multi-miner workspace.
 struct MinersOverviewView: View {
@@ -41,9 +42,12 @@ struct MinersOverviewView: View {
         .task {
             syncSelection()
             captureInitialLinkIssuesIfNeeded()
+            NicknameMinerTip.minerCount = miners.count
+            await NicknameMinerTip.viewedMinersList.donate()
         }
         .onChange(of: miners.map(\.id)) { _, _ in
             syncSelection()
+            NicknameMinerTip.minerCount = miners.count
         }
         .onChange(of: rawLinkIssueSignature) { oldValue, newValue in
             handleLinkIssueSignatureChange(from: oldValue, to: newValue)
@@ -77,6 +81,7 @@ struct MinersOverviewView: View {
                             .contextMenu {
                                 nicknameContextMenu(for: miner)
                             }
+                            .modifier(NicknameTipAttachment(isFirstRow: index == 0))
 
                             if index < miners.count - 1 {
                                 Divider()
@@ -1100,6 +1105,7 @@ private struct EmptyMinersStateView: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
+            .minerTip(AddMinerTip())
         }
         .frame(maxWidth: .infinity, minHeight: 300)
         .padding(24)
@@ -1109,4 +1115,16 @@ private struct EmptyMinersStateView: View {
 #Preview {
     MinersOverviewView()
         .environment(NavigationModel(clientId: "preview"))
+}
+
+private struct NicknameTipAttachment: ViewModifier {
+    let isFirstRow: Bool
+
+    func body(content: Content) -> some View {
+        if isFirstRow {
+            content.minerTip(NicknameMinerTip())
+        } else {
+            content
+        }
+    }
 }
