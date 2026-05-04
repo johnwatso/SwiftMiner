@@ -3,14 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Add miner health overview - Release Notes</title>
+  <title>SwiftMiner 1.01 - Release Notes</title>
   <style>
     :root { color-scheme: light dark; }
     body {
       margin: 0;
       padding: 32px 20px 48px;
       font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #f4f6f8;
+      background:
+        radial-gradient(circle at top left, rgba(17, 124, 182, 0.18), transparent 32rem),
+        linear-gradient(135deg, #f7fbff 0%, #f4f7fb 46%, #f7f2ff 100%);
       color: #0f1720;
     }
     main {
@@ -20,30 +22,104 @@
       border-radius: 22px;
       background: rgba(255, 255, 255, 0.86);
       box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
+      border: 1px solid rgba(82, 96, 109, 0.12);
     }
     h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
-    .meta { margin: 0 0 24px; color: #52606d; font-size: 14px; }
+    .meta { margin: 0 0 10px; color: #52606d; font-size: 14px; }
+    .intro { margin: 0 0 24px; color: #384454; }
     p { margin: 0 0 16px; }
+    section {
+      margin: 18px 0 0;
+      padding: 18px 18px 14px;
+      border: 1px solid rgba(82, 96, 109, 0.18);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.42);
+      border-left: 5px solid var(--accent, #0a67a3);
+    }
+    section.dashboard { --accent: #0a7cbb; }
+    section.onboarding { --accent: #1c8c73; }
+    section.maintenance { --accent: #5f5ac8; }
+    h2 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 4px;
+      color: var(--accent, #0a67a3);
+      font-size: 18px;
+    }
+    .badge {
+      display: inline-grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--accent, #0a67a3) 15%, transparent);
+      font-size: 16px;
+    }
+    .summary { margin: 0 0 12px; color: #52606d; font-size: 14px; }
+    ul { margin: 0; padding-left: 22px; }
+    li { margin: 0 0 8px; }
+    li:last-child { margin-bottom: 0; }
     a { color: #0a67a3; text-decoration: none; }
     a:hover { text-decoration: underline; }
+    .commit { margin-top: 18px; font-size: 14px; color: #52606d; }
     @media (prefers-color-scheme: dark) {
-      body { background: #0b1015; color: #edf2f7; }
+      body {
+        background:
+          radial-gradient(circle at top left, rgba(89, 185, 255, 0.16), transparent 32rem),
+          linear-gradient(135deg, #081019 0%, #101520 52%, #171427 100%);
+        color: #edf2f7;
+      }
       main {
         background: rgba(15, 23, 32, 0.88);
         box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+        border-color: rgba(159, 176, 194, 0.14);
       }
       .meta { color: #9fb0c2; }
+      .intro { color: #c8d3df; }
+      .commit { color: #9fb0c2; }
+      section {
+        border-color: rgba(159, 176, 194, 0.18);
+        background: rgba(255, 255, 255, 0.04);
+      }
+      .summary { color: #9fb0c2; }
       a { color: #73c3ff; }
     }
   </style>
 </head>
 <body>
   <main>
-    <h1>Add miner health overview</h1>
+    <h1>SwiftMiner 1.01</h1>
     <p class="meta">Version 1.01</p>
-    <p>Add miner health overview</p>
-<p>- add a dashboard health card and stagger multi-account miner startup\n- simplify onboarding and auth UI wiring while preserving dismissed onboarding state\n- update the Xcode project marketing version to 1.01</p>
-    <p><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/cc7ce3016f5e6dd7945d3774f5fbd25f3350fcce">cc7ce30</a></p>
+    <p class="intro">A first look at miner health on the dashboard, plus a smoother startup for multi-account setups and tidier onboarding wiring.</p>
+
+    <section class="dashboard">
+      <h2><span class="badge" aria-hidden="true">📊</span> Miner Health Overview</h2>
+      <p class="summary">The dashboard now surfaces a quick read on how miners are doing.</p>
+      <ul>
+        <li>Adds a dashboard health card so the state of the miners is visible at a glance.</li>
+        <li>Staggers multi-account miner startup so several accounts no longer launch all at once.</li>
+      </ul>
+    </section>
+
+    <section class="onboarding">
+      <h2><span class="badge" aria-hidden="true">👋</span> Onboarding & Auth</h2>
+      <p class="summary">The first-run experience is simpler while still remembering where you left off.</p>
+      <ul>
+        <li>Simplifies onboarding and auth UI wiring.</li>
+        <li>Preserves the dismissed onboarding state so it does not reappear after setup.</li>
+      </ul>
+    </section>
+
+    <section class="maintenance">
+      <h2><span class="badge" aria-hidden="true">🔧</span> Maintenance</h2>
+      <p class="summary">Project versioning is bumped to match the new release.</p>
+      <ul>
+        <li>Updates the Xcode project marketing version to 1.01.</li>
+      </ul>
+    </section>
+
+    <p class="commit"><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/cc7ce3016f5e6dd7945d3774f5fbd25f3350fcce">cc7ce30</a></p>
   </main>
 </body>
 </html>
