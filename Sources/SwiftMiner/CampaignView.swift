@@ -454,14 +454,14 @@ struct DropsListView: View {
             )
 
             DashboardMetricCard(
-                title: "Claims queued",
-                value: claimableRewardCount == 0 ? "None" : "\(claimableRewardCount)",
-                detail: claimableRewardCount == 0
-                    ? "No claims pending"
-                    : "\(claimableCampaigns.count) \(claimableCampaigns.count == 1 ? "campaign" : "campaigns") being claimed",
+                title: "Top game",
+                value: topClaimedGame?.name ?? "None yet",
+                detail: topClaimedGame.map { top in
+                    "\(top.count) \(top.count == 1 ? "reward" : "rewards") claimed"
+                } ?? "Claim a reward to crown a winner",
                 tint: .orange,
-                systemImage: "tray.and.arrow.down.fill",
-                isMuted: claimableRewardCount == 0
+                systemImage: "trophy.fill",
+                isMuted: topClaimedGame == nil
             )
 
             DashboardMetricCard(
@@ -471,11 +471,45 @@ struct DropsListView: View {
                 tint: .blue,
                 systemImage: "checkmark.circle.fill"
             )
+
+            if miners.count > 1, let leader = mostActiveMiner {
+                DashboardMetricCard(
+                    title: "Most active miner",
+                    value: leader.name,
+                    detail: "\(leader.count) \(leader.count == 1 ? "reward" : "rewards") claimed",
+                    tint: .purple,
+                    systemImage: "star.fill",
+                    isMuted: leader.count == 0
+                )
+            }
         }
+    }
+
+    private var mostActiveMiner: (name: String, count: Int)? {
+        guard miners.count > 1 else { return nil }
+        guard let leader = miners.max(by: { lhs, rhs in
+            if lhs.dropsClaimed != rhs.dropsClaimed { return lhs.dropsClaimed < rhs.dropsClaimed }
+            return lhs.displayName > rhs.displayName
+        }) else { return nil }
+        return (name: leader.displayName, count: leader.dropsClaimed)
     }
 
     private var claimableRewardCount: Int {
         feedCampaigns.reduce(0) { $0 + activity(for: $1).claimableDropCount }
+    }
+
+    private var topClaimedGame: (name: String, count: Int)? {
+        var counts: [String: Int] = [:]
+        for campaign in feedCampaigns {
+            let claimed = activity(for: campaign).claimedRewardCount
+            guard claimed > 0 else { continue }
+            counts[campaign.gameName, default: 0] += claimed
+        }
+        guard let top = counts.max(by: { lhs, rhs in
+            if lhs.value != rhs.value { return lhs.value < rhs.value }
+            return lhs.key > rhs.key
+        }) else { return nil }
+        return (name: top.key, count: top.value)
     }
 
     @MainActor

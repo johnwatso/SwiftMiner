@@ -10,7 +10,9 @@
       margin: 0;
       padding: 32px 20px 48px;
       font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #f4f6f8;
+      background:
+        radial-gradient(circle at top left, rgba(17, 124, 182, 0.18), transparent 32rem),
+        linear-gradient(135deg, #f7fbff 0%, #f4f7fb 46%, #f7f2ff 100%);
       color: #0f1720;
     }
     main {
@@ -20,22 +22,70 @@
       border-radius: 22px;
       background: rgba(255, 255, 255, 0.86);
       box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
+      border: 1px solid rgba(82, 96, 109, 0.12);
     }
     h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
-    .meta { margin: 0 0 24px; color: #52606d; font-size: 14px; }
+    .meta { margin: 0 0 10px; color: #52606d; font-size: 14px; }
+    .intro { margin: 0 0 24px; color: #384454; }
     p { margin: 0 0 16px; }
-    h2 { margin: 28px 0 10px; font-size: 20px; }
-    ul { margin: 0 0 20px; padding-left: 22px; }
+    section {
+      margin: 18px 0 0;
+      padding: 18px 18px 14px;
+      border: 1px solid rgba(82, 96, 109, 0.18);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.42);
+      border-left: 5px solid var(--accent, #0a67a3);
+    }
+    section.updates { --accent: #5f5ac8; }
+    section.dashboard { --accent: #0a7cbb; }
+    section.priority { --accent: #0a7cbb; }
+    section.search { --accent: #527400; }
+    section.accounts { --accent: #1c8c73; }
+    section.onboarding { --accent: #b76710; }
+    h2 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 4px;
+      color: var(--accent, #0a67a3);
+      font-size: 18px;
+    }
+    .badge {
+      display: inline-grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--accent, #0a67a3) 15%, transparent);
+      font-size: 16px;
+    }
+    .summary { margin: 0 0 12px; color: #52606d; font-size: 14px; }
+    ul { margin: 0; padding-left: 22px; }
     li { margin: 0 0 8px; }
+    li:last-child { margin-bottom: 0; }
     a { color: #0a67a3; text-decoration: none; }
     a:hover { text-decoration: underline; }
+    .commit { margin-top: 18px; font-size: 14px; color: #52606d; }
     @media (prefers-color-scheme: dark) {
-      body { background: #0b1015; color: #edf2f7; }
+      body {
+        background:
+          radial-gradient(circle at top left, rgba(89, 185, 255, 0.16), transparent 32rem),
+          linear-gradient(135deg, #081019 0%, #101520 52%, #171427 100%);
+        color: #edf2f7;
+      }
       main {
         background: rgba(15, 23, 32, 0.88);
         box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+        border-color: rgba(159, 176, 194, 0.14);
       }
       .meta { color: #9fb0c2; }
+      .intro { color: #c8d3df; }
+      .commit { color: #9fb0c2; }
+      section {
+        border-color: rgba(159, 176, 194, 0.18);
+        background: rgba(255, 255, 255, 0.04);
+      }
+      .summary { color: #9fb0c2; }
       a { color: #73c3ff; }
     }
   </style>
@@ -44,30 +94,63 @@
   <main>
     <h1>SwiftMiner 1.11</h1>
     <p class="meta">Version 1.11</p>
-    <h2>Version 1.11</h2>
-    <ul>
-      <li>Ships the latest SwiftMiner dashboard, search, and miner workflow improvements through the stable update feed.</li>
-      <li>Improves update reliability so future SwiftMiner releases can include richer release notes in-app.</li>
-    </ul>
-    <h2>Version 1.10</h2>
-    <ul>
-      <li>Keeps the update path moving forward after the previous build metadata issue.</li>
-      <li>No user-facing SwiftMiner behavior changed in this release.</li>
-    </ul>
-    <h2>Version 1.09</h2>
-    <ul>
-      <li>Continues the update-feed repair work needed for stable auto updates.</li>
-      <li>No user-facing SwiftMiner behavior changed in this release.</li>
-    </ul>
-    <h2>Version 1.08 and 1.07</h2>
-    <ul>
-      <li>Adds a richer miner dashboard with activity overview, miner health status, and clearer campaign detail screens.</li>
-      <li>Adds paused-state handling, ordered Mining/Queued rails, and drag-to-reorder game priority rules.</li>
-      <li>Improves Twitch game search with better no-drop hints, availability badges, sequel-style query fallback, and clearer empty/error states.</li>
-      <li>Automatically refreshes expired Twitch tokens where possible and gives clearer re-auth guidance when a session needs attention.</li>
-      <li>Polishes onboarding, account details, notification handling, and the Set Steam ID flow.</li>
-    </ul>
-    <p><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/ebbc63a08bb0f1249f21d53f1c59adaac4ab1127">ebbc63a</a></p>
+    <p class="intro">A cumulative stable release that finally pushes the recent dashboard, search, and miner workflow improvements through a working update feed.</p>
+
+    <section class="updates">
+      <h2><span class="badge" aria-hidden="true">🔄</span> Stable Update Feed</h2>
+      <p class="summary">Auto updates are reliable again and ready to carry richer notes in future releases.</p>
+      <ul>
+        <li>Ships the latest SwiftMiner dashboard, search, and miner workflow improvements through the stable update feed.</li>
+        <li>Improves update reliability so future SwiftMiner releases can include richer release notes in-app.</li>
+        <li>Continues the build- and appcast-side repair work from 1.09 and 1.10 with no user-facing behaviour changes of its own.</li>
+      </ul>
+    </section>
+
+    <section class="dashboard">
+      <h2><span class="badge" aria-hidden="true">📊</span> Miner Dashboard</h2>
+      <p class="summary">A richer overview of what each miner is doing.</p>
+      <ul>
+        <li>Adds a richer miner dashboard with activity overview, miner health status, and clearer campaign detail screens.</li>
+      </ul>
+    </section>
+
+    <section class="priority">
+      <h2><span class="badge" aria-hidden="true">✨</span> Prioritised Games</h2>
+      <p class="summary">Mining and queued work is easier to read and reorder.</p>
+      <ul>
+        <li>Adds paused-state handling and ordered Mining/Queued rails so it is clearer what each miner is working on.</li>
+        <li>Adds drag-to-reorder game priority rules from the priority list.</li>
+      </ul>
+    </section>
+
+    <section class="search">
+      <h2><span class="badge" aria-hidden="true">🔎</span> Twitch Search</h2>
+      <p class="summary">Finding games to mine is more forgiving and informative.</p>
+      <ul>
+        <li>Improves Twitch game search with better no-drop hints and availability badges.</li>
+        <li>Adds a sequel-style query fallback so closely related titles still surface results.</li>
+        <li>Cleans up empty- and error-state messaging in the search results.</li>
+      </ul>
+    </section>
+
+    <section class="accounts">
+      <h2><span class="badge" aria-hidden="true">👤</span> Twitch Accounts</h2>
+      <p class="summary">Re-auth and token handling get out of your way more often.</p>
+      <ul>
+        <li>Automatically refreshes expired Twitch tokens where possible.</li>
+        <li>Gives clearer re-auth guidance when a session genuinely needs attention.</li>
+      </ul>
+    </section>
+
+    <section class="onboarding">
+      <h2><span class="badge" aria-hidden="true">👋</span> Onboarding & Setup</h2>
+      <p class="summary">First-run flows and account utilities feel more polished.</p>
+      <ul>
+        <li>Polishes onboarding, account details, notification handling, and the Set Steam ID flow.</li>
+      </ul>
+    </section>
+
+    <p class="commit"><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/ebbc63a08bb0f1249f21d53f1c59adaac4ab1127">ebbc63a</a></p>
   </main>
 </body>
 </html>

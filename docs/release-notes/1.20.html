@@ -10,7 +10,9 @@
       margin: 0;
       padding: 32px 20px 48px;
       font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #f4f6f8;
+      background:
+        radial-gradient(circle at top left, rgba(17, 124, 182, 0.18), transparent 32rem),
+        linear-gradient(135deg, #f7fbff 0%, #f4f7fb 46%, #f7f2ff 100%);
       color: #0f1720;
     }
     main {
@@ -20,22 +22,68 @@
       border-radius: 22px;
       background: rgba(255, 255, 255, 0.86);
       box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
+      border: 1px solid rgba(82, 96, 109, 0.12);
     }
     h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
-    .meta { margin: 0 0 24px; color: #52606d; font-size: 14px; }
+    .meta { margin: 0 0 10px; color: #52606d; font-size: 14px; }
+    .intro { margin: 0 0 24px; color: #384454; }
     p { margin: 0 0 16px; }
-    h2 { margin: 28px 0 10px; font-size: 20px; }
-    ul { margin: 0 0 20px; padding-left: 22px; }
+    section {
+      margin: 18px 0 0;
+      padding: 18px 18px 14px;
+      border: 1px solid rgba(82, 96, 109, 0.18);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.42);
+      border-left: 5px solid var(--accent, #0a67a3);
+    }
+    section.streams { --accent: #0a7cbb; }
+    section.activity { --accent: #b76710; }
+    section.launch { --accent: #1c8c73; }
+    section.history { --accent: #b64b9b; }
+    section.status { --accent: #0b7894; }
+    section.updates { --accent: #5f5ac8; }
+    h2 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 4px;
+      color: var(--accent, #0a67a3);
+      font-size: 18px;
+    }
+    .badge {
+      display: inline-grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--accent, #0a67a3) 15%, transparent);
+      font-size: 16px;
+    }
+    .summary { margin: 0 0 12px; color: #52606d; font-size: 14px; }
+    ul { margin: 0; padding-left: 22px; }
     li { margin: 0 0 8px; }
+    li:last-child { margin-bottom: 0; }
     a { color: #0a67a3; text-decoration: none; }
     a:hover { text-decoration: underline; }
     @media (prefers-color-scheme: dark) {
-      body { background: #0b1015; color: #edf2f7; }
+      body {
+        background:
+          radial-gradient(circle at top left, rgba(89, 185, 255, 0.16), transparent 32rem),
+          linear-gradient(135deg, #081019 0%, #101520 52%, #171427 100%);
+        color: #edf2f7;
+      }
       main {
         background: rgba(15, 23, 32, 0.88);
         box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+        border-color: rgba(159, 176, 194, 0.14);
       }
       .meta { color: #9fb0c2; }
+      .intro { color: #c8d3df; }
+      section {
+        border-color: rgba(159, 176, 194, 0.18);
+        background: rgba(255, 255, 255, 0.04);
+      }
+      .summary { color: #9fb0c2; }
       a { color: #73c3ff; }
     }
   </style>
@@ -44,17 +92,61 @@
   <main>
     <h1>SwiftMiner 1.20</h1>
     <p class="meta">Version 1.20</p>
-    <h2>What Changed</h2>
-    <ul>
-      <li>Adds smarter stream selection, including optional stream spreading so multiple miners avoid piling onto the same verified live channel when enough alternatives are available.</li>
-      <li>Adds an option to prioritise followed and subscribed Twitch streamers, with subscriptions ranked ahead of follows during channel selection.</li>
-      <li>Adds a Watching Streamer panel to miner views so each account clearly shows the channel and campaign it is currently using.</li>
-      <li>Refreshes the Activity Log with clearer filters, optional category icons, new-row animation, timestamp formatting, and the new Activity Log navigation name.</li>
-      <li>Adds login launch controls, including Start at login, Start minimised, and approval/error messaging for macOS login item setup.</li>
-      <li>Improves drop claiming by syncing Twitch inventory before and after claims so completed and claimed rewards stay accurate.</li>
-      <li>Cleans up Overview and miner status language by removing the old Up Next/debug queue surfaces and showing waiting states more accurately.</li>
-      <li>Updates the Sparkle appcast and release-note links so the in-app updater can show richer What's New content.</li>
-    </ul>
+    <p class="intro">A wider release that smartens up stream selection, polishes the Activity Log, adds login launch controls, and tightens drop claiming so completed rewards stay accurate.</p>
+
+    <section class="streams">
+      <h2><span class="badge" aria-hidden="true">📺</span> Stream Selection</h2>
+      <p class="summary">Each miner picks its watching channel more deliberately.</p>
+      <ul>
+        <li>Adds smarter stream selection, including optional stream spreading so multiple miners avoid piling onto the same verified live channel when enough alternatives are available.</li>
+        <li>Adds an option to prioritise followed and subscribed Twitch streamers, with subscriptions ranked ahead of follows during channel selection.</li>
+        <li>Adds a Watching Streamer panel to miner views so each account clearly shows the channel and campaign it is currently using.</li>
+      </ul>
+    </section>
+
+    <section class="activity">
+      <h2><span class="badge" aria-hidden="true">📜</span> Activity Log</h2>
+      <p class="summary">A cleaner log that is easier to scan.</p>
+      <ul>
+        <li>Refreshes the Activity Log with clearer filters and optional category icons.</li>
+        <li>Adds new-row animation and tidied timestamp formatting.</li>
+        <li>Renames the section to Activity Log in navigation for consistency.</li>
+      </ul>
+    </section>
+
+    <section class="launch">
+      <h2><span class="badge" aria-hidden="true">🚀</span> Launch at Login</h2>
+      <p class="summary">SwiftMiner can now start with macOS, with clear feedback if it cannot.</p>
+      <ul>
+        <li>Adds login launch controls including Start at login and Start minimised.</li>
+        <li>Adds approval and error messaging for macOS login item setup so it is clear when something needs your attention.</li>
+      </ul>
+    </section>
+
+    <section class="history">
+      <h2><span class="badge" aria-hidden="true">✅</span> Drop Claiming</h2>
+      <p class="summary">Completed and claimed rewards stay in sync with Twitch.</p>
+      <ul>
+        <li>Improves drop claiming by syncing Twitch inventory before and after claims so completed and claimed rewards stay accurate.</li>
+      </ul>
+    </section>
+
+    <section class="status">
+      <h2><span class="badge" aria-hidden="true">⛏️</span> Mining Status</h2>
+      <p class="summary">Overview and miner status messaging is more accurate.</p>
+      <ul>
+        <li>Cleans up Overview and miner status language by removing the old Up Next/debug queue surfaces.</li>
+        <li>Shows waiting states more accurately so a miner is not described as active when it is not.</li>
+      </ul>
+    </section>
+
+    <section class="updates">
+      <h2><span class="badge" aria-hidden="true">🔄</span> Updates & Maintenance</h2>
+      <p class="summary">Sets the stage for richer in-app release notes.</p>
+      <ul>
+        <li>Updates the Sparkle appcast and release-note links so the in-app updater can show richer What's New content.</li>
+      </ul>
+    </section>
   </main>
 </body>
 </html>

@@ -120,6 +120,9 @@ release-artifacts/
 local.config
 *.local
 
+# sourcekit-lsp / xcode-build-server (per-developer absolute paths)
+buildServer.json
+
 # Secrets
 *.env
 .secrets/

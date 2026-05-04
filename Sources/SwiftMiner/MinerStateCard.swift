@@ -636,6 +636,9 @@ struct MinerActivitySnapshot {
         if miner.status == .watching, let campaign, hasUnclaimedDrop(in: campaign) {
             let progress = activeDropProgress(for: campaign, miner: miner)
             let detail = progress.map { item in
+                if item.currentMinutes == 0, item.remainingMinutes == 0 {
+                    return "\(item.dropName) · checking progress with Twitch"
+                }
                 if item.currentMinutes == 0, item.remainingMinutes > 0 {
                     return "\(item.dropName) · checking progress with Twitch"
                 }
@@ -686,14 +689,20 @@ struct MinerActivitySnapshot {
                 return blockedCurrentItem(for: miner, resolved: resolved)
             case .idle:
                 if resolved.reason == .noDropsAvailable {
-                    return MinerActivityItem(
-                        id: "waiting-drops-\(miner.id)-\(resolved.gameId)",
-                        title: "Waiting",
-                        subtitle: "No active drops are available for this account.",
-                        detail: nil,
-                        symbol: "clock",
-                        accent: .secondary
-                    )
+                    // The resolver only inspects prioritised games. If the engine
+                    // is actively waiting for a stream on a non-prioritised but
+                    // linked game, prefer that live status over the stale
+                    // "no drops available" summary derived from priorities.
+                    if miner.status != .waitingForStream {
+                        return MinerActivityItem(
+                            id: "waiting-drops-\(miner.id)-\(resolved.gameId)",
+                            title: "Waiting",
+                            subtitle: "No active drops are available for this account.",
+                            detail: nil,
+                            symbol: "clock",
+                            accent: .secondary
+                        )
+                    }
                 }
             case .watching:
                 break
@@ -838,10 +847,18 @@ struct MinerActivitySnapshot {
         let dropState = miner.stateStore?.dropStates.first { $0.dropId == drop.id }
         let currentMinutes = max(dropState?.progressMinutes ?? 0, drop.progress?.currentMinutes ?? 0)
         let requiredMinutes = max(dropState?.requiredMinutes ?? 0, drop.progress?.requiredMinutes ?? drop.requiredMinutes)
-        guard requiredMinutes > 0 else { return nil }
+        let dropName = drop.progress?.dropName.isEmpty == false ? drop.progress?.dropName ?? drop.name : drop.name
+
+        guard requiredMinutes > 0 else {
+            return (
+                dropName: dropName,
+                fraction: 0,
+                remainingMinutes: 0,
+                currentMinutes: 0
+            )
+        }
 
         let fraction = min(1.0, max(0.0, Double(currentMinutes) / Double(requiredMinutes)))
-        let dropName = drop.progress?.dropName.isEmpty == false ? drop.progress?.dropName ?? drop.name : drop.name
         return (
             dropName: dropName,
             fraction: fraction,
