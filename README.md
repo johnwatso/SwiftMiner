@@ -90,6 +90,9 @@ Download the latest release from [GitHub Releases](https://github.com/johnwatso/
 3. Open the app and add an account
 4. Allow notifications if you want claim alerts
 
+> [!TIP]
+> **Security Prompt:** On first update or when enabling automatic updates, macOS may prompt for **"App Management"** permissions. This is expected and required for **Sparkle** to perform unattended/auto updates. You should allow this if you want the app to stay up-to-date automatically in the background.
+
 Release builds support both Apple Silicon (`arm64`) and Intel (`x86_64`).
 
 Release builds are signed and notarized through ShipHook, and SwiftMiner includes Sparkle support for update prompts, automatic background checks, and unattended updates when macOS allows them.
