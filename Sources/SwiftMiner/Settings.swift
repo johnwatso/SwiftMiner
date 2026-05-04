@@ -86,6 +86,10 @@ public final class Settings: ObservableObject {
     @AppStorage("preferSteamArtwork", store: Settings.appStorageStore)
     public var preferSteamArtwork: Bool = true
 
+    /// Whether in-app TipKit hints are shown.
+    @AppStorage("tipsEnabled", store: Settings.appStorageStore)
+    public var tipsEnabled: Bool = true
+
     /// Whether to run in background when window is closed
     @AppStorage("runInBackground", store: Settings.appStorageStore)
     public var runInBackground: Bool = true

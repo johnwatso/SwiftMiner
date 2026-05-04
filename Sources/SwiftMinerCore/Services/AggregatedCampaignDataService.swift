@@ -584,19 +584,28 @@ public actor AggregatedCampaignDataService {
     ) -> [AccountState] {
         let campaignsByAccount = Dictionary(uniqueKeysWithValues: accountCampaigns)
 
-        return accountUsernames.keys.map { accountId in
+        return accountUsernames.keys.compactMap { accountId -> AccountState? in
             let username = accountUsernames[accountId] ?? accountId
             let campaign = campaignsByAccount[accountId]
+            let needsAuth = accountNeedsAuth[accountId] == true
+            let isActiveOnThis = activeCampaignIds[accountId] == campaignId
+
+            // Hide accounts with no record for this campaign and no other reason to surface them.
+            // They aren't eligible / never saw it, so showing them as "waiting" is misleading.
+            if campaign == nil && !needsAuth && !isActiveOnThis {
+                return nil
+            }
+
             let state: AccountMiningStatus
             let claimedDropCount: Int
 
-            if accountNeedsAuth[accountId] == true {
+            if needsAuth {
                 state = .needsAuth
-            } else if inferMissingAsClaimed {
+            } else if inferMissingAsClaimed, campaign != nil {
                 state = .claimed
             } else if campaign?.isClaimed == true || campaign?.miningStatus == .claimed {
                 state = .claimed
-            } else if activeCampaignIds[accountId] == campaignId {
+            } else if isActiveOnThis {
                 state = .mining
             } else if campaign?.isAccountConnected == false {
                 state = .blocked

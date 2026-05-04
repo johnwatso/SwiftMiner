@@ -246,7 +246,7 @@ struct EventLogView: View {
         guard !query.isEmpty else { return true }
 
         let minerName = event.minerId.flatMap { minerId in
-            miners.first(where: { $0.id == minerId })?.username
+            miners.first(where: { $0.id == minerId })?.displayName
         } ?? ""
         let searchableText = [
             event.message,
@@ -326,7 +326,7 @@ private struct EventLogRow: View {
         }
 
         if let miner = navigation.minerManager.miners.first(where: { $0.id == minerId }) {
-            parts.append(miner.username)
+            parts.append(miner.displayName)
         } else {
             parts.append("Miner \(minerId.prefix(4))")
         }
