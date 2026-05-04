@@ -50,6 +50,14 @@ struct EventLogView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
+                    LogExporter.presentSavePanel(navigation: navigation)
+                } label: {
+                    Image(systemName: "square.and.arrow.up")
+                }
+                .help("Export diagnostic logs")
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button {
                     navigation.clearEvents()
                 } label: {
                     Image(systemName: "trash")

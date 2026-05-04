@@ -84,6 +84,11 @@ struct MinerApp: App {
                 }
                 .keyboardShortcut("r", modifiers: [.command])
             }
+            CommandGroup(after: .help) {
+                Button("Export Diagnostic Logs…") {
+                    LogExporter.presentSavePanel(navigation: navigation)
+                }
+            }
         }
 
         Window("What's New", id: AppWindowID.releaseNotes) {

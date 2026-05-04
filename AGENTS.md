@@ -1,5 +1,20 @@
 # SwiftMiner Agent Notes
 
+## Build System
+
+SwiftMiner is **not** a Swift Package. There is no `Package.swift`. Do not run `swift build` or `swift test` — they will not find this project.
+
+The Xcode project is generated from `project.yml` by [XcodeGen](https://github.com/yonaskolb/XcodeGen). Build and test with `xcodebuild`:
+
+```sh
+xcodebuild -project SwiftMiner.xcodeproj -scheme SwiftMiner -configuration Debug build
+xcodebuild -project SwiftMiner.xcodeproj -scheme SwiftMiner -configuration Debug test
+```
+
+Run `xcodegen` after editing `project.yml` to regenerate `SwiftMiner.xcodeproj`.
+
+After `xcodegen` runs, SourceKit may briefly surface stale diagnostics — most often `No such module 'SwiftMinerCore'` in app-target files, or `No such module 'XCTest'` in new test files. These are editor-only and clear once `xcodebuild` has produced fresh module artifacts. Trust `xcodebuild build` / `xcodebuild test` results over SourceKit warnings.
+
 ## Versioning
 
 `MARKETING_VERSION` is manually owned by the user. Do not invent or bump it unless the user explicitly asks.
