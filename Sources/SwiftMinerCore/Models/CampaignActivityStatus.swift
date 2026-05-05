@@ -16,7 +16,10 @@ public enum CampaignActivityStatus: Sendable, Equatable {
     
     /// Campaign has no remaining rewards.
     case completed
-    
+
+    /// Campaign has drops that require purchasing Twitch subscriptions.
+    case requiresSubscription
+
     /// Campaign is live, but no participating channels are broadcasting.
     case waitingForStream
     
@@ -28,6 +31,7 @@ public enum CampaignActivityStatus: Sendable, Equatable {
         case .upcoming: return "Campaign upcoming"
         case .expired: return "Campaign expired"
         case .completed: return "Completed"
+        case .requiresSubscription: return "Requires subscription"
         case .waitingForStream: return "Waiting — No channels live"
         }
     }
@@ -65,17 +69,22 @@ extension Campaign {
             return .expired
         }
         
-        // 3. Eligibility (all claimed or precondition locked)
+        // 3. Subscription-required drops without progress
+        if !subscriptionRequiredDrops.isEmpty && eligibleDrops.isEmpty {
+            return .requiresSubscription
+        }
+
+        // 4. Eligibility (all claimed or precondition locked)
         if eligibleDrops.isEmpty {
             return .completed
         }
-        
-        // 4. Execution state
+
+        // 5. Execution state
         if miner.status == .watching && miner.currentCampaignId == id {
             return .watching
         }
-        
-        // 5. Fallback (campaign is ready but nothing to watch right now)
+
+        // 6. Fallback (campaign is ready but nothing to watch right now)
         return .waitingForStream
     }
 }

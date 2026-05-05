@@ -191,6 +191,7 @@ public final class Settings: ObservableObject {
 
     public enum WarningType: String, Codable, Sendable {
         case accountLink = "accountLink"
+        case subscriptionRequired = "subscriptionRequired"
     }
 
     /// Scoped warnings that should be suppressed.
@@ -264,6 +265,14 @@ public final class Settings: ObservableObject {
 
     public func setIgnoreAccountLinkWarnings(_ ignored: Bool, for accountId: String, gameId: String = "all") {
         setIgnoreWarning(ignored, accountId: accountId, gameId: gameId, type: .accountLink)
+    }
+
+    public func isIgnoringSubscriptionRequiredWarnings(for accountId: String, campaignId: String) -> Bool {
+        isIgnoringWarning(accountId: accountId, gameId: campaignId, type: .subscriptionRequired)
+    }
+
+    public func setIgnoreSubscriptionRequiredWarnings(_ ignored: Bool, for accountId: String, campaignId: String) {
+        setIgnoreWarning(ignored, accountId: accountId, gameId: campaignId, type: .subscriptionRequired)
     }
 
     /// Last selected game/category (for UI restoration)

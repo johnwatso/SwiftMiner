@@ -25,7 +25,9 @@ public struct DropViewData: Codable, Sendable, Identifiable, Equatable {
     public let isClaimable: Bool
     /// Whether the drop is currently earnable (linked, preconditions met, not yet claimed)
     public let isEarnable: Bool
-    
+    /// Whether this drop requires purchasing Twitch subscriptions.
+    public let isSubscriptionRequired: Bool
+
     public init(
         id: String,
         name: String,
@@ -37,7 +39,8 @@ public struct DropViewData: Codable, Sendable, Identifiable, Equatable {
         progress: Double,
         isClaimed: Bool,
         isClaimable: Bool,
-        isEarnable: Bool
+        isEarnable: Bool,
+        isSubscriptionRequired: Bool = false
     ) {
         self.id = id
         self.name = name
@@ -50,5 +53,6 @@ public struct DropViewData: Codable, Sendable, Identifiable, Equatable {
         self.isClaimed = isClaimed
         self.isClaimable = isClaimable
         self.isEarnable = isEarnable
+        self.isSubscriptionRequired = isSubscriptionRequired
     }
 }

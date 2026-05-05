@@ -652,7 +652,8 @@ public actor MinerEngine {
                 }
 
                 await warnForUnlinkedPriorityCampaigns(in: allEnriched)
-                
+                await warnForSubscriptionRequiredCampaigns(in: allEnriched)
+
                 // Log expired campaigns that might be incorrectly marked as eligible.
                 let expiredButEligible = allEnriched.filter { $0.miningStatus == .expired && $0.isMiningEligible }
                 if !expiredButEligible.isEmpty {
@@ -1113,7 +1114,26 @@ public actor MinerEngine {
             }
         }
     }
-    
+
+    /// Detects campaigns with subscription-required drops and logs warnings.
+    /// These drops are filtered from eligibleDrops, so they won't cause endless retry loops,
+    /// but we want to inform the user why some drops are unavailable.
+    private func warnForSubscriptionRequiredCampaigns(in campaigns: [Campaign]) async {
+        let subscriptionCampaigns = campaigns.filter { campaign in
+            campaign.isTimeActive
+                && campaign.isAccountConnected
+                && campaign.subscriptionRequiredDrops.contains(where: { !$0.isClaimed })
+        }
+
+        guard !subscriptionCampaigns.isEmpty else { return }
+
+        for campaign in subscriptionCampaigns {
+            let drops = campaign.subscriptionRequiredDrops.filter { !$0.isClaimed }
+            let dropNames = drops.map(\.name).joined(separator: ", ")
+            log("⚠️ Subscription required: \(campaign.name) has drops that require purchasing Twitch subscriptions: \(dropNames). These drops are being skipped.")
+        }
+    }
+
     private func candidateCampaigns(
         from campaigns: [Campaign],
         priorityGames: [String],

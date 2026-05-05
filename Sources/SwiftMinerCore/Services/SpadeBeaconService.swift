@@ -109,7 +109,7 @@ public actor SpadeBeaconService {
         let pageRange = NSRange(pageHTML.startIndex..., in: pageHTML)
 
         // Step 2: Check if spade_url is directly in the page HTML (TDM Step #1)
-        let spadePattern = #""(?:spade_url|beacon_url)"\s*:\s*"(https://[^"]+)""#
+        let spadePattern = #""spade_url"\s*:\s*"(https://[^"]+)""#
         let spadeRegex = try NSRegularExpression(pattern: spadePattern, options: [.caseInsensitive])
         
         if let match = spadeRegex.firstMatch(in: pageHTML, options: [], range: pageRange),

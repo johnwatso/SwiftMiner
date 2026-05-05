@@ -280,7 +280,7 @@ final class SpadeBeaconServiceTests: XCTestCase {
         </head></html>
         """
         let settingsJS = """
-        var a={"beacon_url":"https://spade.twitch.tv/bundle-track"};
+        var a={"spade_url":"https://spade.twitch.tv/bundle-track"};
         """
         SpadeBeaconURLMock.stub(urlPrefix: "https://www.twitch.tv/", body: pageHTML, status: 200)
         SpadeBeaconURLMock.stub(urlPrefix: "https://static.twitchsvc.net/config/settings", body: settingsJS, status: 200)
@@ -290,7 +290,7 @@ final class SpadeBeaconServiceTests: XCTestCase {
 
         let postURL = beaconPOST().request.url?.absoluteString
         XCTAssertEqual(postURL, "https://spade.twitch.tv/bundle-track",
-                       "Should fall back to extracting beacon_url from settings JS bundle")
+                       "Should fall back to extracting spade_url from settings JS bundle")
     }
 
     func testFallsBackToDefaultSpadeURLWhenExtractionFails() async throws {

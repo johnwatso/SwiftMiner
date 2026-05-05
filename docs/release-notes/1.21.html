@@ -43,6 +43,7 @@
     section.history { --accent: #b76710; }
     section.updates { --accent: #5f5ac8; }
     section.status { --accent: #0b7894; }
+    section.reliability { --accent: #b03060; }
     h2 {
       display: flex;
       align-items: center;
@@ -92,87 +93,62 @@
 <body>
   <main>
     <h1>SwiftMiner 1.21</h1>
-    <p class="meta">Version 1.21 · Build 2026050509</p>
-    <p class="intro">A brighter quality-of-life release for smoother priorities, steadier artwork, calmer Twitch search, clearer account reminders, easier miner naming, and release notes you can open right inside SwiftMiner.</p>
+    <p class="meta">Version 1.21 · Build 2026050516</p>
+    <p class="intro">A reliability-focused update. Miners that used to get stuck on subscription-gated drops, bad campaign selections, or stalled streams now recover on their own, and a new Pending section under each miner lists anything that actually needs you with dismiss and remind-me actions per item.</p>
 
-    <section class="priority">
-      <h2><span class="badge" aria-hidden="true">✨</span> Prioritised Games</h2>
-      <p class="summary">Priority cards are easier to manage directly from the Overview.</p>
+    <section class="reliability">
+      <h2><span class="badge" aria-hidden="true">🛡️</span> Mining Reliability</h2>
+      <p class="summary">Miners no longer get stuck on campaigns they cannot complete by watching.</p>
       <ul>
-        <li>Drag prioritised cards left or right to change their mining priority.</li>
-        <li>Improves drag feel with live card movement, smoother neighbour spacing, and spring settling.</li>
-        <li>Deduplicates prioritised cards by game id and normalised game name, fixing cases like repeated Call of Duty Warzone entries.</li>
-        <li>Adds context-menu actions for removing prioritised games and managing custom artwork.</li>
-      </ul>
-    </section>
-
-    <section class="search">
-      <h2><span class="badge" aria-hidden="true">🔎</span> Twitch Search</h2>
-      <p class="summary">Finding games feels steadier while you type.</p>
-      <ul>
-        <li>Debounces Twitch category searches so SwiftMiner waits briefly for typing to settle before sending the request.</li>
-        <li>Cancels older in-flight searches when a newer query is ready, keeping the suggestion list focused on the latest text.</li>
-        <li>Keeps the loading state visible during the debounce window so the dropdown does not flash a false "no results" message.</li>
-      </ul>
-    </section>
-
-    <section class="artwork">
-      <h2><span class="badge" aria-hidden="true">🎨</span> Artwork & Drops</h2>
-      <p class="summary">Custom game artwork is more reliable and appears in more places.</p>
-      <ul>
-        <li>Caches uploaded custom artwork in Application Support so it survives refreshes.</li>
-        <li>Matches artwork by game id or name so uploads apply more consistently.</li>
-        <li>Uses custom artwork across Drops campaign decks, grouped rows, campaign details, and fallback reward art.</li>
+        <li>Detects subscription-gated drops (those requiring a paid Twitch sub) and skips them automatically, so miners no longer hang on "checking with Twitch" when watching alone cannot earn the reward. Skipped drops are logged to the Activity Log.</li>
+        <li>Adds a Stall recovery setting, on by default, that restarts an individual miner after a long progress stall or recoverable network error.</li>
+        <li>Detects false-positive account connections and cools campaigns down for 1 hour when they never produce an active drop session, so miners stop cycling on bad selections.</li>
+        <li>Narrows spade beacon URL extraction to <code>spade_url</code> only, matching the upstream TwitchDropsMiner fix — previously a stray <code>beacon_url</code> match could silently route watch events to the wrong endpoint.</li>
       </ul>
     </section>
 
     <section class="accounts">
-      <h2><span class="badge" aria-hidden="true">👤</span> Miner Accounts</h2>
-      <p class="summary">Account names and link problems are easier to handle from the Miners screen.</p>
+      <h2><span class="badge" aria-hidden="true">👤</span> Miner Accounts &amp; Pending</h2>
+      <p class="summary">A single notification-style section surfaces everything that needs your attention.</p>
       <ul>
-        <li>Adds right-click nickname editing from miner rows and miner activity cards.</li>
-        <li>Adds account-link reminders for prioritised games, with dismiss and remind-me actions per miner/game.</li>
-        <li>Aligns Dock and Miners sidebar badges so account-link attention only appears when there is a visible miner issue to review.</li>
+        <li>Adds a Pending section under each miner that consolidates account-link reminders and subscription-required campaigns into one list with dismiss and remind-me actions per item.</li>
+        <li>Adds an orange dot to each miner row, and broadens the Miners sidebar badge, when a miner has non-muted pending items — covering both link issues and sub-gated campaigns.</li>
+        <li>Adds right-click nickname editing from miner rows and activity cards, and uses miner nicknames everywhere a miner is shown.</li>
         <li>Shows a notification when a previously blocked prioritised game becomes linked and ready to mine.</li>
       </ul>
     </section>
 
-    <section class="history">
-      <h2><span class="badge" aria-hidden="true">✅</span> Drop History</h2>
-      <p class="summary">Completed drops remain clearer when Twitch removes old campaign data.</p>
-      <ul>
-        <li>Improves completed drop history when Twitch no longer exposes an expired campaign.</li>
-        <li>Uses cached completed campaign data only as a fallback while fresh Twitch data continues to win when available.</li>
-        <li>Fixes completed miner rows that could appear as waiting after both accounts had already claimed the campaign.</li>
-      </ul>
-    </section>
-
     <section class="updates">
-      <h2><span class="badge" aria-hidden="true">🔄</span> Updates & Maintenance</h2>
-      <p class="summary">Update controls and cache maintenance are easier to manage.</p>
+      <h2><span class="badge" aria-hidden="true">🔄</span> App &amp; Updates</h2>
+      <p class="summary">Update channels, in-app release notes, and a quicker route to filing issues.</p>
       <ul>
-        <li>Adds a What's New window in the app menu so the current release notes can be opened directly from SwiftMiner.</li>
-        <li>Derives release-note links from the configured stable or beta Sparkle feed, keeping in-app notes aligned with the selected update channel.</li>
-        <li>Adds an Anti-stall recovery setting, enabled by default, that restarts an individual miner when it appears stuck after a long progress stall or recoverable network error.</li>
-        <li>Adds Software Updates controls for choosing the stable or beta Sparkle feed.</li>
-        <li>Adds settings for update prompts and unattended update installs when macOS permits them.</li>
-        <li>Adds an Advanced settings action to clear cached drop history without removing accounts or app preferences.</li>
-        <li>Adds in-app TipKit hints that explain adding miners, prioritising games, drag-to-reorder, miner nicknames, drop filters, and the Steam artwork option, with a General settings toggle to disable them.</li>
-        <li>Tidies the Advanced settings layout with grouped sections, consistent labels, and clearer destructive actions.</li>
-        <li>Uses miner nicknames everywhere a miner is shown, including the Drops campaign cards and the Activity Log.</li>
-        <li>Updates the stable Sparkle appcast and release-note links for SwiftMiner 1.21 build 2026050509.</li>
+        <li>Adds Software Updates controls for choosing the stable or beta Sparkle feed, with prompts for available updates and unattended installs where macOS permits.</li>
+        <li>Adds a What's New window in the app menu and derives release-note links from the configured update channel.</li>
+        <li>Adds Help &gt; Raise Issue on GitHub…, prefilled with version and macOS details.</li>
+        <li>Restricts Start minimised to login launches, only showing the option once Start at login is enabled, and removes the unused View menu.</li>
+        <li>Updates the stable Sparkle appcast for SwiftMiner 1.21 build 2026050516.</li>
       </ul>
     </section>
 
     <section class="status">
       <h2><span class="badge" aria-hidden="true">⛏️</span> Mining Status</h2>
-      <p class="summary">Miner status stays clearer while multiple accounts are running.</p>
+      <p class="summary">Clearer status while multiple miners are running.</p>
       <ul>
-        <li>Summarises how many miners are currently mining instead of naming only the first active campaign.</li>
-        <li>Refreshes miner activity cards periodically so the displayed current and upcoming work stays fresh while the app remains open.</li>
-        <li>Removes the Claim All Drops app command now that ready rewards are claimed automatically.</li>
-        <li>Shows claiming rewards in activity cards instead of leaving completed drops labelled ready to claim.</li>
-        <li>Uses a green check for the menu bar status when all miners are running, with warning icons reserved for attention states.</li>
+        <li>Summarises how many miners are currently mining instead of naming only the first active campaign, and refreshes activity cards periodically while the app stays open.</li>
+        <li>Shows claiming rewards in activity cards instead of leaving completed drops labelled ready to claim, and uses a green check in the menu bar when all miners are running.</li>
+        <li>Removes the now-redundant Claim All Drops command — ready rewards are claimed automatically.</li>
+      </ul>
+    </section>
+
+    <section class="priority">
+      <h2><span class="badge" aria-hidden="true">✨</span> Polish</h2>
+      <p class="summary">Plus a round of UI polish across priorities, search, artwork, and drop history.</p>
+      <ul>
+        <li>Drag prioritised cards left or right to change mining priority, with smoother spacing and spring settling. Deduplicates entries when the same game appears under multiple Twitch listings (e.g. Call of Duty), and adds context-menu actions for removing games and managing custom artwork.</li>
+        <li>Custom artwork now caches in Application Support, matches by game id or name, and shows up across Drops decks, grouped rows, campaign details, and fallback reward art.</li>
+        <li>Twitch category search debounces while you type, cancels stale requests, and keeps the loading state steady so the dropdown does not flash false "no results".</li>
+        <li>Improves completed drop history when Twitch no longer exposes an expired campaign, and uses cached data only as a fallback so fresh Twitch data still wins.</li>
+        <li>Adds in-app TipKit hints (with a toggle to disable) and tidies the Advanced settings layout, including a maintenance action to clear cached drop history.</li>
       </ul>
     </section>
   </main>
