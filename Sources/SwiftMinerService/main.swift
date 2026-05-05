@@ -4,8 +4,15 @@ import SwiftMinerService
 
 // MARK: - Configuration
 
-let port = UInt16(ProcessInfo.processInfo.environment["SWIFTMINER_API_PORT"] ?? "8080") ?? 8080
-let apiKey = ProcessInfo.processInfo.environment["SWIFTMINER_API_KEY"] ?? ""
+let defaults = UserDefaults.standard
+let storedEndpoint = defaults.string(forKey: "swiftMinerAPIEndpoint") ?? "http://127.0.0.1:8080"
+let storedPort = URL(string: storedEndpoint)?.port
+let port = UInt16(ProcessInfo.processInfo.environment["SWIFTMINER_API_PORT"] ?? "")
+    ?? storedPort.flatMap(UInt16.init)
+    ?? 8080
+let apiKey = ProcessInfo.processInfo.environment["SWIFTMINER_API_KEY"]
+    ?? defaults.string(forKey: "swiftMinerAPIKey")
+    ?? ""
 
 guard apiKey.count >= 32, apiKey != "dev-key-change-in-production" else {
     print("[SwiftMinerService] SWIFTMINER_API_KEY must be set to a non-default secret of at least 32 characters.")
