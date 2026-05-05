@@ -84,12 +84,13 @@ public enum CampaignMapper {
             
             let isClaimable = !isClaimed && dropProgress >= 1.0
             
-            // Earnable if linked, preconditions met, and not yet 100% or claimed
+            // Earnable if linked, preconditions met, not yet 100% or claimed, and not subscription-gated without progress
             let preconditionsMet = drop.preconditionDrops.allSatisfy { pid in
                 campaign.drops.first { $0.id == pid }?.isClaimed ?? true
             }
-            let isEarnable = !isClaimed && !isClaimable && campaign.isAccountConnected && preconditionsMet
-            
+            let subscriptionMet = !drop.isSubscriptionRequired || (drop.progress?.currentMinutes ?? 0) > 0
+            let isEarnable = !isClaimed && !isClaimable && campaign.isAccountConnected && preconditionsMet && subscriptionMet
+
             return DropViewData(
                 id: drop.id,
                 name: drop.name,
@@ -101,7 +102,8 @@ public enum CampaignMapper {
                 progress: dropProgress,
                 isClaimed: isClaimed,
                 isClaimable: isClaimable,
-                isEarnable: isEarnable
+                isEarnable: isEarnable,
+                isSubscriptionRequired: drop.isSubscriptionRequired
             )
         }
         

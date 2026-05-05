@@ -54,6 +54,7 @@
 		6C82100D145D56BA53B32CFA /* AdminOverviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F3C454705689384F79FB105 /* AdminOverviewView.swift */; };
 		7012840D3FCF5269290EF9C4 /* MinerGameState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58CE4A1460AC0FDF90CDCAA5 /* MinerGameState.swift */; };
 		743B0BB0EE0C477847518250 /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CE5B3372E6DE02DFFFB7CDE /* Logger.swift */; };
+		74C1EF5D9BDFD32042EAAC2A /* GitHubIssueReporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C43EA5DBD5E9A09117B9798 /* GitHubIssueReporter.swift */; };
 		7CDC0528B7FE59F8756FFC72 /* Campaign.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6C4D73F0D9BE5537D245A73 /* Campaign.swift */; };
 		802FA8EC02560A28823938FA /* CampaignViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C67E7250E0A8C61154B61CBB /* CampaignViews.swift */; };
 		80BF3A0AF309839A57255411 /* LogRedactor.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF414565BE5F618A1909D947 /* LogRedactor.swift */; };
@@ -81,6 +82,7 @@
 		ADAE5122C334F0F8BE0C4296 /* MergeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B2A62D9979ADDE4DE784D49 /* MergeService.swift */; };
 		B0B3F31B7C6EC4F7BED6F11B /* DropsServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D227823A0CF0DEDA834B486B /* DropsServiceTests.swift */; };
 		B16F074B9745C37F55F481B7 /* PubSubClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C67349DAA237D14A6C21D75 /* PubSubClient.swift */; };
+		B5073D6F750D1504525FC42D /* MinerAttention.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0528E48497586BD35DE82149 /* MinerAttention.swift */; };
 		B6820745B5DB991B2905AD36 /* SpadeBeaconService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 514F43250FDCF5A12579A212 /* SpadeBeaconService.swift */; };
 		B6A2FFB252B8C1507FD9C478 /* SwiftMinerCoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F01C7FACEB7BCCB9E95430C4 /* SwiftMinerCoreTests.swift */; };
 		BD0BB11FA94E009CB12F20D8 /* MinerOverviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDCBA37E74C916E35CC73905 /* MinerOverviewView.swift */; };
@@ -181,6 +183,7 @@
 		011876AF5BD64BEC7BC88B09 /* CampaignDataService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignDataService.swift; sourceTree = "<group>"; };
 		02ED514E82ADDE29F84D41CF /* AppUpdater.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdater.swift; sourceTree = "<group>"; };
 		0374A8D7AF4EC4089222CA3B /* GamePreferenceManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GamePreferenceManagementView.swift; sourceTree = "<group>"; };
+		0528E48497586BD35DE82149 /* MinerAttention.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinerAttention.swift; sourceTree = "<group>"; };
 		0658398231AD4B7BD6AF16C5 /* EventEmitterService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventEmitterService.swift; sourceTree = "<group>"; };
 		0AD1F4F0ABB2139A352C7351 /* GamePreference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GamePreference.swift; sourceTree = "<group>"; };
 		0B997AFB7DED86FF821143CD /* SwiftBotConnectionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftBotConnectionService.swift; sourceTree = "<group>"; };
@@ -191,6 +194,7 @@
 		14199B9CF6D97675DE0107D4 /* SwiftMiner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SwiftMiner.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1A41A42D94BFB27670F81465 /* InventoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InventoryService.swift; sourceTree = "<group>"; };
 		1B2A62D9979ADDE4DE784D49 /* MergeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MergeService.swift; sourceTree = "<group>"; };
+		1C43EA5DBD5E9A09117B9798 /* GitHubIssueReporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitHubIssueReporter.swift; sourceTree = "<group>"; };
 		1F950E8C5A6FB7A2598984E0 /* DropFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropFilter.swift; sourceTree = "<group>"; };
 		1FBB668242441418AE670CC4 /* ModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelTests.swift; sourceTree = "<group>"; };
 		22D2E0EA1E4D36AEEDCE6A9A /* MinerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinerApp.swift; sourceTree = "<group>"; };
@@ -419,10 +423,12 @@
 				B165EA86CCC1CE19EBFD8064 /* EventLogView.swift */,
 				F52F9551C4B18A1F7A3D4173 /* GamePreferenceComponents.swift */,
 				0374A8D7AF4EC4089222CA3B /* GamePreferenceManagementView.swift */,
+				1C43EA5DBD5E9A09117B9798 /* GitHubIssueReporter.swift */,
 				5A79F35AB0C08E6F2BE9A648 /* LiquidGlass.swift */,
 				703A0B41A5D6897C4E31F17D /* LogExporter.swift */,
 				DF414565BE5F618A1909D947 /* LogRedactor.swift */,
 				22D2E0EA1E4D36AEEDCE6A9A /* MinerApp.swift */,
+				0528E48497586BD35DE82149 /* MinerAttention.swift */,
 				F5774ABEBD1511EF8E8E8165 /* MinerDetailView.swift */,
 				D7CF370FB28AF15B644BAD3E /* MinerHealthCard.swift */,
 				FBE90C8FED1ED1FE9B88FD3B /* MinerLoginService.swift */,
@@ -680,7 +686,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 1430;
+				LastUpgradeCheck = 2640;
 				TargetAttributes = {
 					97C8E54F291D272FD7301055 = {
 						ProvisioningStyle = Automatic;
@@ -860,10 +866,12 @@
 				384E1E7DF948787ACBA82CEC /* EventLogView.swift in Sources */,
 				0043CF0EC5029EC739BE5F7F /* GamePreferenceComponents.swift in Sources */,
 				3409B039878F5812CE36AFB7 /* GamePreferenceManagementView.swift in Sources */,
+				74C1EF5D9BDFD32042EAAC2A /* GitHubIssueReporter.swift in Sources */,
 				D765E5CE3F8F85B72C85B2DB /* LiquidGlass.swift in Sources */,
 				ED66B3A5551F3B9E55791468 /* LogExporter.swift in Sources */,
 				80BF3A0AF309839A57255411 /* LogRedactor.swift in Sources */,
 				5028D0EEE8DC8C4F17B35873 /* MinerApp.swift in Sources */,
+				B5073D6F750D1504525FC42D /* MinerAttention.swift in Sources */,
 				9EF8B2840D67D0FFD8DFDE85 /* MinerDetailView.swift in Sources */,
 				66099E7E794758FB7B605F10 /* MinerHealthCard.swift in Sources */,
 				67256EB1FAB265EDAFAF6A64 /* MinerLoginService.swift in Sources */,
@@ -999,7 +1007,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026050509;
+				CURRENT_PROJECT_VERSION = 2026050516;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -1164,7 +1172,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026050509;
+				CURRENT_PROJECT_VERSION = 2026050516;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;

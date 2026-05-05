@@ -1366,6 +1366,9 @@ public actor TwitchAPIClient {
         let preconditionDrops = (dropDict["preconditionDrops"] as? [[String: Any]] ?? [])
             .compactMap { $0["id"] as? String }
 
+        // Parse subscription requirement (0 = none, >0 = number of subs required)
+        let requiredSubs = dropDict["requiredSubs"] as? Int ?? 0
+
         // Parse ALL benefit IDs from benefitEdges — used for fallback claimed detection.
         // Python: for benefit in self.benefits — checks ALL benefit IDs against claimed_benefits.
         var benefitIds: [String] = []
@@ -1422,6 +1425,7 @@ public actor TwitchAPIClient {
             isClaimed: false,
             benefitIds: benefitIds,
             preconditionDrops: preconditionDrops,
+            requiredSubs: requiredSubs,
             dropStartDate: dropStartDate,
             dropEndDate: dropEndDate
         )

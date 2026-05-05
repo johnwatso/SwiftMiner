@@ -137,11 +137,11 @@ struct MinersOverviewView: View {
                         }
                     }
 
-                    selectedMinerLinkIssuesSection(for: miner)
-
                     selectedMinerWatchingStreamerSection(for: miner)
 
                     minerCampaignsSection(for: miner, campaigns: activeCampaigns)
+
+                    pendingItemsSection(for: miner, campaigns: activeCampaigns)
                 }
                 .frame(maxWidth: 1180, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -266,19 +266,18 @@ struct MinersOverviewView: View {
     }
 
     @ViewBuilder
-    private func selectedMinerLinkIssuesSection(for miner: MinerManager.ManagedMiner) -> some View {
-        let issues = prioritisedLinkIssues(for: miner, includeIgnored: false)
-        let mutedIssues = prioritisedLinkIssues(for: miner, includeIgnored: true)
-            .filter(\.isIgnored)
+    private func pendingItemsSection(for miner: MinerManager.ManagedMiner, campaigns: [Campaign]) -> some View {
+        let items = pendingItems(for: miner, campaigns: campaigns)
+        let activeCount = items.filter { !$0.isMuted }.count
 
-        if !issues.isEmpty || !mutedIssues.isEmpty {
+        if !items.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 8) {
-                    Text("ACCOUNT LINK REMINDERS")
+                    Text("PENDING")
                         .font(.caption2.weight(.bold))
                         .foregroundStyle(.tertiary)
 
-                    Text("\(issues.count)")
+                    Text("\(activeCount)")
                         .font(.caption2.weight(.bold))
                         .foregroundStyle(.tertiary)
 
@@ -288,34 +287,122 @@ struct MinersOverviewView: View {
                 .padding(.vertical, 9)
 
                 VStack(spacing: 1) {
-                    ForEach(issues) { issue in
-                        PrioritisedLinkIssueRow(
-                            issue: issue,
-                            actionTitle: "Dismiss",
-                            actionSystemImage: "bell.slash",
-                            actionRole: nil
-                        ) {
-                            setLinkReminder(false, for: issue)
-                        }
-                    }
-
-                    ForEach(mutedIssues) { issue in
-                        PrioritisedLinkIssueRow(
-                            issue: issue,
-                            actionTitle: "Remind me",
-                            actionSystemImage: "bell",
-                            actionRole: nil
-                        ) {
-                            setLinkReminder(true, for: issue)
+                    ForEach(items) { item in
+                        PendingItemRow(item: item) {
+                            togglePendingMute(item)
                         }
                     }
                 }
             }
-            .background(.orange.opacity(0.07), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
+            .background(.background.opacity(0.62), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
-                    .strokeBorder(.orange.opacity(0.24), lineWidth: 1)
+                    .strokeBorder(.separator.opacity(0.32), lineWidth: 1)
             }
+        }
+    }
+
+    private func pendingItems(for miner: MinerManager.ManagedMiner, campaigns: [Campaign]) -> [PendingItem] {
+        var items: [PendingItem] = []
+
+        // Account-link issues (one per game)
+        let allLinkIssues = prioritisedLinkIssues(for: miner, includeIgnored: true)
+        for issue in allLinkIssues {
+            items.append(PendingItem(
+                kind: .accountLink(issue),
+                isMuted: issue.isIgnored
+            ))
+        }
+
+        // Subscription-gated campaigns (one per campaign)
+        for campaign in campaigns where campaign.activityStatus(for: miner) == .requiresSubscription {
+            let isMuted = settings.isIgnoringSubscriptionRequiredWarnings(
+                for: miner.accountId,
+                campaignId: campaign.id
+            )
+            items.append(PendingItem(
+                kind: .subscriptionRequired(
+                    minerId: miner.id,
+                    accountId: miner.accountId,
+                    campaignId: campaign.id,
+                    gameName: campaign.game.name,
+                    campaignName: campaign.name,
+                    dropNames: campaign.subscriptionRequiredDrops.map(\.name).sorted()
+                ),
+                isMuted: isMuted
+            ))
+        }
+
+        #if DEBUG
+        items.append(contentsOf: debugFakePendingItems(for: miner))
+        #endif
+
+        return items.sorted { lhs, rhs in
+            if lhs.isMuted != rhs.isMuted { return !lhs.isMuted }
+            return lhs.severity.rank < rhs.severity.rank
+        }
+    }
+
+    #if DEBUG
+    /// Injects synthetic pending items when `SWIFTMINER_FAKE_PENDING=1`.
+    /// Set the env var in the Xcode scheme (Run → Arguments → Environment Variables).
+    /// Mute state persists in real Settings storage under the fake accountId namespace.
+    private func debugFakePendingItems(for miner: MinerManager.ManagedMiner) -> [PendingItem] {
+        guard ProcessInfo.processInfo.environment["SWIFTMINER_FAKE_PENDING"] == "1" else {
+            return []
+        }
+
+        let fakeLinkGameId = "debug-fake-link-game"
+        let fakeCampaignId = "debug-fake-campaign"
+
+        // Reads use miner.accountId so mute writes (which also use miner.accountId)
+        // round-trip correctly. Fake gameId/campaignId namespaces prevent collisions
+        // with real warnings.
+        let linkIssue = PrioritisedLinkIssue(
+            minerId: miner.id,
+            accountId: miner.accountId,
+            minerName: miner.displayName,
+            gameId: fakeLinkGameId,
+            gameName: "Debug: Rust",
+            campaignNames: ["Twitch Drops Week 3", "Community Skin Pack"],
+            isIgnored: settings.isIgnoringAccountLinkWarnings(for: miner.accountId, gameId: fakeLinkGameId)
+        )
+
+        let subMuted = settings.isIgnoringSubscriptionRequiredWarnings(
+            for: miner.accountId,
+            campaignId: fakeCampaignId
+        )
+
+        return [
+            PendingItem(
+                kind: .accountLink(linkIssue),
+                isMuted: linkIssue.isIgnored
+            ),
+            PendingItem(
+                kind: .subscriptionRequired(
+                    minerId: miner.id,
+                    accountId: miner.accountId,
+                    campaignId: fakeCampaignId,
+                    gameName: "Debug: Diablo IV",
+                    campaignName: "Season of the Construct",
+                    dropNames: ["Hellfire Helm", "Cinder Wings"]
+                ),
+                isMuted: subMuted
+            ),
+        ]
+    }
+    #endif
+
+    private func togglePendingMute(_ item: PendingItem) {
+        switch item.kind {
+        case .accountLink(let issue):
+            setLinkReminder(item.isMuted, for: issue)
+        case .subscriptionRequired(_, let accountId, let campaignId, _, _, _):
+            settings.setIgnoreSubscriptionRequiredWarnings(
+                !item.isMuted,
+                for: accountId,
+                campaignId: campaignId
+            )
         }
     }
 
@@ -410,12 +497,14 @@ struct MinersOverviewView: View {
             return 1
         case .requiresLink:
             return 2
-        case .completed:
+        case .requiresSubscription:
             return 3
-        case .upcoming:
+        case .completed:
             return 4
-        case .expired:
+        case .upcoming:
             return 5
+        case .expired:
+            return 6
         }
     }
 
@@ -595,6 +684,141 @@ private struct PrioritisedLinkIssue: Identifiable, Equatable {
     }
 }
 
+private struct PendingItem: Identifiable, Equatable {
+    enum Kind: Equatable {
+        case accountLink(PrioritisedLinkIssue)
+        case subscriptionRequired(
+            minerId: String,
+            accountId: String,
+            campaignId: String,
+            gameName: String,
+            campaignName: String,
+            dropNames: [String]
+        )
+    }
+
+    enum Severity {
+        case link
+        case subscription
+
+        var rank: Int {
+            switch self {
+            case .link: return 0
+            case .subscription: return 1
+            }
+        }
+    }
+
+    let kind: Kind
+    let isMuted: Bool
+
+    var id: String {
+        switch kind {
+        case .accountLink(let issue):
+            return "link:\(issue.id)"
+        case .subscriptionRequired(let minerId, _, let campaignId, _, _, _):
+            return "sub:\(minerId):\(campaignId)"
+        }
+    }
+
+    var severity: Severity {
+        switch kind {
+        case .accountLink: return .link
+        case .subscriptionRequired: return .subscription
+        }
+    }
+
+    var title: String {
+        switch kind {
+        case .accountLink(let issue): return issue.gameName
+        case .subscriptionRequired(_, _, _, let gameName, _, _): return gameName
+        }
+    }
+
+    var subtitle: String {
+        switch kind {
+        case .accountLink(let issue):
+            if isMuted { return "Reminder muted for \(issue.minerName)." }
+            let names = issue.campaignNames.prefix(2).joined(separator: ", ")
+            if issue.campaignNames.count > 2 {
+                return "\(names), and more need a linked account."
+            }
+            return "\(names) needs a linked account."
+        case .subscriptionRequired(_, _, _, _, let campaignName, let dropNames):
+            if isMuted { return "\(campaignName) is muted." }
+            let names = dropNames.prefix(2).joined(separator: ", ")
+            let extra = dropNames.count > 2 ? ", and more" : ""
+            if names.isEmpty {
+                return "\(campaignName) needs a paid Twitch sub."
+            }
+            return "\(names)\(extra) needs a paid Twitch sub."
+        }
+    }
+
+    var iconSystemName: String {
+        if isMuted { return "bell.slash" }
+        switch kind {
+        case .accountLink: return "link.badge.plus"
+        case .subscriptionRequired: return "creditcard"
+        }
+    }
+
+    var iconColor: Color {
+        if isMuted { return .secondary }
+        switch kind {
+        case .accountLink: return .orange
+        case .subscriptionRequired: return .pink
+        }
+    }
+
+    var actionTitle: String { isMuted ? "Remind me" : "Dismiss" }
+    var actionSystemImage: String { isMuted ? "bell" : "bell.slash" }
+}
+
+private struct PendingItemRow: View {
+    let item: PendingItem
+    let onAction: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: item.iconSystemName)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(item.iconColor)
+                .frame(width: 18, height: 18)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(item.title)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                Text(item.subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 12)
+
+            Button(action: onAction) {
+                Label(item.actionTitle, systemImage: item.actionSystemImage)
+                    .labelStyle(.titleAndIcon)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(.background.opacity(0.001))
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(.separator.opacity(0.24))
+                .frame(height: 1)
+                .padding(.leading, 42)
+        }
+    }
+}
+
 private struct LinkNotice: Identifiable, Equatable {
     let id: UUID
     let title: String
@@ -675,6 +899,13 @@ private struct MinerSourceListRow: View {
             }
 
             Spacer(minLength: 6)
+
+            if MinerAttention.hasPendingAttention(for: miner, settings: settings) {
+                Circle()
+                    .fill(Color.orange)
+                    .frame(width: 7, height: 7)
+                    .accessibilityLabel("Has pending items")
+            }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, compact ? 7 : 9)
@@ -837,61 +1068,6 @@ private struct LinkNoticeBanner: View {
     }
 }
 
-private struct PrioritisedLinkIssueRow: View {
-    let issue: PrioritisedLinkIssue
-    let actionTitle: String
-    let actionSystemImage: String
-    let actionRole: ButtonRole?
-    let onAction: () -> Void
-
-    private var subtitle: String {
-        let campaigns = issue.campaignNames.prefix(2).joined(separator: ", ")
-        if issue.campaignNames.count > 2 {
-            return "\(campaigns), and more need a linked account."
-        }
-        return "\(campaigns) needs a linked account."
-    }
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Image(systemName: issue.isIgnored ? "bell.slash" : "link.badge.plus")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(issue.isIgnored ? Color.secondary : Color.orange)
-                .frame(width: 18, height: 18)
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(issue.gameName)
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-
-                Text(issue.isIgnored ? "Reminder muted for \(issue.minerName)." : subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
-
-            Spacer(minLength: 12)
-
-            Button(role: actionRole, action: onAction) {
-                Label(actionTitle, systemImage: actionSystemImage)
-                    .labelStyle(.titleAndIcon)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(.background.opacity(0.001))
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(.separator.opacity(0.24))
-                .frame(height: 1)
-                .padding(.leading, 42)
-        }
-    }
-}
-
 private struct CampaignStatusRow: View {
     let miner: MinerManager.ManagedMiner
     let campaign: Campaign
@@ -911,6 +1087,8 @@ private struct CampaignStatusRow: View {
             return "checkmark"
         case .requiresLink:
             return "link.badge.plus"
+        case .requiresSubscription:
+            return "creditcard"
         case .waitingForStream:
             return "antenna.radiowaves.left.and.right"
         case .upcoming:
@@ -926,6 +1104,8 @@ private struct CampaignStatusRow: View {
             return .green
         case .requiresLink:
             return .orange
+        case .requiresSubscription:
+            return .pink
         case .waitingForStream:
             return .cyan
         case .upcoming, .expired:
@@ -966,6 +1146,11 @@ private struct CampaignStatusRow: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+            } else if status == .requiresSubscription {
+                Text(status.label)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(statusColor)
+                    .lineLimit(1)
             } else {
                 Text(status.label)
                     .font(.caption.weight(.semibold))

@@ -1,4 +1,5 @@
 import AppKit
+import ServiceManagement
 import SwiftUI
 import SwiftMinerCore
 import TipKit
@@ -88,7 +89,20 @@ struct MinerApp: App {
                 Button("Export Diagnostic Logs…") {
                     LogExporter.presentSavePanel(navigation: navigation)
                 }
+                Button("Raise Issue on GitHub…") {
+                    GitHubIssueReporter.openNewIssue()
+                }
             }
+            // The default View menu only contains toolbar/sidebar toggles that
+            // don't apply to this app — replace its contents with nothing so it
+            // collapses out of the menu bar.
+            CommandGroup(replacing: .toolbar) {}
+            CommandGroup(replacing: .sidebar) {}
+            // The File menu only contains "New Window" / "Close" — neither is
+            // useful for a single-window app. Strip the SwiftUI-injected items;
+            // the menu itself is removed alongside View in LaunchContextDelegate.
+            CommandGroup(replacing: .newItem) {}
+            CommandGroup(replacing: .saveItem) {}
         }
 
         Window("What's New", id: AppWindowID.releaseNotes) {
@@ -124,9 +138,17 @@ struct MinerApp: App {
         guard !didApplyLaunchWindowPreference else { return }
         didApplyLaunchWindowPreference = true
 
+        guard settings.startMinimized else { return }
+
         // Only auto-minimise when the app was launched at login. Manual launches
-        // (Dock, Finder, Spotlight) should always show the window.
-        guard settings.startMinimized, launchContext.wasLaunchedAtLogin else { return }
+        // (Dock, Finder, Spotlight) should always show the window. We require
+        // BOTH signals: NSApplication.launchIsDefaultUserInfoKey AND an active
+        // SMAppService registration. The userInfo key alone has been observed
+        // to mis-report on manual launches, so the registration check acts as
+        // a structural backstop — `Start minimised` is meaningless if the app
+        // isn't actually registered as a login item.
+        guard launchContext.wasLaunchedAtLogin else { return }
+        guard SMAppService.mainApp.status == .enabled else { return }
 
         DispatchQueue.main.async {
             NSApp.windows
@@ -157,6 +179,62 @@ final class LaunchContextDelegate: NSObject, NSApplicationDelegate, ObservableOb
     func applicationDidFinishLaunching(_ notification: Notification) {
         if let isDefault = notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool {
             wasLaunchedAtLogin = !isDefault
+        }
+
+        // SwiftMiner is single-window by design — disable macOS automatic
+        // window tabbing so the Window menu doesn't expose "Show Tab Bar",
+        // "Merge All Windows", etc.
+        NSWindow.allowsAutomaticWindowTabbing = false
+
+        // SwiftUI's empty `.toolbar` / `.sidebar` command groups still leave
+        // an empty "View" menu in the menu bar; the same applies to the File
+        // menu after stripping `.newItem` / `.saveItem`. Remove both directly
+        // from the main menu, and re-strip whenever the menu is rebuilt.
+        Self.removeRedundantTopLevelMenus()
+        NotificationCenter.default.addObserver(
+            forName: NSMenu.didAddItemNotification,
+            object: NSApp.mainMenu,
+            queue: .main
+        ) { _ in
+            MainActor.assumeIsolated { Self.removeRedundantTopLevelMenus() }
+        }
+
+        // Disable fullscreen on every window. macOS auto-adds an
+        // "Enter Full Screen" item to the View menu whenever any key window
+        // declares `.fullScreenPrimary` — stripping that flag also removes
+        // the menu item, which lets our empty View command groups collapse
+        // the menu out of the menu bar entirely.
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didBecomeKeyNotification,
+            object: nil,
+            queue: .main
+        ) { note in
+            guard let window = note.object as? NSWindow else { return }
+            MainActor.assumeIsolated {
+                var behavior = window.collectionBehavior
+                behavior.remove(.fullScreenPrimary)
+                behavior.remove(.fullScreenAuxiliary)
+                behavior.insert(.fullScreenNone)
+                window.collectionBehavior = behavior
+                window.standardWindowButton(.zoomButton)?.isEnabled = true
+            }
+        }
+    }
+
+    @MainActor
+    private static func removeRedundantTopLevelMenus() {
+        guard let mainMenu = NSApp.mainMenu else { return }
+        // SwiftUI's empty `.toolbar` / `.sidebar` / `.newItem` / `.saveItem`
+        // command groups leave the View and File menus structurally empty.
+        // Identify them by emptiness rather than localised title so this works
+        // on any system locale. Skip the application menu (index 0).
+        let removable = mainMenu.items.enumerated().compactMap { index, item -> NSMenuItem? in
+            guard index > 0, let submenu = item.submenu else { return nil }
+            let hasRealItem = submenu.items.contains { !$0.isSeparatorItem }
+            return hasRealItem ? nil : item
+        }
+        for item in removable {
+            mainMenu.removeItem(item)
         }
     }
 }

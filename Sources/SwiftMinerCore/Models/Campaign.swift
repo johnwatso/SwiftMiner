@@ -104,6 +104,8 @@ public struct Drop: Codable, Sendable, Identifiable, Equatable {
     public var benefitIds: [String]
     /// Prerequisite drop IDs that must be claimed before this drop can be earned.
     public var preconditionDrops: [String]
+    /// Number of Twitch subscriptions required to earn this drop (0 = none).
+    public let requiredSubs: Int
     /// Per-drop active window (may differ from campaign window)
     public var dropStartDate: Date?
     public var dropEndDate: Date?
@@ -120,6 +122,7 @@ public struct Drop: Codable, Sendable, Identifiable, Equatable {
         isClaimed: Bool = false,
         benefitIds: [String] = [],
         preconditionDrops: [String] = [],
+        requiredSubs: Int = 0,
         dropStartDate: Date? = nil,
         dropEndDate: Date? = nil
     ) {
@@ -136,6 +139,7 @@ public struct Drop: Codable, Sendable, Identifiable, Equatable {
             ? (self.benefitID.isEmpty ? [] : [self.benefitID])
             : benefitIds
         self.preconditionDrops = preconditionDrops
+        self.requiredSubs = requiredSubs
         self.dropStartDate = dropStartDate
         self.dropEndDate = dropEndDate
     }
@@ -160,6 +164,9 @@ public struct Drop: Codable, Sendable, Identifiable, Equatable {
     /// Whether this is a community drop (always false for timed drops)
     public var isCommunityDrop: Bool { false }
 
+    /// Whether this drop requires purchasing Twitch subscriptions.
+    public var isSubscriptionRequired: Bool { requiredSubs > 0 }
+
     /// Alias for requiredMinutes (backward compat)
     public var requiredMinutesWatched: Int { requiredMinutes }
 
@@ -175,6 +182,7 @@ public struct Drop: Codable, Sendable, Identifiable, Equatable {
         case isClaimed
         case benefitIds
         case preconditionDrops
+        case requiredSubs
         case dropStartDate
         case dropEndDate
     }
@@ -194,6 +202,7 @@ public struct Drop: Codable, Sendable, Identifiable, Equatable {
         benefitID = decodedBenefitID.isEmpty ? benefitIds.first ?? "" : decodedBenefitID
         isClaimed = try container.decodeIfPresent(Bool.self, forKey: .isClaimed) ?? progress?.isClaimed ?? false
         preconditionDrops = try container.decodeIfPresent([String].self, forKey: .preconditionDrops) ?? []
+        requiredSubs = try container.decodeIfPresent(Int.self, forKey: .requiredSubs) ?? 0
         dropStartDate = try container.decodeIfPresent(Date.self, forKey: .dropStartDate)
         dropEndDate = try container.decodeIfPresent(Date.self, forKey: .dropEndDate)
     }
@@ -211,6 +220,7 @@ public struct Drop: Codable, Sendable, Identifiable, Equatable {
         try container.encode(isClaimed, forKey: .isClaimed)
         try container.encode(benefitIds, forKey: .benefitIds)
         try container.encode(preconditionDrops, forKey: .preconditionDrops)
+        try container.encode(requiredSubs, forKey: .requiredSubs)
         try container.encodeIfPresent(dropStartDate, forKey: .dropStartDate)
         try container.encodeIfPresent(dropEndDate, forKey: .dropEndDate)
     }
@@ -375,12 +385,23 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
         isTimeActive && status != .disabled && isAccountConnected && hasDropsEnabled && !eligibleDrops.isEmpty
     }
 
+    /// Drops that require purchasing subscriptions and have no progress yet.
+    /// These cannot be earned by watching alone.
+    public var subscriptionRequiredDrops: [Drop] {
+        drops.filter { $0.isSubscriptionRequired && !$0.isClaimed && ($0.progress?.currentMinutes ?? 0) == 0 }
+    }
+
     /// Returns drops that can be earned now (not claimed, NOT yet claimable, and all preconditions met).
     public var earnableDrops: [Drop] {
         drops.filter { drop in
             // Must be unclaimed, NOT already at 100% (claimable), and linked
             guard !drop.isClaimed && !drop.isClaimable else { return false }
-            
+
+            // Subscription-required drops without progress can't be earned by watching
+            if drop.isSubscriptionRequired, (drop.progress?.currentMinutes ?? 0) == 0 {
+                return false
+            }
+
             // All preconditions must be fully claimed
             return drop.preconditionDrops.allSatisfy { pid in
                 drops.first { $0.id == pid }?.isClaimed ?? true
@@ -392,6 +413,12 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
     public var eligibleDrops: [Drop] {
         drops.filter { drop in
             guard !drop.isClaimed else { return false }
+
+            // Subscription-required drops without progress can't be earned by watching
+            if drop.isSubscriptionRequired, (drop.progress?.currentMinutes ?? 0) == 0 {
+                return false
+            }
+
             return drop.preconditionDrops.allSatisfy { pid in
                 drops.first { $0.id == pid }?.isClaimed ?? true
             }

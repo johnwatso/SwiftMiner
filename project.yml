@@ -3,6 +3,8 @@ name: SwiftMiner
 options:
   bundleIdPrefix: com.swiftminer
   createIntermediateGroups: true
+  xcodeVersion: "2640"
+  schemeVersion: "1.3"
 
 packages:
   Sparkle:
@@ -55,7 +57,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.swiftminer.app
         MACOSX_DEPLOYMENT_TARGET: "26.0"
         MARKETING_VERSION: "1.21"
-        CURRENT_PROJECT_VERSION: "2026050509"
+        CURRENT_PROJECT_VERSION: "2026050516"
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: SwiftMiner
         INFOPLIST_KEY_CFBundleName: SwiftMiner

@@ -11,118 +11,64 @@ import SwiftMinerCore
 struct SidebarView: View {
     @Environment(NavigationModel.self) private var navigation
     @ObservedObject private var settings = Settings.shared
+    @Namespace private var selectionHighlightNamespace
+    @State private var rowFrames: [NavigationModel.SidebarItem: CGRect] = [:]
+    @State private var isDraggingSelection = false
+
+    private static let dragCoordinateSpace = "sidebarSelectorDrag"
 
     private var minerAttentionCount: Int {
-        let blockedMinerIds = Set(
-            navigation.minerManager.miners
-                .filter { $0.status == .blockedAccountNotLinked || $0.status == .error || $0.needsAuth }
-                .map(\.id)
-        )
-        let linkIssueMinerIds = Set(
-            navigation.minerManager.miners
-                .filter(hasVisiblePrioritisedLinkIssue)
-                .map(\.id)
-        )
-
-        return blockedMinerIds.union(linkIssueMinerIds).count
+        MinerAttention.attentionCount(miners: navigation.minerManager.miners, settings: settings)
     }
 
-    private func hasVisiblePrioritisedLinkIssue(for miner: MinerManager.ManagedMiner) -> Bool {
-        let priorityKeys = Set(
-            settings.priorityGames
-                .map(normalizedGameKey)
-                .filter { !$0.isEmpty }
-        )
-        guard !priorityKeys.isEmpty else { return false }
-
-        return miner.allCampaigns.contains { campaign in
-            let gameId = warningGameId(for: campaign)
-            guard campaign.isTimeActive,
-                  campaign.status != .disabled,
-                  campaign.activityStatus(for: miner) == .requiresLink,
-                  campaign.drops.contains(where: { !$0.isClaimed }),
-                  priorityKeys.contains(normalizedGameKey(campaign.game.name))
-                    || priorityKeys.contains(normalizedGameKey(campaign.game.id)) else {
-                return false
-            }
-
-            return !settings.isIgnoringAccountLinkWarnings(for: miner.accountId, gameId: gameId)
-        }
-    }
-
-    private func warningGameId(for campaign: Campaign) -> String {
-        let id = campaign.game.id.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !id.isEmpty { return id }
-        return normalizedGameKey(campaign.game.name)
-    }
-
-    private func normalizedGameKey(_ value: String) -> String {
-        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    }
-
-    private var sidebarItems: [GlassSelectionItem<NavigationModel.SidebarItem>] {
-        var items: [GlassSelectionItem<NavigationModel.SidebarItem>] = [
-            GlassSelectionItem(id: .overview, title: "Overview", systemImage: "waveform.path.ecg"),
-            GlassSelectionItem(id: .miners, title: "Miners", systemImage: "cpu"),
-            GlassSelectionItem(id: .drops, title: "Drops", systemImage: "gamecontroller.fill"),
-            GlassSelectionItem(id: .events, title: "Activity Log", systemImage: "list.bullet.rectangle.fill"),
+    fileprivate var sidebarItems: [SidebarItemSpec] {
+        var items: [SidebarItemSpec] = [
+            SidebarItemSpec(id: .overview, title: "Overview", systemImage: "waveform.path.ecg"),
+            SidebarItemSpec(id: .miners, title: "Miners", systemImage: "cpu"),
+            SidebarItemSpec(id: .drops, title: "Drops", systemImage: "gamecontroller.fill"),
+            SidebarItemSpec(id: .events, title: "Activity Log", systemImage: "list.bullet.rectangle.fill"),
         ]
         if settings.swiftBotEnabled {
-            items.append(GlassSelectionItem(id: .admin, title: "Admin Beta", systemImage: "lock.shield.fill"))
+            items.append(SidebarItemSpec(id: .admin, title: "Admin Beta", systemImage: "lock.shield.fill"))
         }
         return items
     }
 
-    private var selectionBinding: Binding<NavigationModel.SidebarItem> {
-        Binding(
-            get: { navigation.selectedItem ?? .overview },
-            set: { navigation.selectedItem = $0 }
-        )
+    private var currentSelection: NavigationModel.SidebarItem {
+        navigation.selectedItem ?? .overview
+    }
+
+    @ViewBuilder
+    private func rowView(for item: SidebarItemSpec) -> some View {
+        let attention = item.id == .miners ? minerAttentionCount : 0
+        SidebarRow(
+            item: item,
+            isSelected: currentSelection == item.id,
+            selectionHighlightNamespace: selectionHighlightNamespace,
+            attentionCount: attention
+        ) {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                navigation.selectedItem = item.id
+            }
+        }
     }
 
     var body: some View {
         ZStack {
             SidebarMaterialBackground()
 
-            VStack(alignment: .leading, spacing: 0) {
-                GlassSelectionControl(
-                    items: sidebarItems,
-                    selection: selectionBinding,
-                    axis: .vertical,
-                    itemSpacing: 2,
-                    padding: 0,
-                    contentInsets: EdgeInsets(top: 6, leading: 10, bottom: 6, trailing: 10),
-                    selectedCornerRadius: 11,
-                    fillsAvailableSpace: true,
-                    showsContainer: false
-                ) { item, isSelected in
-                    HStack(spacing: 12) {
-                        Image(systemName: item.systemImage)
-                            .font(.system(size: 14, weight: .semibold))
-                            .frame(width: 18)
-
-                        Text(item.title)
-                            .font(.system(size: 14, weight: isSelected ? .semibold : .medium))
-                            .lineLimit(1)
-
-                        Spacer(minLength: 0)
-
-                        if item.id == .miners && minerAttentionCount > 0 {
-                            Text("\(minerAttentionCount)")
-                                .font(.system(size: 11, weight: .bold, design: .rounded))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color.orange, in: Capsule())
-                        }
-                    }
-                    .foregroundStyle(.primary)
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(sidebarItems) { item in
+                    rowView(for: item)
                 }
 
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 8)
-            .padding(.top, 4)
+            .padding(.top, 10)
+            .coordinateSpace(name: Self.dragCoordinateSpace)
+            .onPreferenceChange(SidebarRowFramesKey.self) { rowFrames = $0 }
+            .gesture(selectionDragGesture)
         }
         .navigationTitle("SwiftMiner")
         .onChange(of: settings.swiftBotEnabled) { _, enabled in
@@ -130,6 +76,116 @@ struct SidebarView: View {
                 navigation.selectedItem = .overview
             }
         }
+    }
+
+    private var selectionDragGesture: some Gesture {
+        DragGesture(minimumDistance: 6, coordinateSpace: .named(Self.dragCoordinateSpace))
+            .onChanged { value in
+                isDraggingSelection = true
+                updateSelection(forDragLocation: value.location)
+            }
+            .onEnded { _ in
+                isDraggingSelection = false
+            }
+    }
+
+    private func updateSelection(forDragLocation point: CGPoint) {
+        guard let target = sidebarItems.first(where: { rowFrames[$0.id]?.contains(point) ?? false }) else {
+            return
+        }
+        guard navigation.selectedItem != target.id else { return }
+        withAnimation(.easeInOut(duration: 0.18)) {
+            navigation.selectedItem = target.id
+        }
+    }
+}
+
+// MARK: - Drag tracking
+
+private struct SidebarRowFramesKey: PreferenceKey {
+    static var defaultValue: [NavigationModel.SidebarItem: CGRect] { [:] }
+    static func reduce(value: inout [NavigationModel.SidebarItem: CGRect], nextValue: () -> [NavigationModel.SidebarItem: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+    }
+}
+
+// MARK: - Sidebar Row & Selection Highlight (ported from SwiftBot)
+
+fileprivate struct SidebarItemSpec: Identifiable {
+    let id: NavigationModel.SidebarItem
+    let title: String
+    let systemImage: String
+}
+
+private struct SidebarRow: View {
+    let item: SidebarItemSpec
+    let isSelected: Bool
+    let selectionHighlightNamespace: Namespace.ID
+    let attentionCount: Int
+    let action: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: item.systemImage)
+                .font(.system(size: 14, weight: .semibold))
+                .frame(width: 18)
+
+            Text(item.title)
+                .font(.system(size: 14, weight: isSelected ? .semibold : .medium))
+                .lineLimit(1)
+
+            Spacer(minLength: 0)
+
+            if attentionCount > 0 {
+                Text("\(attentionCount)")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.orange, in: Capsule())
+            }
+        }
+        .foregroundStyle(.primary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background {
+            if isSelected {
+                SidebarSelectionHighlight()
+                    .matchedGeometryEffect(id: "sidebarSelectionHighlight", in: selectionHighlightNamespace)
+            }
+        }
+        .background(
+            GeometryReader { geo in
+                Color.clear.preference(
+                    key: SidebarRowFramesKey.self,
+                    value: [item.id: geo.frame(in: .named("sidebarSelectorDrag"))]
+                )
+            }
+        )
+        .contentShape(Rectangle())
+        .onTapGesture { action() }
+    }
+}
+
+private struct SidebarSelectionHighlight: View {
+    @Environment(\.controlActiveState) private var controlActiveState
+
+    private var highlightMaterial: Material {
+        controlActiveState == .active ? .ultraThinMaterial : .bar
+    }
+
+    private var strokeOpacity: Double {
+        controlActiveState == .active ? 0.16 : 0.10
+    }
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 11, style: .continuous)
+            .fill(highlightMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .strokeBorder(.white.opacity(strokeOpacity), lineWidth: 1)
+            )
     }
 }
 
