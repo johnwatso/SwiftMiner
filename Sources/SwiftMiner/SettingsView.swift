@@ -473,7 +473,7 @@ private struct MiningSettingsView: View {
                     .onChange(of: settings.antiStallRecoveryEnabled) { _, newValue in
                         Task { await navigation.minerManager.updateAntiStallRecovery(enabled: newValue) }
                     }
-                SettingsSecondaryText("Restarts an individual miner when it appears stuck after a long progress stall or recoverable network error.")
+                SettingsSecondaryText("Restarts an individual miner when it appears stuck after a long progress stall or recoverable network error. Turn off if the restarts feel too aggressive on a flaky connection, or while you are debugging a specific miner and want it to stay paused on the failure.")
 
                 Toggle("Prioritise followed and subscribed streamers", isOn: $settings.prioritiseFollowedStreamers)
                     .onChange(of: settings.prioritiseFollowedStreamers) { _, newValue in
