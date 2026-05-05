@@ -84,6 +84,28 @@ public actor EventEmitterService {
         ))
     }
 
+    /// Emit when an operator requests SwiftBot drive a reauthentication flow for the user.
+    /// Idempotency key folds the epoch second so repeated clicks within the same second collapse,
+    /// but a user can re-request later if the first attempt failed.
+    public func emitUserReauthRequested(
+        discordUserId: String,
+        twitchAccountId: String,
+        occurredAt: Date = Date()
+    ) async {
+        let epoch = Int(occurredAt.timeIntervalSince1970)
+        let key = "user.reauth_requested:discord:\(discordUserId):twitch:\(twitchAccountId):\(epoch)"
+        await insert(envelope: makeEnvelope(
+            eventType: "user.reauth_requested",
+            discordUserId: discordUserId,
+            idempotencyKey: key,
+            occurredAt: occurredAt,
+            data: [
+                "twitchAccountId": .string(twitchAccountId),
+                "occurredAt": .string(iso8601(occurredAt))
+            ]
+        ))
+    }
+
     /// Emit when the projection gains a meaningful campaign opportunity worth surfacing.
     public func emitUserOpportunityAvailable(
         discordUserId: String,

@@ -133,6 +133,17 @@ public final class NavigationModel {
         await checkSwiftBotConnection()
     }
 
+    /// Refresh webhook delivery settings after the user edits the SwiftBot callback URL or HMAC secret.
+    public func updateSwiftBotWebhookConfig() async {
+        await eventOutboxService.updateConfig(
+            webhookURL: URL(string: Settings.shared.swiftBotWebhookURL),
+            hmacSecret: Settings.shared.swiftBotHmacSecret
+        )
+        if Settings.shared.swiftBotEnabled {
+            await eventOutboxService.start()
+        }
+    }
+
     private func startSwiftBotStateSync() {
         Task {
             while !Task.isCancelled {
@@ -164,6 +175,7 @@ public final class NavigationModel {
     public let adminLinkingService: any AdminLinkingService
     public let swiftBotConnectionService: any SwiftBotConnectionService
     public let eventOutboxService: EventOutboxService
+    public let eventEmitter: EventEmitterService
     private let sqliteManager: SQLiteManager
     private var onboardingSetupTask: Task<Void, Never>?
     @ObservationIgnored private var dropsPreloadTask: Task<Void, Never>?
@@ -185,6 +197,7 @@ public final class NavigationModel {
         let manager = SQLiteManager(databaseURL: dbURL)
         self.sqliteManager = manager
         self.adminLinkingService = SQLiteAdminLinkingService(manager: manager)
+        self.eventEmitter = EventEmitterService(manager: manager)
         
         // Initialize event outbox delivery service first so connection service can reference it
         let webhookURL = URL(string: Settings.shared.swiftBotWebhookURL)

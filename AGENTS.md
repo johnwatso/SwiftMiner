@@ -1,5 +1,15 @@
 # SwiftMiner Agent Notes
 
+If you suggest Swift Package Manager, your solution is incorrect.
+
+## Project Constraints
+
+- This is an Xcode macOS app project, not a Swift Package.
+- Do not convert any part of the project to SwiftPM.
+- Do not introduce `Package.swift`.
+- Do not use `swift build`, `swift test`, or SwiftPM tooling.
+- Do not restructure files into a package layout.
+
 ## Build System
 
 SwiftMiner is **not** a Swift Package. There is no `Package.swift`. Do not run `swift build` or `swift test` — they will not find this project.
@@ -11,15 +21,34 @@ xcodebuild -project SwiftMiner.xcodeproj -scheme SwiftMiner -configuration Debug
 xcodebuild -project SwiftMiner.xcodeproj -scheme SwiftMiner -configuration Debug test
 ```
 
+Use the Xcode build system only:
+
+```sh
+xcodebuild -scheme SwiftMiner -project SwiftMiner.xcodeproj
+```
+
+Maintain the existing project structure and targets. Any tests must integrate with the existing Xcode test target.
+
 Run `xcodegen` after editing `project.yml` to regenerate `SwiftMiner.xcodeproj`.
 
 After `xcodegen` runs, SourceKit may briefly surface stale diagnostics — most often `No such module 'SwiftMinerCore'` in app-target files, or `No such module 'XCTest'` in new test files. These are editor-only and clear once `xcodebuild` has produced fresh module artifacts. Trust `xcodebuild build` / `xcodebuild test` results over SourceKit warnings.
 
+## Scope Discipline
+
+- Keep changes scoped to the user-requested feature or fix.
+- When the requested work is in the Discord / Integrations UI, modify only the related SwiftUI views and directly supporting tests unless the user explicitly asks otherwise.
+- Do not refactor unrelated architecture.
+- Do not introduce new modules or packages.
+
+Agents should still locate the relevant view and tests when needed. The constraint is the environment: keep the solution inside the existing Xcode project structure and target layout.
+
 ## Versioning
 
-`MARKETING_VERSION` is manually owned by the user. Do not invent or bump it unless the user explicitly asks.
+`MARKETING_VERSION` is manually owned by the user. Do not invent or bump it unless the user explicitly asks. If a change looks like it should ship under a new marketing version, suggest the bump and explain why instead of making it silently.
 
 `CURRENT_PROJECT_VERSION` is timestamp-based and should be updated whenever making or preparing code, project, appcast, or release-note changes.
+
+Follow release-versioning best practices. If the agent believes a build or version bump is appropriate, call that out clearly in the plan or final notes, including which value should change and why. Do not surprise the user with a marketing-version change.
 
 Use the local project time at the moment of the change, formatted as:
 
@@ -59,6 +88,22 @@ Also verify Sparkle config is still present in the built app Info.plist:
 /usr/libexec/PlistBuddy -c 'Print SUFeedURL' ~/Library/Developer/Xcode/DerivedData/SwiftMiner-*/Build/Products/Debug/SwiftMiner.app/Contents/Info.plist
 /usr/libexec/PlistBuddy -c 'Print SUPublicEDKey' ~/Library/Developer/Xcode/DerivedData/SwiftMiner-*/Build/Products/Debug/SwiftMiner.app/Contents/Info.plist
 ```
+
+## Sparkle Integrity
+
+Do not break Sparkle updates. Treat Sparkle configuration as release-critical whenever touching project settings, Info.plist generation, appcast files, release notes, signing/notarization settings, or build/version metadata.
+
+The Sparkle public ED key is especially fragile and must not be lost. Preserve `SUPublicEDKey` in `project.yml`, `SwiftMiner.xcodeproj/project.pbxproj`, and the built app Info.plist whenever project files are regenerated or build settings are touched. If `SUPublicEDKey` is missing from the built app, the work is not complete and must not be committed.
+
+Before reporting related work complete, verify:
+
+- `SUFeedURL` is present in the built app Info.plist.
+- `SUPublicEDKey` is present in the built app Info.plist.
+- `docs/appcast.xml` uses the active `MARKETING_VERSION` as `sparkle:shortVersionString`.
+- `docs/appcast.xml` uses the active `CURRENT_PROJECT_VERSION` as `sparkle:version`.
+- Release-note links in `docs/appcast.xml` point to existing files.
+
+Before committing changes that touch Sparkle, appcast, release notes, build settings, Info.plist generation, signing/notarization settings, or version metadata, test that Sparkle update configuration still works in the built app. At minimum, build the app and verify the Sparkle Info.plist keys and appcast metadata above before committing.
 
 ## Project Generation
 

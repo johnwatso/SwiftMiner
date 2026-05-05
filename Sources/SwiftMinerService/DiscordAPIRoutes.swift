@@ -62,19 +62,30 @@ struct SwiftMinerActivationStatusResponse: Codable, Sendable {
     let failureReason: String?
 }
 
+private struct RegisterUserRequest: Codable, Sendable {
+    let discordUserId: String
+}
+
 // MARK: - API Routes
 
 public actor DiscordAPIRoutes {
     private let manager: SQLiteManager
     private let projectionBuilder: DiscordProjectionBuilder
+    private let adminLinkingService: any AdminLinkingService
     private let apiKey: String
 
     // In-memory activation session store (ephemeral; DB retains audit rows)
     private var activationSessions: [String: ActivationSession] = [:]
 
-    public init(manager: SQLiteManager, projectionBuilder: DiscordProjectionBuilder, apiKey: String) {
+    public init(
+        manager: SQLiteManager,
+        projectionBuilder: DiscordProjectionBuilder,
+        apiKey: String,
+        adminLinkingService: (any AdminLinkingService)? = nil
+    ) {
         self.manager = manager
         self.projectionBuilder = projectionBuilder
+        self.adminLinkingService = adminLinkingService ?? SQLiteAdminLinkingService(manager: manager)
         self.apiKey = apiKey
     }
 
@@ -89,6 +100,11 @@ public actor DiscordAPIRoutes {
         // Projection endpoint
         await router.register(HTTPRoute(method: "GET", pattern: "/v1/discord/users/:discordUserId") { request, params in
             await routes.handleGetProjection(request: request, params: params)
+        })
+
+        // Registration endpoint
+        await router.register(HTTPRoute(method: "POST", pattern: "/v1/users") { request, params in
+            await routes.handleRegisterUser(request: request, params: params)
         })
 
         // Activation endpoints
@@ -111,6 +127,29 @@ public actor DiscordAPIRoutes {
     }
 
     // MARK: - Handlers
+
+    private func handleRegisterUser(request: HTTPRequest, params: [String: String]) async -> HTTPResponse {
+        guard !request.body.isEmpty,
+              let body = try? JSONDecoder().decode(RegisterUserRequest.self, from: request.body) else {
+            return .error(code: "invalid_payload", message: "Body must include discordUserId.", statusCode: 400)
+        }
+
+        let result = await adminLinkingService.registerUser(
+            discordId: body.discordUserId,
+            operatorIdentity: .bot(apiKeyId: String(apiKey.prefix(8)))
+        )
+
+        switch result {
+        case .registered(let discordId):
+            return HTTPResponse.json(["discordUserId": discordId, "status": "registered"], statusCode: 201)
+        case .alreadyRegistered(let discordId):
+            return HTTPResponse.json(["discordUserId": discordId, "status": "already_registered"], statusCode: 200)
+        case .invalidDiscordId:
+            return .error(code: "invalid_discord_id", message: "Discord ID must be 17-19 numeric digits.", statusCode: 400)
+        case .internalError(let message):
+            return .error(code: "internal_error", message: message, statusCode: 500)
+        }
+    }
 
     private func handleGetProjection(request: HTTPRequest, params: [String: String]) async -> HTTPResponse {
         guard let discordUserId = params["discordUserId"],

@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftMinerCore
+import SwiftMinerService
 import TipKit
 
 /// macOS Settings window using a Safari-style TabView with a top toolbar.
@@ -28,6 +29,14 @@ struct SettingsView: View {
                 }
                 .tag(SettingsTab.mining)
 
+            if settings.swiftBotEnabled {
+                IntegrationsSettingsView(settings: settings)
+                    .tabItem {
+                        Label(SettingsTab.integrations.title, systemImage: SettingsTab.integrations.systemImage)
+                    }
+                    .tag(SettingsTab.integrations)
+            }
+
             AdvancedSettingsView(settings: settings)
                 .tabItem {
                     Label(SettingsTab.advanced.title, systemImage: SettingsTab.advanced.systemImage)
@@ -42,6 +51,7 @@ private enum SettingsTab: String, CaseIterable, Hashable, Identifiable {
     case general
     case accounts
     case mining
+    case integrations
     case advanced
 
     var id: String { rawValue }
@@ -51,6 +61,7 @@ private enum SettingsTab: String, CaseIterable, Hashable, Identifiable {
         case .general: return "General"
         case .accounts: return "Accounts"
         case .mining: return "Mining"
+        case .integrations: return "Integrations"
         case .advanced: return "Advanced"
         }
     }
@@ -60,6 +71,7 @@ private enum SettingsTab: String, CaseIterable, Hashable, Identifiable {
         case .general: return "gearshape"
         case .accounts: return "person.2"
         case .mining: return "hammer"
+        case .integrations: return "app.connected.to.app.below.fill"
         case .advanced: return "gearshape.2"
         }
     }
@@ -527,6 +539,302 @@ private struct MiningSettingsView: View {
 
 }
 
+// MARK: - Integrations Settings
+
+private struct IntegrationsSettingsView: View {
+    @ObservedObject var settings: Settings
+    @Environment(NavigationModel.self) private var navigation
+    @State private var showAPIKey = false
+    @State private var isTestingConnection = false
+    @State private var connectionTestMessage: String?
+    @State private var copiedPairingBundle = false
+    @State private var showAdvanced = false
+
+    private let defaultSwiftBotEndpoint = "http://localhost:38888"
+
+    var body: some View {
+        Form {
+            pairingSection
+            connectionStatusSection
+            advancedSection
+        }
+        .formStyle(.grouped)
+        .padding(24)
+    }
+
+    // MARK: Pairing
+
+    private var pairingSection: some View {
+        Section {
+            Button {
+                copyPairingBundle()
+            } label: {
+                HStack {
+                    Image(systemName: copiedPairingBundle ? "checkmark.circle.fill" : "doc.on.doc.fill")
+                    Text(copiedPairingBundle ? "Copied" : "Copy Pairing Bundle")
+                }
+                .font(.headline)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+
+            SettingsSecondaryText("Paste into SwiftBot to connect")
+        } header: {
+            Text("Pair with SwiftBot")
+        }
+    }
+
+    private func copyPairingBundle() {
+        settings.ensureSwiftBotSecrets()
+        let swiftBotEndpoint = normalizedValue(settings.swiftBotEndpoint) ?? defaultSwiftBotEndpoint
+        let swiftBotWebhookURL = normalizedValue(settings.swiftBotWebhookURL)
+            ?? swiftBotEndpoint.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/webhooks/swiftminer/events"
+        let swiftMinerEndpoint = normalizedValue(settings.swiftMinerAPIEndpoint) ?? "http://127.0.0.1:8080"
+
+        if settings.swiftBotEndpoint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            settings.swiftBotEndpoint = swiftBotEndpoint
+            Task { await navigation.updateSwiftBotEndpoint(swiftBotEndpoint) }
+        }
+        if settings.swiftBotWebhookURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            settings.swiftBotWebhookURL = swiftBotWebhookURL
+            Task { await navigation.updateSwiftBotWebhookConfig() }
+        }
+        if settings.swiftMinerAPIEndpoint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            settings.swiftMinerAPIEndpoint = swiftMinerEndpoint
+        }
+
+        let bundle: [String: Any] = [
+            "version": 1,
+            "endpoint": swiftMinerEndpoint,
+            "swiftMinerEndpoint": swiftMinerEndpoint,
+            "swiftBotEndpoint": swiftBotEndpoint,
+            "apiKey": settings.swiftMinerAPIKey,
+            "hmacSecret": settings.swiftBotHmacSecret,
+            "webhookHint": swiftBotWebhookURL
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: bundle, options: [.sortedKeys]),
+              let json = String(data: data, encoding: .utf8) else { return }
+        let token = "swiftminer://pair?b=" + Data(json.utf8).base64EncodedString()
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(token, forType: .string)
+        copiedPairingBundle = true
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            await MainActor.run {
+                copiedPairingBundle = false
+            }
+        }
+    }
+
+    private func normalizedValue(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    // MARK: Connection status
+
+    private var connectionStatusSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 12) {
+                    let state = navigation.swiftBotState
+                    Image(systemName: state == .connected ? "checkmark.circle.fill" : "wifi.slash")
+                        .foregroundStyle(state == .connected ? .green : .secondary)
+                        .font(.title3)
+
+                    Text(state == .connected ? "Connected to SwiftBot" : "Not Connected")
+                        .font(.subheadline.weight(.medium))
+
+                    Spacer()
+
+                    Button {
+                        Task {
+                            connectionTestMessage = nil
+                            isTestingConnection = true
+                            await navigation.checkSwiftBotConnection()
+                            connectionTestMessage = connectionTestDescription(for: navigation.swiftBotState)
+                            isTestingConnection = false
+                        }
+                    } label: {
+                        if isTestingConnection {
+                            HStack(spacing: 6) {
+                                ProgressView().controlSize(.small)
+                                Text("Testing")
+                            }
+                        } else {
+                            Label("Test", systemImage: "arrow.clockwise")
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(isTestingConnection)
+                }
+
+                if isTestingConnection {
+                    SettingsSecondaryText("Checking SwiftBot...")
+                        .padding(.leading, 32)
+                } else if let connectionTestMessage {
+                    SettingsSecondaryText(connectionTestMessage)
+                        .padding(.leading, 32)
+                }
+            }
+        } header: {
+            Text("Connection Status")
+        }
+    }
+
+    private func connectionTestDescription(for state: SwiftBotConnectionState) -> String {
+        switch state {
+        case .connected:
+            return "SwiftBot replied."
+        case .disconnected:
+            return "Could not reach SwiftBot at the configured localhost endpoint."
+        case .notConfigured:
+            return "No valid localhost endpoint is configured."
+        }
+    }
+
+    // MARK: Advanced (manual fields)
+
+    private var advancedSection: some View {
+        Section {
+            DisclosureGroup(isExpanded: $showAdvanced) {
+                VStack(alignment: .leading, spacing: 14) {
+                    advancedTextField(
+                        "SwiftBot Endpoint",
+                        text: Binding(
+                            get: { settings.swiftBotEndpoint },
+                            set: { newValue in
+                                settings.swiftBotEndpoint = newValue
+                                Task { await navigation.updateSwiftBotEndpoint(newValue) }
+                            }
+                        ),
+                        prompt: defaultSwiftBotEndpoint
+                    )
+
+                    advancedTextField(
+                        "SwiftMiner API Endpoint",
+                        text: $settings.swiftMinerAPIEndpoint,
+                        prompt: "http://127.0.0.1:8080"
+                    )
+
+                    apiKeyField
+
+                    advancedTextField(
+                        "Webhook URL",
+                        text: Binding(
+                            get: { settings.swiftBotWebhookURL },
+                            set: { newValue in
+                                settings.swiftBotWebhookURL = newValue
+                                Task { await navigation.updateSwiftBotWebhookConfig() }
+                            }
+                        ),
+                        prompt: defaultSwiftBotEndpoint + "/webhooks/swiftminer/events"
+                    )
+
+                    advancedSecureField(
+                        "HMAC Secret",
+                        text: Binding(
+                            get: { settings.swiftBotHmacSecret },
+                            set: { newValue in
+                                settings.swiftBotHmacSecret = newValue
+                                Task { await navigation.updateSwiftBotWebhookConfig() }
+                            }
+                        ),
+                        prompt: "Shared secret"
+                    )
+
+                    HStack {
+                        Spacer()
+                        Button {
+                            Task { _ = await navigation.swiftBotConnectionService.sendTestEvent() }
+                        } label: {
+                            Label("Send Test Webhook", systemImage: "paperplane.fill")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(settings.swiftBotWebhookURL.isEmpty)
+                    }
+                }
+                .padding(.top, 8)
+            } label: {
+                Text("Advanced")
+            }
+        }
+    }
+
+    private func advancedTextField(_ label: String, text: Binding<String>, prompt: String) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(label)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            TextField("", text: text, prompt: Text(prompt))
+                .labelsHidden()
+                .textFieldStyle(.roundedBorder)
+                .font(.body.monospaced())
+                .frame(maxWidth: .infinity)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func advancedSecureField(_ label: String, text: Binding<String>, prompt: String) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(label)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            SecureField("", text: text, prompt: Text(prompt))
+                .labelsHidden()
+                .textFieldStyle(.roundedBorder)
+                .font(.body.monospaced())
+                .frame(maxWidth: .infinity)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var apiKeyField: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("API Key")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 8) {
+                Text(showAPIKey ? settings.swiftMinerAPIKey : String(repeating: "•", count: 16))
+                    .font(.body.monospaced())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+
+                Button { showAPIKey.toggle() } label: {
+                    Image(systemName: showAPIKey ? "eye.slash" : "eye")
+                        .frame(width: 18)
+                }
+                .buttonStyle(.borderless)
+
+                Button {
+                    let pasteboard = NSPasteboard.general
+                    pasteboard.clearContents()
+                    pasteboard.setString(settings.swiftMinerAPIKey, forType: .string)
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                        .frame(width: 18)
+                }
+                .buttonStyle(.borderless)
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 // MARK: - Advanced Settings
 
 private struct AdvancedSettingsView: View {
@@ -536,13 +844,11 @@ private struct AdvancedSettingsView: View {
     @State private var showDropCacheConfirmation = false
     @State private var showClientIdAlert = false
     @State private var tempClientId = ""
-    @State private var showEndpointAlert = false
-    @State private var tempEndpoint = ""
 
     var body: some View {
         Form {
             apiConfigurationSection
-            betaIntegrationSection
+            integrationToggleSection
             maintenanceSection
 
 #if DEBUG
@@ -575,23 +881,6 @@ private struct AdvancedSettingsView: View {
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("Enter a custom Twitch Client ID to use for API requests. Leave blank to reset to default.")
-        }
-        .alert("SwiftBot Integration", isPresented: $showEndpointAlert) {
-            TextField("Endpoint URL", text: $tempEndpoint)
-            Button("Save") {
-                let cleanUrl = tempEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
-                // Only save if URL passes localhost-only validation (mirrors service constraint)
-                guard let url = URL(string: cleanUrl),
-                      let scheme = url.scheme, scheme == "http" || scheme == "https",
-                      let host = url.host, host == "localhost" || host == "127.0.0.1" else {
-                    return
-                }
-                settings.swiftBotEndpoint = cleanUrl
-                Task { await navigation.updateSwiftBotEndpoint(cleanUrl) }
-            }
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            Text("Enter the SwiftBot REST API address (e.g. http://127.0.0.1:8080).")
         }
     }
 
@@ -632,8 +921,7 @@ private struct AdvancedSettingsView: View {
         }
     }
 
-    @ViewBuilder
-    private var betaIntegrationSection: some View {
+    private var integrationToggleSection: some View {
         Section {
             Toggle("Enable Discord Integration", isOn: $settings.swiftBotEnabled)
                 .onChange(of: settings.swiftBotEnabled) { _, enabled in
@@ -645,41 +933,9 @@ private struct AdvancedSettingsView: View {
                     }
                 }
 
-            SettingsSecondaryText("Experimental local-only Discord/SwiftBot tools. Keep this off unless you are actively testing the bot integration.")
-
-            if settings.swiftBotEnabled {
-                LabeledContent("SwiftBot Endpoint") {
-                    if settings.swiftBotEndpoint.isEmpty {
-                        Button("Configure\u{2026}") {
-                            tempEndpoint = "http://127.0.0.1:8080"
-                            showEndpointAlert = true
-                        }
-                        .buttonStyle(.link)
-                    } else {
-                        HStack(spacing: 8) {
-                            Text(settings.swiftBotEndpoint)
-                                .font(.caption.monospaced())
-                                .foregroundStyle(.secondary)
-
-                            Button("Edit\u{2026}") {
-                                tempEndpoint = settings.swiftBotEndpoint
-                                showEndpointAlert = true
-                            }
-                            .buttonStyle(.link)
-
-                            Button("Reset", role: .destructive) {
-                                settings.swiftBotEndpoint = ""
-                                Task { await navigation.updateSwiftBotEndpoint("") }
-                            }
-                            .buttonStyle(.link)
-                        }
-                    }
-                }
-
-                SettingsSecondaryText("Address of the SwiftBot REST API (e.g. http://127.0.0.1:8080). Localhost only.")
-            }
+            SettingsSecondaryText("Enables the local Discord/SwiftBot bridge. When on, an Integrations tab appears here for endpoint and webhook configuration.")
         } header: {
-            Text("Beta Integrations")
+            Text("Integrations")
         }
     }
 
