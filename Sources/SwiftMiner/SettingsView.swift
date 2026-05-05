@@ -88,10 +88,7 @@ private struct GeneralSettingsView: View {
                     .onAppear {
                         loginItemSettings.refresh()
                     }
-                if loginItemSettings.isEnabled {
-                    Toggle("Start minimised", isOn: $settings.startMinimized)
-                    SettingsSecondaryText("Only applies to login launches. Manual launches from the Dock or Finder always show the window.")
-                }
+                Toggle("Start minimised", isOn: $settings.startMinimized)
 
                 if loginItemSettings.requiresApproval {
                     Label("Approve SwiftMiner in System Settings to finish enabling login launch.", systemImage: "exclamationmark.triangle.fill")
@@ -469,7 +466,7 @@ private struct MiningSettingsView: View {
                 Toggle("Spread miners across streams", isOn: $settings.avoidDuplicateStreams)
                 SettingsSecondaryText("Avoids putting multiple miners on the same stream when a campaign has more than four verified live channels. Small restricted campaigns can still share streams.")
 
-                Toggle("Stall recovery", isOn: $settings.antiStallRecoveryEnabled)
+                Toggle("Anti-stall recovery", isOn: $settings.antiStallRecoveryEnabled)
                     .onChange(of: settings.antiStallRecoveryEnabled) { _, newValue in
                         Task { await navigation.minerManager.updateAntiStallRecovery(enabled: newValue) }
                     }

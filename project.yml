@@ -3,7 +3,6 @@ name: SwiftMiner
 options:
   bundleIdPrefix: com.swiftminer
   createIntermediateGroups: true
-  xcodeVersion: "2640"
 
 packages:
   Sparkle:
@@ -48,13 +47,6 @@ targets:
       path: Sources/SwiftMiner/Info.plist
       properties:
         CFBundleIconFile: SwiftMiner
-        # Sparkle keys MUST live in Info.plist itself — INFOPLIST_KEY_* build
-        # settings are ignored when INFOPLIST_FILE is set. The $(VAR) tokens
-        # are expanded by Xcode's ProcessInfoPlistFile step at build time.
-        SUEnableAutomaticChecks: true
-        SUAutomaticallyUpdate: true
-        SUFeedURL: $(SPARKLE_FEED_URL)
-        SUPublicEDKey: $(SPARKLE_PUBLIC_ED_KEY)
     settings:
       base:
         PRODUCT_NAME: SwiftMiner
@@ -63,10 +55,14 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.swiftminer.app
         MACOSX_DEPLOYMENT_TARGET: "26.0"
         MARKETING_VERSION: "1.21"
-        CURRENT_PROJECT_VERSION: "2026050512"
+        CURRENT_PROJECT_VERSION: "2026050509"
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: SwiftMiner
         INFOPLIST_KEY_CFBundleName: SwiftMiner
+        INFOPLIST_KEY_SUEnableAutomaticChecks: YES
+        INFOPLIST_KEY_SUAutomaticallyUpdate: YES
+        INFOPLIST_KEY_SUFeedURL: $(SPARKLE_FEED_URL)
+        INFOPLIST_KEY_SUPublicEDKey: $(SPARKLE_PUBLIC_ED_KEY)
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_ENTITLEMENTS: ""
         ENABLE_HARDENED_RUNTIME: YES

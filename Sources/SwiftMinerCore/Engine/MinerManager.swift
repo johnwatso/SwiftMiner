@@ -1053,7 +1053,7 @@ public final class MinerManager {
 
             antiStallRecoveryInFlight.insert(miner.id)
             lastAntiStallRecoveryAt[miner.id] = Date()
-            onLogMessage?(miner.id, "Stall recovery: restarting miner because \(reason).")
+            onLogMessage?(miner.id, "Anti-stall recovery: restarting miner because \(reason).")
 
             await restartMinerForAntiStallRecovery(minerId: miner.id)
             antiStallRecoveryInFlight.remove(miner.id)
@@ -1096,14 +1096,14 @@ public final class MinerManager {
                 antiStallRecoveryEnabled: antiStallRecoveryEnabled,
                 prioritiseFollowedStreamers: prioritiseFollowedStreamers
             )
-            onLogMessage?(minerId, "Stall recovery: miner relaunched.")
+            onLogMessage?(minerId, "Anti-stall recovery: miner relaunched.")
         } catch {
             let needsAuth = Self.requiresManualReauth(for: error)
             if let miner = getMiner(id: minerId) {
                 await dataCoordinator.updateAccountNeedsAuth(accountId: miner.accountId, needsAuth: needsAuth)
             }
             updateMinerStatus(minerId: minerId, status: .error, needsAuth: needsAuth)
-            onLogMessage?(minerId, "Stall recovery failed: \(error.localizedDescription)")
+            onLogMessage?(minerId, "Anti-stall recovery failed: \(error.localizedDescription)")
         }
     }
 
