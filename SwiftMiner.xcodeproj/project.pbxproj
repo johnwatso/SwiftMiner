@@ -49,6 +49,7 @@
 		5D719D19813209223BA476F9 /* Progress.swift in Sources */ = {isa = PBXBuildFile; fileRef = E226CD7402250468FFD4C2DF /* Progress.swift */; };
 		66099E7E794758FB7B605F10 /* MinerHealthCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7CF370FB28AF15B644BAD3E /* MinerHealthCard.swift */; };
 		67256EB1FAB265EDAFAF6A64 /* MinerLoginService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBE90C8FED1ED1FE9B88FD3B /* MinerLoginService.swift */; };
+		684EB4275963160CDAECA967 /* SparkleConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19C66F8182D8FB572197B2EC /* SparkleConfigTests.swift */; };
 		68E24E9AD5F109B1513A1099 /* CampaignView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B27F8A9F37F60E7246A380FB /* CampaignView.swift */; };
 		68FF16EB2CA848AA6369851F /* AdminView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D7BDAE584D407975194C00 /* AdminView.swift */; };
 		6C82100D145D56BA53B32CFA /* AdminOverviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F3C454705689384F79FB105 /* AdminOverviewView.swift */; };
@@ -80,6 +81,7 @@
 		ABC825A2520C21C44782D27B /* libSwiftMinerCore.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 8F71839BFA92F8055C552374 /* libSwiftMinerCore.a */; };
 		AD395777B7BEDF7B4230F15D /* SQLiteTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E8311BE15D3372DD6D2F2CA /* SQLiteTokenStore.swift */; };
 		ADAE5122C334F0F8BE0C4296 /* MergeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B2A62D9979ADDE4DE784D49 /* MergeService.swift */; };
+		AF6AD760D99F6D20299BA9C1 /* TwitchClientFingerprint.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71FA5DF07B124B51C6C833B4 /* TwitchClientFingerprint.swift */; };
 		B0B3F31B7C6EC4F7BED6F11B /* DropsServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D227823A0CF0DEDA834B486B /* DropsServiceTests.swift */; };
 		B16F074B9745C37F55F481B7 /* PubSubClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C67349DAA237D14A6C21D75 /* PubSubClient.swift */; };
 		B5073D6F750D1504525FC42D /* MinerAttention.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0528E48497586BD35DE82149 /* MinerAttention.swift */; };
@@ -192,6 +194,7 @@
 		0EA664151CCCAF2FE4D6598B /* MinerStateCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinerStateCard.swift; sourceTree = "<group>"; };
 		0F1E410973A71500C0EA0280 /* TDMCookieParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TDMCookieParser.swift; sourceTree = "<group>"; };
 		14199B9CF6D97675DE0107D4 /* SwiftMiner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SwiftMiner.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		19C66F8182D8FB572197B2EC /* SparkleConfigTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SparkleConfigTests.swift; sourceTree = "<group>"; };
 		1A41A42D94BFB27670F81465 /* InventoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InventoryService.swift; sourceTree = "<group>"; };
 		1B2A62D9979ADDE4DE784D49 /* MergeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MergeService.swift; sourceTree = "<group>"; };
 		1C43EA5DBD5E9A09117B9798 /* GitHubIssueReporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitHubIssueReporter.swift; sourceTree = "<group>"; };
@@ -231,6 +234,7 @@
 		65FB3E563B38E973DD424620 /* MinersOverviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinersOverviewView.swift; sourceTree = "<group>"; };
 		66D3CD478576ED0783BFEED7 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		703A0B41A5D6897C4E31F17D /* LogExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogExporter.swift; sourceTree = "<group>"; };
+		71FA5DF07B124B51C6C833B4 /* TwitchClientFingerprint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwitchClientFingerprint.swift; sourceTree = "<group>"; };
 		758AF13E9334C95906C1A325 /* SwiftMinerCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftMinerCore.swift; sourceTree = "<group>"; };
 		7A5BB01DA1C922DCEF69AD69 /* MinerManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinerManager.swift; sourceTree = "<group>"; };
 		7CAC406A470B4B2EDE847A9E /* Account.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Account.swift; sourceTree = "<group>"; };
@@ -491,6 +495,7 @@
 				453B2373B127F7ABA8415C06 /* TokenStore.swift */,
 				AC5FB969FDB3C8049A2145DB /* TwitchAPIClient.swift */,
 				5334DA8A9CA3CCF39BBF155F /* TwitchAuthService.swift */,
+				71FA5DF07B124B51C6C833B4 /* TwitchClientFingerprint.swift */,
 				9AF512C0F93E6918AA6CAADF /* WatchSessionManager.swift */,
 			);
 			path = Services;
@@ -538,6 +543,7 @@
 				CD5023EC681D53196C9F4350 /* PrimaryStateResolverTests.swift */,
 				550FD9B06CAA7B5FEE2FA010 /* ServiceTests.swift */,
 				0CADF2275D2FBA60D333419B /* SpadeBeaconServiceTests.swift */,
+				19C66F8182D8FB572197B2EC /* SparkleConfigTests.swift */,
 				F01C7FACEB7BCCB9E95430C4 /* SwiftMinerCoreTests.swift */,
 				9289E4C22C90837BB4EF95A9 /* TwitchAuthServiceTests.swift */,
 				41472EDA22183F56029E12DB /* WarningSuppressionTests.swift */,
@@ -820,6 +826,7 @@
 				C0F529779360F3735964B8BA /* TokenStore.swift in Sources */,
 				98A4D1273566562A5BD80058 /* TwitchAPIClient.swift in Sources */,
 				45FD9D1101884227FE78D046 /* TwitchAuthService.swift in Sources */,
+				AF6AD760D99F6D20299BA9C1 /* TwitchClientFingerprint.swift in Sources */,
 				C10779BDD5BEFE2DF69FBBD4 /* WatchSessionManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -914,6 +921,7 @@
 				0F4C7F2D087B2AFAEBDBE260 /* PrimaryStateResolverTests.swift in Sources */,
 				9C2BE5015F633DB93BE09E6F /* ServiceTests.swift in Sources */,
 				BEC429844CA9C889A06D7E60 /* SpadeBeaconServiceTests.swift in Sources */,
+				684EB4275963160CDAECA967 /* SparkleConfigTests.swift in Sources */,
 				B6A2FFB252B8C1507FD9C478 /* SwiftMinerCoreTests.swift in Sources */,
 				9D9B628CB3A53990DC0082E0 /* TwitchAuthServiceTests.swift in Sources */,
 				C4765CF3DD0FB022C589ED72 /* WarningSuppressionTests.swift in Sources */,
@@ -1010,14 +1018,9 @@
 				CURRENT_PROJECT_VERSION = 2026050516;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
-				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = SwiftMiner;
 				INFOPLIST_KEY_CFBundleName = SwiftMiner;
-				INFOPLIST_KEY_SUAutomaticallyUpdate = YES;
-				INFOPLIST_KEY_SUEnableAutomaticChecks = YES;
-				INFOPLIST_KEY_SUFeedURL = "$(SPARKLE_FEED_URL)";
-				INFOPLIST_KEY_SUPublicEDKey = "$(SPARKLE_PUBLIC_ED_KEY)";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -1175,14 +1178,9 @@
 				CURRENT_PROJECT_VERSION = 2026050516;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
-				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = SwiftMiner;
 				INFOPLIST_KEY_CFBundleName = SwiftMiner;
-				INFOPLIST_KEY_SUAutomaticallyUpdate = YES;
-				INFOPLIST_KEY_SUEnableAutomaticChecks = YES;
-				INFOPLIST_KEY_SUFeedURL = "$(SPARKLE_FEED_URL)";
-				INFOPLIST_KEY_SUPublicEDKey = "$(SPARKLE_PUBLIC_ED_KEY)";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
