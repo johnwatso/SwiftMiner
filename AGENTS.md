@@ -17,7 +17,7 @@ After `xcodegen` runs, SourceKit may briefly surface stale diagnostics — most 
 
 ## Versioning
 
-`MARKETING_VERSION` is manually owned by the user. Do not invent or bump it unless the user explicitly asks.
+`MARKETING_VERSION` is manually owned by the user. Do not bump it automatically. You may *suggest* a new marketing version when a change would normally warrant one, but wait for explicit user confirmation before editing it.
 
 `CURRENT_PROJECT_VERSION` is timestamp-based and should be updated whenever making or preparing code, project, appcast, or release-note changes.
 
@@ -70,3 +70,15 @@ Avoid committing unrelated XcodeGen metadata drift. In particular, do not let pa
 - `CURRENT_PROJECT_VERSION`
 - Sparkle appcast/public-key Info.plist settings
 - existing scheme metadata or build settings unrelated to the requested change
+
+## Info.plist Gotcha: `INFOPLIST_KEY_*` Is Ignored Here
+
+This target sets a custom `INFOPLIST_FILE` (`Sources/SwiftMiner/Info.plist`). When `INFOPLIST_FILE` is set, Xcode **silently ignores** all `INFOPLIST_KEY_*` build settings — they only apply when Info.plist is fully auto-generated. Adding `INFOPLIST_KEY_SUFeedURL` to the `settings:` block will compile and produce no warning, but the key will **not** appear in the built `Info.plist`, breaking Sparkle (and any other consumer that reads via `Bundle.infoDictionary`).
+
+Add Info.plist keys via the xcodegen `info: properties:` block instead — that writes them into `Sources/SwiftMiner/Info.plist` on regen, and `$(VAR)` macros are expanded by the `ProcessInfoPlistFile` build step at build time.
+
+Always confirm new Info.plist keys land in the built bundle:
+
+```sh
+/usr/libexec/PlistBuddy -c 'Print <KEY>' ~/Library/Developer/Xcode/DerivedData/SwiftMiner-*/Build/Products/Debug/SwiftMiner.app/Contents/Info.plist
+```
