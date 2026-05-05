@@ -299,6 +299,10 @@ public final class Settings: ObservableObject {
     @AppStorage("swiftBotWebhookURL", store: Settings.appStorageStore)
     public var swiftBotWebhookURL: String = ""
 
+    /// Local SwiftMiner API endpoint SwiftBot calls for miner status and setup.
+    @AppStorage("swiftMinerAPIEndpoint", store: Settings.appStorageStore)
+    public var swiftMinerAPIEndpoint: String = "http://127.0.0.1:8080"
+
     /// Shared HMAC-SHA256 secret for webhook request signing
     @AppStorage("swiftBotHmacSecret", store: Settings.appStorageStore)
     public var swiftBotHmacSecret: String = ""
@@ -744,6 +748,7 @@ public final class Settings: ObservableObject {
         swiftBotEnabled = false
         swiftBotEndpoint = ""
         swiftBotWebhookURL = ""
+        swiftMinerAPIEndpoint = "http://127.0.0.1:8080"
         swiftBotHmacSecret = ""
         swiftMinerAPIKey = ""
         gamePreferencesData = "[]"

@@ -130,11 +130,6 @@ public actor SQLiteManager {
             metadata_json TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
-        CREATE INDEX IF NOT EXISTS idx_audit_operator ON admin_audit_log(operator_id);
-        CREATE INDEX IF NOT EXISTS idx_audit_twitch_id ON admin_audit_log(twitch_id);
-        CREATE INDEX IF NOT EXISTS idx_audit_to_discord ON admin_audit_log(to_discord_id);
-        CREATE INDEX IF NOT EXISTS idx_audit_action_type ON admin_audit_log(action_type);
-        CREATE INDEX IF NOT EXISTS idx_audit_created_at ON admin_audit_log(created_at);
 
         -- 11. user_campaign_decisions
         CREATE TABLE IF NOT EXISTS user_campaign_decisions (
@@ -196,10 +191,12 @@ public actor SQLiteManager {
         );
         """)
 
+        if !columnExists("action_type", in: "admin_audit_log") {
+            try migration1_recreateAdminAuditLog()
+        }
+        try createAdminAuditIndexes()
+
         if !isMigrationApplied(1) {
-            if !columnExists("action_type", in: "admin_audit_log") {
-                try migration1_recreateAdminAuditLog()
-            }
             try execute("INSERT OR IGNORE INTO _schema_migrations (version) VALUES (1);")
         }
 
@@ -277,6 +274,7 @@ public actor SQLiteManager {
     }
 
     private func migration1_recreateAdminAuditLog() throws {
+        try execute("DROP TABLE IF EXISTS admin_audit_log_new;")
         try execute("""
         CREATE TABLE admin_audit_log_new (
             id TEXT PRIMARY KEY,
@@ -297,6 +295,16 @@ public actor SQLiteManager {
         """)
         try execute("DROP TABLE admin_audit_log;")
         try execute("ALTER TABLE admin_audit_log_new RENAME TO admin_audit_log;")
+        try execute("""
+        CREATE INDEX IF NOT EXISTS idx_audit_operator ON admin_audit_log(operator_id);
+        CREATE INDEX IF NOT EXISTS idx_audit_twitch_id ON admin_audit_log(twitch_id);
+        CREATE INDEX IF NOT EXISTS idx_audit_to_discord ON admin_audit_log(to_discord_id);
+        CREATE INDEX IF NOT EXISTS idx_audit_action_type ON admin_audit_log(action_type);
+        CREATE INDEX IF NOT EXISTS idx_audit_created_at ON admin_audit_log(created_at);
+        """)
+    }
+
+    private func createAdminAuditIndexes() throws {
         try execute("""
         CREATE INDEX IF NOT EXISTS idx_audit_operator ON admin_audit_log(operator_id);
         CREATE INDEX IF NOT EXISTS idx_audit_twitch_id ON admin_audit_log(twitch_id);
