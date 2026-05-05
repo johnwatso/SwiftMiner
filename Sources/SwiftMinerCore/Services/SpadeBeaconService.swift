@@ -21,9 +21,16 @@ public actor SpadeBeaconService {
 
     private let urlSession: URLSession
 
-    /// Android User-Agent for this service instance. Picked once at init
-    /// so all Spade requests in a session share the same fingerprint.
-    private let userAgent = TwitchClientFingerprint.randomAndroidUserAgent()
+    /// Android User-Agent for this service instance. Starts as a random pick
+    /// and is swapped to the sticky-per-account allocation via
+    /// `setAccountId(_:)` once the authenticated account is known, so all
+    /// Spade traffic for a miner shares a fingerprint with its auth/API.
+    private var userAgent = TwitchClientFingerprint.randomAndroidUserAgent()
+
+    /// Switches this service's UA to the sticky allocation for `accountId`.
+    public func setAccountId(_ accountId: String) {
+        userAgent = TwitchClientFingerprint.shared.userAgent(for: accountId)
+    }
 
     /// Cache: channel login → spade URL
     private var spadeURLCache: [String: URL] = [:]
@@ -83,7 +90,7 @@ public actor SpadeBeaconService {
     ///   1. GET `https://www.twitch.tv/<login>`
     ///   2. Check if `spade_url` is directly in the HTML (typical for mobile/minimal views)
     ///   3. Find the `settings.js`-style bundle URL in the page HTML
-    ///   4. GET that bundle and regex-extract `spade_url` / `beacon_url`
+    ///   4. GET that bundle and regex-extract `spade_url`
     private func extractSpadeURL(channelLogin: String) async throws -> URL {
         // Step 1: fetch the channel page
         let pageURL = URL(string: "https://www.twitch.tv/\(channelLogin)")!
@@ -125,7 +132,7 @@ public actor SpadeBeaconService {
             scriptURLs = [settingsURL] + scriptURLs.filter { $0 != settingsURL }
         }
 
-        // Step 4: scan each bundle for spade_url / beacon_url
+        // Step 4: scan each bundle for spade_url
         for scriptURLString in scriptURLs.prefix(5) { // check at most 5 bundles
             guard let scriptURL = URL(string: scriptURLString) else { continue }
             var scriptRequest = URLRequest(url: scriptURL)

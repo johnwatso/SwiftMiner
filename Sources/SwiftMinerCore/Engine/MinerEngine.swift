@@ -274,6 +274,8 @@ public actor MinerEngine {
     public func setAccount(_ account: Account) async {
         self.currentAccount = account
         await authService.setCurrentAccount(account)
+        await authService.setAccountId(account.id)
+        await apiClient.setAccountId(account.id)
         await dropsService.setAccountId(account.id)
         await apiClient.updateAccessToken(account.accessToken)
         await apiClient.setUserLogin(account.username)
@@ -341,6 +343,8 @@ public actor MinerEngine {
         if let account = currentAccount {
             await watchSessionManager.setUserId(account.id)
             await apiClient.setUserLogin(account.username)
+            await apiClient.setAccountId(account.id)
+            await authService.setAccountId(account.id)
         }
 
         // Start main mining loop

@@ -10,9 +10,17 @@ public actor TwitchAPIClient {
     /// Limits GQL requests to ≤5 per second to avoid Twitch rate-limiting
     private let rateLimiter = RateLimiter(maxRequests: 5, per: 1.0)
 
-    /// Android User-Agent that matches the Android client ID. Picked once at
-    /// service init so the same UA is reused for this account's lifetime.
-    private let userAgent = TwitchClientFingerprint.randomAndroidUserAgent()
+    /// Android User-Agent that matches the Android client ID. Starts as a
+    /// random pick for pre-login traffic; swapped to a sticky-per-account UA
+    /// from the shared pool once `setAccountId(_:)` is called.
+    private var userAgent = TwitchClientFingerprint.randomAndroidUserAgent()
+
+    /// Switches this client's UA to the sticky allocation for `accountId` so
+    /// auth/api/spade traffic for the same miner share a fingerprint and
+    /// concurrent miners spread across the pool.
+    public func setAccountId(_ accountId: String) {
+        userAgent = TwitchClientFingerprint.shared.userAgent(for: accountId)
+    }
 
     /// Cached integrity token and its expiry
     private var integrityToken: String?

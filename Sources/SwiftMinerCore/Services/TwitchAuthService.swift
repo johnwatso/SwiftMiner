@@ -12,9 +12,15 @@ public actor TwitchAuthService {
     private let deviceCodeURL = URL(string: "https://id.twitch.tv/oauth2/device")!
     private let validateURL = URL(string: "https://id.twitch.tv/oauth2/validate")!
 
-    /// Android User-Agent that matches the Android client ID. Picked once at
-    /// service init so the same UA is reused for this account's lifetime.
-    private let userAgent = TwitchClientFingerprint.randomAndroidUserAgent()
+    /// Android User-Agent that matches the Android client ID. Starts as a
+    /// random pick (device-code flow has no account yet); swapped to a
+    /// sticky-per-account UA once `setAccountId(_:)` is called.
+    private var userAgent = TwitchClientFingerprint.randomAndroidUserAgent()
+
+    /// Switches this service's UA to the sticky allocation for `accountId`.
+    public func setAccountId(_ accountId: String) {
+        userAgent = TwitchClientFingerprint.shared.userAgent(for: accountId)
+    }
 
     /// Generate a random 32-char lowercase hex string (matches Twitch's "unique_id" cookie format).
     private static func randomDeviceId() -> String {

@@ -94,8 +94,13 @@ private var sessionCounter: UInt64 = 0
 /// The authenticated user ID — required for the Spade beacon payload
 public var userId: String = ""
 
-/// Set the user ID (actor-isolated setter for cross-actor use)
-public func setUserId(_ id: String) { userId = id }
+/// Set the user ID (actor-isolated setter for cross-actor use). Also
+/// switches the Spade beacon to the sticky-per-account UA so this miner's
+/// watch traffic shares a fingerprint with its auth/API requests.
+public func setUserId(_ id: String) {
+    userId = id
+    Task { await spadeBeacon.setAccountId(id) }
+}
 
 /// Callbacks
 public var onProgressUpdate: (@Sendable (Progress) -> Void)?
