@@ -29,7 +29,7 @@ struct SidebarView: View {
             SidebarItemSpec(id: .events, title: "Activity Log", systemImage: "list.bullet.rectangle.fill"),
         ]
         if settings.swiftBotEnabled {
-            items.append(SidebarItemSpec(id: .admin, title: "Admin Beta", systemImage: "lock.shield.fill"))
+            items.append(SidebarItemSpec(id: .admin, title: "Discord", systemImage: "checkmark.message.fill"))
         }
         return items
     }
