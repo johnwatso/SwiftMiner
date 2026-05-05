@@ -43,6 +43,8 @@
     section.history { --accent: #b76710; }
     section.updates { --accent: #5f5ac8; }
     section.status { --accent: #0b7894; }
+    section.reliability { --accent: #8c3a3a; }
+    section.menus { --accent: #4a6fa5; }
     h2 {
       display: flex;
       align-items: center;
@@ -92,7 +94,7 @@
 <body>
   <main>
     <h1>SwiftMiner 1.21</h1>
-    <p class="meta">Version 1.21 · Build 2026050509</p>
+    <p class="meta">Version 1.21 · Build 2026050512</p>
     <p class="intro">A brighter quality-of-life release for smoother priorities, steadier artwork, calmer Twitch search, clearer account reminders, easier miner naming, and release notes you can open right inside SwiftMiner.</p>
 
     <section class="priority">
@@ -153,14 +155,35 @@
       <ul>
         <li>Adds a What's New window in the app menu so the current release notes can be opened directly from SwiftMiner.</li>
         <li>Derives release-note links from the configured stable or beta Sparkle feed, keeping in-app notes aligned with the selected update channel.</li>
-        <li>Adds an Anti-stall recovery setting, enabled by default, that restarts an individual miner when it appears stuck after a long progress stall or recoverable network error.</li>
+        <li>Adds a Stall recovery setting, enabled by default, that restarts an individual miner when it appears stuck after a long progress stall or recoverable network error.</li>
+        <li>Restricts Start minimised to login launches and only shows the option once Start at login is enabled, so manual launches from the Dock or Finder always open the window.</li>
         <li>Adds Software Updates controls for choosing the stable or beta Sparkle feed.</li>
         <li>Adds settings for update prompts and unattended update installs when macOS permits them.</li>
         <li>Adds an Advanced settings action to clear cached drop history without removing accounts or app preferences.</li>
         <li>Adds in-app TipKit hints that explain adding miners, prioritising games, drag-to-reorder, miner nicknames, drop filters, and the Steam artwork option, with a General settings toggle to disable them.</li>
         <li>Tidies the Advanced settings layout with grouped sections, consistent labels, and clearer destructive actions.</li>
         <li>Uses miner nicknames everywhere a miner is shown, including the Drops campaign cards and the Activity Log.</li>
-        <li>Updates the stable Sparkle appcast and release-note links for SwiftMiner 1.21 build 2026050509.</li>
+        <li>Updates the stable Sparkle appcast and release-note links for SwiftMiner 1.21 build 2026050512.</li>
+      </ul>
+    </section>
+
+    <section class="reliability">
+      <h2><span class="badge" aria-hidden="true">🛡️</span> Mining Reliability</h2>
+      <p class="summary">Prevents miners from getting stuck when Twitch reports an account as linked but no active drop session ever starts.</p>
+      <ul>
+        <li>Detects false-positive account connections: if a campaign never produces an active drop session within the first few minutes, the miner fast-fails and tries a different campaign instead of waiting indefinitely.</li>
+        <li>Adds a 1-hour cooldown for campaigns that empirically fail, so the miner does not immediately re-select a campaign that cannot produce drops.</li>
+        <li>Uses a tighter 5-minute stall threshold for sessions that have never observed an active drop, accelerating recovery from bad campaign selections.</li>
+        <li>Syncs inventory state before checking for externally claimed drops during stall detection, preventing stale local data from masking genuine stalls.</li>
+      </ul>
+    </section>
+
+    <section class="menus">
+      <h2><span class="badge" aria-hidden="true">🧭</span> Menus & Help</h2>
+      <p class="summary">Faster paths for sending feedback, with a tidier menu bar.</p>
+      <ul>
+        <li>Adds a Help &gt; Raise Issue on GitHub… action that opens the SwiftMiner issues page in your browser, prefilled with a bug-report template and your current version, build, and macOS version.</li>
+        <li>Removes the unused View menu, which previously held only macOS toolbar and sidebar toggles that didn't apply to SwiftMiner.</li>
       </ul>
     </section>
 

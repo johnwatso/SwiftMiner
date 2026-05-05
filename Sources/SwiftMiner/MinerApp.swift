@@ -1,4 +1,5 @@
 import AppKit
+import ServiceManagement
 import SwiftUI
 import SwiftMinerCore
 import TipKit
@@ -88,7 +89,15 @@ struct MinerApp: App {
                 Button("Export Diagnostic Logs…") {
                     LogExporter.presentSavePanel(navigation: navigation)
                 }
+                Button("Raise Issue on GitHub…") {
+                    GitHubIssueReporter.openNewIssue()
+                }
             }
+            // The default View menu only contains toolbar/sidebar toggles that
+            // don't apply to this app — replace its contents with nothing so it
+            // collapses out of the menu bar.
+            CommandGroup(replacing: .toolbar) {}
+            CommandGroup(replacing: .sidebar) {}
         }
 
         Window("What's New", id: AppWindowID.releaseNotes) {
@@ -124,9 +133,17 @@ struct MinerApp: App {
         guard !didApplyLaunchWindowPreference else { return }
         didApplyLaunchWindowPreference = true
 
+        guard settings.startMinimized else { return }
+
         // Only auto-minimise when the app was launched at login. Manual launches
-        // (Dock, Finder, Spotlight) should always show the window.
-        guard settings.startMinimized, launchContext.wasLaunchedAtLogin else { return }
+        // (Dock, Finder, Spotlight) should always show the window. We require
+        // BOTH signals: NSApplication.launchIsDefaultUserInfoKey AND an active
+        // SMAppService registration. The userInfo key alone has been observed
+        // to mis-report on manual launches, so the registration check acts as
+        // a structural backstop — `Start minimised` is meaningless if the app
+        // isn't actually registered as a login item.
+        guard launchContext.wasLaunchedAtLogin else { return }
+        guard SMAppService.mainApp.status == .enabled else { return }
 
         DispatchQueue.main.async {
             NSApp.windows

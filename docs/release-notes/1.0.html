@@ -36,6 +36,11 @@
       background: rgba(255, 255, 255, 0.42);
       border-left: 5px solid var(--accent, #0a67a3);
     }
+    section.welcome { --accent: #0a7cbb; }
+    section.mining { --accent: #1c8c73; }
+    section.accounts { --accent: #b64b9b; }
+    section.interface { --accent: #5f5ac8; }
+    section.updates { --accent: #b76710; }
     section.docs { --accent: #527400; }
     h2 {
       display: flex;
@@ -88,8 +93,59 @@
 <body>
   <main>
     <h1>SwiftMiner 1.0</h1>
-    <p class="meta">Version 1.0</p>
-    <p class="intro">The first SwiftMiner release, with the documentation tightened up so the macOS architecture requirements are clear from day one.</p>
+    <p class="meta">Version 1.0 · Initial release</p>
+    <p class="intro">The first public release of SwiftMiner — a native macOS app for farming Twitch Drops automatically across one or more accounts, with a clear dashboard for tracking what is mining, what is ready to claim, and what has already been completed.</p>
+
+    <section class="welcome">
+      <h2><span class="badge" aria-hidden="true">👋</span> Welcome to SwiftMiner</h2>
+      <p class="summary">A purpose-built macOS Drops miner, written in Swift and SwiftUI for Apple Silicon.</p>
+      <ul>
+        <li>Runs as a native macOS app — no Electron wrapper, no embedded browser, no background Chrome instance.</li>
+        <li>Built for Apple Silicon (M-series) Macs running macOS 26 or later.</li>
+        <li>Ships as a signed and notarized release build so Gatekeeper opens it cleanly.</li>
+      </ul>
+    </section>
+
+    <section class="mining">
+      <h2><span class="badge" aria-hidden="true">⛏️</span> Drops Mining</h2>
+      <p class="summary">Watches Twitch streams on your behalf and claims rewards as they unlock.</p>
+      <ul>
+        <li>Watches Twitch streams to farm Drops automatically without keeping a browser tab open.</li>
+        <li>Fetches active campaigns and account eligibility directly from Twitch.</li>
+        <li>Prioritises campaigns based on time remaining and your configured priority list.</li>
+        <li>Selects a verified live stream for the active campaign and tracks watch progress through Twitch APIs.</li>
+        <li>Automatically claims Drops the moment they complete, so you don't have to.</li>
+        <li>Tracks in-progress, claimable, and completed Drops in one unified view.</li>
+      </ul>
+    </section>
+
+    <section class="accounts">
+      <h2><span class="badge" aria-hidden="true">👤</span> Multiple Accounts</h2>
+      <p class="summary">Run several Twitch accounts side-by-side, each as its own independent miner.</p>
+      <ul>
+        <li>Supports multiple accounts running in parallel, each with its own miner engine and progress.</li>
+        <li>Uses Twitch device-code login — no embedded web view and no password handling inside SwiftMiner.</li>
+        <li>Stores credentials securely in the macOS Keychain.</li>
+      </ul>
+    </section>
+
+    <section class="interface">
+      <h2><span class="badge" aria-hidden="true">🖥️</span> Native Interface</h2>
+      <p class="summary">A SwiftUI dashboard plus a menu bar companion for at-a-glance status.</p>
+      <ul>
+        <li>Provides a main window for managing miners, campaigns, and Drops.</li>
+        <li>Includes a menu bar item that surfaces miner status without opening the main window.</li>
+        <li>Supports running quietly in the background while still showing live progress.</li>
+      </ul>
+    </section>
+
+    <section class="updates">
+      <h2><span class="badge" aria-hidden="true">🔄</span> Updates Built In</h2>
+      <p class="summary">Stays current through Sparkle so future releases install themselves.</p>
+      <ul>
+        <li>Supports Sparkle update checks, automatic background updates, and unattended installs when macOS permits them.</li>
+      </ul>
+    </section>
 
     <section class="docs">
       <h2><span class="badge" aria-hidden="true">📘</span> Documentation</h2>
