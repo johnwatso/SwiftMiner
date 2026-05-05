@@ -34,18 +34,6 @@ public actor MinerEngine {
     public private(set) var allCampaigns: [Campaign] = []
     private var progressEventTracker = DropProgressEventTracker()
 
-    /// Tracks empirically-failed campaigns to prevent infinite re-selection loops.
-    /// A campaign is added when `fetchCurrentDrop` never returns data despite
-    /// dashboard `isAccountConnected=true`. Suppressed for `campaignFailureCooldownDuration`.
-    private var campaignFailureCooldowns: [String: Date] = [:]
-    static let campaignFailureCooldownDuration: TimeInterval = 3600 // 1 hour
-
-    /// Fast-fail threshold for campaigns where `fetchCurrentDrop` never returns
-    /// an active drop session (false-positive account connection). ~3 minutes.
-    static let warmupMaxEmptyDropPolls = 3
-    /// Tightened stall threshold when a session has never observed an active drop.
-    static let warmupStallThresholdMinutes = 5
-
     // Configuration
     private let campaignCheckInterval: UInt64 = 300 * 1_000_000_000 // 5 minutes
     private let claimCheckInterval: UInt64 = 2 * 60 * 1_000_000_000 // 2 minutes (conditional polling)
@@ -793,7 +781,6 @@ public actor MinerEngine {
                 var lastGqlPoll = Date()
                 var lastCampaignReevaluation = Date()
                 var emptyCurrentDropPolls = 0
-                var hasObservedActiveDropSession = false
                 while await watchSessionManager.isWatching && !shouldSwitchChannel {
                     // Check every 30 seconds for interrupts or polls
                     try? await Task.sleep(nanoseconds: 30 * 1_000_000_000)
@@ -805,7 +792,6 @@ public actor MinerEngine {
                         do {
                             if let current = try await apiClient.fetchCurrentDrop(channelId: channel.id) {
                                 emptyCurrentDropPolls = 0
-                                hasObservedActiveDropSession = true
                                 let campaignId = session?.currentCampaignId
                                 let observation = DropProgressObservation(
                                     campaignId: campaignId,
@@ -845,21 +831,12 @@ public actor MinerEngine {
 
                                 if acknowledged {
                                     emptyCurrentDropPolls = 0
-                                    hasObservedActiveDropSession = true // inventory progress implies an active session existed
                                 } else {
                                     emptyCurrentDropPolls += 1
                                     if emptyCurrentDropPolls == 1 {
                                         log("Awaiting Twitch drop progress confirmation for \(campaign.name) on \(channel.displayName)")
                                     } else if emptyCurrentDropPolls % 5 == 0 {
                                         log("⚠️ Twitch still has not reported an active drop session after \(emptyCurrentDropPolls) progress checks")
-                                    }
-                                    // Fast-fail for false-positive account connections:
-                                    // If we've never seen an active drop session and have polled enough times,
-                                    // this campaign is likely not actually connected. Cool it down.
-                                    if !hasObservedActiveDropSession && emptyCurrentDropPolls >= Self.warmupMaxEmptyDropPolls {
-                                        log("🚫 Fast-fail: '\(campaign.name)' never produced an active drop session after \(emptyCurrentDropPolls) checks. Cooling down for 1h.")
-                                        campaignFailureCooldowns[campaign.id] = Date().addingTimeInterval(Self.campaignFailureCooldownDuration)
-                                        shouldSwitchChannel = true
                                     }
                                 }
                             }
@@ -874,10 +851,7 @@ public actor MinerEngine {
                     let elapsed = Date().timeIntervalSince(lastProgressUpdateAt)
                     extraMinutesWatched = Int(elapsed / 60)
 
-                    // Tighten stall threshold for sessions that have never observed an active drop.
-                    // This accelerates escape from false-positive `isAccountConnected` states.
-                    let stallThreshold = Self.stallThresholdMinutes(hasObservedActiveDropSession: hasObservedActiveDropSession)
-                    if extraMinutesWatched >= stallThreshold {
+                    if extraMinutesWatched >= Self.maxExtraMinutes {
                         log("⚠️ Progress stalled for \(extraMinutesWatched) mins. Refreshing inventory to check for external claims...")
                         
                         // ENHANCEMENT: Force inventory refresh before switching channels
@@ -886,13 +860,9 @@ public actor MinerEngine {
                             // Force fresh inventory snapshot fetch (includes benefitIDs)
                             let inventoryService = await dropsService.getInventoryService()
                             let freshInventory = try await inventoryService.fetchInventory(forceRefresh: true)
-
-                            // Sync local campaign state with fresh inventory BEFORE checking for newly claimed drops.
-                            // This prevents stale `isClaimed` values from causing false positives.
-                            syncCampaigns(with: freshInventory)
-
+                            
                             log("📋 Inventory refreshed: \(freshInventory.benefitIDs.count) claimed benefits, \(freshInventory.progress.count) in-progress drops")
-
+                            
                             // Check if ANY drop in current campaign was recently claimed
                             // This handles the case where user claimed via Twitch UI or another device
                             let campaignDrops = allCampaigns.first { $0.id == session?.currentCampaignId }?.drops ?? []
@@ -907,8 +877,6 @@ public actor MinerEngine {
                                 // Don't switch channel - continue mining remaining drops in campaign
                             } else {
                                 log("🔄 Progress genuinely stalled (no external claims detected). Switching channel.")
-                                // Mark campaign as empirically failed so we don't immediately re-select it
-                                campaignFailureCooldowns[campaign.id] = Date().addingTimeInterval(Self.campaignFailureCooldownDuration)
                                 lastSwitchReason = .stallDetected(minutes: extraMinutesWatched)
                                 lastSwitchAt = Date()
                                 shouldSwitchChannel = true
@@ -1146,51 +1114,6 @@ public actor MinerEngine {
         }
     }
     
-    // MARK: - Internal Testability Helpers
-
-    /// Returns the stall-detection threshold in minutes based on whether an active
-    /// drop session has been observed. Tightened for never-active sessions to escape
-    /// false-positive `isAccountConnected` states faster.
-    internal static func stallThresholdMinutes(hasObservedActiveDropSession: Bool) -> Int {
-        hasObservedActiveDropSession ? maxExtraMinutes : warmupStallThresholdMinutes
-    }
-
-    /// Filters out campaigns that are still within their empirical-failure cooldown window.
-    internal static func filterCampaignsExcludingCooldowns(
-        _ campaigns: [Campaign],
-        cooldowns: [String: Date],
-        now: Date
-    ) -> [Campaign] {
-        campaigns.filter { campaign in
-            if let cooldownEnd = cooldowns[campaign.id] {
-                return now >= cooldownEnd
-            }
-            return true
-        }
-    }
-
-    /// Test-only: seed a cooldown entry so integration tests can drive the live
-    /// `candidateCampaigns` filter through the actor.
-    internal func _testSetCooldown(campaignId: String, expiresAt: Date) {
-        campaignFailureCooldowns[campaignId] = expiresAt
-    }
-
-    /// Test-only: returns the current cooldowns dictionary (after any pruning callers may trigger).
-    internal func _testCooldownsSnapshot() -> [String: Date] {
-        campaignFailureCooldowns
-    }
-
-    /// Test-only: invokes the private campaign filter so tests can verify cooldowns
-    /// are honored end-to-end (including the prune-on-read behavior).
-    internal func _testCandidateCampaigns(
-        from campaigns: [Campaign],
-        priorityGames: [String] = [],
-        excludedGames: [String] = [],
-        strategy: MiningStrategy = .mineAll
-    ) -> [Campaign] {
-        candidateCampaigns(from: campaigns, priorityGames: priorityGames, excludedGames: excludedGames, strategy: strategy)
-    }
-
     private func candidateCampaigns(
         from campaigns: [Campaign],
         priorityGames: [String],
@@ -1206,20 +1129,9 @@ public actor MinerEngine {
         let excludedSet = Set(excludedGames.map { normalizedGameKey($0) }.filter { !$0.isEmpty })
         var filteredOutReasons: [String: Int] = [:]
 
-        let now = Date()
-        // Prune expired cooldowns so the dictionary doesn't grow unbounded over a long session.
-        campaignFailureCooldowns = campaignFailureCooldowns.filter { $0.value > now }
-        let activeCooldowns = campaignFailureCooldowns
-
         let eligible = campaigns.filter { campaign in
             let gameName = normalizedGameKey(campaign.gameName)
             let gameId = normalizedGameKey(campaign.game.id)
-
-            // 0. Cooldown: skip campaigns that recently failed empirically
-            if let cooldownEnd = activeCooldowns[campaign.id], now < cooldownEnd {
-                filteredOutReasons["cooldown", default: 0] += 1
-                return false
-            }
 
             // 1. Core Eligibility (Task 1)
             // MUST be active, account-linked, and have eligible drops (precondition-aware).
