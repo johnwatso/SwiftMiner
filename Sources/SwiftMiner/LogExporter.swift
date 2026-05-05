@@ -1,10 +1,11 @@
 import AppKit
 import Foundation
 import SwiftMinerCore
+import UniformTypeIdentifiers
 
 /// Builds a single plain-text diagnostic report covering app version,
 /// per-miner state, settings, and the in-memory event log. Designed to be
-/// dropped into a chat with a support agent.
+/// attached to a GitHub issue when reporting a problem.
 enum LogExporter {
 
     /// Snapshot inputs are kept primitive so `buildReport` can be unit-tested
@@ -196,7 +197,7 @@ enum LogExporter {
         panel.allowedContentTypes = [.plainText]
         panel.nameFieldStringValue = defaultFilename(for: snapshot.generatedAt)
         panel.title = "Export Diagnostic Logs"
-        panel.message = "Save a redacted diagnostic report to share with support."
+        panel.message = "Save a redacted diagnostic report you can attach to a GitHub issue."
         panel.canCreateDirectories = true
         panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
 

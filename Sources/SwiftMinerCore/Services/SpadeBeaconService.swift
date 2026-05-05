@@ -21,21 +21,9 @@ public actor SpadeBeaconService {
 
     private let urlSession: URLSession
 
-    /// Pool of Android User-Agents to avoid fingerprinting (matches TDM's pool of 7).
-    private static let androidUserAgents = [
-        "Dalvik/2.1.0 (Linux; U; Android 16; SM-S911B Build/TP1A.220624.014) tv.twitch.android.app/25.3.0/2503006",
-        "Dalvik/2.1.0 (Linux; U; Android 16; SM-S938B Build/BP2A.250605.031) tv.twitch.android.app/25.3.0/2503006",
-        "Dalvik/2.1.0 (Linux; Android 16; SM-X716N Build/UP1A.231005.007) tv.twitch.android.app/25.3.0/2503006",
-        "Dalvik/2.1.0 (Linux; U; Android 15; SM-G990B Build/AP3A.240905.015.A2) tv.twitch.android.app/25.3.0/2503006",
-        "Dalvik/2.1.0 (Linux; U; Android 15; SM-G970F Build/AP3A.241105.008) tv.twitch.android.app/25.3.0/2503006",
-        "Dalvik/2.1.0 (Linux; U; Android 15; SM-A566E Build/AP3A.240905.015.A2) tv.twitch.android.app/25.3.0/2503006",
-        "Dalvik/2.1.0 (Linux; U; Android 14; SM-X306B Build/UP1A.231005.007) tv.twitch.android.app/25.3.0/2503006"
-    ]
-
-    /// Randomly picks a User-Agent from the pool.
-    private var randomUserAgent: String {
-        Self.androidUserAgents.randomElement() ?? Self.androidUserAgents[0]
-    }
+    /// Android User-Agent for this service instance. Picked once at init
+    /// so all Spade requests in a session share the same fingerprint.
+    private let userAgent = TwitchClientFingerprint.randomAndroidUserAgent()
 
     /// Cache: channel login → spade URL
     private var spadeURLCache: [String: URL] = [:]
@@ -102,7 +90,7 @@ public actor SpadeBeaconService {
         var pageRequest = URLRequest(url: pageURL)
         pageRequest.timeoutInterval = 15
         // TDM PARITY: Use Android User-Agent consistently
-        pageRequest.setValue(randomUserAgent, forHTTPHeaderField: "User-Agent")
+        pageRequest.setValue(userAgent, forHTTPHeaderField: "User-Agent")
 
         let (pageData, _) = try await urlSession.data(for: pageRequest)
         let pageHTML = String(data: pageData, encoding: .utf8) ?? ""
@@ -196,7 +184,7 @@ public actor SpadeBeaconService {
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         // TDM PARITY: Use Android User-Agent to match the Client ID. 
         // Referer is not sent by the Android app.
-        request.setValue(randomUserAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         request.httpBody = payload
 
         let (_, response) = try await urlSession.data(for: request)

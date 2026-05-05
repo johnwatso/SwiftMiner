@@ -54,7 +54,7 @@ struct EventLogView: View {
                 } label: {
                     Image(systemName: "square.and.arrow.up")
                 }
-                .help("Export diagnostic logs")
+                .help("Export logs for a GitHub issue")
             }
             ToolbarItem(placement: .primaryAction) {
                 Button {
