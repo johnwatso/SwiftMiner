@@ -691,7 +691,8 @@ private struct IntegrationsSettingsView: View {
         case .connected:
             return "SwiftBot replied."
         case .disconnected:
-            return "Could not reach SwiftBot at the configured localhost endpoint."
+            let endpoint = normalizedValue(settings.swiftBotEndpoint) ?? defaultSwiftBotEndpoint
+            return "SwiftBot is not listening at \(endpoint)."
         case .notConfigured:
             return "No valid localhost endpoint is configured."
         }
