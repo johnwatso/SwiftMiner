@@ -129,8 +129,21 @@ public final class NavigationModel {
             adminLinkingService: adminLinkingService,
             authService: authService
         )
-        await routes.setOnAccountActivated { [weak self] account, _ in
-            await self?.minerManager.attachActivatedAccount(account)
+        await routes.setOnAccountActivated { [weak self] account, discordUserId in
+            guard let self else { return }
+            await self.minerManager.attachActivatedAccount(account)
+            // Persist the Discord ↔ Twitch link to the Keychain account and the in-memory
+            // miner so the new miner shows up as Linked immediately and survives restarts.
+            await MainActor.run {
+                self.minerManager.setOwnerDiscordId(forAccountId: account.id, to: discordUserId)
+            }
+            // Confirm to the user via Discord DM with their Twitch username and current priority games.
+            let priorityGames = await MainActor.run { Settings.shared.priorityGames }
+            _ = await self.swiftBotConnectionService.sendTestDM(
+                to: discordUserId,
+                twitchUsername: account.username,
+                priorityGames: priorityGames
+            )
         }
         let router = HTTPRouter()
         await routes.configure(router)
