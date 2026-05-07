@@ -362,6 +362,51 @@ public actor SQLiteAdminLinkingService: AdminLinkingService {
         }
     }
 
+    public func unlinkAccount(twitchAccountId: String, operatorIdentity: OperatorIdentity) async -> AdminUnlinkResult {
+        do {
+            return try await manager.transaction { db in
+                // 1. Fetch current owner
+                let selectSql = "SELECT owner_discord_id FROM twitch_accounts WHERE twitch_id = ?;"
+                var stmt: OpaquePointer?
+                guard sqlite3_prepare_v2(db, selectSql, -1, &stmt, nil) == SQLITE_OK else { throw self.dbError(db) }
+                defer { sqlite3_finalize(stmt) }
+                sqlite3_bind_text(stmt, 1, twitchAccountId, -1, SQLITE_TRANSIENT)
+
+                guard sqlite3_step(stmt) == SQLITE_ROW else { return .notFound }
+
+                guard let ownerPtr = sqlite3_column_text(stmt, 0) else { return .notLinked }
+                let previousOwner = String(cString: ownerPtr)
+
+                // 2. Clear ownership
+                let updateSql = "UPDATE twitch_accounts SET owner_discord_id = NULL, link_state = 'unlinked' WHERE twitch_id = ?;"
+                var updateStmt: OpaquePointer?
+                guard sqlite3_prepare_v2(db, updateSql, -1, &updateStmt, nil) == SQLITE_OK else { throw self.dbError(db) }
+                defer { sqlite3_finalize(updateStmt) }
+                sqlite3_bind_text(updateStmt, 1, twitchAccountId, -1, SQLITE_TRANSIENT)
+                guard sqlite3_step(updateStmt) == SQLITE_DONE else { throw self.dbError(db) }
+
+                // 3. Audit row
+                let auditId = UUID().uuidString
+                let auditSql = """
+                INSERT INTO admin_audit_log (id, action_type, operator_id, twitch_id, from_discord_id, to_discord_id, metadata_json)
+                VALUES (?, 'account_unlinked', ?, ?, ?, NULL, NULL);
+                """
+                var auditStmt: OpaquePointer?
+                guard sqlite3_prepare_v2(db, auditSql, -1, &auditStmt, nil) == SQLITE_OK else { throw self.dbError(db) }
+                defer { sqlite3_finalize(auditStmt) }
+                sqlite3_bind_text(auditStmt, 1, auditId, -1, SQLITE_TRANSIENT)
+                sqlite3_bind_text(auditStmt, 2, operatorIdentity.stringValue, -1, SQLITE_TRANSIENT)
+                sqlite3_bind_text(auditStmt, 3, twitchAccountId, -1, SQLITE_TRANSIENT)
+                sqlite3_bind_text(auditStmt, 4, previousOwner, -1, SQLITE_TRANSIENT)
+                guard sqlite3_step(auditStmt) == SQLITE_DONE else { throw self.dbError(db) }
+
+                return .unlinked(previousDiscordId: previousOwner)
+            }
+        } catch {
+            return .internalError(error.localizedDescription)
+        }
+    }
+
     nonisolated private func dbError(_ db: OpaquePointer?) -> Error {
         let message = sqlite3_errmsg(db).map { String(cString: $0) } ?? "Unknown SQLite error"
         return NSError(domain: "SQLiteAdminLinkingService", code: 1, userInfo: [NSLocalizedDescriptionKey: message])

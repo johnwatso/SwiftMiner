@@ -2,14 +2,17 @@ import SwiftUI
 import SwiftMinerCore
 import SwiftMinerService
 
-/// Minimal Discord oversight panel.
-///
-/// Shows one row per miner: name, link status, optional action.
-/// Actions emit outbox events; SwiftBot handles all user-facing messaging.
+/// Discord oversight panel — one row per miner with link/unlink/test-DM controls.
 struct AdminView: View {
     @Environment(NavigationModel.self) private var navigation
     @State private var expandedMinerId: String?
-    @State private var linkSheetMiner: MinerManager.ManagedMiner?
+    @State private var linkIntent: LinkIntent?
+
+    struct LinkIntent: Identifiable {
+        let id = UUID()
+        let miner: MinerManager.ManagedMiner
+        let isRelink: Bool
+    }
 
     var body: some View {
         ScrollView {
@@ -19,7 +22,8 @@ struct AdminView: View {
                         miner: miner,
                         isExpanded: expandedMinerId == miner.id,
                         onTap: { toggleExpanded(miner.id) },
-                        onLink: { linkSheetMiner = miner },
+                        onLink: { linkIntent = LinkIntent(miner: miner, isRelink: false) },
+                        onRelink: { linkIntent = LinkIntent(miner: miner, isRelink: true) },
                         onFix: { Task { await emitReauth(for: miner) } }
                     )
                     Divider()
@@ -29,8 +33,8 @@ struct AdminView: View {
             .padding(.vertical, 16)
         }
         .navigationTitle("Discord")
-        .sheet(item: $linkSheetMiner) { miner in
-            LinkMinerSheet(miner: miner)
+        .sheet(item: $linkIntent) { intent in
+            LinkMinerSheet(miner: intent.miner, isRelink: intent.isRelink)
         }
     }
 
@@ -92,7 +96,13 @@ private struct MinerRow: View {
     let isExpanded: Bool
     let onTap: () -> Void
     let onLink: () -> Void
+    let onRelink: () -> Void
     let onFix: () -> Void
+
+    @Environment(NavigationModel.self) private var navigation
+    @State private var showUnlinkConfirmation = false
+    @State private var isDMSending = false
+    @State private var dmResult: Bool? = nil
 
     var body: some View {
         let status = LinkStatus.resolve(miner)
@@ -120,6 +130,18 @@ private struct MinerRow: View {
             }
         }
         .padding(.vertical, 10)
+        .confirmationDialog(
+            "Unlink \(miner.displayName)?",
+            isPresented: $showUnlinkConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Unlink", role: .destructive) {
+                Task { await performUnlink() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The Discord account will no longer be linked to this Twitch account.")
+        }
     }
 
     @ViewBuilder
@@ -134,13 +156,29 @@ private struct MinerRow: View {
                 .buttonStyle(.bordered)
                 .controlSize(.small)
         case .linked:
-            EmptyView()
+            Menu {
+                Button {
+                    Task { await sendTestDM() }
+                } label: {
+                    Label("Send Test DM", systemImage: "message")
+                }
+                Button("Re-link", action: onRelink)
+                Divider()
+                Button("Unlink", role: .destructive) {
+                    showUnlinkConfirmation = true
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .controlSize(.small)
         }
     }
 
     @ViewBuilder
     private func expandedDetails(status: LinkStatus) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
             detailRow("Twitch", miner.username)
             if let discordId = miner.ownerDiscordId {
                 detailRow("Discord ID", discordId)
@@ -149,7 +187,13 @@ private struct MinerRow: View {
                 Text(issue)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .padding(.top, 4)
+                    .padding(.top, 2)
+            }
+            if let sent = dmResult {
+                Text(sent ? "Test DM sent." : "Failed to send DM — check SwiftBot connection.")
+                    .font(.caption)
+                    .foregroundStyle(sent ? .green : .red)
+                    .padding(.top, 2)
             }
         }
     }
@@ -166,39 +210,98 @@ private struct MinerRow: View {
                 .textSelection(.enabled)
         }
     }
+
+    private func sendTestDM() async {
+        guard let discordId = miner.ownerDiscordId else { return }
+        isDMSending = true
+        dmResult = nil
+        let ok = await navigation.swiftBotConnectionService.sendTestDM(to: discordId)
+        dmResult = ok
+        isDMSending = false
+        if !isExpanded {
+            // auto-open so the user sees the result
+        }
+    }
+
+    private func performUnlink() async {
+        _ = await navigation.adminLinkingService.unlinkAccount(
+            twitchAccountId: miner.accountId,
+            operatorIdentity: .localAdmin
+        )
+    }
 }
 
 // MARK: - Link sheet
 
 private struct LinkMinerSheet: View {
     let miner: MinerManager.ManagedMiner
+    let isRelink: Bool
 
     @Environment(NavigationModel.self) private var navigation
     @Environment(\.dismiss) private var dismiss
-    @State private var discordId = ""
+    @State private var discordUsers: [SwiftBotDiscordUser] = []
+    @State private var selectedUserId: String?
+    @State private var fallbackId = ""
+    @State private var isLoading = true
     @State private var isProcessing = false
     @State private var errorMessage: String?
 
-    private var cleanId: String { discordId.trimmingCharacters(in: .whitespacesAndNewlines) }
-    private var isValid: Bool { cleanId.count >= 17 && cleanId.count <= 19 && cleanId.allSatisfy(\.isNumber) }
+    private var useFallback: Bool { discordUsers.isEmpty && !isLoading }
+    private var cleanFallbackId: String { fallbackId.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var isFallbackValid: Bool {
+        cleanFallbackId.count >= 17 && cleanFallbackId.count <= 19 && cleanFallbackId.allSatisfy(\.isNumber)
+    }
+    private var canSubmit: Bool {
+        if useFallback { return isFallbackValid && !isProcessing }
+        return selectedUserId != nil && !isProcessing
+    }
+    private var resolvedDiscordId: String? {
+        useFallback ? (isFallbackValid ? cleanFallbackId : nil) : selectedUserId
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Link \(miner.displayName)")
+            Text(isRelink ? "Re-link \(miner.displayName)" : "Link \(miner.displayName)")
                 .font(.title3.weight(.bold))
 
-            Text("Assign a Discord ID to this Twitch account.")
+            Text(isRelink
+                 ? "Choose a different Discord account to own this Twitch account."
+                 : "Assign a Discord account to this Twitch account.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
-            TextField("Discord User ID", text: $discordId)
-                .textFieldStyle(.roundedBorder)
-                .disabled(isProcessing)
-
-            if !cleanId.isEmpty && !isValid {
-                Text("Discord ID must be 17–19 digits.")
-                    .font(.caption)
-                    .foregroundStyle(.red)
+            if isLoading {
+                HStack {
+                    ProgressView().controlSize(.small)
+                    Text("Loading Discord users…")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            } else if !discordUsers.isEmpty {
+                Picker("Discord account", selection: $selectedUserId) {
+                    Text("Select a user…").tag(String?.none)
+                    ForEach(discordUsers) { user in
+                        Text("\(user.displayName)  ·  \(user.id)")
+                            .tag(Optional(user.id))
+                    }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+            } else {
+                // SwiftBot not connected — fall back to manual entry
+                VStack(alignment: .leading, spacing: 6) {
+                    TextField("Discord User ID", text: $fallbackId)
+                        .textFieldStyle(.roundedBorder)
+                        .disabled(isProcessing)
+                    if !cleanFallbackId.isEmpty && !isFallbackValid {
+                        Text("Discord ID must be 17–19 digits.")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                    Text("SwiftBot is not connected — enter a Discord ID manually.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             if let errorMessage {
@@ -211,25 +314,39 @@ private struct LinkMinerSheet: View {
                 Button("Cancel", role: .cancel) { dismiss() }
                     .disabled(isProcessing)
                 Spacer()
-                Button("Link") { Task { await performLink() } }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!isValid || isProcessing)
+                Button(isRelink ? "Re-link" : "Link") {
+                    Task { await performLink() }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!canSubmit)
             }
         }
         .padding(20)
-        .frame(width: 360)
+        .frame(width: 380)
+        .task { await loadUsers() }
+    }
+
+    private func loadUsers() async {
+        isLoading = true
+        discordUsers = await navigation.swiftBotConnectionService.fetchDiscordUsers()
+        isLoading = false
     }
 
     private func performLink() async {
+        guard let discordId = resolvedDiscordId else { return }
         isProcessing = true
         errorMessage = nil
 
+        let policy: ReassignmentPolicy = isRelink
+            ? .allowConfirmed(expectedCurrentOwner: miner.ownerDiscordId ?? "")
+            : .rejectIfOwned
+
         let assignment = AdminAccountAssignment(
             twitchAccountId: miner.accountId,
-            discordId: cleanId,
+            discordId: discordId,
             operatorIdentity: .localAdmin
         )
-        let result = await navigation.adminLinkingService.assignAccount(assignment, policy: .rejectIfOwned)
+        let result = await navigation.adminLinkingService.assignAccount(assignment, policy: policy)
 
         await MainActor.run {
             isProcessing = false

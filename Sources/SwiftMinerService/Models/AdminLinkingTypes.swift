@@ -42,6 +42,13 @@ public enum AdminLinkingResult: Equatable, Sendable {
     case internalError(String)
 }
 
+public enum AdminUnlinkResult: Equatable, Sendable {
+    case unlinked(previousDiscordId: String)
+    case notFound
+    case notLinked
+    case internalError(String)
+}
+
 public enum AdminUserRegistrationResult: Equatable, Sendable {
     case registered(discordId: String)
     case alreadyRegistered(discordId: String)
@@ -73,6 +80,9 @@ public protocol AdminLinkingService: Sendable {
 
     /// Returns all accounts owned by a specific Discord user.
     func getAccounts(for discordId: String) async -> [Account]
+
+    /// Remove the Discord owner from a Twitch account.
+    func unlinkAccount(twitchAccountId: String, operatorIdentity: OperatorIdentity) async -> AdminUnlinkResult
 }
 
 // MARK: - Event Payloads
