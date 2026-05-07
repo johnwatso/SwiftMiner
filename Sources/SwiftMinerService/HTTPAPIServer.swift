@@ -125,29 +125,19 @@ public actor HTTPAPIServer {
         self.router = router
     }
 
-    public func start() throws {
+    public func start() async throws {
         guard !isRunning else { return }
-        let parameters = NWParameters.tcp
         guard let nwPort = NWEndpoint.Port(rawValue: port) else {
             throw NSError(domain: "HTTPAPIServer", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid port"])
         }
-        parameters.requiredLocalEndpoint = NWEndpoint.hostPort(host: .ipv4(IPv4Address("127.0.0.1")!), port: nwPort)
+        // Plain TCP, bound to loopback only. NWParameters.requiredLocalEndpoint applies to
+        // outbound connections — setting it on listener parameters can prevent binding.
+        let parameters = NWParameters.tcp
+        if let tcp = parameters.defaultProtocolStack.transportProtocol as? NWProtocolTCP.Options {
+            tcp.connectionTimeout = 5
+        }
         let listener = try NWListener(using: parameters, on: nwPort)
         self.listener = listener
-
-        listener.stateUpdateHandler = { [weak listener] state in
-            guard let _ = listener else { return }
-            switch state {
-            case .ready:
-                print("[HTTPAPIServer] Listening on port \(self.port)")
-            case .failed(let error):
-                print("[HTTPAPIServer] Failed: \(error)")
-            case .cancelled:
-                print("[HTTPAPIServer] Cancelled")
-            default:
-                break
-            }
-        }
 
         listener.newConnectionHandler = { [weak self] connection in
             guard let self = self else {
@@ -160,8 +150,38 @@ public actor HTTPAPIServer {
             }
         }
 
-        listener.start(queue: .global())
+        // Wait for the listener to actually bind (or fail) before returning so callers
+        // know whether the port is live.
+        let resumeOnce = ResumeOnce()
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            listener.stateUpdateHandler = { state in
+                switch state {
+                case .ready:
+                    resumeOnce.resume(continuation, with: .success(()))
+                case .failed(let error):
+                    resumeOnce.resume(continuation, with: .failure(error))
+                case .cancelled:
+                    resumeOnce.resume(continuation, with: .failure(NSError(domain: "HTTPAPIServer", code: 2, userInfo: [NSLocalizedDescriptionKey: "Listener cancelled before ready"])))
+                default:
+                    break
+                }
+            }
+            listener.start(queue: .global())
+        }
+
+        // Replace the bind-time handler with a long-lived one that just logs.
+        listener.stateUpdateHandler = { [port] state in
+            switch state {
+            case .failed(let error):
+                print("[HTTPAPIServer] Listener failed after start: \(error)")
+            case .cancelled:
+                print("[HTTPAPIServer] Listener cancelled (port \(port))")
+            default:
+                break
+            }
+        }
         isRunning = true
+        print("[HTTPAPIServer] Listening on port \(port)")
     }
 
     public func stop() {
@@ -332,6 +352,25 @@ private enum HTTPStatusText {
         case 429: return "Too Many Requests"
         case 500: return "Internal Server Error"
         default: return "Unknown"
+        }
+    }
+}
+
+// MARK: - Resume-once helper
+
+private final class ResumeOnce: @unchecked Sendable {
+    private let lock = NSLock()
+    private var resumed = false
+
+    func resume(_ continuation: CheckedContinuation<Void, Error>, with result: Result<Void, Error>) {
+        lock.lock()
+        let alreadyResumed = resumed
+        resumed = true
+        lock.unlock()
+        guard !alreadyResumed else { return }
+        switch result {
+        case .success: continuation.resume()
+        case .failure(let error): continuation.resume(throwing: error)
         }
     }
 }

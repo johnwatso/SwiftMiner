@@ -7,6 +7,7 @@ struct AdminView: View {
     @Environment(NavigationModel.self) private var navigation
     @State private var expandedMinerId: String?
     @State private var linkIntent: LinkIntent?
+    @State private var discordNamesById: [String: String] = [:]
 
     struct LinkIntent: Identifiable {
         let id = UUID()
@@ -21,6 +22,7 @@ struct AdminView: View {
                     MinerRow(
                         miner: miner,
                         isExpanded: expandedMinerId == miner.id,
+                        discordNamesById: discordNamesById,
                         onTap: { toggleExpanded(miner.id) },
                         onLink: { linkIntent = LinkIntent(miner: miner, isRelink: false) },
                         onRelink: { linkIntent = LinkIntent(miner: miner, isRelink: true) },
@@ -36,6 +38,14 @@ struct AdminView: View {
         .sheet(item: $linkIntent) { intent in
             LinkMinerSheet(miner: intent.miner, isRelink: intent.isRelink)
         }
+        .task { await loadDiscordNames() }
+    }
+
+    private func loadDiscordNames() async {
+        let users = await navigation.swiftBotConnectionService.fetchDiscordUsers()
+        var map: [String: String] = [:]
+        for user in users { map[user.id] = user.displayName }
+        discordNamesById = map
     }
 
     private func toggleExpanded(_ id: String) {
@@ -94,6 +104,7 @@ private enum LinkStatus {
 private struct MinerRow: View {
     let miner: MinerManager.ManagedMiner
     let isExpanded: Bool
+    let discordNamesById: [String: String]
     let onTap: () -> Void
     let onLink: () -> Void
     let onRelink: () -> Void
@@ -181,7 +192,11 @@ private struct MinerRow: View {
         VStack(alignment: .leading, spacing: 6) {
             detailRow("Twitch", miner.username)
             if let discordId = miner.ownerDiscordId {
-                detailRow("Discord ID", discordId)
+                if let name = discordNamesById[discordId] {
+                    detailRow("Discord", name)
+                } else {
+                    detailRow("Discord", discordId)
+                }
             }
             if let issue = status.issueDescription(for: miner) {
                 Text(issue)
@@ -224,10 +239,13 @@ private struct MinerRow: View {
     }
 
     private func performUnlink() async {
-        _ = await navigation.adminLinkingService.unlinkAccount(
+        let result = await navigation.adminLinkingService.unlinkAccount(
             twitchAccountId: miner.accountId,
             operatorIdentity: .localAdmin
         )
+        if case .unlinked = result {
+            navigation.minerManager.setOwnerDiscordId(forAccountId: miner.accountId, to: nil)
+        }
     }
 }
 
@@ -281,7 +299,7 @@ private struct LinkMinerSheet: View {
                 Picker("Discord account", selection: $selectedUserId) {
                     Text("Select a user…").tag(String?.none)
                     ForEach(discordUsers) { user in
-                        Text("\(user.displayName)  ·  \(user.id)")
+                        Text(user.displayName)
                             .tag(Optional(user.id))
                     }
                 }
@@ -328,6 +346,7 @@ private struct LinkMinerSheet: View {
 
     private func loadUsers() async {
         isLoading = true
+        // SwiftBot already filters out bots and webhooks before returning.
         discordUsers = await navigation.swiftBotConnectionService.fetchDiscordUsers()
         isLoading = false
     }
@@ -352,9 +371,17 @@ private struct LinkMinerSheet: View {
             isProcessing = false
             switch result {
             case .linked:
+                navigation.minerManager.setOwnerDiscordId(forAccountId: miner.accountId, to: discordId)
                 dismiss()
             case .alreadyLinked(let currentDiscordId):
-                errorMessage = "Twitch account already linked to \(currentDiscordId)."
+                if currentDiscordId == discordId {
+                    // Server already considers this link valid — sync local state and dismiss.
+                    navigation.minerManager.setOwnerDiscordId(forAccountId: miner.accountId, to: discordId)
+                    dismiss()
+                } else {
+                    let label = displayName(forDiscordId: currentDiscordId)
+                    errorMessage = "Twitch account already linked to \(label). Use Re-link to reassign."
+                }
             case .notFound:
                 errorMessage = "Twitch account not found."
             case .invalidDiscordId:
@@ -363,6 +390,10 @@ private struct LinkMinerSheet: View {
                 errorMessage = message
             }
         }
+    }
+
+    private func displayName(forDiscordId id: String) -> String {
+        discordUsers.first(where: { $0.id == id })?.displayName ?? id
     }
 }
 

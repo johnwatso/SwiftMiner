@@ -106,6 +106,54 @@ public final class NavigationModel {
         return requestedDropsFilter
     }
 
+    /// Start the in-process HTTP server that exposes the SwiftMiner REST API to SwiftBot.
+    /// Without this, SwiftBot's `/miner` command and pairing health checks have nothing to talk to.
+    private func startSwiftMinerHTTPServerIfNeeded() async {
+        guard httpAPIServer == nil else { return }
+        Settings.shared.ensureSwiftBotSecrets()
+        let apiKey = Settings.shared.swiftMinerAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard apiKey.count >= 32 else {
+            logEvent(message: "API server not started — API key missing", level: .warning)
+            return
+        }
+        let endpoint = Settings.shared.swiftMinerAPIEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        let port = URL(string: endpoint)?.port.flatMap { UInt16(exactly: $0) } ?? 8080
+
+        let projectionBuilder = DiscordProjectionBuilder(manager: sqliteManager)
+        let clientId = Settings.shared.resolvedClientId
+        let authService = TwitchAuthService(clientId: clientId, tokenStore: minerManager.tokenStore)
+        let routes = DiscordAPIRoutes(
+            manager: sqliteManager,
+            projectionBuilder: projectionBuilder,
+            apiKey: apiKey,
+            adminLinkingService: adminLinkingService,
+            authService: authService
+        )
+        await routes.setOnAccountActivated { [weak self] account, _ in
+            await self?.minerManager.attachActivatedAccount(account)
+        }
+        let router = HTTPRouter()
+        await routes.configure(router)
+        let server = HTTPAPIServer(port: port, apiKey: apiKey, router: router)
+        do {
+            try await server.start()
+            httpAPIServer = server
+            logEvent(message: "API server listening on port \(port)", level: .info)
+            print("[NavigationModel] SwiftMiner HTTP server listening on port \(port)")
+        } catch {
+            logEvent(message: "API server failed on port \(port): \(error.localizedDescription)", level: .error)
+            print("[NavigationModel] Failed to start HTTP server on port \(port): \(error)")
+        }
+    }
+
+    /// Upserts every MinerManager account into SQLite so AdminLinkingService can find them.
+    /// Only touches twitch_id and username — never overwrites owner_discord_id or tokens.
+    func syncMinersToSQLite() async {
+        for miner in minerManager.miners {
+            await adminLinkingService.upsertAccountIdentity(twitchId: miner.accountId, username: miner.username)
+        }
+    }
+
     public func refreshUnownedAccounts() async {
         unownedAccounts = await adminLinkingService.getUnownedAccounts()
     }
@@ -177,6 +225,7 @@ public final class NavigationModel {
     public let eventOutboxService: EventOutboxService
     public let eventEmitter: EventEmitterService
     private let sqliteManager: SQLiteManager
+    private var httpAPIServer: HTTPAPIServer?
     private var onboardingSetupTask: Task<Void, Never>?
     @ObservationIgnored private var dropsPreloadTask: Task<Void, Never>?
     private var lastKnownAccountCount = 0
@@ -227,6 +276,8 @@ public final class NavigationModel {
             print("[NavigationModel] Failed to open database: \(error)")
         }
 
+        await startSwiftMinerHTTPServerIfNeeded()
+
         if Settings.shared.swiftBotEnabled {
             await checkSwiftBotConnection()
             await eventOutboxService.updateConfig(
@@ -245,6 +296,17 @@ public final class NavigationModel {
         }
         let settings = Settings.shared
         minerManager.updateClientId(settings.resolvedClientId)
+        minerManager.onMinersChanged = { [weak self] in
+            Task { [weak self] in
+                await self?.syncMinersToSQLite()
+            }
+        }
+        minerManager.onAccountRemoved = { [weak self] twitchAccountId in
+            Task { [weak self] in
+                await self?.adminLinkingService.deleteAccountRow(twitchId: twitchAccountId)
+            }
+        }
+
         await minerManager.setup(
             autoStart: true,
             priorityGames: settings.priorityGames,
@@ -256,6 +318,7 @@ public final class NavigationModel {
             prioritiseFollowedStreamers: settings.prioritiseFollowedStreamers,
             ignoredWarnings: settings.ignoredWarnings
         )
+        await syncMinersToSQLite()
         preloadDropsTab()
     }
 

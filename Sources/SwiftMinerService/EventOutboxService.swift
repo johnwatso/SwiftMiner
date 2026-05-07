@@ -205,26 +205,27 @@ public actor EventOutboxService {
         do {
             try await manager.execute { db in
                 let sql: String
-                var stmt: OpaquePointer?
-                if let retryCount {
+                if retryCount != nil {
                     sql = """
                     UPDATE event_outbox
                     SET status = ?, retry_count = ?, last_attempt = CURRENT_TIMESTAMP
                     WHERE id = ?;
                     """
-                    guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
-                    defer { sqlite3_finalize(stmt) }
-                    sqlite3_bind_text(stmt, 1, status, -1, SQLITE_TRANSIENT_LOCAL)
-                    sqlite3_bind_int(stmt, 2, Int32(retryCount))
-                    sqlite3_bind_text(stmt, 3, id, -1, SQLITE_TRANSIENT_LOCAL)
                 } else {
                     sql = """
                     UPDATE event_outbox
                     SET status = ?, last_attempt = CURRENT_TIMESTAMP
                     WHERE id = ?;
                     """
-                    guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
-                    defer { sqlite3_finalize(stmt) }
+                }
+                var stmt: OpaquePointer?
+                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+                defer { sqlite3_finalize(stmt) }
+                if let retryCount {
+                    sqlite3_bind_text(stmt, 1, status, -1, SQLITE_TRANSIENT_LOCAL)
+                    sqlite3_bind_int(stmt, 2, Int32(retryCount))
+                    sqlite3_bind_text(stmt, 3, id, -1, SQLITE_TRANSIENT_LOCAL)
+                } else {
                     sqlite3_bind_text(stmt, 1, status, -1, SQLITE_TRANSIENT_LOCAL)
                     sqlite3_bind_text(stmt, 2, id, -1, SQLITE_TRANSIENT_LOCAL)
                 }

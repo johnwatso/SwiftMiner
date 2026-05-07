@@ -271,7 +271,7 @@ public final class MinerManager {
     private var clientId: String
 
     /// Persistent store for account tokens (Phase: Managed Platform)
-    private let tokenStore: any TokenStore
+    public let tokenStore: any TokenStore
 
     /// Track drop IDs claimed today (locally)
     private var claimedTodayIds: Set<String> = []
@@ -280,6 +280,8 @@ public final class MinerManager {
     /// Callbacks for aggregated events
     public var onMinerStatusChange: (@Sendable (ManagedMiner) -> Void)?
     public var onMinersChanged: (@Sendable () -> Void)?
+    /// Fired right after an account has been removed from the manager, with its Twitch ID.
+    public var onAccountRemoved: (@Sendable (String) -> Void)?
     public var onAggregateProgress: (@Sendable (AggregateProgress) -> Void)?
     public var onLogMessage: (@Sendable (String, String) -> Void)? // (minerId, message)
     
@@ -532,8 +534,10 @@ public final class MinerManager {
         
         // Remove from collections
         engines.removeValue(forKey: minerId)
+        let removedAccountId = miner.accountId
         miners.removeAll { $0.id == minerId }
         onMinersChanged?()
+        onAccountRemoved?(removedAccountId)
     }
     
     /// Get a specific miner by ID
@@ -1156,6 +1160,41 @@ public final class MinerManager {
             }
         }
         onMinersChanged?()
+    }
+
+    /// Add an account that was just activated through the bot-driven device flow.
+    /// Skips re-saving (the auth service already saved to the token store) but registers
+    /// the miner with the manager and starts mining for it.
+    public func attachActivatedAccount(_ account: Account) async {
+        guard !miners.contains(where: { $0.accountId == account.id }) else { return }
+        do {
+            _ = try addAccount(account)
+        } catch {
+            print("[MinerManager] attachActivatedAccount failed: \(error)")
+        }
+    }
+
+    /// Update the Discord owner for a miner by Twitch account ID. Pass `nil` to unlink.
+    /// Persists to the token store so the link survives across restarts.
+    public func setOwnerDiscordId(forAccountId accountId: String, to discordId: String?) {
+        guard let index = miners.firstIndex(where: { $0.accountId == accountId }) else { return }
+        miners[index].ownerDiscordId = discordId
+        onMinersChanged?()
+
+        Task { [tokenStore] in
+            guard let existing = try? await tokenStore.loadAccount(twitchUserId: accountId) else { return }
+            let updated = Account(
+                id: existing.id,
+                username: existing.username,
+                nickname: existing.nickname,
+                ownerDiscordId: discordId,
+                accessToken: existing.accessToken,
+                refreshToken: existing.refreshToken,
+                tokenExpiry: existing.tokenExpiry,
+                scopes: existing.scopes
+            )
+            try? await tokenStore.save(account: updated)
+        }
     }
 
     private func updateMinerStatus(

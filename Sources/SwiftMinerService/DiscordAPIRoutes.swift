@@ -8,6 +8,7 @@ struct ActivationSession: Sendable {
     let sessionId: String
     let discordUserId: String
     let userCode: String
+    let deviceCode: String
     let verificationUri: String
     let expiresAt: Date
     let intervalSeconds: Int
@@ -73,20 +74,31 @@ public actor DiscordAPIRoutes {
     private let projectionBuilder: DiscordProjectionBuilder
     private let adminLinkingService: any AdminLinkingService
     private let apiKey: String
+    private let authService: TwitchAuthService?
+    /// Notified after a successful Twitch auth so the host app can register the new
+    /// account with MinerManager and refresh the UI.
+    public var onAccountActivated: (@Sendable (Account, String) async -> Void)?
 
     // In-memory activation session store (ephemeral; DB retains audit rows)
     private var activationSessions: [String: ActivationSession] = [:]
+    private var activationPollTasks: [String: Task<Void, Never>] = [:]
 
     public init(
         manager: SQLiteManager,
         projectionBuilder: DiscordProjectionBuilder,
         apiKey: String,
-        adminLinkingService: (any AdminLinkingService)? = nil
+        adminLinkingService: (any AdminLinkingService)? = nil,
+        authService: TwitchAuthService? = nil
     ) {
         self.manager = manager
         self.projectionBuilder = projectionBuilder
         self.adminLinkingService = adminLinkingService ?? SQLiteAdminLinkingService(manager: manager)
         self.apiKey = apiKey
+        self.authService = authService
+    }
+
+    public func setOnAccountActivated(_ handler: @escaping @Sendable (Account, String) async -> Void) {
+        self.onAccountActivated = handler
     }
 
     public func configure(_ router: HTTPRouter) async {
@@ -183,6 +195,10 @@ public actor DiscordAPIRoutes {
             return .error(code: "invalid_discord_id", message: "Discord ID must be 17-19 numeric digits.", statusCode: 400)
         }
 
+        guard let authService else {
+            return .error(code: "activation_unavailable", message: "Activation flow is not configured on this SwiftMiner instance.", statusCode: 503)
+        }
+
         // Verify user exists
         let userExists = await self.userExists(discordUserId: discordUserId)
         guard userExists else {
@@ -195,34 +211,92 @@ public actor DiscordAPIRoutes {
             return .error(code: "account_already_linked", message: "A Twitch account is already linked to this Discord user.", statusCode: 409)
         }
 
-        // Check for existing pending session
-        let existingPending = activationSessions.values.first { $0.discordUserId == discordUserId && $0.status == .pending && $0.expiresAt > Date() }
-        if let existing = existingPending {
+        // Reuse a valid pending session for the same Discord user
+        if let existing = activationSessions.values.first(where: {
+            $0.discordUserId == discordUserId && $0.status == .pending && $0.expiresAt > Date()
+        }) {
             return HTTPResponse.json(existing.toResponse(), statusCode: 200)
         }
 
-        // Create new session
+        // Hit Twitch for a real device code
+        let deviceResponse: DeviceCodeResponse
+        do {
+            deviceResponse = try await authService.initiateDeviceFlow()
+        } catch {
+            return .error(code: "twitch_unavailable", message: "Could not start Twitch device flow: \(error.localizedDescription)", statusCode: 502)
+        }
+
         let sessionId = UUID().uuidString
-        let userCode = Self.generateUserCode()
-        let verificationUri = "https://www.twitch.tv/activate"
-        let intervalSeconds = 5
-        let expiresAt = Date().addingTimeInterval(600) // 10 minutes
+        // Embed the user code in the verification URL so the user only has to click.
+        var verificationUri = deviceResponse.verificationURI.absoluteString
+        if !verificationUri.contains("device-code=") {
+            let separator = verificationUri.contains("?") ? "&" : "?"
+            verificationUri += "\(separator)device-code=\(deviceResponse.userCode)"
+        }
+        let expiresAt = Date().addingTimeInterval(TimeInterval(deviceResponse.expiresIn))
 
         let session = ActivationSession(
             sessionId: sessionId,
             discordUserId: discordUserId,
-            userCode: userCode,
+            userCode: deviceResponse.userCode,
+            deviceCode: deviceResponse.deviceCode,
             verificationUri: verificationUri,
             expiresAt: expiresAt,
-            intervalSeconds: intervalSeconds,
+            intervalSeconds: deviceResponse.interval,
             status: .pending
         )
         activationSessions[sessionId] = session
-
-        // Persist audit row in oauth_link_sessions
         await self.persistActivationSession(session)
 
+        // Kick off background polling — the user will authorize in the browser, and once
+        // Twitch returns a token we link the account to the Discord user automatically.
+        startPolling(sessionId: sessionId, deviceCode: deviceResponse.deviceCode, interval: deviceResponse.interval, discordUserId: discordUserId)
+
         return HTTPResponse.json(session.toResponse(), statusCode: 201)
+    }
+
+    private func startPolling(sessionId: String, deviceCode: String, interval: Int, discordUserId: String) {
+        guard let authService else { return }
+        let task = Task { [weak self] in
+            do {
+                let account = try await authService.pollForToken(deviceCode: deviceCode, interval: interval)
+                await self?.handleActivationSuccess(sessionId: sessionId, account: account, discordUserId: discordUserId)
+            } catch {
+                await self?.handleActivationFailure(sessionId: sessionId, reason: error.localizedDescription)
+            }
+        }
+        activationPollTasks[sessionId] = task
+    }
+
+    private func handleActivationSuccess(sessionId: String, account: Account, discordUserId: String) async {
+        // Make sure the row exists in twitch_accounts (the auth service persisted to the
+        // token store, but assignAccount queries SQLite).
+        await adminLinkingService.upsertAccountIdentity(twitchId: account.id, username: account.username)
+        let assignment = AdminAccountAssignment(
+            twitchAccountId: account.id,
+            discordId: discordUserId,
+            operatorIdentity: .bot(apiKeyId: String(apiKey.prefix(8)))
+        )
+        _ = await adminLinkingService.assignAccount(assignment, policy: .rejectIfOwned)
+
+        await onAccountActivated?(account, discordUserId)
+
+        if var session = activationSessions[sessionId] {
+            session.status = .authorized
+            session.linkedAccountId = account.id
+            session.twitchUsername = account.username
+            activationSessions[sessionId] = session
+        }
+        activationPollTasks.removeValue(forKey: sessionId)
+    }
+
+    private func handleActivationFailure(sessionId: String, reason: String) async {
+        if var session = activationSessions[sessionId] {
+            session.status = .failed
+            session.failureReason = reason
+            activationSessions[sessionId] = session
+        }
+        activationPollTasks.removeValue(forKey: sessionId)
     }
 
     private func handleGetActivationStatus(request: HTTPRequest, params: [String: String]) async -> HTTPResponse {
@@ -253,6 +327,8 @@ public actor DiscordAPIRoutes {
             return .error(code: "session_not_found", message: "Session not found.", statusCode: 404)
         }
 
+        activationPollTasks[sessionId]?.cancel()
+        activationPollTasks.removeValue(forKey: sessionId)
         activationSessions.removeValue(forKey: sessionId)
         return HTTPResponse(statusCode: 204)
     }
