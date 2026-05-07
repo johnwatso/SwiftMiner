@@ -362,6 +362,41 @@ public actor SQLiteAdminLinkingService: AdminLinkingService {
         }
     }
 
+    public func upsertAccountIdentity(twitchId: String, username: String) async {
+        do {
+            try await manager.execute { db in
+                // Provide empty-string placeholders for required columns so the INSERT satisfies
+                // NOT NULL constraints. ON CONFLICT only refreshes the username; tokens and
+                // owner_discord_id are left untouched if the row already exists.
+                let sql = """
+                INSERT INTO twitch_accounts
+                    (twitch_id, username, access_token, refresh_token, token_expiry, scopes, link_state)
+                VALUES (?, ?, '', '', datetime('now'), '', 'unowned')
+                ON CONFLICT(twitch_id) DO UPDATE SET username = excluded.username;
+                """
+                var stmt: OpaquePointer?
+                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+                defer { sqlite3_finalize(stmt) }
+                sqlite3_bind_text(stmt, 1, twitchId, -1, SQLITE_TRANSIENT)
+                sqlite3_bind_text(stmt, 2, username, -1, SQLITE_TRANSIENT)
+                sqlite3_step(stmt)
+            }
+        } catch {}
+    }
+
+    public func deleteAccountRow(twitchId: String) async {
+        do {
+            try await manager.execute { db in
+                let sql = "DELETE FROM twitch_accounts WHERE twitch_id = ?;"
+                var stmt: OpaquePointer?
+                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+                defer { sqlite3_finalize(stmt) }
+                sqlite3_bind_text(stmt, 1, twitchId, -1, SQLITE_TRANSIENT)
+                sqlite3_step(stmt)
+            }
+        } catch {}
+    }
+
     public func unlinkAccount(twitchAccountId: String, operatorIdentity: OperatorIdentity) async -> AdminUnlinkResult {
         do {
             return try await manager.transaction { db in
@@ -378,7 +413,7 @@ public actor SQLiteAdminLinkingService: AdminLinkingService {
                 let previousOwner = String(cString: ownerPtr)
 
                 // 2. Clear ownership
-                let updateSql = "UPDATE twitch_accounts SET owner_discord_id = NULL, link_state = 'unlinked' WHERE twitch_id = ?;"
+                let updateSql = "UPDATE twitch_accounts SET owner_discord_id = NULL, link_state = 'unowned' WHERE twitch_id = ?;"
                 var updateStmt: OpaquePointer?
                 guard sqlite3_prepare_v2(db, updateSql, -1, &updateStmt, nil) == SQLITE_OK else { throw self.dbError(db) }
                 defer { sqlite3_finalize(updateStmt) }
