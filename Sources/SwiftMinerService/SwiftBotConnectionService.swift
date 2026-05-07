@@ -57,7 +57,40 @@ public actor RestSwiftBotConnectionService: SwiftBotConnectionService {
         return await outbox.sendTestWebhook()
     }
 
+    public func fetchDiscordUsers() async -> [SwiftBotDiscordUser] {
+        guard let url = endpoint else { return [] }
+        var request = URLRequest(url: url.appendingPathComponent("v1/users"))
+        request.httpMethod = "GET"
+        request.timeoutInterval = 5.0
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else { return [] }
+            let wrapper = try JSONDecoder().decode(UsersResponse.self, from: data)
+            return wrapper.users
+        } catch {
+            return []
+        }
+    }
+
+    public func sendTestDM(to discordUserId: String) async -> Bool {
+        guard let url = endpoint else { return false }
+        let dmUrl = url.appendingPathComponent("v1/users/\(discordUserId)/dm/test")
+        var request = URLRequest(url: dmUrl)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 10.0
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            return (response as? HTTPURLResponse).map { (200...299).contains($0.statusCode) } ?? false
+        } catch {
+            return false
+        }
+    }
+
     // MARK: - Private Helpers
+
+    private struct UsersResponse: Decodable {
+        let users: [SwiftBotDiscordUser]
+    }
 
     /// Validates that the URL is a local endpoint (localhost/127.0.0.1) with http/https scheme.
     private static func validatedURL(from urlString: String) -> URL? {

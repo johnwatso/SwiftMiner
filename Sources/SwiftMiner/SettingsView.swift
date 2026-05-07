@@ -641,8 +641,8 @@ private struct IntegrationsSettingsView: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 12) {
                     let state = navigation.swiftBotState
-                    Image(systemName: state == .connected ? "checkmark.circle.fill" : "wifi.slash")
-                        .foregroundStyle(state == .connected ? .green : .secondary)
+                    Image(systemName: state == .connected ? "arrow.trianglehead.2.clockwise.rotate.90" : "exclamationmark.arrow.trianglehead.2.clockwise.rotate.90")
+                        .foregroundStyle(state == .connected ? .green : .red)
                         .font(.title3)
 
                     Text(state == .connected ? "Connected to SwiftBot" : "Not Connected")

@@ -102,6 +102,11 @@ public actor DiscordAPIRoutes {
             await routes.handleGetProjection(request: request, params: params)
         })
 
+        // List registered users
+        await router.register(HTTPRoute(method: "GET", pattern: "/v1/users") { request, params in
+            await routes.handleGetUsers(request: request, params: params)
+        })
+
         // Registration endpoint
         await router.register(HTTPRoute(method: "POST", pattern: "/v1/users") { request, params in
             await routes.handleRegisterUser(request: request, params: params)
@@ -127,6 +132,12 @@ public actor DiscordAPIRoutes {
     }
 
     // MARK: - Handlers
+
+    private func handleGetUsers(request: HTTPRequest, params: [String: String]) async -> HTTPResponse {
+        let users = await adminLinkingService.getAllUsers()
+        let payload = users.map { ["discord_id": $0.discordId, "status": $0.status.rawValue] }
+        return HTTPResponse.json(["users": payload])
+    }
 
     private func handleRegisterUser(request: HTTPRequest, params: [String: String]) async -> HTTPResponse {
         guard !request.body.isEmpty,
