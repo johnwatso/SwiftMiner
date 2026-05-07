@@ -25,6 +25,15 @@ struct MinerHealthCard: View {
         if let blockedGame = blockedPriorityGameRequiringLink(for: miner) {
             return HealthVerdict(severity: .warning, message: "Link required for \(blockedGame) drops")
         }
+        if miner.workerState.isRecovering {
+            return HealthVerdict(severity: .warning, message: "Recovering...")
+        }
+        if miner.isStalled {
+            return HealthVerdict(severity: .error, message: "Miner unresponsive")
+        }
+        if miner.isRunning && !miner.needsAuth && !miner.isHealthy {
+            return HealthVerdict(severity: .warning, message: "No recent activity")
+        }
         if miner.needsAuth {
             return HealthVerdict(severity: .error, message: "Re-authentication required")
         }

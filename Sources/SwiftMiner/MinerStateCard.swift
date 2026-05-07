@@ -157,6 +157,33 @@ struct MinerStateCard: View {
 
     private var config: StateConfig {
         let gameName = resolved?.resolved?.gameName
+        if miner.workerState.isRecovering {
+            return StateConfig(
+                headline: "Recovering...",
+                subtitle: "Restarting this miner and restoring Twitch subscriptions.",
+                icon: "wrench.and.screwdriver.fill",
+                color: .orange
+            )
+        }
+
+        if miner.isStalled {
+            return StateConfig(
+                headline: "Miner Unresponsive",
+                subtitle: "This miner is not receiving Twitch activity while other miners continue polling.",
+                icon: "bolt.horizontal.circle.fill",
+                color: .red
+            )
+        }
+
+        if miner.isRunning && !miner.needsAuth && !miner.isHealthy {
+            return StateConfig(
+                headline: "No Recent Activity",
+                subtitle: "The worker is running, but liveness signals have gone quiet.",
+                icon: "waveform.path.ecg",
+                color: .yellow
+            )
+        }
+
         switch state {
         case .blocked(let reasons):
             if reasons.contains(.accountNotLinked) {
@@ -633,6 +660,36 @@ struct MinerActivitySnapshot {
 
     @MainActor
     private static func currentActivityItem(for miner: MinerManager.ManagedMiner, campaign: Campaign?) -> MinerActivityItem {
+        if miner.workerState.isRecovering {
+            return waitingItem(
+                id: "recovering-\(miner.id)",
+                title: "Recovering...",
+                subtitle: "Restarting this miner and rebuilding its Twitch worker pipeline.",
+                symbol: "wrench.and.screwdriver.fill",
+                accent: .orange
+            )
+        }
+
+        if miner.isStalled {
+            return waitingItem(
+                id: "stalled-\(miner.id)",
+                title: "Miner Unresponsive",
+                subtitle: "This miner stopped receiving Twitch activity while other miners are still active.",
+                symbol: "bolt.horizontal.circle.fill",
+                accent: .red
+            )
+        }
+
+        if miner.isRunning && !miner.needsAuth && !miner.isHealthy {
+            return waitingItem(
+                id: "quiet-\(miner.id)",
+                title: "No Recent Activity",
+                subtitle: "Worker is running, but it has not reported recent liveness yet.",
+                symbol: "waveform.path.ecg",
+                accent: .yellow
+            )
+        }
+
         if miner.status == .watching, let campaign, hasUnclaimedDrop(in: campaign) {
             let progress = activeDropProgress(for: campaign, miner: miner)
             let detail = progress.map { item in
@@ -1026,6 +1083,15 @@ struct MinerActivitySnapshot {
     }
 
     private static func statusText(for miner: MinerManager.ManagedMiner, now: MinerActivityItem) -> String {
+        if miner.workerState.isRecovering {
+            return "Recovering..."
+        }
+        if miner.isStalled {
+            return "Miner Unresponsive"
+        }
+        if miner.isRunning && !miner.needsAuth && !miner.isHealthy {
+            return "No Recent Activity"
+        }
         if now.id.hasPrefix("waiting-drops-") {
             return "Waiting"
         }
@@ -1055,6 +1121,15 @@ struct MinerActivitySnapshot {
     }
 
     private static func statusSymbol(for miner: MinerManager.ManagedMiner, now: MinerActivityItem) -> String {
+        if miner.workerState.isRecovering {
+            return "wrench.and.screwdriver.fill"
+        }
+        if miner.isStalled {
+            return "bolt.horizontal.circle.fill"
+        }
+        if miner.isRunning && !miner.needsAuth && !miner.isHealthy {
+            return "waveform.path.ecg"
+        }
         if now.requiresAccountLink || miner.needsAuth {
             return "exclamationmark.triangle.fill"
         }
@@ -1084,6 +1159,15 @@ struct MinerActivitySnapshot {
     }
 
     private static func statusColor(for miner: MinerManager.ManagedMiner, now: MinerActivityItem) -> Color {
+        if miner.workerState.isRecovering {
+            return .orange
+        }
+        if miner.isStalled {
+            return .red
+        }
+        if miner.isRunning && !miner.needsAuth && !miner.isHealthy {
+            return .yellow
+        }
         switch miner.status {
         case .watching:
             return .green

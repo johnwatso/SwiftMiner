@@ -220,6 +220,7 @@ public struct AccountState: Codable, Sendable, Equatable, Identifiable {
     public let initials: String
     public let miningStatus: AccountMiningStatus
     public let claimedDropCount: Int
+    public let progressFraction: Double?
 
     private enum CodingKeys: String, CodingKey {
         case accountId
@@ -227,6 +228,7 @@ public struct AccountState: Codable, Sendable, Equatable, Identifiable {
         case initials
         case miningStatus
         case claimedDropCount
+        case progressFraction
     }
     
     public init(
@@ -234,13 +236,15 @@ public struct AccountState: Codable, Sendable, Equatable, Identifiable {
         username: String,
         initials: String,
         miningStatus: AccountMiningStatus,
-        claimedDropCount: Int = 0
+        claimedDropCount: Int = 0,
+        progressFraction: Double? = nil
     ) {
         self.accountId = accountId
         self.username = username
         self.initials = initials
         self.miningStatus = miningStatus
         self.claimedDropCount = claimedDropCount
+        self.progressFraction = progressFraction
     }
 
     public init(from decoder: Decoder) throws {
@@ -250,6 +254,7 @@ public struct AccountState: Codable, Sendable, Equatable, Identifiable {
         initials = try container.decode(String.self, forKey: .initials)
         miningStatus = try container.decode(AccountMiningStatus.self, forKey: .miningStatus)
         claimedDropCount = try container.decodeIfPresent(Int.self, forKey: .claimedDropCount) ?? 0
+        progressFraction = try container.decodeIfPresent(Double.self, forKey: .progressFraction)
     }
 }
 

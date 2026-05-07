@@ -180,6 +180,18 @@ struct OverviewView: View {
             return .blockedAuthenticationExpired
         }
 
+        if miners.contains(where: \.isStalled) {
+            return .minerUnresponsive
+        }
+
+        if miners.contains(where: { $0.workerState.isRecovering }) {
+            return .recovering
+        }
+
+        if miners.contains(where: { $0.isRunning && !$0.needsAuth && !$0.isHealthy }) {
+            return .noRecentActivity
+        }
+
         let accountLinkBlockedMiners = miners.filter { $0.status == .blockedAccountNotLinked }
         if !accountLinkBlockedMiners.isEmpty {
             return .blockedAccountNotLinked(
@@ -1050,6 +1062,9 @@ private enum OverviewSystemState: Equatable {
     case waitingForLiveStream
     case waitingRefreshingCampaigns
     case waitingAuthenticating
+    case minerUnresponsive
+    case recovering
+    case noRecentActivity
     case blockedAccountNotLinked(minerName: String?, blockedCount: Int)
     case blockedAuthenticationExpired
     case blockedNeedsAttention
@@ -1059,8 +1074,10 @@ private enum OverviewSystemState: Equatable {
         switch self {
         case .idleNoEligibleCampaigns, .idleAllCampaignsCompleted:
             return "Idle"
-        case .waitingForLiveStream, .waitingRefreshingCampaigns, .waitingAuthenticating:
+        case .waitingForLiveStream, .waitingRefreshingCampaigns, .waitingAuthenticating, .recovering:
             return "Waiting"
+        case .minerUnresponsive, .noRecentActivity:
+            return "Attention"
         case .blockedAccountNotLinked(let minerName, let blockedCount):
             if let minerName {
                 return "\(minerName) is blocked"
@@ -1085,6 +1102,12 @@ private enum OverviewSystemState: Equatable {
             return "Checking for new campaign opportunities..."
         case .waitingAuthenticating:
             return "Reconnecting account..."
+        case .minerUnresponsive:
+            return "One or more miners stopped receiving Twitch activity while other miners are still active."
+        case .recovering:
+            return "A miner is being restarted and refreshed automatically."
+        case .noRecentActivity:
+            return "A miner is running but has not reported recent activity yet."
         case .blockedAccountNotLinked(let minerName, let blockedCount):
             if let minerName {
                 return "Account not linked. Link \(minerName)'s account to start mining drops."
@@ -1117,6 +1140,12 @@ private enum OverviewSystemState: Equatable {
             return "arrow.triangle.2.circlepath"
         case .waitingAuthenticating:
             return "key.fill"
+        case .minerUnresponsive:
+            return "bolt.horizontal.circle.fill"
+        case .recovering:
+            return "wrench.and.screwdriver.fill"
+        case .noRecentActivity:
+            return "waveform.path.ecg"
         case .blockedAccountNotLinked:
             return "link.badge.plus"
         case .blockedAuthenticationExpired, .blockedNeedsAttention:
@@ -1136,6 +1165,12 @@ private enum OverviewSystemState: Equatable {
             return .blue
         case .waitingAuthenticating:
             return .orange
+        case .minerUnresponsive:
+            return .red
+        case .recovering:
+            return .orange
+        case .noRecentActivity:
+            return .yellow
         case .blockedAccountNotLinked, .blockedAuthenticationExpired, .blockedNeedsAttention:
             return .orange
         case .mining:
@@ -1147,8 +1182,10 @@ private enum OverviewSystemState: Equatable {
         switch self {
         case .idleNoEligibleCampaigns, .idleAllCampaignsCompleted:
             return .viewDrops
-        case .waitingForLiveStream, .waitingRefreshingCampaigns, .waitingAuthenticating:
+        case .waitingForLiveStream, .waitingRefreshingCampaigns, .waitingAuthenticating, .recovering:
             return .viewSchedule
+        case .minerUnresponsive, .noRecentActivity:
+            return nil
         case .blockedAccountNotLinked, .blockedAuthenticationExpired, .blockedNeedsAttention:
             return .linkAccount
         case .mining:

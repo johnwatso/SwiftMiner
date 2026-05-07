@@ -204,17 +204,10 @@ final class SpadeBeaconServiceTests: XCTestCase {
         XCTAssertTrue(ua!.contains("tv.twitch.android.app"),
                       "Beacon POST must use an Android User-Agent to match TDM's ANDROID_APP client")
         
-        // Verify it's one of the 7 expected UAs
-        let androidPool = [
-            "Dalvik/2.1.0 (Linux; U; Android 16; SM-S911B Build/TP1A.220624.014) tv.twitch.android.app/25.3.0/2503006",
-            "Dalvik/2.1.0 (Linux; U; Android 16; SM-S938B Build/BP2A.250605.031) tv.twitch.android.app/25.3.0/2503006",
-            "Dalvik/2.1.0 (Linux; Android 16; SM-X716N Build/UP1A.231005.007) tv.twitch.android.app/25.3.0/2503006",
-            "Dalvik/2.1.0 (Linux; U; Android 15; SM-G990B Build/AP3A.240905.015.A2) tv.twitch.android.app/25.3.0/2503006",
-            "Dalvik/2.1.0 (Linux; U; Android 15; SM-G970F Build/AP3A.241105.008) tv.twitch.android.app/25.3.0/2503006",
-            "Dalvik/2.1.0 (Linux; U; Android 15; SM-A566E Build/AP3A.240905.015.A2) tv.twitch.android.app/25.3.0/2503006",
-            "Dalvik/2.1.0 (Linux; U; Android 14; SM-X306B Build/UP1A.231005.007) tv.twitch.android.app/25.3.0/2503006"
-        ]
-        XCTAssertTrue(androidPool.contains(ua!), "User-Agent must be from the TDM Android pool")
+        XCTAssertTrue(
+            TwitchClientFingerprint.androidUserAgents.contains(ua!),
+            "User-Agent must be from the configured Android pool"
+        )
     }
 
     func testPageFetchUsesAndroidUserAgent() async throws {

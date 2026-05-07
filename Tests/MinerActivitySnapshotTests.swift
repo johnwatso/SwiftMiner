@@ -9,7 +9,10 @@ final class MinerActivitySnapshotTests: XCTestCase {
         status: MinerManager.MinerStatus = .idle,
         campaigns: [Campaign],
         currentCampaignId: String? = nil,
-        priorityGames: [String] = ["Test Game"]
+        priorityGames: [String] = ["Test Game"],
+        workerState: MinerWorkerState = .running,
+        isHealthy: Bool = true,
+        isStalled: Bool = false
     ) -> MinerManager.ManagedMiner {
         MinerManager.ManagedMiner(
             id: "miner-1",
@@ -19,7 +22,10 @@ final class MinerActivitySnapshotTests: XCTestCase {
             currentCampaignId: currentCampaignId,
             allCampaigns: campaigns,
             isRunning: true,
-            priorityGames: priorityGames
+            priorityGames: priorityGames,
+            workerState: workerState,
+            isHealthy: isHealthy,
+            isStalled: isStalled
         )
     }
 
@@ -175,5 +181,37 @@ final class MinerActivitySnapshotTests: XCTestCase {
         XCTAssertEqual(snapshot.now.title, "Waiting")
         XCTAssertEqual(snapshot.now.subtitle, "No active drops are available for this account.")
         XCTAssertNotEqual(snapshot.now.campaignId, "claimed")
+    }
+
+    func testStalledMinerSurfacesOperationalStateInsteadOfNoCampaigns() {
+        let miner = makeMiner(
+            status: .idleNoEligibleCampaigns,
+            campaigns: [],
+            priorityGames: [],
+            workerState: .running,
+            isHealthy: false,
+            isStalled: true
+        )
+
+        let snapshot = resolveSnapshot(for: miner)
+
+        XCTAssertEqual(snapshot.statusText, "Miner Unresponsive")
+        XCTAssertEqual(snapshot.now.title, "Miner Unresponsive")
+    }
+
+    func testRecoveringMinerSurfacesRecoveringState() {
+        let miner = makeMiner(
+            status: .idleNoEligibleCampaigns,
+            campaigns: [],
+            priorityGames: [],
+            workerState: .recovering,
+            isHealthy: false,
+            isStalled: false
+        )
+
+        let snapshot = resolveSnapshot(for: miner)
+
+        XCTAssertEqual(snapshot.statusText, "Recovering...")
+        XCTAssertEqual(snapshot.now.title, "Recovering...")
     }
 }

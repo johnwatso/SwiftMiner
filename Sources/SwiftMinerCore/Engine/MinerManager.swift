@@ -34,6 +34,13 @@ public final class MinerManager {
         public var dropsClaimed: Int
         public var isRunning: Bool
         public var priorityGames: [String]
+        public var lastEventAt: Date?
+        public var lastSuccessfulPollAt: Date?
+        public var lastCampaignRefreshAt: Date?
+        public var workerState: MinerWorkerState = .idle
+        public var workerTaskID: String?
+        public var isHealthy: Bool = true
+        public var isStalled: Bool = false
         
         /// Resolved "Primary State" for the user-facing activity UI (Phase 4).
         @MainActor
@@ -58,6 +65,15 @@ public final class MinerManager {
         /// A concise, deterministic status label for UI badges and list rows.
         @MainActor
         public var statusLabel: String {
+            if workerState.isRecovering {
+                return "Recovering..."
+            }
+            if isStalled {
+                return "Miner Unresponsive"
+            }
+            if isRunning && !needsAuth && !isHealthy {
+                return "No Recent Activity"
+            }
             guard let resolved = resolvedPrimaryState?.resolved else {
                 return status.displayName
             }
@@ -104,7 +120,14 @@ public final class MinerManager {
             allCampaigns: [Campaign] = [],
             dropsClaimed: Int = 0,
             isRunning: Bool = false,
-            priorityGames: [String] = []
+            priorityGames: [String] = [],
+            lastEventAt: Date? = nil,
+            lastSuccessfulPollAt: Date? = nil,
+            lastCampaignRefreshAt: Date? = nil,
+            workerState: MinerWorkerState = .idle,
+            workerTaskID: String? = nil,
+            isHealthy: Bool = true,
+            isStalled: Bool = false
         ) {
             self.id = id
             self.accountId = accountId
@@ -120,6 +143,13 @@ public final class MinerManager {
             self.dropsClaimed = dropsClaimed
             self.isRunning = isRunning
             self.priorityGames = priorityGames
+            self.lastEventAt = lastEventAt
+            self.lastSuccessfulPollAt = lastSuccessfulPollAt
+            self.lastCampaignRefreshAt = lastCampaignRefreshAt
+            self.workerState = workerState
+            self.workerTaskID = workerTaskID
+            self.isHealthy = isHealthy
+            self.isStalled = isStalled
         }
 
         public var displayName: String {
@@ -258,8 +288,7 @@ public final class MinerManager {
 
     /// Background recovery loop for miners that get wedged after network or progress stalls.
     private var antiStallMonitorTask: Task<Void, Never>?
-    private var antiStallRecoveryInFlight: Set<String> = []
-    private var lastAntiStallRecoveryAt: [String: Date] = [:]
+    private let supervisor = MinerSupervisor()
 
     /// Last start options, used when anti-stall recovery restarts an individual miner.
     private var currentPriorityGames: [String] = []
@@ -322,7 +351,6 @@ public final class MinerManager {
         } else {
             antiStallMonitorTask?.cancel()
             antiStallMonitorTask = nil
-            antiStallRecoveryInFlight.removeAll()
         }
     }
 
@@ -475,6 +503,9 @@ public final class MinerManager {
         )
         miners.append(miner)
         onMinersChanged?()
+        Task { [supervisor] in
+            await supervisor.registerMiner(minerId)
+        }
 
         let setupTask = Task {
             await engine.setAccount(account)
@@ -536,6 +567,7 @@ public final class MinerManager {
         engines.removeValue(forKey: minerId)
         let removedAccountId = miner.accountId
         miners.removeAll { $0.id == minerId }
+        await supervisor.unregisterMiner(minerId)
         onMinersChanged?()
         onAccountRemoved?(removedAccountId)
     }
@@ -627,6 +659,9 @@ public final class MinerManager {
         self.antiStallRecoveryEnabled = antiStallRecoveryEnabled
         self.prioritiseFollowedStreamers = prioritiseFollowedStreamers
         startAntiStallMonitorIfNeeded()
+        let workerTaskID = UUID().uuidString
+        await supervisor.recordWorkerStart(minerId: minerId, taskID: workerTaskID)
+        await applySupervisorSnapshot(for: minerId)
 
         // Update mining preferences
         let ignoredGames = Array(ignoredAccountLinkWarnings[miner.accountId] ?? [])
@@ -648,9 +683,13 @@ public final class MinerManager {
 
         do {
             try await engine.start()
+            await supervisor.recordWorkerRunning(minerId: minerId)
+            await applySupervisorSnapshot(for: minerId)
             await dataCoordinator.updateAccountNeedsAuth(accountId: miner.accountId, needsAuth: false)
             updateMinerStatus(minerId: minerId, isRunning: true, priorityGames: priorityGames, needsAuth: false)
         } catch {
+            await supervisor.recordWorkerStop(minerId: minerId, failed: true)
+            await applySupervisorSnapshot(for: minerId)
             let needsAuth = Self.requiresManualReauth(for: error)
             await dataCoordinator.updateAccountNeedsAuth(accountId: miner.accountId, needsAuth: needsAuth)
             updateMinerStatus(minerId: minerId, status: .error, priorityGames: priorityGames, needsAuth: needsAuth)
@@ -664,6 +703,8 @@ public final class MinerManager {
               let miner = getMiner(id: minerId) else { return }
         
         await engine.stop()
+        await supervisor.recordWorkerStop(minerId: minerId)
+        await applySupervisorSnapshot(for: minerId)
         await dataCoordinator.updateAccountNeedsAuth(accountId: miner.accountId, needsAuth: false)
         updateMinerStatus(minerId: minerId, status: .idle, currentCampaignId: .some(nil), isRunning: false, needsAuth: false)
     }
@@ -961,6 +1002,7 @@ public final class MinerManager {
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
                 let minerStatus = self.mapSessionStatus(status)
+                await self.supervisor.recordStateUpdate(minerId: minerId)
                 
                 // If status changed to watching or back to idle, update campaign info too
                 let currentId = await engine.currentCampaignId
@@ -974,12 +1016,14 @@ public final class MinerManager {
                     currentCampaignId: .some(currentId),
                     needsAuth: clearsNeedsAuth ? false : nil
                 )
+                await self.applySupervisorSnapshot(for: minerId)
             }
         }
         
         await engine.setCampaignUpdateHandler { [weak self] campaigns in
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
+                await self.supervisor.recordCampaignRefresh(minerId: minerId)
                 
                 // Get all campaigns and current ID from engine
                 let all = await engine.allCampaigns
@@ -998,22 +1042,48 @@ public final class MinerManager {
                     await self.getMiner(id: minerId)?.stateStore?.refresh()
                     self.onMinersChanged?()
                 }
+                await self.applySupervisorSnapshot(for: minerId)
+            }
+        }
+
+        await engine.setOperationalEventHandler { [weak self] event in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                switch event {
+                case .workerStarted(let taskID):
+                    await self.supervisor.recordWorkerStart(minerId: minerId, taskID: taskID)
+                case .workerStopped:
+                    await self.supervisor.recordWorkerStop(minerId: minerId)
+                case .successfulPoll, .inventoryRefresh:
+                    await self.supervisor.recordSuccessfulPoll(minerId: minerId)
+                case .campaignRefresh:
+                    await self.supervisor.recordCampaignRefresh(minerId: minerId)
+                case .authRefreshed:
+                    await self.supervisor.recordStateUpdate(minerId: minerId, workerState: .running)
+                case .heartbeat, .stateUpdate:
+                    await self.supervisor.recordStateUpdate(minerId: minerId)
+                }
+                await self.applySupervisorSnapshot(for: minerId)
             }
         }
         
         await engine.setDropClaimedHandler { [weak self] drop in
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
+                await self.supervisor.recordEvent(minerId: minerId)
                 self.resetDailyClaimsIfNeeded()
                 self.claimedTodayIds.insert(drop.id)
                 self.incrementDropsClaimed(minerId: minerId)
+                await self.applySupervisorSnapshot(for: minerId)
             }
         }
         
         await engine.setLogMessageHandler { [weak self] message in
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
+                await self.supervisor.recordEvent(minerId: minerId)
                 self.onLogMessage?(minerId, message)
+                await self.applySupervisorSnapshot(for: minerId)
             }
         }
 
@@ -1022,9 +1092,11 @@ public final class MinerManager {
                 guard let self = self,
                       let miner = self.getMiner(id: minerId) else { return }
 
+                await self.supervisor.recordWorkerStop(minerId: minerId, failed: true)
                 let needsAuth = Self.requiresManualReauth(for: error)
                 await self.dataCoordinator.updateAccountNeedsAuth(accountId: miner.accountId, needsAuth: needsAuth)
                 self.updateMinerStatus(minerId: minerId, status: .error, needsAuth: needsAuth)
+                await self.applySupervisorSnapshot(for: minerId)
             }
         }
     }
@@ -1034,7 +1106,7 @@ public final class MinerManager {
 
         antiStallMonitorTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 60 * 1_000_000_000)
+                try? await Task.sleep(nanoseconds: 30 * 1_000_000_000)
                 if Task.isCancelled { break }
                 await self?.runAntiStallCheck()
             }
@@ -1044,70 +1116,13 @@ public final class MinerManager {
     private func runAntiStallCheck() async {
         guard antiStallRecoveryEnabled else { return }
 
-        for miner in miners where miner.isRunning {
-            guard !antiStallRecoveryInFlight.contains(miner.id),
-                  let reason = await antiStallRecoveryReason(for: miner) else {
-                continue
-            }
-
-            if let lastRecovery = lastAntiStallRecoveryAt[miner.id],
-               Date().timeIntervalSince(lastRecovery) < 10 * 60 {
-                continue
-            }
-
-            antiStallRecoveryInFlight.insert(miner.id)
-            lastAntiStallRecoveryAt[miner.id] = Date()
-            onLogMessage?(miner.id, "Stall recovery: restarting miner because \(reason).")
-
-            await restartMinerForAntiStallRecovery(minerId: miner.id)
-            antiStallRecoveryInFlight.remove(miner.id)
-        }
-    }
-
-    private func antiStallRecoveryReason(for miner: ManagedMiner) async -> String? {
-        guard let engine = engines[miner.id] else { return nil }
-
-        let stuckDuration = Date().timeIntervalSince(miner.statusChangedAt)
-        let stallState = await engine.getStallState()
-
-        if miner.status == .watching, stallState.minutesSinceLastProgress >= 20 {
-            return "no confirmed progress has arrived for \(stallState.minutesSinceLastProgress) minutes"
+        let metadataByMiner = await supervisor.refreshHealth(for: miners)
+        for (minerId, metadata) in metadataByMiner {
+            updateMinerOperationalMetadata(minerId: minerId, metadata: metadata)
         }
 
-        if miner.status == .error, !miner.needsAuth, stuckDuration >= 5 * 60 {
-            return "it has been in a recoverable error state for \(Int(stuckDuration / 60)) minutes"
-        }
-
-        if (miner.status == .authenticating || miner.status == .fetchingCampaigns), stuckDuration >= 10 * 60 {
-            return "it has been stuck at \(miner.status.displayName.lowercased()) for \(Int(stuckDuration / 60)) minutes"
-        }
-
-        return nil
-    }
-
-    private func restartMinerForAntiStallRecovery(minerId: String) async {
-        await stopMiner(minerId: minerId)
-
-        do {
-            try await startMiner(
-                minerId: minerId,
-                priorityGames: currentPriorityGames,
-                excludedGames: currentExcludedGames,
-                strategy: currentStrategy,
-                enableBadgesEmotes: currentEnableBadgesEmotes,
-                showClaimNotifications: showClaimNotifications,
-                avoidDuplicateStreams: avoidDuplicateStreams,
-                antiStallRecoveryEnabled: antiStallRecoveryEnabled,
-                prioritiseFollowedStreamers: prioritiseFollowedStreamers
-            )
-            onLogMessage?(minerId, "Stall recovery: miner relaunched.")
-        } catch {
-            let needsAuth = Self.requiresManualReauth(for: error)
-            if let miner = getMiner(id: minerId) {
-                await dataCoordinator.updateAccountNeedsAuth(accountId: miner.accountId, needsAuth: needsAuth)
-            }
-            updateMinerStatus(minerId: minerId, status: .error, needsAuth: needsAuth)
-            onLogMessage?(minerId, "Stall recovery failed: \(error.localizedDescription)")
+        while let action = await supervisor.nextRecoveryAction(for: miners) {
+            await performRecoveryAction(action)
         }
     }
 
@@ -1232,6 +1247,78 @@ public final class MinerManager {
     
     private func updateMinerStatus(minerId: String, isRunning: Bool, status: MinerStatus) {
         updateMinerStatus(minerId: minerId, status: status, isRunning: isRunning)
+    }
+
+    private func updateMinerOperationalMetadata(minerId: String, metadata: MinerOperationalMetadata) {
+        guard let index = miners.firstIndex(where: { $0.id == minerId }) else { return }
+        miners[index].lastEventAt = metadata.lastEventAt
+        miners[index].lastSuccessfulPollAt = metadata.lastSuccessfulPollAt
+        miners[index].lastCampaignRefreshAt = metadata.lastCampaignRefreshAt
+        miners[index].workerState = metadata.workerState
+        miners[index].workerTaskID = metadata.workerTaskID
+        miners[index].isHealthy = metadata.isHealthy
+        miners[index].isStalled = metadata.isStalled
+        onMinersChanged?()
+    }
+
+    private func applySupervisorSnapshot(for minerId: String) async {
+        guard let metadata = await supervisor.snapshot(for: minerId) else { return }
+        updateMinerOperationalMetadata(minerId: minerId, metadata: metadata)
+    }
+
+    private func performRecoveryAction(_ action: MinerSupervisor.RecoveryAction) async {
+        guard let engine = engines[action.minerId] else { return }
+
+        await supervisor.markRecovering(minerId: action.minerId, stage: action.stage)
+        await applySupervisorSnapshot(for: action.minerId)
+        onLogMessage?(
+            action.minerId,
+            "[Supervisor] stall detected | reason=\(action.reason) | stage=\(action.stage.rawValue) | attempt=\(action.attempt)"
+        )
+
+        do {
+            switch action.stage {
+            case .refresh:
+                onLogMessage?(action.minerId, "[Supervisor] recovery stage 1 | forcing campaign refresh + inventory refresh")
+                try await engine.forceInventoryRefresh()
+                await engine.forceRefresh()
+            case .restart:
+                onLogMessage?(action.minerId, "[Supervisor] recovery stage 2 | restarting worker, subscriptions, and timers")
+                await stopMiner(minerId: action.minerId)
+                try await startMiner(
+                    minerId: action.minerId,
+                    priorityGames: currentPriorityGames,
+                    excludedGames: currentExcludedGames,
+                    strategy: currentStrategy,
+                    enableBadgesEmotes: currentEnableBadgesEmotes,
+                    showClaimNotifications: showClaimNotifications,
+                    avoidDuplicateStreams: avoidDuplicateStreams,
+                    antiStallRecoveryEnabled: antiStallRecoveryEnabled,
+                    prioritiseFollowedStreamers: prioritiseFollowedStreamers
+                )
+            case .authRefresh:
+                onLogMessage?(action.minerId, "[Supervisor] recovery stage 3 | refreshing auth/session state")
+                try await engine.refreshAuthenticationSession()
+                try await engine.forceInventoryRefresh()
+                await engine.forceRefresh()
+            }
+
+            await supervisor.noteRecoverySuccess(minerId: action.minerId)
+            await applySupervisorSnapshot(for: action.minerId)
+            onLogMessage?(action.minerId, "[Supervisor] recovery success")
+        } catch {
+            await supervisor.noteRecoveryFailure(minerId: action.minerId, stage: action.stage)
+            await applySupervisorSnapshot(for: action.minerId)
+
+            let needsAuth = Self.requiresManualReauth(for: error)
+            if let miner = getMiner(id: action.minerId) {
+                await dataCoordinator.updateAccountNeedsAuth(accountId: miner.accountId, needsAuth: needsAuth)
+            }
+            if needsAuth {
+                updateMinerStatus(minerId: action.minerId, status: .error, needsAuth: true)
+            }
+            onLogMessage?(action.minerId, "[Supervisor] recovery failed | \(error.localizedDescription)")
+        }
     }
 
     static func requiresManualReauth(for error: Error) -> Bool {

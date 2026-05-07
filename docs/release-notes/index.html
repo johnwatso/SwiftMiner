@@ -49,6 +49,9 @@
       <li>Derives release-note links from the configured stable or beta Sparkle feed, keeping in-app notes aligned with the selected update channel.</li>
       <li>Summarises how many miners are currently mining instead of naming only the first active campaign.</li>
       <li>Refreshes miner activity cards periodically so the displayed current and upcoming work stays fresh while the app remains open.</li>
+      <li>Adds a dedicated miner supervisor that detects stalled miners, records worker liveness, and recovers an individual miner without restarting the app.</li>
+      <li>Shows Miner Unresponsive and Recovering states so a stalled miner no longer appears as No Campaigns while other miners are still active.</li>
+      <li>Updates grouped Drops cards to show which miners are mining or claimed instead of relying on a combined progress bar.</li>
       <li>Debounces Twitch category searches, cancels stale requests, and keeps the loading state steady while you type.</li>
       <li>Removes the Claim All Drops app command now that ready rewards are claimed automatically.</li>
       <li>Adds a Stall recovery setting, enabled by default, that restarts an individual miner when it appears stuck after a long progress stall or recoverable network error.</li>
@@ -60,7 +63,7 @@
       <li>Adds in-app TipKit hints that explain adding miners, prioritising games, drag-to-reorder, miner nicknames, drop filters, and the Steam artwork option, with a General settings toggle to disable them.</li>
       <li>Tidies the Advanced settings layout with grouped sections, consistent labels, and clearer destructive actions.</li>
       <li>Uses miner nicknames everywhere a miner is shown, including the Drops campaign cards and the Activity Log.</li>
-      <li>Updates the stable Sparkle appcast and release-note links for SwiftMiner 1.21 build 2026050618.</li>
+      <li>Updates the stable Sparkle appcast and release-note links for SwiftMiner 1.21 build 2026050810.</li>
       <li>Improves completed drop history when Twitch no longer exposes an expired campaign.</li>
       <li>Uses cached completed campaign data only as a fallback when a campaign is missing from Twitch, while fresh Twitch campaign data continues to win when available.</li>
       <li>Fixes completed miner rows that could appear as waiting after both accounts had already claimed the campaign.</li>
