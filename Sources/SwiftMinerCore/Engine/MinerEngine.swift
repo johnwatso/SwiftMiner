@@ -2,6 +2,17 @@ import Foundation
 
 /// Main actor that orchestrates the Twitch drops mining lifecycle
 public actor MinerEngine {
+    public enum OperationalEvent: Sendable, Equatable {
+        case workerStarted(taskID: String)
+        case workerStopped
+        case successfulPoll
+        case campaignRefresh
+        case inventoryRefresh
+        case authRefreshed
+        case heartbeat
+        case stateUpdate
+    }
+
     // MARK: - Properties
 
     private let clientId: String
@@ -67,6 +78,7 @@ public actor MinerEngine {
     public var onDropClaimed: (@Sendable (Drop) -> Void)?
     public var onError: (@Sendable (TwitchMinerError) -> Void)?
     public var onLogMessage: (@Sendable (String) -> Void)?
+    public var onOperationalEvent: (@Sendable (OperationalEvent) -> Void)?
     
     // MARK: - Callback Setters
 
@@ -80,6 +92,10 @@ public actor MinerEngine {
 
     public func setProgressUpdateHandler(_ handler: (@Sendable (OverallProgress) -> Void)?) {
         self.onProgressUpdate = handler
+    }
+
+    public func setOperationalEventHandler(_ handler: (@Sendable (OperationalEvent) -> Void)?) {
+        self.onOperationalEvent = handler
     }
 
     /// Update mining preferences (priority/excluded games)
@@ -290,9 +306,11 @@ public actor MinerEngine {
         }
 
         isRunning = true
+        let workerTaskID = UUID().uuidString
         session = MiningSession()
         progressEventTracker = DropProgressEventTracker()
         warnedUnlinkedPriorityGames.removeAll()
+        onOperationalEvent?(.workerStarted(taskID: workerTaskID))
 
         onStatusChange?(.authenticating)
         log("Starting SwiftMinerCore...")
@@ -352,6 +370,7 @@ public actor MinerEngine {
             guard let self = self else { return }
             await self.runMiningLoop()
         }
+        onOperationalEvent?(.stateUpdate)
 
         // Start maintenance loop (30 minute intervals)
         startMaintenanceLoop()
@@ -376,6 +395,7 @@ public actor MinerEngine {
         session?.endedAt = Date()
         
         onStatusChange?(.stopped)
+        onOperationalEvent?(.workerStopped)
     }
     
     /// Initiates device code authentication flow
@@ -409,6 +429,31 @@ public actor MinerEngine {
         log("Forcing immediate campaign rescan...")
         shouldRescanCampaigns = true
         shouldSwitchChannel = true
+        onOperationalEvent?(.stateUpdate)
+    }
+
+    public func forceInventoryRefresh() async throws {
+        let inventoryService = await dropsService.getInventoryService()
+        let snapshot = try await inventoryService.fetchInventory(forceRefresh: true)
+        syncCampaigns(with: snapshot)
+        onOperationalEvent?(.inventoryRefresh)
+        if let progress = try? await dropsService.getOverallProgress() {
+            onProgressUpdate?(progress)
+        }
+    }
+
+    public func refreshAuthenticationSession() async throws {
+        let token = try await authService.refreshTokenIfNeeded()
+        await apiClient.updateAccessToken(token)
+        await pubSubClient.updateAccessToken(token)
+        if let account = currentAccount {
+            await apiClient.setUserLogin(account.username)
+            await apiClient.setAccountId(account.id)
+            await authService.setAccountId(account.id)
+        }
+        try? await pubSubClient.connect()
+        onOperationalEvent?(.authRefreshed)
+        log("Authentication/session refresh completed")
     }
 
     /// Claims all ready drops immediately
@@ -575,6 +620,7 @@ public actor MinerEngine {
         } else {
             log("Watch heartbeat sent for \(session.channelName)")
         }
+        onOperationalEvent?(.heartbeat)
     }
 
     private func cleanupActiveWatchSession(clearTarget: Bool) async {
@@ -620,6 +666,7 @@ public actor MinerEngine {
             await apiClient.updateAccessToken(token)
             
             log("✅ Maintenance: Token validated/refreshed")
+            onOperationalEvent?(.authRefreshed)
             
             // 3. Check for major campaign updates (TDM parity)
             // If we've been running for a long time, it's good to force a full inventory refresh
@@ -640,6 +687,8 @@ public actor MinerEngine {
 
                 // 1. Fetch all campaigns (single call — avoids double API hit).
                 var allEnriched = try await dropsService.fetchCampaigns()
+                onOperationalEvent?(.successfulPoll)
+                onOperationalEvent?(.campaignRefresh)
                 
                 self.allCampaigns = allEnriched
                 var candidates = candidateCampaigns(
@@ -673,6 +722,8 @@ public actor MinerEngine {
                 let didClaimDrops = await claimReadyDrops()
                 if didClaimDrops {
                     allEnriched = try await dropsService.fetchCampaigns(forceRefresh: true)
+                    onOperationalEvent?(.successfulPoll)
+                    onOperationalEvent?(.campaignRefresh)
                     self.allCampaigns = allEnriched
                     candidates = candidateCampaigns(
                         from: allEnriched,
@@ -797,6 +848,7 @@ public actor MinerEngine {
                         do {
                             if let current = try await apiClient.fetchCurrentDrop(channelId: channel.id) {
                                 emptyCurrentDropPolls = 0
+                                onOperationalEvent?(.successfulPoll)
                                 let campaignId = session?.currentCampaignId
                                 let observation = DropProgressObservation(
                                     campaignId: campaignId,
@@ -828,6 +880,8 @@ public actor MinerEngine {
                             } else {
                                 let inventoryService = await dropsService.getInventoryService()
                                 let snapshot = try await inventoryService.fetchInventory(forceRefresh: true)
+                                onOperationalEvent?(.successfulPoll)
+                                onOperationalEvent?(.inventoryRefresh)
                                 let acknowledged = await acknowledgeInventoryProgress(
                                     snapshot,
                                     campaignId: campaign.id,
@@ -865,6 +919,8 @@ public actor MinerEngine {
                             // Force fresh inventory snapshot fetch (includes benefitIDs)
                             let inventoryService = await dropsService.getInventoryService()
                             let freshInventory = try await inventoryService.fetchInventory(forceRefresh: true)
+                            onOperationalEvent?(.successfulPoll)
+                            onOperationalEvent?(.inventoryRefresh)
                             
                             log("📋 Inventory refreshed: \(freshInventory.benefitIDs.count) claimed benefits, \(freshInventory.progress.count) in-progress drops")
                             
@@ -898,6 +954,8 @@ public actor MinerEngine {
                     if Date().timeIntervalSince(lastCampaignReevaluation) >= campaignReevalInterval {
                         lastCampaignReevaluation = Date()
                         if let fetched = try? await dropsService.fetchCampaigns() {
+                            onOperationalEvent?(.successfulPoll)
+                            onOperationalEvent?(.campaignRefresh)
                             self.allCampaigns = fetched
 
                             // If the current campaign no longer exists in the API response,
@@ -976,6 +1034,8 @@ public actor MinerEngine {
         do {
             let inventoryService = await dropsService.getInventoryService()
             let snapshot = try await inventoryService.fetchInventory(forceRefresh: true)
+            onOperationalEvent?(.successfulPoll)
+            onOperationalEvent?(.inventoryRefresh)
             syncCampaigns(with: snapshot)
 
             let claimedDropIds = Set(
@@ -1034,6 +1094,8 @@ public actor MinerEngine {
 
             if didClaimAnyDrop {
                 let refreshedSnapshot = try await inventoryService.fetchInventory(forceRefresh: true)
+                onOperationalEvent?(.successfulPoll)
+                onOperationalEvent?(.inventoryRefresh)
                 syncCampaigns(with: refreshedSnapshot)
             }
         } catch {

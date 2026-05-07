@@ -4,8 +4,8 @@
         <title>SwiftMiner</title>
         <item>
             <title>1.21</title>
-            <pubDate>Sun, 29 Mar 2026 12:08:29 +1300</pubDate>
-            <sparkle:version>2026050618</sparkle:version>
+            <pubDate>Fri, 08 May 2026 10:00:40 +1200</pubDate>
+            <sparkle:version>2026050810</sparkle:version>
             <sparkle:shortVersionString>1.21</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
             <sparkle:releaseNotesLink>https://johnwatso.github.io/SwiftMiner/release-notes/1.21.html</sparkle:releaseNotesLink>
@@ -27,7 +27,7 @@
                     <li>Adds in-app TipKit hints that explain adding miners, prioritising games, drag-to-reorder, miner nicknames, drop filters, and the Steam artwork option, with a General settings toggle to disable them.</li>
                     <li>Tidies the Advanced settings layout with grouped sections, consistent labels, and clearer destructive actions.</li>
                     <li>Uses miner nicknames everywhere a miner is shown, including the Drops campaign cards and the Activity Log.</li>
-                    <li>Updates the stable Sparkle appcast and release-note links for SwiftMiner 1.21 build 2026050618.</li>
+                    <li>Updates the stable Sparkle appcast and release-note links for SwiftMiner 1.21 build 2026050810.</li>
                     <li>Improves completed drop history when Twitch no longer exposes an expired campaign.</li>
                     <li>Uses cached completed campaign data only as a fallback when a campaign is missing from Twitch, while fresh Twitch campaign data continues to win when available.</li>
                     <li>Fixes completed miner rows that could appear as waiting after both accounts had already claimed the campaign.</li>
@@ -36,6 +36,9 @@
                     <li>Adds a Help &gt; Raise Issue on GitHub… action that opens the SwiftMiner issues page prefilled with version and macOS details.</li>
                     <li>Removes the unused View menu and restricts Start minimised to login launches, only showing the option once Start at login is enabled.</li>
                     <li>Detects false-positive account connections and adds a 1-hour cooldown for campaigns that never produce an active drop session, so miners stop getting stuck on bad campaign selections.</li>
+                    <li>Adds a dedicated miner supervisor that detects stalled miners, records worker liveness, and recovers an individual miner without restarting the app.</li>
+                    <li>Shows Miner Unresponsive and Recovering states so a stalled miner no longer appears as No Campaigns while other miners are still active.</li>
+                    <li>Updates Drops game cards to show which miners are mining or claimed instead of relying on a combined progress bar.</li>
                 </ul>
                 <h3>Version 1.20</h3>
                 <ul>

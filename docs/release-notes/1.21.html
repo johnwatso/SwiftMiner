@@ -93,8 +93,8 @@
 <body>
   <main>
     <h1>SwiftMiner 1.21</h1>
-    <p class="meta">Version 1.21 · Build 2026050618</p>
-    <p class="intro">A reliability-focused update. Miners that used to get stuck on subscription-gated drops, bad campaign selections, or stalled streams now recover on their own, and a new Pending section under each miner lists anything that actually needs you with dismiss and remind-me actions per item.</p>
+    <p class="meta">Version 1.21 · Build 2026050810</p>
+    <p class="intro">A reliability-focused update. Miners that used to get stuck on subscription-gated drops, bad campaign selections, or stalled workers now recover on their own, and the Drops view now shows which miners are actively mining or already claimed without overloading that screen with per-miner progress detail.</p>
 
     <section class="reliability">
       <h2><span class="badge" aria-hidden="true">🛡️</span> Mining Reliability</h2>
@@ -102,6 +102,8 @@
       <ul>
         <li>Detects subscription-gated drops (those requiring a paid Twitch sub) and skips them automatically, so miners no longer hang on "checking with Twitch" when watching alone cannot earn the reward. Skipped drops are logged to the Activity Log.</li>
         <li>Adds a Stall recovery setting, on by default, that restarts an individual miner after a long progress stall or recoverable network error.</li>
+        <li>Adds a dedicated miner supervisor that tracks worker liveness, detects when one miner goes quiet while others are still receiving Twitch activity, and recovers that miner without requiring an app restart.</li>
+        <li>Adds Miner Unresponsive, Recovering, and No Recent Activity states so stalled miners are clearly distinguished from a legitimate no-campaign situation.</li>
         <li>Detects false-positive account connections and cools campaigns down for 1 hour when they never produce an active drop session, so miners stop cycling on bad selections.</li>
         <li>Narrows spade beacon URL extraction to <code>spade_url</code> only, matching the upstream TwitchDropsMiner fix — previously a stray <code>beacon_url</code> match could silently route watch events to the wrong endpoint.</li>
       </ul>
@@ -126,7 +128,7 @@
         <li>Adds a What's New window in the app menu and derives release-note links from the configured update channel.</li>
         <li>Adds Help &gt; Raise Issue on GitHub…, prefilled with version and macOS details.</li>
         <li>Restricts Start minimised to login launches, only showing the option once Start at login is enabled, and removes the unused View menu.</li>
-        <li>Updates the stable Sparkle appcast for SwiftMiner 1.21 build 2026050618.</li>
+        <li>Updates the stable Sparkle appcast for SwiftMiner 1.21 build 2026050810.</li>
       </ul>
     </section>
 
@@ -136,6 +138,7 @@
       <ul>
         <li>Summarises how many miners are currently mining instead of naming only the first active campaign, and refreshes activity cards periodically while the app stays open.</li>
         <li>Shows claiming rewards in activity cards instead of leaving completed drops labelled ready to claim, and uses a green check in the menu bar when all miners are running.</li>
+        <li>Updates grouped Drops cards to show which miners are mining or claimed for each campaign instead of using a combined progress bar at the game level.</li>
         <li>Removes the now-redundant Claim All Drops command — ready rewards are claimed automatically.</li>
       </ul>
     </section>

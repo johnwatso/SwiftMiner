@@ -736,6 +736,8 @@ struct DropsListView: View {
             state = .expired
         } else if combinedProgress >= 0.995 {
             state = .claimed
+        } else if !activeMiners.isEmpty {
+            state = .active
         } else if combinedProgress > 0 {
             state = .inProgress
         } else {
@@ -1104,15 +1106,34 @@ private struct GameCampaignDeckCard: View {
         group.aggregateState == .inProgress
     }
 
-    private var showsCombinedProgressBar: Bool {
-        guard group.combinedProgressFraction != nil else { return false }
-        return group.aggregateState == .inProgress
-    }
+    private var minerAccountStates: [AccountState] {
+        var mergedStates: [String: AccountState] = [:]
 
-    private var combinedProgressLabel: String? {
-        guard let fraction = group.combinedProgressFraction else { return nil }
-        guard group.aggregateState != .actionRequired else { return nil }
-        return "\(Int((fraction * 100).rounded()))% combined progress"
+        for account in group.campaigns.flatMap(\.campaign.accountStates) {
+            if let existing = mergedStates[account.accountId] {
+                mergedStates[account.accountId] = preferredAccountState(existing, account)
+            } else {
+                mergedStates[account.accountId] = account
+            }
+        }
+
+        let statusOrder: [AccountMiningStatus: Int] = [
+            .needsAuth: 0,
+            .blocked: 1,
+            .mining: 2,
+            .ready: 3,
+            .claimed: 4,
+            .idle: 5
+        ]
+
+        return mergedStates.values.sorted {
+            let lhsOrder = statusOrder[$0.miningStatus] ?? Int.max
+            let rhsOrder = statusOrder[$1.miningStatus] ?? Int.max
+            if lhsOrder != rhsOrder {
+                return lhsOrder < rhsOrder
+            }
+            return $0.username.localizedCaseInsensitiveCompare($1.username) == .orderedAscending
+        }
     }
 
     var body: some View {
@@ -1168,17 +1189,8 @@ private struct GameCampaignDeckCard: View {
                         }
                     }
 
-                    if let combinedProgressLabel {
-                        Text(combinedProgressLabel)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    if let progress = group.combinedProgressFraction, showsCombinedProgressBar {
-                        ProgressView(value: progress, total: 1.0)
-                            .progressViewStyle(.linear)
-                            .tint(group.aggregateState.tint)
-                            .padding(.top, 2)
+                    if !minerAccountStates.isEmpty {
+                        CampaignMinerAttributionRow(accountStates: minerAccountStates)
                     }
                 }
             }
@@ -1213,6 +1225,32 @@ private struct GameCampaignDeckCard: View {
             radius: isActive ? 8 : 4,
             y: isActive ? 4 : 2
         )
+    }
+
+    private func preferredAccountState(_ lhs: AccountState, _ rhs: AccountState) -> AccountState {
+        let statusOrder: [AccountMiningStatus: Int] = [
+            .needsAuth: 0,
+            .blocked: 1,
+            .mining: 2,
+            .ready: 3,
+            .claimed: 4,
+            .idle: 5
+        ]
+
+        let lhsOrder = statusOrder[lhs.miningStatus] ?? Int.max
+        let rhsOrder = statusOrder[rhs.miningStatus] ?? Int.max
+
+        if lhsOrder != rhsOrder {
+            return lhsOrder < rhsOrder ? lhs : rhs
+        }
+
+        let lhsProgress = lhs.progressFraction ?? 0
+        let rhsProgress = rhs.progressFraction ?? 0
+        if lhsProgress != rhsProgress {
+            return lhsProgress > rhsProgress ? lhs : rhs
+        }
+
+        return lhs.claimedDropCount >= rhs.claimedDropCount ? lhs : rhs
     }
 }
 
@@ -1260,7 +1298,7 @@ private struct GroupedCampaignSubItem: View {
         HStack(alignment: .center, spacing: 10) {
             thumbnail
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 5) {
                 Text(item.campaign.campaignName)
                     .font(.subheadline.weight(.medium))
                     .lineLimit(1)
@@ -1268,6 +1306,10 @@ private struct GroupedCampaignSubItem: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+
+                if !item.campaign.accountStates.isEmpty {
+                    CampaignAccountAttribution(accountStates: item.campaign.accountStates)
+                }
             }
 
             Spacer(minLength: 0)

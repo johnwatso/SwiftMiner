@@ -392,6 +392,16 @@ struct MinerInspectorView: View {
                         LabeledContent("Campaign", value: miner.currentCampaign ?? "—")
                         LabeledContent("Drops Claimed", value: "\(miner.dropsClaimed)")
                     }
+
+                    inspectorSection(title: "Worker Health") {
+                        LabeledContent("Worker State", value: workerStateLabel(for: miner.workerState))
+                        LabeledContent("Healthy", value: miner.isHealthy ? "Yes" : "No")
+                        LabeledContent("Stalled", value: miner.isStalled ? "Yes" : "No")
+                        LabeledContent("Task ID", value: miner.workerTaskID ?? "—")
+                        LabeledContent("Last Event", value: timestampText(miner.lastEventAt))
+                        LabeledContent("Last Poll", value: timestampText(miner.lastSuccessfulPollAt))
+                        LabeledContent("Last Campaign Refresh", value: timestampText(miner.lastCampaignRefreshAt))
+                    }
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 20)
@@ -418,6 +428,32 @@ struct MinerInspectorView: View {
         }
         .padding(14)
         .glassControlSurface()
+    }
+
+    private func workerStateLabel(for state: MinerWorkerState) -> String {
+        switch state {
+        case .idle:
+            return "Idle"
+        case .starting:
+            return "Starting"
+        case .running:
+            return "Running"
+        case .refreshing:
+            return "Refreshing"
+        case .recovering:
+            return "Recovering"
+        case .authRefreshing:
+            return "Refreshing Auth"
+        case .stopped:
+            return "Stopped"
+        case .failed:
+            return "Failed"
+        }
+    }
+
+    private func timestampText(_ value: Date?) -> String {
+        guard let value else { return "—" }
+        return value.formatted(date: .abbreviated, time: .standard)
     }
 }
 

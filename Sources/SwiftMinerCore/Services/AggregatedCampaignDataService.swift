@@ -629,7 +629,8 @@ public actor AggregatedCampaignDataService {
                 username: username,
                 initials: Self.initials(from: username),
                 miningStatus: state,
-                claimedDropCount: claimedDropCount
+                claimedDropCount: claimedDropCount,
+                progressFraction: campaign.flatMap(Self.progressFraction(for:))
             )
         }
         .sorted { lhs, rhs in
@@ -670,6 +671,22 @@ public actor AggregatedCampaignDataService {
             isClaimable: existing.isClaimable || incoming.isClaimable,
             isEarnable: existing.isEarnable || incoming.isEarnable
         )
+    }
+
+    private static func progressFraction(for campaign: CampaignViewData) -> Double? {
+        guard !campaign.isClaimed else { return 1.0 }
+
+        let progress = min(max(campaign.progress, 0), 1)
+        if progress > 0 {
+            return progress
+        }
+
+        let dropProgress = campaign.drops
+            .filter { !$0.isClaimed }
+            .map(\.progress)
+            .max() ?? 0
+
+        return dropProgress > 0 ? min(max(dropProgress, 0), 1) : nil
     }
 
     private func mergedMiningStatus(
