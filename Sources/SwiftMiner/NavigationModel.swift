@@ -72,7 +72,7 @@ public final class NavigationModel {
     }
     
     public var selectedItem: SidebarItem? = .overview
-    public var columnVisibility: NavigationSplitViewVisibility = .automatic
+    public var columnVisibility: NavigationSplitViewVisibility = .all
     public var requestedDropsFilter: DropsFilterIntent?
 
 

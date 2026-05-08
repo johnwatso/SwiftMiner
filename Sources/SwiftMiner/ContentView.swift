@@ -10,20 +10,27 @@ struct ContentView: View {
 
     var body: some View {
         @Bindable var nav = navigation
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $nav.columnVisibility) {
             SidebarView()
-                .navigationSplitViewColumnWidth(min: 168, ideal: 180, max: 240)
+                .navigationSplitViewColumnWidth(min: 180, ideal: 180, max: 180)
         } detail: {
             detailContainer
         }
         .background(WindowZoomConfigurator())
+        .toolbar(removing: .sidebarToggle)
         .frame(minWidth: 800, minHeight: 600)
         .sheet(isPresented: $nav.showAddAccountSheet) {
             AuthRequiredSheet(isPresented: $nav.showAddAccountSheet)
                 .environment(navigation)
         }
         .onAppear {
+            navigation.columnVisibility = .all
             navigation.preloadDropsTab()
+        }
+        .onChange(of: navigation.columnVisibility) { _, newValue in
+            if newValue != .all {
+                navigation.columnVisibility = .all
+            }
         }
         .onChange(of: navigation.minerManager.miners.count) { _, _ in
             navigation.handleAccountCountChange()
@@ -2716,26 +2723,53 @@ private struct WindowZoomConfigurator: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        guard let window = nsView.window, !context.coordinator.didConfigure else { return }
+        guard let window = nsView.window else { return }
         configure(window, coordinator: context.coordinator)
     }
 
     private func configure(_ window: NSWindow, coordinator: Coordinator) {
-        coordinator.didConfigure = true
-        window.styleMask.insert(.resizable)
-        window.collectionBehavior.remove([
-            .fullScreenPrimary,
-            .fullScreenAuxiliary,
-            .fullScreenAllowsTiling
-        ])
-        window.collectionBehavior.insert([
-            .fullScreenNone,
-            .fullScreenDisallowsTiling
-        ])
+        if !coordinator.didConfigure {
+            coordinator.didConfigure = true
+            window.styleMask.insert(.resizable)
+            window.collectionBehavior.remove([
+                .fullScreenPrimary,
+                .fullScreenAuxiliary,
+                .fullScreenAllowsTiling
+            ])
+            window.collectionBehavior.insert([
+                .fullScreenNone,
+                .fullScreenDisallowsTiling
+            ])
+        }
+
+        removeSidebarToggleIfNeeded(from: window)
+        DispatchQueue.main.async {
+            removeSidebarToggleIfNeeded(from: window)
+        }
     }
 
     final class Coordinator: NSObject {
         var didConfigure = false
+    }
+
+    private func removeSidebarToggleIfNeeded(from window: NSWindow) {
+        guard let toolbar = window.toolbar else { return }
+
+        while let index = toolbar.items.firstIndex(where: isSidebarToggleItem) {
+            toolbar.removeItem(at: index)
+        }
+    }
+
+    private func isSidebarToggleItem(_ item: NSToolbarItem) -> Bool {
+        let identifier = item.itemIdentifier
+        let rawValue = identifier.rawValue
+
+        if identifier == .toggleSidebar || identifier == .sidebarTrackingSeparator {
+            return true
+        }
+
+        return rawValue.contains("toggleSidebar")
+            || rawValue.contains("sidebarTrackingSeparator")
     }
 }
 
