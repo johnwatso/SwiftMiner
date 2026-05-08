@@ -230,7 +230,14 @@ private struct MinerRow: View {
         guard let discordId = miner.ownerDiscordId else { return }
         isDMSending = true
         dmResult = nil
-        let ok = await navigation.swiftBotConnectionService.sendTestDM(to: discordId)
+        // Pull live app-level priorities so the test DM mirrors what real
+        // activation DMs send. Using the no-arg overload would hard-code [].
+        let priorityGames = await MainActor.run { Settings.shared.priorityGames }
+        let ok = await navigation.swiftBotConnectionService.sendTestDM(
+            to: discordId,
+            twitchUsername: miner.username,
+            priorityGames: priorityGames
+        )
         dmResult = ok
         isDMSending = false
         if !isExpanded {

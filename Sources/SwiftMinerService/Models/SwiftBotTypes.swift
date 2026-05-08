@@ -46,9 +46,3 @@ public protocol SwiftBotConnectionService: Sendable {
     func sendTestDM(to discordUserId: String, twitchUsername: String?, priorityGames: [String]) async -> Bool
 }
 
-public extension SwiftBotConnectionService {
-    /// Convenience: send a basic test DM with no additional context.
-    func sendTestDM(to discordUserId: String) async -> Bool {
-        await sendTestDM(to: discordUserId, twitchUsername: nil, priorityGames: [])
-    }
-}
