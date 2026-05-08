@@ -544,19 +544,18 @@ private struct MiningSettingsView: View {
 private struct IntegrationsSettingsView: View {
     @ObservedObject var settings: Settings
     @Environment(NavigationModel.self) private var navigation
-    @State private var showAPIKey = false
     @State private var isTestingConnection = false
     @State private var connectionTestMessage: String?
     @State private var copiedPairingBundle = false
-    @State private var showAdvanced = false
 
     private let defaultSwiftBotEndpoint = "http://localhost:38888"
 
     var body: some View {
         Form {
-            pairingSection
+            if navigation.swiftBotState != .connected {
+                pairingSection
+            }
             connectionStatusSection
-            advancedSection
         }
         .formStyle(.grouped)
         .padding(24)
@@ -650,27 +649,37 @@ private struct IntegrationsSettingsView: View {
 
                     Spacer()
 
-                    Button {
-                        Task {
-                            connectionTestMessage = nil
-                            isTestingConnection = true
-                            await navigation.checkSwiftBotConnection()
-                            connectionTestMessage = connectionTestDescription(for: navigation.swiftBotState)
-                            isTestingConnection = false
+                    HStack(spacing: 8) {
+                        Button {
+                            repairConnection()
+                        } label: {
+                            Label("Repair", systemImage: "wrench.and.screwdriver")
                         }
-                    } label: {
-                        if isTestingConnection {
-                            HStack(spacing: 6) {
-                                ProgressView().controlSize(.small)
-                                Text("Testing")
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+
+                        Button {
+                            Task {
+                                connectionTestMessage = nil
+                                isTestingConnection = true
+                                await navigation.checkSwiftBotConnection()
+                                connectionTestMessage = connectionTestDescription(for: navigation.swiftBotState)
+                                isTestingConnection = false
                             }
-                        } else {
-                            Label("Test", systemImage: "arrow.clockwise")
+                        } label: {
+                            if isTestingConnection {
+                                HStack(spacing: 6) {
+                                    ProgressView().controlSize(.small)
+                                    Text("Testing")
+                                }
+                            } else {
+                                Label("Test", systemImage: "arrow.clockwise")
+                            }
                         }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(isTestingConnection)
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .disabled(isTestingConnection)
                 }
 
                 if isTestingConnection {
@@ -698,141 +707,9 @@ private struct IntegrationsSettingsView: View {
         }
     }
 
-    // MARK: Advanced (manual fields)
-
-    private var advancedSection: some View {
-        Section {
-            DisclosureGroup(isExpanded: $showAdvanced) {
-                VStack(alignment: .leading, spacing: 14) {
-                    advancedTextField(
-                        "SwiftBot Endpoint",
-                        text: Binding(
-                            get: { settings.swiftBotEndpoint },
-                            set: { newValue in
-                                settings.swiftBotEndpoint = newValue
-                                Task { await navigation.updateSwiftBotEndpoint(newValue) }
-                            }
-                        ),
-                        prompt: defaultSwiftBotEndpoint
-                    )
-
-                    advancedTextField(
-                        "SwiftMiner API Endpoint",
-                        text: $settings.swiftMinerAPIEndpoint,
-                        prompt: "http://127.0.0.1:8080"
-                    )
-
-                    apiKeyField
-
-                    advancedTextField(
-                        "Webhook URL",
-                        text: Binding(
-                            get: { settings.swiftBotWebhookURL },
-                            set: { newValue in
-                                settings.swiftBotWebhookURL = newValue
-                                Task { await navigation.updateSwiftBotWebhookConfig() }
-                            }
-                        ),
-                        prompt: defaultSwiftBotEndpoint + "/webhooks/swiftminer/events"
-                    )
-
-                    advancedSecureField(
-                        "HMAC Secret",
-                        text: Binding(
-                            get: { settings.swiftBotHmacSecret },
-                            set: { newValue in
-                                settings.swiftBotHmacSecret = newValue
-                                Task { await navigation.updateSwiftBotWebhookConfig() }
-                            }
-                        ),
-                        prompt: "Shared secret"
-                    )
-
-                    HStack {
-                        Spacer()
-                        Button {
-                            Task { _ = await navigation.swiftBotConnectionService.sendTestEvent() }
-                        } label: {
-                            Label("Send Test Webhook", systemImage: "paperplane.fill")
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .disabled(settings.swiftBotWebhookURL.isEmpty)
-                    }
-                }
-                .padding(.top, 8)
-            } label: {
-                Text("Advanced")
-            }
-        }
-    }
-
-    private func advancedTextField(_ label: String, text: Binding<String>, prompt: String) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(label)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-
-            TextField("", text: text, prompt: Text(prompt))
-                .labelsHidden()
-                .textFieldStyle(.roundedBorder)
-                .font(.body.monospaced())
-                .frame(maxWidth: .infinity)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func advancedSecureField(_ label: String, text: Binding<String>, prompt: String) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(label)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-
-            SecureField("", text: text, prompt: Text(prompt))
-                .labelsHidden()
-                .textFieldStyle(.roundedBorder)
-                .font(.body.monospaced())
-                .frame(maxWidth: .infinity)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var apiKeyField: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text("API Key")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-
-            HStack(spacing: 8) {
-                Text(showAPIKey ? settings.swiftMinerAPIKey : String(repeating: "•", count: 16))
-                    .font(.body.monospaced())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 5)
-                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
-
-                Button { showAPIKey.toggle() } label: {
-                    Image(systemName: showAPIKey ? "eye.slash" : "eye")
-                        .frame(width: 18)
-                }
-                .buttonStyle(.borderless)
-
-                Button {
-                    let pasteboard = NSPasteboard.general
-                    pasteboard.clearContents()
-                    pasteboard.setString(settings.swiftMinerAPIKey, forType: .string)
-                } label: {
-                    Image(systemName: "doc.on.doc")
-                        .frame(width: 18)
-                }
-                .buttonStyle(.borderless)
-            }
-            .frame(maxWidth: .infinity)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+    private func repairConnection() {
+        copyPairingBundle()
+        connectionTestMessage = "Fresh SwiftBot pairing details copied. Paste them into SwiftBot to repair the connection."
     }
 }
 

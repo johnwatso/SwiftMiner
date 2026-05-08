@@ -1,5 +1,8 @@
 import Foundation
+import OSLog
 import SwiftMinerCore
+
+private let swiftBotConnectionLogger = Logger(subsystem: "com.swiftminer", category: "swiftbot")
 
 /// Implementation of SwiftBotConnectionService using REST polling.
 public actor RestSwiftBotConnectionService: SwiftBotConnectionService {
@@ -73,22 +76,41 @@ public actor RestSwiftBotConnectionService: SwiftBotConnectionService {
     }
 
     public func sendTestDM(to discordUserId: String, twitchUsername: String?, priorityGames: [String]) async -> Bool {
-        guard let url = endpoint else { return false }
+        guard let url = endpoint else {
+            swiftBotConnectionLogger.warning("sendTestDM aborted — endpoint not configured")
+            return false
+        }
         let dmUrl = url.appendingPathComponent("v1/users/\(discordUserId)/dm/test")
         var request = URLRequest(url: dmUrl)
         request.httpMethod = "POST"
         request.timeoutInterval = 10.0
-        if twitchUsername != nil || !priorityGames.isEmpty {
-            var body: [String: Any] = [:]
-            if let twitchUsername { body["twitch_username"] = twitchUsername }
-            if !priorityGames.isEmpty { body["priority_games"] = priorityGames }
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+        // Always send a JSON body and always include priority_games (even when empty),
+        // so SwiftBot can distinguish "key missing" (could not load) from
+        // "explicitly empty" (no priorities configured — mine any drops campaign).
+        var body: [String: Any] = [
+            "priority_games": priorityGames
+        ]
+        if let twitchUsername { body["twitch_username"] = twitchUsername }
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+        swiftBotConnectionLogger.info(
+            "sendTestDM POST discordId=\(discordUserId, privacy: .private) twitchUsername=\(twitchUsername ?? "<nil>", privacy: .private) priorityCount=\(priorityGames.count) priorityGames=\(priorityGames.joined(separator: ", "), privacy: .private)"
+        )
+        if let httpBody = request.httpBody, let raw = String(data: httpBody, encoding: .utf8) {
+            swiftBotConnectionLogger.debug("sendTestDM body=\(raw, privacy: .private)")
         }
+
         do {
             let (_, response) = try await URLSession.shared.data(for: request)
-            return (response as? HTTPURLResponse).map { (200...299).contains($0.statusCode) } ?? false
+            let ok = (response as? HTTPURLResponse).map { (200...299).contains($0.statusCode) } ?? false
+            if !ok, let http = response as? HTTPURLResponse {
+                swiftBotConnectionLogger.error("sendTestDM non-2xx status=\(http.statusCode)")
+            }
+            return ok
         } catch {
+            swiftBotConnectionLogger.error("sendTestDM transport error: \(error.localizedDescription)")
             return false
         }
     }
