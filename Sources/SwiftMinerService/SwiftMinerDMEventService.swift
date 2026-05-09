@@ -59,7 +59,8 @@ public actor SwiftMinerDMEventService {
             twitchUsername: nil,
             priorityGames: priorityGames,
             campaignName: campaignName,
-            milestoneTitle: dropName
+            milestoneTitle: dropName,
+            eventId: "drop:\(dropId)"
         )
 
         dmEventLogger.info("Emitting dropClaimed discordId=\(discordUserId, privacy: .private) drop=\(dropName)")
@@ -81,7 +82,8 @@ public actor SwiftMinerDMEventService {
             debug: false,
             twitchUsername: nil,
             priorityGames: priorityGames,
-            campaignName: campaignName
+            campaignName: campaignName,
+            eventId: "campaign:\(campaignId)"
         )
 
         dmEventLogger.info("Emitting campaignCompleted discordId=\(discordUserId, privacy: .private) campaign=\(campaignName)")
@@ -99,7 +101,8 @@ public actor SwiftMinerDMEventService {
         let request = SwiftBotDMRequest(
             messageType: .reauth,
             debug: false,
-            twitchUsername: twitchUsername
+            twitchUsername: twitchUsername,
+            eventId: "reauth:\(accountId)"
         )
 
         dmEventLogger.info("Emitting reauth discordId=\(discordUserId, privacy: .private)")
@@ -120,7 +123,8 @@ public actor SwiftMinerDMEventService {
             debug: false,
             twitchUsername: nil,
             priorityGames: priorityGames,
-            affectedGame: gameName
+            affectedGame: gameName,
+            eventId: "link:\(gameName.lowercased())"
         )
 
         dmEventLogger.info("Emitting prioritisedGameNeedsLinking discordId=\(discordUserId, privacy: .private) game=\(gameName)")
@@ -140,7 +144,8 @@ public actor SwiftMinerDMEventService {
             messageType: .welcomeBack,
             debug: false,
             twitchUsername: twitchUsername,
-            priorityGames: priorityGames
+            priorityGames: priorityGames,
+            eventId: "welcomeBack:\(accountId)"
         )
 
         dmEventLogger.info("Emitting welcomeBack discordId=\(discordUserId, privacy: .private)")
