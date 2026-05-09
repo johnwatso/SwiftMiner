@@ -1053,6 +1053,9 @@ private struct IntegrationsSettingsView: View {
             debug: true,
             twitchUsername: "preview_user",
             priorityGames: Settings.shared.priorityGames,
+            activationCode: type == .setup ? "ABCD-EFGH" : nil,
+            activationExpiresInMinutes: type == .setup ? 29 : nil,
+            activationURL: type == .setup ? "https://www.twitch.tv/activate?code=ABCD-EFGH" : nil,
             campaignName: "Preview Campaign",
             milestoneTitle: "Preview Drop"
         )
@@ -1106,8 +1109,9 @@ private struct IntegrationsSettingsView: View {
                 debug: true,
                 twitchUsername: "test_user",
                 priorityGames: Settings.shared.priorityGames,
-                activationCode: "ABCD-EFGH",
-                activationExpiresInMinutes: 29,
+                activationCode: type == .setup ? "ABCD-EFGH" : nil,
+                activationExpiresInMinutes: type == .setup ? 29 : nil,
+                activationURL: type == .setup ? "https://www.twitch.tv/activate?code=ABCD-EFGH" : nil,
                 affectedGame: "Test Game",
                 campaignName: "Test Campaign",
                 milestoneTitle: "50% Complete",
