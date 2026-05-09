@@ -1052,7 +1052,7 @@ private struct IntegrationsSettingsView: View {
             messageType: type,
             debug: true,
             twitchUsername: "preview_user",
-            priorityGames: ["THE FINALS"],
+            priorityGames: Settings.shared.priorityGames,
             campaignName: "Preview Campaign",
             milestoneTitle: "Preview Drop"
         )
@@ -1105,7 +1105,7 @@ private struct IntegrationsSettingsView: View {
                 messageType: type,
                 debug: true,
                 twitchUsername: "test_user",
-                priorityGames: ["THE FINALS", "Overwatch 2"],
+                priorityGames: Settings.shared.priorityGames,
                 activationCode: "ABCD-EFGH",
                 activationExpiresInMinutes: 29,
                 affectedGame: "Test Game",
