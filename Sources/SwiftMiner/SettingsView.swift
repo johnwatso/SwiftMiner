@@ -176,6 +176,13 @@ private struct GeneralSettingsView: View {
             }
 
             Section {
+                Toggle("Enable Discord Integration", isOn: $settings.swiftBotEnabled)
+                SettingsSecondaryText("Enables the local Discord/SwiftBot bridge. When on, an Integrations tab appears here for endpoint and webhook configuration.")
+            } header: {
+                Text("Integrations")
+            }
+
+            Section {
                 let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
                 let currentBuild = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown"
 
@@ -1126,7 +1133,6 @@ private struct AdvancedSettingsView: View {
     var body: some View {
         Form {
             apiConfigurationSection
-            integrationToggleSection
             maintenanceSection
 
 #if DEBUG
@@ -1196,15 +1202,6 @@ private struct AdvancedSettingsView: View {
             SettingsSecondaryText("By default, SwiftMiner uses a built-in Twitch client. Only change this if you know what you are doing.")
         } header: {
             Text("API Configuration")
-        }
-    }
-
-    private var integrationToggleSection: some View {
-        Section {
-            Toggle("Enable Discord Integration", isOn: $settings.swiftBotEnabled)
-            SettingsSecondaryText("Enables the local Discord/SwiftBot bridge. When on, an Integrations tab appears here for endpoint and webhook configuration.")
-        } header: {
-            Text("Integrations")
         }
     }
 
