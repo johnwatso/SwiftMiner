@@ -313,7 +313,19 @@ public final class MinerManager {
     public var onAccountRemoved: (@Sendable (String) -> Void)?
     public var onAggregateProgress: (@Sendable (AggregateProgress) -> Void)?
     public var onLogMessage: (@Sendable (String, String) -> Void)? // (minerId, message)
-    
+
+    // MARK: - DM Event Callbacks
+    /// Fired when a drop is successfully claimed. (minerId, drop, campaignName?)
+    public var onDropClaimedEvent: (@Sendable (String, Drop, String?) -> Void)?
+    /// Fired when manual re-authentication is required. (minerId)
+    public var onAuthRequiredEvent: (@Sendable (String) -> Void)?
+    /// Fired when a campaign becomes fully completed. (minerId, campaign)
+    public var onCampaignCompletedEvent: (@Sendable (String, Campaign) -> Void)?
+    /// Fired when a prioritised game is blocked due to missing account link. (minerId, gameName)
+    public var onLinkWarningEvent: (@Sendable (String, String) -> Void)?
+    /// Fired when a miner recovers from error to active state. (minerId)
+    public var onWelcomeBackEvent: (@Sendable (String) -> Void)?
+
     // MARK: - Initialization
     
     public init(
@@ -1003,7 +1015,14 @@ public final class MinerManager {
                 guard let self = self else { return }
                 let minerStatus = self.mapSessionStatus(status)
                 await self.supervisor.recordStateUpdate(minerId: minerId)
-                
+
+                // Detect welcome-back: miner recovered from error to active
+                if let miner = self.getMiner(id: minerId),
+                   miner.status == .error,
+                   (minerStatus == .watching || minerStatus == .fetchingCampaigns || minerStatus == .claiming) {
+                    self.onWelcomeBackEvent?(minerId)
+                }
+
                 // If status changed to watching or back to idle, update campaign info too
                 let currentId = await engine.currentCampaignId
                 let clearsNeedsAuth = minerStatus != .authenticating && minerStatus != .error
@@ -1024,11 +1043,16 @@ public final class MinerManager {
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
                 await self.supervisor.recordCampaignRefresh(minerId: minerId)
-                
+
                 // Get all campaigns and current ID from engine
                 let all = await engine.allCampaigns
                 let currentId = await engine.currentCampaignId
-                
+
+                // Detect newly completed campaigns
+                for campaign in all where campaign.drops.allSatisfy({ $0.isClaimed }) {
+                    self.onCampaignCompletedEvent?(minerId, campaign)
+                }
+
                 // Update current campaign info
                 if let currentId, let current = all.first(where: { $0.id == currentId }) {
                     self.updateMinerStatus(minerId: minerId, currentCampaign: current.name, currentCampaignId: .some(currentId), allCampaigns: all)
@@ -1074,6 +1098,13 @@ public final class MinerManager {
                 self.resetDailyClaimsIfNeeded()
                 self.claimedTodayIds.insert(drop.id)
                 self.incrementDropsClaimed(minerId: minerId)
+
+                // Find campaign name for the DM event
+                let campaignName = self.getMiner(id: minerId)?.allCampaigns.first(where: {
+                    $0.drops.contains(where: { $0.id == drop.id })
+                })?.name
+                self.onDropClaimedEvent?(minerId, drop, campaignName)
+
                 await self.applySupervisorSnapshot(for: minerId)
             }
         }
@@ -1094,9 +1125,19 @@ public final class MinerManager {
 
                 await self.supervisor.recordWorkerStop(minerId: minerId, failed: true)
                 let needsAuth = Self.requiresManualReauth(for: error)
+                if needsAuth {
+                    self.onAuthRequiredEvent?(minerId)
+                }
                 await self.dataCoordinator.updateAccountNeedsAuth(accountId: miner.accountId, needsAuth: needsAuth)
                 self.updateMinerStatus(minerId: minerId, status: .error, needsAuth: needsAuth)
                 await self.applySupervisorSnapshot(for: minerId)
+            }
+        }
+
+        await engine.setLinkWarningHandler { [weak self] gameName in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                self.onLinkWarningEvent?(minerId, gameName)
             }
         }
     }

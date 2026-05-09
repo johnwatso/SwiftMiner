@@ -137,9 +137,9 @@ public final class NavigationModel {
             await MainActor.run {
                 self.minerManager.setOwnerDiscordId(forAccountId: account.id, to: discordUserId)
             }
-            // Confirm to the user via Discord DM with their Twitch username and current priority games.
+            // Confirm to the user via Discord DM with their Twitch username and current app-level priority games.
             let priorityGames = await MainActor.run { Settings.shared.priorityGames }
-            _ = await self.swiftBotConnectionService.sendTestDM(
+            _ = await self.swiftBotConnectionService.sendLinkedDM(
                 to: discordUserId,
                 twitchUsername: account.username,
                 priorityGames: priorityGames
@@ -237,6 +237,7 @@ public final class NavigationModel {
     public let swiftBotConnectionService: any SwiftBotConnectionService
     public let eventOutboxService: EventOutboxService
     public let eventEmitter: EventEmitterService
+    public private(set) var dmEventService: SwiftMinerDMEventService?
     private let sqliteManager: SQLiteManager
     private var httpAPIServer: HTTPAPIServer?
     private var onboardingSetupTask: Task<Void, Never>?
@@ -300,6 +301,78 @@ public final class NavigationModel {
             await eventOutboxService.start()
         }
         startSwiftBotStateSync()
+
+        // Wire DM event production — lightweight event emission, notification decisions stay in SwiftBot
+        let dmEventService = SwiftMinerDMEventService(connectionService: swiftBotConnectionService)
+        self.dmEventService = dmEventService
+
+        minerManager.onDropClaimedEvent = { [weak self] minerId, drop, campaignName in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                guard let miner = self.minerManager.miners.first(where: { $0.id == minerId }) else { return }
+                let priorityGames = Settings.shared.priorityGames
+                await dmEventService.emitDropClaimed(
+                    dropId: drop.id,
+                    dropName: drop.name,
+                    campaignName: campaignName,
+                    discordUserId: miner.ownerDiscordId,
+                    priorityGames: priorityGames
+                )
+            }
+        }
+
+        minerManager.onAuthRequiredEvent = { [weak self] minerId in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                guard let miner = self.minerManager.miners.first(where: { $0.id == minerId }) else { return }
+                await dmEventService.emitReauthRequired(
+                    accountId: miner.accountId,
+                    discordUserId: miner.ownerDiscordId,
+                    twitchUsername: miner.username
+                )
+            }
+        }
+
+        minerManager.onCampaignCompletedEvent = { [weak self] minerId, campaign in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                guard let miner = self.minerManager.miners.first(where: { $0.id == minerId }) else { return }
+                let priorityGames = Settings.shared.priorityGames
+                await dmEventService.emitCampaignCompleted(
+                    campaignId: campaign.id,
+                    campaignName: campaign.name,
+                    discordUserId: miner.ownerDiscordId,
+                    priorityGames: priorityGames
+                )
+            }
+        }
+
+        minerManager.onLinkWarningEvent = { [weak self] minerId, gameName in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                guard let miner = self.minerManager.miners.first(where: { $0.id == minerId }) else { return }
+                let priorityGames = Settings.shared.priorityGames
+                await dmEventService.emitPrioritisedGameNeedsLinking(
+                    gameName: gameName,
+                    discordUserId: miner.ownerDiscordId,
+                    priorityGames: priorityGames
+                )
+            }
+        }
+
+        minerManager.onWelcomeBackEvent = { [weak self] minerId in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                guard let miner = self.minerManager.miners.first(where: { $0.id == minerId }) else { return }
+                let priorityGames = Settings.shared.priorityGames
+                await dmEventService.emitWelcomeBack(
+                    accountId: miner.accountId,
+                    discordUserId: miner.ownerDiscordId,
+                    twitchUsername: miner.username,
+                    priorityGames: priorityGames
+                )
+            }
+        }
 
         minerManager.onLogMessage = { [weak self] minerId, message in
             Task { @MainActor [weak self] in

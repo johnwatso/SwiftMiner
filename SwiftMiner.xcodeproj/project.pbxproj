@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0043CF0EC5029EC739BE5F7F /* GamePreferenceComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = F52F9551C4B18A1F7A3D4173 /* GamePreferenceComponents.swift */; };
+		0527D2AA5B1A268EFE44380C /* SwiftMinerDMEventService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF94C5B6274D4250D2A5F940 /* SwiftMinerDMEventService.swift */; };
 		05EDE4B6BDADF449C9F36B96 /* libSwiftMinerService.a in Frameworks */ = {isa = PBXBuildFile; fileRef = F79E8CD76AF45B0FC7080868 /* libSwiftMinerService.a */; };
 		0B2E0AC6FE0D7B1B112DFD02 /* AdminLinkingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9559DA840299AFF90133587 /* AdminLinkingService.swift */; };
 		0DA97EF00308C1F2837F3394 /* LogExporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 637C207EE3AF4206DA9F2C8F /* LogExporterTests.swift */; };
@@ -289,6 +290,7 @@
 		E8AA7E5479C3A8C70111FF9A /* CampaignStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignStore.swift; sourceTree = "<group>"; };
 		ED4E879166A2415E98157832 /* SwiftMinerCoreTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SwiftMinerCoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		EEFF26E9E87FC777EBE09B2B /* DiscordAPIRoutes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscordAPIRoutes.swift; sourceTree = "<group>"; };
+		EF94C5B6274D4250D2A5F940 /* SwiftMinerDMEventService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftMinerDMEventService.swift; sourceTree = "<group>"; };
 		F01C7FACEB7BCCB9E95430C4 /* SwiftMinerCoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftMinerCoreTests.swift; sourceTree = "<group>"; };
 		F071D325BFB29DE25B89EE2D /* RateLimiter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RateLimiter.swift; sourceTree = "<group>"; };
 		F236D61181DC6F51C8E35FC1 /* SwiftBotTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftBotTypes.swift; sourceTree = "<group>"; };
@@ -511,6 +513,7 @@
 				305B04699BD520AFB3A5FA57 /* HTTPAPIServer.swift */,
 				66D3CD478576ED0783BFEED7 /* main.swift */,
 				0B997AFB7DED86FF821143CD /* SwiftBotConnectionService.swift */,
+				EF94C5B6274D4250D2A5F940 /* SwiftMinerDMEventService.swift */,
 				33D3714930D449ED44CCC477 /* Models */,
 			);
 			path = SwiftMinerService;
@@ -855,6 +858,7 @@
 				2B859C567EF99B5FC7C0B670 /* MinerUser.swift in Sources */,
 				340860B0B9B8241392636C41 /* SwiftBotConnectionService.swift in Sources */,
 				BD5FB81949A8CED44F2B6A40 /* SwiftBotTypes.swift in Sources */,
+				0527D2AA5B1A268EFE44380C /* SwiftMinerDMEventService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1015,7 +1019,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026050811;
+				CURRENT_PROJECT_VERSION = 2026050913;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;
@@ -1026,7 +1030,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 1.21;
+				MARKETING_VERSION = 1.22;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -1175,7 +1179,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026050811;
+				CURRENT_PROJECT_VERSION = 2026050913;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;
@@ -1186,7 +1190,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 1.21;
+				MARKETING_VERSION = 1.22;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",

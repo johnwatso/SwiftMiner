@@ -42,6 +42,7 @@ public actor DiscordProjectionBuilder {
         let account = await fetchAccount(discordUserId: discordUserId)
         let issues = await fetchIssues(discordUserId: discordUserId)
         let activeCampaign = await stateProvider.activeCampaign(for: discordUserId)
+        let dmState = await fetchDMState(discordUserId: discordUserId)
 
         let state: DiscordUserProjection.ProjectionState
         if let providerState = await stateProvider.projectionState(for: discordUserId) {
@@ -61,7 +62,8 @@ public actor DiscordProjectionBuilder {
             state: state,
             account: account,
             activeCampaign: activeCampaign,
-            issues: issues
+            issues: issues,
+            dmState: dmState
         )
     }
 
@@ -133,6 +135,33 @@ public actor DiscordProjectionBuilder {
             }
         } catch {
             return []
+        }
+    }
+
+    private func fetchDMState(discordUserId: String) async -> DiscordDMState {
+        do {
+            return try await manager.query { db in
+                let sql = """
+                SELECT has_received_welcome_message, has_completed_initial_dm_flow
+                FROM miner_users
+                WHERE discord_id = ?;
+                """
+                var stmt: OpaquePointer?
+                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                    return DiscordDMState()
+                }
+                defer { sqlite3_finalize(stmt) }
+                sqlite3_bind_text(stmt, 1, discordUserId, -1, SQLITE_TRANSIENT_BUILDER)
+                guard sqlite3_step(stmt) == SQLITE_ROW else {
+                    return DiscordDMState()
+                }
+                return DiscordDMState(
+                    hasReceivedWelcomeMessage: sqlite3_column_int(stmt, 0) != 0,
+                    hasCompletedInitialDMFlow: sqlite3_column_int(stmt, 1) != 0
+                )
+            }
+        } catch {
+            return DiscordDMState()
         }
     }
 

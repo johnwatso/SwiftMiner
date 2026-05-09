@@ -168,11 +168,13 @@ private struct MinerRow: View {
                 .controlSize(.small)
         case .linked:
             Menu {
+#if DEBUG
                 Button {
-                    Task { await sendTestDM() }
+                    Task { await sendDebugDMFlow() }
                 } label: {
-                    Label("Send Test DM", systemImage: "message")
+                    Label("Preview DM Flow", systemImage: "message")
                 }
+#endif
                 Button("Re-link", action: onRelink)
                 Divider()
                 Button("Unlink", role: .destructive) {
@@ -205,7 +207,7 @@ private struct MinerRow: View {
                     .padding(.top, 2)
             }
             if let sent = dmResult {
-                Text(sent ? "Test DM sent." : "Failed to send DM — check SwiftBot connection.")
+                Text(sent ? "Preview DM flow sent." : "Failed to send DM flow — check SwiftBot connection.")
                     .font(.caption)
                     .foregroundStyle(sent ? .green : .red)
                     .padding(.top, 2)
@@ -226,24 +228,41 @@ private struct MinerRow: View {
         }
     }
 
-    private func sendTestDM() async {
+#if DEBUG
+    private func sendDebugDMFlow() async {
         guard let discordId = miner.ownerDiscordId else { return }
         isDMSending = true
         dmResult = nil
         // Pull live app-level priorities so the test DM mirrors what real
         // activation DMs send. Using the no-arg overload would hard-code [].
         let priorityGames = await MainActor.run { Settings.shared.priorityGames }
-        let ok = await navigation.swiftBotConnectionService.sendTestDM(
-            to: discordId,
-            twitchUsername: miner.username,
-            priorityGames: priorityGames
-        )
+        var ok = true
+        for messageType in SwiftBotDMMessageType.debugPreviewOrder {
+            let sent = await navigation.swiftBotConnectionService.sendDebugDM(
+                to: discordId,
+                request: SwiftBotDMRequest(
+                    messageType: messageType,
+                    debug: true,
+                    twitchUsername: miner.username,
+                    priorityGames: priorityGames,
+                    activationCode: "NSMRCHHL",
+                    activationExpiresInMinutes: 29,
+                    affectedGame: priorityGames.first ?? "THE FINALS",
+                    campaignName: "Launch Drops",
+                    milestoneTitle: "Drop claimed",
+                    recoveryReason: "Twitch login needs to be refreshed."
+                )
+            )
+            ok = ok && sent
+            try? await Task.sleep(for: .milliseconds(650))
+        }
         dmResult = ok
         isDMSending = false
         if !isExpanded {
             // auto-open so the user sees the result
         }
     }
+#endif
 
     private func performUnlink() async {
         let result = await navigation.adminLinkingService.unlinkAccount(

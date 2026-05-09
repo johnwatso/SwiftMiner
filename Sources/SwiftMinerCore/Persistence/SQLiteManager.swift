@@ -31,6 +31,8 @@ public actor SQLiteManager {
         CREATE TABLE IF NOT EXISTS miner_users (
             discord_id TEXT PRIMARY KEY,
             status TEXT NOT NULL CHECK(status IN ('registered', 'active', 'suspended')),
+            has_received_welcome_message INTEGER NOT NULL DEFAULT 0,
+            has_completed_initial_dm_flow INTEGER NOT NULL DEFAULT 0,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_miner_users_status ON miner_users(status);
@@ -250,6 +252,16 @@ public actor SQLiteManager {
                 try execute("ALTER TABLE twitch_accounts ADD COLUMN nickname TEXT;")
             }
             try execute("INSERT OR IGNORE INTO _schema_migrations (version) VALUES (5);")
+        }
+
+        if !isMigrationApplied(6) {
+            if !columnExists("has_received_welcome_message", in: "miner_users") {
+                try execute("ALTER TABLE miner_users ADD COLUMN has_received_welcome_message INTEGER NOT NULL DEFAULT 0;")
+            }
+            if !columnExists("has_completed_initial_dm_flow", in: "miner_users") {
+                try execute("ALTER TABLE miner_users ADD COLUMN has_completed_initial_dm_flow INTEGER NOT NULL DEFAULT 0;")
+            }
+            try execute("INSERT OR IGNORE INTO _schema_migrations (version) VALUES (6);")
         }
     }
 
