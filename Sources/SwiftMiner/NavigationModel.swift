@@ -309,6 +309,7 @@ public final class NavigationModel {
         minerManager.onDropClaimedEvent = { [weak self] minerId, drop, campaignName in
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                guard Settings.shared.dmDropClaimedEnabled else { return }
                 guard let miner = self.minerManager.miners.first(where: { $0.id == minerId }) else { return }
                 let priorityGames = Settings.shared.priorityGames
                 await dmEventService.emitDropClaimed(
@@ -324,6 +325,7 @@ public final class NavigationModel {
         minerManager.onAuthRequiredEvent = { [weak self] minerId in
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                guard Settings.shared.dmConnectionExpiredEnabled else { return }
                 guard let miner = self.minerManager.miners.first(where: { $0.id == minerId }) else { return }
                 await dmEventService.emitReauthRequired(
                     accountId: miner.accountId,
@@ -336,6 +338,7 @@ public final class NavigationModel {
         minerManager.onCampaignCompletedEvent = { [weak self] minerId, campaign in
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                guard Settings.shared.dmCampaignCompletedEnabled else { return }
                 guard let miner = self.minerManager.miners.first(where: { $0.id == minerId }) else { return }
                 let priorityGames = Settings.shared.priorityGames
                 await dmEventService.emitCampaignCompleted(
@@ -350,6 +353,7 @@ public final class NavigationModel {
         minerManager.onLinkWarningEvent = { [weak self] minerId, gameName in
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                guard Settings.shared.dmLinkRequiredEnabled else { return }
                 guard let miner = self.minerManager.miners.first(where: { $0.id == minerId }) else { return }
                 let priorityGames = Settings.shared.priorityGames
                 await dmEventService.emitPrioritisedGameNeedsLinking(
@@ -363,6 +367,7 @@ public final class NavigationModel {
         minerManager.onWelcomeBackEvent = { [weak self] minerId in
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                guard Settings.shared.dmWelcomeBackEnabled else { return }
                 guard let miner = self.minerManager.miners.first(where: { $0.id == minerId }) else { return }
                 let priorityGames = Settings.shared.priorityGames
                 await dmEventService.emitWelcomeBack(
