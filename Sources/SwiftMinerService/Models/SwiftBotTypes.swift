@@ -82,6 +82,7 @@ public struct SwiftBotDMRequest: Codable, Sendable, Equatable {
     public let priorityGames: [String]
     public let activationCode: String?
     public let activationExpiresInMinutes: Int?
+    public let activationURL: String?
     public let affectedGame: String?
     public let campaignName: String?
     public let milestoneTitle: String?
@@ -96,6 +97,7 @@ public struct SwiftBotDMRequest: Codable, Sendable, Equatable {
         priorityGames: [String] = [],
         activationCode: String? = nil,
         activationExpiresInMinutes: Int? = nil,
+        activationURL: String? = nil,
         affectedGame: String? = nil,
         campaignName: String? = nil,
         milestoneTitle: String? = nil,
@@ -108,6 +110,7 @@ public struct SwiftBotDMRequest: Codable, Sendable, Equatable {
         self.priorityGames = priorityGames
         self.activationCode = activationCode
         self.activationExpiresInMinutes = activationExpiresInMinutes
+        self.activationURL = activationURL
         self.affectedGame = affectedGame
         self.campaignName = campaignName
         self.milestoneTitle = milestoneTitle
@@ -122,6 +125,7 @@ public struct SwiftBotDMRequest: Codable, Sendable, Equatable {
         case priorityGames = "priority_games"
         case activationCode = "activation_code"
         case activationExpiresInMinutes = "activation_expires_in_minutes"
+        case activationURL = "activation_url"
         case affectedGame = "affected_game"
         case campaignName = "campaign_name"
         case milestoneTitle = "milestone_title"
