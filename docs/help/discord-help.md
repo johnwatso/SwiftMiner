@@ -1,129 +1,197 @@
-# SwiftMiner Help
+# SwiftMiner Discord Help
 
 ## What is SwiftMiner?
 
-SwiftMiner is a Twitch Drops automation tool that someone in your Discord community runs on their Mac. It watches Twitch streams in the background and claims Drops automatically so you don't have to keep a stream open yourself.
+SwiftMiner helps automate Twitch Drops so you don't need to leave streams open all day yourself.
 
-SwiftBot is the Discord bot that sends you updates about your Drops, helps you set up your Twitch account, and lets you check progress.
+SwiftBot is the Discord bot companion that:
+- helps connect your Twitch account
+- sends important Drop notifications
+- lets you check status with `/miner`
 
-If you're seeing this, someone in your server is running SwiftMiner and invited you to use it.
+If you're seeing these messages, someone in your Discord server is using SwiftMiner and enabled access for you.
+
+---
+
+## What SwiftBot can do
+
+SwiftBot can:
+- help connect your Twitch account
+- notify you when Drops are claimed
+- let you check your current status
+- let you reconnect Twitch if your session expires
+
+SwiftBot does **not**:
+- post messages as you
+- access your Discord account
+- read your DMs
+- access your Twitch password
 
 ---
 
 ## Why am I getting these DMs?
 
-SwiftBot sends you direct messages when something actually happens with your Drops. You won't get routine updates or spam — only when something is ready, finished, or needs your attention.
+SwiftBot only sends DMs when something important happens with your Drops.
 
-**Messages you might see:**
+You won't get spam, constant progress updates, or random notifications.
+
+### Messages you might see
 
 | Message | What it means |
 |---------|--------------|
-| **Drop claimed** | SwiftMiner claimed a Twitch Drop for you. Check your Twitch inventory to redeem it. |
-| **Campaign complete** | All Drops in a campaign have been earned. Nothing left to do for this one. |
-| **Twitch connection expired** | Your Twitch login session expired. You'll need to reconnect so SwiftMiner can keep claiming Drops. |
-| **Link Twitch for {game}** | A game you prioritised requires linking your Twitch account to the game publisher. SwiftMiner can't do this part for you. |
-| **Welcome back** | SwiftMiner had a brief issue but recovered and is working again. |
+| **Drop claimed** | A Twitch Drop was successfully claimed for you. |
+| **Campaign complete** | All available Drops for a campaign have been earned. |
+| **Twitch connection expired** | Your Twitch session needs reconnecting before Drops can continue. |
+| **Link Twitch for {game}** | A game publisher account still needs linking before Drops can be claimed. |
+| **Welcome back** | SwiftMiner briefly lost connection but recovered successfully. |
 
-**You will not get:**
-- "Still running" messages
-- Progress updates every few minutes
-- Random pings
+### Messages you will NOT get
+
+- Constant heartbeat notifications
+- Stream activity spam
+- Messages every few minutes
+- Unrelated Discord notifications
 
 ---
 
-## Getting Set Up
+# Getting Started
 
-### Step 1: Your Discord account is connected
+## Step 1: Connect your Discord account
 
-You only get added to SwiftMiner when you actively use a `/miner` command — for example `/miner action:setup` or `/miner action:status`. At that point your Discord account is registered and you'll receive a welcome DM explaining what SwiftMiner is.
+Your Discord account only becomes connected to SwiftMiner after you use a `/miner` command yourself.
 
-If you haven't received a welcome message, you haven't been registered yet. Use `/miner action:setup` to get started.
+For example:
+- `/miner action:setup`
+- `/miner action:status`
 
-### Step 2: Link your Twitch account
+Once connected, you'll receive a welcome DM explaining how everything works.
 
-SwiftMiner needs access to your Twitch account to claim Drops for you.
+---
 
-1. Send `/miner action:setup` to SwiftBot in a DM
-2. You'll receive an activation code
-3. Go to **twitch.tv/activate** in your browser
-4. Sign in to Twitch (if you aren't already)
+## Step 2: Connect your Twitch account
+
+SwiftMiner needs permission to claim Drops on your behalf.
+
+### Setup steps
+
+1. Send `/miner action:setup`
+2. SwiftBot will send you an activation code
+3. Open **twitch.tv/activate**
+4. Sign in to Twitch
 5. Enter the activation code
-6. Wait for SwiftBot to confirm you're connected
+6. Wait for the confirmation message
 
-That's it. SwiftMiner will start watching for Drops automatically.
-
-### Reconnecting after your session expires
-
-Twitch login sessions expire every so often — especially if you change your password or revoke access. If you get a "Twitch connection expired" DM, just run `/miner action:setup` again. It takes about 30 seconds.
+Once complete, SwiftMiner will automatically watch for eligible Drops.
 
 ---
 
-## Slash Commands
+## Reconnecting Twitch later
 
-You can DM SwiftBot directly. These commands work anywhere the bot can see you:
+Sometimes Twitch sessions expire — especially after password changes or revoked permissions.
 
-| Command | What it does |
+If that happens:
+1. Run `/miner action:setup`
+2. Complete the Twitch activation steps again
+
+The process usually takes less than a minute.
+
+---
+
+# Slash Commands
+
+You can DM SwiftBot directly or use commands in supported servers.
+
+| Command | Description |
 |---------|-------------|
-| `/miner` | Check your current status, active campaigns, and claimed Drops |
-| `/miner action:setup` | Start or redo the Twitch linking flow |
-| `/miner action:status` | Quick summary of what SwiftMiner is doing for you right now |
+| `/miner` | View your current status and active Drops |
+| `/miner action:setup` | Connect or reconnect your Twitch account |
+| `/miner action:status` | Quick summary of current mining activity |
 
 ---
 
-## Troubleshooting
+# Troubleshooting
 
-### "Twitch connection expired" keeps happening
+## My Twitch connection keeps expiring
 
-Try these in order:
-1. Run `/miner action:setup` and re-link
-2. Make sure you haven't changed your Twitch password recently
-3. Check that your Twitch account is in good standing (not suspended or flagged)
+Try the following:
 
-If it still keeps happening, reach out to whoever runs SwiftMiner in your server — they can check the logs.
+1. Re-run `/miner action:setup`
+2. Make sure your Twitch password hasn't changed recently
+3. Check that Twitch hasn't revoked app access
 
-### I'm not getting any DMs at all
-
-- Did you complete the Twitch setup flow? Run `/miner action:setup` if you're not sure.
-- Are there active Drops campaigns right now? Not every game has Drops running all the time.
-- Is the person running SwiftMiner online? SwiftMiner runs on their Mac, so if their computer is off, nothing happens.
-
-### "Link Twitch for {game}" but I already linked my Twitch
-
-Some game publishers (like EA, Ubisoft, etc.) require a **separate** account link on their own website or on Twitch's Drops page. SwiftMiner can't do this step automatically.
-
-1. Go to the game's Twitch Drops campaign page
-2. Look for "Link Account" or "Connect"
-3. Link your game account there
-
-Once that's done, SwiftMiner can claim Drops for that game normally.
-
-### The activation code doesn't work
-
-Activation codes expire after a few minutes. If yours expired, just run `/miner action:setup` again to get a fresh one.
-
-### I want to stop receiving DMs
-
-Reach out to whoever runs SwiftMiner in your server and ask them to remove your registration. There is no self-service unlinking right now.
+If the issue continues, contact the person managing SwiftMiner in your server.
 
 ---
 
-## Privacy
+## I'm not receiving any DMs
 
-**What SwiftBot stores:**
-- Your Discord user ID
-- Your Twitch username (after you link it)
-- Whether you've completed setup
+Check the following:
+- Have you completed Twitch setup?
+- Are there active Twitch Drops campaigns right now?
+- Is SwiftMiner currently online?
 
-**What SwiftBot does NOT store:**
-- Your Twitch password
-- Your Twitch login tokens
-- What streams you watched
-- Your drop inventory
-
-All Twitch authentication happens directly between your browser and Twitch. SwiftMiner (the Mac app) handles the actual claiming — SwiftBot just tells you when things happen.
+Not every game has Drops active all the time.
 
 ---
 
-## Need more help?
+## I already linked Twitch, but a game still says linking is required
 
-If something isn't covered here, reach out to the person running SwiftMiner in your Discord server. They have access to logs and can check if something is wrong on their end.
+Some publishers require an additional account connection outside of Twitch itself.
+
+Examples include:
+- EA
+- Ubisoft
+- Riot
+- other publisher accounts
+
+To fix this:
+1. Open the game's Twitch Drops page
+2. Look for **Link Account** or **Connect**
+3. Complete the publisher account connection
+
+Once linked, Drops for that game should work normally.
+
+---
+
+## My activation code expired
+
+Activation codes only stay valid for a few minutes.
+
+If yours expired:
+- run `/miner action:setup` again
+- a new code will be generated automatically
+
+---
+
+## I want to stop receiving DMs
+
+Please contact the person managing SwiftMiner in your server and ask them to remove your access.
+
+Self-service unlinking is not available yet.
+
+---
+
+# Privacy
+
+### SwiftBot stores:
+- your Discord user ID
+- your Twitch username (after setup)
+- setup completion status
+
+### SwiftBot does NOT store:
+- your Twitch password
+- your Twitch login credentials
+- your Twitch viewing history
+- your Twitch inventory
+
+Twitch sign-in happens directly through Twitch.
+
+SwiftMiner handles Drop monitoring and claiming, while SwiftBot only sends updates and setup messages.
+
+---
+
+# Need more help?
+
+If something still isn't working, contact the person managing SwiftMiner in your Discord server.
+
+They can check logs, reconnect services, or help troubleshoot setup issues.
