@@ -8,19 +8,22 @@ public struct DiscordUserProjection: Codable, Sendable {
     public let account: Account?
     public let activeCampaign: ActiveCampaign?
     public let issues: [Issue]
+    public let dmState: DiscordDMState
 
     public init(
         discordUserId: String,
         state: ProjectionState,
         account: Account? = nil,
         activeCampaign: ActiveCampaign? = nil,
-        issues: [Issue] = []
+        issues: [Issue] = [],
+        dmState: DiscordDMState = DiscordDMState()
     ) {
         self.discordUserId = discordUserId
         self.state = state
         self.account = account
         self.activeCampaign = activeCampaign
         self.issues = issues
+        self.dmState = dmState
     }
 
     public enum ProjectionState: String, Codable, Sendable {

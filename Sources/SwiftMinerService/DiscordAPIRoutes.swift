@@ -67,6 +67,16 @@ private struct RegisterUserRequest: Codable, Sendable {
     let discordUserId: String
 }
 
+private struct UpdateDMStateRequest: Codable, Sendable {
+    let hasReceivedWelcomeMessage: Bool?
+    let hasCompletedInitialDMFlow: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case hasReceivedWelcomeMessage = "has_received_welcome_message"
+        case hasCompletedInitialDMFlow = "has_completed_initial_dm_flow"
+    }
+}
+
 // MARK: - API Routes
 
 public actor DiscordAPIRoutes {
@@ -124,6 +134,10 @@ public actor DiscordAPIRoutes {
             await routes.handleRegisterUser(request: request, params: params)
         })
 
+        await router.register(HTTPRoute(method: "PATCH", pattern: "/v1/users/:discordUserId/dm-state") { request, params in
+            await routes.handleUpdateDMState(request: request, params: params)
+        })
+
         // Activation endpoints
         await router.register(HTTPRoute(method: "POST", pattern: "/v1/users/:discordUserId/activation") { request, params in
             await routes.handleStartActivation(request: request, params: params)
@@ -147,7 +161,13 @@ public actor DiscordAPIRoutes {
 
     private func handleGetUsers(request: HTTPRequest, params: [String: String]) async -> HTTPResponse {
         let users = await adminLinkingService.getAllUsers()
-        let payload = users.map { ["discord_id": $0.discordId, "status": $0.status.rawValue] }
+        let payload = users.map {
+            UserListItem(
+                discordId: $0.discordId,
+                status: $0.status.rawValue,
+                dmState: $0.dmState
+            )
+        }
         return HTTPResponse.json(["users": payload])
     }
 
@@ -164,13 +184,48 @@ public actor DiscordAPIRoutes {
 
         switch result {
         case .registered(let discordId):
-            return HTTPResponse.json(["discordUserId": discordId, "status": "registered"], statusCode: 201)
+            return HTTPResponse.json(UserRegistrationResponse(
+                discordUserId: discordId,
+                status: "registered",
+                dmState: DiscordDMState()
+            ), statusCode: 201)
         case .alreadyRegistered(let discordId):
-            return HTTPResponse.json(["discordUserId": discordId, "status": "already_registered"], statusCode: 200)
+            let dmState = await fetchDMState(discordUserId: discordId)
+            return HTTPResponse.json(UserRegistrationResponse(
+                discordUserId: discordId,
+                status: "already_registered",
+                dmState: dmState
+            ), statusCode: 200)
         case .invalidDiscordId:
             return .error(code: "invalid_discord_id", message: "Discord ID must be 17-19 numeric digits.", statusCode: 400)
         case .internalError(let message):
             return .error(code: "internal_error", message: message, statusCode: 500)
+        }
+    }
+
+    private func handleUpdateDMState(request: HTTPRequest, params: [String: String]) async -> HTTPResponse {
+        guard let discordUserId = params["discordUserId"],
+              Self.isValidDiscordId(discordUserId) else {
+            return .error(code: "invalid_discord_id", message: "Discord ID must be 17-19 numeric digits.", statusCode: 400)
+        }
+
+        guard !request.body.isEmpty,
+              let body = try? JSONDecoder().decode(UpdateDMStateRequest.self, from: request.body) else {
+            return .error(code: "invalid_payload", message: "Body must include DM state fields.", statusCode: 400)
+        }
+
+        guard await userExists(discordUserId: discordUserId) else {
+            return .error(code: "user_not_found", message: "User not found.", statusCode: 404)
+        }
+
+        do {
+            try await updateDMState(discordUserId: discordUserId, update: body)
+            return HTTPResponse.json(DMStateResponse(
+                discordUserId: discordUserId,
+                dmState: await fetchDMState(discordUserId: discordUserId)
+            ))
+        } catch {
+            return .error(code: "internal_error", message: "Failed to update DM state: \(error.localizedDescription)", statusCode: 500)
         }
     }
 
@@ -426,6 +481,81 @@ public actor DiscordAPIRoutes {
         } catch { return false }
     }
 
+    private func fetchDMState(discordUserId: String) async -> DiscordDMState {
+        do {
+            return try await manager.query { db in
+                let sql = """
+                SELECT has_received_welcome_message, has_completed_initial_dm_flow
+                FROM miner_users
+                WHERE discord_id = ?;
+                """
+                var stmt: OpaquePointer?
+                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                    return DiscordDMState()
+                }
+                defer { sqlite3_finalize(stmt) }
+                sqlite3_bind_text(stmt, 1, discordUserId, -1, SQLITE_TRANSIENT_ROUTES)
+                guard sqlite3_step(stmt) == SQLITE_ROW else {
+                    return DiscordDMState()
+                }
+                return DiscordDMState(
+                    hasReceivedWelcomeMessage: sqlite3_column_int(stmt, 0) != 0,
+                    hasCompletedInitialDMFlow: sqlite3_column_int(stmt, 1) != 0
+                )
+            }
+        } catch {
+            return DiscordDMState()
+        }
+    }
+
+    private func updateDMState(discordUserId: String, update: UpdateDMStateRequest) async throws {
+        try await manager.execute { db in
+            let current = try currentDMState(discordUserId: discordUserId, db: db)
+            let nextWelcome = update.hasReceivedWelcomeMessage ?? current.hasReceivedWelcomeMessage
+            let nextInitialFlow = update.hasCompletedInitialDMFlow ?? current.hasCompletedInitialDMFlow
+            let sql = """
+            UPDATE miner_users
+            SET has_received_welcome_message = ?, has_completed_initial_dm_flow = ?
+            WHERE discord_id = ?;
+            """
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                let msg = String(cString: sqlite3_errmsg(db))
+                throw NSError(domain: "DiscordAPIRoutes", code: 3, userInfo: [NSLocalizedDescriptionKey: msg])
+            }
+            defer { sqlite3_finalize(stmt) }
+            sqlite3_bind_int(stmt, 1, nextWelcome ? 1 : 0)
+            sqlite3_bind_int(stmt, 2, nextInitialFlow ? 1 : 0)
+            sqlite3_bind_text(stmt, 3, discordUserId, -1, SQLITE_TRANSIENT_ROUTES)
+            guard sqlite3_step(stmt) == SQLITE_DONE else {
+                let msg = String(cString: sqlite3_errmsg(db))
+                throw NSError(domain: "DiscordAPIRoutes", code: 4, userInfo: [NSLocalizedDescriptionKey: msg])
+            }
+        }
+    }
+
+    nonisolated private func currentDMState(discordUserId: String, db: OpaquePointer?) throws -> DiscordDMState {
+        let sql = """
+        SELECT has_received_welcome_message, has_completed_initial_dm_flow
+        FROM miner_users
+        WHERE discord_id = ?;
+        """
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            let msg = String(cString: sqlite3_errmsg(db))
+            throw NSError(domain: "DiscordAPIRoutes", code: 5, userInfo: [NSLocalizedDescriptionKey: msg])
+        }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_text(stmt, 1, discordUserId, -1, SQLITE_TRANSIENT_ROUTES)
+        guard sqlite3_step(stmt) == SQLITE_ROW else {
+            return DiscordDMState()
+        }
+        return DiscordDMState(
+            hasReceivedWelcomeMessage: sqlite3_column_int(stmt, 0) != 0,
+            hasCompletedInitialDMFlow: sqlite3_column_int(stmt, 1) != 0
+        )
+    }
+
     private func hasLinkedAccount(discordUserId: String) async -> Bool {
         do {
             return try await manager.query { db in
@@ -471,6 +601,44 @@ public actor DiscordAPIRoutes {
         }
         return code
     }
+
+    private static func isValidDiscordId(_ discordUserId: String) -> Bool {
+        discordUserId.count >= 17 && discordUserId.count <= 19 && discordUserId.allSatisfy(\.isNumber)
+    }
 }
 
 private let SQLITE_TRANSIENT_ROUTES = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+
+private struct UserListItem: Codable {
+    let discordId: String
+    let status: String
+    let dmState: DiscordDMState
+
+    enum CodingKeys: String, CodingKey {
+        case discordId = "discord_id"
+        case status
+        case dmState = "dm_state"
+    }
+}
+
+private struct UserRegistrationResponse: Codable {
+    let discordUserId: String
+    let status: String
+    let dmState: DiscordDMState
+
+    enum CodingKeys: String, CodingKey {
+        case discordUserId = "discord_user_id"
+        case status
+        case dmState = "dm_state"
+    }
+}
+
+private struct DMStateResponse: Codable {
+    let discordUserId: String
+    let dmState: DiscordDMState
+
+    enum CodingKeys: String, CodingKey {
+        case discordUserId = "discord_user_id"
+        case dmState = "dm_state"
+    }
+}

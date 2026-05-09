@@ -547,6 +547,22 @@ private struct IntegrationsSettingsView: View {
     @State private var isTestingConnection = false
     @State private var connectionTestMessage: String?
     @State private var copiedPairingBundle = false
+    @State private var debugDiscordUsers: [SwiftBotDiscordUser] = []
+    @State private var debugSelectedUserId: String?
+    @State private var debugFallbackUserId = ""
+    @State private var debugMessageType: SwiftBotDMMessageType = .welcome
+    @State private var debugTwitchUsername = "ruffcrumble"
+    @State private var debugPriorityGames = "THE FINALS, ARC Raiders, Battlefield 6"
+    @State private var debugActivationCode = "NSMRCHHL"
+    @State private var debugExpirationMinutes = 29
+    @State private var debugAffectedGame = "THE FINALS"
+    @State private var debugCampaignName = "Launch Drops"
+    @State private var debugMilestoneTitle = "Drop claimed"
+    @State private var debugRecoveryReason = "Twitch login needs to be refreshed."
+    @State private var isSendingDebugDM = false
+    @State private var isSendingAllDebugDMs = false
+    @State private var debugDMResult: Bool?
+    @State private var debugDMStatus: String?
 
     private let defaultSwiftBotEndpoint = "http://localhost:38888"
 
@@ -556,9 +572,17 @@ private struct IntegrationsSettingsView: View {
                 pairingSection
             }
             connectionStatusSection
+#if DEBUG
+            dmDebugSection
+#endif
         }
         .formStyle(.grouped)
         .padding(24)
+        .task {
+#if DEBUG
+            await loadDebugDiscordUsers()
+#endif
+        }
     }
 
     // MARK: Pairing
@@ -711,6 +735,178 @@ private struct IntegrationsSettingsView: View {
         copyPairingBundle()
         connectionTestMessage = "Fresh SwiftBot pairing details copied. Paste them into SwiftBot to repair the connection."
     }
+
+#if DEBUG
+    // MARK: DM debug
+
+    private var dmDebugSection: some View {
+        Section {
+            Picker("Message", selection: $debugMessageType) {
+                ForEach(SwiftBotDMMessageType.allCases) { type in
+                    Text(type.displayName).tag(type)
+                }
+            }
+
+            if !debugDiscordUsers.isEmpty {
+                Picker("Discord user", selection: $debugSelectedUserId) {
+                    Text("Select a user...").tag(String?.none)
+                    ForEach(debugDiscordUsers) { user in
+                        Text(user.displayName).tag(Optional(user.id))
+                    }
+                }
+                .pickerStyle(.menu)
+            }
+
+            HStack {
+                TextField("Discord user ID", text: $debugFallbackUserId)
+                    .textFieldStyle(.roundedBorder)
+                Button("Use Linked Test Account") {
+                    debugFallbackUserId = firstLinkedDiscordId ?? debugFallbackUserId
+                }
+                .disabled(firstLinkedDiscordId == nil)
+            }
+
+            TextField("Twitch username", text: $debugTwitchUsername)
+            TextField("Prioritised games", text: $debugPriorityGames)
+            TextField("Activation code", text: $debugActivationCode)
+            Stepper("Code expires in \(debugExpirationMinutes) minutes", value: $debugExpirationMinutes, in: 1...60)
+            TextField("Affected game", text: $debugAffectedGame)
+            TextField("Campaign name", text: $debugCampaignName)
+            TextField("Milestone label", text: $debugMilestoneTitle)
+            TextField("Recovery reason", text: $debugRecoveryReason)
+
+            HStack {
+                Button {
+                    Task { await sendDebugDM() }
+                } label: {
+                    if isSendingDebugDM && !isSendingAllDebugDMs {
+                        HStack(spacing: 6) {
+                            ProgressView().controlSize(.small)
+                            Text("Sending")
+                        }
+                    } else {
+                        Label("Send Debug DM", systemImage: "paperplane")
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!canSendDebugDM || isSendingDebugDM || isSendingAllDebugDMs)
+
+                Button {
+                    Task { await sendAllDebugDMs() }
+                } label: {
+                    if isSendingAllDebugDMs {
+                        HStack(spacing: 6) {
+                            ProgressView().controlSize(.small)
+                            Text("Sending All")
+                        }
+                    } else {
+                        Label("Send All in Order", systemImage: "text.bubble")
+                    }
+                }
+                .buttonStyle(.bordered)
+                .disabled(!canSendDebugDM || isSendingDebugDM || isSendingAllDebugDMs)
+            }
+
+            if let status = debugDMStatus {
+                Text(status)
+                    .font(.caption)
+                    .foregroundStyle(debugDMResult == false ? .red : .secondary)
+            }
+
+            SettingsSecondaryText("Debug previews are sent with debug=true and do not update welcome or setup state.")
+        } header: {
+            Text("DM Flow Testing")
+        }
+    }
+
+    private var firstLinkedDiscordId: String? {
+        navigation.minerManager.miners.compactMap(\.ownerDiscordId).first
+    }
+
+    private var resolvedDebugDiscordId: String? {
+        let trimmed = debugFallbackUserId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { return trimmed }
+        return debugSelectedUserId
+    }
+
+    private var canSendDebugDM: Bool {
+        guard let id = resolvedDebugDiscordId else { return false }
+        return id.count >= 17 && id.count <= 19 && id.allSatisfy(\.isNumber)
+    }
+
+    private var debugDMPreviewOrder: [SwiftBotDMMessageType] {
+        SwiftBotDMMessageType.debugPreviewOrder
+    }
+
+    private func loadDebugDiscordUsers() async {
+        debugDiscordUsers = await navigation.swiftBotConnectionService.fetchDiscordUsers()
+        if debugSelectedUserId == nil {
+            debugSelectedUserId = debugDiscordUsers.first?.id
+        }
+    }
+
+    private func sendDebugDM() async {
+        guard let discordId = resolvedDebugDiscordId else { return }
+        isSendingDebugDM = true
+        debugDMStatus = nil
+        debugDMResult = nil
+        let request = debugDMRequest(for: debugMessageType)
+        debugDMResult = await navigation.swiftBotConnectionService.sendDebugDM(to: discordId, request: request)
+        debugDMStatus = debugDMResult == true ? "Debug DM sent." : "SwiftBot could not send this debug DM."
+        isSendingDebugDM = false
+    }
+
+    private func sendAllDebugDMs() async {
+        guard let discordId = resolvedDebugDiscordId else { return }
+        isSendingAllDebugDMs = true
+        debugDMResult = nil
+        debugDMStatus = "Sending 0/\(debugDMPreviewOrder.count)..."
+
+        var failures: [String] = []
+        for (index, messageType) in debugDMPreviewOrder.enumerated() {
+            debugDMStatus = "Sending \(index + 1)/\(debugDMPreviewOrder.count): \(messageType.displayName)"
+            let ok = await navigation.swiftBotConnectionService.sendDebugDM(
+                to: discordId,
+                request: debugDMRequest(for: messageType)
+            )
+            if !ok {
+                failures.append(messageType.displayName)
+            }
+            try? await Task.sleep(for: .milliseconds(650))
+        }
+
+        if failures.isEmpty {
+            debugDMResult = true
+            debugDMStatus = "All \(debugDMPreviewOrder.count) debug DMs sent in order."
+        } else {
+            debugDMResult = false
+            debugDMStatus = "Sent sequence with \(failures.count) failure\(failures.count == 1 ? "" : "s"): \(failures.joined(separator: ", "))."
+        }
+        isSendingAllDebugDMs = false
+    }
+
+    private func debugDMRequest(for messageType: SwiftBotDMMessageType) -> SwiftBotDMRequest {
+        SwiftBotDMRequest(
+            messageType: messageType,
+            debug: true,
+            twitchUsername: normalizedValue(debugTwitchUsername),
+            priorityGames: parsedDebugPriorityGames,
+            activationCode: normalizedValue(debugActivationCode),
+            activationExpiresInMinutes: debugExpirationMinutes,
+            affectedGame: normalizedValue(debugAffectedGame),
+            campaignName: normalizedValue(debugCampaignName),
+            milestoneTitle: normalizedValue(debugMilestoneTitle),
+            recoveryReason: normalizedValue(debugRecoveryReason)
+        )
+    }
+
+    private var parsedDebugPriorityGames: [String] {
+        debugPriorityGames
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+#endif
 }
 
 // MARK: - Advanced Settings

@@ -281,7 +281,11 @@ public actor SQLiteAdminLinkingService: AdminLinkingService {
     public func getAllUsers() async -> [MinerUser] {
         do {
             return try await manager.query { db in
-                let sql = "SELECT discord_id, status, created_at FROM miner_users ORDER BY created_at DESC;"
+                let sql = """
+                SELECT discord_id, status, created_at, has_received_welcome_message, has_completed_initial_dm_flow
+                FROM miner_users
+                ORDER BY created_at DESC;
+                """
                 var statement: OpaquePointer?
                 guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
                     return []
@@ -303,7 +307,11 @@ public actor SQLiteAdminLinkingService: AdminLinkingService {
                     users.append(MinerUser(
                         discordId: discordId,
                         status: status,
-                        createdAt: createdAt
+                        createdAt: createdAt,
+                        dmState: DiscordDMState(
+                            hasReceivedWelcomeMessage: sqlite3_column_int(statement, 3) != 0,
+                            hasCompletedInitialDMFlow: sqlite3_column_int(statement, 4) != 0
+                        )
                     ))
                 }
                 return users

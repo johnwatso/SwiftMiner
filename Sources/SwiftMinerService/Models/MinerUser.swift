@@ -6,11 +6,18 @@ public struct MinerUser: Codable, Sendable, Equatable, Identifiable {
     public let discordId: String // Discord Snowflake (Primary Key)
     public var status: UserStatus
     public let createdAt: Date
+    public var dmState: DiscordDMState
 
-    public init(discordId: String, status: UserStatus = .registered, createdAt: Date = Date()) {
+    public init(
+        discordId: String,
+        status: UserStatus = .registered,
+        createdAt: Date = Date(),
+        dmState: DiscordDMState = DiscordDMState()
+    ) {
         self.discordId = discordId
         self.status = status
         self.createdAt = createdAt
+        self.dmState = dmState
     }
 
     public enum UserStatus: String, Codable, Sendable, CaseIterable {

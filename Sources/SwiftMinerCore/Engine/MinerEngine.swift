@@ -79,6 +79,7 @@ public actor MinerEngine {
     public var onError: (@Sendable (TwitchMinerError) -> Void)?
     public var onLogMessage: (@Sendable (String) -> Void)?
     public var onOperationalEvent: (@Sendable (OperationalEvent) -> Void)?
+    public var onLinkWarning: (@Sendable (String) -> Void)?
     
     // MARK: - Callback Setters
 
@@ -96,6 +97,10 @@ public actor MinerEngine {
 
     public func setOperationalEventHandler(_ handler: (@Sendable (OperationalEvent) -> Void)?) {
         self.onOperationalEvent = handler
+    }
+
+    public func setLinkWarningHandler(_ handler: (@Sendable (String) -> Void)?) {
+        self.onLinkWarning = handler
     }
 
     /// Update mining preferences (priority/excluded games)
@@ -1178,6 +1183,8 @@ public actor MinerEngine {
                     gameName: sample.gameName
                 )
             }
+
+            onLinkWarning?(sample.gameName)
         }
     }
 

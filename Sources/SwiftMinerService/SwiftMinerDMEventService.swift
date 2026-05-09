@@ -1,0 +1,176 @@
+import Foundation
+import OSLog
+
+private let dmEventLogger = Logger(subsystem: "com.swiftminer", category: "dm-events")
+
+/// Lightweight event producer that emits rich typed DM requests to SwiftBot.
+///
+/// Responsibility: detect miner events → build typed payloads → emit.
+/// Non-responsibility: notification lifecycle, suppression, UX orchestration.
+/// Those remain centralized in SwiftBot.
+public actor SwiftMinerDMEventService {
+    private let connectionService: any SwiftBotConnectionService
+
+    // MARK: - Dedup State (lightweight, event-side only)
+
+    /// Drop IDs we've already notified for (session-scoped). Drops can only be claimed once.
+    private var notifiedDropIds: Set<String> = []
+
+    /// Campaign IDs we've already notified for (session-scoped). Campaigns stay completed.
+    private var notifiedCampaignIds: Set<String> = []
+
+    /// Account IDs → last auth-failure notification time
+    private var lastAuthFailure: [String: Date] = [:]
+
+    /// Game names (lowercased) → last link-warning notification time
+    private var lastLinkWarning: [String: Date] = [:]
+
+    /// Account IDs → last welcome-back notification time
+    private var lastWelcomeBack: [String: Date] = [:]
+
+    // MARK: - Dedup Windows
+
+    private let authFailureCooldown: TimeInterval = 300   // 5 min
+    private let linkWarningCooldown: TimeInterval = 3600  // 1 hour
+    private let welcomeBackCooldown: TimeInterval = 3600  // 1 hour
+
+    // MARK: - Init
+
+    public init(connectionService: any SwiftBotConnectionService) {
+        self.connectionService = connectionService
+    }
+
+    // MARK: - Event Emitters
+
+    public func emitDropClaimed(
+        dropId: String,
+        dropName: String,
+        campaignName: String?,
+        discordUserId: String?,
+        priorityGames: [String]
+    ) async {
+        guard let discordUserId else { return }
+        guard !notifiedDropIds.contains(dropId) else { return }
+        notifiedDropIds.insert(dropId)
+
+        let request = SwiftBotDMRequest(
+            messageType: .dropClaimed,
+            debug: false,
+            twitchUsername: nil,
+            priorityGames: priorityGames,
+            campaignName: campaignName,
+            milestoneTitle: dropName
+        )
+
+        dmEventLogger.info("Emitting dropClaimed discordId=\(discordUserId, privacy: .private) drop=\(dropName)")
+        _ = await connectionService.sendEventDM(to: discordUserId, request: request)
+    }
+
+    public func emitCampaignCompleted(
+        campaignId: String,
+        campaignName: String,
+        discordUserId: String?,
+        priorityGames: [String]
+    ) async {
+        guard let discordUserId else { return }
+        guard !notifiedCampaignIds.contains(campaignId) else { return }
+        notifiedCampaignIds.insert(campaignId)
+
+        let request = SwiftBotDMRequest(
+            messageType: .campaignCompleted,
+            debug: false,
+            twitchUsername: nil,
+            priorityGames: priorityGames,
+            campaignName: campaignName
+        )
+
+        dmEventLogger.info("Emitting campaignCompleted discordId=\(discordUserId, privacy: .private) campaign=\(campaignName)")
+        _ = await connectionService.sendEventDM(to: discordUserId, request: request)
+    }
+
+    public func emitReauthRequired(
+        accountId: String,
+        discordUserId: String?,
+        twitchUsername: String?
+    ) async {
+        guard let discordUserId else { return }
+        guard !isRecentlyNotified(key: accountId, map: &lastAuthFailure, cooldown: authFailureCooldown) else { return }
+
+        let request = SwiftBotDMRequest(
+            messageType: .reauth,
+            debug: false,
+            twitchUsername: twitchUsername
+        )
+
+        dmEventLogger.info("Emitting reauth discordId=\(discordUserId, privacy: .private)")
+        _ = await connectionService.sendEventDM(to: discordUserId, request: request)
+    }
+
+    public func emitPrioritisedGameNeedsLinking(
+        gameName: String,
+        discordUserId: String?,
+        priorityGames: [String]
+    ) async {
+        guard let discordUserId else { return }
+        let key = gameName.lowercased()
+        guard !isRecentlyNotified(key: key, map: &lastLinkWarning, cooldown: linkWarningCooldown) else { return }
+
+        let request = SwiftBotDMRequest(
+            messageType: .prioritisedGameNeedsLinking,
+            debug: false,
+            twitchUsername: nil,
+            priorityGames: priorityGames,
+            affectedGame: gameName
+        )
+
+        dmEventLogger.info("Emitting prioritisedGameNeedsLinking discordId=\(discordUserId, privacy: .private) game=\(gameName)")
+        _ = await connectionService.sendEventDM(to: discordUserId, request: request)
+    }
+
+    public func emitWelcomeBack(
+        accountId: String,
+        discordUserId: String?,
+        twitchUsername: String?,
+        priorityGames: [String]
+    ) async {
+        guard let discordUserId else { return }
+        guard !isRecentlyNotified(key: accountId, map: &lastWelcomeBack, cooldown: welcomeBackCooldown) else { return }
+
+        let request = SwiftBotDMRequest(
+            messageType: .welcomeBack,
+            debug: false,
+            twitchUsername: twitchUsername,
+            priorityGames: priorityGames
+        )
+
+        dmEventLogger.info("Emitting welcomeBack discordId=\(discordUserId, privacy: .private)")
+        _ = await connectionService.sendEventDM(to: discordUserId, request: request)
+    }
+
+    public func emitAccountActionRequired(
+        reason: String,
+        discordUserId: String?,
+        twitchUsername: String?,
+        priorityGames: [String]
+    ) async {
+        guard let discordUserId else { return }
+
+        let request = SwiftBotDMRequest(
+            messageType: .accountActionRequired,
+            debug: false,
+            twitchUsername: twitchUsername,
+            priorityGames: priorityGames,
+            recoveryReason: reason
+        )
+
+        dmEventLogger.info("Emitting accountActionRequired discordId=\(discordUserId, privacy: .private) reason=\(reason)")
+        _ = await connectionService.sendEventDM(to: discordUserId, request: request)
+    }
+
+    // MARK: - Dedup Helpers
+
+    private func isRecentlyNotified(key: String, map: inout [String: Date], cooldown: TimeInterval) -> Bool {
+        guard let last = map[key] else { return false }
+        return Date().timeIntervalSince(last) < cooldown
+    }
+}
