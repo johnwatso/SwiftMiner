@@ -227,7 +227,9 @@ private struct GeneralSettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .padding(24)
+        .padding(.horizontal, 24)
+        .padding(.bottom, 20)
+        .padding(.top, 10)
     }
 
     private var startAtLoginBinding: Binding<Bool> {
@@ -538,7 +540,9 @@ private struct MiningSettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .padding(24)
+        .padding(.horizontal, 24)
+        .padding(.bottom, 20)
+        .padding(.top, 10)
         .sheet(isPresented: $isShowingGameManagement) {
             GamePreferenceManagementView(
                 settings: settings,
@@ -600,7 +604,9 @@ private struct IntegrationsSettingsView: View {
 #endif
         }
         .formStyle(.grouped)
-        .padding(24)
+        .padding(.horizontal, 24)
+        .padding(.bottom, 20)
+        .padding(.top, 10)
     }
 
     // MARK: - Status Card
@@ -1144,7 +1150,9 @@ private struct AdvancedSettingsView: View {
 #endif
         }
         .formStyle(.grouped)
-        .padding(24)
+        .padding(.horizontal, 24)
+        .padding(.bottom, 20)
+        .padding(.top, 10)
         .confirmationDialog("Reset all settings?", isPresented: $showResetConfirmation) {
             Button("Reset", role: .destructive) {
                 settings.resetToDefaults()
