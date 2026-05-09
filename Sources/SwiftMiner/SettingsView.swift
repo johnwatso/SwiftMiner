@@ -43,7 +43,7 @@ struct SettingsView: View {
                 }
                 .tag(SettingsTab.advanced)
         }
-        .padding(.top, -6)
+        .padding(.top, -2)
         .frame(width: 520)
     }
 }
@@ -87,10 +87,10 @@ private struct SettingsTabItem: View {
     var body: some View {
         VStack(spacing: 1) {
             Image(systemName: tab.systemImage)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 12, weight: .medium))
                 .imageScale(.small)
                 .symbolRenderingMode(.hierarchical)
-                .frame(height: 15, alignment: .center)
+                .frame(height: 14, alignment: .center)
             Text(tab.title)
                 .font(.system(size: 10, weight: .medium))
         }
@@ -600,20 +600,20 @@ private struct IntegrationsSettingsView: View {
 
     private var statusCard: some View {
         Section {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 10) {
                     ZStack {
                         Circle()
-                            .fill(statusColor.opacity(0.15))
-                            .frame(width: 44, height: 44)
+                            .fill(statusColor.opacity(0.12))
+                            .frame(width: 34, height: 34)
                         Image(systemName: statusIcon)
-                            .font(.system(size: 20, weight: .semibold))
+                            .font(.system(size: 15, weight: .medium))
                             .foregroundStyle(statusColor)
                     }
 
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: 0) {
                         Text(statusTitle)
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(.system(size: 13, weight: .semibold))
                         Text(statusSubtitle)
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -622,19 +622,19 @@ private struct IntegrationsSettingsView: View {
                     Spacer()
                 }
 
-                Text("SwiftMiner sends Discord direct messages through SwiftBot for account recovery, drop claims, and campaign updates.")
+                Text("Sends Discord DMs for account recovery, drop claims, and campaign updates.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineSpacing(2)
+                    .lineSpacing(1)
 
-                HStack(spacing: 10) {
+                HStack(spacing: 8) {
                     Button {
                         openHelpURL()
                     } label: {
-                        Label("View Help", systemImage: "questionmark.circle")
+                        Label("Help", systemImage: "questionmark.circle")
                     }
                     .buttonStyle(.bordered)
-                    .controlSize(.small)
+                    .controlSize(.mini)
 
                     Button {
                         Task { await sendTestDM() }
@@ -646,11 +646,11 @@ private struct IntegrationsSettingsView: View {
                                 Text("Sending…")
                             }
                         } else {
-                            Label("Send Test DM", systemImage: "paperplane")
+                            Label("Test", systemImage: "paperplane")
                         }
                     }
                     .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
+                    .controlSize(.mini)
                     .disabled(isSendingPreview || firstLinkedDiscordId == nil)
 
                     Spacer()
@@ -662,14 +662,13 @@ private struct IntegrationsSettingsView: View {
                         .foregroundStyle(previewStatus.hasPrefix("Sent") ? .green : .red)
                 }
             }
-            .padding(.vertical, 4)
         }
         .listRowBackground(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(.ultraThinMaterial)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(statusColor.opacity(0.18), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(statusColor.opacity(0.14), lineWidth: 0.5)
                 )
         )
     }
@@ -801,61 +800,56 @@ private struct IntegrationsSettingsView: View {
 
     private var connectionStatusSection: some View {
         Section {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 12) {
-                    let state = navigation.swiftBotState
-                    Image(systemName: state == .connected ? "arrow.trianglehead.2.clockwise.rotate.90" : "exclamationmark.arrow.trianglehead.2.clockwise.rotate.90")
-                        .foregroundStyle(state == .connected ? .green : .red)
-                        .font(.title3)
+            HStack(spacing: 8) {
+                let state = navigation.swiftBotState
+                Image(systemName: state == .connected ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(state == .connected ? .green : .orange)
 
-                    Text(state == .connected ? "Connected to SwiftBot" : "Not Connected")
-                        .font(.subheadline.weight(.medium))
+                Text(state == .connected ? "SwiftBot connected" : "SwiftBot not responding")
+                    .font(.caption)
 
-                    Spacer()
+                Spacer()
 
-                    HStack(spacing: 8) {
-                        Button {
-                            repairConnection()
-                        } label: {
-                            Label("Repair", systemImage: "wrench.and.screwdriver")
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
+                if state != .connected {
+                    Button {
+                        repairConnection()
+                    } label: {
+                        Label("Repair", systemImage: "wrench.and.screwdriver")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
+                }
 
-                        Button {
-                            Task {
-                                connectionTestMessage = nil
-                                isTestingConnection = true
-                                await navigation.checkSwiftBotConnection()
-                                connectionTestMessage = connectionTestDescription(for: navigation.swiftBotState)
-                                isTestingConnection = false
-                            }
-                        } label: {
-                            if isTestingConnection {
-                                HStack(spacing: 6) {
-                                    ProgressView().controlSize(.small)
-                                    Text("Testing")
-                                }
-                            } else {
-                                Label("Test", systemImage: "arrow.clockwise")
-                            }
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .disabled(isTestingConnection)
+                Button {
+                    Task {
+                        connectionTestMessage = nil
+                        isTestingConnection = true
+                        await navigation.checkSwiftBotConnection()
+                        connectionTestMessage = connectionTestDescription(for: navigation.swiftBotState)
+                        isTestingConnection = false
+                    }
+                } label: {
+                    if isTestingConnection {
+                        ProgressView()
+                            .controlSize(.mini)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 11))
                     }
                 }
+                .buttonStyle(.borderless)
+                .controlSize(.mini)
+                .disabled(isTestingConnection)
+            }
 
-                if isTestingConnection {
-                    SettingsSecondaryText("Checking SwiftBot…")
-                        .padding(.leading, 32)
-                } else if let connectionTestMessage {
-                    SettingsSecondaryText(connectionTestMessage)
-                        .padding(.leading, 32)
-                }
+            if isTestingConnection {
+                SettingsSecondaryText("Checking SwiftBot…")
+            } else if let connectionTestMessage {
+                SettingsSecondaryText(connectionTestMessage)
             }
         } header: {
-            Text("Connection Status")
+            Text("Connection")
         }
     }
 
@@ -995,10 +989,10 @@ private struct IntegrationsSettingsView: View {
         }
         .listRowBackground(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.blue.opacity(0.06))
+                .fill(Color.blue.opacity(0.04))
                 .overlay(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(Color.blue.opacity(0.12), lineWidth: 1)
+                        .stroke(Color.blue.opacity(0.10), lineWidth: 0.5)
                 )
         )
     }
