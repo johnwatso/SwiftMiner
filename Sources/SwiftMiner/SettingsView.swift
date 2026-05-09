@@ -572,6 +572,7 @@ private struct IntegrationsSettingsView: View {
                 pairingSection
             }
             connectionStatusSection
+            dmNotificationsSection
 #if DEBUG
             dmDebugSection
 #endif
@@ -734,6 +735,25 @@ private struct IntegrationsSettingsView: View {
     private func repairConnection() {
         copyPairingBundle()
         connectionTestMessage = "Fresh SwiftBot pairing details copied. Paste them into SwiftBot to repair the connection."
+    }
+
+    // MARK: DM Notifications
+
+    private var dmNotificationsSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 10) {
+                Toggle("Drop claimed", isOn: $settings.dmDropClaimedEnabled)
+                Toggle("Campaign complete", isOn: $settings.dmCampaignCompletedEnabled)
+                Toggle("Connection expired", isOn: $settings.dmConnectionExpiredEnabled)
+                Toggle("Welcome back", isOn: $settings.dmWelcomeBackEnabled)
+                Toggle("Link required for game", isOn: $settings.dmLinkRequiredEnabled)
+                Toggle("New campaign detected", isOn: $settings.dmCampaignDetectedEnabled)
+                Toggle("Account action required", isOn: $settings.dmAccountActionRequiredEnabled)
+            }
+            SettingsSecondaryText("Choose which DMs SwiftBot sends. Onboarding messages are always sent.")
+        } header: {
+            Text("Discord DM Notifications")
+        }
     }
 
 #if DEBUG

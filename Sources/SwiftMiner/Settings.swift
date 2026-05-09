@@ -310,6 +310,29 @@ public final class Settings: ObservableObject {
     /// API Key for the SwiftMiner HTTP service (used by SwiftBot)
     @AppStorage("swiftMinerAPIKey", store: Settings.appStorageStore)
     public var swiftMinerAPIKey: String = ""
+
+    // MARK: - Discord DM Notification Preferences
+
+    @AppStorage("dmDropClaimedEnabled", store: Settings.appStorageStore)
+    public var dmDropClaimedEnabled: Bool = true
+
+    @AppStorage("dmCampaignCompletedEnabled", store: Settings.appStorageStore)
+    public var dmCampaignCompletedEnabled: Bool = true
+
+    @AppStorage("dmConnectionExpiredEnabled", store: Settings.appStorageStore)
+    public var dmConnectionExpiredEnabled: Bool = true
+
+    @AppStorage("dmWelcomeBackEnabled", store: Settings.appStorageStore)
+    public var dmWelcomeBackEnabled: Bool = true
+
+    @AppStorage("dmLinkRequiredEnabled", store: Settings.appStorageStore)
+    public var dmLinkRequiredEnabled: Bool = true
+
+    @AppStorage("dmCampaignDetectedEnabled", store: Settings.appStorageStore)
+    public var dmCampaignDetectedEnabled: Bool = true
+
+    @AppStorage("dmAccountActionRequiredEnabled", store: Settings.appStorageStore)
+    public var dmAccountActionRequiredEnabled: Bool = true
     
     /// JSON-encoded array of GamePreference for selected games
     @AppStorage("gamePreferencesData", store: Settings.appStorageStore)
@@ -751,6 +774,13 @@ public final class Settings: ObservableObject {
         swiftMinerAPIEndpoint = "http://127.0.0.1:8080"
         swiftBotHmacSecret = ""
         swiftMinerAPIKey = ""
+        dmDropClaimedEnabled = true
+        dmCampaignCompletedEnabled = true
+        dmConnectionExpiredEnabled = true
+        dmWelcomeBackEnabled = true
+        dmLinkRequiredEnabled = true
+        dmCampaignDetectedEnabled = true
+        dmAccountActionRequiredEnabled = true
         gamePreferencesData = "[]"
         selectedDropsFiltersData = "[\"active\"]"
         miningStrategy = .mineAll
