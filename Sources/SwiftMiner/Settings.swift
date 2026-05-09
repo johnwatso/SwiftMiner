@@ -313,23 +313,28 @@ public final class Settings: ObservableObject {
 
     // MARK: - Discord DM Notification Preferences
 
+    // MARK: - Discord DM Notification Preferences
+    //
+    // Important notifications default ON — these relate to account recovery and action required.
+    // Activity notifications default OFF — these are informational and can be noisy.
+
     @AppStorage("dmDropClaimedEnabled", store: Settings.appStorageStore)
-    public var dmDropClaimedEnabled: Bool = true
+    public var dmDropClaimedEnabled: Bool = false
 
     @AppStorage("dmCampaignCompletedEnabled", store: Settings.appStorageStore)
-    public var dmCampaignCompletedEnabled: Bool = true
+    public var dmCampaignCompletedEnabled: Bool = false
 
     @AppStorage("dmConnectionExpiredEnabled", store: Settings.appStorageStore)
     public var dmConnectionExpiredEnabled: Bool = true
 
     @AppStorage("dmWelcomeBackEnabled", store: Settings.appStorageStore)
-    public var dmWelcomeBackEnabled: Bool = true
+    public var dmWelcomeBackEnabled: Bool = false
 
     @AppStorage("dmLinkRequiredEnabled", store: Settings.appStorageStore)
     public var dmLinkRequiredEnabled: Bool = true
 
     @AppStorage("dmCampaignDetectedEnabled", store: Settings.appStorageStore)
-    public var dmCampaignDetectedEnabled: Bool = true
+    public var dmCampaignDetectedEnabled: Bool = false
 
     @AppStorage("dmAccountActionRequiredEnabled", store: Settings.appStorageStore)
     public var dmAccountActionRequiredEnabled: Bool = true
@@ -774,12 +779,12 @@ public final class Settings: ObservableObject {
         swiftMinerAPIEndpoint = "http://127.0.0.1:8080"
         swiftBotHmacSecret = ""
         swiftMinerAPIKey = ""
-        dmDropClaimedEnabled = true
-        dmCampaignCompletedEnabled = true
+        dmDropClaimedEnabled = false
+        dmCampaignCompletedEnabled = false
         dmConnectionExpiredEnabled = true
-        dmWelcomeBackEnabled = true
+        dmWelcomeBackEnabled = false
         dmLinkRequiredEnabled = true
-        dmCampaignDetectedEnabled = true
+        dmCampaignDetectedEnabled = false
         dmAccountActionRequiredEnabled = true
         gamePreferencesData = "[]"
         selectedDropsFiltersData = "[\"active\"]"

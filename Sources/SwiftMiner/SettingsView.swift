@@ -13,37 +13,38 @@ struct SettingsView: View {
         TabView(selection: $selectedTab) {
             GeneralSettingsView(settings: settings)
                 .tabItem {
-                    Label(SettingsTab.general.title, systemImage: SettingsTab.general.systemImage)
+                    SettingsTabItem(tab: .general)
                 }
                 .tag(SettingsTab.general)
 
             AccountSettingsView(navigation: navigation)
                 .tabItem {
-                    Label(SettingsTab.accounts.title, systemImage: SettingsTab.accounts.systemImage)
+                    SettingsTabItem(tab: .accounts)
                 }
                 .tag(SettingsTab.accounts)
 
             MiningSettingsView(settings: settings)
                 .tabItem {
-                    Label(SettingsTab.mining.title, systemImage: SettingsTab.mining.systemImage)
+                    SettingsTabItem(tab: .mining)
                 }
                 .tag(SettingsTab.mining)
 
             if settings.swiftBotEnabled {
                 IntegrationsSettingsView(settings: settings)
                     .tabItem {
-                        Label(SettingsTab.integrations.title, systemImage: SettingsTab.integrations.systemImage)
+                        SettingsTabItem(tab: .integrations)
                     }
                     .tag(SettingsTab.integrations)
             }
 
             AdvancedSettingsView(settings: settings)
                 .tabItem {
-                    Label(SettingsTab.advanced.title, systemImage: SettingsTab.advanced.systemImage)
+                    SettingsTabItem(tab: .advanced)
                 }
                 .tag(SettingsTab.advanced)
         }
-        .frame(width: 520) // Authentic Safari-style pane width
+        .padding(.top, -6)
+        .frame(width: 520)
     }
 }
 
@@ -73,6 +74,25 @@ private enum SettingsTab: String, CaseIterable, Hashable, Identifiable {
         case .mining: return "hammer"
         case .integrations: return "app.connected.to.app.below.fill"
         case .advanced: return "gearshape.2"
+        }
+    }
+}
+
+/// Custom tab-item label with precise optical centering and tight spacing.
+/// On macOS the system extracts the Image and Text from .tabItem to build the
+/// segmented control; explicit sizing here ensures every icon sits consistently.
+private struct SettingsTabItem: View {
+    let tab: SettingsTab
+
+    var body: some View {
+        VStack(spacing: 1) {
+            Image(systemName: tab.systemImage)
+                .font(.system(size: 13, weight: .semibold))
+                .imageScale(.small)
+                .symbolRenderingMode(.hierarchical)
+                .frame(height: 15, alignment: .center)
+            Text(tab.title)
+                .font(.system(size: 10, weight: .medium))
         }
     }
 }
@@ -547,46 +567,165 @@ private struct IntegrationsSettingsView: View {
     @State private var isTestingConnection = false
     @State private var connectionTestMessage: String?
     @State private var copiedPairingBundle = false
-    @State private var debugDiscordUsers: [SwiftBotDiscordUser] = []
-    @State private var debugSelectedUserId: String?
-    @State private var debugFallbackUserId = ""
-    @State private var debugMessageType: SwiftBotDMMessageType = .welcome
-    @State private var debugTwitchUsername = "ruffcrumble"
-    @State private var debugPriorityGames = "THE FINALS, ARC Raiders, Battlefield 6"
-    @State private var debugActivationCode = "NSMRCHHL"
-    @State private var debugExpirationMinutes = 29
-    @State private var debugAffectedGame = "THE FINALS"
-    @State private var debugCampaignName = "Launch Drops"
-    @State private var debugMilestoneTitle = "Drop claimed"
-    @State private var debugRecoveryReason = "Twitch login needs to be refreshed."
-    @State private var isSendingDebugDM = false
-    @State private var isSendingAllDebugDMs = false
-    @State private var debugDMResult: Bool?
-    @State private var debugDMStatus: String?
+    @State private var isSendingPreview = false
+    @State private var previewStatus: String?
 
     private let defaultSwiftBotEndpoint = "http://localhost:38888"
 
     var body: some View {
         Form {
+            statusCard
+
             if navigation.swiftBotState != .connected {
                 pairingSection
             }
+
             connectionStatusSection
-            dmNotificationsSection
+
+            importantSection
+
+            activitySection
+
+            onboardingInfoSection
+
 #if DEBUG
             dmDebugSection
 #endif
         }
         .formStyle(.grouped)
         .padding(24)
-        .task {
-#if DEBUG
-            await loadDebugDiscordUsers()
-#endif
+    }
+
+    // MARK: - Status Card
+
+    private var statusCard: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 14) {
+                    ZStack {
+                        Circle()
+                            .fill(statusColor.opacity(0.15))
+                            .frame(width: 44, height: 44)
+                        Image(systemName: statusIcon)
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundStyle(statusColor)
+                    }
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(statusTitle)
+                            .font(.system(size: 15, weight: .semibold))
+                        Text(statusSubtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+                }
+
+                Text("SwiftMiner sends Discord direct messages through SwiftBot for account recovery, drop claims, and campaign updates.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineSpacing(2)
+
+                HStack(spacing: 10) {
+                    Button {
+                        openHelpURL()
+                    } label: {
+                        Label("View Help", systemImage: "questionmark.circle")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+
+                    Button {
+                        Task { await sendTestDM() }
+                    } label: {
+                        if isSendingPreview {
+                            HStack(spacing: 4) {
+                                ProgressView()
+                                    .controlSize(.mini)
+                                Text("Sending…")
+                            }
+                        } else {
+                            Label("Send Test DM", systemImage: "paperplane")
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(isSendingPreview || firstLinkedDiscordId == nil)
+
+                    Spacer()
+                }
+
+                if let previewStatus {
+                    Text(previewStatus)
+                        .font(.caption)
+                        .foregroundStyle(previewStatus.hasPrefix("Sent") ? .green : .red)
+                }
+            }
+            .padding(.vertical, 4)
+        }
+        .listRowBackground(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(statusColor.opacity(0.18), lineWidth: 1)
+                )
+        )
+    }
+
+    private var statusTitle: String {
+        switch navigation.swiftBotState {
+        case .connected: return "Connected to SwiftBot"
+        case .notConfigured: return "Discord Integration"
+        case .disconnected: return "Not Connected"
         }
     }
 
-    // MARK: Pairing
+    private var statusSubtitle: String {
+        switch navigation.swiftBotState {
+        case .connected: return "Messages will be delivered to Discord"
+        case .notConfigured: return "Enable Discord integration to get started"
+        case .disconnected: return "SwiftBot is not responding"
+        }
+    }
+
+    private var statusIcon: String {
+        switch navigation.swiftBotState {
+        case .connected: return "checkmark.circle.fill"
+        case .notConfigured: return "app.badge.checkmark"
+        case .disconnected: return "exclamationmark.triangle.fill"
+        }
+    }
+
+    private var statusColor: Color {
+        switch navigation.swiftBotState {
+        case .connected: return .green
+        case .notConfigured: return .secondary
+        case .disconnected: return .orange
+        }
+    }
+
+    private func openHelpURL() {
+        let url = URL(string: "https://github.com/johnwatso/SwiftMiner/blob/main/docs/help/discord-help.md")!
+        NSWorkspace.shared.open(url)
+    }
+
+    private func sendTestDM() async {
+        guard let discordId = firstLinkedDiscordId else { return }
+        isSendingPreview = true
+        previewStatus = nil
+        let request = SwiftBotDMRequest(
+            messageType: .linked,
+            debug: true,
+            twitchUsername: "test_user"
+        )
+        let ok = await navigation.swiftBotConnectionService.sendDebugDM(to: discordId, request: request)
+        previewStatus = ok ? "Sent test DM." : "SwiftBot could not send the test DM."
+        isSendingPreview = false
+    }
+
+    // MARK: - Pairing
 
     private var pairingSection: some View {
         Section {
@@ -658,7 +797,7 @@ private struct IntegrationsSettingsView: View {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    // MARK: Connection status
+    // MARK: - Connection Status
 
     private var connectionStatusSection: some View {
         Section {
@@ -708,7 +847,7 @@ private struct IntegrationsSettingsView: View {
                 }
 
                 if isTestingConnection {
-                    SettingsSecondaryText("Checking SwiftBot...")
+                    SettingsSecondaryText("Checking SwiftBot…")
                         .padding(.leading, 32)
                 } else if let connectionTestMessage {
                     SettingsSecondaryText(connectionTestMessage)
@@ -737,194 +876,245 @@ private struct IntegrationsSettingsView: View {
         connectionTestMessage = "Fresh SwiftBot pairing details copied. Paste them into SwiftBot to repair the connection."
     }
 
-    // MARK: DM Notifications
+    // MARK: - Important Notifications
 
-    private var dmNotificationsSection: some View {
+    private var importantSection: some View {
         Section {
-            VStack(alignment: .leading, spacing: 10) {
-                Toggle("Drop claimed", isOn: $settings.dmDropClaimedEnabled)
-                Toggle("Campaign complete", isOn: $settings.dmCampaignCompletedEnabled)
-                Toggle("Connection expired", isOn: $settings.dmConnectionExpiredEnabled)
-                Toggle("Welcome back", isOn: $settings.dmWelcomeBackEnabled)
-                Toggle("Link required for game", isOn: $settings.dmLinkRequiredEnabled)
-                Toggle("New campaign detected", isOn: $settings.dmCampaignDetectedEnabled)
-                Toggle("Account action required", isOn: $settings.dmAccountActionRequiredEnabled)
+            VStack(alignment: .leading, spacing: 4) {
+                notificationToggleRow(
+                    title: "Twitch reconnect needed",
+                    description: "Sent when a Twitch login session expires and needs reconnecting.",
+                    isOn: $settings.dmConnectionExpiredEnabled
+                )
+
+                Divider().padding(.vertical, 2)
+
+                notificationToggleRow(
+                    title: "Game account link needed",
+                    description: "Sent when you prioritised a game but haven't linked the required account.",
+                    isOn: $settings.dmLinkRequiredEnabled
+                )
+
+                Divider().padding(.vertical, 2)
+
+                notificationToggleRow(
+                    title: "Something needs attention",
+                    description: "Sent when a miner encounters an issue that needs a manual look.",
+                    isOn: $settings.dmAccountActionRequiredEnabled
+                )
             }
-            SettingsSecondaryText("Choose which DMs SwiftBot sends. Onboarding messages are always sent.")
         } header: {
-            Text("Discord DM Notifications")
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.shield")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.orange)
+                Text("Important")
+                    .font(.subheadline.weight(.semibold))
+            }
+        } footer: {
+            Text("These notifications relate to account recovery and linking. They are recommended to stay on.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 
-#if DEBUG
-    // MARK: DM debug
+    // MARK: - Activity Notifications
 
-    private var dmDebugSection: some View {
+    private var activitySection: some View {
         Section {
-            Picker("Message", selection: $debugMessageType) {
-                ForEach(SwiftBotDMMessageType.allCases) { type in
-                    Text(type.displayName).tag(type)
+            VStack(alignment: .leading, spacing: 4) {
+                notificationToggleRow(
+                    title: "Drop claimed",
+                    description: "Sent when SwiftMiner successfully claims a Drop.",
+                    isOn: $settings.dmDropClaimedEnabled,
+                    previewType: .dropClaimed
+                )
+
+                Divider().padding(.vertical, 2)
+
+                notificationToggleRow(
+                    title: "Campaign complete",
+                    description: "Sent when all Drops in a campaign have been claimed.",
+                    isOn: $settings.dmCampaignCompletedEnabled,
+                    previewType: .campaignCompleted
+                )
+
+                Divider().padding(.vertical, 2)
+
+                notificationToggleRow(
+                    title: "New Drops campaign",
+                    description: "Sent when a new campaign starts for a game you follow.",
+                    isOn: $settings.dmCampaignDetectedEnabled,
+                    previewType: .campaignDetected
+                )
+
+                Divider().padding(.vertical, 2)
+
+                notificationToggleRow(
+                    title: "Connection restored",
+                    description: "Sent when SwiftMiner detects a miner has come back online.",
+                    isOn: $settings.dmWelcomeBackEnabled,
+                    previewType: .welcomeBack
+                )
+            }
+        } header: {
+            HStack(spacing: 6) {
+                Image(systemName: "bell")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text("Activity")
+                    .font(.subheadline.weight(.semibold))
+            }
+        } footer: {
+            Text("These are informational updates about mining progress. Turn on the ones you find useful.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    // MARK: - Onboarding Info
+
+    private var onboardingInfoSection: some View {
+        Section {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "info.circle.fill")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.blue)
+                    .padding(.top, 1)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Setup messages are always enabled")
+                        .font(.caption.weight(.medium))
+                    Text("Welcome, linking, and reconnection instructions are always sent so users can complete setup and recover accounts.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineSpacing(2)
                 }
             }
+            .padding(.vertical, 2)
+        }
+        .listRowBackground(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.blue.opacity(0.06))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(Color.blue.opacity(0.12), lineWidth: 1)
+                )
+        )
+    }
 
-            if !debugDiscordUsers.isEmpty {
-                Picker("Discord user", selection: $debugSelectedUserId) {
-                    Text("Select a user...").tag(String?.none)
-                    ForEach(debugDiscordUsers) { user in
-                        Text(user.displayName).tag(Optional(user.id))
-                    }
-                }
-                .pickerStyle(.menu)
+    // MARK: - Notification Toggle Row
+
+    private func notificationToggleRow(
+        title: String,
+        description: String,
+        isOn: Binding<Bool>,
+        previewType: SwiftBotDMMessageType? = nil
+    ) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 13, weight: .medium))
+                Text(description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
             }
 
-            HStack {
-                TextField("Discord user ID", text: $debugFallbackUserId)
-                    .textFieldStyle(.roundedBorder)
-                Button("Use Linked Test Account") {
-                    debugFallbackUserId = firstLinkedDiscordId ?? debugFallbackUserId
+            Spacer(minLength: 8)
+
+            if let previewType {
+                Button {
+                    Task { await sendPreview(type: previewType) }
+                } label: {
+                    Image(systemName: "play.circle")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.secondary)
                 }
+                .buttonStyle(.plain)
+                .help("Preview this message")
                 .disabled(firstLinkedDiscordId == nil)
             }
 
-            TextField("Twitch username", text: $debugTwitchUsername)
-            TextField("Prioritised games", text: $debugPriorityGames)
-            TextField("Activation code", text: $debugActivationCode)
-            Stepper("Code expires in \(debugExpirationMinutes) minutes", value: $debugExpirationMinutes, in: 1...60)
-            TextField("Affected game", text: $debugAffectedGame)
-            TextField("Campaign name", text: $debugCampaignName)
-            TextField("Milestone label", text: $debugMilestoneTitle)
-            TextField("Recovery reason", text: $debugRecoveryReason)
-
-            HStack {
-                Button {
-                    Task { await sendDebugDM() }
-                } label: {
-                    if isSendingDebugDM && !isSendingAllDebugDMs {
-                        HStack(spacing: 6) {
-                            ProgressView().controlSize(.small)
-                            Text("Sending")
-                        }
-                    } else {
-                        Label("Send Debug DM", systemImage: "paperplane")
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(!canSendDebugDM || isSendingDebugDM || isSendingAllDebugDMs)
-
-                Button {
-                    Task { await sendAllDebugDMs() }
-                } label: {
-                    if isSendingAllDebugDMs {
-                        HStack(spacing: 6) {
-                            ProgressView().controlSize(.small)
-                            Text("Sending All")
-                        }
-                    } else {
-                        Label("Send All in Order", systemImage: "text.bubble")
-                    }
-                }
-                .buttonStyle(.bordered)
-                .disabled(!canSendDebugDM || isSendingDebugDM || isSendingAllDebugDMs)
-            }
-
-            if let status = debugDMStatus {
-                Text(status)
-                    .font(.caption)
-                    .foregroundStyle(debugDMResult == false ? .red : .secondary)
-            }
-
-            SettingsSecondaryText("Debug previews are sent with debug=true and do not update welcome or setup state.")
-        } header: {
-            Text("DM Flow Testing")
+            Toggle("", isOn: isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
         }
+        .padding(.vertical, 4)
+    }
+
+    // MARK: - Preview
+
+    private func sendPreview(type: SwiftBotDMMessageType) async {
+        guard let discordId = firstLinkedDiscordId else { return }
+        let request = SwiftBotDMRequest(
+            messageType: type,
+            debug: true,
+            twitchUsername: "preview_user",
+            priorityGames: ["THE FINALS"],
+            campaignName: "Preview Campaign",
+            milestoneTitle: "Preview Drop"
+        )
+        _ = await navigation.swiftBotConnectionService.sendDebugDM(to: discordId, request: request)
     }
 
     private var firstLinkedDiscordId: String? {
         navigation.minerManager.miners.compactMap(\.ownerDiscordId).first
     }
 
-    private var resolvedDebugDiscordId: String? {
-        let trimmed = debugFallbackUserId.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty { return trimmed }
-        return debugSelectedUserId
-    }
+#if DEBUG
+    // MARK: - DM Debug
 
-    private var canSendDebugDM: Bool {
-        guard let id = resolvedDebugDiscordId else { return false }
-        return id.count >= 17 && id.count <= 19 && id.allSatisfy(\.isNumber)
-    }
+    private var dmDebugSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 10) {
+                    Button {
+                        Task { await sendAllDebugDMs() }
+                    } label: {
+                        Label("Send All Test DMs", systemImage: "text.bubble")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
 
-    private var debugDMPreviewOrder: [SwiftBotDMMessageType] {
-        SwiftBotDMMessageType.debugPreviewOrder
-    }
+                    if let firstLinkedDiscordId {
+                        SettingsSecondaryText("Target: \(firstLinkedDiscordId)")
+                    } else {
+                        SettingsSecondaryText("No linked Discord account found.", tint: .orange)
+                    }
 
-    private func loadDebugDiscordUsers() async {
-        debugDiscordUsers = await navigation.swiftBotConnectionService.fetchDiscordUsers()
-        if debugSelectedUserId == nil {
-            debugSelectedUserId = debugDiscordUsers.first?.id
+                    Spacer()
+                }
+            }
+        } header: {
+            Text("Debug Testing")
         }
-    }
-
-    private func sendDebugDM() async {
-        guard let discordId = resolvedDebugDiscordId else { return }
-        isSendingDebugDM = true
-        debugDMStatus = nil
-        debugDMResult = nil
-        let request = debugDMRequest(for: debugMessageType)
-        debugDMResult = await navigation.swiftBotConnectionService.sendDebugDM(to: discordId, request: request)
-        debugDMStatus = debugDMResult == true ? "Debug DM sent." : "SwiftBot could not send this debug DM."
-        isSendingDebugDM = false
     }
 
     private func sendAllDebugDMs() async {
-        guard let discordId = resolvedDebugDiscordId else { return }
-        isSendingAllDebugDMs = true
-        debugDMResult = nil
-        debugDMStatus = "Sending 0/\(debugDMPreviewOrder.count)..."
-
-        var failures: [String] = []
-        for (index, messageType) in debugDMPreviewOrder.enumerated() {
-            debugDMStatus = "Sending \(index + 1)/\(debugDMPreviewOrder.count): \(messageType.displayName)"
-            let ok = await navigation.swiftBotConnectionService.sendDebugDM(
-                to: discordId,
-                request: debugDMRequest(for: messageType)
+        guard let discordId = firstLinkedDiscordId else { return }
+        let order: [SwiftBotDMMessageType] = [
+            .welcome, .discordLinked, .setup, .linked,
+            .campaignDetected, .prioritisedGameNeedsLinking,
+            .accountActionRequired, .reauth, .welcomeBack,
+            .dropClaimed, .campaignCompleted
+        ]
+        for type in order {
+            let request = SwiftBotDMRequest(
+                messageType: type,
+                debug: true,
+                twitchUsername: "test_user",
+                priorityGames: ["THE FINALS", "Overwatch 2"],
+                activationCode: "ABCD-EFGH",
+                activationExpiresInMinutes: 29,
+                affectedGame: "Test Game",
+                campaignName: "Test Campaign",
+                milestoneTitle: "50% Complete",
+                recoveryReason: "Twitch token expired during mining."
             )
-            if !ok {
-                failures.append(messageType.displayName)
-            }
+            _ = await navigation.swiftBotConnectionService.sendDebugDM(to: discordId, request: request)
             try? await Task.sleep(for: .milliseconds(650))
         }
-
-        if failures.isEmpty {
-            debugDMResult = true
-            debugDMStatus = "All \(debugDMPreviewOrder.count) debug DMs sent in order."
-        } else {
-            debugDMResult = false
-            debugDMStatus = "Sent sequence with \(failures.count) failure\(failures.count == 1 ? "" : "s"): \(failures.joined(separator: ", "))."
-        }
-        isSendingAllDebugDMs = false
-    }
-
-    private func debugDMRequest(for messageType: SwiftBotDMMessageType) -> SwiftBotDMRequest {
-        SwiftBotDMRequest(
-            messageType: messageType,
-            debug: true,
-            twitchUsername: normalizedValue(debugTwitchUsername),
-            priorityGames: parsedDebugPriorityGames,
-            activationCode: normalizedValue(debugActivationCode),
-            activationExpiresInMinutes: debugExpirationMinutes,
-            affectedGame: normalizedValue(debugAffectedGame),
-            campaignName: normalizedValue(debugCampaignName),
-            milestoneTitle: normalizedValue(debugMilestoneTitle),
-            recoveryReason: normalizedValue(debugRecoveryReason)
-        )
-    }
-
-    private var parsedDebugPriorityGames: [String] {
-        debugPriorityGames
-            .split(separator: ",")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
     }
 #endif
 }
@@ -1018,15 +1208,6 @@ private struct AdvancedSettingsView: View {
     private var integrationToggleSection: some View {
         Section {
             Toggle("Enable Discord Integration", isOn: $settings.swiftBotEnabled)
-                .onChange(of: settings.swiftBotEnabled) { _, enabled in
-                    if enabled {
-                        settings.ensureSwiftBotSecrets()
-                        Task { await navigation.checkSwiftBotConnection() }
-                    } else {
-                        navigation.swiftBotState = .notConfigured
-                    }
-                }
-
             SettingsSecondaryText("Enables the local Discord/SwiftBot bridge. When on, an Integrations tab appears here for endpoint and webhook configuration.")
         } header: {
             Text("Integrations")
@@ -1035,16 +1216,15 @@ private struct AdvancedSettingsView: View {
 
     private var maintenanceSection: some View {
         Section {
-            Button("Clear Cached Drop History\u{2026}", role: .destructive) {
+            Button("Clear Drop History Cache\u{2026}") {
                 showDropCacheConfirmation = true
             }
-
             SettingsSecondaryText("Removes preserved campaign and inventory snapshots. Use this if old expired drops look wrong; the next refresh rebuilds history from Twitch.")
 
-            Button("Reset All Settings\u{2026}", role: .destructive) {
+            Button("Reset All Settings\u{2026}") {
                 showResetConfirmation = true
             }
-
+            .foregroundStyle(.red)
             SettingsSecondaryText("Restores every SwiftMiner preference to its default. Account logins are kept.")
         } header: {
             Text("Maintenance")
@@ -1054,27 +1234,11 @@ private struct AdvancedSettingsView: View {
 #if DEBUG
     private var debugTestingSection: some View {
         Section {
-            Toggle("Bypass Link Requirement", isOn: $settings.debugBypassLinkRequirement)
-                .onChange(of: settings.debugBypassLinkRequirement) { _, newValue in
-                    Task { await navigation.minerManager.setDebugBypassLinkRequirement(newValue) }
-                }
-
+            Toggle("Bypass link requirement", isOn: $settings.debugBypassLinkRequirement)
             SettingsSecondaryText("Mines a random live channel for any time-active campaign, ignoring account linkage. Drops won't actually credit — for exercising the watch pipeline only.")
 
-            LabeledContent("TipKit Popovers") {
-                HStack(spacing: 12) {
-                    Button("Force Show") {
-                        Tips.showAllTipsForTesting()
-                    }
-                    .buttonStyle(.link)
-
-                    Button("Hide All") {
-                        Tips.hideAllTipsForTesting()
-                    }
-                    .buttonStyle(.link)
-                }
-            }
-
+            Toggle("Force Show Tips", isOn: .constant(false))
+                .disabled(true)
             SettingsSecondaryText("Force Show ignores rules so every tip renders immediately. State resets on relaunch.")
         } header: {
             Text("Debug Testing")
