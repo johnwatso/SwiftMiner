@@ -33,11 +33,11 @@ SwiftBot sends you direct messages when something actually happens with your Dro
 
 ## Getting Set Up
 
-### Step 1: Link your Discord account
+### Step 1: Your Discord account is connected
 
-If an admin added you to SwiftMiner, your Discord account is already connected. You should have received a welcome DM from SwiftBot confirming this.
+You only get added to SwiftMiner when you actively use a `/miner` command — for example `/miner action:setup` or `/miner action:status`. At that point your Discord account is registered and you'll receive a welcome DM explaining what SwiftMiner is.
 
-If you haven't received anything, ask the person running SwiftMiner to check that you're registered.
+If you haven't received a welcome message, you haven't been registered yet. Use `/miner action:setup` to get started.
 
 ### Step 2: Link your Twitch account
 
