@@ -113,6 +113,7 @@
 		D98D9E425CE00B2FB2C57686 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46366DBAD54AF15E48C9E501 /* main.swift */; };
 		D9E4B76670DBD16E2DB5EAF1 /* DebugTracer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B8617965DD708EF04CA5A35 /* DebugTracer.swift */; };
 		D9ED48085AC9C519F0FCD0E7 /* CampaignDataService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 011876AF5BD64BEC7BC88B09 /* CampaignDataService.swift */; };
+		E43DEC94C9BDD5175A511E3F /* SwiftMinerDMEventServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 629F288CD5F83A1A3925F9AC /* SwiftMinerDMEventServiceTests.swift */; };
 		E52A43018B32BC80753EB96F /* CampaignMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54D58D6720C5197DA271ECF7 /* CampaignMapper.swift */; };
 		E66FEEA86A15D48613576F2D /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 320947611A8A4BB7759DAF7C /* NotificationService.swift */; };
 		E710235205E55957CBF29F95 /* CampaignMergeEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = D12899BD6300ED21BCE6187E /* CampaignMergeEngine.swift */; };
@@ -230,6 +231,7 @@
 		5A79F35AB0C08E6F2BE9A648 /* LiquidGlass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidGlass.swift; sourceTree = "<group>"; };
 		5BF00FC996141AD5345CE864 /* AuthRequiredSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthRequiredSheet.swift; sourceTree = "<group>"; };
 		5EB4A75313DCEC0D8CFC2445 /* MinerEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinerEngine.swift; sourceTree = "<group>"; };
+		629F288CD5F83A1A3925F9AC /* SwiftMinerDMEventServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftMinerDMEventServiceTests.swift; sourceTree = "<group>"; };
 		637C207EE3AF4206DA9F2C8F /* LogExporterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogExporterTests.swift; sourceTree = "<group>"; };
 		65FB3E563B38E973DD424620 /* MinersOverviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinersOverviewView.swift; sourceTree = "<group>"; };
 		66D3CD478576ED0783BFEED7 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
@@ -548,6 +550,7 @@
 				0CADF2275D2FBA60D333419B /* SpadeBeaconServiceTests.swift */,
 				19C66F8182D8FB572197B2EC /* SparkleConfigTests.swift */,
 				F01C7FACEB7BCCB9E95430C4 /* SwiftMinerCoreTests.swift */,
+				629F288CD5F83A1A3925F9AC /* SwiftMinerDMEventServiceTests.swift */,
 				9289E4C22C90837BB4EF95A9 /* TwitchAuthServiceTests.swift */,
 				41472EDA22183F56029E12DB /* WarningSuppressionTests.swift */,
 				AC39C0659C5D0936EE467992 /* WatchSessionManagerTests.swift */,
@@ -927,6 +930,7 @@
 				BEC429844CA9C889A06D7E60 /* SpadeBeaconServiceTests.swift in Sources */,
 				684EB4275963160CDAECA967 /* SparkleConfigTests.swift in Sources */,
 				B6A2FFB252B8C1507FD9C478 /* SwiftMinerCoreTests.swift in Sources */,
+				E43DEC94C9BDD5175A511E3F /* SwiftMinerDMEventServiceTests.swift in Sources */,
 				9D9B628CB3A53990DC0082E0 /* TwitchAuthServiceTests.swift in Sources */,
 				C4765CF3DD0FB022C589ED72 /* WarningSuppressionTests.swift in Sources */,
 				EC44A554596615D41BC5DDC5 /* WatchSessionManagerTests.swift in Sources */,
