@@ -350,6 +350,23 @@ public final class NavigationModel {
             }
         }
 
+        minerManager.onCampaignDetectedEvent = { [weak self] minerId, campaign in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                guard Settings.shared.dmCampaignDetectedEnabled else { return }
+                guard let miner = self.minerManager.miners.first(where: { $0.id == minerId }) else { return }
+                let priorityGames = Settings.shared.priorityGames
+                guard priorityGames.contains(where: { $0.caseInsensitiveCompare(campaign.game.name) == .orderedSame }) else { return }
+                await dmEventService.emitCampaignDetected(
+                    campaignId: campaign.id,
+                    campaignName: campaign.name,
+                    gameName: campaign.game.name,
+                    discordUserId: miner.ownerDiscordId,
+                    priorityGames: priorityGames
+                )
+            }
+        }
+
         minerManager.onLinkWarningEvent = { [weak self] minerId, gameName in
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -359,6 +376,22 @@ public final class NavigationModel {
                 await dmEventService.emitPrioritisedGameNeedsLinking(
                     gameName: gameName,
                     discordUserId: miner.ownerDiscordId,
+                    priorityGames: priorityGames
+                )
+            }
+        }
+
+        minerManager.onAccountActionRequiredEvent = { [weak self] minerId, reason in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                guard Settings.shared.dmAccountActionRequiredEnabled else { return }
+                guard let miner = self.minerManager.miners.first(where: { $0.id == minerId }) else { return }
+                let priorityGames = Settings.shared.priorityGames
+                await dmEventService.emitAccountActionRequired(
+                    accountId: miner.accountId,
+                    reason: reason,
+                    discordUserId: miner.ownerDiscordId,
+                    twitchUsername: miner.username,
                     priorityGames: priorityGames
                 )
             }

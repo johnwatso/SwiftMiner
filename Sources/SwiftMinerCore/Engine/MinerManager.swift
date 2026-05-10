@@ -289,6 +289,7 @@ public final class MinerManager {
     /// Background recovery loop for miners that get wedged after network or progress stalls.
     private var antiStallMonitorTask: Task<Void, Never>?
     private let supervisor = MinerSupervisor()
+    private var initializedCampaignSnapshots: Set<String> = []
 
     /// Last start options, used when anti-stall recovery restarts an individual miner.
     private var currentPriorityGames: [String] = []
@@ -321,10 +322,14 @@ public final class MinerManager {
     public var onAuthRequiredEvent: (@Sendable (String) -> Void)?
     /// Fired when a campaign becomes fully completed. (minerId, campaign)
     public var onCampaignCompletedEvent: (@Sendable (String, Campaign) -> Void)?
+    /// Fired when a newly seen campaign appears after the initial snapshot. (minerId, campaign)
+    public var onCampaignDetectedEvent: (@Sendable (String, Campaign) -> Void)?
     /// Fired when a prioritised game is blocked due to missing account link. (minerId, gameName)
     public var onLinkWarningEvent: (@Sendable (String, String) -> Void)?
     /// Fired when a miner recovers from error to active state. (minerId)
     public var onWelcomeBackEvent: (@Sendable (String) -> Void)?
+    /// Fired when a miner needs manual attention for a non-auth issue. (minerId, reason)
+    public var onAccountActionRequiredEvent: (@Sendable (String, String) -> Void)?
 
     // MARK: - Initialization
     
@@ -1045,8 +1050,18 @@ public final class MinerManager {
                 await self.supervisor.recordCampaignRefresh(minerId: minerId)
 
                 // Get all campaigns and current ID from engine
+                let previousCampaigns = self.getMiner(id: minerId)?.allCampaigns ?? []
+                let previousCampaignIds = Set(previousCampaigns.map(\.id))
+                let canEmitNewCampaigns = self.initializedCampaignSnapshots.contains(minerId)
                 let all = await engine.allCampaigns
                 let currentId = await engine.currentCampaignId
+
+                if canEmitNewCampaigns {
+                    for campaign in all where campaign.isTimeActive && !previousCampaignIds.contains(campaign.id) {
+                        self.onCampaignDetectedEvent?(minerId, campaign)
+                    }
+                }
+                self.initializedCampaignSnapshots.insert(minerId)
 
                 // Detect newly completed campaigns
                 for campaign in all where campaign.drops.allSatisfy({ $0.isClaimed }) {
@@ -1357,6 +1372,8 @@ public final class MinerManager {
             }
             if needsAuth {
                 updateMinerStatus(minerId: action.minerId, status: .error, needsAuth: true)
+            } else {
+                onAccountActionRequiredEvent?(action.minerId, action.reason)
             }
             onLogMessage?(action.minerId, "[Supervisor] recovery failed | \(error.localizedDescription)")
         }

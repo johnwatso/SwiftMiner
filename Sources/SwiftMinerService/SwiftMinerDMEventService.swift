@@ -19,6 +19,9 @@ public actor SwiftMinerDMEventService {
     /// Campaign IDs we've already notified for (session-scoped). Campaigns stay completed.
     private var notifiedCampaignIds: Set<String> = []
 
+    /// Campaign IDs we've already announced as newly detected (session-scoped).
+    private var detectedCampaignIds: Set<String> = []
+
     /// Account IDs → last auth-failure notification time
     private var lastAuthFailure: [String: Date] = [:]
 
@@ -28,11 +31,15 @@ public actor SwiftMinerDMEventService {
     /// Account IDs → last welcome-back notification time
     private var lastWelcomeBack: [String: Date] = [:]
 
+    /// Account IDs → last manual-attention notification time
+    private var lastAccountActionRequired: [String: Date] = [:]
+
     // MARK: - Dedup Windows
 
     private let authFailureCooldown: TimeInterval = 300   // 5 min
     private let linkWarningCooldown: TimeInterval = 3600  // 1 hour
     private let welcomeBackCooldown: TimeInterval = 3600  // 1 hour
+    private let accountActionCooldown: TimeInterval = 3600 // 1 hour
 
     // MARK: - Init
 
@@ -101,8 +108,7 @@ public actor SwiftMinerDMEventService {
         let request = SwiftBotDMRequest(
             messageType: .reauth,
             debug: false,
-            twitchUsername: twitchUsername,
-            eventId: "reauth:\(accountId)"
+            twitchUsername: twitchUsername
         )
 
         dmEventLogger.info("Emitting reauth discordId=\(discordUserId, privacy: .private)")
@@ -123,8 +129,7 @@ public actor SwiftMinerDMEventService {
             debug: false,
             twitchUsername: nil,
             priorityGames: priorityGames,
-            affectedGame: gameName,
-            eventId: "link:\(gameName.lowercased())"
+            affectedGame: gameName
         )
 
         dmEventLogger.info("Emitting prioritisedGameNeedsLinking discordId=\(discordUserId, privacy: .private) game=\(gameName)")
@@ -144,21 +149,47 @@ public actor SwiftMinerDMEventService {
             messageType: .welcomeBack,
             debug: false,
             twitchUsername: twitchUsername,
-            priorityGames: priorityGames,
-            eventId: "welcomeBack:\(accountId)"
+            priorityGames: priorityGames
         )
 
         dmEventLogger.info("Emitting welcomeBack discordId=\(discordUserId, privacy: .private)")
         _ = await connectionService.sendEventDM(to: discordUserId, request: request)
     }
 
+    public func emitCampaignDetected(
+        campaignId: String,
+        campaignName: String,
+        gameName: String,
+        discordUserId: String?,
+        priorityGames: [String]
+    ) async {
+        guard let discordUserId else { return }
+        guard !detectedCampaignIds.contains(campaignId) else { return }
+        detectedCampaignIds.insert(campaignId)
+
+        let request = SwiftBotDMRequest(
+            messageType: .campaignDetected,
+            debug: false,
+            twitchUsername: nil,
+            priorityGames: priorityGames,
+            affectedGame: gameName,
+            campaignName: campaignName,
+            eventId: "campaignDetected:\(campaignId)"
+        )
+
+        dmEventLogger.info("Emitting campaignDetected discordId=\(discordUserId, privacy: .private) campaign=\(campaignName)")
+        _ = await connectionService.sendEventDM(to: discordUserId, request: request)
+    }
+
     public func emitAccountActionRequired(
+        accountId: String,
         reason: String,
         discordUserId: String?,
         twitchUsername: String?,
         priorityGames: [String]
     ) async {
         guard let discordUserId else { return }
+        guard !isRecentlyNotified(key: accountId, map: &lastAccountActionRequired, cooldown: accountActionCooldown) else { return }
 
         let request = SwiftBotDMRequest(
             messageType: .accountActionRequired,
@@ -175,7 +206,10 @@ public actor SwiftMinerDMEventService {
     // MARK: - Dedup Helpers
 
     private func isRecentlyNotified(key: String, map: inout [String: Date], cooldown: TimeInterval) -> Bool {
-        guard let last = map[key] else { return false }
-        return Date().timeIntervalSince(last) < cooldown
+        if let last = map[key], Date().timeIntervalSince(last) < cooldown {
+            return true
+        }
+        map[key] = Date()
+        return false
     }
 }
