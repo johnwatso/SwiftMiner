@@ -16,6 +16,7 @@
 		156A8D4734DACD633E3CC8BB /* MinerTableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E783D8A8E6145DE8BED34EED /* MinerTableView.swift */; };
 		1843A5CE760FEA47E6E4BAA8 /* AsyncAlgorithms in Frameworks */ = {isa = PBXBuildFile; productRef = D556FD2F54AFA29EBC58E523 /* AsyncAlgorithms */; };
 		19A074814DF20B17C5744B4F /* TDMCookieParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F1E410973A71500C0EA0280 /* TDMCookieParser.swift */; };
+		19FDAFDD14E8A2A5B78A2DB3 /* DMLogStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5BD1E13C13564BAF7ED49D7 /* DMLogStore.swift */; };
 		1A07E9FA650B8CFB69A0D223 /* MinerActivitySnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A62D525DAD95E511F9DA6C90 /* MinerActivitySnapshotTests.swift */; };
 		1EE2734B85C0BF49B0910AF0 /* libSwiftMinerService.a in Frameworks */ = {isa = PBXBuildFile; fileRef = F79E8CD76AF45B0FC7080868 /* libSwiftMinerService.a */; };
 		249C7DE2B2D13F9A5AC84049 /* AccountStateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB66D4A9EB7F4E54D88D2EC0 /* AccountStateStore.swift */; };
@@ -256,6 +257,7 @@
 		A3B34F2E4A7B27C96831AB24 /* CommunityPointsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunityPointsService.swift; sourceTree = "<group>"; };
 		A5838C1AEB6D4797976C6C65 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		A5B111F33F9BAEDF35E4BD16 /* MinerSupervisor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinerSupervisor.swift; sourceTree = "<group>"; };
+		A5BD1E13C13564BAF7ED49D7 /* DMLogStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DMLogStore.swift; sourceTree = "<group>"; };
 		A62D525DAD95E511F9DA6C90 /* MinerActivitySnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinerActivitySnapshotTests.swift; sourceTree = "<group>"; };
 		AA337D3B4BF522E65F51DB29 /* ClaimServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaimServiceTests.swift; sourceTree = "<group>"; };
 		AB66D4A9EB7F4E54D88D2EC0 /* AccountStateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountStateStore.swift; sourceTree = "<group>"; };
@@ -510,6 +512,7 @@
 				F9559DA840299AFF90133587 /* AdminLinkingService.swift */,
 				EEFF26E9E87FC777EBE09B2B /* DiscordAPIRoutes.swift */,
 				E28062B84C1F7D5591CB6B2E /* DiscordProjectionBuilder.swift */,
+				A5BD1E13C13564BAF7ED49D7 /* DMLogStore.swift */,
 				0658398231AD4B7BD6AF16C5 /* EventEmitterService.swift */,
 				E26B1BFE29C45B4FDBD798AA /* EventOutboxService.swift */,
 				305B04699BD520AFB3A5FA57 /* HTTPAPIServer.swift */,
@@ -852,6 +855,7 @@
 			files = (
 				0B2E0AC6FE0D7B1B112DFD02 /* AdminLinkingService.swift in Sources */,
 				92F50709B99C5BF86A6FE6AE /* AdminLinkingTypes.swift in Sources */,
+				19FDAFDD14E8A2A5B78A2DB3 /* DMLogStore.swift in Sources */,
 				C41185BF0A8E8F3ABC8B30B7 /* DiscordAPIRoutes.swift in Sources */,
 				55921328AA75FC8BA1236D64 /* DiscordProjectionBuilder.swift in Sources */,
 				F09AFAC96F0CFB8AE3DBEDB9 /* DiscordUserProjection.swift in Sources */,
@@ -1023,7 +1027,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026050913;
+				CURRENT_PROJECT_VERSION = 2026051110;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;
@@ -1183,7 +1187,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026050913;
+				CURRENT_PROJECT_VERSION = 2026051110;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;

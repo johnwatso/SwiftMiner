@@ -100,7 +100,8 @@ public actor SwiftMinerDMEventService {
     public func emitReauthRequired(
         accountId: String,
         discordUserId: String?,
-        twitchUsername: String?
+        twitchUsername: String?,
+        priorityGames: [String]
     ) async {
         guard let discordUserId else { return }
         guard !isRecentlyNotified(key: accountId, map: &lastAuthFailure, cooldown: authFailureCooldown) else { return }
@@ -108,7 +109,9 @@ public actor SwiftMinerDMEventService {
         let request = SwiftBotDMRequest(
             messageType: .reauth,
             debug: false,
-            twitchUsername: twitchUsername
+            twitchUsername: twitchUsername,
+            priorityGames: priorityGames,
+            eventId: "reauth:\(accountId):\(bucket(for: authFailureCooldown))"
         )
 
         dmEventLogger.info("Emitting reauth discordId=\(discordUserId, privacy: .private)")
@@ -129,7 +132,8 @@ public actor SwiftMinerDMEventService {
             debug: false,
             twitchUsername: nil,
             priorityGames: priorityGames,
-            affectedGame: gameName
+            affectedGame: gameName,
+            eventId: "linkWarning:\(key):\(bucket(for: linkWarningCooldown))"
         )
 
         dmEventLogger.info("Emitting prioritisedGameNeedsLinking discordId=\(discordUserId, privacy: .private) game=\(gameName)")
@@ -149,7 +153,8 @@ public actor SwiftMinerDMEventService {
             messageType: .welcomeBack,
             debug: false,
             twitchUsername: twitchUsername,
-            priorityGames: priorityGames
+            priorityGames: priorityGames,
+            eventId: "welcomeBack:\(accountId):\(bucket(for: welcomeBackCooldown))"
         )
 
         dmEventLogger.info("Emitting welcomeBack discordId=\(discordUserId, privacy: .private)")
@@ -196,7 +201,8 @@ public actor SwiftMinerDMEventService {
             debug: false,
             twitchUsername: twitchUsername,
             priorityGames: priorityGames,
-            recoveryReason: reason
+            recoveryReason: reason,
+            eventId: "accountAction:\(accountId):\(stableHash(reason)):\(bucket(for: accountActionCooldown))"
         )
 
         dmEventLogger.info("Emitting accountActionRequired discordId=\(discordUserId, privacy: .private) reason=\(reason)")
@@ -211,5 +217,22 @@ public actor SwiftMinerDMEventService {
         }
         map[key] = Date()
         return false
+    }
+
+    /// Time bucket index for the current cooldown window. Matches across SwiftMiner
+    /// restarts so SwiftBot can dedupe events that fire again within the same window.
+    private func bucket(for cooldown: TimeInterval) -> Int {
+        Int(Date().timeIntervalSince1970 / cooldown)
+    }
+
+    /// Stable, process-independent hash for embedding free-form strings (e.g. recovery
+    /// reasons) inside an `eventId`. FNV-1a 32-bit, hex-encoded.
+    private func stableHash(_ string: String) -> String {
+        var hash: UInt32 = 0x811c9dc5
+        for byte in string.utf8 {
+            hash ^= UInt32(byte)
+            hash = hash &* 0x01000193
+        }
+        return String(hash, radix: 16)
     }
 }

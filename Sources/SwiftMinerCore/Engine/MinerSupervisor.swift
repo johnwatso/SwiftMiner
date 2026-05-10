@@ -58,7 +58,7 @@ public actor MinerSupervisor {
         public var recoveryMaxCooldown: TimeInterval
 
         public init(
-            stallTimeout: TimeInterval = 6 * 60,
+            stallTimeout: TimeInterval = 15 * 60,
             peerFreshnessWindow: TimeInterval = 4 * 60,
             startupGracePeriod: TimeInterval = 2 * 60,
             noRecentActivityWindow: TimeInterval = 3 * 60,
@@ -87,6 +87,30 @@ public actor MinerSupervisor {
         public let attempt: Int
     }
 
+    public enum StallCause: String, Sendable, Equatable {
+        case networkError
+        case twitchAPIFailure
+        case rateLimited
+        case authIssue
+        case watchSessionFailure
+        case workerStartupFailure
+        case noRecentActivity
+        case unknown
+
+        public var displayName: String {
+            switch self {
+            case .networkError: return "network connectivity"
+            case .twitchAPIFailure: return "Twitch API failure"
+            case .rateLimited: return "Twitch rate limiting"
+            case .authIssue: return "authentication issue"
+            case .watchSessionFailure: return "watch session failure"
+            case .workerStartupFailure: return "worker startup failure"
+            case .noRecentActivity: return "no recent activity"
+            case .unknown: return "miner unresponsive"
+            }
+        }
+    }
+
     private struct Entry: Sendable {
         var metadata = MinerOperationalMetadata()
         var lastStateUpdateAt: Date?
@@ -95,6 +119,9 @@ public actor MinerSupervisor {
         var nextRecoveryStage: RecoveryStage = .refresh
         var recoveryCooldownUntil: Date?
         var lastRecoveryReason: String?
+        var lastIssueCause: StallCause?
+        var lastIssueDetail: String?
+        var lastIssueAt: Date?
     }
 
     private let configuration: Configuration
@@ -144,6 +171,14 @@ public actor MinerSupervisor {
         entry.metadata.workerState = failed ? .failed : .stopped
         entry.metadata.isHealthy = !failed
         entry.metadata.isStalled = false
+        entries[minerId] = entry
+    }
+
+    public func recordIssue(minerId: String, cause: StallCause, detail: String, at date: Date = Date()) {
+        var entry = entries[minerId, default: Entry()]
+        entry.lastIssueCause = cause
+        entry.lastIssueDetail = detail
+        entry.lastIssueAt = date
         entries[minerId] = entry
     }
 
@@ -309,9 +344,26 @@ public actor MinerSupervisor {
             .compactMap { $0 }
             .max()
         let signalAge = lastSignal.map { Int(now.timeIntervalSince($0) / 60) } ?? -1
-        if signalAge >= 0 {
-            return "\(miner.displayName) has had no recent liveness signal for \(signalAge) minute(s) while peer miners are still polling"
+
+        // Prefer the most recent specific issue if it fired within the stall window — it tells
+        // the user *why* the miner stopped reporting, not just that it did.
+        if let cause = entry.lastIssueCause,
+           let issueAt = entry.lastIssueAt,
+           now.timeIntervalSince(issueAt) <= configuration.stallTimeout {
+            let detail = entry.lastIssueDetail?.trimmingCharacters(in: .whitespacesAndNewlines)
+            var fragment = "cause=\(cause.rawValue) • \(cause.displayName)"
+            if let detail, !detail.isEmpty {
+                fragment += " • \(detail)"
+            }
+            if signalAge >= 0 {
+                fragment += " • silent \(signalAge) min"
+            }
+            return "\(miner.displayName) — \(fragment)"
         }
-        return "\(miner.displayName) never completed worker bootstrap after being added"
+
+        if signalAge >= 0 {
+            return "\(miner.displayName) — cause=\(StallCause.noRecentActivity.rawValue) • \(StallCause.noRecentActivity.displayName) • silent \(signalAge) min while peers were polling"
+        }
+        return "\(miner.displayName) — cause=\(StallCause.workerStartupFailure.rawValue) • \(StallCause.workerStartupFailure.displayName)"
     }
 }

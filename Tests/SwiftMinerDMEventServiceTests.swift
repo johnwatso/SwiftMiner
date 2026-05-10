@@ -2,14 +2,15 @@ import XCTest
 @testable import SwiftMinerService
 
 final class SwiftMinerDMEventServiceTests: XCTestCase {
-    func testRecurringNotificationsDoNotSetPersistentEventIds() async {
+    func testRecurringNotificationsCarryBucketedEventIds() async {
         let connection = RecordingConnectionService()
         let service = SwiftMinerDMEventService(connectionService: connection)
 
         await service.emitReauthRequired(
             accountId: "account-1",
             discordUserId: "discord-1",
-            twitchUsername: "miner"
+            twitchUsername: "miner",
+            priorityGames: ["THE FINALS"]
         )
         await service.emitPrioritisedGameNeedsLinking(
             gameName: "THE FINALS",
@@ -33,7 +34,37 @@ final class SwiftMinerDMEventServiceTests: XCTestCase {
         let requests = await connection.sentRequests
         XCTAssertEqual(requests.count, 4)
         XCTAssertEqual(requests.map(\.messageType), [.reauth, .prioritisedGameNeedsLinking, .welcomeBack, .accountActionRequired])
-        XCTAssertTrue(requests.allSatisfy { $0.eventId == nil })
+
+        let ids = requests.compactMap(\.eventId)
+        XCTAssertEqual(ids.count, 4, "All cooldown-based events should carry an eventId for cross-restart dedup")
+        XCTAssertTrue(ids[0].hasPrefix("reauth:account-1:"))
+        XCTAssertTrue(ids[1].hasPrefix("linkWarning:the finals:"))
+        XCTAssertTrue(ids[2].hasPrefix("welcomeBack:account-1:"))
+        XCTAssertTrue(ids[3].hasPrefix("accountAction:account-1:"))
+
+        // Reauth request should now also carry the user's priority games.
+        XCTAssertEqual(requests[0].priorityGames, ["THE FINALS"])
+    }
+
+    func testReauthDedupesWithinCooldownWindow() async {
+        let connection = RecordingConnectionService()
+        let service = SwiftMinerDMEventService(connectionService: connection)
+
+        await service.emitReauthRequired(
+            accountId: "account-1",
+            discordUserId: "discord-1",
+            twitchUsername: "miner",
+            priorityGames: []
+        )
+        await service.emitReauthRequired(
+            accountId: "account-1",
+            discordUserId: "discord-1",
+            twitchUsername: "miner",
+            priorityGames: []
+        )
+
+        let requests = await connection.sentRequests
+        XCTAssertEqual(requests.count, 1, "Second reauth within cooldown should be suppressed in-process")
     }
 
     func testCampaignDetectedUsesStableEventIdAndDedupesByCampaign() async {

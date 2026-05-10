@@ -38,11 +38,14 @@
 <body>
   <main>
     <h1>SwiftMiner 1.22</h1>
-    <p class="meta">Version 1.22 · Build 2026050913</p>
+    <p class="meta">Version 1.22 · Build 2026051110</p>
     <ul>
+      <li>Raises the stall-recovery liveness threshold from 6 to 15 minutes so the supervisor no longer flags healthy miners during normal idle periods between campaign rescans.</li>
+      <li>Adds a distinct yellow rotate icon and readable summaries for stall-recovery activity in the Activity Log, routed under the Warnings filter so recoveries are easy to spot and review.</li>
+      <li>Classifies the underlying cause of each stall recovery — network connectivity, Twitch API failure, rate limiting, authentication, or watch-session failure — and surfaces it in the Activity Log entry so the trigger is obvious at a glance.</li>
       <li>Adds DEBUG-only SwiftBot DM previews for individual messages and the full ordered DM sequence without mutating production user state.</li>
       <li>Changes the Discord admin Preview DM action to send the full ordered SwiftBot DM flow in DEBUG builds only.</li>
-      <li>Updates the stable Sparkle appcast and release-note links for SwiftMiner 1.22 build 2026050913.</li>
+      <li>Updates the stable Sparkle appcast and release-note links for SwiftMiner 1.22 build 2026051110.</li>
     </ul>
   </main>
 </body>

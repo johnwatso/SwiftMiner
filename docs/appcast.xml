@@ -4,8 +4,8 @@
         <title>SwiftMiner</title>
         <item>
             <title>1.22</title>
-            <pubDate>Sat, 09 May 2026 13:00:00 +1200</pubDate>
-            <sparkle:version>2026050913</sparkle:version>
+            <pubDate>Mon, 11 May 2026 10:00:00 +1200</pubDate>
+            <sparkle:version>2026051110</sparkle:version>
             <sparkle:shortVersionString>1.22</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
             <sparkle:releaseNotesLink>https://johnwatso.github.io/SwiftMiner/release-notes/1.22.html</sparkle:releaseNotesLink>

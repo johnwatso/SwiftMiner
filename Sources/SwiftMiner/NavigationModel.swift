@@ -237,7 +237,11 @@ public final class NavigationModel {
     public let swiftBotConnectionService: any SwiftBotConnectionService
     public let eventOutboxService: EventOutboxService
     public let eventEmitter: EventEmitterService
+    public let dmLogStore: DMLogStore
     public private(set) var dmEventService: SwiftMinerDMEventService?
+    /// Cached Discord display names keyed by Discord user ID. Refreshed from
+    /// SwiftBot whenever the connection is healthy or the Discord tab loads.
+    public private(set) var discordDisplayNamesById: [String: String] = [:]
     private let sqliteManager: SQLiteManager
     private var httpAPIServer: HTTPAPIServer?
     private var onboardingSetupTask: Task<Void, Never>?
@@ -261,6 +265,8 @@ public final class NavigationModel {
         self.sqliteManager = manager
         self.adminLinkingService = SQLiteAdminLinkingService(manager: manager)
         self.eventEmitter = EventEmitterService(manager: manager)
+        let dmLogStore = DMLogStore(manager: manager)
+        self.dmLogStore = dmLogStore
         
         // Initialize event outbox delivery service first so connection service can reference it
         let webhookURL = URL(string: Settings.shared.swiftBotWebhookURL)
@@ -273,7 +279,10 @@ public final class NavigationModel {
 
         // Initialize SwiftBot connection service
         let endpoint = Settings.shared.swiftBotEndpoint
-        self.swiftBotConnectionService = RestSwiftBotConnectionService(endpoint: endpoint) {
+        self.swiftBotConnectionService = RestSwiftBotConnectionService(
+            endpoint: endpoint,
+            dmLogStore: dmLogStore
+        ) {
             outboxService
         }
     }
@@ -290,6 +299,8 @@ public final class NavigationModel {
             print("[NavigationModel] Failed to open database: \(error)")
         }
 
+        await wireDMActivityLogging()
+
         await startSwiftMinerHTTPServerIfNeeded()
 
         if Settings.shared.swiftBotEnabled {
@@ -299,6 +310,7 @@ public final class NavigationModel {
                 hmacSecret: Settings.shared.swiftBotHmacSecret
             )
             await eventOutboxService.start()
+            await refreshDiscordDisplayNames()
         }
         startSwiftBotStateSync()
 
@@ -327,10 +339,12 @@ public final class NavigationModel {
                 guard let self else { return }
                 guard Settings.shared.dmConnectionExpiredEnabled else { return }
                 guard let miner = self.minerManager.miners.first(where: { $0.id == minerId }) else { return }
+                let priorityGames = Settings.shared.priorityGames
                 await dmEventService.emitReauthRequired(
                     accountId: miner.accountId,
                     discordUserId: miner.ownerDiscordId,
-                    twitchUsername: miner.username
+                    twitchUsername: miner.username,
+                    priorityGames: priorityGames
                 )
             }
         }
@@ -553,6 +567,70 @@ public final class NavigationModel {
         if events.count > maxEvents {
             events.removeLast()
         }
+    }
+
+    /// Wires DM dispatch in the connection service into the activity log.
+    /// Production sends only — debug previews stay out of the timeline.
+    private func wireDMActivityLogging() async {
+        guard let rest = swiftBotConnectionService as? RestSwiftBotConnectionService else { return }
+        await rest.setDMActivityHandler { [weak self] messageType, discordUserId, success, debug in
+            guard !debug else { return }
+            await MainActor.run {
+                self?.logDMActivityEvent(
+                    messageType: messageType,
+                    discordUserId: discordUserId,
+                    success: success
+                )
+            }
+        }
+    }
+
+    private func logDMActivityEvent(
+        messageType: SwiftBotDMMessageType,
+        discordUserId: String,
+        success: Bool
+    ) {
+        let miner = minerManager.miners.first { $0.ownerDiscordId == discordUserId }
+        // Prefer the Discord display name — it's the human-readable handle the
+        // recipient actually recognises. Fall back to the miner's Twitch
+        // display name only if SwiftBot hasn't told us the Discord name yet,
+        // and finally to a generic placeholder if neither is known.
+        let target = discordDisplayNamesById[discordUserId]
+            ?? miner?.displayName
+            ?? "Discord user"
+        let message: String
+        if success {
+            message = "Sent \(messageType.displayName) DM to \(target)"
+        } else {
+            message = "Failed to send \(messageType.displayName) DM to \(target)"
+        }
+        // Tag rawMessage with the sentinel so EventLogView's filter resolver
+        // routes this entry to the .discord chip.
+        let tagged = "[discord-dm] \(messageType.rawValue) \(success ? "ok" : "fail") \(discordUserId)"
+        logEvent(
+            message: message,
+            level: success ? .info : .warning,
+            minerId: miner?.id,
+            rawMessage: tagged
+        )
+
+        // If we logged the event without a known Discord name, opportunistically
+        // refresh the cache so future DMs to this user get the proper handle.
+        if discordDisplayNamesById[discordUserId] == nil {
+            Task { [weak self] in await self?.refreshDiscordDisplayNames() }
+        }
+    }
+
+    /// Refreshes the Discord display-name cache from SwiftBot. Cheap (one
+    /// HTTP call) and best-effort — any failure just leaves the cache as-is.
+    public func refreshDiscordDisplayNames() async {
+        let users = await swiftBotConnectionService.fetchDiscordUsers()
+        guard !users.isEmpty else { return }
+        var map: [String: String] = [:]
+        for user in users {
+            map[user.id] = user.displayName
+        }
+        discordDisplayNamesById = map
     }
 
     /// Clear all events.

@@ -2,6 +2,15 @@ import Foundation
 
 /// Main actor that orchestrates the Twitch drops mining lifecycle
 public actor MinerEngine {
+    public enum IssueCategory: String, Sendable, Equatable {
+        case networkError
+        case twitchAPIFailure
+        case rateLimited
+        case authIssue
+        case watchSessionFailure
+        case unknown
+    }
+
     public enum OperationalEvent: Sendable, Equatable {
         case workerStarted(taskID: String)
         case workerStopped
@@ -11,6 +20,44 @@ public actor MinerEngine {
         case authRefreshed
         case heartbeat
         case stateUpdate
+        case issueDetected(category: IssueCategory, detail: String)
+    }
+
+    static func classifyIssue(_ error: Error) -> (IssueCategory, String) {
+        let detail = error.localizedDescription
+        if let twitchError = error as? TwitchMinerError {
+            switch twitchError {
+            case .networkError(let message):
+                return (.networkError, message)
+            case .apiError(let status, let message):
+                if (500...599).contains(status) {
+                    return (.twitchAPIFailure, "HTTP \(status) — \(message)")
+                }
+                if status == 401 || status == 403 {
+                    return (.authIssue, "HTTP \(status) — \(message)")
+                }
+                return (.twitchAPIFailure, "HTTP \(status) — \(message)")
+            case .authenticationFailed(let message), .keychainError(let message):
+                return (.authIssue, message)
+            case .tokenExpired:
+                return (.authIssue, "Twitch token expired")
+            case .rateLimited(let retryAfter):
+                return (.rateLimited, "Retry after \(Int(retryAfter))s")
+            case .watchSessionFailed(let message):
+                return (.watchSessionFailure, message)
+            case .invalidResponse:
+                return (.twitchAPIFailure, "Invalid response from Twitch")
+            default:
+                return (.unknown, detail)
+            }
+        }
+        let lower = detail.lowercased()
+        if lower.contains("offline") || lower.contains("network") || lower.contains("timed out")
+            || lower.contains("could not connect") || lower.contains("internet")
+            || lower.contains("hostname") || lower.contains("dns") {
+            return (.networkError, detail)
+        }
+        return (.unknown, detail)
     }
 
     // MARK: - Properties
@@ -616,7 +663,14 @@ public actor MinerEngine {
 
     private func handleWatchSessionError(_ error: TwitchMinerError) async {
         log("⚠️ Watch session warning: \(error.localizedDescription)")
+        let (category, detail) = Self.classifyIssue(error)
+        onOperationalEvent?(.issueDetected(category: category, detail: detail))
         onError?(error)
+    }
+
+    private func emitIssue(_ error: Error) {
+        let (category, detail) = Self.classifyIssue(error)
+        onOperationalEvent?(.issueDetected(category: category, detail: detail))
     }
 
     private func handleWatchHeartbeatSent(_ session: WatchSession) async {
@@ -906,6 +960,7 @@ public actor MinerEngine {
                             }
                         } catch {
                             emptyCurrentDropPolls += 1
+                            emitIssue(error)
                             log("⚠️ Could not verify current drop progress: \(error.localizedDescription)")
                         }
                     }
@@ -948,6 +1003,7 @@ public actor MinerEngine {
                                 shouldSwitchChannel = true
                             }
                         } catch {
+                            emitIssue(error)
                             log("⚠️ Inventory refresh failed: \(error.localizedDescription). Switching channel as fallback.")
                             shouldSwitchChannel = true
                         }
@@ -1014,10 +1070,12 @@ public actor MinerEngine {
 
             } catch let error as TwitchMinerError {
                 await cleanupActiveWatchSession(clearTarget: true)
+                emitIssue(error)
                 handleError(error)
                 try? await Task.sleep(nanoseconds: campaignCheckInterval)
             } catch {
                 await cleanupActiveWatchSession(clearTarget: true)
+                emitIssue(error)
                 handleError(.unknown(error.localizedDescription))
                 try? await Task.sleep(nanoseconds: campaignCheckInterval)
             }

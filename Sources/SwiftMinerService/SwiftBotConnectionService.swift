@@ -6,18 +6,34 @@ private let swiftBotConnectionLogger = Logger(subsystem: "com.swiftminer", categ
 
 /// Implementation of SwiftBotConnectionService using REST polling.
 public actor RestSwiftBotConnectionService: SwiftBotConnectionService {
+    /// Notified after every DM send attempt so the app layer can mirror the
+    /// event into the activity log. Always called on a non-debug send;
+    /// `success` reflects the HTTP outcome.
+    public typealias DMActivityHandler = @Sendable (_ messageType: SwiftBotDMMessageType, _ discordUserId: String, _ success: Bool, _ debug: Bool) async -> Void
+
     private var endpoint: URL?
     private(set) public var state: SwiftBotConnectionState = .notConfigured
     private let outboxProvider: @Sendable () -> EventOutboxService?
-    
-    public init(endpoint: String, outboxProvider: @escaping @Sendable () -> EventOutboxService?) {
+    private let dmLogStore: DMLogStore?
+    private var dmActivityHandler: DMActivityHandler?
+
+    public init(
+        endpoint: String,
+        dmLogStore: DMLogStore? = nil,
+        outboxProvider: @escaping @Sendable () -> EventOutboxService?
+    ) {
         self.endpoint = Self.validatedURL(from: endpoint)
+        self.dmLogStore = dmLogStore
         self.outboxProvider = outboxProvider
         if self.endpoint == nil {
             self.state = .notConfigured
         } else {
             self.state = .disconnected
         }
+    }
+
+    public func setDMActivityHandler(_ handler: @escaping DMActivityHandler) {
+        self.dmActivityHandler = handler
     }
     
     public func updateEndpoint(_ urlString: String) async {
@@ -136,6 +152,13 @@ public actor RestSwiftBotConnectionService: SwiftBotConnectionService {
             if !ok, let http = response as? HTTPURLResponse {
                 swiftBotConnectionLogger.error("sendDM non-2xx status=\(http.statusCode)")
             }
+            // Persist successful sends (production + debug) with the full
+            // payload. The reader filters debug entries out for production UI;
+            // DEBUG-only views opt in via `includeDebug: true`.
+            if ok, let dmLogStore {
+                await dmLogStore.record(discordUserId: discordUserId, request: dmRequest)
+            }
+            await dmActivityHandler?(dmRequest.messageType, discordUserId, ok, dmRequest.debug)
             return ok
         } catch {
             swiftBotConnectionLogger.error("sendDM transport error: \(error.localizedDescription)")

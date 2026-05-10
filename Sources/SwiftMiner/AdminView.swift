@@ -2,12 +2,14 @@ import SwiftUI
 import SwiftMinerCore
 import SwiftMinerService
 
-/// Discord oversight panel — one row per miner with link/unlink/test-DM controls.
+/// Discord oversight panel — tabular view of every miner with link/unlink/DM
+/// controls and an inline detail panel for the selected row.
 struct AdminView: View {
     @Environment(NavigationModel.self) private var navigation
-    @State private var expandedMinerId: String?
+    @State private var selectedMinerId: String?
     @State private var linkIntent: LinkIntent?
     @State private var discordNamesById: [String: String] = [:]
+    @State private var dmSummariesById: [String: DMLogStore.Summary] = [:]
 
     struct LinkIntent: Identifiable {
         let id = UUID()
@@ -15,21 +17,14 @@ struct AdminView: View {
         let isRelink: Bool
     }
 
+    private var miners: [MinerManager.ManagedMiner] { navigation.minerManager.miners }
+
     var body: some View {
         ScrollView {
-            LazyVStack(spacing: 0) {
-                ForEach(navigation.minerManager.miners) { miner in
-                    MinerRow(
-                        miner: miner,
-                        isExpanded: expandedMinerId == miner.id,
-                        discordNamesById: discordNamesById,
-                        onTap: { toggleExpanded(miner.id) },
-                        onLink: { linkIntent = LinkIntent(miner: miner, isRelink: false) },
-                        onRelink: { linkIntent = LinkIntent(miner: miner, isRelink: true) },
-                        onFix: { Task { await emitReauth(for: miner) } }
-                    )
-                    Divider()
-                }
+            VStack(alignment: .leading, spacing: 14) {
+                header
+                tableHeader
+                rowsList
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 16)
@@ -38,18 +33,84 @@ struct AdminView: View {
         .sheet(item: $linkIntent) { intent in
             LinkMinerSheet(miner: intent.miner, isRelink: intent.isRelink)
         }
-        .task { await loadDiscordNames() }
+        .task { await refreshAll() }
     }
 
-    private func loadDiscordNames() async {
-        let users = await navigation.swiftBotConnectionService.fetchDiscordUsers()
-        var map: [String: String] = [:]
-        for user in users { map[user.id] = user.displayName }
-        discordNamesById = map
+    // MARK: - Header
+
+    private var header: some View {
+        Text("Manage Discord links, DM delivery and account health for all Twitch miners.")
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
     }
 
-    private func toggleExpanded(_ id: String) {
-        expandedMinerId = (expandedMinerId == id) ? nil : id
+    // MARK: - Table
+
+    private var tableHeader: some View {
+        HStack(spacing: 12) {
+            columnLabel("Miner (Twitch)").frame(maxWidth: .infinity, alignment: .leading)
+            columnLabel("Discord").frame(maxWidth: .infinity, alignment: .leading)
+            columnLabel("Status").frame(width: 140, alignment: .leading)
+            columnLabel("Last DM").frame(width: 110, alignment: .leading)
+            columnLabel("DM History").frame(width: 90, alignment: .leading)
+            columnLabel("Actions").frame(width: 60, alignment: .center)
+        }
+        .padding(.horizontal, 8)
+    }
+
+    private func columnLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+    }
+
+    private var rowsList: some View {
+        LazyVStack(spacing: 0) {
+            if miners.isEmpty {
+                Text("No miners yet.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 24)
+                    .frame(maxWidth: .infinity)
+            } else {
+                ForEach(miners) { miner in
+                    MinerRow(
+                        miner: miner,
+                        isSelected: selectedMinerId == miner.id,
+                        discordName: miner.ownerDiscordId.flatMap { discordNamesById[$0] },
+                        summary: miner.ownerDiscordId.flatMap { dmSummariesById[$0] },
+                        onTap: { toggleSelection(miner.id) },
+                        onLink: { linkIntent = LinkIntent(miner: miner, isRelink: false) },
+                        onRelink: { linkIntent = LinkIntent(miner: miner, isRelink: true) },
+                        onFix: { Task { await emitReauth(for: miner) } },
+                        onSummaryChanged: { id, summary in
+                            dmSummariesById[id] = summary
+                        }
+                    )
+                    if selectedMinerId == miner.id {
+                        DetailPanel(
+                            miner: miner,
+                            discordName: miner.ownerDiscordId.flatMap { discordNamesById[$0] },
+                            onRelink: {
+                                let isRelink = miner.ownerDiscordId != nil
+                                linkIntent = LinkIntent(miner: miner, isRelink: isRelink)
+                            },
+                            onResendLast: {
+                                Task { await resendLast(for: miner) }
+                            }
+                        )
+                        .transition(.opacity)
+                    }
+                    Divider()
+                }
+            }
+        }
+    }
+
+    private func toggleSelection(_ id: String) {
+        withAnimation(.easeInOut(duration: 0.12)) {
+            selectedMinerId = (selectedMinerId == id) ? nil : id
+        }
     }
 
     private func emitReauth(for miner: MinerManager.ManagedMiner) async {
@@ -58,6 +119,23 @@ struct AdminView: View {
             discordUserId: discordId,
             twitchAccountId: miner.accountId
         )
+    }
+
+    private func resendLast(for miner: MinerManager.ManagedMiner) async {
+        guard let discordId = miner.ownerDiscordId else { return }
+        guard let request = await navigation.dmLogStore.mostRecentProductionRequest(forDiscordId: discordId) else { return }
+        _ = await navigation.swiftBotConnectionService.sendEventDM(to: discordId, request: request)
+        let summaries = await navigation.dmLogStore.summaries(forDiscordIds: [discordId])
+        if let s = summaries[discordId] {
+            dmSummariesById[discordId] = s
+        }
+    }
+
+    private func refreshAll() async {
+        await navigation.refreshDiscordDisplayNames()
+        discordNamesById = navigation.discordDisplayNamesById
+        let ids = miners.compactMap(\.ownerDiscordId)
+        dmSummariesById = await navigation.dmLogStore.summaries(forDiscordIds: ids)
     }
 }
 
@@ -84,6 +162,14 @@ private enum LinkStatus {
         }
     }
 
+    var subLabel: String? {
+        switch self {
+        case .linked: return "Healthy"
+        case .notLinked: return nil
+        case .needsAttention: return "Auth Expired"
+        }
+    }
+
     static func resolve(_ miner: MinerManager.ManagedMiner) -> LinkStatus {
         guard miner.ownerDiscordId != nil else { return .notLinked }
         if miner.needsAuth { return .needsAttention }
@@ -94,7 +180,7 @@ private enum LinkStatus {
         switch self {
         case .linked: return nil
         case .notLinked: return "This Twitch account has no Discord owner."
-        case .needsAttention: return "Twitch authentication has expired or been revoked."
+        case .needsAttention: return "Twitch authentication has expired or been revoked. Re-link required."
         }
     }
 }
@@ -103,44 +189,112 @@ private enum LinkStatus {
 
 private struct MinerRow: View {
     let miner: MinerManager.ManagedMiner
-    let isExpanded: Bool
-    let discordNamesById: [String: String]
+    let isSelected: Bool
+    let discordName: String?
+    let summary: DMLogStore.Summary?
     let onTap: () -> Void
     let onLink: () -> Void
     let onRelink: () -> Void
     let onFix: () -> Void
+    let onSummaryChanged: (String, DMLogStore.Summary) -> Void
 
     @Environment(NavigationModel.self) private var navigation
     @State private var showUnlinkConfirmation = false
-    @State private var isDMSending = false
     @State private var dmResult: Bool? = nil
+    @State private var dmResultLabel: String? = nil
+    @State private var hasReplayableMessage = false
 
     var body: some View {
         let status = LinkStatus.resolve(miner)
 
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 12) {
+        HStack(spacing: 12) {
+            // Miner (Twitch)
+            VStack(alignment: .leading, spacing: 1) {
                 Text(miner.displayName)
-                    .font(.body.weight(.medium))
+                    .font(.system(size: 13, weight: .medium))
+                Text(miner.username)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-                Spacer()
+            // Discord
+            VStack(alignment: .leading, spacing: 1) {
+                if let id = miner.ownerDiscordId {
+                    Text(discordName ?? "—")
+                        .font(.system(size: 13))
+                    Text(id)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                } else {
+                    Text("Not linked")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
+            // Status
+            VStack(alignment: .leading, spacing: 2) {
                 Text(status.label)
                     .font(.caption.weight(.semibold))
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2)
+                    .background(
+                        Capsule().fill(status.color.opacity(0.15))
+                    )
                     .foregroundStyle(status.color)
-
-                actionButton(for: status)
+                if let sub = status.subLabel {
+                    Text(sub)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             }
-            .contentShape(Rectangle())
-            .onTapGesture { onTap() }
+            .frame(width: 140, alignment: .leading)
 
-            if isExpanded {
-                expandedDetails(status: status)
-                    .padding(.top, 4)
-                    .padding(.leading, 4)
+            // Last DM
+            Group {
+                if let date = summary?.lastSentAt {
+                    Text(relativeTimeString(for: date))
+                        .font(.caption)
+                } else {
+                    Text("—")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
+            .frame(width: 110, alignment: .leading)
+
+            // DM history count
+            HStack(spacing: 4) {
+                if let count = summary?.count, count > 0 {
+                    Image(systemName: "bubble.left")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("\(count)")
+                        .font(.caption.monospacedDigit())
+                } else {
+                    Text("—")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(width: 90, alignment: .leading)
+
+            // Actions
+            actionMenu(for: status)
+                .frame(width: 60, alignment: .center)
         }
+        .padding(.horizontal, 8)
         .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(isSelected ? Color.accentColor.opacity(0.06) : Color.clear)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture { onTap() }
         .confirmationDialog(
             "Unlink \(miner.displayName)?",
             isPresented: $showUnlinkConfirmation,
@@ -153,116 +307,107 @@ private struct MinerRow: View {
         } message: {
             Text("The Discord account will no longer be linked to this Twitch account.")
         }
+        .task(id: miner.ownerDiscordId) { await refreshReplayableState() }
     }
 
     @ViewBuilder
-    private func actionButton(for status: LinkStatus) -> some View {
-        switch status {
-        case .notLinked:
-            Button("Link", action: onLink)
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-        case .needsAttention:
-            Button("Fix", action: onFix)
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-        case .linked:
-            Menu {
-#if DEBUG
-                Button {
-                    Task { await sendDebugDMFlow() }
-                } label: {
-                    Label("Preview DM Flow", systemImage: "message")
+    private func actionMenu(for status: LinkStatus) -> some View {
+        Menu {
+            switch status {
+            case .notLinked:
+                Button(action: onLink) {
+                    Label("Link", systemImage: "personalhotspot")
                 }
-#endif
-                Button("Re-link", action: onRelink)
+            case .needsAttention:
+                Button(action: onFix) {
+                    Label("Fix connection", systemImage: "wrench.and.screwdriver")
+                }
                 Divider()
-                Button("Unlink", role: .destructive) {
+                Button(action: onRelink) {
+                    Label("Re-link", systemImage: "personalhotspot")
+                }
+                Button(role: .destructive) {
                     showUnlinkConfirmation = true
+                } label: {
+                    Label("Unlink", systemImage: "personalhotspot.slash")
                 }
-            } label: {
-                Image(systemName: "ellipsis.circle")
-                    .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-            .controlSize(.small)
-        }
-    }
-
-    @ViewBuilder
-    private func expandedDetails(status: LinkStatus) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            detailRow("Twitch", miner.username)
-            if let discordId = miner.ownerDiscordId {
-                if let name = discordNamesById[discordId] {
-                    detailRow("Discord", name)
-                } else {
-                    detailRow("Discord", discordId)
+            case .linked:
+                Button {
+                    Task { await sendOneOff(messageType: .welcome) }
+                } label: {
+                    Label("Send welcome message", systemImage: "checkmark.message")
+                }
+                Button {
+                    Task { await resendLastMessage() }
+                } label: {
+                    Label("Re-send last message", systemImage: "ellipsis.message")
+                }
+                .disabled(!hasReplayableMessage)
+                Divider()
+                Button(action: onRelink) {
+                    Label("Re-link", systemImage: "personalhotspot")
+                }
+                Button(role: .destructive) {
+                    showUnlinkConfirmation = true
+                } label: {
+                    Label("Unlink", systemImage: "personalhotspot.slash")
                 }
             }
-            if let issue = status.issueDescription(for: miner) {
-                Text(issue)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 2)
-            }
-            if let sent = dmResult {
-                Text(sent ? "Preview DM flow sent." : "Failed to send DM flow — check SwiftBot connection.")
-                    .font(.caption)
-                    .foregroundStyle(sent ? .green : .red)
-                    .padding(.top, 2)
-            }
-        }
-    }
-
-    private func detailRow(_ label: String, _ value: String) -> some View {
-        HStack(spacing: 8) {
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-                .frame(width: 80, alignment: .leading)
-            Text(value)
-                .font(.caption.monospaced())
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .font(.system(size: 14))
                 .foregroundStyle(.secondary)
-                .textSelection(.enabled)
         }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
     }
 
-#if DEBUG
-    private func sendDebugDMFlow() async {
+    private func sendOneOff(messageType: SwiftBotDMMessageType) async {
         guard let discordId = miner.ownerDiscordId else { return }
-        isDMSending = true
-        dmResult = nil
-        // Pull live app-level priorities so the test DM mirrors what real
-        // activation DMs send. Using the no-arg overload would hard-code [].
         let priorityGames = await MainActor.run { Settings.shared.priorityGames }
-        var ok = true
-        for messageType in SwiftBotDMMessageType.debugPreviewOrder {
-            let sent = await navigation.swiftBotConnectionService.sendDebugDM(
-                to: discordId,
-                request: SwiftBotDMRequest(
-                    messageType: messageType,
-                    debug: true,
-                    twitchUsername: miner.username,
-                    priorityGames: priorityGames,
-                    activationCode: "NSMRCHHL",
-                    activationExpiresInMinutes: 29,
-                    affectedGame: priorityGames.first ?? "THE FINALS",
-                    campaignName: "Launch Drops",
-                    milestoneTitle: "Drop claimed",
-                    recoveryReason: "Twitch login needs to be refreshed."
-                )
-            )
-            ok = ok && sent
-            try? await Task.sleep(for: .milliseconds(650))
-        }
+        let request = SwiftBotDMRequest(
+            messageType: messageType,
+            debug: false,
+            twitchUsername: miner.username,
+            priorityGames: priorityGames
+        )
+        let ok = await navigation.swiftBotConnectionService.sendEventDM(to: discordId, request: request)
         dmResult = ok
-        isDMSending = false
-        if !isExpanded {
-            // auto-open so the user sees the result
+        dmResultLabel = "\(messageType.displayName) DM"
+        await refreshReplayableState()
+        await refreshSummary()
+    }
+
+    private func resendLastMessage() async {
+        guard let discordId = miner.ownerDiscordId else { return }
+        guard let lastRequest = await navigation.dmLogStore.mostRecentProductionRequest(forDiscordId: discordId) else {
+            dmResult = false
+            dmResultLabel = "Re-send"
+            return
+        }
+        let ok = await navigation.swiftBotConnectionService.sendEventDM(to: discordId, request: lastRequest)
+        dmResult = ok
+        dmResultLabel = "Re-send (\(lastRequest.messageType.displayName))"
+        await refreshSummary()
+    }
+
+    private func refreshReplayableState() async {
+        guard let discordId = miner.ownerDiscordId else {
+            hasReplayableMessage = false
+            return
+        }
+        let last = await navigation.dmLogStore.mostRecentProductionRequest(forDiscordId: discordId)
+        hasReplayableMessage = (last != nil)
+    }
+
+    private func refreshSummary() async {
+        guard let discordId = miner.ownerDiscordId else { return }
+        let summaries = await navigation.dmLogStore.summaries(forDiscordIds: [discordId])
+        if let s = summaries[discordId] {
+            onSummaryChanged(discordId, s)
         }
     }
-#endif
 
     private func performUnlink() async {
         let result = await navigation.adminLinkingService.unlinkAccount(
@@ -272,6 +417,383 @@ private struct MinerRow: View {
         if case .unlinked = result {
             navigation.minerManager.setOwnerDiscordId(forAccountId: miner.accountId, to: nil)
         }
+    }
+}
+
+// MARK: - Inline detail panel
+
+private struct DetailPanel: View {
+    let miner: MinerManager.ManagedMiner
+    let discordName: String?
+    let onRelink: () -> Void
+    let onResendLast: () -> Void
+
+    @Environment(NavigationModel.self) private var navigation
+    @State private var entries: [DMLogStore.Entry] = []
+    @State private var lastRequest: SwiftBotDMRequest?
+    @State private var isLoading = true
+    @State private var showAllHistory = false
+
+    var body: some View {
+        let status = LinkStatus.resolve(miner)
+        HStack(alignment: .top, spacing: 24) {
+            if let issue = status.issueDescription(for: miner) {
+                issueColumn(issue: issue, status: status)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+            lastDMColumn
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+            historyColumn
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+            infoColumn
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 18)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color(white: 0.97))
+        )
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .task(id: miner.ownerDiscordId) { await load() }
+        .sheet(isPresented: $showAllHistory) {
+            AllHistorySheet(
+                minerName: miner.displayName,
+                entries: visibleEntries
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func issueColumn(issue: String, status: LinkStatus) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 5) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.orange)
+                Text("Issue")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.orange)
+            }
+            Text(issue)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .lineSpacing(2)
+
+            if status == .needsAttention {
+                Button(action: onRelink) {
+                    Label("Re-link Discord Account", systemImage: "link")
+                        .font(.system(size: 12))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .padding(.top, 4)
+            } else if status == .notLinked {
+                Button(action: onRelink) {
+                    Label("Link Discord Account", systemImage: "link")
+                        .font(.system(size: 12))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .padding(.top, 4)
+            }
+        }
+    }
+
+    private var lastDMColumn: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            sectionHeader("Last DM")
+            if let entry = entries.first(where: { !$0.isDebug }) {
+                Text(messageTitle(for: entry, request: lastRequest))
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let detail = messageDetail(for: entry, request: lastRequest) {
+                    Text(detail)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Text("Sent \(relativeTimeString(for: entry.sentAt)) • \(absoluteTimeString(for: entry.sentAt))")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+                    .padding(.top, 2)
+
+                Button(action: onResendLast) {
+                    Label("Resend Last DM", systemImage: "paperplane")
+                        .font(.system(size: 12))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(lastRequest == nil)
+                .padding(.top, 4)
+            } else {
+                Text("No DMs sent yet.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var historyColumn: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                sectionHeader("DM History (\(visibleEntries.count))")
+                Spacer()
+                if visibleEntries.count > 5 {
+                    Button("View All") { showAllHistory = true }
+                        .font(.system(size: 11))
+                        .buttonStyle(.bordered)
+                        .controlSize(.mini)
+                }
+            }
+            if isLoading {
+                Text("Loading…")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            } else if visibleEntries.isEmpty {
+                Text("No DMs.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(Array(visibleEntries.prefix(5).enumerated()), id: \.offset) { _, entry in
+                        HStack(alignment: .firstTextBaseline, spacing: 12) {
+                            Text(relativeTimeString(for: entry.sentAt))
+                                .font(.system(size: 11).monospacedDigit())
+                                .foregroundStyle(.tertiary)
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
+                                .frame(minWidth: 70, alignment: .leading)
+                            Text(displayLabel(for: entry.messageType))
+                                .font(.system(size: 12))
+                                .lineLimit(1)
+                            if entry.isDebug {
+                                Text("TEST")
+                                    .font(.system(size: 8, weight: .semibold))
+                                    .padding(.horizontal, 4)
+                                    .padding(.vertical, 1)
+                                    .background(Color.orange.opacity(0.18), in: Capsule())
+                                    .foregroundStyle(.orange)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var infoColumn: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            sectionHeader("Info")
+            infoRow("Twitch", miner.username)
+            if let id = miner.ownerDiscordId {
+                infoRow("Discord", discordName ?? id)
+                infoRow("Owner Discord ID", id, monospaced: true, copyable: true)
+            } else {
+                Text("Not linked to a Discord account.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func sectionHeader(_ text: String, color: Color = .primary) -> some View {
+        Text(text)
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(color)
+    }
+
+    private func infoRow(_ label: String, _ value: String, monospaced: Bool = false, copyable: Bool = false) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text("\(label):")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(monospaced ? .system(size: 12).monospaced() : .system(size: 12))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+            if copyable {
+                Button {
+                    let pb = NSPasteboard.general
+                    pb.clearContents()
+                    pb.setString(value, forType: .string)
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.borderless)
+                .help("Copy")
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func messageTitle(for entry: DMLogStore.Entry, request: SwiftBotDMRequest?) -> String {
+        guard let type = SwiftBotDMMessageType(rawValue: entry.messageType) else {
+            return entry.messageType
+        }
+        if let request, request.messageType == type {
+            switch type {
+            case .dropClaimed:
+                if let drop = request.milestoneTitle, !drop.isEmpty {
+                    return "Drop claimed: \(drop)"
+                }
+            case .campaignDetected:
+                if let name = request.campaignName, !name.isEmpty {
+                    return "New campaign: \(name)"
+                }
+            case .campaignCompleted:
+                if let name = request.campaignName, !name.isEmpty {
+                    return "Campaign complete: \(name)"
+                }
+            case .prioritisedGameNeedsLinking:
+                if let game = request.affectedGame, !game.isEmpty {
+                    return "Link required for \(game)"
+                }
+            default:
+                break
+            }
+        }
+        return type.displayName
+    }
+
+    private func messageDetail(for entry: DMLogStore.Entry, request: SwiftBotDMRequest?) -> String? {
+        guard let type = SwiftBotDMMessageType(rawValue: entry.messageType) else { return nil }
+        guard let request, request.messageType == type else { return nil }
+        switch type {
+        case .dropClaimed:
+            return request.campaignName
+        case .accountActionRequired, .reauth:
+            return request.recoveryReason
+        default:
+            return nil
+        }
+    }
+
+    /// Recurring/configurable types are filtered against Settings toggles —
+    /// the user shouldn't see entries for notifications they've turned off.
+    private var visibleEntries: [DMLogStore.Entry] {
+        entries.filter { isVisible(messageType: $0.messageType) }
+    }
+
+    private func isVisible(messageType: String) -> Bool {
+        guard let type = SwiftBotDMMessageType(rawValue: messageType) else { return true }
+        let s = Settings.shared
+        switch type {
+        case .welcome, .discordLinked, .setup, .linked:
+            return true
+        case .reauth: return s.dmConnectionExpiredEnabled
+        case .welcomeBack: return s.dmWelcomeBackEnabled
+        case .dropClaimed: return s.dmDropClaimedEnabled
+        case .campaignCompleted: return s.dmCampaignCompletedEnabled
+        case .campaignDetected: return s.dmCampaignDetectedEnabled
+        case .accountActionRequired: return s.dmAccountActionRequiredEnabled
+        case .prioritisedGameNeedsLinking: return s.dmLinkRequiredEnabled
+        }
+    }
+
+    private func displayLabel(for messageType: String) -> String {
+        SwiftBotDMMessageType(rawValue: messageType)?.displayName ?? messageType
+    }
+
+    private func load() async {
+        guard let discordId = miner.ownerDiscordId else {
+            isLoading = false
+            entries = []
+            lastRequest = nil
+            return
+        }
+        isLoading = true
+#if DEBUG
+        let includeDebug = true
+#else
+        let includeDebug = false
+#endif
+        async let entriesResult = navigation.dmLogStore.recentEntries(
+            forDiscordId: discordId,
+            limit: 50,
+            includeDebug: includeDebug
+        )
+        async let requestResult = navigation.dmLogStore.mostRecentProductionRequest(forDiscordId: discordId)
+        entries = await entriesResult
+        lastRequest = await requestResult
+        isLoading = false
+    }
+}
+
+// MARK: - View All sheet
+
+private struct AllHistorySheet: View {
+    let minerName: String
+    let entries: [DMLogStore.Entry]
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("DM History")
+                        .font(.headline)
+                    Text(minerName)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("Done") { dismiss() }
+                    .keyboardShortcut(.defaultAction)
+            }
+            .padding(16)
+
+            Divider()
+
+            if entries.isEmpty {
+                Text("No DMs.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(20)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 6) {
+                        ForEach(Array(entries.enumerated()), id: \.offset) { _, entry in
+                            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                                Text(relativeTimeString(for: entry.sentAt))
+                                    .font(.caption.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 80, alignment: .leading)
+                                Text(SwiftBotDMMessageType(rawValue: entry.messageType)?.displayName ?? entry.messageType)
+                                    .font(.caption)
+                                if entry.isDebug {
+                                    Text("TEST")
+                                        .font(.system(size: 9, weight: .semibold))
+                                        .padding(.horizontal, 5)
+                                        .padding(.vertical, 1)
+                                        .background(Color.orange.opacity(0.18), in: Capsule())
+                                        .foregroundStyle(.orange)
+                                }
+                                Spacer()
+                                Text(absoluteTimeString(for: entry.sentAt))
+                                    .font(.caption2.monospacedDigit())
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 4)
+                        }
+                    }
+                    .padding(.vertical, 8)
+                }
+                .frame(maxHeight: 400)
+            }
+        }
+        .frame(width: 480)
     }
 }
 
@@ -332,7 +854,6 @@ private struct LinkMinerSheet: View {
                 .pickerStyle(.menu)
                 .labelsHidden()
             } else {
-                // SwiftBot not connected — fall back to manual entry
                 VStack(alignment: .leading, spacing: 6) {
                     TextField("Discord User ID", text: $fallbackId)
                         .textFieldStyle(.roundedBorder)
@@ -372,7 +893,6 @@ private struct LinkMinerSheet: View {
 
     private func loadUsers() async {
         isLoading = true
-        // SwiftBot already filters out bots and webhooks before returning.
         discordUsers = await navigation.swiftBotConnectionService.fetchDiscordUsers()
         isLoading = false
     }
@@ -401,7 +921,6 @@ private struct LinkMinerSheet: View {
                 dismiss()
             case .alreadyLinked(let currentDiscordId):
                 if currentDiscordId == discordId {
-                    // Server already considers this link valid — sync local state and dismiss.
                     navigation.minerManager.setOwnerDiscordId(forAccountId: miner.accountId, to: discordId)
                     dismiss()
                 } else {
@@ -421,6 +940,26 @@ private struct LinkMinerSheet: View {
     private func displayName(forDiscordId id: String) -> String {
         discordUsers.first(where: { $0.id == id })?.displayName ?? id
     }
+}
+
+// MARK: - Helpers
+
+/// Minute-precision relative formatter — `Text(_, style: .relative)` ticks
+/// down per-second which is too noisy for a list view.
+private func relativeTimeString(for date: Date) -> String {
+    let interval = Date().timeIntervalSince(date)
+    if interval < 60 { return "Just now" }
+    let formatter = RelativeDateTimeFormatter()
+    formatter.unitsStyle = .abbreviated
+    formatter.dateTimeStyle = .numeric
+    return formatter.localizedString(for: date, relativeTo: Date())
+}
+
+private func absoluteTimeString(for date: Date) -> String {
+    let formatter = DateFormatter()
+    formatter.dateStyle = .none
+    formatter.timeStyle = .short
+    return formatter.string(from: date)
 }
 
 #Preview {

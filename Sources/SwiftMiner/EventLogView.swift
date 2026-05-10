@@ -157,10 +157,18 @@ struct EventLogView: View {
         .help("Filter events by miner")
     }
 
+    private var availableFilters: [EventFilter] {
+        EventFilter.allCases.filter { filter in
+            // Discord chip only surfaces when the SwiftBot integration is on —
+            // otherwise it would always be empty and add visual noise.
+            filter != .discord || settings.swiftBotEnabled
+        }
+    }
+
     private var filterChipsRow: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                ForEach(EventFilter.allCases) { option in
+                ForEach(availableFilters) { option in
                     let isSelected = selectedFilters.contains(option)
                     Button {
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
@@ -267,13 +275,15 @@ struct EventLogView: View {
 }
 
 private struct EventFilterHelpPopover: View {
+    @ObservedObject private var settings = Settings.shared
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Activity Filters")
                 .font(.headline)
 
             VStack(alignment: .leading, spacing: 11) {
-                ForEach(EventFilter.allCases) { filter in
+                ForEach(EventFilter.allCases.filter { $0 != .discord || settings.swiftBotEnabled }) { filter in
                     HStack(alignment: .top, spacing: 9) {
                         Image(systemName: filter.symbol)
                             .font(.system(size: 14, weight: .semibold))
@@ -290,6 +300,27 @@ private struct EventFilterHelpPopover: View {
                                 .foregroundStyle(.secondary)
                                 .lineSpacing(1.5)
                                 .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+
+                    if filter == .warnings {
+                        HStack(alignment: .top, spacing: 9) {
+                            Image(systemName: "exclamationmark.arrow.trianglehead.counterclockwise.rotate.90")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(.yellow)
+                                .frame(width: 18)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Stall Recovery")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(.primary)
+
+                                Text("The supervisor detected a miner had stopped reporting activity and refreshed campaigns, restarted the worker, or refreshed authentication to get it moving again. Shown under Warnings.")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.secondary)
+                                    .lineSpacing(1.5)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                         }
                     }
                 }
@@ -346,9 +377,19 @@ private struct EventLogRow: View {
         event.timestamp.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute().second())
     }
 
+    private var stallRecoveryIcon: (symbol: String, color: Color)? {
+        guard isStallRecoveryEvent(eventSearchText(for: event)) else { return nil }
+        return ("exclamationmark.arrow.trianglehead.counterclockwise.rotate.90", .yellow)
+    }
+
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
-            if settings.showActivityLogIcons {
+            if let stall = stallRecoveryIcon {
+                Image(systemName: stall.symbol)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(stall.color)
+                    .frame(width: 16, alignment: .center)
+            } else if settings.showActivityLogIcons {
                 Image(systemName: eventFilter.symbol)
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(eventColor)
@@ -400,9 +441,19 @@ private struct EventDisplayText {
 }
 
 private func eventDisplayText(for event: EventEntry) -> EventDisplayText {
+    // Discord DM events tag the raw message with a sentinel for filter routing,
+    // but the friendly text on `event.message` is what should actually render.
+    if let raw = event.rawMessage, raw.hasPrefix(discordEventTag) {
+        return EventDisplayText(title: event.message, detail: nil)
+    }
+
     let source = event.rawMessage ?? event.message
     let cleaned = cleanedEventText(source)
     let lowercased = cleaned.lowercased()
+
+    if let stallText = stallRecoveryDisplayText(rawSource: source, cleaned: cleaned) {
+        return stallText
+    }
 
     if let campaignSummary = campaignStatusSummary(from: cleaned) {
         return campaignSummary
@@ -532,6 +583,17 @@ private func eventDisplayText(for event: EventEntry) -> EventDisplayText {
 private func eventFilters(for event: EventEntry) -> Set<EventFilter> {
     let text = eventSearchText(for: event)
 
+    if isStallRecoveryEvent(text) {
+        if text.contains("recovery failed") || event.level == .error {
+            return [.warnings, .errors]
+        }
+        return [.warnings]
+    }
+
+    if isDiscordEvent(text) {
+        return event.level == .error ? [.discord, .errors] : [.discord]
+    }
+
     if isHeartbeatEvent(text) {
         return [.heartbeats]
     }
@@ -569,6 +631,7 @@ private func primaryEventFilter(for event: EventEntry) -> EventFilter {
         .errors,
         .warnings,
         .accountLink,
+        .discord,
         .drops,
         .heartbeats,
         .mining,
@@ -589,6 +652,7 @@ private extension EventFilter {
         case .errors: return .red
         case .accountLink: return .purple
         case .scan: return .teal
+        case .discord: return .indigo
         case .system: return .gray
         }
     }
@@ -596,6 +660,94 @@ private extension EventFilter {
 
 private func eventSearchText(for event: EventEntry) -> String {
     "\(event.rawMessage ?? "") \(event.message)".lowercased()
+}
+
+private let discordEventTag = "[discord-dm]"
+
+private func isDiscordEvent(_ text: String) -> Bool {
+    text.contains(discordEventTag)
+}
+
+private func isStallRecoveryEvent(_ text: String) -> Bool {
+    text.contains("[supervisor]")
+}
+
+private func stallRecoveryReason(rawSource: String, cleaned: String) -> (title: String, detail: String?) {
+    // The supervisor formats the reason as:
+    //   <miner> — cause=<causeRawValue> • <causeDisplayName>[ • <detail>][ • silent <n> min[ while peers were polling]]
+    if let cause = matchGroups(#"cause=([a-zA-Z]+)"#, in: cleaned)?.first {
+        let causeTitle = stallCauseTitle(for: cause)
+        let detail = stallReasonDetail(cleaned: cleaned)
+        return (causeTitle, detail)
+    }
+
+    // Fallback: legacy / unparsed reason text.
+    if let reason = matchGroups(#"reason=([^|]+)"#, in: cleaned)?.first, !reason.isEmpty {
+        return (trimmedSentence(reason), nil)
+    }
+
+    return ("miner unresponsive", nil)
+}
+
+private func stallCauseTitle(for rawCause: String) -> String {
+    switch rawCause.lowercased() {
+    case "networkerror": return "no internet connection"
+    case "twitchapifailure": return "Twitch API failure"
+    case "ratelimited": return "Twitch rate limiting"
+    case "authissue": return "authentication issue"
+    case "watchsessionfailure": return "watch session failure"
+    case "workerstartupfailure": return "worker startup failure"
+    case "norecentactivity": return "no recent activity"
+    default: return "miner unresponsive"
+    }
+}
+
+private func stallReasonDetail(cleaned: String) -> String? {
+    // Pull every "• " separated fragment after the cause= token, drop the cause displayName
+    // (which we already render as the title), and join the rest.
+    guard let causeRange = cleaned.range(of: #"cause=[a-zA-Z]+"#, options: .regularExpression) else {
+        return nil
+    }
+    let tail = String(cleaned[causeRange.upperBound...])
+    let fragments = tail
+        .split(separator: "•")
+        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
+
+    // First fragment is the human-readable cause name (already used as title) — skip it.
+    let extras = fragments.dropFirst()
+    guard !extras.isEmpty else { return nil }
+    return extras.joined(separator: " • ")
+}
+
+private func stallRecoveryDisplayText(rawSource: String, cleaned: String) -> EventDisplayText? {
+    let raw = rawSource.lowercased()
+    guard raw.contains("[supervisor]") else { return nil }
+
+    if raw.contains("stall detected") {
+        let reason = stallRecoveryReason(rawSource: rawSource, cleaned: cleaned)
+        return EventDisplayText(
+            title: "Stall Recovery Activated due to \(reason.title)",
+            detail: reason.detail
+        )
+    }
+    if raw.contains("recovery stage 1") {
+        return EventDisplayText(title: "Stall recovery", detail: "Refreshing campaigns & inventory")
+    }
+    if raw.contains("recovery stage 2") {
+        return EventDisplayText(title: "Stall recovery", detail: "Restarting miner worker")
+    }
+    if raw.contains("recovery stage 3") {
+        return EventDisplayText(title: "Stall recovery", detail: "Refreshing authentication")
+    }
+    if raw.contains("recovery success") {
+        return EventDisplayText(title: "Stall recovery", detail: "Recovered")
+    }
+    if raw.contains("recovery failed") {
+        let detail = matchGroups(#"recovery failed \|\s*(.+)$"#, in: cleaned)?.first
+        return EventDisplayText(title: "Stall recovery failed", detail: detail.map(trimmedSentence))
+    }
+    return EventDisplayText(title: "Stall recovery", detail: nil)
 }
 
 private func isHeartbeatEvent(_ text: String) -> Bool {

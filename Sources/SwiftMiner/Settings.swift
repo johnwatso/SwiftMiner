@@ -165,7 +165,7 @@ public final class Settings: ObservableObject {
     }
 
     private static var defaultEventFilters: Set<EventFilter> {
-        [.mining, .heartbeats, .drops, .warnings, .errors, .system]
+        [.mining, .heartbeats, .drops, .warnings, .errors, .discord, .system]
     }
 
 #if DEBUG

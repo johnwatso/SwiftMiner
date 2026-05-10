@@ -578,20 +578,15 @@ private struct IntegrationsSettingsView: View {
     @State private var isTestingConnection = false
     @State private var connectionTestMessage: String?
     @State private var copiedPairingBundle = false
-    @State private var isSendingPreview = false
-    @State private var previewStatus: String?
+    @State private var debugTargetSelection: String?
+    @State private var debugDiscordUsers: [SwiftBotDiscordUser] = []
+    @State private var isLoadingDebugUsers = false
 
     private let defaultSwiftBotEndpoint = "http://localhost:38888"
 
     var body: some View {
         Form {
             statusCard
-
-            if navigation.swiftBotState != .connected {
-                pairingSection
-            }
-
-            connectionStatusSection
 
             importantSection
 
@@ -613,7 +608,7 @@ private struct IntegrationsSettingsView: View {
 
     private var statusCard: some View {
         Section {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 10) {
                     ZStack {
                         Circle()
@@ -633,6 +628,28 @@ private struct IntegrationsSettingsView: View {
                     }
 
                     Spacer()
+
+                    Button {
+                        Task {
+                            connectionTestMessage = nil
+                            isTestingConnection = true
+                            await navigation.checkSwiftBotConnection()
+                            connectionTestMessage = connectionTestDescription(for: navigation.swiftBotState)
+                            isTestingConnection = false
+                        }
+                    } label: {
+                        if isTestingConnection {
+                            ProgressView()
+                                .controlSize(.mini)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 11))
+                        }
+                    }
+                    .buttonStyle(.borderless)
+                    .controlSize(.mini)
+                    .disabled(isTestingConnection)
+                    .help("Re-check SwiftBot connection")
                 }
 
                 Text("Sends Discord DMs for account recovery, drop claims, and campaign updates.")
@@ -640,39 +657,38 @@ private struct IntegrationsSettingsView: View {
                     .foregroundStyle(.secondary)
                     .lineSpacing(1)
 
-                HStack(spacing: 8) {
-                    Button {
-                        openHelpURL()
-                    } label: {
-                        Label("Help", systemImage: "questionmark.circle")
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.mini)
-
-                    Button {
-                        Task { await sendTestDM() }
-                    } label: {
-                        if isSendingPreview {
-                            HStack(spacing: 4) {
-                                ProgressView()
-                                    .controlSize(.mini)
-                                Text("Sending…")
-                            }
-                        } else {
-                            Label("Test", systemImage: "paperplane")
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.mini)
-                    .disabled(isSendingPreview || firstLinkedDiscordId == nil)
-
-                    Spacer()
+                if isTestingConnection {
+                    Text("Checking SwiftBot…")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if let connectionTestMessage {
+                    Text(connectionTestMessage)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
-                if let previewStatus {
-                    Text(previewStatus)
-                        .font(.caption)
-                        .foregroundStyle(previewStatus.hasPrefix("Sent") ? .green : .red)
+                if navigation.swiftBotState != .connected {
+                    Divider()
+                        .padding(.vertical, 2)
+
+                    HStack(spacing: 10) {
+                        Button {
+                            copyPairingBundle()
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: copiedPairingBundle ? "checkmark.circle.fill" : "doc.on.doc")
+                                Text(copiedPairingBundle ? "Copied" : "Pair with SwiftBot")
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.regular)
+
+                        Text("Copies a pairing bundle. Paste it into SwiftBot to connect.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        Spacer(minLength: 0)
+                    }
                 }
             }
         }
@@ -718,48 +734,7 @@ private struct IntegrationsSettingsView: View {
         }
     }
 
-    private func openHelpURL() {
-        let url = URL(string: "https://github.com/johnwatso/SwiftMiner/blob/main/docs/help/discord-help.md")!
-        NSWorkspace.shared.open(url)
-    }
-
-    private func sendTestDM() async {
-        guard let discordId = firstLinkedDiscordId else { return }
-        isSendingPreview = true
-        previewStatus = nil
-        let request = SwiftBotDMRequest(
-            messageType: .linked,
-            debug: true,
-            twitchUsername: "test_user"
-        )
-        let ok = await navigation.swiftBotConnectionService.sendDebugDM(to: discordId, request: request)
-        previewStatus = ok ? "Sent test DM." : "SwiftBot could not send the test DM."
-        isSendingPreview = false
-    }
-
     // MARK: - Pairing
-
-    private var pairingSection: some View {
-        Section {
-            Button {
-                copyPairingBundle()
-            } label: {
-                HStack {
-                    Image(systemName: copiedPairingBundle ? "checkmark.circle.fill" : "doc.on.doc.fill")
-                    Text(copiedPairingBundle ? "Copied" : "Copy Pairing Bundle")
-                }
-                .font(.headline)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-
-            SettingsSecondaryText("Paste into SwiftBot to connect")
-        } header: {
-            Text("Pair with SwiftBot")
-        }
-    }
 
     private func copyPairingBundle() {
         settings.ensureSwiftBotSecrets()
@@ -811,61 +786,6 @@ private struct IntegrationsSettingsView: View {
 
     // MARK: - Connection Status
 
-    private var connectionStatusSection: some View {
-        Section {
-            HStack(spacing: 8) {
-                let state = navigation.swiftBotState
-                Image(systemName: state == .connected ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                    .font(.system(size: 12))
-                    .foregroundStyle(state == .connected ? .green : .orange)
-
-                Text(state == .connected ? "SwiftBot connected" : "SwiftBot not responding")
-                    .font(.caption)
-
-                Spacer()
-
-                if state != .connected {
-                    Button {
-                        repairConnection()
-                    } label: {
-                        Label("Repair", systemImage: "wrench.and.screwdriver")
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.mini)
-                }
-
-                Button {
-                    Task {
-                        connectionTestMessage = nil
-                        isTestingConnection = true
-                        await navigation.checkSwiftBotConnection()
-                        connectionTestMessage = connectionTestDescription(for: navigation.swiftBotState)
-                        isTestingConnection = false
-                    }
-                } label: {
-                    if isTestingConnection {
-                        ProgressView()
-                            .controlSize(.mini)
-                    } else {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 11))
-                    }
-                }
-                .buttonStyle(.borderless)
-                .controlSize(.mini)
-                .disabled(isTestingConnection)
-            }
-
-            if isTestingConnection {
-                SettingsSecondaryText("Checking SwiftBot…")
-            } else if let connectionTestMessage {
-                SettingsSecondaryText(connectionTestMessage)
-            }
-        } header: {
-            Text("Connection")
-        }
-    }
-
     private func connectionTestDescription(for state: SwiftBotConnectionState) -> String {
         switch state {
         case .connected:
@@ -876,11 +796,6 @@ private struct IntegrationsSettingsView: View {
         case .notConfigured:
             return "No valid localhost endpoint is configured."
         }
-    }
-
-    private func repairConnection() {
-        copyPairingBundle()
-        connectionTestMessage = "Fresh SwiftBot pairing details copied. Paste them into SwiftBot to repair the connection."
     }
 
     // MARK: - Important Notifications
@@ -1030,6 +945,7 @@ private struct IntegrationsSettingsView: View {
 
             Spacer(minLength: 8)
 
+#if DEBUG
             if let previewType {
                 Button {
                     Task { await sendPreview(type: previewType) }
@@ -1040,8 +956,9 @@ private struct IntegrationsSettingsView: View {
                 }
                 .buttonStyle(.plain)
                 .help("Preview this message")
-                .disabled(firstLinkedDiscordId == nil)
+                .disabled(debugTargetId == nil)
             }
+#endif
 
             Toggle("", isOn: isOn)
                 .labelsHidden()
@@ -1053,7 +970,7 @@ private struct IntegrationsSettingsView: View {
     // MARK: - Preview
 
     private func sendPreview(type: SwiftBotDMMessageType) async {
-        guard let discordId = firstLinkedDiscordId else { return }
+        guard let discordId = debugTargetId else { return }
         let request = SwiftBotDMRequest(
             messageType: type,
             debug: true,
@@ -1072,12 +989,57 @@ private struct IntegrationsSettingsView: View {
         navigation.minerManager.miners.compactMap(\.ownerDiscordId).first
     }
 
+    /// Discord ID used for debug previews — picker selection takes precedence
+    /// when set, otherwise we fall back to the first linked miner's Discord ID.
+    private var debugTargetId: String? {
+        debugTargetSelection ?? firstLinkedDiscordId
+    }
+
+    private func displayName(for discordId: String) -> String {
+        debugDiscordUsers.first(where: { $0.id == discordId })?.displayName ?? discordId
+    }
+
 #if DEBUG
     // MARK: - DM Debug
 
     private var dmDebugSection: some View {
         Section {
             VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Text("Target")
+                        .font(.callout)
+
+                    Picker("", selection: debugTargetBinding) {
+                        if debugTargetCandidates.isEmpty {
+                            Text("No linked Discord users").tag(String?.none)
+                        } else {
+                            ForEach(debugTargetCandidates, id: \.id) { user in
+                                Text(user.displayName).tag(Optional(user.id))
+                            }
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .disabled(debugTargetCandidates.isEmpty)
+
+                    Button {
+                        Task { await loadDebugDiscordUsers() }
+                    } label: {
+                        if isLoadingDebugUsers {
+                            ProgressView().controlSize(.mini)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 11))
+                        }
+                    }
+                    .buttonStyle(.borderless)
+                    .controlSize(.mini)
+                    .disabled(isLoadingDebugUsers)
+                    .help("Refresh Discord user list from SwiftBot")
+
+                    Spacer()
+                }
+
                 HStack(spacing: 10) {
                     Button {
                         Task { await sendAllDebugDMs() }
@@ -1086,9 +1048,10 @@ private struct IntegrationsSettingsView: View {
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
+                    .disabled(debugTargetId == nil)
 
-                    if let firstLinkedDiscordId {
-                        SettingsSecondaryText("Target: \(firstLinkedDiscordId)")
+                    if let id = debugTargetId {
+                        SettingsSecondaryText("Sending to \(displayName(for: id))")
                     } else {
                         SettingsSecondaryText("No linked Discord account found.", tint: .orange)
                     }
@@ -1099,10 +1062,43 @@ private struct IntegrationsSettingsView: View {
         } header: {
             Text("Debug Testing")
         }
+        .task {
+            await loadDebugDiscordUsers()
+        }
+    }
+
+    /// Union of locally-known miner Discord IDs and SwiftBot's known users, with
+    /// display names where available. Locally-known IDs without a matched display
+    /// name fall back to showing the raw ID so the dev can still target them.
+    private var debugTargetCandidates: [SwiftBotDiscordUser] {
+        var seen: Set<String> = []
+        var result: [SwiftBotDiscordUser] = []
+
+        for user in debugDiscordUsers where seen.insert(user.id).inserted {
+            result.append(user)
+        }
+        for id in navigation.minerManager.miners.compactMap(\.ownerDiscordId) where seen.insert(id).inserted {
+            result.append(SwiftBotDiscordUser(id: id, displayName: id))
+        }
+        return result
+    }
+
+    private var debugTargetBinding: Binding<String?> {
+        Binding(
+            get: { debugTargetId },
+            set: { debugTargetSelection = $0 }
+        )
+    }
+
+    private func loadDebugDiscordUsers() async {
+        isLoadingDebugUsers = true
+        defer { isLoadingDebugUsers = false }
+        let users = await navigation.swiftBotConnectionService.fetchDiscordUsers()
+        debugDiscordUsers = users
     }
 
     private func sendAllDebugDMs() async {
-        guard let discordId = firstLinkedDiscordId else { return }
+        guard let discordId = debugTargetId else { return }
         let order: [SwiftBotDMMessageType] = [
             .welcome, .discordLinked, .setup, .linked,
             .campaignDetected, .prioritisedGameNeedsLinking,
