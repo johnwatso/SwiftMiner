@@ -133,6 +133,17 @@ public actor SQLiteManager {
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
 
+        -- 12. dm_log
+        CREATE TABLE IF NOT EXISTS dm_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            discord_id TEXT NOT NULL,
+            message_type TEXT NOT NULL,
+            sent_at REAL NOT NULL,
+            payload_json TEXT,
+            debug INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_dm_log_discord_recent ON dm_log(discord_id, sent_at DESC);
+
         -- 11. user_campaign_decisions
         CREATE TABLE IF NOT EXISTS user_campaign_decisions (
             discord_id TEXT,
@@ -262,6 +273,29 @@ public actor SQLiteManager {
                 try execute("ALTER TABLE miner_users ADD COLUMN has_completed_initial_dm_flow INTEGER NOT NULL DEFAULT 0;")
             }
             try execute("INSERT OR IGNORE INTO _schema_migrations (version) VALUES (6);")
+        }
+
+        if !isMigrationApplied(7) {
+            try execute("""
+            CREATE TABLE IF NOT EXISTS dm_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                discord_id TEXT NOT NULL,
+                message_type TEXT NOT NULL,
+                sent_at REAL NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_dm_log_discord_recent ON dm_log(discord_id, sent_at DESC);
+            """)
+            try execute("INSERT OR IGNORE INTO _schema_migrations (version) VALUES (7);")
+        }
+
+        if !isMigrationApplied(8) {
+            if !columnExists("payload_json", in: "dm_log") {
+                try execute("ALTER TABLE dm_log ADD COLUMN payload_json TEXT;")
+            }
+            if !columnExists("debug", in: "dm_log") {
+                try execute("ALTER TABLE dm_log ADD COLUMN debug INTEGER NOT NULL DEFAULT 0;")
+            }
+            try execute("INSERT OR IGNORE INTO _schema_migrations (version) VALUES (8);")
         }
     }
 

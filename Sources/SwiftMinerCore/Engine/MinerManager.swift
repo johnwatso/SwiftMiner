@@ -1101,6 +1101,9 @@ public final class MinerManager {
                     await self.supervisor.recordStateUpdate(minerId: minerId, workerState: .running)
                 case .heartbeat, .stateUpdate:
                     await self.supervisor.recordStateUpdate(minerId: minerId)
+                case .issueDetected(let category, let detail):
+                    let cause = Self.mapIssueCategoryToStallCause(category)
+                    await self.supervisor.recordIssue(minerId: minerId, cause: cause, detail: detail)
                 }
                 await self.applySupervisorSnapshot(for: minerId)
             }
@@ -1138,6 +1141,12 @@ public final class MinerManager {
                 guard let self = self,
                       let miner = self.getMiner(id: minerId) else { return }
 
+                let (category, detail) = MinerEngine.classifyIssue(error)
+                await self.supervisor.recordIssue(
+                    minerId: minerId,
+                    cause: Self.mapIssueCategoryToStallCause(category),
+                    detail: detail
+                )
                 await self.supervisor.recordWorkerStop(minerId: minerId, failed: true)
                 let needsAuth = Self.requiresManualReauth(for: error)
                 if needsAuth {
@@ -1154,6 +1163,17 @@ public final class MinerManager {
                 guard let self = self else { return }
                 self.onLinkWarningEvent?(minerId, gameName)
             }
+        }
+    }
+
+    private static func mapIssueCategoryToStallCause(_ category: MinerEngine.IssueCategory) -> MinerSupervisor.StallCause {
+        switch category {
+        case .networkError: return .networkError
+        case .twitchAPIFailure: return .twitchAPIFailure
+        case .rateLimited: return .rateLimited
+        case .authIssue: return .authIssue
+        case .watchSessionFailure: return .watchSessionFailure
+        case .unknown: return .unknown
         }
     }
 

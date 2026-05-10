@@ -37,6 +37,7 @@ public enum EventFilter: String, CaseIterable, Identifiable, Hashable, Codable {
     case errors
     case accountLink
     case scan
+    case discord
     case system
 
     public var id: String { rawValue }
@@ -50,6 +51,7 @@ public enum EventFilter: String, CaseIterable, Identifiable, Hashable, Codable {
         case .errors: return "Errors"
         case .accountLink: return "Linking"
         case .scan: return "Scan"
+        case .discord: return "Discord"
         case .system: return "System"
         }
     }
@@ -63,6 +65,7 @@ public enum EventFilter: String, CaseIterable, Identifiable, Hashable, Codable {
         case .errors: return "xmark.octagon"
         case .accountLink: return "link.badge.plus"
         case .scan: return "barcode.viewfinder"
+        case .discord: return "checkmark.message.fill"
         case .system: return "gearshape"
         }
     }
@@ -83,6 +86,8 @@ public enum EventFilter: String, CaseIterable, Identifiable, Hashable, Codable {
             return "Games that need account linking before drops can count."
         case .scan:
             return "Campaign checks and why some campaigns were skipped."
+        case .discord:
+            return "DMs sent to linked Discord users for setup, drops, and recovery."
         case .system:
             return "App startup, setup, and other general messages."
         }
