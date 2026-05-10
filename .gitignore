@@ -116,6 +116,9 @@ release-artifacts/
 *.swo
 *~
 
+# Claude Code local session state
+.claude/
+
 # Local configuration
 local.config
 *.local
