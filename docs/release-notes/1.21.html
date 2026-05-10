@@ -3,14 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Fix permanent sidebar behavior - Release Notes</title>
+  <title>SwiftMiner 1.21 - Release Notes</title>
   <style>
     :root { color-scheme: light dark; }
     body {
       margin: 0;
       padding: 32px 20px 48px;
       font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #f4f6f8;
+      background:
+        radial-gradient(circle at top left, rgba(17, 124, 182, 0.18), transparent 32rem),
+        linear-gradient(135deg, #f7fbff 0%, #f4f7fb 46%, #f7f2ff 100%);
       color: #0f1720;
     }
     main {
@@ -20,29 +22,140 @@
       border-radius: 22px;
       background: rgba(255, 255, 255, 0.86);
       box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
+      border: 1px solid rgba(82, 96, 109, 0.12);
     }
     h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
-    .meta { margin: 0 0 24px; color: #52606d; font-size: 14px; }
+    .meta { margin: 0 0 10px; color: #52606d; font-size: 14px; }
+    .intro { margin: 0 0 24px; color: #384454; }
     p { margin: 0 0 16px; }
+    section {
+      margin: 18px 0 0;
+      padding: 18px 18px 14px;
+      border: 1px solid rgba(82, 96, 109, 0.18);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.42);
+      border-left: 5px solid var(--accent, #0a67a3);
+    }
+    section.priority { --accent: #0a7cbb; }
+    section.artwork { --accent: #b64b9b; }
+    section.search { --accent: #527400; }
+    section.accounts { --accent: #1c8c73; }
+    section.history { --accent: #b76710; }
+    section.updates { --accent: #5f5ac8; }
+    section.status { --accent: #0b7894; }
+    section.reliability { --accent: #b03060; }
+    h2 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 4px;
+      color: var(--accent, #0a67a3);
+      font-size: 18px;
+    }
+    .badge {
+      display: inline-grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--accent, #0a67a3) 15%, transparent);
+      font-size: 16px;
+    }
+    .summary { margin: 0 0 12px; color: #52606d; font-size: 14px; }
+    ul { margin: 0; padding-left: 22px; }
+    li { margin: 0 0 8px; }
+    li:last-child { margin-bottom: 0; }
     a { color: #0a67a3; text-decoration: none; }
     a:hover { text-decoration: underline; }
     @media (prefers-color-scheme: dark) {
-      body { background: #0b1015; color: #edf2f7; }
+      body {
+        background:
+          radial-gradient(circle at top left, rgba(89, 185, 255, 0.16), transparent 32rem),
+          linear-gradient(135deg, #081019 0%, #101520 52%, #171427 100%);
+        color: #edf2f7;
+      }
       main {
         background: rgba(15, 23, 32, 0.88);
         box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+        border-color: rgba(159, 176, 194, 0.14);
       }
       .meta { color: #9fb0c2; }
+      .intro { color: #c8d3df; }
+      section {
+        border-color: rgba(159, 176, 194, 0.18);
+        background: rgba(255, 255, 255, 0.04);
+      }
+      .summary { color: #9fb0c2; }
       a { color: #73c3ff; }
     }
   </style>
 </head>
 <body>
   <main>
-    <h1>Fix permanent sidebar behavior</h1>
-    <p class="meta">Version 1.21</p>
-    <p>Fix permanent sidebar behavior</p>
-    <p><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/566648efd5e03be8fee150b3f0610973615d231e">566648e</a></p>
+    <h1>SwiftMiner 1.21</h1>
+    <p class="meta">Version 1.21 · Build 2026050811</p>
+    <p class="intro">A reliability-focused update. Miners that used to get stuck on subscription-gated drops, bad campaign selections, or stalled workers now recover on their own, and the Drops view now shows which miners are actively mining or already claimed without overloading that screen with per-miner progress detail.</p>
+
+    <section class="reliability">
+      <h2><span class="badge" aria-hidden="true">🛡️</span> Mining Reliability</h2>
+      <p class="summary">Miners no longer get stuck on campaigns they cannot complete by watching.</p>
+      <ul>
+        <li>Detects subscription-gated drops (those requiring a paid Twitch sub) and skips them automatically, so miners no longer hang on "checking with Twitch" when watching alone cannot earn the reward. Skipped drops are logged to the Activity Log.</li>
+        <li>Adds a Stall recovery setting, on by default, that restarts an individual miner after a long progress stall or recoverable network error.</li>
+        <li>Adds a dedicated miner supervisor that tracks worker liveness, detects when one miner goes quiet while others are still receiving Twitch activity, and recovers that miner without requiring an app restart.</li>
+        <li>Adds Miner Unresponsive, Recovering, and No Recent Activity states so stalled miners are clearly distinguished from a legitimate no-campaign situation.</li>
+        <li>Detects false-positive account connections and cools campaigns down for 1 hour when they never produce an active drop session, so miners stop cycling on bad selections.</li>
+        <li>Narrows spade beacon URL extraction to <code>spade_url</code> only, matching the upstream TwitchDropsMiner fix — previously a stray <code>beacon_url</code> match could silently route watch events to the wrong endpoint.</li>
+      </ul>
+    </section>
+
+    <section class="accounts">
+      <h2><span class="badge" aria-hidden="true">👤</span> Miner Accounts &amp; Pending</h2>
+      <p class="summary">A single notification-style section surfaces everything that needs your attention.</p>
+      <ul>
+        <li>Adds a Pending section under each miner that consolidates account-link reminders and subscription-required campaigns into one list with dismiss and remind-me actions per item.</li>
+        <li>Adds an orange dot to each miner row, and broadens the Miners sidebar badge, when a miner has non-muted pending items — covering both link issues and sub-gated campaigns.</li>
+        <li>Adds right-click nickname editing from miner rows and activity cards, and uses miner nicknames everywhere a miner is shown.</li>
+        <li>Adds SwiftBot integration so new miners can be created and managed through the bot workflow without manual setup in SwiftMiner.</li>
+        <li>Shows a notification when a previously blocked prioritised game becomes linked and ready to mine.</li>
+      </ul>
+    </section>
+
+    <section class="updates">
+      <h2><span class="badge" aria-hidden="true">🔄</span> App &amp; Updates</h2>
+      <p class="summary">Update channels, in-app release notes, and a quicker route to filing issues.</p>
+      <ul>
+        <li>Adds Software Updates controls for choosing the stable or beta Sparkle feed, with prompts for available updates and unattended installs where macOS permits.</li>
+        <li>Adds a What's New window in the app menu and derives release-note links from the configured update channel.</li>
+        <li>Adds Help &gt; Raise Issue on GitHub…, prefilled with version and macOS details.</li>
+        <li>Restricts Start minimised to login launches, only showing the option once Start at login is enabled, and removes the unused View menu.</li>
+        <li>Tidies the SwiftBot integrations settings by hiding pairing once connected, removing redundant advanced controls, and adding a repair action beside connection testing.</li>
+        <li>Updates the stable Sparkle appcast for SwiftMiner 1.21 build 2026050811.</li>
+      </ul>
+    </section>
+
+    <section class="status">
+      <h2><span class="badge" aria-hidden="true">⛏️</span> Mining Status</h2>
+      <p class="summary">Clearer status while multiple miners are running.</p>
+      <ul>
+        <li>Summarises how many miners are currently mining instead of naming only the first active campaign, and refreshes activity cards periodically while the app stays open.</li>
+        <li>Shows claiming rewards in activity cards instead of leaving completed drops labelled ready to claim, and uses a green check in the menu bar when all miners are running.</li>
+        <li>Updates grouped Drops cards to show which miners are mining or claimed for each campaign instead of using a combined progress bar at the game level.</li>
+        <li>Removes the now-redundant Claim All Drops command — ready rewards are claimed automatically.</li>
+      </ul>
+    </section>
+
+    <section class="priority">
+      <h2><span class="badge" aria-hidden="true">✨</span> Polish</h2>
+      <p class="summary">Plus a round of UI polish across priorities, search, artwork, and drop history.</p>
+      <ul>
+        <li>Drag prioritised cards left or right to change mining priority, with smoother spacing and spring settling. Deduplicates entries when the same game appears under multiple Twitch listings (e.g. Call of Duty), and adds context-menu actions for removing games and managing custom artwork.</li>
+        <li>Custom artwork now caches in Application Support, matches by game id or name, and shows up across Drops decks, grouped rows, campaign details, and fallback reward art.</li>
+        <li>Twitch category search debounces while you type, cancels stale requests, and keeps the loading state steady so the dropdown does not flash false "no results".</li>
+        <li>Improves completed drop history when Twitch no longer exposes an expired campaign, and uses cached data only as a fallback so fresh Twitch data still wins.</li>
+        <li>Adds in-app TipKit hints (with a toggle to disable) and tidies the Advanced settings layout, including a maintenance action to clear cached drop history.</li>
+      </ul>
+    </section>
   </main>
 </body>
 </html>
