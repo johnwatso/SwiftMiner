@@ -62,8 +62,8 @@ targets:
         SWIFT_STRICT_CONCURRENCY: complete
         PRODUCT_BUNDLE_IDENTIFIER: com.swiftminer.app
         MACOSX_DEPLOYMENT_TARGET: "26.0"
-        MARKETING_VERSION: "1.22"
-        CURRENT_PROJECT_VERSION: "2026051110"
+        MARKETING_VERSION: "1.23"
+        CURRENT_PROJECT_VERSION: "2026051116"
         INFOPLIST_KEY_CFBundleDisplayName: SwiftMiner
         INFOPLIST_KEY_CFBundleName: SwiftMiner
         CODE_SIGN_STYLE: Automatic
@@ -75,7 +75,7 @@ targets:
           - "$(inherited)"
           - "@executable_path/../Frameworks"
         SPARKLE_FEED_URL: https://johnwatso.github.io/SwiftMiner/appcast.xml
-        SPARKLE_PUBLIC_ED_KEY: "OTycmeGRCsewFd9QUCV93CiC40oE+iiewSfWMptLeLI="
+        SPARKLE_PUBLIC_ED_KEY: "4Aht0ilQOmLxGQMnSwGNJvtZ0VKH7lZoV4Raag6eEN8="
 
   SwiftMinerService:
     type: library.static

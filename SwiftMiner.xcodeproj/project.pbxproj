@@ -1027,7 +1027,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026051110;
+				CURRENT_PROJECT_VERSION = 2026051116;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;
@@ -1038,7 +1038,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 1.22;
+				MARKETING_VERSION = 1.23;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -1047,7 +1047,7 @@
 				PRODUCT_NAME = SwiftMiner;
 				SDKROOT = macosx;
 				SPARKLE_FEED_URL = "https://johnwatso.github.io/SwiftMiner/appcast.xml";
-				SPARKLE_PUBLIC_ED_KEY = "OTycmeGRCsewFd9QUCV93CiC40oE+iiewSfWMptLeLI=";
+				SPARKLE_PUBLIC_ED_KEY = "4Aht0ilQOmLxGQMnSwGNJvtZ0VKH7lZoV4Raag6eEN8=";
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.0;
 			};
@@ -1187,7 +1187,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026051110;
+				CURRENT_PROJECT_VERSION = 2026051116;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;
@@ -1198,7 +1198,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 1.22;
+				MARKETING_VERSION = 1.23;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -1207,7 +1207,7 @@
 				PRODUCT_NAME = SwiftMiner;
 				SDKROOT = macosx;
 				SPARKLE_FEED_URL = "https://johnwatso.github.io/SwiftMiner/appcast.xml";
-				SPARKLE_PUBLIC_ED_KEY = "OTycmeGRCsewFd9QUCV93CiC40oE+iiewSfWMptLeLI=";
+				SPARKLE_PUBLIC_ED_KEY = "4Aht0ilQOmLxGQMnSwGNJvtZ0VKH7lZoV4Raag6eEN8=";
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.0;
 			};
