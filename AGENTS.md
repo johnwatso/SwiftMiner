@@ -105,6 +105,22 @@ Before reporting related work complete, verify:
 
 Before committing changes that touch Sparkle, appcast, release notes, build settings, Info.plist generation, signing/notarization settings, or version metadata, test that Sparkle update configuration still works in the built app. At minimum, build the app and verify the Sparkle Info.plist keys and appcast metadata above before committing.
 
+### Appcast EdDSA signing
+
+Releases are produced by ShipHook, which code-signs/notarizes under a different Apple ID and **does not** have the Sparkle EdDSA private key. As a result, ShipHook-pushed appcast commits (authored by Max Hewett, message prefix `chore(shiphook): update appcast for SwiftMiner ...`) leave the `<enclosure>` with **no** `sparkle:edSignature` attribute, and Sparkle on the client correctly rejects those updates as improperly signed.
+
+After every ShipHook release, the appcast must be re-signed locally before installs can update:
+
+1. Download the released zip from the GitHub Release matching the appcast `enclosure url` and `length`.
+2. Run Sparkle's `sign_update <zip>`. The binary is at `~/Library/Developer/Xcode/DerivedData/SwiftMiner-*/SourcePackages/artifacts/sparkle/Sparkle/bin/sign_update` after any build of the SparklePublisher scheme. Approve the keychain access prompt.
+3. Insert the returned `sparkle:edSignature="…"` attribute into the `<enclosure>` in `docs/appcast.xml` (and `docs/beta/appcast.xml` for beta releases).
+4. Verify with `sign_update --verify <zip> "<signature>"` (exit 0 = good).
+5. Commit and push so GitHub Pages serves the signed feed.
+
+To confirm the keychain's private key matches the embedded public key, run `<sparkle-bin>/generate_keys -p`; the printed value must equal `SPARKLE_PUBLIC_ED_KEY` in `project.yml`. If they don't match, the resulting signature will be rejected by every installed copy of the app — do not push such a "signed" appcast and treat it as a key-rotation incident instead.
+
+`Tools/SparklePublisher/main.swift` has an `ensureEdSignaturePresent` check, but ShipHook bypasses `scripts/publish_sparkle_release.sh` entirely, so that check does not run for real releases.
+
 ## Project Generation
 
 `project.yml` is the source config for generated Xcode project settings. If a package, dependency, version, build setting, or Sparkle Info.plist setting changes, keep `project.yml` and `SwiftMiner.xcodeproj/project.pbxproj` aligned.
