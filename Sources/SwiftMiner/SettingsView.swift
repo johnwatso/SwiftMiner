@@ -707,6 +707,7 @@ private struct IntegrationsSettingsView: View {
         case .connected: return "Connected to SwiftBot"
         case .notConfigured: return "Discord Integration"
         case .disconnected: return "Not Connected"
+        case .unpaired: return "Pairing Required"
         }
     }
 
@@ -715,6 +716,7 @@ private struct IntegrationsSettingsView: View {
         case .connected: return "Messages will be delivered to Discord"
         case .notConfigured: return "Enable Discord integration to get started"
         case .disconnected: return "SwiftBot is not responding"
+        case .unpaired: return "SwiftBot is running but has not been paired yet"
         }
     }
 
@@ -723,6 +725,7 @@ private struct IntegrationsSettingsView: View {
         case .connected: return "checkmark.circle.fill"
         case .notConfigured: return "app.badge.checkmark"
         case .disconnected: return "exclamationmark.triangle.fill"
+        case .unpaired: return "link.badge.plus"
         }
     }
 
@@ -731,6 +734,7 @@ private struct IntegrationsSettingsView: View {
         case .connected: return .green
         case .notConfigured: return .secondary
         case .disconnected: return .orange
+        case .unpaired: return .accentColor
         }
     }
 
@@ -795,6 +799,8 @@ private struct IntegrationsSettingsView: View {
             return "SwiftBot is not listening at \(endpoint)."
         case .notConfigured:
             return "No valid localhost endpoint is configured."
+        case .unpaired:
+            return "SwiftBot is reachable but not paired — paste the pairing bundle into SwiftBot."
         }
     }
 
