@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>SwiftMiner 1.22 - Release Notes</title>
+  <title>Add general help documentation - Release Notes</title>
   <style>
     :root { color-scheme: light dark; }
     body {
@@ -23,8 +23,9 @@
     }
     h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
     .meta { margin: 0 0 24px; color: #52606d; font-size: 14px; }
-    ul { margin: 0 0 16px; padding-left: 22px; }
-    li { margin: 0 0 8px; }
+    p { margin: 0 0 16px; }
+    a { color: #0a67a3; text-decoration: none; }
+    a:hover { text-decoration: underline; }
     @media (prefers-color-scheme: dark) {
       body { background: #0b1015; color: #edf2f7; }
       main {
@@ -32,21 +33,17 @@
         box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
       }
       .meta { color: #9fb0c2; }
+      a { color: #73c3ff; }
     }
   </style>
 </head>
 <body>
   <main>
-    <h1>SwiftMiner 1.22</h1>
-    <p class="meta">Version 1.22 · Build 2026051110</p>
-    <ul>
-      <li>Raises the stall-recovery liveness threshold from 6 to 15 minutes so the supervisor no longer flags healthy miners during normal idle periods between campaign rescans.</li>
-      <li>Adds a distinct yellow rotate icon and readable summaries for stall-recovery activity in the Activity Log, routed under the Warnings filter so recoveries are easy to spot and review.</li>
-      <li>Classifies the underlying cause of each stall recovery — network connectivity, Twitch API failure, rate limiting, authentication, or watch-session failure — and surfaces it in the Activity Log entry so the trigger is obvious at a glance.</li>
-      <li>Adds DEBUG-only SwiftBot DM previews for individual messages and the full ordered DM sequence without mutating production user state.</li>
-      <li>Changes the Discord admin Preview DM action to send the full ordered SwiftBot DM flow in DEBUG builds only.</li>
-      <li>Updates the stable Sparkle appcast and release-note links for SwiftMiner 1.22 build 2026051110.</li>
-    </ul>
+    <h1>Add general help documentation</h1>
+    <p class="meta">Version 1.22</p>
+    <p>Add general help documentation</p>
+<p>Add a new comprehensive user guide at docs/help/general-help.md. The document covers SwiftMiner overview, installation and account setup, UI sections (Overview, Miners, Drops, Activity Log), settings (General, Accounts, Mining, Integrations, Advanced), menu bar mode and commands, notifications, troubleshooting, best practices, important notes, and links to related documentation (Discord Help and architecture docs).</p>
+    <p><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/4ee0f7af030fb9662a261abe091c7cde35f01dfe">4ee0f7a</a></p>
   </main>
 </body>
 </html>
