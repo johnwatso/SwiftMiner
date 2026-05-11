@@ -8,7 +8,7 @@
             <sparkle:version>2026051110</sparkle:version>
             <sparkle:shortVersionString>1.22</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://github.com/johnwatso/SwiftMiner/releases/download/v1.22/SwiftMiner-1.22.zip" length="8967664" type="application/octet-stream"/>
+            <enclosure url="https://github.com/johnwatso/SwiftMiner/releases/download/v1.22/SwiftMiner-1.22.zip" sparkle:edSignature="nuZUK/CgswC0wUASYVcR7IEByPbHnmaZEZ9XuRhSTWNkNZo1cREo1GPwo00QaeSVBGhM5mNPrEzggCW7y0qZAA==" length="8967664" type="application/octet-stream"/>
         </item>
     </channel>
 </rss>
