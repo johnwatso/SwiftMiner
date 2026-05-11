@@ -58,16 +58,25 @@ public actor RestSwiftBotConnectionService: SwiftBotConnectionService {
         request.timeoutInterval = 5.0
         
         do {
-            let (_, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await URLSession.shared.data(for: request)
             if let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) {
-                self.state = .connected
+                // SwiftBot 1.11+ reports a `paired` flag in /health. Treat a
+                // present-and-false flag as `.unpaired` so the UI prompts the
+                // user to paste the pairing bundle. Missing/unparseable falls
+                // back to `.connected` for older SwiftBot builds.
+                if let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let paired = body["paired"] as? Bool {
+                    self.state = paired ? .connected : .unpaired
+                } else {
+                    self.state = .connected
+                }
             } else {
                 self.state = .disconnected
             }
         } catch {
             self.state = .disconnected
         }
-        
+
         return self.state
     }
 

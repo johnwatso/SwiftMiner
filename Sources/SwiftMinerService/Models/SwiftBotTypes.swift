@@ -6,6 +6,7 @@ public enum SwiftBotConnectionState: String, Codable, Equatable, Sendable {
     case connected
     case notConfigured = "not_configured"
     case disconnected
+    case unpaired
 }
 
 // MARK: - Discord User
