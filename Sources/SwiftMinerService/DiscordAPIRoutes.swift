@@ -88,6 +88,7 @@ public actor DiscordAPIRoutes {
     /// Notified after a successful Twitch auth so the host app can register the new
     /// account with MinerManager and refresh the UI.
     public var onAccountActivated: (@Sendable (Account, String) async -> Void)?
+    public var onMinerControl: (@Sendable (String, MinerControlAction) async -> MinerControlResponse)?
 
     // In-memory activation session store (ephemeral; DB retains audit rows)
     private var activationSessions: [String: ActivationSession] = [:]
@@ -109,6 +110,10 @@ public actor DiscordAPIRoutes {
 
     public func setOnAccountActivated(_ handler: @escaping @Sendable (Account, String) async -> Void) {
         self.onAccountActivated = handler
+    }
+
+    public func setOnMinerControl(_ handler: @escaping @Sendable (String, MinerControlAction) async -> MinerControlResponse) {
+        self.onMinerControl = handler
     }
 
     public func configure(_ router: HTTPRouter) async {
@@ -154,6 +159,10 @@ public actor DiscordAPIRoutes {
         // Campaign action endpoint
         await router.register(HTTPRoute(method: "POST", pattern: "/v1/users/:discordUserId/campaigns/:campaignId/:action") { request, params in
             await routes.handleCampaignAction(request: request, params: params)
+        })
+
+        await router.register(HTTPRoute(method: "POST", pattern: "/v1/users/:discordUserId/miner/:action") { request, params in
+            await routes.handleMinerControl(request: request, params: params)
         })
     }
 
@@ -438,6 +447,26 @@ public actor DiscordAPIRoutes {
         }
     }
 
+    private func handleMinerControl(request: HTTPRequest, params: [String: String]) async -> HTTPResponse {
+        guard let discordUserId = params["discordUserId"],
+              Self.isValidDiscordId(discordUserId),
+              let actionValue = params["action"],
+              let action = MinerControlAction(rawValue: actionValue) else {
+            return .error(code: "invalid_action", message: "Action must be status, pause, resume, or refresh.", statusCode: 400)
+        }
+
+        guard await userExists(discordUserId: discordUserId) else {
+            return .error(code: "user_not_found", message: "User not found. Register first.", statusCode: 404)
+        }
+
+        guard let onMinerControl else {
+            return .error(code: "control_unavailable", message: "Miner controls are not available.", statusCode: 503)
+        }
+
+        let response = await onMinerControl(discordUserId, action)
+        return HTTPResponse.json(response, statusCode: response.ok ? 200 : 409)
+    }
+
     // MARK: - DB Helpers
 
     private func persistCampaignDecision(discordUserId: String, campaignId: String, decision: String, scope: String) async throws {
@@ -640,5 +669,28 @@ private struct DMStateResponse: Codable {
     enum CodingKeys: String, CodingKey {
         case discordUserId = "discord_user_id"
         case dmState = "dm_state"
+    }
+}
+
+public enum MinerControlAction: String, Codable, Sendable {
+    case status
+    case pause
+    case resume
+    case refresh
+}
+
+public struct MinerControlResponse: Codable, Sendable {
+    public let ok: Bool
+    public let action: String
+    public let state: String
+    public let twitchUsername: String?
+    public let message: String
+
+    public init(ok: Bool, action: String, state: String, twitchUsername: String?, message: String) {
+        self.ok = ok
+        self.action = action
+        self.state = state
+        self.twitchUsername = twitchUsername
+        self.message = message
     }
 }

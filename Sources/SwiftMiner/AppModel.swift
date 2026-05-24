@@ -94,7 +94,7 @@ public final class AppModel {
             manager.updatePriorityGames(Settings.shared.priorityGames)
 
             // Sync notification preference
-            await manager.updateNotificationPreference(enabled: Settings.shared.showClaimNotifications)
+            await manager.updateNotificationPreference(enabled: Settings.shared.showClaimNotifications && Settings.shared.allowsOperatorNotifications())
             await manager.updateAntiStallRecovery(enabled: Settings.shared.antiStallRecoveryEnabled)
 
             // Keep app-level state (auth + badge) in sync whenever miners or
@@ -113,7 +113,7 @@ public final class AppModel {
         await engine.updateMiningPreferences(
             priorityGames: Settings.shared.priorityGames,
             excludedGames: Settings.shared.excludedGames,
-            showClaimNotifications: Settings.shared.showClaimNotifications,
+            showClaimNotifications: Settings.shared.showClaimNotifications && Settings.shared.allowsOperatorNotifications(),
             avoidDuplicateStreams: Settings.shared.avoidDuplicateStreams,
             prioritiseFollowedStreamers: Settings.shared.prioritiseFollowedStreamers
         )

@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import SwiftMinerCore
 import SwiftMinerService
@@ -9,6 +10,7 @@ struct AdminView: View {
     @State private var selectedMinerId: String?
     @State private var linkIntent: LinkIntent?
     @State private var discordNamesById: [String: String] = [:]
+    @State private var discordUsersById: [String: SwiftBotDiscordUser] = [:]
     @State private var dmSummariesById: [String: DMLogStore.Summary] = [:]
 
     struct LinkIntent: Identifiable {
@@ -48,8 +50,8 @@ struct AdminView: View {
 
     private var tableHeader: some View {
         HStack(spacing: 12) {
-            columnLabel("Miner (Twitch)").frame(maxWidth: .infinity, alignment: .leading)
             columnLabel("Discord").frame(maxWidth: .infinity, alignment: .leading)
+            columnLabel("Miner (Twitch)").frame(maxWidth: .infinity, alignment: .leading)
             columnLabel("Status").frame(width: 140, alignment: .leading)
             columnLabel("Last DM").frame(width: 110, alignment: .leading)
             columnLabel("DM History").frame(width: 90, alignment: .leading)
@@ -77,6 +79,7 @@ struct AdminView: View {
                     MinerRow(
                         miner: miner,
                         isSelected: selectedMinerId == miner.id,
+                        discordUser: miner.ownerDiscordId.flatMap { discordUsersById[$0] },
                         discordName: miner.ownerDiscordId.flatMap { discordNamesById[$0] },
                         summary: miner.ownerDiscordId.flatMap { dmSummariesById[$0] },
                         onTap: { toggleSelection(miner.id) },
@@ -90,6 +93,7 @@ struct AdminView: View {
                     if selectedMinerId == miner.id {
                         DetailPanel(
                             miner: miner,
+                            discordUser: miner.ownerDiscordId.flatMap { discordUsersById[$0] },
                             discordName: miner.ownerDiscordId.flatMap { discordNamesById[$0] },
                             onRelink: {
                                 let isRelink = miner.ownerDiscordId != nil
@@ -134,6 +138,7 @@ struct AdminView: View {
     private func refreshAll() async {
         await navigation.refreshDiscordDisplayNames()
         discordNamesById = navigation.discordDisplayNamesById
+        discordUsersById = navigation.discordUsersById
         let ids = miners.compactMap(\.ownerDiscordId)
         dmSummariesById = await navigation.dmLogStore.summaries(forDiscordIds: ids)
     }
@@ -190,6 +195,7 @@ private enum LinkStatus {
 private struct MinerRow: View {
     let miner: MinerManager.ManagedMiner
     let isSelected: Bool
+    let discordUser: SwiftBotDiscordUser?
     let discordName: String?
     let summary: DMLogStore.Summary?
     let onTap: () -> Void
@@ -208,6 +214,15 @@ private struct MinerRow: View {
         let status = LinkStatus.resolve(miner)
 
         HStack(spacing: 12) {
+            // Discord
+            DiscordPersonView(
+                name: discordDisplayName,
+                username: discordUsername,
+                avatarURL: discordUser?.avatarURL,
+                isLinked: miner.ownerDiscordId != nil
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
+
             // Miner (Twitch)
             VStack(alignment: .leading, spacing: 1) {
                 Text(miner.displayName)
@@ -215,24 +230,6 @@ private struct MinerRow: View {
                 Text(miner.username)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            // Discord
-            VStack(alignment: .leading, spacing: 1) {
-                if let id = miner.ownerDiscordId {
-                    Text(discordName ?? "—")
-                        .font(.system(size: 13))
-                    Text(id)
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                } else {
-                    Text("Not linked")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -308,6 +305,19 @@ private struct MinerRow: View {
             Text("The Discord account will no longer be linked to this Twitch account.")
         }
         .task(id: miner.ownerDiscordId) { await refreshReplayableState() }
+    }
+
+    private var discordDisplayName: String {
+        guard miner.ownerDiscordId != nil else { return "Not linked" }
+        return discordName?.nilIfBlank
+            ?? discordUser?.displayName.nilIfBlank
+            ?? discordUser?.username?.nilIfBlank
+            ?? "Discord user"
+    }
+
+    private var discordUsername: String? {
+        guard miner.ownerDiscordId != nil else { return nil }
+        return discordUser?.username?.nilIfBlank
     }
 
     @ViewBuilder
@@ -420,10 +430,87 @@ private struct MinerRow: View {
     }
 }
 
+private struct DiscordPersonView: View {
+    let name: String
+    let username: String?
+    let avatarURL: URL?
+    let isLinked: Bool
+
+    var body: some View {
+        HStack(spacing: 9) {
+            avatar
+            VStack(alignment: .leading, spacing: 1) {
+                Text(name)
+                    .font(.system(size: 13, weight: isLinked ? .medium : .regular))
+                    .foregroundStyle(isLinked ? .primary : .secondary)
+                    .lineLimit(1)
+                if let username, isLinked, username != name {
+                    Text(username)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var avatar: some View {
+        if let avatarURL {
+            AsyncImage(url: avatarURL) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                default:
+                    fallbackAvatar
+                }
+            }
+            .frame(width: 24, height: 24)
+            .clipShape(Circle())
+        } else {
+            fallbackAvatar
+                .frame(width: 24, height: 24)
+        }
+    }
+
+    private var fallbackAvatar: some View {
+        DiscordLogoFallback()
+    }
+}
+
+private struct DiscordLogoFallback: View {
+    private static let officialMark = Bundle.main
+        .url(forResource: "DiscordMarkOfficial", withExtension: "svg")
+        .flatMap(NSImage.init(contentsOf:))
+
+    private let discordBlurple = Color(red: 0.345, green: 0.396, blue: 0.949)
+
+    var body: some View {
+        Circle()
+            .fill(discordBlurple)
+            .overlay {
+                if let officialMark = Self.officialMark {
+                    Image(nsImage: officialMark)
+                        .resizable()
+                        .scaledToFit()
+                        .padding(5)
+                } else {
+                    Image(systemName: "message.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+            }
+            .accessibilityLabel("Discord")
+    }
+}
+
 // MARK: - Inline detail panel
 
 private struct DetailPanel: View {
     let miner: MinerManager.ManagedMiner
+    let discordUser: SwiftBotDiscordUser?
     let discordName: String?
     let onRelink: () -> Void
     let onResendLast: () -> Void
@@ -591,15 +678,22 @@ private struct DetailPanel: View {
         VStack(alignment: .leading, spacing: 8) {
             sectionHeader("Info")
             infoRow("Twitch", miner.username)
-            if let id = miner.ownerDiscordId {
-                infoRow("Discord", discordName ?? id)
-                infoRow("Owner Discord ID", id, monospaced: true, copyable: true)
+            if miner.ownerDiscordId != nil {
+                infoRow("Discord", discordDisplayName)
+                infoRow("Discord username", discordUser?.username?.nilIfBlank ?? "Unavailable")
             } else {
                 Text("Not linked to a Discord account.")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    private var discordDisplayName: String {
+        discordName?.nilIfBlank
+            ?? discordUser?.displayName.nilIfBlank
+            ?? discordUser?.username?.nilIfBlank
+            ?? "Discord user"
     }
 
     private func sectionHeader(_ text: String, color: Color = .primary) -> some View {
@@ -938,7 +1032,9 @@ private struct LinkMinerSheet: View {
     }
 
     private func displayName(forDiscordId id: String) -> String {
-        discordUsers.first(where: { $0.id == id })?.displayName ?? id
+        discordUsers.first(where: { $0.id == id })?.displayName.nilIfBlank
+            ?? discordUsers.first(where: { $0.id == id })?.username?.nilIfBlank
+            ?? "Discord user"
     }
 }
 
@@ -960,6 +1056,13 @@ private func absoluteTimeString(for date: Date) -> String {
     formatter.dateStyle = .none
     formatter.timeStyle = .short
     return formatter.string(from: date)
+}
+
+private extension String {
+    var nilIfBlank: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
 }
 
 #Preview {

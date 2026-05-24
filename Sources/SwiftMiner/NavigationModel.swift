@@ -11,6 +11,7 @@ public final class NavigationModel {
     // MARK: - Navigation State
     public enum SidebarItem: Hashable, Identifiable {
         case overview
+        case operations
         case miners
         case drops
         case events
@@ -19,6 +20,7 @@ public final class NavigationModel {
         public var id: String {
             switch self {
             case .overview: return "overview"
+            case .operations: return "operations"
             case .miners: return "miners"
             case .drops: return "drops"
             case .events: return "events"
@@ -29,6 +31,7 @@ public final class NavigationModel {
         public var displayName: String {
             switch self {
             case .overview: return "Overview"
+            case .operations: return "Operations"
             case .miners: return "miners"
             case .drops: return "Drops"
             case .events: return "Activity Log"
@@ -145,6 +148,12 @@ public final class NavigationModel {
                 priorityGames: priorityGames
             )
         }
+        await routes.setOnMinerControl { [weak self] discordUserId, action in
+            guard let self else {
+                return MinerControlResponse(ok: false, action: action.rawValue, state: "unavailable", twitchUsername: nil, message: "SwiftMiner is not available.")
+            }
+            return await self.handleDiscordMinerControl(discordUserId: discordUserId, action: action)
+        }
         let router = HTTPRouter()
         await routes.configure(router)
         let server = HTTPAPIServer(port: port, apiKey: apiKey, router: router)
@@ -205,6 +214,77 @@ public final class NavigationModel {
         }
     }
 
+    public func handleDiscordMinerControl(discordUserId: String, action: MinerControlAction) async -> MinerControlResponse {
+        guard let miner = minerManager.miners.first(where: { $0.ownerDiscordId == discordUserId }) else {
+            return MinerControlResponse(
+                ok: false,
+                action: action.rawValue,
+                state: "not_linked",
+                twitchUsername: nil,
+                message: "No linked Twitch account was found for this Discord user."
+            )
+        }
+
+        switch action {
+        case .status:
+            return MinerControlResponse(
+                ok: true,
+                action: action.rawValue,
+                state: miner.status.rawValue,
+                twitchUsername: miner.username,
+                message: miner.statusLabel
+            )
+        case .pause:
+            await minerManager.stopMiner(minerId: miner.id)
+            return MinerControlResponse(
+                ok: true,
+                action: action.rawValue,
+                state: "PAUSED",
+                twitchUsername: miner.username,
+                message: "Miner paused for \(miner.displayName)."
+            )
+        case .resume:
+            do {
+                let settings = Settings.shared
+                try await minerManager.startMiner(
+                    minerId: miner.id,
+                    priorityGames: settings.priorityGames,
+                    excludedGames: settings.excludedGames,
+                    strategy: settings.miningStrategy,
+                    enableBadgesEmotes: settings.enableBadgesEmotes,
+                    showClaimNotifications: settings.showClaimNotifications && settings.allowsOperatorNotifications(),
+                    avoidDuplicateStreams: settings.avoidDuplicateStreams,
+                    antiStallRecoveryEnabled: settings.antiStallRecoveryEnabled,
+                    prioritiseFollowedStreamers: settings.prioritiseFollowedStreamers
+                )
+                return MinerControlResponse(
+                    ok: true,
+                    action: action.rawValue,
+                    state: "RESUMING",
+                    twitchUsername: miner.username,
+                    message: "Miner resume requested for \(miner.displayName)."
+                )
+            } catch {
+                return MinerControlResponse(
+                    ok: false,
+                    action: action.rawValue,
+                    state: "ERROR",
+                    twitchUsername: miner.username,
+                    message: error.localizedDescription
+                )
+            }
+        case .refresh:
+            await minerManager.forceRefreshMiner(minerId: miner.id)
+            return MinerControlResponse(
+                ok: true,
+                action: action.rawValue,
+                state: miner.status.rawValue,
+                twitchUsername: miner.username,
+                message: "Miner refresh requested for \(miner.displayName)."
+            )
+        }
+    }
+
     private func startSwiftBotStateSync() {
         Task {
             while !Task.isCancelled {
@@ -238,10 +318,12 @@ public final class NavigationModel {
     public let eventOutboxService: EventOutboxService
     public let eventEmitter: EventEmitterService
     public let dmLogStore: DMLogStore
+    let rewardsLedger = RewardsLedgerStore.shared
     public private(set) var dmEventService: SwiftMinerDMEventService?
     /// Cached Discord display names keyed by Discord user ID. Refreshed from
     /// SwiftBot whenever the connection is healthy or the Discord tab loads.
     public private(set) var discordDisplayNamesById: [String: String] = [:]
+    public private(set) var discordUsersById: [String: SwiftBotDiscordUser] = [:]
     private let sqliteManager: SQLiteManager
     private var httpAPIServer: HTTPAPIServer?
     private var onboardingSetupTask: Task<Void, Never>?
@@ -321,8 +403,13 @@ public final class NavigationModel {
         minerManager.onDropClaimedEvent = { [weak self] minerId, drop, campaignName in
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                guard Settings.shared.dmDropClaimedEnabled else { return }
                 guard let miner = self.minerManager.miners.first(where: { $0.id == minerId }) else { return }
+                let campaign = miner.allCampaigns.first { candidate in
+                    candidate.drops.contains { $0.id == drop.id }
+                }
+                self.rewardsLedger.record(drop: drop, miner: miner, campaign: campaign, campaignName: campaignName)
+                guard Settings.shared.dmDropClaimedEnabled else { return }
+                guard Settings.shared.allowsOperatorNotifications() else { return }
                 let priorityGames = Settings.shared.priorityGames
                 await dmEventService.emitDropClaimed(
                     dropId: drop.id,
@@ -338,6 +425,7 @@ public final class NavigationModel {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 guard Settings.shared.dmConnectionExpiredEnabled else { return }
+                guard Settings.shared.allowsOperatorNotifications() else { return }
                 guard let miner = self.minerManager.miners.first(where: { $0.id == minerId }) else { return }
                 let priorityGames = Settings.shared.priorityGames
                 await dmEventService.emitReauthRequired(
@@ -353,6 +441,7 @@ public final class NavigationModel {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 guard Settings.shared.dmCampaignCompletedEnabled else { return }
+                guard Settings.shared.allowsOperatorNotifications() else { return }
                 guard let miner = self.minerManager.miners.first(where: { $0.id == minerId }) else { return }
                 let priorityGames = Settings.shared.priorityGames
                 await dmEventService.emitCampaignCompleted(
@@ -368,6 +457,7 @@ public final class NavigationModel {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 guard Settings.shared.dmCampaignDetectedEnabled else { return }
+                guard Settings.shared.allowsOperatorNotifications() else { return }
                 guard let miner = self.minerManager.miners.first(where: { $0.id == minerId }) else { return }
                 let priorityGames = Settings.shared.priorityGames
                 guard priorityGames.contains(where: { $0.caseInsensitiveCompare(campaign.game.name) == .orderedSame }) else { return }
@@ -385,6 +475,7 @@ public final class NavigationModel {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 guard Settings.shared.dmLinkRequiredEnabled else { return }
+                guard Settings.shared.allowsOperatorNotifications() else { return }
                 guard let miner = self.minerManager.miners.first(where: { $0.id == minerId }) else { return }
                 let priorityGames = Settings.shared.priorityGames
                 await dmEventService.emitPrioritisedGameNeedsLinking(
@@ -399,6 +490,7 @@ public final class NavigationModel {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 guard Settings.shared.dmAccountActionRequiredEnabled else { return }
+                guard Settings.shared.allowsOperatorNotifications() else { return }
                 guard let miner = self.minerManager.miners.first(where: { $0.id == minerId }) else { return }
                 let priorityGames = Settings.shared.priorityGames
                 await dmEventService.emitAccountActionRequired(
@@ -415,6 +507,7 @@ public final class NavigationModel {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 guard Settings.shared.dmWelcomeBackEnabled else { return }
+                guard Settings.shared.allowsOperatorNotifications() else { return }
                 guard let miner = self.minerManager.miners.first(where: { $0.id == minerId }) else { return }
                 let priorityGames = Settings.shared.priorityGames
                 await dmEventService.emitWelcomeBack(
@@ -627,10 +720,13 @@ public final class NavigationModel {
         let users = await swiftBotConnectionService.fetchDiscordUsers()
         guard !users.isEmpty else { return }
         var map: [String: String] = [:]
+        var usersMap: [String: SwiftBotDiscordUser] = [:]
         for user in users {
             map[user.id] = user.displayName
+            usersMap[user.id] = user
         }
         discordDisplayNamesById = map
+        discordUsersById = usersMap
     }
 
     /// Clear all events.

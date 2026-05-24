@@ -2,6 +2,8 @@ import SwiftUI
 import SwiftMinerCore
 import SwiftMinerService
 import TipKit
+import AppKit
+import UniformTypeIdentifiers
 
 /// macOS Settings window using a Safari-style TabView with a top toolbar.
 struct SettingsView: View {
@@ -169,8 +171,28 @@ private struct GeneralSettingsView: View {
             Section {
                 Toggle("Show notifications when drops are claimed", isOn: $settings.showClaimNotifications)
                     .onChange(of: settings.showClaimNotifications) { _, newValue in
-                        Task { await navigation.minerManager.updateNotificationPreference(enabled: newValue) }
+                        Task { await navigation.minerManager.updateNotificationPreference(enabled: newValue && settings.allowsOperatorNotifications()) }
                     }
+
+                Toggle("Quiet hours", isOn: $settings.quietHoursEnabled)
+                    .onChange(of: settings.quietHoursEnabled) { _, _ in
+                        Task { await navigation.minerManager.updateNotificationPreference(enabled: settings.showClaimNotifications && settings.allowsOperatorNotifications()) }
+                    }
+                if settings.quietHoursEnabled {
+                    HStack {
+                        Picker("From", selection: quietStartBinding) {
+                            ForEach(0..<24, id: \.self) { hour in
+                                Text(hourLabel(hour)).tag(hour)
+                            }
+                        }
+                        Picker("Until", selection: quietEndBinding) {
+                            ForEach(0..<24, id: \.self) { hour in
+                                Text(hourLabel(hour)).tag(hour)
+                            }
+                        }
+                    }
+                    SettingsSecondaryText("Suppresses local claim notifications and Discord DM events during the selected window.")
+                }
             } header: {
                 Text("Notifications")
             }
@@ -254,6 +276,27 @@ private struct GeneralSettingsView: View {
         } set: { isEnabled in
             updater.setAutomaticallyDownloadsUpdates(isEnabled)
         }
+    }
+
+    private var quietStartBinding: Binding<Int> {
+        Binding {
+            settings.quietHoursStartMinute / 60
+        } set: { hour in
+            settings.quietHoursStartMinute = hour * 60
+        }
+    }
+
+    private var quietEndBinding: Binding<Int> {
+        Binding {
+            settings.quietHoursEndMinute / 60
+        } set: { hour in
+            settings.quietHoursEndMinute = hour * 60
+        }
+    }
+
+    private func hourLabel(_ hour: Int) -> String {
+        let date = Calendar.current.date(from: DateComponents(hour: hour, minute: 0)) ?? Date()
+        return date.formatted(date: .omitted, time: .shortened)
     }
 
     @ViewBuilder
@@ -383,7 +426,7 @@ private struct AccountSettingsView: View {
                     excludedGames: settings.excludedGames,
                     strategy: settings.miningStrategy,
                     enableBadgesEmotes: settings.enableBadgesEmotes,
-                    showClaimNotifications: settings.showClaimNotifications,
+                    showClaimNotifications: settings.showClaimNotifications && settings.allowsOperatorNotifications(),
                     avoidDuplicateStreams: settings.avoidDuplicateStreams,
                     antiStallRecoveryEnabled: settings.antiStallRecoveryEnabled,
                     prioritiseFollowedStreamers: settings.prioritiseFollowedStreamers
@@ -1002,7 +1045,10 @@ private struct IntegrationsSettingsView: View {
     }
 
     private func displayName(for discordId: String) -> String {
-        debugDiscordUsers.first(where: { $0.id == discordId })?.displayName ?? discordId
+        debugDiscordUsers.first(where: { $0.id == discordId })?.displayName.nilIfBlank
+            ?? debugDiscordUsers.first(where: { $0.id == discordId })?.username?.nilIfBlank
+            ?? navigation.minerManager.miners.first(where: { $0.ownerDiscordId == discordId })?.username
+            ?? "Linked Discord user"
     }
 
 #if DEBUG
@@ -1074,8 +1120,8 @@ private struct IntegrationsSettingsView: View {
     }
 
     /// Union of locally-known miner Discord IDs and SwiftBot's known users, with
-    /// display names where available. Locally-known IDs without a matched display
-    /// name fall back to showing the raw ID so the dev can still target them.
+    /// display names where available. Locally-known IDs fall back to the linked
+    /// Twitch username so raw snowflakes stay out of the UI.
     private var debugTargetCandidates: [SwiftBotDiscordUser] {
         var seen: Set<String> = []
         var result: [SwiftBotDiscordUser] = []
@@ -1083,8 +1129,9 @@ private struct IntegrationsSettingsView: View {
         for user in debugDiscordUsers where seen.insert(user.id).inserted {
             result.append(user)
         }
-        for id in navigation.minerManager.miners.compactMap(\.ownerDiscordId) where seen.insert(id).inserted {
-            result.append(SwiftBotDiscordUser(id: id, displayName: id))
+        for miner in navigation.minerManager.miners {
+            guard let id = miner.ownerDiscordId, seen.insert(id).inserted else { continue }
+            result.append(SwiftBotDiscordUser(id: id, displayName: miner.displayName, username: miner.username))
         }
         return result
     }
@@ -1141,10 +1188,12 @@ private struct AdvancedSettingsView: View {
     @State private var showDropCacheConfirmation = false
     @State private var showClientIdAlert = false
     @State private var tempClientId = ""
+    @State private var backupMessage: String?
 
     var body: some View {
         Form {
             apiConfigurationSection
+            backupSection
             maintenanceSection
 
 #if DEBUG
@@ -1236,6 +1285,60 @@ private struct AdvancedSettingsView: View {
         }
     }
 
+    private var backupSection: some View {
+        Section {
+            HStack(spacing: 8) {
+                Button("Export Settings\u{2026}") {
+                    exportSettingsBackup()
+                }
+                Button("Import Settings\u{2026}") {
+                    importSettingsBackup()
+                }
+            }
+
+            if let backupMessage {
+                SettingsSecondaryText(backupMessage)
+            } else {
+                SettingsSecondaryText("Exports preferences, game rules, filters, quiet hours and integration endpoints. Account login tokens are never included.")
+            }
+        } header: {
+            Text("Backup")
+        }
+    }
+
+    private func exportSettingsBackup() {
+        do {
+            let data = try settings.exportBackupData()
+            let panel = NSSavePanel()
+            panel.allowedContentTypes = [.json]
+            panel.nameFieldStringValue = "SwiftMiner Settings Backup.json"
+            panel.canCreateDirectories = true
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+            try data.write(to: url, options: .atomic)
+            backupMessage = "Settings backup exported."
+        } catch {
+            backupMessage = "Export failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func importSettingsBackup() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let data = try Data(contentsOf: url)
+            try settings.importBackupData(data)
+            Task {
+                await navigation.minerManager.updateAntiStallRecovery(enabled: settings.antiStallRecoveryEnabled)
+                await navigation.minerManager.updateFollowedStreamerPriority(enabled: settings.prioritiseFollowedStreamers)
+            }
+            backupMessage = "Settings backup imported."
+        } catch {
+            backupMessage = "Import failed: \(error.localizedDescription)"
+        }
+    }
+
 #if DEBUG
     private var debugTestingSection: some View {
         Section {
@@ -1268,6 +1371,13 @@ private struct SettingsSecondaryText: View {
             .font(.caption)
             .foregroundStyle(tint)
             .padding(.vertical, 1)
+    }
+}
+
+private extension String {
+    var nilIfBlank: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }
 

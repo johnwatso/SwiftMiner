@@ -24,6 +24,7 @@ struct SidebarView: View {
     fileprivate var sidebarItems: [SidebarItemSpec] {
         var items: [SidebarItemSpec] = [
             SidebarItemSpec(id: .overview, title: "Overview", systemImage: "waveform.path.ecg"),
+            SidebarItemSpec(id: .operations, title: "Operations", systemImage: "gauge.with.dots.needle.67percent"),
             SidebarItemSpec(id: .miners, title: "Miners", systemImage: "cpu"),
             SidebarItemSpec(id: .drops, title: "Drops", systemImage: "gamecontroller.fill"),
             SidebarItemSpec(id: .events, title: "Activity Log", systemImage: "list.bullet.rectangle.fill"),

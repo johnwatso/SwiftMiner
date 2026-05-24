@@ -2,6 +2,16 @@ import XCTest
 @testable import SwiftMinerCore
 
 final class MinerSupervisorTests: XCTestCase {
+    func testNetworkAndRateLimitErrorsAreRetryable() {
+        XCTAssertFalse(MinerEngine.shouldReportFatalError(.networkError("The request timed out.")))
+        XCTAssertFalse(MinerEngine.shouldReportFatalError(.rateLimited(retryAfter: 30)))
+    }
+
+    func testAuthErrorsRemainFatal() {
+        XCTAssertTrue(MinerEngine.shouldReportFatalError(.tokenExpired))
+        XCTAssertTrue(MinerEngine.shouldReportFatalError(.authenticationFailed("Forbidden")))
+    }
+
     func testPeerPollingMinerMarksSilentMinerStalled() async {
         let supervisor = MinerSupervisor(
             configuration: .init(
