@@ -73,7 +73,7 @@ private enum SettingsTab: String, CaseIterable, Hashable, Identifiable {
         switch self {
         case .general: return "gearshape"
         case .accounts: return "person.2"
-        case .mining: return "hammer"
+        case .mining: return "cpu"
         case .integrations: return "app.connected.to.app.below.fill"
         case .advanced: return "gearshape.2"
         }

@@ -11,6 +11,7 @@ struct DropsListView: View {
     @State private var isRefreshing = false
     @State private var searchText: String = ""
     @State private var selectedMinerFilterId: String = DropsListView.allMinersFilterId
+    @State private var gameExpansionOverrides: [String: Bool] = [:]
     @AppStorage("preferSteamArtwork", store: Settings.appStorageStore) private var preferSteamArtwork: Bool = false
     @ObservedObject private var settings = Settings.shared
 
@@ -57,25 +58,20 @@ struct DropsListView: View {
                             fallbackBanner(emptyFilterMessage)
                         } else {
                             ForEach(groupedCampaigns) { group in
-                                if let single = group.singleCampaign {
-                                    let singleActivity = activity(for: single.campaign)
-                                    CampaignDeckCard(
-                                        campaign: single.campaign,
-                                        activity: singleActivity,
-                                        onSteamIdSet: { appId in
-                                            await SteamArtworkService.shared.setManualAppId(for: single.campaign.gameName, appId: appId)
-                                            await navigation.minerManager.dataCoordinator.clearSteamArtworkCache()
-                                            await loadCampaignFeed()
-                                        }
-                                    )
-                                    .transition(.opacity.combined(with: .scale(scale: 0.985)))
-                                } else {
-                                    GameCampaignDeckCard(
-                                        group: group,
-                                        activityProvider: activity(for:)
-                                    )
-                                        .transition(.opacity.combined(with: .scale(scale: 0.985)))
-                                }
+                                GameCampaignDeckCard(
+                                    group: group,
+                                    activityProvider: activity(for:),
+                                    isExpanded: gameExpansionOverrides[group.id] ?? shouldExpandByDefault(group),
+                                    onExpansionChange: { isExpanded in
+                                        gameExpansionOverrides[group.id] = isExpanded
+                                    },
+                                    onSteamIdSet: { appId in
+                                        await SteamArtworkService.shared.setManualAppId(for: group.gameName, appId: appId)
+                                        await navigation.minerManager.dataCoordinator.clearSteamArtworkCache()
+                                        await loadCampaignFeed()
+                                    }
+                                )
+                                .transition(.opacity.combined(with: .scale(scale: 0.985)))
                             }
                         }
                     }
@@ -487,11 +483,26 @@ struct DropsListView: View {
 
     private var mostActiveMiner: (name: String, count: Int)? {
         guard miners.count > 1 else { return nil }
+        let claimedCountsByAccount = claimedRewardCountsByAccount()
         guard let leader = miners.max(by: { lhs, rhs in
-            if lhs.dropsClaimed != rhs.dropsClaimed { return lhs.dropsClaimed < rhs.dropsClaimed }
+            let lhsCount = claimedCountsByAccount[lhs.accountId] ?? lhs.dropsClaimed
+            let rhsCount = claimedCountsByAccount[rhs.accountId] ?? rhs.dropsClaimed
+            if lhsCount != rhsCount { return lhsCount < rhsCount }
             return lhs.displayName > rhs.displayName
         }) else { return nil }
-        return (name: leader.displayName, count: leader.dropsClaimed)
+
+        let leaderCount = claimedCountsByAccount[leader.accountId] ?? leader.dropsClaimed
+        return (name: leader.displayName, count: leaderCount)
+    }
+
+    private func claimedRewardCountsByAccount() -> [String: Int] {
+        var counts: [String: Int] = [:]
+        for campaign in feedCampaigns {
+            for account in campaign.accountStates {
+                counts[account.accountId, default: 0] += account.claimedDropCount
+            }
+        }
+        return counts
     }
 
     private var claimableRewardCount: Int {
@@ -754,6 +765,44 @@ struct DropsListView: View {
             claimedRewardCount: claimedRewardCount,
             remainingRewardCount: remainingRewardCount
         )
+    }
+
+    private func shouldExpandByDefault(_ group: GameAggregate) -> Bool {
+        guard group.aggregateState == .inProgress || group.aggregateState == .actionRequired else {
+            return false
+        }
+
+        if group.claimableRewardCount > 0 {
+            return true
+        }
+
+        for item in group.campaigns {
+            let snapshot = activity(for: item.campaign)
+            if !snapshot.blockedAccounts.isEmpty || !snapshot.needsAuthAccounts.isEmpty {
+                return true
+            }
+            if minerSyncIssueCount(for: item.campaign, activity: snapshot) > 0 {
+                return true
+            }
+        }
+
+        return false
+    }
+
+    private func minerSyncIssueCount(for campaign: CampaignViewData, activity: CampaignActivitySnapshot) -> Int {
+        let activeAccounts = Set(activity.activeMiners.map(\.accountId))
+        return campaign.accountStates.filter { account in
+            switch account.miningStatus {
+            case .blocked, .needsAuth:
+                return true
+            case .mining:
+                return !activeAccounts.isEmpty && !activeAccounts.contains(account.accountId)
+            case .ready, .idle:
+                return activity.state == .active || activity.state == .inProgress
+            case .claimed:
+                return false
+            }
+        }.count
     }
 }
 
@@ -1097,6 +1146,12 @@ private struct CampaignDeckCard: View {
 private struct GameCampaignDeckCard: View {
     let group: GameAggregate
     let activityProvider: (CampaignViewData) -> CampaignActivitySnapshot
+    let isExpanded: Bool
+    let onExpansionChange: (Bool) -> Void
+    var onSteamIdSet: ((String) async -> Void)?
+    @State private var isHovered = false
+    @State private var showingSteamIdPopover = false
+    @State private var steamIdDraft = ""
 
     private var cardState: CampaignCardState {
         group.aggregateState.asCampaignCardState
@@ -1104,6 +1159,56 @@ private struct GameCampaignDeckCard: View {
 
     private var isActive: Bool {
         group.aggregateState == .inProgress
+    }
+
+    private var isFinishedOrEnded: Bool {
+        group.aggregateState == .completed || group.aggregateState == .unavailable
+    }
+
+    private var campaignGame: Game {
+        let firstCampaign = group.campaigns.first?.campaign
+        return Game(id: firstCampaign?.gameId ?? "", name: group.gameName, boxArtURL: group.artworkURL)
+    }
+
+    private var supportsSteamArtwork: Bool {
+        let firstCampaign = group.campaigns.first?.campaign
+        return SteamArtworkService.supportsSteamArtwork(forGameName: group.gameName, gameId: firstCampaign?.gameId)
+    }
+
+    private var totalRewardCount: Int {
+        group.campaigns.reduce(0) { $0 + max($1.campaign.totalDrops, $1.campaign.drops.count) }
+    }
+
+    private var claimedRewardCount: Int {
+        group.campaigns.reduce(0) { $0 + min(activityProvider($1.campaign).claimedRewardCount, max($1.campaign.totalDrops, $1.campaign.drops.count)) }
+    }
+
+    private var minerHealthSummary: MinerHealthSummary {
+        MinerHealthSummary(
+            accountStates: minerAccountStates,
+            activeCount: activeMinerCount,
+            issueCount: group.campaigns.reduce(0) { $0 + minerIssueCount(for: $1.campaign, activity: activityProvider($1.campaign)) },
+            readyToClaimCount: group.claimableRewardCount,
+            completedCurrentRewardCount: completedCurrentRewardMinerCount,
+            totalMinerCount: minerAccountStates.count
+        )
+    }
+
+    private var activeMinerCount: Int {
+        Set(group.campaigns.flatMap { activityProvider($0.campaign).activeMiners.map(\.accountId) }).count
+    }
+
+    private var completedCurrentRewardMinerCount: Int {
+        let activeCampaigns = group.campaigns.filter { !$0.campaign.isExpired() }
+        guard let currentCampaign = activeCampaigns.first(where: { activityProvider($0.campaign).state == .active || activityProvider($0.campaign).state == .inProgress })?.campaign
+            ?? activeCampaigns.first?.campaign
+        else { return 0 }
+
+        return currentCampaign.accountStates.filter { account in
+            account.miningStatus == .claimed
+                || account.claimedDropCount > 0
+                || (account.progressFraction ?? 0) >= 0.995
+        }.count
     }
 
     private var minerAccountStates: [AccountState] {
@@ -1138,93 +1243,160 @@ private struct GameCampaignDeckCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top, spacing: 14) {
+            HStack(alignment: .center, spacing: 14) {
                 CampaignArtworkIcon(url: group.artworkURL, tint: group.aggregateState.tint)
 
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(alignment: .top, spacing: 10) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(group.gameName)
-                                .font(.title3.weight(.bold))
-                                .lineLimit(1)
+                VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(group.gameName)
+                            .font(.title3.weight(.bold))
+                            .lineLimit(1)
 
-                            Text("\(group.campaigns.count) campaigns")
-                                .font(.subheadline.weight(.medium))
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Spacer(minLength: 0)
-
-                        HStack(spacing: 6) {
-                            Image(systemName: group.aggregateState.symbol)
-                                .font(.caption2.weight(.bold))
-
-                            Text(group.aggregateState.title)
-                                .lineLimit(1)
-                        }
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(group.aggregateState.tint)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(.regularMaterial.opacity(0.92), in: Capsule())
+                        Text("\(group.campaigns.count) \(group.campaigns.count == 1 ? "campaign" : "campaigns")")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.secondary)
                     }
 
-                    HStack(spacing: 8) {
-                        CampaignMetricPill(
-                            title: "\(group.claimedRewardCount) claimed",
-                            systemImage: "checkmark.circle.fill",
-                            tint: .blue
-                        )
-                        CampaignMetricPill(
-                            title: "\(group.remainingRewardCount) remaining",
-                            systemImage: "gift.fill",
-                            tint: .secondary
-                        )
-                        if group.claimableRewardCount > 0 && group.aggregateState != .actionRequired {
-                            CampaignMetricPill(
-                                title: "\(group.claimableRewardCount) queued",
-                                systemImage: "tray.and.arrow.down.fill",
-                                tint: .orange
-                            )
-                        }
-                    }
+                    CompactCampaignHealthRow(
+                        rewardText: "\(claimedRewardCount) / \(max(totalRewardCount, 1)) rewards",
+                        summary: minerHealthSummary
+                    )
+                }
 
-                    if !minerAccountStates.isEmpty {
-                        CampaignMinerAttributionRow(accountStates: minerAccountStates)
+                Spacer(minLength: 12)
+
+                GameOperationalGlyphPanel(
+                    campaigns: group.campaigns.map(\.campaign),
+                    activityProvider: activityProvider,
+                    accounts: minerAccountStates,
+                    summary: minerHealthSummary
+                )
+
+                VStack(alignment: .trailing, spacing: 8) {
+                    CampaignStatePill(state: cardState)
+
+                    Button {
+                        withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                            onExpansionChange(!isExpanded)
+                        }
+                    } label: {
+                        Image(systemName: "chevron.down")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.secondary)
+                            .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                            .frame(width: 28, height: 28)
+                            .background(.regularMaterial.opacity(0.72), in: Circle())
                     }
+                    .buttonStyle(.plain)
+                    .help(isExpanded ? "Hide miner detail" : "Show miner detail")
                 }
             }
 
-            Divider()
-                .overlay(.white.opacity(0.08))
-
-            VStack(spacing: 8) {
-                ForEach(group.campaigns) { item in
-                    GroupedCampaignSubItem(
-                        item: item,
-                        activity: activityProvider(item.campaign)
-                    )
+            if isExpanded {
+                VStack(spacing: 10) {
+                    ForEach(group.campaigns) { item in
+                        CampaignProgressModule(
+                            item: item,
+                            activity: activityProvider(item.campaign)
+                        )
+                    }
                 }
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
         .padding(18)
         .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(.thinMaterial.opacity(isActive ? 0.98 : 0.95))
-        )
+        .background(cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(cardState.borderTint, lineWidth: isActive ? 1.2 : 1)
+                .strokeBorder(cardState.borderTint.opacity(isActive ? 0.86 : 0.62), lineWidth: isActive ? 1 : 0.8)
         }
         .shadow(
             color: isActive
-                ? group.aggregateState.tint.opacity(0.10)
-                : .black.opacity(0.06),
-            radius: isActive ? 8 : 4,
-            y: isActive ? 4 : 2
+                ? group.aggregateState.tint.opacity(isHovered ? 0.16 : 0.10)
+                : .black.opacity(isHovered ? 0.10 : 0.06),
+            radius: isHovered ? 10 : (isActive ? 8 : 4),
+            y: isHovered ? 5 : (isActive ? 4 : 2)
         )
+        .saturation(isFinishedOrEnded ? 0.72 : 1)
+        .opacity(group.aggregateState == .unavailable ? 0.70 : 1)
+        .animation(.easeInOut(duration: 0.18), value: isHovered)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+        .contextMenu {
+            Button {
+                Settings.shared.setGamePreference(campaignGame, state: .preferred)
+            } label: {
+                Label("Prioritise Game", systemImage: "star")
+            }
+
+            Button {
+                Settings.shared.setGamePreference(campaignGame, state: .excluded)
+            } label: {
+                Label("Exclude Game", systemImage: "minus.circle")
+            }
+
+            Divider()
+
+            if supportsSteamArtwork {
+                Button {
+                    steamIdDraft = ""
+                    showingSteamIdPopover = true
+                } label: {
+                    Label("Set Steam ID", systemImage: "photo.artframe")
+                }
+            }
+        }
+        .popover(isPresented: $showingSteamIdPopover, arrowEdge: .bottom) {
+            SteamIdInputPopover(
+                gameName: group.gameName,
+                appId: $steamIdDraft,
+                onConfirm: {
+                    showingSteamIdPopover = false
+                    let id = steamIdDraft.trimmingCharacters(in: .whitespaces)
+                    guard !id.isEmpty else { return }
+                    Task { await onSteamIdSet?(id) }
+                },
+                onCancel: { showingSteamIdPopover = false }
+            )
+        }
+    }
+
+    private var cardBackground: some View {
+        RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .fill(.thinMaterial.opacity(isActive ? 0.98 : 0.94))
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                cardState.tint.opacity(isActive ? 0.11 : (isFinishedOrEnded ? 0.025 : 0.055)),
+                                Color.white.opacity(isActive ? 0.055 : 0.025),
+                                Color.clear
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
+    }
+
+    private func minerIssueCount(for campaign: CampaignViewData, activity: CampaignActivitySnapshot) -> Int {
+        let activeAccounts = Set(activity.activeMiners.map(\.accountId))
+        return campaign.accountStates.filter { account in
+            switch account.miningStatus {
+            case .blocked, .needsAuth:
+                return true
+            case .mining:
+                return !activeAccounts.isEmpty && !activeAccounts.contains(account.accountId)
+            case .ready, .idle:
+                return activity.state == .active || activity.state == .inProgress
+            case .claimed:
+                return false
+            }
+        }.count
     }
 
     private func preferredAccountState(_ lhs: AccountState, _ rhs: AccountState) -> AccountState {
@@ -1254,130 +1426,760 @@ private struct GameCampaignDeckCard: View {
     }
 }
 
-private struct GroupedCampaignSubItem: View {
-    let item: GameAggregateCampaign
-    let activity: CampaignActivitySnapshot
+private struct MinerHealthSummary {
+    let accountStates: [AccountState]
+    let activeCount: Int
+    let issueCount: Int
+    let readyToClaimCount: Int
+    let completedCurrentRewardCount: Int
+    let totalMinerCount: Int
 
-    private var representativeDrop: DropViewData? {
-        item.campaign.drops.first { $0.isClaimable && !$0.isClaimed }
-            ?? item.campaign.drops.first { $0.progress > 0 && !$0.isClaimed }
-            ?? item.campaign.drops.first { !$0.isClaimed }
-            ?? item.campaign.drops.first
+    var primaryText: String {
+        if activeCount > 0 {
+            return "\(activeCount) \(activeCount == 1 ? "miner" : "miners") active"
+        }
+        if totalMinerCount > 0 {
+            return "\(totalMinerCount) \(totalMinerCount == 1 ? "miner" : "miners") tracked"
+        }
+        return "No miners synced"
     }
 
-    private var imageURLToUse: URL? {
-        (representativeDrop?.imageURL ?? item.campaign.artworkURL)?.highResolutionArtworkURL
+    var secondaryText: String {
+        if issueCount > 0 {
+            return issueCount == 1 ? "1 miner behind" : "\(issueCount) miners behind"
+        }
+        if readyToClaimCount > 0 {
+            return readyToClaimCount == 1 ? "1 ready to claim" : "\(readyToClaimCount) ready to claim"
+        }
+        if totalMinerCount > 0 {
+            return "Good sync"
+        }
+        return "Waiting for campaign state"
     }
 
-    private var progressPercent: Int {
-        Int((item.campaign.progress * 100).rounded())
+    var tertiaryText: String? {
+        guard totalMinerCount > 1 else { return nil }
+        return "\(completedCurrentRewardCount) / \(totalMinerCount) miners finished current reward"
     }
 
-    private var detailText: String {
-        if item.state == .actionRequired {
-            return "Action required"
+    var tint: Color {
+        if issueCount > 0 { return .orange }
+        if readyToClaimCount > 0 { return .orange }
+        if activeCount > 0 { return .green }
+        return .secondary
+    }
+}
+
+private struct CompactCampaignHealthRow: View {
+    let rewardText: String
+    let summary: MinerHealthSummary
+
+    var body: some View {
+        HStack(spacing: 10) {
+            OperationalSummaryItem(text: rewardText, systemImage: "gift.fill", tint: .blue)
+            OperationalSummaryItem(text: summary.primaryText, systemImage: "person.2.fill", tint: summary.tint)
+            OperationalSummaryItem(
+                text: summary.secondaryText,
+                systemImage: summary.issueCount > 0 ? "exclamationmark.triangle.fill" : "checkmark.circle.fill",
+                tint: summary.tint
+            )
         }
-        if activity.claimableDropCount > 0 {
-            let count = activity.claimableDropCount
-            return count == 1 ? "1 claim queued" : "\(count) claims queued"
+        .lineLimit(1)
+    }
+}
+
+private struct OperationalSummaryItem: View {
+    let text: String
+    let systemImage: String
+    let tint: Color
+
+    var body: some View {
+        Label {
+            Text(text)
+        } icon: {
+            Image(systemName: systemImage)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(tint)
         }
-        if item.state == .inProgress && item.campaign.progress > 0 {
-            return "\(progressPercent)% progress • \(activity.claimedRewardCount) claimed"
+        .font(.caption2.weight(.medium))
+        .foregroundStyle(.secondary)
+    }
+}
+
+private struct GameOperationalGlyphPanel: View {
+    let campaigns: [CampaignViewData]
+    let activityProvider: (CampaignViewData) -> CampaignActivitySnapshot
+    let accounts: [AccountState]
+    let summary: MinerHealthSummary
+
+    private var displayDrops: [(campaign: CampaignViewData, drop: DropViewData)] {
+        campaigns.flatMap { campaign in
+            campaign.drops.map { (campaign, $0) }
         }
-        if item.campaign.overviewRemainingRewardCount > 0 {
-            let remaining = item.campaign.overviewRemainingRewardCount
-            return remaining == 1 ? "1 reward remaining" : "\(remaining) rewards remaining"
-        }
-        if item.state == .completed {
-            return "Completed"
-        }
-        return "Ended"
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 10) {
-            thumbnail
+        HStack(alignment: .center, spacing: 14) {
+            VStack(alignment: .trailing, spacing: 7) {
+                GameRewardSummaryStrip(
+                    campaigns: campaigns,
+                    activityProvider: activityProvider,
+                    maxVisibleCount: 8,
+                    nodeSize: 17
+                )
 
-            VStack(alignment: .leading, spacing: 5) {
-                Text(item.campaign.campaignName)
-                    .font(.subheadline.weight(.medium))
-                    .lineLimit(1)
-                Text(detailText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                MinerSyncIndicatorStrip(accounts: accounts, summary: summary)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(.regularMaterial.opacity(0.28), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .help(summary.tertiaryText ?? summary.secondaryText)
+    }
+}
 
-                if !item.campaign.accountStates.isEmpty {
-                    CampaignAccountAttribution(accountStates: item.campaign.accountStates)
-                }
+private struct GameRewardSummaryStrip: View {
+    let campaigns: [CampaignViewData]
+    let activityProvider: (CampaignViewData) -> CampaignActivitySnapshot
+    var maxVisibleCount = 10
+    var nodeSize: CGFloat = 14
+
+    private var displayDrops: [(campaign: CampaignViewData, drop: DropViewData)] {
+        campaigns.flatMap { campaign in
+            campaign.drops.map { (campaign, $0) }
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(Array(displayDrops.prefix(maxVisibleCount).enumerated()), id: \.offset) { index, item in
+                let state = RewardMilestoneState(drop: item.drop, activity: activityProvider(item.campaign))
+                RewardMilestoneNode(
+                    state: state,
+                    progress: item.drop.progress,
+                    size: nodeSize
+                )
+                .help("Drop \(index + 1): \(item.drop.name) - \(state.title)")
             }
 
-            Spacer(minLength: 0)
-
-            if item.state != .actionRequired && item.campaign.progress > 0 && item.state != .completed {
-                Text("\(progressPercent)%")
+            let overflowCount = max(displayDrops.count - maxVisibleCount, 0)
+            if overflowCount > 0 {
+                Text("+\(overflowCount)")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.secondary)
-                    .monospacedDigit()
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(.regularMaterial.opacity(0.72), in: Capsule())
+                    .help("\(overflowCount) more reward\(overflowCount == 1 ? "" : "s")")
+            }
+        }
+        .frame(height: 18, alignment: .leading)
+    }
+}
+
+private struct MinerSyncIndicatorStrip: View {
+    let accounts: [AccountState]
+    let summary: MinerHealthSummary
+
+    var body: some View {
+        HStack(spacing: 5) {
+            ForEach(Array(accounts.prefix(7).enumerated()), id: \.element.id) { _, account in
+                Circle()
+                    .fill(tint(for: account))
+                    .frame(width: 6, height: 6)
+                    .overlay {
+                        Circle()
+                            .strokeBorder(.white.opacity(0.42), lineWidth: 0.6)
+                    }
+                    .help("\(account.username) - \(statusTitle(for: account))")
             }
 
-            Text(item.state.title)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(item.state.tint)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 5)
-                .background(.thinMaterial.opacity(0.85), in: Capsule())
+            let overflowCount = max(accounts.count - 7, 0)
+            if overflowCount > 0 {
+                Text("+\(overflowCount)")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .frame(height: 9)
+        .accessibilityLabel(summary.secondaryText)
+    }
+
+    private func tint(for account: AccountState) -> Color {
+        switch account.miningStatus {
+        case .mining:
+            return .green
+        case .claimed:
+            return .blue
+        case .ready:
+            return .secondary.opacity(0.58)
+        case .idle:
+            return .secondary.opacity(0.34)
+        case .blocked, .needsAuth:
+            return .orange
+        }
+    }
+
+    private func statusTitle(for account: AccountState) -> String {
+        switch account.miningStatus {
+        case .mining: return "Active"
+        case .claimed: return "Finished"
+        case .needsAuth, .blocked: return "Needs Setup"
+        case .ready: return "Ready"
+        case .idle: return "Idle"
+        }
+    }
+}
+
+private struct CampaignProgressModule: View {
+    let item: GameAggregateCampaign
+    let activity: CampaignActivitySnapshot
+
+    private var sortedAccounts: [AccountState] {
+        item.campaign.accountStates.sorted {
+            let lhsRank = accountSortRank($0)
+            let rhsRank = accountSortRank($1)
+            if lhsRank != rhsRank { return lhsRank < rhsRank }
+            return $0.username.localizedCaseInsensitiveCompare($1.username) == .orderedAscending
+        }
+    }
+
+    private var moduleStateTitle: String {
+        if item.state == .actionRequired { return "Needs Setup" }
+        if item.campaign.isExpired() { return "Ended" }
+        if activity.claimableDropCount > 0 {
+            return "Ready to Claim"
+        }
+        if item.state == .completed { return "Finished" }
+        if item.state == .inProgress { return "Active" }
+        return "Active"
+    }
+
+    private var moduleTint: Color {
+        if item.state == .actionRequired { return .orange }
+        if activity.claimableDropCount > 0 { return .orange }
+        return item.state.tint
+    }
+
+    private var timeText: String {
+        if item.campaign.isExpired() {
+            return "Ended"
+        }
+        if let remaining = item.campaign.timeRemaining {
+            return remaining.formattedRemaining
+        }
+        return item.campaign.endDate.timeIntervalSince(Date()).formattedRemaining
+    }
+
+    private var completionSummary: String {
+        let total = max(sortedAccounts.count, 1)
+        let finished = sortedAccounts.filter { account in
+            account.miningStatus == .claimed
+                || account.claimedDropCount >= max(item.campaign.drops.count, item.campaign.totalDrops)
+        }.count
+        let readyCount = item.campaign.drops.filter { $0.isClaimable && !$0.isClaimed }.count
+        if readyCount > 0 {
+            return readyCount == 1 ? "1 ready to claim" : "\(readyCount) ready to claim"
+        }
+        return "\(finished) / \(total) miners finished"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 13) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(item.campaign.campaignName)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+
+                    Text(timeText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 0)
+
+                Text(completionSummary)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                Text(moduleStateTitle)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(moduleTint)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(.thinMaterial.opacity(0.62), in: Capsule())
+            }
+
+            if item.campaign.drops.isEmpty {
+                Text("No reward milestones available.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                CampaignCollectibleRewardTrack(campaign: item.campaign, activity: activity)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(moduleBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(.white.opacity(0.06), lineWidth: 0.8)
+        }
+    }
+
+    private var moduleBackground: Color {
+        if item.campaign.isExpired() {
+            return .secondary.opacity(0.055)
+        }
+        if item.state == .actionRequired {
+            return .orange.opacity(0.055)
+        }
+        if item.state == .inProgress {
+            return .green.opacity(0.045)
+        }
+        return .secondary.opacity(0.045)
+    }
+
+    private func accountSortRank(_ account: AccountState) -> Int {
+        switch account.miningStatus {
+        case .needsAuth: return 0
+        case .blocked: return 1
+        case .mining: return 2
+        case .ready: return 3
+        case .idle: return 4
+        case .claimed: return 5
+        }
+    }
+}
+
+private struct CampaignCollectibleRewardTrack: View {
+    let campaign: CampaignViewData
+    let activity: CampaignActivitySnapshot
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 0) {
+                ForEach(Array(campaign.drops.enumerated()), id: \.element.id) { index, drop in
+                    let state = RewardMilestoneState(drop: drop, activity: activity)
+
+                    HStack(spacing: 0) {
+                        CollectibleRewardNode(
+                            drop: drop,
+                            activityState: state,
+                            progress: drop.progress,
+                            campaign: campaign,
+                            dropIndex: index,
+                            size: 36
+                        )
+
+                        if index < campaign.drops.count - 1 {
+                            Capsule()
+                                .fill(
+                                    LinearGradient(
+                                        colors: [state.tint.opacity(0.35), .white.opacity(0.08)],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .frame(width: 14, height: 2)
+                                .offset(y: -6)
+                                .padding(.horizontal, 4)
+                        }
+                    }
+                }
+            }
+            .padding(.vertical, 6)
+            .padding(.horizontal, 8)
+        }
+        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+    }
+}
+
+private struct CollectibleRewardNode: View {
+    let drop: DropViewData
+    let activityState: RewardMilestoneState
+    let progress: Double
+    let campaign: CampaignViewData
+    let dropIndex: Int
+    let size: CGFloat
+
+    @State private var isHovered = false
+
+    var body: some View {
+        VStack(spacing: 2) {
+            ZStack {
+                if activityState == .readyToClaim {
+                    Circle()
+                        .fill(Color.orange.opacity(0.34))
+                        .frame(width: size + 10, height: size + 10)
+                        .blur(radius: 5)
+                        .scaleEffect(isHovered ? 1.08 : 1.0)
+                } else if case .mining = activityState {
+                    Circle()
+                        .fill(Color.blue.opacity(0.20))
+                        .frame(width: size + 10, height: size + 10)
+                        .blur(radius: 4)
+                        .scaleEffect(isHovered ? 1.05 : 1.0)
+                }
+
+                Circle()
+                    .stroke(ringTrackColor, lineWidth: 2.2)
+                    .frame(width: size + 6, height: size + 6)
+
+                if progress > 0 && progress < 1.0 {
+                    Circle()
+                        .trim(from: 0, to: progress.clamped01)
+                        .stroke(
+                            activityState.tint,
+                            style: StrokeStyle(lineWidth: 2.2, lineCap: .round)
+                        )
+                        .rotationEffect(.degrees(-90))
+                        .frame(width: size + 6, height: size + 6)
+                } else if progress >= 0.995 || activityState == .claimed {
+                    Circle()
+                        .stroke(
+                            activityState == .claimed ? Color.green : Color.orange,
+                            lineWidth: 2.2
+                        )
+                        .frame(width: size + 6, height: size + 6)
+                }
+
+                thumbnail
+                    .frame(width: size, height: size)
+                    .clipShape(Circle())
+                    .scaleEffect(isHovered ? 1.05 : 1.0)
+                    .overlay {
+                        Circle()
+                            .strokeBorder(.white.opacity(0.12), lineWidth: 0.8)
+                    }
+                    .shadow(color: .black.opacity(isHovered ? 0.14 : 0.08), radius: isHovered ? 5 : 3, y: isHovered ? 2 : 1)
+
+                if activityState == .claimed {
+                    ZStack {
+                        Circle()
+                            .fill(Color.green)
+                            .frame(width: 13, height: 13)
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 7, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
+                    .offset(x: size/2 - 1, y: -size/2 + 1)
+                } else if activityState == .readyToClaim {
+                    ZStack {
+                        Circle()
+                            .fill(Color.orange)
+                            .frame(width: 13, height: 13)
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 7, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
+                    .offset(x: size/2 - 1, y: -size/2 + 1)
+                } else if activityState == .blocked {
+                    ZStack {
+                        Circle()
+                            .fill(Color.orange)
+                            .frame(width: 13, height: 13)
+                        Image(systemName: "exclamationmark")
+                            .font(.system(size: 7, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
+                    .offset(x: size/2 - 1, y: -size/2 + 1)
+                }
+            }
+            .animation(.spring(response: 0.24, dampingFraction: 0.82), value: isHovered)
+            .onHover { hovering in
+                isHovered = hovering
+            }
+
+            if !campaign.accountStates.isEmpty {
+                HStack(spacing: 3) {
+                    ForEach(campaign.accountStates) { account in
+                        let ms = minerState(for: account)
+                        MiniMinerStatusDot(
+                            account: account,
+                            state: ms,
+                            size: 5
+                        )
+                    }
+                }
+                .padding(.top, 4)
+            }
+        }
+        .help("\(drop.name) — \(activityState.title) (\(Int(progress * 100))%)\nRequired watch time: \(drop.requiredMinutes)m")
+    }
+
+    private var ringTrackColor: Color {
+        switch activityState {
+        case .claimed: return Color.green.opacity(0.12)
+        case .readyToClaim: return Color.orange.opacity(0.12)
+        case .mining: return Color.blue.opacity(0.08)
+        default: return Color.white.opacity(0.06)
+        }
     }
 
     private var thumbnail: some View {
         Group {
-            if let imageURLToUse {
-                AsyncImage(url: imageURLToUse) { phase in
-                    switch phase {
-                    case .empty:
-                        thumbnailPlaceholder
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .interpolation(.high)
-                            .scaledToFill()
-                    case .failure:
-                        thumbnailPlaceholder
-                    @unknown default:
-                        thumbnailPlaceholder
-                    }
+            if let url = drop.imageURL?.highResolutionArtworkURL {
+                AsyncImage(url: url) { image in
+                    image
+                        .resizable()
+                        .interpolation(.high)
+                        .scaledToFill()
+                } placeholder: {
+                    placeholderArtwork
                 }
             } else {
-                thumbnailPlaceholder
+                placeholderArtwork
             }
-        }
-        .frame(width: 34, height: 34)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .strokeBorder(.white.opacity(0.10), lineWidth: 1)
         }
     }
 
-    private var thumbnailPlaceholder: some View {
-        RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(item.state.tint.opacity(0.12))
-            .overlay {
-                Image(systemName: rewardIcon)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(item.state.tint)
-            }
+    private var placeholderArtwork: some View {
+        ZStack {
+            LinearGradient(
+                colors: [activityState.tint.opacity(0.35), activityState.tint.opacity(0.08)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            Image(systemName: rewardIcon)
+                .font(.system(size: size * 0.40, weight: .semibold))
+                .foregroundStyle(activityState.tint)
+        }
+        .grayscale(activityState == .locked || activityState == .ended ? 1.0 : 0.0)
+        .opacity(activityState == .locked || activityState == .ended ? 0.58 : 1.0)
     }
 
     private var rewardIcon: String {
-        switch representativeDrop?.rewardType ?? .inGame {
+        switch drop.rewardType {
         case .badge: return "person.badge.shield.check.fill"
         case .emote: return "face.smiling.fill"
         case .inGame: return "gift.fill"
+        }
+    }
+
+    private func minerState(for account: AccountState) -> RewardMilestoneState {
+        if campaign.isExpired() && dropIndex >= account.claimedDropCount {
+            return .ended
+        }
+
+        switch account.miningStatus {
+        case .needsAuth, .blocked:
+            return .blocked
+        case .claimed:
+            return .claimed
+        case .mining, .ready, .idle:
+            break
+        }
+
+        if dropIndex < account.claimedDropCount || drop.isClaimed {
+            return .claimed
+        }
+
+        let totalDrops = max(campaign.drops.count, 1)
+        let scaledProgress = (account.progressFraction ?? campaign.progress).clamped01 * Double(totalDrops)
+        if scaledProgress >= Double(dropIndex + 1) || (drop.isClaimable && dropIndex == account.claimedDropCount) {
+            return .readyToClaim
+        }
+
+        if scaledProgress > Double(dropIndex) {
+            return .mining(progress: scaledProgress - Double(dropIndex))
+        }
+
+        if account.miningStatus == .mining && dropIndex == account.claimedDropCount {
+            return .mining(progress: max(drop.progress, 0.12))
+        }
+
+        return .locked
+    }
+}
+
+private struct MiniMinerStatusDot: View {
+    let account: AccountState
+    let state: RewardMilestoneState
+    let size: CGFloat
+    @Environment(NavigationModel.self) private var navigation
+
+    var body: some View {
+        Circle()
+            .fill(dotColor)
+            .frame(width: size, height: size)
+            .overlay {
+                if state == .claimed {
+                    Circle()
+                        .strokeBorder(Color.white.opacity(0.4), lineWidth: 0.5)
+                }
+            }
+            .help("\(navigation.minerManager.displayName(forAccountId: account.accountId, fallback: account.username)) — \(state.title)")
+    }
+
+    private var dotColor: Color {
+        switch state {
+        case .claimed: return .blue
+        case .readyToClaim: return .orange
+        case .mining: return .green
+        case .blocked: return .orange
+        default: return .secondary.opacity(0.34)
+        }
+    }
+}
+
+private enum RewardMilestoneState: Equatable {
+    case claimed
+    case readyToClaim
+    case mining(progress: Double)
+    case locked
+    case blocked
+    case ended
+
+    init(drop: DropViewData, activity: CampaignActivitySnapshot) {
+        if activity.state == .blocked {
+            self = drop.isClaimed ? .claimed : .blocked
+        } else if activity.state == .expired {
+            self = drop.isClaimed ? .claimed : .ended
+        } else if drop.isClaimed {
+            self = .claimed
+        } else if drop.isClaimable {
+            self = .readyToClaim
+        } else if drop.progress > 0 || !activity.activeMiners.isEmpty {
+            self = .mining(progress: max(drop.progress, 0.12))
+        } else {
+            self = .locked
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .claimed: return "Claimed"
+        case .readyToClaim: return "Ready to Claim"
+        case .mining: return "Mining"
+        case .locked: return "Locked"
+        case .blocked: return "Needs Setup"
+        case .ended: return "Ended"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .claimed: return .green
+        case .readyToClaim: return .orange
+        case .mining: return .blue
+        case .locked: return .secondary
+        case .blocked: return .orange
+        case .ended: return .secondary
+        }
+    }
+
+    var progressFraction: Double {
+        switch self {
+        case .mining(let progress):
+            return progress.clamped01
+        case .claimed, .readyToClaim:
+            return 1
+        case .locked, .blocked, .ended:
+            return 0
+        }
+    }
+}
+
+private struct RewardMilestoneNode: View {
+    let state: RewardMilestoneState
+    let progress: Double
+    let size: CGFloat
+
+    var body: some View {
+        ZStack {
+            if case .mining = state {
+                MiningMilestonePulse(color: state.tint, size: size)
+            }
+
+            Circle()
+                .fill(fillColor)
+                .frame(width: size, height: size)
+
+            Circle()
+                .strokeBorder(borderColor, lineWidth: borderWidth)
+                .frame(width: size, height: size)
+
+            if case .mining = state {
+                Circle()
+                    .trim(from: 0, to: progress.clamped01)
+                    .stroke(
+                        state.tint,
+                        style: StrokeStyle(lineWidth: 2.2, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(-90))
+                    .frame(width: size, height: size)
+            } else if state == .claimed {
+                Image(systemName: "checkmark")
+                    .font(.system(size: size * 0.42, weight: .bold))
+                    .foregroundStyle(.white)
+            } else if state == .readyToClaim {
+                Circle()
+                    .fill(.white.opacity(0.80))
+                    .frame(width: size * 0.34, height: size * 0.34)
+            } else if state == .blocked {
+                Image(systemName: "exclamationmark")
+                    .font(.system(size: size * 0.42, weight: .bold))
+                    .foregroundStyle(.orange)
+            }
+        }
+        .frame(width: size, height: size)
+        .accessibilityLabel(state.title)
+    }
+
+    private var fillColor: Color {
+        switch state {
+        case .claimed:
+            return .green
+        case .readyToClaim:
+            return .orange.opacity(0.82)
+        case .mining:
+            return .blue.opacity(0.10)
+        case .blocked:
+            return .orange.opacity(0.12)
+        case .ended:
+            return .secondary.opacity(0.10)
+        case .locked:
+            return .secondary.opacity(0.08)
+        }
+    }
+
+    private var borderColor: Color {
+        switch state {
+        case .claimed, .readyToClaim:
+            return .white.opacity(0.50)
+        case .mining:
+            return .blue.opacity(0.28)
+        case .blocked:
+            return .orange.opacity(0.34)
+        case .ended:
+            return .secondary.opacity(0.18)
+        case .locked:
+            return .secondary.opacity(0.16)
+        }
+    }
+
+    private var borderWidth: CGFloat {
+        switch state {
+        case .readyToClaim, .mining:
+            return 1.6
+        default:
+            return 1
+        }
+    }
+}
+
+private struct MiningMilestonePulse: View {
+    let color: Color
+    let size: CGFloat
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1 / 24, paused: false)) { context in
+            let phase = (sin(context.date.timeIntervalSinceReferenceDate * 2.2) + 1) / 2
+            Circle()
+                .stroke(color.opacity(0.12 + (phase * 0.18)), lineWidth: 1)
+                .frame(width: size + 5 + (phase * 3), height: size + 5 + (phase * 3))
         }
     }
 }
@@ -1606,12 +2408,21 @@ private struct CampaignStatePill: View {
     let state: CampaignCardState
 
     var body: some View {
-        Label(state.title, systemImage: state.symbol)
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(state.tint)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(.regularMaterial.opacity(0.9), in: Capsule())
+        HStack(spacing: 6) {
+            if state == .active || state == .inProgress {
+                LivePulseDot(color: state.tint)
+            } else {
+                Image(systemName: state.symbol)
+                    .font(.caption2.weight(.bold))
+            }
+
+            Text(state.title)
+        }
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(state.tint)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(.regularMaterial.opacity(0.9), in: Capsule())
     }
 }
 
@@ -1878,7 +2689,7 @@ private struct CampaignArtworkIcon: View {
     }
 }
 
-private extension URL {
+extension URL {
     var highResolutionArtworkURL: URL {
         let replacements: [(String, String)] = [
             ("{width}", "1200"),
@@ -2007,7 +2818,7 @@ private extension GameAggregateState {
         case .actionRequired: return "Link required"
         case .inProgress: return "In Progress"
         case .ready: return "Ready"
-        case .completed: return "Completed"
+        case .completed: return "Finished"
         case .unavailable: return "Ended"
         }
     }
@@ -2075,13 +2886,13 @@ private enum CampaignCardState: String {
 
     var title: String {
         switch self {
-        case .blocked: return "Link required"
-        case .active: return "Watching now"
-        case .inProgress: return "In progress"
-        case .claimable: return "Reward ready"
+        case .blocked: return "Needs Setup"
+        case .active: return "Active"
+        case .inProgress: return "Active"
+        case .claimable: return "Ready to Claim"
         case .ready: return "Ready"
         case .waiting: return "Waiting"
-        case .claimed: return "Completed"
+        case .claimed: return "Finished"
         case .expired: return "Ended"
         case .idle: return "Available"
         }
@@ -2146,7 +2957,7 @@ private enum DropPreviewState {
     var title: String {
         switch self {
         case .claimed: return "Claimed"
-        case .claimable: return "Claimable"
+        case .claimable: return "Ready to Claim"
         case .inProgress: return "In progress"
         case .locked: return "Locked"
         }
