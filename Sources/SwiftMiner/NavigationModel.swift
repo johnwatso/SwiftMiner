@@ -11,7 +11,6 @@ public final class NavigationModel {
     // MARK: - Navigation State
     public enum SidebarItem: Hashable, Identifiable {
         case overview
-        case operations
         case miners
         case drops
         case events
@@ -20,7 +19,6 @@ public final class NavigationModel {
         public var id: String {
             switch self {
             case .overview: return "overview"
-            case .operations: return "operations"
             case .miners: return "miners"
             case .drops: return "drops"
             case .events: return "events"
@@ -31,7 +29,6 @@ public final class NavigationModel {
         public var displayName: String {
             switch self {
             case .overview: return "Overview"
-            case .operations: return "Operations"
             case .miners: return "miners"
             case .drops: return "Drops"
             case .events: return "Activity Log"
@@ -318,7 +315,6 @@ public final class NavigationModel {
     public let eventOutboxService: EventOutboxService
     public let eventEmitter: EventEmitterService
     public let dmLogStore: DMLogStore
-    let rewardsLedger = RewardsLedgerStore.shared
     public private(set) var dmEventService: SwiftMinerDMEventService?
     /// Cached Discord display names keyed by Discord user ID. Refreshed from
     /// SwiftBot whenever the connection is healthy or the Discord tab loads.
@@ -404,10 +400,6 @@ public final class NavigationModel {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 guard let miner = self.minerManager.miners.first(where: { $0.id == minerId }) else { return }
-                let campaign = miner.allCampaigns.first { candidate in
-                    candidate.drops.contains { $0.id == drop.id }
-                }
-                self.rewardsLedger.record(drop: drop, miner: miner, campaign: campaign, campaignName: campaignName)
                 guard Settings.shared.dmDropClaimedEnabled else { return }
                 guard Settings.shared.allowsOperatorNotifications() else { return }
                 let priorityGames = Settings.shared.priorityGames

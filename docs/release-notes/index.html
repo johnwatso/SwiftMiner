@@ -43,10 +43,17 @@
   <main>
     <h1>SwiftMiner Release Notes</h1>
     <p class="meta">Recent Sparkle update history</p>
+    <h2>Version 1.24</h2>
+    <ul>
+      <li>Moves miner diagnostics into the Miners view, directly beneath Prioritised Campaigns.</li>
+      <li>Adds a collapsible diagnostics panel with miner health, recovery timeline, stall signals, and inline help explaining stall confidence.</li>
+      <li>Replaces the stall confidence percentage label with clearer Normal, Early Warning, Likely Trouble, and High Risk states using native status icons and risk colours.</li>
+      <li>Removes the duplicate Operations screen and the rewards ledger surface now that diagnostics live with each miner.</li>
+      <li>Fixes the Drops dashboard's Most active miner card so claimed counts come from inventory-backed per-account drop totals instead of the live session counter.</li>
+      <li>Updates the stable Sparkle appcast and release-note metadata for SwiftMiner 1.24 build 2026052509.</li>
+    </ul>
     <h2>Version 1.23</h2>
     <ul>
-      <li>Adds an Operations view with global miner health, campaign deadline forecasts, per-miner recovery timelines, and stall confidence signals.</li>
-      <li>Adds a persistent rewards ledger that records claimed drops with account, campaign, game, and timestamp context.</li>
       <li>Adds quiet hours for local claim notifications and Discord DM events.</li>
       <li>Adds settings backup and restore for preferences, game rules, filters, quiet hours, and integration endpoints.</li>
       <li>Adds Discord self-service miner controls for linked users: status, pause, resume, and refresh.</li>
@@ -123,6 +130,7 @@
       <li>Automatically refreshes expired Twitch tokens where possible and gives clearer re-auth guidance when a session needs attention.</li>
       <li>Polishes onboarding, account details, notification handling, and the Set Steam ID flow.</li>
     </ul>
+    <p><a href="./1.24.html">Version 1.24 release page</a></p>
     <p><a href="./1.23.html">Version 1.23 release page</a></p>
     <p><a href="./1.22.html">Version 1.22 release page</a></p>
     <p><a href="./1.21.html">Version 1.21 release page</a></p>

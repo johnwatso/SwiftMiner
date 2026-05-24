@@ -6,11 +6,14 @@ import TipKit
 struct MinersOverviewView: View {
     @Environment(NavigationModel.self) private var navigation
     @ObservedObject private var settings = Settings.shared
+    @AppStorage("minersDiagnosticsExpanded", store: Settings.appStorageStore)
+    private var diagnosticsExpanded = true
     @State private var selectedActivitySummary: MinerManager.MinerActivitySummary?
     @State private var hasCapturedInitialLinkIssues = false
     @State private var previousLinkIssuesById: [String: PrioritisedLinkIssue] = [:]
     @State private var linkNotice: LinkNotice?
     @State private var nicknameEditor: MinerNicknameEditorPresentation?
+    @State private var isDiagnosticsHelpPresented = false
 
     private var miners: [MinerManager.ManagedMiner] {
         navigation.minerManager.miners
@@ -141,6 +144,8 @@ struct MinersOverviewView: View {
 
                     minerCampaignsSection(for: miner, campaigns: activeCampaigns)
 
+                    minerDiagnosticsSection(for: miner)
+
                     pendingItemsSection(for: miner, campaigns: activeCampaigns)
                 }
                 .frame(maxWidth: 1180, alignment: .leading)
@@ -235,6 +240,119 @@ struct MinersOverviewView: View {
             } label: {
                 Label("Clear Nickname", systemImage: "xmark.circle")
             }
+        }
+    }
+
+    private func minerDiagnosticsSection(for miner: MinerManager.ManagedMiner) -> some View {
+        let snapshot = MinerHealthSnapshot.make(miner: miner)
+        let logEvents = navigation.events.filter { $0.minerId == miner.id }.prefix(5)
+        let stallState = StallConfidenceState(percent: snapshot.stallConfidencePercent)
+
+        return DisclosureGroup(isExpanded: $diagnosticsExpanded) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Label(snapshot.statusLabel, systemImage: diagnosticsSystemImage(for: snapshot.health))
+                        .font(.headline)
+                        .foregroundStyle(diagnosticsTint(for: snapshot.health))
+
+                    Spacer()
+
+                    Label {
+                        Text(stallState.title)
+                    } icon: {
+                        Image(systemName: stallState.systemImage)
+                    }
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(stallState.tint)
+                }
+
+                ProgressView(value: Double(snapshot.stallConfidencePercent), total: 100)
+                    .tint(stallState.tint)
+
+                if snapshot.stallSignals.isEmpty {
+                    Text("Recent poll, event and worker signals look normal.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(snapshot.stallSignals, id: \.self) { signal in
+                            Label(signal, systemImage: "smallcircle.filled.circle")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                Divider()
+                    .opacity(0.55)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Recovery Timeline")
+                        .font(.subheadline.weight(.semibold))
+
+                    if selectedActivitySummary?.recentEvents.isEmpty != false && logEvents.isEmpty {
+                        Text("No recent diagnostic events for this miner.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(selectedActivitySummary?.recentEvents.indices ?? 0..<0, id: \.self) { index in
+                            if let event = selectedActivitySummary?.recentEvents[index] {
+                                MinerDiagnosticTimelineRow(
+                                    title: event.summary,
+                                    detail: event.type.rawValue,
+                                    date: event.timestamp
+                                )
+                            }
+                        }
+
+                        ForEach(Array(logEvents)) { event in
+                            MinerDiagnosticTimelineRow(
+                                title: event.message,
+                                detail: event.level.rawValue.capitalized,
+                                date: event.timestamp
+                            )
+                        }
+                    }
+                }
+            }
+            .padding(.top, 12)
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "waveform.path.ecg.rectangle")
+                    .foregroundStyle(diagnosticsTint(for: snapshot.health))
+
+                Text("DIAGNOSTICS")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.tertiary)
+
+                Text(snapshot.statusLabel)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+
+                Spacer(minLength: 4)
+
+                Button {
+                    isDiagnosticsHelpPresented.toggle()
+                } label: {
+                    Image(systemName: "questionmark.circle")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Explain stall confidence")
+                .accessibilityLabel("Explain stall confidence")
+                .popover(isPresented: $isDiagnosticsHelpPresented, arrowEdge: .top) {
+                    StallConfidenceHelpPopover()
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .padding(12)
+        .background(.background.opacity(0.62), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
+                .strokeBorder(.separator.opacity(0.32), lineWidth: 1)
         }
     }
 
@@ -667,6 +785,130 @@ struct MinersOverviewView: View {
         let id = campaign.game.id.trimmingCharacters(in: .whitespacesAndNewlines)
         if !id.isEmpty { return id }
         return normalizedGameKey(campaign.game.name)
+    }
+
+    private func diagnosticsSystemImage(for health: MinerHealthSnapshot.Health) -> String {
+        switch health {
+        case .mining: return "play.circle.fill"
+        case .blocked: return "exclamationmark.triangle.fill"
+        case .needsAuth: return "person.crop.circle.badge.exclamationmark"
+        case .stalled: return "waveform.path.ecg.rectangle"
+        case .recovering: return "arrow.triangle.2.circlepath"
+        case .idle: return "pause.circle"
+        case .attention: return "exclamationmark.circle.fill"
+        }
+    }
+
+    private func diagnosticsTint(for health: MinerHealthSnapshot.Health) -> Color {
+        switch health {
+        case .mining: return .green
+        case .recovering: return .blue
+        case .blocked, .needsAuth, .stalled, .attention: return .orange
+        case .idle: return .secondary
+        }
+    }
+
+}
+
+private struct StallConfidenceState {
+    let percent: Int
+
+    var title: String {
+        switch percent {
+        case 0..<25: return "Normal"
+        case 25...50: return "Early Warning"
+        case 51..<75: return "Likely Trouble"
+        default: return "High Risk"
+        }
+    }
+
+    var systemImage: String {
+        switch percent {
+        case 0..<25: return "checkmark.circle.fill"
+        case 25...50: return "checkmark.circle.badge.questionmark.fill"
+        case 51..<75: return "checkmark.circle.trianglebadge.exclamationmark.fill"
+        default: return "checkmark.circle.badge.xmark.fill"
+        }
+    }
+
+    var tint: Color {
+        switch percent {
+        case 0..<25: return .green
+        case 25...50: return .yellow
+        case 51..<75: return .orange
+        default: return .red
+        }
+    }
+}
+
+private struct StallConfidenceHelpPopover: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Stall Confidence")
+                .font(.headline)
+
+            Text("This estimates how likely the selected miner is stuck. Lower is healthier: 0% means no stall signals, while 100% means the supervisor has marked the miner unresponsive.")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .lineSpacing(1.5)
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(alignment: .leading, spacing: 8) {
+                StallConfidenceHelpRow(state: StallConfidenceState(percent: 0), range: "0-24%")
+                StallConfidenceHelpRow(state: StallConfidenceState(percent: 25), range: "25-50%")
+                StallConfidenceHelpRow(state: StallConfidenceState(percent: 51), range: "51-74%")
+                StallConfidenceHelpRow(state: StallConfidenceState(percent: 75), range: "75-100%")
+            }
+        }
+        .padding(14)
+        .frame(width: 320, alignment: .leading)
+    }
+}
+
+private struct StallConfidenceHelpRow: View {
+    let state: StallConfidenceState
+    let range: String
+
+    var body: some View {
+        HStack(spacing: 9) {
+            Image(systemName: state.systemImage)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(state.tint)
+                .frame(width: 16)
+
+            Text(range)
+                .font(.system(size: 12, weight: .semibold))
+                .frame(width: 62, alignment: .leading)
+
+            Text(state.title)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+private struct MinerDiagnosticTimelineRow: View {
+    let title: String
+    let detail: String
+    let date: Date
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Circle()
+                .fill(Color.secondary.opacity(0.45))
+                .frame(width: 6, height: 6)
+                .padding(.top, 6)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption.weight(.medium))
+                    .lineLimit(2)
+
+                Text("\(detail) · \(date.formatted(date: .omitted, time: .shortened))")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 }
 

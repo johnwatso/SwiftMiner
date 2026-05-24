@@ -229,15 +229,19 @@ struct DropRowView: View {
     let drop: DropViewData
     /// Fallback image URL (e.g., campaign artwork) when drop image is missing
     var fallbackURL: URL? = nil
+    @State private var isHovered = false
 
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
+        HStack(alignment: .top, spacing: 16) {
             dropArtwork
+                .scaleEffect(isHovered ? 1.04 : 1.0)
+                .animation(.spring(response: 0.24, dampingFraction: 0.8), value: isHovered)
 
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .top, spacing: 12) {
                     Text(drop.name)
-                        .font(.headline)
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(isHovered ? .primary : (drop.isEarnable || drop.isClaimable || drop.isClaimed ? .primary : .secondary))
                         .lineLimit(2)
 
                     Spacer(minLength: 0)
@@ -251,7 +255,7 @@ struct DropRowView: View {
 
                 HStack(spacing: 8) {
                     Text("\(drop.currentMinutes) / \(drop.requiredMinutes) min")
-                        .font(.caption)
+                        .font(.system(.caption, design: .rounded).weight(.bold))
                         .foregroundStyle(.secondary)
 
                     if let description = drop.description, !description.isEmpty {
@@ -268,7 +272,34 @@ struct DropRowView: View {
         }
         .padding(16)
         .glassPanel()
-        .opacity(drop.isEarnable || drop.isClaimable || drop.isClaimed ? 1.0 : 0.62)
+        .background(
+            ZStack {
+                if drop.isClaimable {
+                    RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
+                        .fill(Color.orange.opacity(0.04))
+                } else if drop.isEarnable && drop.progress > 0 {
+                    RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
+                        .fill(Color.blue.opacity(0.03))
+                } else if drop.isClaimed {
+                    RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
+                        .fill(Color.green.opacity(0.02))
+                }
+            }
+        )
+        .overlay {
+            if drop.isClaimable {
+                RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
+                    .strokeBorder(Color.orange.opacity(0.24), lineWidth: 1.2)
+            } else if drop.isEarnable && drop.progress > 0 {
+                RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
+                    .strokeBorder(Color.blue.opacity(0.18), lineWidth: 1)
+            }
+        }
+        .opacity(drop.isEarnable || drop.isClaimable || drop.isClaimed ? 1.0 : 0.58)
+        .grayscale(drop.isEarnable || drop.isClaimable || drop.isClaimed ? 0.0 : 0.82)
+        .onHover { hovering in
+            isHovered = hovering
+        }
     }
 
     /// Determines the best URL to use: drop image first, then fallback, then nil
@@ -278,7 +309,8 @@ struct DropRowView: View {
 
     @ViewBuilder
     private var dropArtwork: some View {
-        if let url = imageURLToUse {
+        let artworkSize: CGFloat = 64
+        if let url = imageURLToUse?.highResolutionArtworkURL {
             AsyncImage(url: url) { image in
                 image
                     .resizable()
@@ -287,11 +319,12 @@ struct DropRowView: View {
             } placeholder: {
                 placeholderArtwork
             }
-            .frame(width: 52, height: 52)
+            .frame(width: artworkSize, height: artworkSize)
             .clipShape(RoundedRectangle(cornerRadius: GlassRadius.artwork, style: .continuous))
+            .shadow(color: .black.opacity(drop.isEarnable || drop.isClaimable || drop.isClaimed ? 0.12 : 0.04), radius: 4, y: 2)
         } else {
             placeholderArtwork
-                .frame(width: 52, height: 52)
+                .frame(width: artworkSize, height: artworkSize)
         }
     }
 
@@ -300,7 +333,7 @@ struct DropRowView: View {
             .fill(.thinMaterial)
             .overlay {
                 Image(systemName: rewardIcon)
-                    .font(.system(size: 18, weight: .medium))
+                    .font(.system(size: 22, weight: .medium))
                     .foregroundStyle(.secondary)
             }
     }
@@ -315,8 +348,8 @@ struct DropRowView: View {
 
     private var progressTint: Color {
         if drop.isClaimed { return .green }
-        if drop.isClaimable { return .blue }
-        if drop.isEarnable { return .accentColor }
+        if drop.isClaimable { return .orange }
+        if drop.isEarnable { return .blue }
         return .secondary
     }
 }
@@ -354,7 +387,7 @@ private struct DropStateBadge: View {
 
     var body: some View {
         Label(title, systemImage: icon)
-            .font(.caption2.weight(.semibold))
+            .font(.caption2.weight(.bold))
             .padding(.horizontal, 9)
             .padding(.vertical, 5)
             .foregroundStyle(color)
@@ -377,15 +410,15 @@ private struct DropStateBadge: View {
 
     private var color: Color {
         if drop.isClaimed { return .green }
-        if drop.isClaimable { return .blue }
-        if drop.isEarnable { return .secondary }
+        if drop.isClaimable { return .orange }
+        if drop.isEarnable { return .blue }
         return .secondary.opacity(0.8)
     }
 
     private var backgroundColor: Color {
         if drop.isClaimed { return .green.opacity(0.12) }
-        if drop.isClaimable { return .blue.opacity(0.12) }
-        if drop.isEarnable { return .white.opacity(0.08) }
+        if drop.isClaimable { return .orange.opacity(0.12) }
+        if drop.isEarnable { return .blue.opacity(0.12) }
         return .white.opacity(0.05)
     }
 }
