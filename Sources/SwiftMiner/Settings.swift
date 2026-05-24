@@ -338,6 +338,15 @@ public final class Settings: ObservableObject {
 
     @AppStorage("dmAccountActionRequiredEnabled", store: Settings.appStorageStore)
     public var dmAccountActionRequiredEnabled: Bool = true
+
+    @AppStorage("quietHoursEnabled", store: Settings.appStorageStore)
+    public var quietHoursEnabled: Bool = false
+
+    @AppStorage("quietHoursStartMinute", store: Settings.appStorageStore)
+    public var quietHoursStartMinute: Int = 22 * 60
+
+    @AppStorage("quietHoursEndMinute", store: Settings.appStorageStore)
+    public var quietHoursEndMinute: Int = 7 * 60
     
     /// JSON-encoded array of GamePreference for selected games
     @AppStorage("gamePreferencesData", store: Settings.appStorageStore)
@@ -786,6 +795,9 @@ public final class Settings: ObservableObject {
         dmLinkRequiredEnabled = true
         dmCampaignDetectedEnabled = false
         dmAccountActionRequiredEnabled = true
+        quietHoursEnabled = false
+        quietHoursStartMinute = 22 * 60
+        quietHoursEndMinute = 7 * 60
         gamePreferencesData = "[]"
         selectedDropsFiltersData = "[\"active\"]"
         miningStrategy = .mineAll
@@ -794,6 +806,122 @@ public final class Settings: ObservableObject {
 #if DEBUG
         debugBypassLinkRequirement = false
 #endif
+    }
+
+    public func allowsOperatorNotifications(at date: Date = Date(), calendar: Calendar = .current) -> Bool {
+        guard quietHoursEnabled else { return true }
+        let components = calendar.dateComponents([.hour, .minute], from: date)
+        let minute = (components.hour ?? 0) * 60 + (components.minute ?? 0)
+        let start = normalizedMinute(quietHoursStartMinute)
+        let end = normalizedMinute(quietHoursEndMinute)
+        guard start != end else { return false }
+        if start < end {
+            return !(minute >= start && minute < end)
+        }
+        return !(minute >= start || minute < end)
+    }
+
+    public func exportBackupData(includeSecrets: Bool = false) throws -> Data {
+        let backup = SettingsBackup(
+            exportedAt: Date(),
+            autoClaimEnabled: autoClaimEnabled,
+            autoClaimPointsEnabled: autoClaimPointsEnabled,
+            logLevel: logLevel.rawValue,
+            maxLogEntries: maxLogEntries,
+            appPresenceMode: appPresenceMode.rawValue,
+            autoStartOnLaunch: autoStartOnLaunch,
+            startMinimized: startMinimized,
+            enableBadgesEmotes: enableBadgesEmotes,
+            avoidDuplicateStreams: avoidDuplicateStreams,
+            antiStallRecoveryEnabled: antiStallRecoveryEnabled,
+            prioritiseFollowedStreamers: prioritiseFollowedStreamers,
+            syncMinersState: syncMinersState,
+            preferSteamArtwork: preferSteamArtwork,
+            tipsEnabled: tipsEnabled,
+            runInBackground: runInBackground,
+            showActivityLogIcons: showActivityLogIcons,
+            animateActivityLogRows: animateActivityLogRows,
+            selectedDropsFiltersData: selectedDropsFiltersData,
+            selectedEventFiltersData: selectedEventFiltersData,
+            preferredQuality: preferredQuality.rawValue,
+            showClaimNotifications: showClaimNotifications,
+            ignoredWarningsData: ignoredWarningsData,
+            twitchClientId: includeSecrets ? twitchClientId : "",
+            swiftBotEnabled: swiftBotEnabled,
+            swiftBotEndpoint: swiftBotEndpoint,
+            swiftBotWebhookURL: swiftBotWebhookURL,
+            swiftMinerAPIEndpoint: swiftMinerAPIEndpoint,
+            swiftBotHmacSecret: includeSecrets ? swiftBotHmacSecret : "",
+            swiftMinerAPIKey: includeSecrets ? swiftMinerAPIKey : "",
+            dmDropClaimedEnabled: dmDropClaimedEnabled,
+            dmCampaignCompletedEnabled: dmCampaignCompletedEnabled,
+            dmConnectionExpiredEnabled: dmConnectionExpiredEnabled,
+            dmWelcomeBackEnabled: dmWelcomeBackEnabled,
+            dmLinkRequiredEnabled: dmLinkRequiredEnabled,
+            dmCampaignDetectedEnabled: dmCampaignDetectedEnabled,
+            dmAccountActionRequiredEnabled: dmAccountActionRequiredEnabled,
+            quietHoursEnabled: quietHoursEnabled,
+            quietHoursStartMinute: quietHoursStartMinute,
+            quietHoursEndMinute: quietHoursEndMinute,
+            gamePreferencesData: gamePreferencesData,
+            miningStrategy: miningStrategy.rawValue
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return try encoder.encode(backup)
+    }
+
+    public func importBackupData(_ data: Data) throws {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let backup = try decoder.decode(SettingsBackup.self, from: data)
+
+        autoClaimEnabled = backup.autoClaimEnabled
+        autoClaimPointsEnabled = backup.autoClaimPointsEnabled
+        logLevel = Settings.LogLevel(rawValue: backup.logLevel) ?? .info
+        maxLogEntries = backup.maxLogEntries
+        appPresenceMode = AppPresenceMode(rawValue: backup.appPresenceMode) ?? .dockOnly
+        autoStartOnLaunch = backup.autoStartOnLaunch
+        startMinimized = backup.startMinimized
+        enableBadgesEmotes = backup.enableBadgesEmotes
+        avoidDuplicateStreams = backup.avoidDuplicateStreams
+        antiStallRecoveryEnabled = backup.antiStallRecoveryEnabled
+        prioritiseFollowedStreamers = backup.prioritiseFollowedStreamers
+        syncMinersState = backup.syncMinersState
+        preferSteamArtwork = backup.preferSteamArtwork
+        tipsEnabled = backup.tipsEnabled
+        runInBackground = backup.runInBackground
+        showActivityLogIcons = backup.showActivityLogIcons
+        animateActivityLogRows = backup.animateActivityLogRows
+        selectedDropsFiltersData = backup.selectedDropsFiltersData
+        selectedEventFiltersData = backup.selectedEventFiltersData
+        preferredQuality = Settings.StreamQuality(rawValue: backup.preferredQuality) ?? .auto
+        showClaimNotifications = backup.showClaimNotifications
+        ignoredWarningsData = backup.ignoredWarningsData
+        if !backup.twitchClientId.isEmpty { twitchClientId = backup.twitchClientId }
+        swiftBotEnabled = backup.swiftBotEnabled
+        swiftBotEndpoint = backup.swiftBotEndpoint
+        swiftBotWebhookURL = backup.swiftBotWebhookURL
+        swiftMinerAPIEndpoint = backup.swiftMinerAPIEndpoint
+        if !backup.swiftBotHmacSecret.isEmpty { swiftBotHmacSecret = backup.swiftBotHmacSecret }
+        if !backup.swiftMinerAPIKey.isEmpty { swiftMinerAPIKey = backup.swiftMinerAPIKey }
+        dmDropClaimedEnabled = backup.dmDropClaimedEnabled
+        dmCampaignCompletedEnabled = backup.dmCampaignCompletedEnabled
+        dmConnectionExpiredEnabled = backup.dmConnectionExpiredEnabled
+        dmWelcomeBackEnabled = backup.dmWelcomeBackEnabled
+        dmLinkRequiredEnabled = backup.dmLinkRequiredEnabled
+        dmCampaignDetectedEnabled = backup.dmCampaignDetectedEnabled
+        dmAccountActionRequiredEnabled = backup.dmAccountActionRequiredEnabled
+        quietHoursEnabled = backup.quietHoursEnabled
+        quietHoursStartMinute = normalizedMinute(backup.quietHoursStartMinute)
+        quietHoursEndMinute = normalizedMinute(backup.quietHoursEndMinute)
+        gamePreferencesData = backup.gamePreferencesData
+        miningStrategy = MiningStrategy(rawValue: backup.miningStrategy) ?? .mineAll
+    }
+
+    private func normalizedMinute(_ minute: Int) -> Int {
+        min(max(minute, 0), 23 * 60 + 59)
     }
 
     public func ensureSwiftBotSecrets() {
@@ -814,6 +942,142 @@ public final class Settings: ObservableObject {
         }
         return UUID().uuidString.replacingOccurrences(of: "-", with: "") +
             UUID().uuidString.replacingOccurrences(of: "-", with: "")
+    }
+}
+
+public struct SettingsBackup: Codable, Sendable {
+    public let schemaVersion: Int
+    public let exportedAt: Date
+    public let autoClaimEnabled: Bool
+    public let autoClaimPointsEnabled: Bool
+    public let logLevel: String
+    public let maxLogEntries: Int
+    public let appPresenceMode: String
+    public let autoStartOnLaunch: Bool
+    public let startMinimized: Bool
+    public let enableBadgesEmotes: Bool
+    public let avoidDuplicateStreams: Bool
+    public let antiStallRecoveryEnabled: Bool
+    public let prioritiseFollowedStreamers: Bool
+    public let syncMinersState: Bool
+    public let preferSteamArtwork: Bool
+    public let tipsEnabled: Bool
+    public let runInBackground: Bool
+    public let showActivityLogIcons: Bool
+    public let animateActivityLogRows: Bool
+    public let selectedDropsFiltersData: String
+    public let selectedEventFiltersData: String
+    public let preferredQuality: String
+    public let showClaimNotifications: Bool
+    public let ignoredWarningsData: String
+    public let twitchClientId: String
+    public let swiftBotEnabled: Bool
+    public let swiftBotEndpoint: String
+    public let swiftBotWebhookURL: String
+    public let swiftMinerAPIEndpoint: String
+    public let swiftBotHmacSecret: String
+    public let swiftMinerAPIKey: String
+    public let dmDropClaimedEnabled: Bool
+    public let dmCampaignCompletedEnabled: Bool
+    public let dmConnectionExpiredEnabled: Bool
+    public let dmWelcomeBackEnabled: Bool
+    public let dmLinkRequiredEnabled: Bool
+    public let dmCampaignDetectedEnabled: Bool
+    public let dmAccountActionRequiredEnabled: Bool
+    public let quietHoursEnabled: Bool
+    public let quietHoursStartMinute: Int
+    public let quietHoursEndMinute: Int
+    public let gamePreferencesData: String
+    public let miningStrategy: String
+
+    public init(
+        schemaVersion: Int = 1,
+        exportedAt: Date,
+        autoClaimEnabled: Bool,
+        autoClaimPointsEnabled: Bool,
+        logLevel: String,
+        maxLogEntries: Int,
+        appPresenceMode: String,
+        autoStartOnLaunch: Bool,
+        startMinimized: Bool,
+        enableBadgesEmotes: Bool,
+        avoidDuplicateStreams: Bool,
+        antiStallRecoveryEnabled: Bool,
+        prioritiseFollowedStreamers: Bool,
+        syncMinersState: Bool,
+        preferSteamArtwork: Bool,
+        tipsEnabled: Bool,
+        runInBackground: Bool,
+        showActivityLogIcons: Bool,
+        animateActivityLogRows: Bool,
+        selectedDropsFiltersData: String,
+        selectedEventFiltersData: String,
+        preferredQuality: String,
+        showClaimNotifications: Bool,
+        ignoredWarningsData: String,
+        twitchClientId: String,
+        swiftBotEnabled: Bool,
+        swiftBotEndpoint: String,
+        swiftBotWebhookURL: String,
+        swiftMinerAPIEndpoint: String,
+        swiftBotHmacSecret: String,
+        swiftMinerAPIKey: String,
+        dmDropClaimedEnabled: Bool,
+        dmCampaignCompletedEnabled: Bool,
+        dmConnectionExpiredEnabled: Bool,
+        dmWelcomeBackEnabled: Bool,
+        dmLinkRequiredEnabled: Bool,
+        dmCampaignDetectedEnabled: Bool,
+        dmAccountActionRequiredEnabled: Bool,
+        quietHoursEnabled: Bool,
+        quietHoursStartMinute: Int,
+        quietHoursEndMinute: Int,
+        gamePreferencesData: String,
+        miningStrategy: String
+    ) {
+        self.schemaVersion = schemaVersion
+        self.exportedAt = exportedAt
+        self.autoClaimEnabled = autoClaimEnabled
+        self.autoClaimPointsEnabled = autoClaimPointsEnabled
+        self.logLevel = logLevel
+        self.maxLogEntries = maxLogEntries
+        self.appPresenceMode = appPresenceMode
+        self.autoStartOnLaunch = autoStartOnLaunch
+        self.startMinimized = startMinimized
+        self.enableBadgesEmotes = enableBadgesEmotes
+        self.avoidDuplicateStreams = avoidDuplicateStreams
+        self.antiStallRecoveryEnabled = antiStallRecoveryEnabled
+        self.prioritiseFollowedStreamers = prioritiseFollowedStreamers
+        self.syncMinersState = syncMinersState
+        self.preferSteamArtwork = preferSteamArtwork
+        self.tipsEnabled = tipsEnabled
+        self.runInBackground = runInBackground
+        self.showActivityLogIcons = showActivityLogIcons
+        self.animateActivityLogRows = animateActivityLogRows
+        self.selectedDropsFiltersData = selectedDropsFiltersData
+        self.selectedEventFiltersData = selectedEventFiltersData
+        self.preferredQuality = preferredQuality
+        self.showClaimNotifications = showClaimNotifications
+        self.ignoredWarningsData = ignoredWarningsData
+        self.twitchClientId = twitchClientId
+        self.swiftBotEnabled = swiftBotEnabled
+        self.swiftBotEndpoint = swiftBotEndpoint
+        self.swiftBotWebhookURL = swiftBotWebhookURL
+        self.swiftMinerAPIEndpoint = swiftMinerAPIEndpoint
+        self.swiftBotHmacSecret = swiftBotHmacSecret
+        self.swiftMinerAPIKey = swiftMinerAPIKey
+        self.dmDropClaimedEnabled = dmDropClaimedEnabled
+        self.dmCampaignCompletedEnabled = dmCampaignCompletedEnabled
+        self.dmConnectionExpiredEnabled = dmConnectionExpiredEnabled
+        self.dmWelcomeBackEnabled = dmWelcomeBackEnabled
+        self.dmLinkRequiredEnabled = dmLinkRequiredEnabled
+        self.dmCampaignDetectedEnabled = dmCampaignDetectedEnabled
+        self.dmAccountActionRequiredEnabled = dmAccountActionRequiredEnabled
+        self.quietHoursEnabled = quietHoursEnabled
+        self.quietHoursStartMinute = quietHoursStartMinute
+        self.quietHoursEndMinute = quietHoursEndMinute
+        self.gamePreferencesData = gamePreferencesData
+        self.miningStrategy = miningStrategy
     }
 }
 

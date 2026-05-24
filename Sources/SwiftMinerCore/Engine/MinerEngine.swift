@@ -60,6 +60,15 @@ public actor MinerEngine {
         return (.unknown, detail)
     }
 
+    static func shouldReportFatalError(_ error: TwitchMinerError) -> Bool {
+        switch error {
+        case .networkError, .rateLimited:
+            return false
+        default:
+            return true
+        }
+    }
+
     // MARK: - Properties
 
     private let clientId: String
@@ -665,7 +674,6 @@ public actor MinerEngine {
         log("⚠️ Watch session warning: \(error.localizedDescription)")
         let (category, detail) = Self.classifyIssue(error)
         onOperationalEvent?(.issueDetected(category: category, detail: detail))
-        onError?(error)
     }
 
     private func emitIssue(_ error: Error) {
@@ -1895,9 +1903,11 @@ public actor MinerEngine {
     
     private func handleError(_ error: TwitchMinerError) {
         log("Error: \(error.localizedDescription)")
-        onError?(error)
-
-        session?.status = .error
+        let isFatal = Self.shouldReportFatalError(error)
+        if isFatal {
+            onError?(error)
+            session?.status = .error
+        }
 
         // Don't stop for recoverable errors
         switch error {

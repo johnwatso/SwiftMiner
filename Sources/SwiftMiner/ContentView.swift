@@ -57,6 +57,9 @@ struct ContentView: View {
         case .overview, .none:
             OverviewView()
 
+        case .operations:
+            OperationsView()
+
         case .miners:
             MinersOverviewView()
 
