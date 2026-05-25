@@ -88,6 +88,7 @@
 		ADAE5122C334F0F8BE0C4296 /* MergeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B2A62D9979ADDE4DE784D49 /* MergeService.swift */; };
 		AF6AD760D99F6D20299BA9C1 /* TwitchClientFingerprint.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71FA5DF07B124B51C6C833B4 /* TwitchClientFingerprint.swift */; };
 		B0B3F31B7C6EC4F7BED6F11B /* DropsServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D227823A0CF0DEDA834B486B /* DropsServiceTests.swift */; };
+		B1A8C6E53C0D4F80A56C1E20 /* DiscordAPIRoutesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8A8CB79AC1D4CE4B70F4A90 /* DiscordAPIRoutesTests.swift */; };
 		B16F074B9745C37F55F481B7 /* PubSubClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C67349DAA237D14A6C21D75 /* PubSubClient.swift */; };
 		B5073D6F750D1504525FC42D /* MinerAttention.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0528E48497586BD35DE82149 /* MinerAttention.swift */; };
 		B6820745B5DB991B2905AD36 /* SpadeBeaconService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 514F43250FDCF5A12579A212 /* SpadeBeaconService.swift */; };
@@ -278,6 +279,7 @@
 		C67E7250E0A8C61154B61CBB /* CampaignViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignViews.swift; sourceTree = "<group>"; };
 		CA4CEDB6297B13DCF0FDD8A7 /* DropEventsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropEventsService.swift; sourceTree = "<group>"; };
 		CD5023EC681D53196C9F4350 /* PrimaryStateResolverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrimaryStateResolverTests.swift; sourceTree = "<group>"; };
+		C8A8CB79AC1D4CE4B70F4A90 /* DiscordAPIRoutesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscordAPIRoutesTests.swift; sourceTree = "<group>"; };
 		D12899BD6300ED21BCE6187E /* CampaignMergeEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignMergeEngine.swift; sourceTree = "<group>"; };
 		D227823A0CF0DEDA834B486B /* DropsServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropsServiceTests.swift; sourceTree = "<group>"; };
 		D566A4967EB868FA5FD84FED /* SparklePublisher */ = {isa = PBXFileReference; includeInIndex = 0; path = SparklePublisher; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -558,6 +560,7 @@
 				E3C6E1FF09A07505FAF56FDF /* CampaignStateTests.swift */,
 				573073692F55774FD9E03776 /* CampaignTabRoutingTests.swift */,
 				AA337D3B4BF522E65F51DB29 /* ClaimServiceTests.swift */,
+				C8A8CB79AC1D4CE4B70F4A90 /* DiscordAPIRoutesTests.swift */,
 				D227823A0CF0DEDA834B486B /* DropsServiceTests.swift */,
 				41D6E3EDBE9FEE60A15BCD57 /* GameAggregateTests.swift */,
 				637C207EE3AF4206DA9F2C8F /* LogExporterTests.swift */,
@@ -943,6 +946,7 @@
 				374303964418BDD39C426435 /* CampaignStateTests.swift in Sources */,
 				2D011D07DA750AF66BFC2C25 /* CampaignTabRoutingTests.swift in Sources */,
 				D421E764CC96327AB1098DCF /* ClaimServiceTests.swift in Sources */,
+				B1A8C6E53C0D4F80A56C1E20 /* DiscordAPIRoutesTests.swift in Sources */,
 				B0B3F31B7C6EC4F7BED6F11B /* DropsServiceTests.swift in Sources */,
 				2B503A529D384687C95757EC /* GameAggregateTests.swift in Sources */,
 				0DA97EF00308C1F2837F3394 /* LogExporterTests.swift in Sources */,
@@ -1051,7 +1055,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026052509;
+				CURRENT_PROJECT_VERSION = 2026052521;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;
@@ -1211,7 +1215,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026052509;
+				CURRENT_PROJECT_VERSION = 2026052521;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;
