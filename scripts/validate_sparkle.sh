@@ -12,6 +12,7 @@ SCHEME="SwiftMiner"
 CONFIGURATION="${SPARKLE_VALIDATION_CONFIGURATION:-Release}"
 APPCAST_STABLE="$ROOT_DIR/docs/appcast.xml"
 APPCAST_BETA="$ROOT_DIR/docs/beta/appcast.xml"
+PROJECT_YML="$ROOT_DIR/project.yml"
 
 BUILD_SETTINGS_CACHE=""
 
@@ -32,6 +33,14 @@ build_setting_value() {
         | sed -nE "s/^[[:space:]]*$key = (.*)$/\\1/p" \
         | head -n 1 \
         | tr -d '"'
+}
+
+project_yml_value() {
+    local key="$1"
+    if [[ ! -f "$PROJECT_YML" ]]; then
+        return
+    fi
+    sed -nE "s/^[[:space:]]*$key:[[:space:]]*\"?([^\"]+)\"?[[:space:]]*$/\\1/p" "$PROJECT_YML" | head -n 1
 }
 
 resolve_build_setting_reference() {
@@ -67,12 +76,18 @@ fi
 if [[ -z "$FEED_URL" ]]; then
     FEED_URL=$(build_setting_value "SPARKLE_FEED_URL")
 fi
+if [[ -z "$FEED_URL" ]]; then
+    FEED_URL=$(project_yml_value "SPARKLE_FEED_URL")
+fi
 
 if [[ -z "$PUBLIC_KEY" ]]; then
     PUBLIC_KEY=$(build_setting_value "INFOPLIST_KEY_SUPublicEDKey")
 fi
 if [[ -z "$PUBLIC_KEY" ]]; then
     PUBLIC_KEY=$(build_setting_value "SPARKLE_PUBLIC_ED_KEY")
+fi
+if [[ -z "$PUBLIC_KEY" ]]; then
+    PUBLIC_KEY=$(project_yml_value "SPARKLE_PUBLIC_ED_KEY")
 fi
 
 if [[ -z "$FEED_URL" ]]; then
