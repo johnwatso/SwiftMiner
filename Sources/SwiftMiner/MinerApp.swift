@@ -400,7 +400,7 @@ struct MenuBarContent: View {
 
     var body: some View {
         Group {
-            (Text(Image(systemName: statusIcon)) + Text(" \(statusText)"))
+            Text("\(Image(systemName: statusIcon)) \(statusText)")
                 .foregroundStyle(statusColor)
 
             Divider()

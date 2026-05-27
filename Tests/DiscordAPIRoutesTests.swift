@@ -75,7 +75,8 @@ final class DiscordAPIRoutesTests: XCTestCase {
             body: Data()
         ))
         XCTAssertEqual(missingUser.statusCode, 404)
-        XCTAssertEqual(await recorder.callCount(), 0)
+        let initialCallCount = await recorder.callCount()
+        XCTAssertEqual(initialCallCount, 0)
 
         try await harness.registerUser(discordUserId)
 
@@ -86,7 +87,8 @@ final class DiscordAPIRoutesTests: XCTestCase {
             body: Data()
         ))
         XCTAssertEqual(response.statusCode, 200)
-        XCTAssertEqual(await recorder.actions(), [.status])
+        let recordedActions = await recorder.actions()
+        XCTAssertEqual(recordedActions, [.status])
 
         let payload = try decodeJSON(response.body)
         XCTAssertEqual(payload["ok"] as? Bool, true)

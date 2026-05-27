@@ -175,6 +175,11 @@ public struct DiscordDMState: Codable, Sendable, Equatable {
         self.hasReceivedWelcomeMessage = hasReceivedWelcomeMessage
         self.hasCompletedInitialDMFlow = hasCompletedInitialDMFlow
     }
+
+    enum CodingKeys: String, CodingKey {
+        case hasReceivedWelcomeMessage = "has_received_welcome_message"
+        case hasCompletedInitialDMFlow = "has_completed_initial_dm_flow"
+    }
 }
 
 // MARK: - Protocol
