@@ -120,7 +120,6 @@ public final class Settings: ObservableObject {
             if let data = try? JSONEncoder().encode(encoded),
                let string = String(data: data, encoding: .utf8),
                selectedDropsFiltersData != string {
-                objectWillChange.send()
                 selectedDropsFiltersData = string
             }
         }
@@ -141,26 +140,30 @@ public final class Settings: ObservableObject {
                   let decoded = try? JSONDecoder().decode([EventFilter].self, from: data) else {
                 return Self.defaultEventFilters
             }
-            var filters = Set(decoded)
-            if !eventFiltersHeartbeatDefaultApplied {
-                filters.insert(.heartbeats)
-                eventFiltersHeartbeatDefaultApplied = true
-                let encoded = Array(filters).sorted { $0.rawValue < $1.rawValue }
-                if let data = try? JSONEncoder().encode(encoded),
-                   let string = String(data: data, encoding: .utf8) {
-                    selectedEventFiltersData = string
-                }
-            }
-            return filters
+            return Set(decoded)
         }
         set {
             let encoded = Array(newValue).sorted { $0.rawValue < $1.rawValue }
             if let data = try? JSONEncoder().encode(encoded),
                let string = String(data: data, encoding: .utf8),
                selectedEventFiltersData != string {
-                objectWillChange.send()
                 selectedEventFiltersData = string
             }
+        }
+    }
+
+    /// Apply the one-time migration that enables heartbeat diagnostics for existing users.
+    /// Must be called from init(), not from a property getter, to avoid mutating
+    /// @AppStorage during a view update (which triggers the SwiftUI runtime warning).
+    private func applyHeartbeatFilterDefaultIfNeeded() {
+        guard !eventFiltersHeartbeatDefaultApplied else { return }
+        var filters = selectedEventFilters
+        filters.insert(.heartbeats)
+        eventFiltersHeartbeatDefaultApplied = true
+        let encoded = Array(filters).sorted { $0.rawValue < $1.rawValue }
+        if let data = try? JSONEncoder().encode(encoded),
+           let string = String(data: data, encoding: .utf8) {
+            selectedEventFiltersData = string
         }
     }
 
@@ -207,7 +210,6 @@ public final class Settings: ObservableObject {
             if let data = try? JSONEncoder().encode(newValue),
                let encoded = String(data: data, encoding: .utf8),
                ignoredWarningsData != encoded {
-                objectWillChange.send()
                 ignoredWarningsData = encoded
             }
         }
@@ -380,7 +382,6 @@ public final class Settings: ObservableObject {
             if let data = try? JSONEncoder().encode(normalized),
                let string = String(data: data, encoding: .utf8) {
                 guard gamePreferencesData != string else { return }
-                objectWillChange.send()
                 gamePreferencesData = string
             }
         }
@@ -578,6 +579,7 @@ public final class Settings: ObservableObject {
             appPresenceMode = .menuBarWhenClosed
         }
         migrateFromLegacyIfNeeded()
+        applyHeartbeatFilterDefaultIfNeeded()
     }
 
     /// One-time migration from old comma-separated strings to new JSON model
