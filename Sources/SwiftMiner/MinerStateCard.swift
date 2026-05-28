@@ -181,7 +181,7 @@ struct MinerStateCard: View {
             return StateConfig(
                 headline: "No Recent Activity",
                 subtitle: "The worker is running, but liveness signals have gone quiet.",
-                icon: "waveform.path.ecg",
+                icon: "checkmark.circle.trianglebadge.exclamationmark.fill",
                 color: .yellow
             )
         }
@@ -687,7 +687,7 @@ struct MinerActivitySnapshot {
                 id: "quiet-\(miner.id)",
                 title: "No Recent Activity",
                 subtitle: "Worker is running, but it has not reported recent liveness yet.",
-                symbol: "waveform.path.ecg",
+                symbol: "checkmark.circle.trianglebadge.exclamationmark.fill",
                 accent: .yellow
             )
         }
@@ -1130,7 +1130,7 @@ struct MinerActivitySnapshot {
             return "bolt.horizontal.circle.fill"
         }
         if miner.isRunning && !miner.needsAuth && !miner.isHealthy {
-            return "waveform.path.ecg"
+            return "checkmark.circle.trianglebadge.exclamationmark.fill"
         }
         if now.requiresAccountLink || miner.needsAuth {
             return "exclamationmark.triangle.fill"

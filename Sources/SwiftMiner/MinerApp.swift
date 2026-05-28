@@ -103,6 +103,22 @@ struct MinerApp: App {
             // the menu itself is removed alongside View in LaunchContextDelegate.
             CommandGroup(replacing: .newItem) {}
             CommandGroup(replacing: .saveItem) {}
+            #if DEBUG
+            CommandMenu("Developer") {
+                if minerManager.miners.isEmpty {
+                    Button("No miners added") {
+                        // no-op
+                    }
+                    .disabled(true)
+                } else {
+                    ForEach(minerManager.miners) { miner in
+                        Button("Cycle State for \(miner.displayName)") {
+                            minerManager.cycleDebugState(for: miner.id)
+                        }
+                    }
+                }
+            }
+            #endif
         }
 
         Window("What's New", id: AppWindowID.releaseNotes) {

@@ -33,8 +33,17 @@ struct AnimatedStatusIcon: View {
     private var animatedIcon: some View {
         if symbol == "checkmark.circle.fill" {
             AnimatedCheckmarkCircleView(color: color, size: size)
-        } else if symbol == "waveform.path.ecg" {
-            AnimatedECGView(color: color, size: size)
+        } else if symbol == "checkmark.circle.trianglebadge.exclamationmark.fill" {
+            Image(systemName: symbol)
+                .font(.system(size: size, weight: weight))
+                .foregroundStyle(color)
+                .symbolEffect(.bounce.down, value: triggerBounce)
+                .onAppear {
+                    triggerBounce.toggle()
+                }
+                .onChange(of: symbol) { _, _ in
+                    triggerBounce.toggle()
+                }
         } else if symbol == "checkmark.seal.fill" {
             Image(systemName: symbol)
                 .font(.system(size: size, weight: weight))
@@ -140,93 +149,6 @@ private struct CheckmarkShape: Shape {
         path.addLine(to: CGPoint(x: rect.width * 0.38, y: rect.maxY))
         // Up to the top-right
         path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-        return path
-    }
-}
-
-// MARK: - AnimatedECGView
-
-/// Renders a custom ECG heartbeat trace that draws in, draws out, pauses, then repeats.
-private struct AnimatedECGView: View {
-    let color: Color
-    let size: CGFloat
-
-    @State private var progress: CGFloat = 0
-    @State private var ecgTask: Task<Void, Never>?
-
-    var body: some View {
-        ECGShape()
-            .trim(from: 0, to: progress)
-            .stroke(
-                color,
-                style: StrokeStyle(lineWidth: max(1, size * 0.1), lineCap: .round, lineJoin: .round)
-            )
-            .frame(width: size * 2.2, height: size)
-            .onAppear { startLoop() }
-            .onDisappear { ecgTask?.cancel() }
-    }
-
-    private func startLoop() {
-        ecgTask?.cancel()
-        ecgTask = Task {
-            while !Task.isCancelled {
-                // Draw in left-to-right over 2s
-                withAnimation(.linear(duration: 2.0)) { progress = 1.0 }
-                try? await Task.sleep(nanoseconds: 2_000_000_000)
-                guard !Task.isCancelled else { break }
-
-                // Hold fully drawn for 1s
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
-                guard !Task.isCancelled else { break }
-
-                // Snap back to blank instantly
-                progress = 0.0
-
-                // Hold blank for 1s before next cycle
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
-            }
-        }
-    }
-}
-
-// MARK: - ECGShape
-
-/// A stylised hospital-monitor ECG trace (flat → bump → spike → drop → recovery → flat).
-/// Drawn in a normalised rect so it scales cleanly with any size.
-private struct ECGShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        let w = rect.width
-        let h = rect.height
-        let mid = rect.midY
-
-        var path = Path()
-
-        // Leading flat line
-        path.move(to: CGPoint(x: 0, y: mid))
-        path.addLine(to: CGPoint(x: w * 0.25, y: mid))
-
-        // Small P-wave bump
-        path.addCurve(
-            to: CGPoint(x: w * 0.35, y: mid),
-            control1: CGPoint(x: w * 0.27, y: mid - h * 0.15),
-            control2: CGPoint(x: w * 0.33, y: mid - h * 0.15)
-        )
-
-        // QRS complex: drop then spike
-        path.addLine(to: CGPoint(x: w * 0.42, y: mid + h * 0.18))   // Q
-        path.addLine(to: CGPoint(x: w * 0.50, y: h * 0.04))          // R (peak)
-        path.addLine(to: CGPoint(x: w * 0.57, y: mid + h * 0.22))   // S
-
-        // T-wave recovery
-        path.addCurve(
-            to: CGPoint(x: w * 0.75, y: mid),
-            control1: CGPoint(x: w * 0.62, y: mid - h * 0.20),
-            control2: CGPoint(x: w * 0.72, y: mid - h * 0.20)
-        )
-
-        // Trailing flat line
-        path.addLine(to: CGPoint(x: w, y: mid))
-
         return path
     }
 }

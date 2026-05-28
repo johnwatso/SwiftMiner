@@ -636,7 +636,8 @@ final class ModelTests: XCTestCase {
         requiredMinutes: Int,
         progress: Double,
         isClaimed: Bool,
-        isClaimable: Bool = false
+        isClaimable: Bool = false,
+        isSubscriptionRequired: Bool = false
     ) -> DropViewData {
         DropViewData(
             id: id,
@@ -649,7 +650,74 @@ final class ModelTests: XCTestCase {
             progress: progress,
             isClaimed: isClaimed,
             isClaimable: isClaimable,
-            isEarnable: !isClaimed && !isClaimable
+            isEarnable: !isClaimed && !isClaimable,
+            isSubscriptionRequired: isSubscriptionRequired
         )
+    }
+
+    // MARK: - hasObtainableRewards Tests
+
+    func testHasObtainableRewards_AllClaimed_ReturnsFalse() {
+        let campaign = makeCampaignViewData(
+            dropsClaimed: 2,
+            totalDrops: 2,
+            drops: [
+                makeDropViewData(id: "d1", currentMinutes: 60, requiredMinutes: 60, progress: 1.0, isClaimed: true),
+                makeDropViewData(id: "d2", currentMinutes: 60, requiredMinutes: 60, progress: 1.0, isClaimed: true)
+            ]
+        )
+        XCTAssertFalse(campaign.hasObtainableRewards)
+    }
+
+    func testHasObtainableRewards_NoDrops_NoTotalDrops_ReturnsFalse() {
+        let campaign = makeCampaignViewData(
+            dropsClaimed: 0,
+            totalDrops: 0,
+            drops: []
+        )
+        XCTAssertFalse(campaign.hasObtainableRewards)
+    }
+
+    func testHasObtainableRewards_NoDrops_WithTotalDrops_ReturnsTrue() {
+        let campaign = makeCampaignViewData(
+            dropsClaimed: 0,
+            totalDrops: 2,
+            drops: []
+        )
+        XCTAssertTrue(campaign.hasObtainableRewards)
+    }
+
+    func testHasObtainableRewards_SomeUnclaimed_ReturnsTrue() {
+        let campaign = makeCampaignViewData(
+            dropsClaimed: 1,
+            totalDrops: 2,
+            drops: [
+                makeDropViewData(id: "d1", currentMinutes: 60, requiredMinutes: 60, progress: 1.0, isClaimed: true),
+                makeDropViewData(id: "d2", currentMinutes: 0, requiredMinutes: 60, progress: 0.0, isClaimed: false)
+            ]
+        )
+        XCTAssertTrue(campaign.hasObtainableRewards)
+    }
+
+    func testHasObtainableRewards_OnlySubscriptionWithoutProgress_ReturnsFalse() {
+        let campaign = makeCampaignViewData(
+            dropsClaimed: 0,
+            totalDrops: 1,
+            drops: [
+                makeDropViewData(id: "d1", currentMinutes: 0, requiredMinutes: 60, progress: 0.0, isClaimed: false, isSubscriptionRequired: true)
+            ]
+        )
+        XCTAssertFalse(campaign.hasObtainableRewards)
+    }
+
+    func testHasObtainableRewards_OnlySubscriptionWithProgress_ReturnsTrue() {
+        let campaign = makeCampaignViewData(
+            dropsClaimed: 0,
+            totalDrops: 1,
+            drops: [
+                makeDropViewData(id: "d1", currentMinutes: 10, requiredMinutes: 60, progress: 0.16, isClaimed: false, isSubscriptionRequired: true)
+            ]
+        )
+        XCTAssertTrue(campaign.hasObtainableRewards)
     }
 }

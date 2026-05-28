@@ -63,7 +63,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.swiftminer.app
         MACOSX_DEPLOYMENT_TARGET: "26.0"
         MARKETING_VERSION: "1.25"
-        CURRENT_PROJECT_VERSION: "2026052908"
+        CURRENT_PROJECT_VERSION: "2026052910"
         INFOPLIST_KEY_CFBundleDisplayName: SwiftMiner
         INFOPLIST_KEY_CFBundleName: SwiftMiner
         CODE_SIGN_STYLE: Automatic

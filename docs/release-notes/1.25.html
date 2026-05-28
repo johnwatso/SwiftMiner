@@ -3,14 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Tahoe-style Drops campaign cards and visual refinements - Release Notes</title>
+  <title>SwiftMiner 1.25 - Release Notes</title>
   <style>
     :root { color-scheme: light dark; }
     body {
       margin: 0;
       padding: 32px 20px 48px;
       font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #f4f6f8;
+      background:
+        radial-gradient(circle at top left, rgba(17, 124, 182, 0.18), transparent 32rem),
+        linear-gradient(135deg, #f7fbff 0%, #f4f7fb 46%, #f7f2ff 100%);
       color: #0f1720;
     }
     main {
@@ -20,30 +22,117 @@
       border-radius: 22px;
       background: rgba(255, 255, 255, 0.86);
       box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
+      border: 1px solid rgba(82, 96, 109, 0.12);
     }
     h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
-    .meta { margin: 0 0 24px; color: #52606d; font-size: 14px; }
+    .meta { margin: 0 0 10px; color: #52606d; font-size: 14px; }
+    .intro { margin: 0 0 24px; color: #384454; }
     p { margin: 0 0 16px; }
+    section {
+      margin: 18px 0 0;
+      padding: 18px 18px 14px;
+      border: 1px solid rgba(82, 96, 109, 0.18);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.42);
+      border-left: 5px solid var(--accent, #0a67a3);
+    }
+    section.tahoe { --accent: #0a7cbb; }
+    section.status { --accent: #1c8c73; }
+    section.filters { --accent: #0b7894; }
+    section.tooling { --accent: #5f5ac8; }
+    h2 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 4px;
+      color: var(--accent, #0a67a3);
+      font-size: 18px;
+    }
+    .badge {
+      display: inline-grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--accent, #0a67a3) 15%, transparent);
+      font-size: 16px;
+    }
+    .summary { margin: 0 0 12px; color: #52606d; font-size: 14px; }
+    ul { margin: 0; padding-left: 22px; }
+    li { margin: 0 0 8px; }
+    li:last-child { margin-bottom: 0; }
     a { color: #0a67a3; text-decoration: none; }
     a:hover { text-decoration: underline; }
     @media (prefers-color-scheme: dark) {
-      body { background: #0b1015; color: #edf2f7; }
+      body {
+        background:
+          radial-gradient(circle at top left, rgba(89, 185, 255, 0.16), transparent 32rem),
+          linear-gradient(135deg, #081019 0%, #101520 52%, #171427 100%);
+        color: #edf2f7;
+      }
       main {
         background: rgba(15, 23, 32, 0.88);
         box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+        border-color: rgba(159, 176, 194, 0.14);
       }
       .meta { color: #9fb0c2; }
+      .intro { color: #c8d3df; }
+      section {
+        border-color: rgba(159, 176, 194, 0.18);
+        background: rgba(255, 255, 255, 0.04);
+      }
+      .summary { color: #9fb0c2; }
       a { color: #73c3ff; }
     }
   </style>
 </head>
 <body>
   <main>
-    <h1>Tahoe-style Drops campaign cards and visual refinements</h1>
-    <p class="meta">Version 1.25</p>
-    <p>Tahoe-style Drops campaign cards and visual refinements</p>
-    <p>Redesign the Drops campaign cards with a stronger Apple-style horizontal composition, larger visual focus on rewards, and dynamic hover effects. Overlay watch duration badges directly onto 72x72 rounded-rectangle reward artwork (using clean, animation-free static cards to avoid visual clutter), hiding reward names except on hover. Refine the aggregate status pill with softer, low-saturation styling, and introduce neat SF Symbol indicators (gift, calendar, and people) for the metadata details and compact weekly/daily time remainders. Redesign the miner detail inspector popover into a tighter, Control Center-style layout displaying SF Symbols for eligible miners only, keeping the primary card view completely clean.</p>
-    <p><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/placeholder">placeholder</a></p>
+    <h1>SwiftMiner 1.25</h1>
+    <p class="meta">Version 1.25 · Build 2026052910</p>
+    <p class="intro">A major design refresh that introduces gorgeous Tahoe-style Drops cards with a native visual hierarchy, elegant remaining-time formatting, a new Ended campaign filter, and comprehensive automated release tooling.</p>
+
+    <section class="tahoe">
+      <h2><span class="badge" aria-hidden="true">✨</span> Tahoe Campaign Cards</h2>
+      <p class="summary">A cohesive, clean layout that feels native and reduces visual noise.</p>
+      <ul>
+        <li>Redesigns Drops campaign cards into an Apple-style cohesive horizontal band, keeping game artwork as the prominent card item and shrinking reward artwork to 72x72 to highlight the game hero.</li>
+        <li>Removes permanent text metadata below reward tiles, overlaying compact watch duration badges directly onto clean, static reward cards instead.</li>
+        <li>Animates reward names under the tiles dynamically on hover, maximizing visual efficiency and reducing card height.</li>
+        <li>Refines the aggregate status pill with soft, low-saturation capsule styling to keep visual focus on the rewards.</li>
+      </ul>
+    </section>
+
+    <section class="status">
+      <h2><span class="badge" aria-hidden="true">📊</span> Metadata &amp; Status</h2>
+      <p class="summary">Richer information with less visual clutter.</p>
+      <ul>
+        <li>Uses clean, content-first SF Symbols (gift, calendar, and people) in the metadata row to keep visual elements quiet, structured, and native.</li>
+        <li>Introduces elegant remaining-time formatting, reporting time in days or a mixture of weeks and days (e.g. "1 week and 2 days left") instead of raw hours.</li>
+        <li>Compacts the miner details inspector popover with a denser layout and native macOS-style SF Symbols.</li>
+        <li>Ensures only eligible and actionable miners are represented on the card and popover surfaces.</li>
+      </ul>
+    </section>
+
+    <section class="filters">
+      <h2><span class="badge" aria-hidden="true">🔍</span> Campaign Filters &amp; Obtainability</h2>
+      <p class="summary">Smarter filtering for completed, upcoming, and ended campaigns.</p>
+      <ul>
+        <li>Introduces an <strong>Ended</strong> campaign status and filter (<code>case ended</code> / clock symbol) to clearly separate expired/finished campaigns from completed or claimed ones.</li>
+        <li>Refines <strong>Needs Setup</strong> and <strong>Blocked</strong> states so they only trigger if a campaign actually has obtainable rewards remaining, ignoring fully claimed or subscription-only drops with no watch progress.</li>
+        <li>Adds comprehensive unit test coverage for checking campaign reward obtainability.</li>
+      </ul>
+    </section>
+
+    <section class="tooling">
+      <h2><span class="badge" aria-hidden="true">🛠️</span> Integration &amp; Release Tooling</h2>
+      <p class="summary">Automated testing and simplified release operations.</p>
+      <ul>
+        <li>Integrates automated testing for Discord API integration (<code>DiscordAPIRoutesTests.swift</code>) directly into the Xcode project target layout.</li>
+        <li>Introduces release scripts: <code>bump_build_number.sh</code> to keep settings and Sparkle manifests aligned, and <code>preflight_release.sh</code> to automate preflight checks and build validation.</li>
+        <li>Enhances Sparkle validation (<code>validate_sparkle.sh</code>) to fallback automatically to properties declared in <code>project.yml</code> for feed URLs and public keys.</li>
+      </ul>
+    </section>
   </main>
 </body>
 </html>

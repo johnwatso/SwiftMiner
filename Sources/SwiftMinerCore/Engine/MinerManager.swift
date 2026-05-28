@@ -1417,6 +1417,75 @@ public final class MinerManager {
         miners[index] = miner
         onMinersChanged?()
     }
+
+    #if DEBUG
+    /// Cycles a miner's state through different configurations to test UI card presentations.
+    public func cycleDebugState(for minerId: String) {
+        guard let index = miners.firstIndex(where: { $0.id == minerId }) else { return }
+        var miner = miners[index]
+        let currentStatus = miner.status
+        
+        switch currentStatus {
+        case .idle:
+            // State 1: Recovering
+            miner.workerState = .recovering
+            miner.isStalled = false
+            miner.isRunning = true
+            miner.isHealthy = true
+            miner.needsAuth = false
+            miner.status = .authenticating
+
+        case .authenticating:
+            // State 2: Unresponsive/Stalled
+            miner.workerState = .idle
+            miner.isStalled = true
+            miner.isRunning = true
+            miner.isHealthy = true
+            miner.needsAuth = false
+            miner.status = .error
+
+        case .error where miner.isStalled:
+            // State 3: No Recent Activity (Liveness Quiet)
+            miner.workerState = .idle
+            miner.isStalled = false
+            miner.isRunning = true
+            miner.isHealthy = false
+            miner.needsAuth = false
+            miner.status = .fetchingCampaigns
+
+        case .fetchingCampaigns:
+            // State 4: Blocked — Account Not Linked
+            miner.workerState = .idle
+            miner.isStalled = false
+            miner.isRunning = true
+            miner.isHealthy = true
+            miner.needsAuth = false
+            miner.status = .blockedAccountNotLinked
+
+        case .blockedAccountNotLinked:
+            // State 5: Blocked — Authentication Expired
+            miner.workerState = .idle
+            miner.isStalled = false
+            miner.isRunning = true
+            miner.isHealthy = true
+            miner.needsAuth = true
+            miner.status = .error
+
+        default:
+            // Reset back to normal Idle
+            miner.workerState = .idle
+            miner.isStalled = false
+            miner.isHealthy = true
+            miner.needsAuth = false
+            miner.isRunning = false
+            miner.status = .idle
+        }
+        
+        miners[index] = miner
+        onMinersChanged?()
+        onMinerStatusChange?(miner)
+    }
+    #endif
 }
 
 // MARK: - Supporting Types

@@ -6,6 +6,7 @@ public enum DropFilter: String, CaseIterable, Identifiable, Hashable, Codable {
     case needsSetup
     case upcoming
     case completed
+    case ended
 
     public var id: String { rawValue }
 
@@ -15,6 +16,7 @@ public enum DropFilter: String, CaseIterable, Identifiable, Hashable, Codable {
         case .needsSetup: return "Needs Setup"
         case .upcoming: return "Upcoming"
         case .completed: return "Completed"
+        case .ended: return "Ended"
         }
     }
 
@@ -24,6 +26,7 @@ public enum DropFilter: String, CaseIterable, Identifiable, Hashable, Codable {
         case .needsSetup: return "link.badge.plus"
         case .upcoming: return "calendar.badge.clock"
         case .completed: return "checkmark.circle.fill"
+        case .ended: return "clock"
         }
     }
 }
