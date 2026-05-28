@@ -33,6 +33,18 @@ struct AnimatedStatusIcon: View {
     private var animatedIcon: some View {
         if symbol == "checkmark.circle.fill" {
             AnimatedCheckmarkCircleView(color: color, size: size)
+        } else if symbol == "calendar.badge.checkmark" {
+            Image(systemName: symbol)
+                .font(.system(size: size, weight: weight))
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(Color.green, Color.red)
+                .symbolEffect(.bounce.down, value: triggerBounce)
+                .onAppear {
+                    triggerBounce.toggle()
+                }
+                .onChange(of: symbol) { _, _ in
+                    triggerBounce.toggle()
+                }
         } else if symbol == "checkmark.circle.trianglebadge.exclamationmark.fill" {
             Image(systemName: symbol)
                 .font(.system(size: size, weight: weight))

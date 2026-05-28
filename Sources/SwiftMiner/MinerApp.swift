@@ -116,6 +116,12 @@ struct MinerApp: App {
                             minerManager.cycleDebugState(for: miner.id)
                         }
                     }
+                    Divider()
+                    Button("Revert to Live Data") {
+                        Task {
+                            await minerManager.revertAllToLiveData()
+                        }
+                    }
                 }
             }
             #endif

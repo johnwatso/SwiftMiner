@@ -39,17 +39,7 @@ struct MinerStateCard: View {
 
     private var headerSection: some View {
         HStack(alignment: .top, spacing: 16) {
-            ZStack {
-                if config.icon == "checkmark.circle.fill" {
-                    AnimatedStatusIcon(symbol: config.icon, color: config.color, size: 44, weight: .semibold)
-                } else {
-                    Circle()
-                        .fill(config.color.opacity(0.15))
-                        .frame(width: 44, height: 44)
-
-                    AnimatedStatusIcon(symbol: config.icon, color: config.color, size: 20, weight: .semibold)
-                }
-            }
+            AnimatedStatusIcon(symbol: config.icon, color: config.color, size: 44, weight: .bold)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(config.headline)
@@ -200,7 +190,7 @@ struct MinerStateCard: View {
                     return StateConfig(
                         headline: campaign.game.name,
                         subtitle: campaign.activityStatus(for: miner).label,
-                        icon: "checkmark.circle.fill",
+                        icon: "calendar.badge.checkmark",
                         color: .green
                     )
                 }
@@ -208,7 +198,7 @@ struct MinerStateCard: View {
                 return StateConfig(
                     headline: "Up to Date",
                     subtitle: "No drops available for prioritised games.",
-                    icon: "checkmark.circle.fill",
+                    icon: "calendar.badge.checkmark",
                     color: .green
                 )
             } else {
@@ -233,7 +223,7 @@ struct MinerStateCard: View {
             return StateConfig(
                 headline: "Up to Date",
                 subtitle: "No drops available for prioritised games",
-                icon: "checkmark.circle.fill",
+                icon: "calendar.badge.checkmark",
                 color: .green
             )
 
@@ -250,7 +240,7 @@ struct MinerStateCard: View {
                 return StateConfig(
                     headline: "All Rewards Completed",
                     subtitle: campaign.game.name,
-                    icon: "checkmark.circle.fill",
+                    icon: "calendar.badge.checkmark",
                     color: .green
                 )
             }
@@ -258,7 +248,7 @@ struct MinerStateCard: View {
             return StateConfig(
                 headline: "All Rewards Completed",
                 subtitle: "All currently available drops are completed.",
-                icon: "checkmark.circle.fill",
+                icon: "calendar.badge.checkmark",
                 color: .green
             )
         }
@@ -373,17 +363,7 @@ struct MinerActivityCard: View {
 
     private var header: some View {
         HStack(alignment: .center, spacing: 10) {
-            ZStack {
-                if snapshot.now.symbol == "checkmark.circle.fill" {
-                    AnimatedStatusIcon(symbol: snapshot.now.symbol, color: snapshot.now.accent, size: isExpanded ? 28 : 30, weight: .semibold)
-                } else {
-                    Circle()
-                        .fill(snapshot.now.accent.opacity(0.14))
-
-                    AnimatedStatusIcon(symbol: snapshot.now.symbol, color: snapshot.now.accent, size: isExpanded ? 12 : 13, weight: .semibold)
-                }
-            }
-            .frame(width: isExpanded ? 28 : 30, height: isExpanded ? 28 : 30)
+            AnimatedStatusIcon(symbol: snapshot.now.symbol, color: snapshot.now.accent, size: isExpanded ? 28 : 30, weight: .bold)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(miner.displayName)
@@ -758,7 +738,7 @@ struct MinerActivitySnapshot {
                             title: "Up to Date",
                             subtitle: "No active drops are available for this account.",
                             detail: nil,
-                            symbol: "checkmark.circle.fill",
+                            symbol: "calendar.badge.checkmark",
                             accent: .green
                         )
                     }
@@ -782,7 +762,7 @@ struct MinerActivitySnapshot {
                 id: "fetch-\(miner.id)",
                 title: "Up to Date",
                 subtitle: "Checking for active campaigns...",
-                symbol: "checkmark.circle.fill",
+                symbol: "calendar.badge.checkmark",
                 accent: .green
             )
         case .waitingForStream:
@@ -806,7 +786,7 @@ struct MinerActivitySnapshot {
                 id: "idle-\(miner.id)",
                 title: "Up to Date",
                 subtitle: "Nothing is available to mine for this account.",
-                symbol: "checkmark.circle.fill",
+                symbol: "calendar.badge.checkmark",
                 accent: .green
             )
         case .error:
@@ -830,7 +810,7 @@ struct MinerActivitySnapshot {
                 id: "idle-\(miner.id)",
                 title: "Up to Date",
                 subtitle: "Nothing is available to mine for this account.",
-                symbol: "checkmark.circle.fill",
+                symbol: "calendar.badge.checkmark",
                 accent: .green
             )
         }
@@ -1144,7 +1124,7 @@ struct MinerActivitySnapshot {
         case .waitingForStream:
             return "antenna.radiowaves.left.and.right"
         case .fetchingCampaigns:
-            return "checkmark.circle.fill"
+            return "calendar.badge.checkmark"
         case .authenticating:
             return "arrow.triangle.2.circlepath"
         case .paused:
@@ -1152,11 +1132,11 @@ struct MinerActivitySnapshot {
         case .error:
             return "exclamationmark.triangle.fill"
         case .idleNoEligibleCampaigns:
-            return "checkmark.circle.fill"
+            return "calendar.badge.checkmark"
         case .blockedAccountNotLinked:
             return "link.badge.plus"
         case .idle:
-            return "checkmark.circle.fill"
+            return "calendar.badge.checkmark"
         }
     }
 

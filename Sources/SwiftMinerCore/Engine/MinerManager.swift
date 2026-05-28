@@ -1485,6 +1485,43 @@ public final class MinerManager {
         onMinersChanged?()
         onMinerStatusChange?(miner)
     }
+
+    /// Reverts a miner's mocked state back to real live data from the engine and supervisor.
+    public func revertToLiveData(for minerId: String) async {
+        guard let engine = engines[minerId],
+              let miner = getMiner(id: minerId) else { return }
+        
+        let session = await engine.currentSession
+        let isRunning = await engine.isActive
+        let sessionStatus = session?.status ?? .idle
+        let minerStatus = self.mapSessionStatus(sessionStatus)
+        let allCampaigns = await engine.allCampaigns
+        let currentId = await engine.currentCampaignId
+        
+        // Restore operational metadata (isHealthy, isStalled, workerState, etc.)
+        await applySupervisorSnapshot(for: minerId)
+        
+        let clearsNeedsAuth = minerStatus != .authenticating && minerStatus != .error
+        let needsAuth = clearsNeedsAuth ? false : miner.needsAuth
+        
+        updateMinerStatus(
+            minerId: minerId,
+            status: minerStatus,
+            currentCampaignId: .some(currentId),
+            allCampaigns: allCampaigns,
+            isRunning: isRunning,
+            needsAuth: needsAuth
+        )
+        
+        await dataCoordinator.updateAccountNeedsAuth(accountId: miner.accountId, needsAuth: needsAuth)
+    }
+
+    /// Reverts all miners back to live data.
+    public func revertAllToLiveData() async {
+        for miner in miners {
+            await revertToLiveData(for: miner.id)
+        }
+    }
     #endif
 }
 

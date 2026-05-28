@@ -1144,13 +1144,13 @@ private enum OverviewSystemState: Equatable {
     var symbol: String {
         switch self {
         case .idleNoEligibleCampaigns:
-            return "checkmark.circle.fill"
+            return "calendar.badge.checkmark"
         case .idleAllCampaignsCompleted:
-            return "checkmark.circle.fill"
+            return "calendar.badge.checkmark"
         case .waitingForLiveStream:
             return "antenna.radiowaves.left.and.right"
         case .waitingRefreshingCampaigns:
-            return "checkmark.circle.fill"
+            return "calendar.badge.checkmark"
         case .waitingAuthenticating:
             return "arrow.triangle.2.circlepath"
         case .minerUnresponsive:
