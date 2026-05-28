@@ -108,9 +108,7 @@ struct MinerHealthCard: View {
 
     private var healthyRow: some View {
         HStack(spacing: 10) {
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-                .font(.body.weight(.semibold))
+            AnimatedStatusIcon(symbol: "checkmark.circle.fill", color: .green, size: 17, weight: .semibold)
             Text(miners.count == 1 ? "Miner is running normally" : "All \(miners.count) miners are running normally")
                 .font(.subheadline.weight(.medium))
             Spacer()

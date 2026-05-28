@@ -1015,21 +1015,21 @@ struct OverviewView: View {
     private func fallbackSubtitle(for miner: MinerManager.ManagedMiner) -> String {
         switch miner.status {
         case .idle:
-            return "Idle — No eligible campaigns"
+            return "Up to Date"
         case .authenticating:
-            return "Waiting — Authenticating"
+            return "Reconnecting"
         case .fetchingCampaigns:
-            return "Waiting — Refreshing campaigns"
+            return "Up to Date"
         case .watching:
-            return "Mining — \(miner.currentCampaign ?? "active campaign")"
+            return "Watching — \(miner.currentCampaign ?? "active campaign")"
         case .waitingForStream:
-            return "Waiting — No live stream"
+            return "Looking for Streams"
         case .claiming:
-            return "Claiming completed rewards"
+            return "Claiming Rewards"
         case .paused:
             return "Paused — Mining is paused"
         case .idleNoEligibleCampaigns:
-            return "Idle — No eligible campaigns"
+            return "Up to Date"
         case .blockedAccountNotLinked:
             return "Blocked — Account not linked"
         case .error:
@@ -1080,8 +1080,14 @@ private enum OverviewSystemState: Equatable {
     var title: String {
         switch self {
         case .idleNoEligibleCampaigns, .idleAllCampaignsCompleted:
-            return "Idle"
-        case .waitingForLiveStream, .waitingRefreshingCampaigns, .waitingAuthenticating, .recovering:
+            return "Up to Date"
+        case .waitingForLiveStream:
+            return "Looking for Streams"
+        case .waitingRefreshingCampaigns:
+            return "Up to Date"
+        case .waitingAuthenticating:
+            return "Reconnecting"
+        case .recovering:
             return "Waiting"
         case .minerUnresponsive, .noRecentActivity:
             return "Attention"
@@ -1093,22 +1099,22 @@ private enum OverviewSystemState: Equatable {
         case .blockedAuthenticationExpired, .blockedNeedsAttention:
             return "Blocked"
         case .mining:
-            return "Mining"
+            return "Mining Active"
         }
     }
 
     var subtitle: String {
         switch self {
         case .idleNoEligibleCampaigns:
-            return "No eligible campaigns are available right now."
+            return "No active campaigns are available right now."
         case .idleAllCampaignsCompleted:
-            return "All campaigns have been earned and claimed."
+            return "All campaigns have been earned and completed."
         case .waitingForLiveStream:
-            return "Campaigns exist but no eligible stream is live."
+            return "Checking channels for active streams."
         case .waitingRefreshingCampaigns:
-            return "Checking for new campaign opportunities..."
+            return "Checking for campaign opportunities in the background."
         case .waitingAuthenticating:
-            return "Reconnecting account..."
+            return "Reconnecting and restoring Twitch subscriptions."
         case .minerUnresponsive:
             return "One or more miners stopped receiving Twitch activity while other miners are still active."
         case .recovering:
@@ -1126,27 +1132,27 @@ private enum OverviewSystemState: Equatable {
             return "Check Events for the latest issue before mining can continue."
         case .mining(let activeMinerCount, let totalMinerCount):
             if totalMinerCount <= 1 {
-                return "Miner is currently mining."
+                return "Miner is currently active."
             }
             if activeMinerCount == totalMinerCount {
-                return "All miners are currently mining."
+                return "All miners are currently active."
             }
-            return "\(activeMinerCount) of \(totalMinerCount) miners are currently mining."
+            return "\(activeMinerCount) of \(totalMinerCount) miners are currently active."
         }
     }
 
     var symbol: String {
         switch self {
         case .idleNoEligibleCampaigns:
-            return "pause.circle"
+            return "checkmark.circle.fill"
         case .idleAllCampaignsCompleted:
-            return "checkmark.seal.fill"
+            return "checkmark.circle.fill"
         case .waitingForLiveStream:
             return "antenna.radiowaves.left.and.right"
         case .waitingRefreshingCampaigns:
-            return "arrow.triangle.2.circlepath"
+            return "checkmark.circle.fill"
         case .waitingAuthenticating:
-            return "key.fill"
+            return "arrow.triangle.2.circlepath"
         case .minerUnresponsive:
             return "bolt.horizontal.circle.fill"
         case .recovering:
@@ -1158,18 +1164,18 @@ private enum OverviewSystemState: Equatable {
         case .blockedAuthenticationExpired, .blockedNeedsAttention:
             return "exclamationmark.triangle.fill"
         case .mining:
-            return "play.fill"
+            return "dot.radiowaves.left.and.right"
         }
     }
 
     var color: Color {
         switch self {
         case .idleNoEligibleCampaigns, .idleAllCampaignsCompleted:
-            return .secondary
+            return .green
         case .waitingForLiveStream:
             return .cyan
         case .waitingRefreshingCampaigns:
-            return .blue
+            return .green
         case .waitingAuthenticating:
             return .orange
         case .minerUnresponsive:
@@ -1228,9 +1234,7 @@ private struct OverviewSystemStateBanner: View {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .fill(state.color.opacity(0.14))
 
-                Image(systemName: state.symbol)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(state.color)
+                AnimatedStatusIcon(symbol: state.symbol, color: state.color, size: 16, weight: .semibold)
             }
             .frame(width: 38, height: 38)
 
@@ -1366,7 +1370,7 @@ private struct CampaignLibraryAmbientRow: View {
             .frame(width: 56, height: 56)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("Idle — No eligible campaigns")
+                Text("Up to Date")
                     .font(.headline)
 
                 Text("No active drop campaigns are available right now.")
@@ -2569,32 +2573,37 @@ private struct CampaignArtworkBackground: View {
     var useGhostArtworkPlaceholder = false
 
     var body: some View {
-        ZStack {
-            placeholder
+        GeometryReader { geo in
+            ZStack {
+                placeholder
 
-            if let url {
-                AsyncImage(
-                    url: url.overviewHighResolutionArtworkURL,
-                    transaction: Transaction(animation: .easeInOut(duration: 0.55))
-                ) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .interpolation(.high)
-                            .scaledToFill()
-                            .transition(.opacity.combined(with: .scale(scale: 1.02)))
-                    case .empty:
-                        Color.clear
-                    case .failure:
-                        initialsOverlay
-                    @unknown default:
-                        Color.clear
+                if let url {
+                    AsyncImage(
+                        url: url.overviewHighResolutionArtworkURL,
+                        transaction: Transaction(animation: .easeInOut(duration: 0.55))
+                    ) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .interpolation(.high)
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
+                                .transition(.opacity.combined(with: .scale(scale: 1.02)))
+                        case .empty:
+                            Color.clear
+                        case .failure:
+                            initialsOverlay
+                        @unknown default:
+                            Color.clear
+                        }
                     }
+                } else {
+                    initialsOverlay
                 }
-            } else {
-                initialsOverlay
             }
+            .frame(width: geo.size.width, height: geo.size.height)
+            .clipped()
         }
         .animation(.easeInOut(duration: 0.55), value: url)
     }

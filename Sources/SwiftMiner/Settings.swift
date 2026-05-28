@@ -102,6 +102,10 @@ public final class Settings: ObservableObject {
     @AppStorage("animateActivityLogRows", store: Settings.appStorageStore)
     public var animateActivityLogRows: Bool = true
 
+    /// Whether to animate status icons with Apple-style transitions and drawing effects.
+    @AppStorage("animatedStatusIcons", store: Settings.appStorageStore)
+    public var animatedStatusIcons: Bool = true
+
     /// JSON-encoded array of DropFilter for the Drops list view.
     @AppStorage("selectedDropsFiltersData", store: Settings.appStorageStore)
     private var selectedDropsFiltersData: String = "[\"active\"]"
@@ -779,6 +783,7 @@ public final class Settings: ObservableObject {
         runInBackground = true
         showActivityLogIcons = true
         animateActivityLogRows = true
+        animatedStatusIcons = true
         preferredQuality = .auto
         showClaimNotifications = false
         lastSelectedGameId = ""

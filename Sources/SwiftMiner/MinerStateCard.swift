@@ -40,13 +40,15 @@ struct MinerStateCard: View {
     private var headerSection: some View {
         HStack(alignment: .top, spacing: 16) {
             ZStack {
-                Circle()
-                    .fill(config.color.opacity(0.15))
-                    .frame(width: 44, height: 44)
+                if config.icon == "checkmark.circle.fill" {
+                    AnimatedStatusIcon(symbol: config.icon, color: config.color, size: 44, weight: .semibold)
+                } else {
+                    Circle()
+                        .fill(config.color.opacity(0.15))
+                        .frame(width: 44, height: 44)
 
-                Image(systemName: config.icon)
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(config.color)
+                    AnimatedStatusIcon(symbol: config.icon, color: config.color, size: 20, weight: .semibold)
+                }
             }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -198,20 +200,20 @@ struct MinerStateCard: View {
                     return StateConfig(
                         headline: campaign.game.name,
                         subtitle: campaign.activityStatus(for: miner).label,
-                        icon: "list.bullet.rectangle",
-                        color: .secondary
+                        icon: "checkmark.circle.fill",
+                        color: .green
                     )
                 }
 
                 return StateConfig(
-                    headline: "Idle — No eligible campaigns",
+                    headline: "Up to Date",
                     subtitle: "No drops available for prioritised games.",
-                    icon: "archivebox",
-                    color: .secondary
+                    icon: "checkmark.circle.fill",
+                    color: .green
                 )
             } else {
                 return StateConfig(
-                    headline: "Waiting — No live stream",
+                    headline: "Looking for Streams",
                     subtitle: gameName ?? "No participating channels are live right now.",
                     icon: "antenna.radiowaves.left.and.right",
                     color: .cyan
@@ -221,43 +223,43 @@ struct MinerStateCard: View {
         case .ready:
             if let campaign = firstActivityCampaign {
                 return StateConfig(
-                    headline: "Waiting — Campaign available",
+                    headline: "Looking for Streams",
                     subtitle: campaign.game.name,
-                    icon: "list.bullet.rectangle",
-                    color: .blue
+                    icon: "antenna.radiowaves.left.and.right",
+                    color: .cyan
                 )
             }
 
             return StateConfig(
-                headline: "Idle — No eligible campaigns",
+                headline: "Up to Date",
                 subtitle: "No drops available for prioritised games",
-                icon: "waveform.path.ecg",
-                color: .blue
+                icon: "checkmark.circle.fill",
+                color: .green
             )
 
         case .mining(let progress):
             return StateConfig(
                 headline: "Watching \(progress.gameName)",
                 subtitle: nil,
-                icon: "play.fill",
+                icon: "dot.radiowaves.left.and.right",
                 color: .green
             )
 
         case .completed:
             if let campaign = firstActivityCampaign {
                 return StateConfig(
-                    headline: "Drops completed",
+                    headline: "All Rewards Completed",
                     subtitle: campaign.game.name,
-                    icon: "checkmark.seal.fill",
-                    color: .purple
+                    icon: "checkmark.circle.fill",
+                    color: .green
                 )
             }
 
             return StateConfig(
-                headline: "Idle — All campaigns completed",
+                headline: "All Rewards Completed",
                 subtitle: "All currently available drops are completed.",
-                icon: "checkmark.seal.fill",
-                color: .purple
+                icon: "checkmark.circle.fill",
+                color: .green
             )
         }
     }
@@ -372,12 +374,14 @@ struct MinerActivityCard: View {
     private var header: some View {
         HStack(alignment: .center, spacing: 10) {
             ZStack {
-                Circle()
-                    .fill(snapshot.now.accent.opacity(0.14))
+                if snapshot.now.symbol == "checkmark.circle.fill" {
+                    AnimatedStatusIcon(symbol: snapshot.now.symbol, color: snapshot.now.accent, size: isExpanded ? 28 : 30, weight: .semibold)
+                } else {
+                    Circle()
+                        .fill(snapshot.now.accent.opacity(0.14))
 
-                Image(systemName: snapshot.now.symbol)
-                    .font(.system(size: isExpanded ? 12 : 13, weight: .semibold))
-                    .foregroundStyle(snapshot.now.accent)
+                    AnimatedStatusIcon(symbol: snapshot.now.symbol, color: snapshot.now.accent, size: isExpanded ? 12 : 13, weight: .semibold)
+                }
             }
             .frame(width: isExpanded ? 28 : 30, height: isExpanded ? 28 : 30)
 
@@ -449,9 +453,7 @@ struct MinerActivityCard: View {
 
     private func nextActivity(_ item: MinerActivityItem) -> some View {
         HStack(alignment: .top, spacing: 9) {
-            Image(systemName: item.symbol)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(item.accent)
+            AnimatedStatusIcon(symbol: item.symbol, color: item.accent, size: 9, weight: .semibold)
                 .frame(width: 16, height: 16)
                 .padding(.top, 1)
 
@@ -753,11 +755,11 @@ struct MinerActivitySnapshot {
                     if miner.status != .waitingForStream {
                         return MinerActivityItem(
                             id: "waiting-drops-\(miner.id)-\(resolved.gameId)",
-                            title: "Waiting",
+                            title: "Up to Date",
                             subtitle: "No active drops are available for this account.",
                             detail: nil,
-                            symbol: "clock",
-                            accent: .secondary
+                            symbol: "checkmark.circle.fill",
+                            accent: .green
                         )
                     }
                 }
@@ -770,23 +772,23 @@ struct MinerActivitySnapshot {
         case .authenticating:
             return waitingItem(
                 id: "auth-\(miner.id)",
-                title: "Waiting — Authenticating",
+                title: "Reconnecting",
                 subtitle: "Reconnecting account...",
-                symbol: "key.fill",
+                symbol: "arrow.triangle.2.circlepath",
                 accent: .orange
             )
         case .fetchingCampaigns:
             return waitingItem(
                 id: "fetch-\(miner.id)",
-                title: "Waiting — Refreshing campaigns",
+                title: "Up to Date",
                 subtitle: "Checking for active campaigns...",
-                symbol: "arrow.clockwise",
-                accent: .blue
+                symbol: "checkmark.circle.fill",
+                accent: .green
             )
         case .waitingForStream:
             return waitingItem(
                 id: "stream-\(miner.id)",
-                title: "Waiting — No channels live",
+                title: "Looking for Streams",
                 subtitle: "Waiting for an eligible live stream.",
                 symbol: "antenna.radiowaves.left.and.right",
                 accent: .cyan
@@ -802,10 +804,10 @@ struct MinerActivitySnapshot {
         case .idleNoEligibleCampaigns:
             return waitingItem(
                 id: "idle-\(miner.id)",
-                title: "Idle — No eligible campaigns",
+                title: "Up to Date",
                 subtitle: "Nothing is available to mine for this account.",
-                symbol: "pause.circle",
-                accent: .secondary
+                symbol: "checkmark.circle.fill",
+                accent: .green
             )
         case .error:
             return waitingItem(
@@ -826,10 +828,10 @@ struct MinerActivitySnapshot {
         case .idle, .watching, .claiming:
             return waitingItem(
                 id: "idle-\(miner.id)",
-                title: "Idle — No eligible campaigns",
+                title: "Up to Date",
                 subtitle: "Nothing is available to mine for this account.",
-                symbol: "clock",
-                accent: .secondary
+                symbol: "checkmark.circle.fill",
+                accent: .green
             )
         }
     }
@@ -867,7 +869,7 @@ struct MinerActivitySnapshot {
         case .noLiveStreams:
             return MinerActivityItem(
                 id: "blocked-stream-\(miner.id)-\(resolved.gameId)",
-                title: "Waiting — No live stream",
+                title: "Looking for Streams",
                 subtitle: resolved.gameName,
                 detail: "Waiting for an eligible live stream.",
                 symbol: "antenna.radiowaves.left.and.right",
@@ -877,11 +879,11 @@ struct MinerActivitySnapshot {
         default:
             return MinerActivityItem(
                 id: "blocked-empty-\(miner.id)-\(resolved.gameId)",
-                title: "Idle — No eligible campaigns",
+                title: "Up to Date",
                 subtitle: "No eligible campaign is available for \(resolved.gameName).",
                 detail: nil,
-                symbol: "clock",
-                accent: .secondary,
+                symbol: "checkmark.circle.fill",
+                accent: .green,
                 campaignId: resolved.campaignId
             )
         }
@@ -1093,30 +1095,30 @@ struct MinerActivitySnapshot {
             return "No Recent Activity"
         }
         if now.id.hasPrefix("waiting-drops-") {
-            return "Waiting"
+            return "Up to Date"
         }
 
         switch miner.status {
         case .watching:
             return "Watching \(now.title)"
         case .claiming:
-            return "Claiming"
+            return "Claiming Rewards"
         case .waitingForStream:
-            return "Waiting — No channels live"
+            return "Looking for Streams"
         case .fetchingCampaigns:
-            return "Waiting — Refreshing campaigns"
+            return "Up to Date"
         case .authenticating:
-            return "Waiting — Authenticating"
+            return "Reconnecting"
         case .paused:
             return "Paused"
         case .error:
             return "Blocked — Needs attention"
         case .idleNoEligibleCampaigns:
-            return "Idle — No eligible campaigns"
+            return "Up to Date"
         case .blockedAccountNotLinked:
             return "Blocked — Account not linked"
         case .idle:
-            return "Idle — No eligible campaigns"
+            return "Up to Date"
         }
     }
 
@@ -1136,25 +1138,25 @@ struct MinerActivitySnapshot {
 
         switch miner.status {
         case .watching:
-            return "play.circle.fill"
+            return "dot.radiowaves.left.and.right"
         case .claiming:
-            return "gift.circle.fill"
+            return "gift.fill"
         case .waitingForStream:
-            return "antenna.radiowaves.left.and.right.circle.fill"
+            return "antenna.radiowaves.left.and.right"
         case .fetchingCampaigns:
-            return "arrow.triangle.2.circlepath.circle.fill"
+            return "checkmark.circle.fill"
         case .authenticating:
-            return "key.circle.fill"
+            return "arrow.triangle.2.circlepath"
         case .paused:
-            return "pause.circle.fill"
+            return "pause.fill"
         case .error:
             return "exclamationmark.triangle.fill"
         case .idleNoEligibleCampaigns:
-            return "pause.circle"
+            return "checkmark.circle.fill"
         case .blockedAccountNotLinked:
             return "link.badge.plus"
         case .idle:
-            return "pause.circle"
+            return "checkmark.circle.fill"
         }
     }
 

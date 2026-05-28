@@ -340,12 +340,22 @@ struct DropsListView: View {
         let activeGroups = GameAggregateBuilder.buildDrops(from: activeCampaigns)
         let endedGroups = endedCampaigns.map(endedCampaignGroup)
 
-        return (activeGroups + endedGroups).sorted { lhs, rhs in
-            if lhs.aggregateState.priority != rhs.aggregateState.priority {
-                return lhs.aggregateState.priority < rhs.aggregateState.priority
+        return (activeGroups + endedGroups)
+            .filter { group in
+                if group.aggregateState == .unavailable {
+                    return selectedFilters.contains(.completed)
+                }
+                if group.aggregateState == .actionRequired {
+                    return selectedFilters.contains(.needsSetup)
+                }
+                return true
             }
-            return lhs.gameName.localizedCaseInsensitiveCompare(rhs.gameName) == .orderedAscending
-        }
+            .sorted { lhs, rhs in
+                if lhs.aggregateState.priority != rhs.aggregateState.priority {
+                    return lhs.aggregateState.priority < rhs.aggregateState.priority
+                }
+                return lhs.gameName.localizedCaseInsensitiveCompare(rhs.gameName) == .orderedAscending
+            }
     }
 
     private func endedCampaignGroup(for campaign: CampaignViewData) -> GameAggregate {
@@ -925,10 +935,26 @@ private struct GameCampaignDeckCard: View {
         return lhs.claimedDropCount >= rhs.claimedDropCount ? lhs : rhs
     }
 
-    private var eligibleMinerCount: Int {
+    private var eligibleMiners: [AccountState] {
         minerAccountStates.filter { account in
-            account.miningStatus != .blocked && account.miningStatus != .needsAuth
-        }.count
+            if Settings.shared.excludedGames.contains(where: { $0.localizedCaseInsensitiveCompare(group.gameName) == .orderedSame }) {
+                return false
+            }
+            let gameId = group.campaigns.first?.campaign.gameId ?? ""
+            if Settings.shared.isIgnoringAccountLinkWarnings(for: account.accountId, gameId: gameId) ||
+               Settings.shared.isIgnoringAccountLinkWarnings(for: account.accountId, gameId: "all") {
+                return false
+            }
+            let campaignId = group.campaigns.first?.campaign.id ?? ""
+            if Settings.shared.isIgnoringSubscriptionRequiredWarnings(for: account.accountId, campaignId: campaignId) {
+                return false
+            }
+            return true
+        }
+    }
+
+    private var eligibleMinerCount: Int {
+        eligibleMiners.count
     }
 
     private var campaignExpiryText: String {
@@ -946,19 +972,19 @@ private struct GameCampaignDeckCard: View {
         let totalCount = minerAccountStates.count
         
         if activeCount > 0 {
-            return activeCount == 1 ? "1 Miner Watching" : "\(activeCount) Miners Watching"
+            return activeCount == 1 ? "1 Miner Active" : "\(activeCount) Miners Active"
         } else if claimedCount == totalCount && totalCount > 0 {
-            return "Campaign Complete"
+            return "Completed"
         } else if claimedCount > 0 {
-            return claimedCount == 1 ? "1 Miner Claimed" : "\(claimedCount) Miners Claimed"
+            return claimedCount == 1 ? "1 Miner Completed" : "\(claimedCount) Miners Completed"
         } else if group.aggregateState == .actionRequired {
             return "Needs Setup"
         } else if group.aggregateState == .unavailable {
             return "Campaign Ended"
         } else if group.aggregateState == .ready {
-            return "Waiting For Streams"
+            return "Looking for Streams"
         } else {
-            return "Waiting For Streams"
+            return "Looking for Streams"
         }
     }
     
@@ -968,7 +994,7 @@ private struct GameCampaignDeckCard: View {
         let totalCount = minerAccountStates.count
 
         if activeCount > 0 {
-            return "play.fill"
+            return "dot.radiowaves.left.and.right"
         } else if claimedCount == totalCount && totalCount > 0 {
             return "checkmark.circle.fill"
         } else if claimedCount > 0 {
@@ -978,7 +1004,7 @@ private struct GameCampaignDeckCard: View {
         } else if group.aggregateState == .unavailable {
             return "clock.badge.exclamationmark"
         } else {
-            return "clock.fill"
+            return "antenna.radiowaves.left.and.right"
         }
     }
 
@@ -1002,13 +1028,15 @@ private struct GameCampaignDeckCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .top, spacing: 16) {
-                GameArtworkCard(url: group.artworkURL, tint: group.aggregateState.tint)
+        HStack(alignment: .center, spacing: 16) {
+            // LEFT ARTWORK (Anchors the cluster, prominent 120x160 size)
+            GameArtworkCard(url: group.artworkURL, tint: group.aggregateState.tint)
 
-                VStack(alignment: .leading, spacing: 6) {
+            // CONTENT CLUSTER (titles, metadata, and reward shelf sit together)
+            VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 3) {
                     Text(group.gameName)
-                        .font(.title2.weight(.bold))
+                        .font(.headline.weight(.bold))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
 
@@ -1019,91 +1047,127 @@ private struct GameCampaignDeckCard: View {
                             .lineLimit(1)
                     }
 
-                    HStack(spacing: 8) {
-                        Text("\(totalRewardCount) \(totalRewardCount == 1 ? "Reward" : "Rewards")")
+                    // Compact Metadata Row
+                    HStack(spacing: 12) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "gift.fill")
+                            Text("\(totalRewardCount) \(totalRewardCount == 1 ? "reward" : "rewards")")
+                        }
                         
                         if !campaignExpiryText.isEmpty {
-                            Text("•")
-                                .foregroundStyle(.tertiary)
-                            Text(campaignExpiryText)
+                            HStack(spacing: 4) {
+                                Image(systemName: "calendar")
+                                Text(campaignExpiryText)
+                            }
                         }
                         
                         let count = eligibleMinerCount
                         if count > 0 {
-                            Text("•")
-                                .foregroundStyle(.tertiary)
-                            Text("\(count) Eligible \(count == 1 ? "Miner" : "Miners")")
+                            HStack(spacing: 4) {
+                                Image(systemName: "person.2.fill")
+                                Text("\(count) eligible")
+                            }
                         }
                     }
-                    .font(.caption)
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
                 }
 
-                Spacer(minLength: 12)
-
-                VStack(alignment: .trailing, spacing: 10) {
-                    HStack(spacing: 6) {
-                        Image(systemName: aggregateStatusIcon)
-                            .font(.caption.weight(.semibold))
-                        Text(aggregateStatusText)
-                            .font(.caption.weight(.semibold))
+                // Reward Shelf directly beneath metadata
+                if !displayDrops.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) { // Tightened spacing
+                            ForEach(displayDrops) { drop in
+                                BeautifulRewardCard(drop: drop)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                        .padding(.horizontal, 2)
                     }
-                    .foregroundStyle(aggregateStatusColor)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(.regularMaterial.opacity(0.85), in: Capsule())
-
-                    Button {
-                        showingInspectorPopover = true
-                    } label: {
-                        Image(systemName: "info.circle")
-                            .font(.title3)
-                            .foregroundStyle(.secondary)
-                            .frame(width: 28, height: 28)
-                            .background(.regularMaterial.opacity(0.72), in: Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .help("Show miner operational details")
-                    .popover(isPresented: $showingInspectorPopover, arrowEdge: .bottom) {
-                        CampaignMinerInspectorPopover(gameName: group.gameName, miners: minerAccountStates)
-                    }
+                    .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+                } else {
+                    Text("No rewards available")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
 
-            if !displayDrops.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 16) {
-                        ForEach(displayDrops) { drop in
-                            BeautifulRewardCard(drop: drop)
-                        }
-                    }
-                    .padding(.vertical, 4)
-                    .padding(.horizontal, 2)
-                }
-                .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
-            } else {
-                Text("No rewards available for this campaign.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            Spacer(minLength: 64)
         }
-        .padding(20)
+        .padding(.leading, 16)
+        .padding(.trailing, 16)
+        .padding(.vertical, 16)
         .frame(maxWidth: .infinity)
         .background(cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .strokeBorder(cardState.borderTint.opacity(isActive ? 0.86 : 0.62), lineWidth: isActive ? 1.2 : 0.8)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(cardState.borderTint.opacity(isActive ? 0.75 : 0.40), lineWidth: isActive ? 1.0 : 0.6)
         }
         .shadow(
             color: isActive
-                ? group.aggregateState.tint.opacity(isHovered ? 0.16 : 0.10)
-                : .black.opacity(isHovered ? 0.10 : 0.06),
-            radius: isHovered ? 12 : (isActive ? 8 : 4),
-            y: isHovered ? 6 : (isActive ? 4 : 2)
+                ? group.aggregateState.tint.opacity(isHovered ? 0.12 : 0.08)
+                : .black.opacity(isHovered ? 0.08 : 0.04),
+            radius: isHovered ? 8 : (isActive ? 6 : 3),
+            y: isHovered ? 4 : (isActive ? 3 : 1)
         )
-        .saturation(isFinishedOrEnded ? 0.72 : 1)
-        .opacity(group.aggregateState == .unavailable ? 0.70 : 1)
+        .saturation(isFinishedOrEnded ? 0.8 : 1)
+        .opacity(group.aggregateState == .unavailable ? 0.80 : 1)
+        .animation(.easeInOut(duration: 0.18), value: isHovered)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+        .overlay(alignment: .topTrailing) {
+            HStack(spacing: 8) {
+                // Compact Semantic Status Pill
+                HStack(spacing: 4) {
+                    AnimatedStatusIcon(symbol: aggregateStatusIcon, color: aggregateStatusColor, size: 10, weight: .semibold)
+                    Text(aggregateStatusText)
+                        .font(.system(size: 10, weight: aggregateStatusText == "Completed" ? .medium : .semibold))
+                }
+                .foregroundStyle(aggregateStatusColor.opacity(0.85))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4.5)
+                .background(aggregateStatusColor.opacity(0.06), in: Capsule())
+                .overlay {
+                    Capsule()
+                        .strokeBorder(aggregateStatusColor.opacity(0.15), lineWidth: 1)
+                }
+                .saturation(aggregateStatusText == "Completed" ? 0.65 : 1.0)
+                .opacity(aggregateStatusText == "Completed" ? 0.85 : 1.0)
+
+                Button {
+                    showingInspectorPopover = true
+                } label: {
+                    Image(systemName: "info.circle")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 20, height: 20)
+                        .background(.regularMaterial.opacity(0.65), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .help("Show miner operational details")
+                .popover(isPresented: $showingInspectorPopover, arrowEdge: .bottom) {
+                    CampaignMinerInspectorPopover(gameName: group.gameName, miners: eligibleMiners)
+                }
+            }
+            .padding(.top, 14)
+            .padding(.trailing, 14)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(cardState.borderTint.opacity(isActive ? 0.75 : 0.40), lineWidth: isActive ? 1.0 : 0.6)
+        }
+        .shadow(
+            color: isActive
+                ? group.aggregateState.tint.opacity(isHovered ? 0.12 : 0.08)
+                : .black.opacity(isHovered ? 0.08 : 0.04),
+            radius: isHovered ? 8 : (isActive ? 6 : 3),
+            y: isHovered ? 4 : (isActive ? 3 : 1)
+        )
+        .saturation(isFinishedOrEnded ? 0.8 : 1)
+        .opacity(group.aggregateState == .unavailable ? 0.80 : 1)
         .animation(.easeInOut(duration: 0.18), value: isHovered)
         .onHover { hovering in
             isHovered = hovering
@@ -1173,10 +1237,10 @@ private struct GameArtworkCard: View {
 
     var body: some View {
         CampaignCardArtwork(url: url, tint: tint)
-            .frame(width: 80, height: 106)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .frame(width: 120, height: 160)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .strokeBorder(.white.opacity(0.10), lineWidth: 1)
             }
             .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
@@ -1188,8 +1252,9 @@ private struct BeautifulRewardCard: View {
     @State private var isHovered = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ZStack(alignment: .bottomLeading) {
+        ZStack(alignment: .center) {
+            // Main image thumbnail
+            Group {
                 if let url = drop.imageURL?.highResolutionArtworkURL {
                     AsyncImage(url: url) { image in
                         image
@@ -1199,75 +1264,93 @@ private struct BeautifulRewardCard: View {
                     } placeholder: {
                         placeholderArtwork
                     }
-                    .frame(width: 80, height: 80)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .shadow(color: .black.opacity(isHovered ? 0.16 : 0.08), radius: isHovered ? 6 : 4, y: 2)
                 } else {
                     placeholderArtwork
-                        .frame(width: 80, height: 80)
                 }
+            }
+            .frame(width: 76, height: 76)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .shadow(color: .black.opacity(isHovered ? 0.15 : 0.10), radius: isHovered ? 6 : 4, y: isHovered ? 3 : 2)
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(isHovered ? .white.opacity(0.20) : .white.opacity(0.08), lineWidth: 1)
+            }
 
-                if drop.isClaimed {
-                    ZStack {
-                        Circle()
-                            .fill(Color.green)
-                            .frame(width: 20, height: 20)
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(.white)
-                    }
-                    .padding(6)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                } else if drop.isClaimable {
-                    ZStack {
-                        Circle()
-                            .fill(Color.orange)
-                            .frame(width: 20, height: 20)
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(.white)
-                    }
-                    .padding(6)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+            // Completion checkmark (Frosted Glass Outer Circle, Apple Photos selection style)
+            if drop.isClaimed {
+                ZStack {
+                    Circle()
+                        .fill(.ultraThinMaterial)
+                        .frame(width: 18, height: 18)
+                        .shadow(color: .black.opacity(0.12), radius: 2)
+                    
+                    Circle()
+                        .fill(Color.green)
+                        .frame(width: 13, height: 13)
+                    
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 7.5, weight: .bold))
+                        .foregroundStyle(.white)
                 }
+                .frame(width: 76, height: 76, alignment: .topTrailing)
+                .padding(4)
+            } else if drop.isClaimable {
+                ZStack {
+                    Circle()
+                        .fill(.ultraThinMaterial)
+                        .frame(width: 18, height: 18)
+                        .shadow(color: .black.opacity(0.12), radius: 2)
+                    
+                    Circle()
+                        .fill(Color.orange)
+                        .frame(width: 13, height: 13)
+                    
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 7.5, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+                .frame(width: 76, height: 76, alignment: .topTrailing)
+                .padding(4)
+            }
 
-                if drop.progress > 0 && drop.progress < 1.0 {
-                    GeometryReader { geo in
-                        VStack {
-                            Spacer()
-                            ZStack(alignment: .leading) {
-                                RoundedRectangle(cornerRadius: 2)
-                                    .fill(.black.opacity(0.3))
-                                    .frame(height: 4)
-                                
-                                RoundedRectangle(cornerRadius: 2)
-                                    .fill(Color.blue)
-                                    .frame(width: geo.size.width * drop.progress, height: 4)
-                            }
+            // Progress bar
+            if drop.progress > 0 && drop.progress < 1.0 {
+                GeometryReader { geo in
+                    VStack {
+                        Spacer()
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(.black.opacity(0.45))
+                                .frame(height: 3)
+                            
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(Color.blue)
+                                .frame(width: geo.size.width * drop.progress, height: 3)
                         }
                     }
-                    .frame(height: 80)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
-            }
-            .scaleEffect(isHovered ? 1.04 : 1.0)
-            .animation(.spring(response: 0.24, dampingFraction: 0.8), value: isHovered)
-            .onHover { hovering in
-                isHovered = hovering
+                .frame(width: 76, height: 76)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
 
-            Text(drop.name)
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-                .frame(width: 80, alignment: .leading)
-            
-            Text("\(drop.requiredMinutes) min")
-                .font(.system(size: 9, weight: .semibold, design: .rounded))
-                .foregroundStyle(.secondary)
-                .frame(width: 80, alignment: .leading)
+            // Duration Overlay Badge (Bottom Right)
+            Text("\(drop.requiredMinutes)m")
+                .font(.system(size: 8, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 4.5)
+                .padding(.vertical, 2.5)
+                .background(.black.opacity(0.68), in: RoundedRectangle(cornerRadius: 4.5, style: .continuous))
+                .frame(width: 76, height: 76, alignment: .bottomTrailing)
+                .padding(4)
         }
-        .help("\(drop.name)\n\(drop.description ?? "")\nStatus: \(statusTitle)\nRequired watch time: \(drop.requiredMinutes)m")
+        .scaleEffect(isHovered ? 1.03 : 1.0)
+        .animation(.easeOut(duration: 0.15), value: isHovered)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+        .popover(isPresented: $isHovered, arrowEdge: .top) {
+            BeautifulRewardHoverCard(drop: drop)
+        }
     }
 
     private var statusTitle: String {
@@ -1278,7 +1361,7 @@ private struct BeautifulRewardCard: View {
     }
 
     private var placeholderArtwork: some View {
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
             .fill(.thinMaterial)
             .overlay {
                 Image(systemName: rewardIcon)
@@ -1296,6 +1379,73 @@ private struct BeautifulRewardCard: View {
     }
 }
 
+// MARK: - Premium Frosted Hover Card Popover
+private struct BeautifulRewardHoverCard: View {
+    let drop: DropViewData
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                // Tiny reward artwork preview!
+                if let url = drop.imageURL?.highResolutionArtworkURL {
+                    AsyncImage(url: url) { image in
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    } placeholder: {
+                        RoundedRectangle(cornerRadius: 6).fill(.secondary.opacity(0.2))
+                    }
+                    .frame(width: 32, height: 32)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(drop.name)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    
+                    Text(statusText)
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(statusColor)
+                }
+            }
+            
+            if let desc = drop.description, !desc.isEmpty {
+                Text(desc)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            
+            HStack(spacing: 4) {
+                Image(systemName: "clock")
+                    .font(.system(size: 9))
+                Text("Required: \(drop.requiredMinutes) min")
+                    .font(.system(size: 9, weight: .medium))
+            }
+            .foregroundStyle(.secondary.opacity(0.8))
+        }
+        .padding(12)
+        .frame(width: 200)
+    }
+
+    private var statusText: String {
+        if drop.isClaimed { return "Claimed" }
+        if drop.isClaimable { return "Ready to Claim" }
+        if drop.progress > 0 { return "Mining (\(Int(drop.progress * 100))%)" }
+        return "Locked"
+    }
+
+    private var statusColor: Color {
+        if drop.isClaimed { return .green }
+        if drop.isClaimable { return .orange }
+        if drop.progress > 0 { return .blue }
+        return .secondary
+    }
+}
+
 private extension TimeInterval {
     var formattedHoursMinutes: String {
         let totalMinutes = max(Int(self / 60), 0)
@@ -1310,17 +1460,30 @@ private extension TimeInterval {
     }
 
     var formattedRemaining: String {
-        let totalMinutes = max(Int(self / 60), 0)
-        let hours = totalMinutes / 60
-        let minutes = totalMinutes % 60
-
-        if hours > 0 {
-            return minutes > 0
-                ? "\(hours)h \(minutes)m remaining"
-                : "\(hours)h remaining"
+        let totalSeconds = max(self, 0)
+        let totalDays = Int(totalSeconds / 86400)
+        
+        if totalDays == 0 {
+            let hours = Int(totalSeconds / 3600)
+            let minutes = Int((totalSeconds.truncatingRemainder(dividingBy: 3600)) / 60)
+            if hours > 0 {
+                return minutes > 0 ? "\(hours)h \(minutes)m left" : "\(hours)h left"
+            }
+            return "\(max(minutes, 1))m left"
         }
-
-        return "\(minutes)m remaining"
+        
+        let weeks = totalDays / 7
+        let days = totalDays % 7
+        
+        if weeks > 0 {
+            if days > 0 {
+                return "\(weeks) \(weeks == 1 ? "week" : "weeks") and \(days) \(days == 1 ? "day" : "days") left"
+            } else {
+                return "\(weeks) \(weeks == 1 ? "week" : "weeks") left"
+            }
+        } else {
+            return "\(days) \(days == 1 ? "day" : "days") left"
+        }
     }
 }
 
@@ -1395,14 +1558,14 @@ enum CampaignCardState: String {
     var title: String {
         switch self {
         case .blocked: return "Needs Setup"
-        case .active: return "Active"
-        case .inProgress: return "Active"
-        case .claimable: return "Ready to Claim"
-        case .ready: return "Ready"
-        case .waiting: return "Waiting"
-        case .claimed: return "Finished"
+        case .active: return "Mining Active"
+        case .inProgress: return "Mining Active"
+        case .claimable: return "Claiming Rewards"
+        case .ready: return "Up to Date"
+        case .waiting: return "Looking for Streams"
+        case .claimed: return "Completed"
         case .expired: return "Ended"
-        case .idle: return "Available"
+        case .idle: return "Ready to Mine"
         }
     }
 
@@ -1410,13 +1573,13 @@ enum CampaignCardState: String {
         switch self {
         case .blocked: return "exclamationmark.triangle.fill"
         case .active: return "dot.radiowaves.left.and.right"
-        case .inProgress: return "chart.bar.fill"
-        case .claimable: return "sparkles"
-        case .ready: return "clock.badge.checkmark.fill"
-        case .waiting: return "antenna.radiowaves.left.and.right.slash"
+        case .inProgress: return "dot.radiowaves.left.and.right"
+        case .claimable: return "gift.fill"
+        case .ready: return "checkmark.circle.fill"
+        case .waiting: return "antenna.radiowaves.left.and.right"
         case .claimed: return "checkmark.circle.fill"
         case .expired: return "clock.badge.exclamationmark"
-        case .idle: return "clock.badge.checkmark.fill"
+        case .idle: return "checkmark.circle.fill"
         }
     }
 
@@ -1426,11 +1589,11 @@ enum CampaignCardState: String {
         case .active: return .green
         case .inProgress: return .blue
         case .claimable: return .secondary
-        case .ready: return .secondary
+        case .ready: return .green
         case .waiting: return .secondary
         case .claimed: return .green
         case .expired: return .orange
-        case .idle: return .secondary
+        case .idle: return .green
         }
     }
 
@@ -1453,6 +1616,7 @@ enum CampaignCardState: String {
         case .idle:
             return .white.opacity(0.12)
         }
+        
     }
 }
 
@@ -1496,64 +1660,69 @@ struct CampaignMinerInspectorPopover: View {
     @Environment(NavigationModel.self) private var navigation
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Miners for \(gameName)")
-                .font(.headline)
-                .padding(.bottom, 4)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "personalhotspot")
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+                Text(gameName)
+                    .font(.headline.weight(.semibold))
+            }
+            .padding(.bottom, 2)
 
             if miners.isEmpty {
-                Text("No eligible miners connected.")
-                    .font(.subheadline)
+                Text("No actionable miners")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
+                    .padding(.vertical, 4)
             } else {
-                VStack(spacing: 8) {
+                VStack(spacing: 6) {
                     ForEach(miners) { account in
-                        HStack(spacing: 10) {
+                        HStack(spacing: 8) {
                             Image(systemName: statusIcon(for: account.miningStatus))
-                                .font(.title3)
+                                .font(.system(size: 13, weight: .bold))
                                 .foregroundStyle(statusColor(for: account.miningStatus))
-                                .frame(width: 24)
+                                .frame(width: 18)
 
-                            VStack(alignment: .leading, spacing: 2) {
+                            VStack(alignment: .leading, spacing: 1) {
                                 Text(navigation.minerManager.displayName(forAccountId: account.accountId, fallback: account.username))
-                                    .font(.subheadline.weight(.semibold))
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(.primary)
                                 
-                                Text(statusDescription(for: account.miningStatus))
-                                    .font(.caption)
+                                Text(statusLabel(for: account.miningStatus))
+                                    .font(.system(size: 9, weight: .medium))
                                     .foregroundStyle(.secondary)
                             }
 
-                            Spacer()
+                            Spacer(minLength: 8)
 
                             if let progress = account.progressFraction, progress > 0 && progress < 0.995 {
                                 Text("\(Int(progress * 100))%")
-                                    .font(.caption.weight(.bold))
-                                    .foregroundStyle(.secondary)
+                                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                                    .foregroundStyle(.blue)
+                                    .padding(.horizontal, 4)
+                                    .padding(.vertical, 1)
+                                    .background(Color.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 4))
                             }
                         }
                         .padding(.vertical, 4)
                         .padding(.horizontal, 8)
-                        .background(Color.secondary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+                        .background(.secondary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
                 }
             }
         }
-        .padding(16)
-        .frame(width: 280)
+        .padding(12)
+        .frame(width: 220)
     }
 
     private func statusIcon(for status: AccountMiningStatus) -> String {
         switch status {
-        case .mining:
-            return "play.circle.fill"
-        case .claimed:
-            return "checkmark.circle.fill"
-        case .ready, .idle:
-            return "pause.circle.fill"
-        case .blocked:
-            return "link.badge.plus"
-        case .needsAuth:
-            return "exclamationmark.triangle.fill"
+        case .mining: return "play.circle.fill"
+        case .claimed: return "checkmark.circle.fill"
+        case .ready, .idle: return "pause.circle.fill"
+        case .blocked: return "link.badge.plus"
+        case .needsAuth: return "exclamationmark.triangle.fill"
         }
     }
 
@@ -1565,25 +1734,25 @@ struct CampaignMinerInspectorPopover: View {
             return .green
         case .ready, .idle:
             return .secondary
-        case .blocked, .needsAuth:
+        case .blocked:
             return .orange
+        case .needsAuth:
+            return .red
         }
     }
 
-    private func statusDescription(for status: AccountMiningStatus) -> String {
+    private func statusLabel(for status: AccountMiningStatus) -> String {
         switch status {
         case .mining:
-            return "Watching stream"
+            return "Watching"
         case .claimed:
-            return "All drops claimed"
-        case .ready:
-            return "Ready to mine"
-        case .idle:
-            return "Waiting for stream"
+            return "Claimed"
+        case .ready, .idle:
+            return "Waiting"
         case .blocked:
-            return "Twitch account not linked"
+            return "Needs Link"
         case .needsAuth:
-            return "Re-authentication required"
+            return "Error"
         }
     }
 }
@@ -1597,22 +1766,25 @@ struct CampaignCardArtwork: View {
     }
 
     var body: some View {
-        ZStack {
-            if let resolvedURL {
-                AsyncImage(url: resolvedURL) { image in
-                    image
-                        .resizable()
-                        .interpolation(.high)
-                        .scaledToFill()
-                } placeholder: {
+        GeometryReader { geo in
+            ZStack(alignment: .top) {
+                if let resolvedURL {
+                    AsyncImage(url: resolvedURL) { image in
+                        image
+                            .resizable()
+                            .interpolation(.high)
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
+                    } placeholder: {
+                        placeholder
+                    }
+                } else {
                     placeholder
                 }
-            } else {
-                placeholder
             }
+            .frame(width: geo.size.width, height: geo.size.height)
+            .clipped()
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .clipped()
     }
 
     private var placeholder: some View {

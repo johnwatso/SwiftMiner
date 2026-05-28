@@ -1273,9 +1273,7 @@ private struct LinkNoticeBanner: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: "checkmark.seal.fill")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(.green)
+            AnimatedStatusIcon(symbol: "checkmark.circle.fill", color: .green, size: 15, weight: .semibold)
                 .frame(width: 20, height: 20)
 
             VStack(alignment: .leading, spacing: 3) {
