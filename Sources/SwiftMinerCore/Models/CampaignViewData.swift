@@ -305,6 +305,26 @@ public extension CampaignViewData {
         return isClaimed
     }
 
+    /// True when there are unclaimed drops in this campaign that are earnable by mining.
+    /// Returns false if all drops are claimed, or if the remaining drops require subscriptions with no watch progress.
+    public var hasObtainableRewards: Bool {
+        if totalDrops > 0 && dropsClaimed >= totalDrops {
+            return false
+        }
+        if drops.isEmpty {
+            return totalDrops > 0
+        }
+        let unclaimed = drops.filter { !$0.isClaimed }
+        guard !unclaimed.isEmpty else {
+            return false
+        }
+        // If all unclaimed drops require subscription and have 0 progress, they cannot be watched/mined
+        let hasMinedObtainable = unclaimed.contains { drop in
+            !drop.isSubscriptionRequired || drop.currentMinutes > 0
+        }
+        return hasMinedObtainable
+    }
+
     /// Overview must only surface campaigns with real progress or completed rewards.
     var isDisplayableInOverview: Bool {
         hasValidProgress || isCompleted
@@ -373,20 +393,24 @@ public extension CampaignViewData {
     /// Campaign-level state used by `GameAggregate`.
     /// Primary Drops state: expired > completed > in progress > ready.
     func gameAggregateState(now: Date = Date()) -> GameAggregateState {
-        let needsSetup = !isAccountConnected || accountStates.contains {
-            $0.miningStatus == .blocked || $0.miningStatus == .needsAuth
-        }
-        if needsSetup {
-            return .actionRequired
-        }
-
         let hasExpired = self.isExpired(now: now)
         if hasExpired {
             return .unavailable
         }
 
-        if combinedProgressFraction >= 0.995 {
+        if isCompleted {
             return .completed
+        }
+
+        if startDate > now {
+            return .ready
+        }
+
+        let needsSetup = (!isAccountConnected || accountStates.contains {
+            $0.miningStatus == .blocked || $0.miningStatus == .needsAuth
+        }) && hasObtainableRewards
+        if needsSetup {
+            return .actionRequired
         }
 
         if combinedProgressFraction > 0 {

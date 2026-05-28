@@ -1158,7 +1158,7 @@ private enum OverviewSystemState: Equatable {
         case .recovering:
             return "wrench.and.screwdriver.fill"
         case .noRecentActivity:
-            return "waveform.path.ecg"
+            return "checkmark.circle.trianglebadge.exclamationmark.fill"
         case .blockedAccountNotLinked:
             return "link.badge.plus"
         case .blockedAuthenticationExpired, .blockedNeedsAttention:

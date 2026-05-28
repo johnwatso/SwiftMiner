@@ -343,7 +343,7 @@ struct DropsListView: View {
         return (activeGroups + endedGroups)
             .filter { group in
                 if group.aggregateState == .unavailable {
-                    return selectedFilters.contains(.completed)
+                    return selectedFilters.contains(.ended)
                 }
                 if group.aggregateState == .actionRequired {
                     return selectedFilters.contains(.needsSetup)
@@ -436,7 +436,11 @@ struct DropsListView: View {
         }
 
         if selectedFilters == [.completed] {
-            return "No completed or ended campaigns yet."
+            return "No completed campaigns yet."
+        }
+
+        if selectedFilters == [.ended] {
+            return "No ended campaigns yet."
         }
 
         return "No campaigns match the selected filters."
@@ -686,24 +690,39 @@ struct DropsListView: View {
     }
 
     private func matchesNeedsSetupFilter(_ campaign: CampaignViewData, activity: CampaignActivitySnapshot) -> Bool {
+        // Needs setup must only contain active, live, and mineable/actionable campaigns
+        guard campaign.startDate <= Date() else {
+            return false
+        }
+        // It must NOT contain ended/expired campaigns
+        guard !campaign.isExpired() && campaign.endDate > Date() else {
+            return false
+        }
+        // It must NOT contain completed/fully claimed campaigns
+        guard !campaign.isCompleted else {
+            return false
+        }
+        // It must have obtainable rewards remaining
+        guard campaign.hasObtainableRewards else {
+            return false
+        }
+        // It must require account linking or setup
         return isBlockedCampaign(campaign, activity: activity)
     }
 
     private func matchesUpcomingFilter(_ campaign: CampaignViewData, activity: CampaignActivitySnapshot) -> Bool {
-        guard !isBlockedCampaign(campaign, activity: activity) else {
-            return false
-        }
         guard campaign.startDate > Date() else {
             return false
         }
-        return !matchesCompletedFilter(campaign, activity: activity)
+        return !matchesCompletedFilter(campaign, activity: activity) && !matchesEndedFilter(campaign, activity: activity)
     }
 
     private func matchesCompletedFilter(_ campaign: CampaignViewData, activity: CampaignActivitySnapshot) -> Bool {
-        guard !isBlockedCampaign(campaign, activity: activity) else {
-            return false
-        }
-        return campaign.isExpired() || activity.state == .claimed
+        return !campaign.isExpired() && (activity.state == .claimed || campaign.isCompleted)
+    }
+
+    private func matchesEndedFilter(_ campaign: CampaignViewData, activity: CampaignActivitySnapshot) -> Bool {
+        return campaign.isExpired()
     }
 
     private func isBlockedCampaign(_ campaign: CampaignViewData, activity: CampaignActivitySnapshot) -> Bool {
@@ -724,6 +743,9 @@ struct DropsListView: View {
         }
         if matchesCompletedFilter(campaign, activity: activity) {
             filters.insert(.completed)
+        }
+        if matchesEndedFilter(campaign, activity: activity) {
+            filters.insert(.ended)
         }
         return filters
     }
@@ -751,12 +773,14 @@ struct DropsListView: View {
 
         let state: CampaignCardState
 
-        if !campaign.isAccountConnected || !blockedAccounts.isEmpty {
-            state = .blocked
-        } else if isExpired {
+        if isExpired {
             state = .expired
-        } else if combinedProgress >= 0.995 {
+        } else if campaign.startDate > Date() {
+            state = .ready
+        } else if combinedProgress >= 0.995 || campaign.isCompleted {
             state = .claimed
+        } else if (!campaign.isAccountConnected || !blockedAccounts.isEmpty) && campaign.hasObtainableRewards {
+            state = .blocked
         } else if !activeMiners.isEmpty {
             state = .active
         } else if combinedProgress > 0 {
