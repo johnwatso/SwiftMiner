@@ -386,12 +386,15 @@ private struct DropStateBadge: View {
     let drop: DropViewData
 
     var body: some View {
-        Label(title, systemImage: icon)
-            .font(.caption2.weight(.bold))
-            .padding(.horizontal, 9)
-            .padding(.vertical, 5)
-            .foregroundStyle(color)
-            .background(backgroundColor, in: Capsule())
+        HStack(spacing: 4) {
+            AnimatedStatusIcon(symbol: icon, color: color, size: 9, weight: .bold)
+            Text(title)
+        }
+        .font(.caption2.weight(.bold))
+        .padding(.horizontal, 9)
+        .padding(.vertical, 5)
+        .foregroundStyle(color)
+        .background(backgroundColor, in: Capsule())
     }
 
     private var title: String {

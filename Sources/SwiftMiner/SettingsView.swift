@@ -169,6 +169,13 @@ private struct GeneralSettingsView: View {
             }
 
             Section {
+                Toggle("Animated status icons", isOn: $settings.animatedStatusIcons)
+                SettingsSecondaryText("Animate status badges with Apple-style transitions and drawing effects. Continuous animation only runs for actively changing states.")
+            } header: {
+                Text("Status Animations")
+            }
+
+            Section {
                 Toggle("Show notifications when drops are claimed", isOn: $settings.showClaimNotifications)
                     .onChange(of: settings.showClaimNotifications) { _, newValue in
                         Task { await navigation.minerManager.updateNotificationPreference(enabled: newValue && settings.allowsOperatorNotifications()) }

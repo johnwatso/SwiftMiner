@@ -93,8 +93,8 @@ final class MinerActivitySnapshotTests: XCTestCase {
         let idleSnapshot = resolveSnapshot(for: idleMiner)
         let blockedSnapshot = resolveSnapshot(for: blockedMiner)
 
-        XCTAssertEqual(idleSnapshot.statusText, "Idle — No eligible campaigns")
-        XCTAssertEqual(idleSnapshot.now.title, "Idle — No eligible campaigns")
+        XCTAssertEqual(idleSnapshot.statusText, "Up to Date")
+        XCTAssertEqual(idleSnapshot.now.title, "Up to Date")
         XCTAssertNil(idleSnapshot.upNext)
 
         XCTAssertEqual(blockedSnapshot.statusText, "Blocked — Account not linked")
@@ -136,8 +136,8 @@ final class MinerActivitySnapshotTests: XCTestCase {
             includesBadgeAndEmoteCampaigns: false
         )
 
-        XCTAssertEqual(snapshot.statusText, "Waiting")
-        XCTAssertEqual(snapshot.now.title, "Waiting")
+        XCTAssertEqual(snapshot.statusText, "Up to Date")
+        XCTAssertEqual(snapshot.now.title, "Up to Date")
         XCTAssertEqual(snapshot.now.subtitle, "No active drops are available for this account.")
     }
 
@@ -177,8 +177,8 @@ final class MinerActivitySnapshotTests: XCTestCase {
             includesBadgeAndEmoteCampaigns: false
         )
 
-        XCTAssertEqual(snapshot.statusText, "Waiting")
-        XCTAssertEqual(snapshot.now.title, "Waiting")
+        XCTAssertEqual(snapshot.statusText, "Up to Date")
+        XCTAssertEqual(snapshot.now.title, "Up to Date")
         XCTAssertEqual(snapshot.now.subtitle, "No active drops are available for this account.")
         XCTAssertNotEqual(snapshot.now.campaignId, "claimed")
     }

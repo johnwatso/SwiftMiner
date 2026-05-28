@@ -195,9 +195,7 @@ struct AuthRequiredSheet: View {
 
     private var successView: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 48))
-                .foregroundStyle(.green)
+            AnimatedStatusIcon(symbol: "checkmark.circle.fill", color: .green, size: 48)
             Text("Account Added!")
                 .font(.title3.weight(.semibold))
             Text("Your Twitch account has been connected.")
