@@ -5,7 +5,7 @@
         <item>
             <title>1.25</title>
             <pubDate>Thu, 28 May 2026 10:45:39 +1200</pubDate>
-            <sparkle:version>2026052918</sparkle:version>
+            <sparkle:version>2026052921</sparkle:version>
             <sparkle:shortVersionString>1.25</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
             <enclosure url="https://github.com/johnwatso/SwiftMiner/releases/download/v1.25/SwiftMiner-1.25.zip" length="9168395" type="application/octet-stream"/>
