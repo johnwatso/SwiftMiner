@@ -93,11 +93,9 @@ struct MinerApp: App {
                     GitHubIssueReporter.openNewIssue()
                 }
             }
-            // The default View menu only contains toolbar/sidebar toggles that
-            // don't apply to this app — replace its contents with nothing so it
-            // collapses out of the menu bar.
+            // The default View menu contains toolbar/sidebar toggles — we keep sidebar
+            // so users can toggle it.
             CommandGroup(replacing: .toolbar) {}
-            CommandGroup(replacing: .sidebar) {}
             // The File menu only contains "New Window" / "Close" — neither is
             // useful for a single-window app. Strip the SwiftUI-injected items;
             // the menu itself is removed alongside View in LaunchContextDelegate.
@@ -112,12 +110,26 @@ struct MinerApp: App {
                     .disabled(true)
                 } else {
                     ForEach(minerManager.miners) { miner in
-                        Button("Cycle State for \(miner.displayName)") {
-                            minerManager.cycleDebugState(for: miner.id)
+                        Menu(miner.displayName) {
+                            Button("Cycle State") {
+                                minerManager.cycleDebugState(for: miner.id)
+                            }
+                            Divider()
+                            ForEach(MinerManager.DebugState.allCases, id: \.self) { state in
+                                Button("Set to: \(state.rawValue)") {
+                                    minerManager.setDebugState(for: miner.id, state: state)
+                                }
+                            }
+                            Divider()
+                            Button("Revert to Live Data") {
+                                Task {
+                                    await minerManager.revertToLiveData(for: miner.id)
+                                }
+                            }
                         }
                     }
                     Divider()
-                    Button("Revert to Live Data") {
+                    Button("Revert All to Live Data") {
                         Task {
                             await minerManager.revertAllToLiveData()
                         }

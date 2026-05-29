@@ -106,6 +106,10 @@ public final class Settings: ObservableObject {
     @AppStorage("animatedStatusIcons", store: Settings.appStorageStore)
     public var animatedStatusIcons: Bool = true
 
+    /// Whether to use colour in palette-rendered status icons (e.g. the clock badge exclamation icon).
+    @AppStorage("coloredStatusIcons", store: Settings.appStorageStore)
+    public var coloredStatusIcons: Bool = true
+
     /// JSON-encoded array of DropFilter for the Drops list view.
     @AppStorage("selectedDropsFiltersData", store: Settings.appStorageStore)
     private var selectedDropsFiltersData: String = "[\"active\"]"
@@ -784,6 +788,7 @@ public final class Settings: ObservableObject {
         showActivityLogIcons = true
         animateActivityLogRows = true
         animatedStatusIcons = true
+        coloredStatusIcons = true
         preferredQuality = .auto
         showClaimNotifications = false
         lastSelectedGameId = ""

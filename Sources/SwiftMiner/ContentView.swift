@@ -17,7 +17,6 @@ struct ContentView: View {
             detailContainer
         }
         .background(WindowZoomConfigurator())
-        .toolbar(removing: .sidebarToggle)
         .frame(minWidth: 800, minHeight: 600)
         .sheet(isPresented: $nav.showAddAccountSheet) {
             AuthRequiredSheet(isPresented: $nav.showAddAccountSheet)
@@ -26,11 +25,6 @@ struct ContentView: View {
         .onAppear {
             navigation.columnVisibility = .all
             navigation.preloadDropsTab()
-        }
-        .onChange(of: navigation.columnVisibility) { _, newValue in
-            if newValue != .all {
-                navigation.columnVisibility = .all
-            }
         }
         .onChange(of: navigation.minerManager.miners.count) { _, _ in
             navigation.handleAccountCountChange()
@@ -87,6 +81,7 @@ struct OverviewView: View {
     @State private var isShowingGameManagement = false
     @State private var customArtworkImportGame: Game?
     @State private var isShowingArtworkImporter = false
+    @State private var isMinerStatusLegendPresented = false
 
     private var campaigns: [CampaignViewData] {
         overviewCampaigns
@@ -324,8 +319,26 @@ struct OverviewView: View {
     private var minerActivitySection: some View {
         let miners = navigation.minerManager.miners
 
-        return VStack(alignment: .leading, spacing: 14) {
-            sectionHeading("Miner Activity")
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                sectionHeading("Miner Activity")
+
+                Button {
+                    isMinerStatusLegendPresented.toggle()
+                } label: {
+                    Image(systemName: "info.circle")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Explain miner card statuses")
+                .popover(isPresented: $isMinerStatusLegendPresented, arrowEdge: .top) {
+                    MinerStatusLegendPopover()
+                }
+
+                Spacer()
+            }
+            .padding(.top, 10)
 
             if miners.isEmpty {
                 MaterialEmptyStatePanel(
@@ -1041,6 +1054,141 @@ struct OverviewView: View {
         return gameTintColor(forGameName: campaign.gameName)
     }
 
+// MARK: - Miner Status Legend Popover
+
+private struct MinerStatusLegendPopover: View {
+    @ObservedObject private var settings = Settings.shared
+
+    private struct StatusEntry {
+        let symbol: String
+        let paletteColors: (Color, Color)?
+        let monoColor: Color
+        let title: String
+        let description: String
+    }
+
+    private var entries: [StatusEntry] {
+        [
+            StatusEntry(
+                symbol: "dot.radiowaves.left.and.right",
+                paletteColors: nil,
+                monoColor: .green,
+                title: "Watching",
+                description: "Actively watching a live stream and earning drops."
+            ),
+            StatusEntry(
+                symbol: "gift.fill",
+                paletteColors: nil,
+                monoColor: .purple,
+                title: "Claiming Reward",
+                description: "A completed drop is being claimed from Twitch."
+            ),
+            StatusEntry(
+                symbol: "antenna.radiowaves.left.and.right",
+                paletteColors: nil,
+                monoColor: .cyan,
+                title: "Looking for Streams",
+                description: "Eligible campaigns found — waiting for a live channel to become available."
+            ),
+            StatusEntry(
+                symbol: "calendar.badge.checkmark",
+                paletteColors: settings.coloredStatusIcons ? (.green, .red) : nil,
+                monoColor: .green,
+                title: "Up to Date",
+                description: "No drops left to earn right now. The miner is standing by."
+            ),
+            StatusEntry(
+                symbol: "clock.badge.exclamationmark",
+                paletteColors: settings.coloredStatusIcons ? (.red, Color(nsColor: .labelColor)) : nil,
+                monoColor: .yellow,
+                title: "No Recent Activity",
+                description: "Worker is running but hasn't reported a liveness signal yet."
+            ),
+            StatusEntry(
+                symbol: "wrench.and.screwdriver.fill",
+                paletteColors: nil,
+                monoColor: .orange,
+                title: "Recovering",
+                description: "Restarting the miner and rebuilding Twitch subscriptions after a stall."
+            ),
+            StatusEntry(
+                symbol: "bolt.horizontal.circle.fill",
+                paletteColors: nil,
+                monoColor: .red,
+                title: "Miner Unresponsive",
+                description: "This miner stopped receiving Twitch activity while others are still active."
+            ),
+            StatusEntry(
+                symbol: "link.badge.plus",
+                paletteColors: nil,
+                monoColor: .orange,
+                title: "Account Not Linked",
+                description: "The game account must be connected on Twitch before drops can be earned."
+            ),
+            StatusEntry(
+                symbol: "person.crop.circle.badge.exclamationmark",
+                paletteColors: nil,
+                monoColor: .orange,
+                title: "Authentication Expired",
+                description: "Twitch credentials have expired. Re-link the account to resume."
+            ),
+            StatusEntry(
+                symbol: "arrow.triangle.2.circlepath",
+                paletteColors: nil,
+                monoColor: .orange,
+                title: "Reconnecting",
+                description: "Refreshing the Twitch session after a token or network interruption."
+            ),
+            StatusEntry(
+                symbol: "exclamationmark.triangle.fill",
+                paletteColors: nil,
+                monoColor: .red,
+                title: "Error",
+                description: "Something went wrong. Check the Activity Log for details."
+            ),
+        ]
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Miner Card Statuses")
+                .font(.headline)
+
+            VStack(alignment: .leading, spacing: 11) {
+                ForEach(Array(entries.enumerated()), id: \.offset) { _, entry in
+                    HStack(alignment: .top, spacing: 10) {
+                        Group {
+                            if let (primary, secondary) = entry.paletteColors {
+                                Image(systemName: entry.symbol)
+                                    .symbolRenderingMode(.palette)
+                                    .foregroundStyle(primary, secondary)
+                            } else {
+                                Image(systemName: entry.symbol)
+                                    .foregroundStyle(entry.monoColor)
+                            }
+                        }
+                        .font(.system(size: 14, weight: .semibold))
+                        .frame(width: 20, alignment: .center)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(entry.title)
+                                .font(.system(size: 13, weight: .semibold))
+
+                            Text(entry.description)
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+                                .lineSpacing(1.5)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .frame(width: 360, alignment: .leading)
+    }
+}
+
     @ViewBuilder
     private func sectionHeading(_ title: String) -> some View {
         Text(title)
@@ -1230,13 +1378,8 @@ private struct OverviewSystemStateBanner: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(state.color.opacity(0.14))
-
-                AnimatedStatusIcon(symbol: state.symbol, color: state.color, size: 16, weight: .semibold)
-            }
-            .frame(width: 38, height: 38)
+            AnimatedStatusIcon(symbol: state.symbol, color: state.color, size: 16, weight: .semibold)
+                .frame(width: 38, height: 38, alignment: .center)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(state.title)
@@ -2750,35 +2893,10 @@ private struct WindowZoomConfigurator: NSViewRepresentable {
                 .fullScreenDisallowsTiling
             ])
         }
-
-        removeSidebarToggleIfNeeded(from: window)
-        DispatchQueue.main.async {
-            removeSidebarToggleIfNeeded(from: window)
-        }
     }
 
     final class Coordinator: NSObject {
         var didConfigure = false
-    }
-
-    private func removeSidebarToggleIfNeeded(from window: NSWindow) {
-        guard let toolbar = window.toolbar else { return }
-
-        while let index = toolbar.items.firstIndex(where: isSidebarToggleItem) {
-            toolbar.removeItem(at: index)
-        }
-    }
-
-    private func isSidebarToggleItem(_ item: NSToolbarItem) -> Bool {
-        let identifier = item.itemIdentifier
-        let rawValue = identifier.rawValue
-
-        if identifier == .toggleSidebar || identifier == .sidebarTrackingSeparator {
-            return true
-        }
-
-        return rawValue.contains("toggleSidebar")
-            || rawValue.contains("sidebarTrackingSeparator")
     }
 }
 

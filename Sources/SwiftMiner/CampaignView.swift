@@ -1125,23 +1125,6 @@ private struct GameCampaignDeckCard: View {
         .frame(maxWidth: .infinity)
         .background(cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(cardState.borderTint.opacity(isActive ? 0.75 : 0.40), lineWidth: isActive ? 1.0 : 0.6)
-        }
-        .shadow(
-            color: isActive
-                ? group.aggregateState.tint.opacity(isHovered ? 0.12 : 0.08)
-                : .black.opacity(isHovered ? 0.08 : 0.04),
-            radius: isHovered ? 8 : (isActive ? 6 : 3),
-            y: isHovered ? 4 : (isActive ? 3 : 1)
-        )
-        .saturation(isFinishedOrEnded ? 0.8 : 1)
-        .opacity(group.aggregateState == .unavailable ? 0.80 : 1)
-        .animation(.easeInOut(duration: 0.18), value: isHovered)
-        .onHover { hovering in
-            isHovered = hovering
-        }
         .overlay(alignment: .topTrailing) {
             HStack(spacing: 8) {
                 // Compact Semantic Status Pill
@@ -1190,8 +1173,6 @@ private struct GameCampaignDeckCard: View {
             radius: isHovered ? 8 : (isActive ? 6 : 3),
             y: isHovered ? 4 : (isActive ? 3 : 1)
         )
-        .saturation(isFinishedOrEnded ? 0.8 : 1)
-        .opacity(group.aggregateState == .unavailable ? 0.80 : 1)
         .animation(.easeInOut(duration: 0.18), value: isHovered)
         .onHover { hovering in
             isHovered = hovering
