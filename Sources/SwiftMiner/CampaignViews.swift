@@ -295,8 +295,6 @@ struct DropRowView: View {
                     .strokeBorder(Color.blue.opacity(0.18), lineWidth: 1)
             }
         }
-        .opacity(drop.isEarnable || drop.isClaimable || drop.isClaimed ? 1.0 : 0.58)
-        .grayscale(drop.isEarnable || drop.isClaimable || drop.isClaimed ? 0.0 : 0.82)
         .onHover { hovering in
             isHovered = hovering
         }

@@ -17,87 +17,141 @@ struct AnimatedStatusIcon: View {
 
     @State private var triggerBounce = false
 
-    var body: some View {
-        Group {
-            if !settings.animatedStatusIcons || reduceMotion {
-                Image(systemName: symbol)
-                    .font(.system(size: size, weight: weight))
-                    .foregroundStyle(color)
-            } else {
-                animatedIcon
-            }
-        }
+    /// Resolves to `.secondary` when the user has turned off coloured icons,
+    /// stripping all accent tints so everything renders in a neutral grey/black.
+    private var effectiveColor: Color {
+        settings.coloredStatusIcons ? color : .secondary
     }
 
-    @ViewBuilder
-    private var animatedIcon: some View {
-        if symbol == "checkmark.circle.fill" {
-            AnimatedCheckmarkCircleView(color: color, size: size)
-        } else if symbol == "calendar.badge.checkmark" {
-            Image(systemName: symbol)
-                .font(.system(size: size, weight: weight))
-                .symbolRenderingMode(.palette)
-                .foregroundStyle(Color.green, Color.red)
-                .symbolEffect(.bounce.down, value: triggerBounce)
-                .onAppear {
-                    triggerBounce.toggle()
+    var body: some View {
+        let isAnimated = settings.animatedStatusIcons && !reduceMotion
+        
+        Group {
+            if symbol == "checkmark.circle.fill" {
+                if isAnimated {
+                    AnimatedCheckmarkCircleView(color: effectiveColor, size: size)
+                } else {
+                    Image(systemName: symbol)
+                        .font(.system(size: size, weight: weight))
+                        .foregroundStyle(effectiveColor)
                 }
-                .onChange(of: symbol) { _, _ in
-                    triggerBounce.toggle()
+            } else if symbol == "calendar.badge.checkmark" {
+                if settings.coloredStatusIcons {
+                    let base = Image(systemName: symbol)
+                        .font(.system(size: size, weight: weight))
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(Color.green, Color.red)
+                    
+                    if isAnimated {
+                        base
+                            .symbolEffect(.bounce.down, value: triggerBounce)
+                            .onAppear { triggerBounce.toggle() }
+                            .onChange(of: symbol) { _, _ in triggerBounce.toggle() }
+                    } else {
+                        base
+                    }
+                } else {
+                    let base = Image(systemName: symbol)
+                        .font(.system(size: size, weight: weight))
+                        .foregroundStyle(effectiveColor)
+                    
+                    if isAnimated {
+                        base
+                            .symbolEffect(.bounce.down, value: triggerBounce)
+                            .onAppear { triggerBounce.toggle() }
+                            .onChange(of: symbol) { _, _ in triggerBounce.toggle() }
+                    } else {
+                        base
+                    }
                 }
-        } else if symbol == "checkmark.circle.trianglebadge.exclamationmark.fill" {
-            Image(systemName: symbol)
-                .font(.system(size: size, weight: weight))
-                .foregroundStyle(color)
-                .symbolEffect(.bounce.down, value: triggerBounce)
-                .onAppear {
-                    triggerBounce.toggle()
+            } else if symbol == "clock.badge.exclamationmark" {
+                if settings.coloredStatusIcons {
+                    let base = Image(systemName: symbol)
+                        .font(.system(size: size, weight: weight))
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(Color.red, Color(nsColor: .labelColor))
+                    
+                    if isAnimated {
+                        base
+                            .symbolEffect(.bounce.down, value: triggerBounce)
+                            .onAppear { triggerBounce.toggle() }
+                            .onChange(of: symbol) { _, _ in triggerBounce.toggle() }
+                    } else {
+                        base
+                    }
+                } else {
+                    let base = Image(systemName: symbol)
+                        .font(.system(size: size, weight: weight))
+                        .foregroundStyle(effectiveColor)
+                    
+                    if isAnimated {
+                        base
+                            .symbolEffect(.bounce.down, value: triggerBounce)
+                            .onAppear { triggerBounce.toggle() }
+                            .onChange(of: symbol) { _, _ in triggerBounce.toggle() }
+                    } else {
+                        base
+                    }
                 }
-                .onChange(of: symbol) { _, _ in
-                    triggerBounce.toggle()
+            } else if symbol == "checkmark.seal.fill" {
+                let base = Image(systemName: symbol)
+                    .font(.system(size: size, weight: weight))
+                    .foregroundStyle(effectiveColor)
+                
+                if isAnimated {
+                    base
+                        .symbolEffect(.bounce.down, value: triggerBounce)
+                        .onAppear { triggerBounce.toggle() }
+                        .onChange(of: symbol) { _, _ in triggerBounce.toggle() }
+                } else {
+                    base
                 }
-        } else if symbol == "checkmark.seal.fill" {
-            Image(systemName: symbol)
-                .font(.system(size: size, weight: weight))
-                .foregroundStyle(color)
-                .symbolEffect(.bounce.down, value: triggerBounce)
-                .onAppear {
-                    triggerBounce.toggle()
+            } else if symbol == "antenna.radiowaves.left.and.right" {
+                let base = Image(systemName: symbol)
+                    .font(.system(size: size, weight: weight))
+                    .foregroundStyle(effectiveColor)
+                
+                if isAnimated {
+                    base.symbolEffect(.variableColor.iterative.reversing, options: .repeating)
+                } else {
+                    base
                 }
-                .onChange(of: symbol) { _, _ in
-                    triggerBounce.toggle()
+            } else if symbol == "dot.radiowaves.left.and.right" {
+                let base = Image(systemName: symbol)
+                    .font(.system(size: size, weight: weight))
+                    .foregroundStyle(effectiveColor)
+                
+                if isAnimated {
+                    base.symbolEffect(.pulse, options: .repeating)
+                } else {
+                    base
                 }
-        } else if symbol == "antenna.radiowaves.left.and.right" {
-            // Animate only the waves iteratively (variableColor)
-            Image(systemName: symbol)
-                .font(.system(size: size, weight: weight))
-                .foregroundStyle(color)
-                .symbolEffect(.variableColor.iterative.reversing, options: .repeating)
-        } else if symbol == "dot.radiowaves.left.and.right" {
-            // Gentle ambient pulse effect only
-            Image(systemName: symbol)
-                .font(.system(size: size, weight: weight))
-                .foregroundStyle(color)
-                .symbolEffect(.pulse, options: .repeating)
-        } else if symbol == "gift.fill" {
-            // Gift icon with single bounce transition
-            Image(systemName: symbol)
-                .font(.system(size: size, weight: weight))
-                .foregroundStyle(color)
-                .symbolEffect(.bounce.up, value: triggerBounce)
-                .onAppear {
-                    triggerBounce.toggle()
+            } else if symbol == "gift.fill" {
+                let base = Image(systemName: symbol)
+                    .font(.system(size: size, weight: weight))
+                    .foregroundStyle(effectiveColor)
+                
+                if isAnimated {
+                    base
+                        .symbolEffect(.bounce.up, value: triggerBounce)
+                        .onAppear { triggerBounce.toggle() }
+                        .onChange(of: symbol) { _, _ in triggerBounce.toggle() }
+                } else {
+                    base
                 }
-                .onChange(of: symbol) { _, _ in
-                    triggerBounce.toggle()
+            } else if symbol == "arrow.triangle.2.circlepath" || symbol == "arrow.clockwise" {
+                if isAnimated {
+                    ReconnectingSpinnerView(symbol: symbol, size: size, weight: weight, color: effectiveColor)
+                } else {
+                    Image(systemName: symbol)
+                        .font(.system(size: size, weight: weight))
+                        .foregroundStyle(effectiveColor)
                 }
-        } else if symbol == "arrow.triangle.2.circlepath" || symbol == "arrow.clockwise" {
-            // Slow, subtle rotational animation
-            ReconnectingSpinnerView(symbol: symbol, size: size, weight: weight, color: color)
-        } else {
-            Image(systemName: symbol)
-                .font(.system(size: size, weight: weight))
-                .foregroundStyle(color)
+            } else {
+                Image(systemName: symbol)
+                    .font(.system(size: size, weight: weight))
+                    .foregroundStyle(effectiveColor)
+            }
         }
     }
 }

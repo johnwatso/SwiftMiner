@@ -171,7 +171,7 @@ struct MinerStateCard: View {
             return StateConfig(
                 headline: "No Recent Activity",
                 subtitle: "The worker is running, but liveness signals have gone quiet.",
-                icon: "checkmark.circle.trianglebadge.exclamationmark.fill",
+                icon: "clock.badge.exclamationmark",
                 color: .yellow
             )
         }
@@ -299,12 +299,18 @@ struct MinerActivityCard: View {
         prominence == .expanded
     }
 
+    /// Returns the accent colour only when coloured icons/status are enabled,
+    /// otherwise falls back to `.secondary` for a monochrome look.
+    private func effectiveAccent(_ color: Color) -> Color {
+        settings.coloredStatusIcons ? color : .secondary
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: isExpanded ? 14 : 12) {
             header
 
             VStack(alignment: .leading, spacing: isExpanded ? 7 : 10) {
-                ActivityLabel("Current Status", color: snapshot.now.accent)
+                ActivityLabel("Current Status", color: .secondary)
                 currentActivity
             }
 
@@ -362,22 +368,15 @@ struct MinerActivityCard: View {
     }
 
     private var header: some View {
-        HStack(alignment: .center, spacing: 10) {
-            AnimatedStatusIcon(symbol: snapshot.now.symbol, color: snapshot.now.accent, size: isExpanded ? 28 : 30, weight: .bold)
+        HStack(alignment: .center, spacing: 8) {
+            AnimatedStatusIcon(symbol: snapshot.now.symbol, color: snapshot.now.accent, size: 17, weight: .medium)
 
-            VStack(alignment: .leading, spacing: 1) {
-                Text(miner.displayName)
-                    .font(.headline.weight(.semibold))
-                    .lineLimit(1)
-                    .contextMenu {
-                        nicknameContextMenu
-                    }
-
-                Text(snapshot.statusText)
-                    .font(.caption)
-                    .foregroundStyle(snapshot.statusColor)
-                    .lineLimit(1)
-            }
+            Text(miner.displayName)
+                .font(.title3.weight(.semibold))
+                .lineLimit(1)
+                .contextMenu {
+                    nicknameContextMenu
+                }
 
             Spacer(minLength: 8)
         }
@@ -417,7 +416,7 @@ struct MinerActivityCard: View {
             }
 
             if let progress = snapshot.now.progressFraction {
-                AnimatedLinearProgressView(value: progress, tint: snapshot.now.accent)
+                AnimatedLinearProgressView(value: progress, tint: effectiveAccent(snapshot.now.accent))
                     .padding(.top, isExpanded ? 0 : 2)
             }
 
@@ -484,7 +483,7 @@ struct MinerActivityCard: View {
                 HStack(alignment: .top, spacing: 10) {
                     Image(systemName: item.symbol)
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(item.accent)
+                        .foregroundStyle(effectiveAccent(item.accent))
                         .frame(width: 18, height: 18)
 
                     VStack(alignment: .leading, spacing: 3) {
@@ -667,7 +666,7 @@ struct MinerActivitySnapshot {
                 id: "quiet-\(miner.id)",
                 title: "No Recent Activity",
                 subtitle: "Worker is running, but it has not reported recent liveness yet.",
-                symbol: "checkmark.circle.trianglebadge.exclamationmark.fill",
+                symbol: "clock.badge.exclamationmark",
                 accent: .yellow
             )
         }

@@ -171,6 +171,9 @@ private struct GeneralSettingsView: View {
             Section {
                 Toggle("Animated status icons", isOn: $settings.animatedStatusIcons)
                 SettingsSecondaryText("Animate status badges with Apple-style transitions and drawing effects. Continuous animation only runs for actively changing states.")
+
+                Toggle("Coloured status icons", isOn: $settings.coloredStatusIcons)
+                SettingsSecondaryText("Apply distinct colours to multi-layer icons such as the clock warning badge. Turn off for a monochrome, system-tinted look.")
             } header: {
                 Text("Status Animations")
             }

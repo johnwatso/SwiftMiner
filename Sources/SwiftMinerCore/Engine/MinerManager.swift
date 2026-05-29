@@ -1419,6 +1419,75 @@ public final class MinerManager {
     }
 
     #if DEBUG
+    public enum DebugState: String, CaseIterable, Sendable {
+        case idle = "Idle"
+        case recovering = "Recovering"
+        case stalled = "Stalled"
+        case quiet = "No Recent Activity"
+        case blockedNotLinked = "Blocked — Account Not Linked"
+        case authExpired = "Blocked — Auth Expired"
+    }
+
+    /// Sets a miner's state to a specific debug configuration to test UI card presentations.
+    public func setDebugState(for minerId: String, state: DebugState) {
+        guard let index = miners.firstIndex(where: { $0.id == minerId }) else { return }
+        var miner = miners[index]
+        
+        switch state {
+        case .recovering:
+            miner.workerState = .recovering
+            miner.isStalled = false
+            miner.isRunning = true
+            miner.isHealthy = true
+            miner.needsAuth = false
+            miner.status = .authenticating
+            
+        case .stalled:
+            miner.workerState = .idle
+            miner.isStalled = true
+            miner.isRunning = true
+            miner.isHealthy = true
+            miner.needsAuth = false
+            miner.status = .error
+            
+        case .quiet:
+            miner.workerState = .idle
+            miner.isStalled = false
+            miner.isRunning = true
+            miner.isHealthy = false
+            miner.needsAuth = false
+            miner.status = .fetchingCampaigns
+            
+        case .blockedNotLinked:
+            miner.workerState = .idle
+            miner.isStalled = false
+            miner.isRunning = true
+            miner.isHealthy = true
+            miner.needsAuth = false
+            miner.status = .blockedAccountNotLinked
+            
+        case .authExpired:
+            miner.workerState = .idle
+            miner.isStalled = false
+            miner.isRunning = true
+            miner.isHealthy = true
+            miner.needsAuth = true
+            miner.status = .error
+            
+        case .idle:
+            miner.workerState = .idle
+            miner.isStalled = false
+            miner.isHealthy = true
+            miner.needsAuth = false
+            miner.isRunning = false
+            miner.status = .idle
+        }
+        
+        miners[index] = miner
+        onMinersChanged?()
+        onMinerStatusChange?(miner)
+    }
+
     /// Cycles a miner's state through different configurations to test UI card presentations.
     public func cycleDebugState(for minerId: String) {
         guard let index = miners.firstIndex(where: { $0.id == minerId }) else { return }
