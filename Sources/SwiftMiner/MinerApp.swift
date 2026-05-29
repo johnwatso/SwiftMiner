@@ -40,6 +40,12 @@ struct MinerApp: App {
                     // and optionally auto-starts miners before AppModel reads miner state.
                     await navigation.setup()
                     await appModel.setup()
+                    updater.onError = { error in
+                        navigation.logEvent(
+                            message: "Update check failed: \(error.localizedDescription). You can download manually from https://github.com/johnwatso/SwiftMiner/releases",
+                            level: .warning
+                        )
+                    }
                     navigation.configureOnboardingPresentation()
                     UNUserNotificationCenter.current().delegate = notificationDelegate
                     await requestNotificationPermission()

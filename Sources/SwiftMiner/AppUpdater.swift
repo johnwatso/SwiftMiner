@@ -48,6 +48,7 @@ final class AppUpdater: NSObject, ObservableObject {
     private let stableFeedURL: String
     private let currentShortVersion: String
     private var autoCheckTask: Task<Void, Never>?
+    var onError: ((Error) -> Void)?
 
     init(bundle: Bundle = .main) {
         let persistedChannelRaw = UserDefaults.standard.string(forKey: Self.updateChannelDefaultsKey) ?? UpdateChannel.stable.rawValue
@@ -216,6 +217,21 @@ extension AppUpdater: SPUUpdaterDelegate {
 
     func updater(_ updater: SPUUpdater, shouldPostponeRelaunchForUpdate item: SUAppcastItem, untilInvokingBlock installHandler: @escaping () -> Void) -> Bool {
         false
+    }
+
+    func updater(_ updater: SPUUpdater, didAbortWithError error: Error) {
+        let nsError = error as NSError
+        // Skip expected non-failure errors:
+        // SUNoUpdateError = 4001 or 2401
+        // SUInstallationCanceledError = 4003 or 2403
+        if nsError.domain == "SUSparkleErrorDomain" {
+            let code = nsError.code
+            if code == 4001 || code == 4003 || code == 2401 || code == 2403 {
+                return
+            }
+        }
+        
+        onError?(error)
     }
 
     func updaterShouldRelaunchApplication(_ updater: SPUUpdater) -> Bool {

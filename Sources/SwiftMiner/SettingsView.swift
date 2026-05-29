@@ -44,6 +44,12 @@ struct SettingsView: View {
                     SettingsTabItem(tab: .advanced)
                 }
                 .tag(SettingsTab.advanced)
+
+            UpdatesSettingsView()
+                .tabItem {
+                    SettingsTabItem(tab: .updates)
+                }
+                .tag(SettingsTab.updates)
         }
         .padding(.top, -2)
         .frame(width: 520)
@@ -56,6 +62,7 @@ private enum SettingsTab: String, CaseIterable, Hashable, Identifiable {
     case mining
     case integrations
     case advanced
+    case updates
 
     var id: String { rawValue }
 
@@ -66,6 +73,7 @@ private enum SettingsTab: String, CaseIterable, Hashable, Identifiable {
         case .mining: return "Mining"
         case .integrations: return "Integrations"
         case .advanced: return "Advanced"
+        case .updates: return "Updates"
         }
     }
 
@@ -76,6 +84,7 @@ private enum SettingsTab: String, CaseIterable, Hashable, Identifiable {
         case .mining: return "cpu"
         case .integrations: return "app.connected.to.app.below.fill"
         case .advanced: return "gearshape.2"
+        case .updates: return "arrow.clockwise.circle"
         }
     }
 }
@@ -214,6 +223,53 @@ private struct GeneralSettingsView: View {
                 Text("Integrations")
             }
 
+
+        }
+        .formStyle(.grouped)
+        .padding(.horizontal, 24)
+        .padding(.bottom, 20)
+        .padding(.top, 10)
+    }
+
+    private var startAtLoginBinding: Binding<Bool> {
+        Binding {
+            loginItemSettings.isEnabled
+        } set: { isEnabled in
+            loginItemSettings.setEnabled(isEnabled)
+        }
+    }
+
+
+
+    private var quietStartBinding: Binding<Int> {
+        Binding {
+            settings.quietHoursStartMinute / 60
+        } set: { hour in
+            settings.quietHoursStartMinute = hour * 60
+        }
+    }
+
+    private var quietEndBinding: Binding<Int> {
+        Binding {
+            settings.quietHoursEndMinute / 60
+        } set: { hour in
+            settings.quietHoursEndMinute = hour * 60
+        }
+    }
+
+    private func hourLabel(_ hour: Int) -> String {
+        let date = Calendar.current.date(from: DateComponents(hour: hour, minute: 0)) ?? Date()
+        return date.formatted(date: .omitted, time: .shortened)
+    }
+}
+
+// MARK: - Updates Settings
+
+private struct UpdatesSettingsView: View {
+    @EnvironmentObject private var updater: AppUpdater
+
+    var body: some View {
+        Form {
             Section {
                 let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
                 let currentBuild = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown"
@@ -244,6 +300,18 @@ private struct GeneralSettingsView: View {
                 .disabled(!updater.canCheckForUpdates)
 
                 VStack(alignment: .leading, spacing: 4) {
+                    Text("If automatic updates fail, you can download the latest version manually from:")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    
+                    Link("GitHub Releases", destination: URL(string: "https://github.com/johnwatso/SwiftMiner/releases")!)
+                        .font(.caption)
+                        .underline()
+                }
+                .padding(.leading, 2)
+                .padding(.top, 2)
+
+                VStack(alignment: .leading, spacing: 4) {
                     Text("Current version: \(currentVersion)")
                     Text("Build: \(currentBuild)")
                 }
@@ -264,14 +332,6 @@ private struct GeneralSettingsView: View {
         .padding(.top, 10)
     }
 
-    private var startAtLoginBinding: Binding<Bool> {
-        Binding {
-            loginItemSettings.isEnabled
-        } set: { isEnabled in
-            loginItemSettings.setEnabled(isEnabled)
-        }
-    }
-
     private var automaticUpdateChecksBinding: Binding<Bool> {
         Binding {
             updater.automaticallyChecksForUpdates
@@ -286,27 +346,6 @@ private struct GeneralSettingsView: View {
         } set: { isEnabled in
             updater.setAutomaticallyDownloadsUpdates(isEnabled)
         }
-    }
-
-    private var quietStartBinding: Binding<Int> {
-        Binding {
-            settings.quietHoursStartMinute / 60
-        } set: { hour in
-            settings.quietHoursStartMinute = hour * 60
-        }
-    }
-
-    private var quietEndBinding: Binding<Int> {
-        Binding {
-            settings.quietHoursEndMinute / 60
-        } set: { hour in
-            settings.quietHoursEndMinute = hour * 60
-        }
-    }
-
-    private func hourLabel(_ hour: Int) -> String {
-        let date = Calendar.current.date(from: DateComponents(hour: hour, minute: 0)) ?? Date()
-        return date.formatted(date: .omitted, time: .shortened)
     }
 
     @ViewBuilder
