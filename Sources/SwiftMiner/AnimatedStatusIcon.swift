@@ -36,34 +36,13 @@ struct AnimatedStatusIcon: View {
                         .foregroundStyle(effectiveColor)
                 }
             } else if symbol == "calendar.badge.checkmark" {
-                if settings.coloredStatusIcons {
-                    let base = Image(systemName: symbol)
-                        .font(.system(size: size, weight: weight))
-                        .symbolRenderingMode(.palette)
-                        .foregroundStyle(Color.green, Color.red)
-                    
-                    if isAnimated {
-                        base
-                            .symbolEffect(.bounce.down, value: triggerBounce)
-                            .onAppear { triggerBounce.toggle() }
-                            .onChange(of: symbol) { _, _ in triggerBounce.toggle() }
-                    } else {
-                        base
-                    }
-                } else {
-                    let base = Image(systemName: symbol)
-                        .font(.system(size: size, weight: weight))
-                        .foregroundStyle(effectiveColor)
-                    
-                    if isAnimated {
-                        base
-                            .symbolEffect(.bounce.down, value: triggerBounce)
-                            .onAppear { triggerBounce.toggle() }
-                            .onChange(of: symbol) { _, _ in triggerBounce.toggle() }
-                    } else {
-                        base
-                    }
-                }
+                AnimatedCalendarCheckmarkIcon(
+                    calendarColor: settings.coloredStatusIcons ? .red : effectiveColor,
+                    checkmarkColor: settings.coloredStatusIcons ? .green : effectiveColor,
+                    size: size,
+                    weight: weight,
+                    isAnimated: isAnimated
+                )
             } else if symbol == "clock.badge.exclamationmark" {
                 if settings.coloredStatusIcons {
                     let base = Image(systemName: symbol)
@@ -151,6 +130,80 @@ struct AnimatedStatusIcon: View {
                 Image(systemName: symbol)
                     .font(.system(size: size, weight: weight))
                     .foregroundStyle(effectiveColor)
+            }
+        }
+    }
+}
+
+// MARK: - AnimatedCalendarCheckmarkIcon
+
+private struct AnimatedCalendarCheckmarkIcon: View {
+    let calendarColor: Color
+    let checkmarkColor: Color
+    let size: CGFloat
+    let weight: Font.Weight
+    let isAnimated: Bool
+
+    @State private var badgeScale: CGFloat
+    @State private var checkmarkProgress: CGFloat
+    @State private var didAnimate = false
+
+    init(calendarColor: Color, checkmarkColor: Color, size: CGFloat, weight: Font.Weight, isAnimated: Bool) {
+        self.calendarColor = calendarColor
+        self.checkmarkColor = checkmarkColor
+        self.size = size
+        self.weight = weight
+        self.isAnimated = isAnimated
+        _badgeScale = State(initialValue: isAnimated ? 0 : 1)
+        _checkmarkProgress = State(initialValue: isAnimated ? 0 : 1)
+    }
+
+    var body: some View {
+        let badgeSize = size * 0.42
+        let checkSize = badgeSize * 0.52
+
+        ZStack(alignment: .bottomTrailing) {
+            Image(systemName: "calendar")
+                .font(.system(size: size, weight: weight))
+                .foregroundStyle(calendarColor)
+
+            ZStack {
+                Circle()
+                    .fill(checkmarkColor)
+
+                CheckmarkShape()
+                    .trim(from: 0, to: checkmarkProgress)
+                    .stroke(
+                        Color.white,
+                        style: StrokeStyle(lineWidth: max(badgeSize * 0.12, 1.1), lineCap: .round, lineJoin: .round)
+                    )
+                    .frame(width: checkSize, height: checkSize * 0.78)
+                    .offset(y: badgeSize * 0.03)
+            }
+            .frame(width: badgeSize, height: badgeSize)
+            .scaleEffect(badgeScale)
+            .offset(x: size * 0.06, y: size * 0.02)
+        }
+        .frame(width: size, height: size)
+        .onAppear {
+            guard isAnimated, !didAnimate else {
+                badgeScale = 1
+                checkmarkProgress = 1
+                return
+            }
+
+            didAnimate = true
+            withAnimation(.spring(response: 0.24, dampingFraction: 0.78).delay(0.06)) {
+                badgeScale = 1
+            }
+            withAnimation(.easeOut(duration: 0.28).delay(0.16)) {
+                checkmarkProgress = 1
+            }
+        }
+        .onChange(of: isAnimated) { _, newValue in
+            if !newValue {
+                badgeScale = 1
+                checkmarkProgress = 1
             }
         }
     }

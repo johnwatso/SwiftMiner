@@ -122,6 +122,7 @@
 		DD4BEB71DFE7F4289A2EE792 /* DiscordAPIRoutesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9801029B6FF0AE01627EE293 /* DiscordAPIRoutesTests.swift */; };
 		E43DEC94C9BDD5175A511E3F /* SwiftMinerDMEventServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 629F288CD5F83A1A3925F9AC /* SwiftMinerDMEventServiceTests.swift */; };
 		E52A43018B32BC80753EB96F /* CampaignMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54D58D6720C5197DA271ECF7 /* CampaignMapper.swift */; };
+		E64A2E73C87D520DDF9B7BDB /* AggregatedCampaignDataServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F534FC0C4A706694C2C7007 /* AggregatedCampaignDataServiceTests.swift */; };
 		E66FEEA86A15D48613576F2D /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 320947611A8A4BB7759DAF7C /* NotificationService.swift */; };
 		E710235205E55957CBF29F95 /* CampaignMergeEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = D12899BD6300ED21BCE6187E /* CampaignMergeEngine.swift */; };
 		E7FCDE6D918A60F6F6DFA5E5 /* SteamArtworkService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5A91BEF2B2404145AB60B1B /* SteamArtworkService.swift */; };
@@ -239,6 +240,7 @@
 		5A79F35AB0C08E6F2BE9A648 /* LiquidGlass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidGlass.swift; sourceTree = "<group>"; };
 		5BF00FC996141AD5345CE864 /* AuthRequiredSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthRequiredSheet.swift; sourceTree = "<group>"; };
 		5EB4A75313DCEC0D8CFC2445 /* MinerEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinerEngine.swift; sourceTree = "<group>"; };
+		5F534FC0C4A706694C2C7007 /* AggregatedCampaignDataServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AggregatedCampaignDataServiceTests.swift; sourceTree = "<group>"; };
 		629F288CD5F83A1A3925F9AC /* SwiftMinerDMEventServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftMinerDMEventServiceTests.swift; sourceTree = "<group>"; };
 		637C207EE3AF4206DA9F2C8F /* LogExporterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogExporterTests.swift; sourceTree = "<group>"; };
 		65FB3E563B38E973DD424620 /* MinersOverviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinersOverviewView.swift; sourceTree = "<group>"; };
@@ -560,6 +562,7 @@
 		E901A37D9DD80204A5583082 /* Tests */ = {
 			isa = PBXGroup;
 			children = (
+				5F534FC0C4A706694C2C7007 /* AggregatedCampaignDataServiceTests.swift */,
 				E3C6E1FF09A07505FAF56FDF /* CampaignStateTests.swift */,
 				573073692F55774FD9E03776 /* CampaignTabRoutingTests.swift */,
 				AA337D3B4BF522E65F51DB29 /* ClaimServiceTests.swift */,
@@ -947,6 +950,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E64A2E73C87D520DDF9B7BDB /* AggregatedCampaignDataServiceTests.swift in Sources */,
 				374303964418BDD39C426435 /* CampaignStateTests.swift in Sources */,
 				2D011D07DA750AF66BFC2C25 /* CampaignTabRoutingTests.swift in Sources */,
 				D421E764CC96327AB1098DCF /* ClaimServiceTests.swift in Sources */,
@@ -1059,7 +1063,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026052921;
+				CURRENT_PROJECT_VERSION = 2026060111;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;
@@ -1070,7 +1074,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 1.25;
+				MARKETING_VERSION = 1.26;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -1219,7 +1223,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026052921;
+				CURRENT_PROJECT_VERSION = 2026060111;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;
@@ -1230,7 +1234,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 1.25;
+				MARKETING_VERSION = 1.26;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
