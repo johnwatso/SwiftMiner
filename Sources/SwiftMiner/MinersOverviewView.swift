@@ -1000,7 +1000,7 @@ private struct PendingItem: Identifiable, Equatable {
     var iconSystemName: String {
         if isMuted { return "bell.slash" }
         switch kind {
-        case .accountLink: return "link.badge.plus"
+        case .accountLink: return "personalhotspot.slash"
         case .subscriptionRequired: return "creditcard"
         }
     }
@@ -1326,7 +1326,7 @@ private struct CampaignStatusRow: View {
         case .completed:
             return "checkmark"
         case .requiresLink:
-            return "link.badge.plus"
+            return "personalhotspot.slash"
         case .requiresSubscription:
             return "creditcard"
         case .waitingForStream:

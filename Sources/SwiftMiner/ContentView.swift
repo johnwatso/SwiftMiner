@@ -1119,7 +1119,7 @@ private struct MinerStatusLegendPopover: View {
                 description: "This miner stopped receiving Twitch activity while others are still active."
             ),
             StatusEntry(
-                symbol: "link.badge.plus",
+                symbol: "personalhotspot.slash",
                 paletteColors: nil,
                 monoColor: .orange,
                 title: "Account Not Linked",
@@ -1308,7 +1308,7 @@ private enum OverviewSystemState: Equatable {
         case .noRecentActivity:
             return "checkmark.circle.trianglebadge.exclamationmark.fill"
         case .blockedAccountNotLinked:
-            return "link.badge.plus"
+            return "personalhotspot.slash"
         case .blockedAuthenticationExpired, .blockedNeedsAttention:
             return "exclamationmark.triangle.fill"
         case .mining:

@@ -12,6 +12,7 @@ struct DropsListView: View {
     @State private var searchText: String = ""
     @State private var selectedMinerFilterId: String = DropsListView.allMinersFilterId
     @State private var gameExpansionOverrides: [String: Bool] = [:]
+    @State private var visibleGroupLimit = 24
     @AppStorage("preferSteamArtwork", store: Settings.appStorageStore) private var preferSteamArtwork: Bool = false
     @ObservedObject private var settings = Settings.shared
 
@@ -57,7 +58,7 @@ struct DropsListView: View {
                         if renderedCampaigns.isEmpty {
                             fallbackBanner(emptyFilterMessage)
                         } else {
-                            ForEach(groupedCampaigns) { group in
+                            ForEach(visibleGroupedCampaigns) { group in
                                 GameCampaignDeckCard(
                                     group: group,
                                     activityProvider: activity(for:),
@@ -73,6 +74,14 @@ struct DropsListView: View {
                                 )
                                 .transition(.opacity.combined(with: .scale(scale: 0.985)))
                             }
+
+                            if groupedCampaigns.count > visibleGroupLimit {
+                                Color.clear
+                                    .frame(height: 1)
+                                    .onAppear {
+                                        visibleGroupLimit += 24
+                                    }
+                            }
                         }
                     }
                     .padding(24)
@@ -84,11 +93,21 @@ struct DropsListView: View {
         .task(id: accountSignature) {
             applyRequestedDropsFilter()
             await loadCampaignFeed()
+            isRefreshing = navigation.refreshDropsInBackground()
             await MinerFilterTip.viewedDropsList.donate()
             await DropFilterChipsTip.viewedDropsList.donate()
             if !preferSteamArtwork {
                 await SteamArtworkTip.viewedCampaigns.donate()
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .dropsCampaignsDidUpdate)) { _ in
+            Task { @MainActor in
+                await loadCampaignFeed(recomposeCachedFeed: true)
+                isRefreshing = navigation.isDropsBackgroundRefreshRunning
+            }
+        }
+        .onChange(of: navigation.isDropsBackgroundRefreshRunning) { _, running in
+            isRefreshing = running
         }
         .onChange(of: navigation.requestedDropsFilter) { _, _ in
             applyRequestedDropsFilter()
@@ -105,6 +124,9 @@ struct DropsListView: View {
             else { return }
             selectedMinerFilterId = Self.allMinersFilterId
         }
+        .onChange(of: selectedFilters) { _, _ in resetVisibleGroups() }
+        .onChange(of: selectedMinerFilterId) { _, _ in resetVisibleGroups() }
+        .onChange(of: searchText) { _, _ in resetVisibleGroups() }
     }
 
     private var searchAndMinerControls: some View {
@@ -358,6 +380,14 @@ struct DropsListView: View {
             }
     }
 
+    private var visibleGroupedCampaigns: ArraySlice<GameAggregate> {
+        groupedCampaigns.prefix(visibleGroupLimit)
+    }
+
+    private func resetVisibleGroups() {
+        visibleGroupLimit = 24
+    }
+
     private func endedCampaignGroup(for campaign: CampaignViewData) -> GameAggregate {
         GameAggregate(
             id: "\(campaign.aggregateGameGroupKey):ended:\(campaign.id)",
@@ -538,21 +568,23 @@ struct DropsListView: View {
     }
 
     @MainActor
-    private func loadCampaignFeed() async {
+    private func loadCampaignFeed(recomposeCachedFeed: Bool = false) async {
         guard hasAccounts else {
             campaigns = []
             isRefreshing = false
+            resetVisibleGroups()
             return
         }
 
-        isRefreshing = true
-        defer { isRefreshing = false }
-
         // Seed from last-known cache immediately (synchronous) so the view
-        // shows artwork-complete campaigns while the async refresh runs.
+        // shows artwork-complete campaigns while any async refresh runs.
         let lastKnown = navigation.minerManager.dataCoordinator.lastKnownAllCampaigns
         if campaigns.isEmpty && !lastKnown.isEmpty {
             campaigns = lastKnown
+        }
+
+        guard recomposeCachedFeed || campaigns.isEmpty else {
+            return
         }
 
         // Load ALL campaigns (not filtered) for the "All" tab
@@ -562,44 +594,7 @@ struct DropsListView: View {
         if !cached.isEmpty {
             withAnimation(.easeInOut(duration: 0.2)) {
                 campaigns = cached
-            }
-        }
-
-        let preferSteamArtwork = Settings.shared.preferSteamArtwork
-        let refreshTask = Task {
-            await navigation.minerManager.dataCoordinator.refreshAll()
-        }
-        let completedInTime = await waitForRefreshTask(
-            refreshTask,
-            timeout: .seconds(45)
-        )
-
-        // Don't leave the UI waiting forever when one account is slow.
-        // Let refresh continue in the background and apply results when ready.
-        if !completedInTime {
-            Task { @MainActor in
-                await refreshTask.value
-                guard hasAccounts else { return }
-                let eventual = await navigation.minerManager.dataCoordinator.allCampaigns(
-                    preferSteamArtwork: preferSteamArtwork
-                )
-                if !eventual.isEmpty || campaigns.isEmpty {
-                    withAnimation(.easeInOut(duration: 0.24)) {
-                        campaigns = eventual
-                    }
-                }
-            }
-            return
-        }
-
-        // Load ALL campaigns after refresh (not filtered)
-        let refreshed = await navigation.minerManager.dataCoordinator.allCampaigns(
-            preferSteamArtwork: preferSteamArtwork
-        )
-
-        if !refreshed.isEmpty || campaigns.isEmpty {
-            withAnimation(.easeInOut(duration: 0.24)) {
-                campaigns = refreshed
+                resetVisibleGroups()
             }
         }
     }
@@ -615,27 +610,6 @@ struct DropsListView: View {
             }
 
             return miner.currentCampaign == campaign.campaignName
-        }
-    }
-
-    private func waitForRefreshTask(_ task: Task<Void, Never>, timeout: Duration) async -> Bool {
-        await withTaskGroup(of: Bool.self) { group in
-            group.addTask {
-                await task.value
-                return true
-            }
-            group.addTask {
-                do {
-                    try await Task.sleep(for: timeout)
-                    return false
-                } catch {
-                    return true
-                }
-            }
-
-            let first = await group.next() ?? true
-            group.cancelAll()
-            return first
         }
     }
 
@@ -1717,7 +1691,7 @@ struct CampaignMinerInspectorPopover: View {
         case .mining: return "play.circle.fill"
         case .claimed: return "checkmark.circle.fill"
         case .ready, .idle: return "pause.circle.fill"
-        case .blocked: return "link.badge.plus"
+        case .blocked: return "personalhotspot.slash"
         case .needsAuth: return "exclamationmark.triangle.fill"
         }
     }

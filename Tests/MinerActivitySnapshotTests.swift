@@ -102,6 +102,28 @@ final class MinerActivitySnapshotTests: XCTestCase {
         XCTAssertNil(blockedSnapshot.upNext)
     }
 
+    func testDismissedMissingGameShowsCurrentStatusAsUpToDateAndBlockedUpNext() {
+        let campaign = makeCampaign(id: "unlinked", isAccountConnected: false)
+        let miner = makeMiner(status: .blockedAccountNotLinked, campaigns: [campaign])
+
+        let snapshot = MinerActivitySnapshot.resolve(
+            for: miner,
+            priorityGames: ["Test Game"],
+            excludedGames: [],
+            strategy: .prioritiseSelected,
+            includesBadgeAndEmoteCampaigns: false,
+            ignoredAccountLinkGameIds: ["game-1"]
+        )
+
+        XCTAssertEqual(snapshot.statusText, "Up to Date")
+        XCTAssertEqual(snapshot.now.title, "Up to Date")
+        XCTAssertEqual(snapshot.upNext?.campaignId, "unlinked")
+        XCTAssertEqual(snapshot.upNext?.title, "Test Game")
+        XCTAssertEqual(snapshot.upNext?.detail, "Blocked — account not linked")
+        XCTAssertFalse(snapshot.upNext?.requiresAccountLink ?? true)
+        XCTAssertTrue(snapshot.blockedPriority.isEmpty)
+    }
+
     func testClaimedPriorityGameWaitsForDropsInsteadOfSayingComplete() {
         let claimedProgress = Progress(
             dropId: "drop-1",

@@ -20,4 +20,7 @@ public struct SwiftMinerCore {
 public extension Notification.Name {
     /// Posted by MiningDataCoordinator when Steam artwork enrichment completes.
     static let steamArtworkDidUpdate = Notification.Name("com.swiftminer.steamArtworkDidUpdate")
+
+    /// Posted when the cached Drops campaign feed has been refreshed.
+    static let dropsCampaignsDidUpdate = Notification.Name("com.swiftminer.dropsCampaignsDidUpdate")
 }
