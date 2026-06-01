@@ -23,10 +23,10 @@ struct SidebarView: View {
 
     fileprivate var sidebarItems: [SidebarItemSpec] {
         var items: [SidebarItemSpec] = [
-            SidebarItemSpec(id: .overview, title: "Overview", systemImage: "waveform.path.ecg"),
+            SidebarItemSpec(id: .overview, title: "Overview", systemImage: "list.dash.header.rectangle.fill"),
             SidebarItemSpec(id: .miners, title: "Miners", systemImage: "cpu"),
             SidebarItemSpec(id: .drops, title: "Drops", systemImage: "gamecontroller.fill"),
-            SidebarItemSpec(id: .events, title: "Activity Log", systemImage: "list.bullet.rectangle.fill"),
+            SidebarItemSpec(id: .events, title: "Activity Log", systemImage: "waveform.path.ecg.text.clipboard.fill"),
         ]
         if settings.swiftBotEnabled {
             items.append(SidebarItemSpec(id: .admin, title: "Discord", systemImage: "checkmark.message.fill"))

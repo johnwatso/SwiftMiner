@@ -990,46 +990,29 @@ private struct GameCampaignDeckCard: View {
         return remaining.formattedRemaining
     }
 
-    private var aggregateStatusText: String {
-        let activeCount = activeMinerCount
-        let claimedCount = completedCurrentRewardMinerCount
-        let totalCount = minerAccountStates.count
-        
-        if activeCount > 0 {
-            return activeCount == 1 ? "1 Miner Active" : "\(activeCount) Miners Active"
-        } else if claimedCount == totalCount && totalCount > 0 {
-            return "Completed"
-        } else if claimedCount > 0 {
-            return claimedCount == 1 ? "1 Miner Completed" : "\(claimedCount) Miners Completed"
-        } else if group.aggregateState == .actionRequired {
-            return "Needs Setup"
-        } else if group.aggregateState == .unavailable {
-            return "Campaign Ended"
-        } else if group.aggregateState == .ready {
-            return "Looking for Streams"
-        } else {
-            return "Looking for Streams"
-        }
-    }
-    
-    private var aggregateStatusIcon: String {
+    private var aggregateStatusSummary: CardStatusSummary {
         let activeCount = activeMinerCount
         let claimedCount = completedCurrentRewardMinerCount
         let totalCount = minerAccountStates.count
 
         if activeCount > 0 {
-            return "dot.radiowaves.left.and.right"
-        } else if claimedCount == totalCount && totalCount > 0 {
-            return "checkmark.circle.fill"
-        } else if claimedCount > 0 {
-            return "checkmark.circle.fill"
-        } else if group.aggregateState == .actionRequired {
-            return "exclamationmark.triangle.fill"
-        } else if group.aggregateState == .unavailable {
-            return "clock.badge.exclamationmark"
-        } else {
-            return "antenna.radiowaves.left.and.right"
+            let title = activeCount == 1 ? "1 Miner Active" : "\(activeCount) Miners Active"
+            return CardStatusSummary(title: title, icon: "dot.radiowaves.left.and.right")
         }
+        if claimedCount == totalCount && totalCount > 0 {
+            return CardStatusSummary(title: "Completed", icon: "checkmark.circle.fill")
+        }
+        if claimedCount > 0 {
+            let title = claimedCount == 1 ? "1 Miner Completed" : "\(claimedCount) Miners Completed"
+            return CardStatusSummary(title: title, icon: "checkmark.circle.fill")
+        }
+        if group.aggregateState == .actionRequired {
+            return CardStatusSummary(title: "Needs Setup", icon: "exclamationmark.triangle.fill")
+        }
+        if group.aggregateState == .unavailable {
+            return CardStatusSummary(title: "Campaign Ended", icon: "clock.badge.exclamationmark")
+        }
+        return CardStatusSummary(title: "Looking for Streams", icon: "antenna.radiowaves.left.and.right")
     }
 
     private var aggregateStatusColor: Color {
@@ -1052,6 +1035,9 @@ private struct GameCampaignDeckCard: View {
     }
 
     var body: some View {
+        let drops = displayDrops
+        let status = aggregateStatusSummary
+
         HStack(alignment: .center, spacing: 16) {
             // LEFT ARTWORK (Anchors the cluster, prominent 120x160 size)
             GameArtworkCard(url: group.artworkURL, tint: group.aggregateState.tint)
@@ -1099,10 +1085,10 @@ private struct GameCampaignDeckCard: View {
                 }
 
                 // Reward Shelf directly beneath metadata
-                if !displayDrops.isEmpty {
+                if !drops.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) { // Tightened spacing
-                            ForEach(displayDrops) { drop in
+                        LazyHStack(spacing: 8) {
+                            ForEach(drops) { drop in
                                 BeautifulRewardCard(drop: drop)
                             }
                         }
@@ -1129,9 +1115,9 @@ private struct GameCampaignDeckCard: View {
             HStack(spacing: 8) {
                 // Compact Semantic Status Pill
                 HStack(spacing: 4) {
-                    AnimatedStatusIcon(symbol: aggregateStatusIcon, color: aggregateStatusColor, size: 10, weight: .semibold)
-                    Text(aggregateStatusText)
-                        .font(.system(size: 10, weight: aggregateStatusText == "Completed" ? .medium : .semibold))
+                    AnimatedStatusIcon(symbol: status.icon, color: aggregateStatusColor, size: 10, weight: .semibold)
+                    Text(status.title)
+                        .font(.system(size: 10, weight: status.title == "Completed" ? .medium : .semibold))
                 }
                 .foregroundStyle(aggregateStatusColor.opacity(0.85))
                 .padding(.horizontal, 8)
@@ -1141,8 +1127,8 @@ private struct GameCampaignDeckCard: View {
                     Capsule()
                         .strokeBorder(aggregateStatusColor.opacity(0.15), lineWidth: 1)
                 }
-                .saturation(aggregateStatusText == "Completed" ? 0.65 : 1.0)
-                .opacity(aggregateStatusText == "Completed" ? 0.85 : 1.0)
+                .saturation(status.title == "Completed" ? 0.65 : 1.0)
+                .opacity(status.title == "Completed" ? 0.85 : 1.0)
 
                 Button {
                     showingInspectorPopover = true
@@ -1382,6 +1368,11 @@ private struct BeautifulRewardCard: View {
         case .inGame: return "gift.fill"
         }
     }
+}
+
+private struct CardStatusSummary {
+    let title: String
+    let icon: String
 }
 
 // MARK: - Premium Frosted Hover Card Popover

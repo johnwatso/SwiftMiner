@@ -521,22 +521,10 @@ public actor AggregatedCampaignDataService {
             : progressValues.max() ?? data.progress  // Use max progress, not average
 
         let anyConnected = accountCampaigns.contains { $0.1.isAccountConnected }
-        let knownComplete = accountCampaigns.contains { _, campaign in
-            campaign.isClaimed ||
-                (campaign.totalDrops > 0 && campaign.dropsClaimed >= campaign.totalDrops) ||
-                (!campaign.drops.isEmpty && campaign.drops.allSatisfy(\.isClaimed))
-        }
-
         let drops = mergeDrops(from: accountCampaigns.map(\.1))
-        let hasKnownRewards = data.totalDrops > 0 || !drops.isEmpty
-        let inferredComplete = knownComplete ||
-            (data.totalDrops > 0 && data.dropsClaimed >= data.totalDrops) ||
-            (!drops.isEmpty && drops.allSatisfy(\.isClaimed)) ||
-            (!hasKnownRewards && data.isExpired())
         let accountStates = buildCampaignAccountStates(
             for: data.id,
-            accountCampaigns: accountCampaigns,
-            inferMissingAsClaimed: inferredComplete
+            accountCampaigns: accountCampaigns
         )
         let allClaimed = !accountStates.isEmpty
             ? accountStates.allSatisfy { $0.miningStatus == .claimed }
@@ -579,8 +567,7 @@ public actor AggregatedCampaignDataService {
 
     private func buildCampaignAccountStates(
         for campaignId: String,
-        accountCampaigns: [(String, CampaignViewData)],
-        inferMissingAsClaimed: Bool = false
+        accountCampaigns: [(String, CampaignViewData)]
     ) -> [AccountState] {
         let campaignsByAccount = Dictionary(uniqueKeysWithValues: accountCampaigns)
 
@@ -601,8 +588,6 @@ public actor AggregatedCampaignDataService {
 
             if needsAuth {
                 state = .needsAuth
-            } else if inferMissingAsClaimed, campaign != nil {
-                state = .claimed
             } else if campaign?.isClaimed == true || campaign?.miningStatus == .claimed {
                 state = .claimed
             } else if isActiveOnThis {
