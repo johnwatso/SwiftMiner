@@ -23,7 +23,7 @@ public enum DropFilter: String, CaseIterable, Identifiable, Hashable, Codable {
     public var symbol: String {
         switch self {
         case .active: return "dot.radiowaves.left.and.right"
-        case .needsSetup: return "link.badge.plus"
+        case .needsSetup: return "personalhotspot.slash"
         case .upcoming: return "calendar.badge.clock"
         case .completed: return "checkmark.circle.fill"
         case .ended: return "clock"
@@ -66,7 +66,7 @@ public enum EventFilter: String, CaseIterable, Identifiable, Hashable, Codable {
         case .drops: return "shippingbox"
         case .warnings: return "exclamationmark.triangle"
         case .errors: return "xmark.octagon"
-        case .accountLink: return "link.badge.plus"
+        case .accountLink: return "personalhotspot.slash"
         case .scan: return "barcode.viewfinder"
         case .discord: return "checkmark.message.fill"
         case .system: return "gearshape"

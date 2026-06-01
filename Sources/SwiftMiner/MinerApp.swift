@@ -519,7 +519,7 @@ struct MenuBarContent: View {
         case .stopped, .idle:    return "stop.fill"
         case .paused:            return "clock.fill"
         case .idleNoEligibleCampaigns: return "pause.circle"
-        case .blockedAccountNotLinked: return "link.badge.plus"
+        case .blockedAccountNotLinked: return "personalhotspot.slash"
         }
     }
 

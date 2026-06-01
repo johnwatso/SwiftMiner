@@ -93,6 +93,7 @@ public final class NavigationModel {
 
     public var selectedMinerId: String?
     public var selectedCampaignId: String?
+    public private(set) var isDropsBackgroundRefreshRunning = false
     public var unownedAccounts: [Account] = []
     public var registeredUsers: [MinerUser] = []
     public var swiftBotState: SwiftBotConnectionState = .notConfigured
@@ -324,6 +325,8 @@ public final class NavigationModel {
     private var httpAPIServer: HTTPAPIServer?
     private var onboardingSetupTask: Task<Void, Never>?
     @ObservationIgnored private var dropsPreloadTask: Task<Void, Never>?
+    @ObservationIgnored private var dropsBackgroundRefreshTask: Task<Void, Never>?
+    private var lastDropsBackgroundRefreshStartedAt: Date?
     private var lastKnownAccountCount = 0
     private var hasConfiguredOnboardingBaseline = false
 
@@ -571,13 +574,44 @@ public final class NavigationModel {
             )
             guard !Task.isCancelled else { return }
 
+            _ = self.refreshDropsInBackground(force: force)
+        }
+    }
+
+    @discardableResult
+    public func refreshDropsInBackground(force: Bool = false) -> Bool {
+        guard !minerManager.miners.isEmpty else { return false }
+
+        if dropsBackgroundRefreshTask != nil {
+            return true
+        }
+
+        let minimumRefreshInterval: TimeInterval = 120
+        if !force,
+           let lastDropsBackgroundRefreshStartedAt,
+           Date().timeIntervalSince(lastDropsBackgroundRefreshStartedAt) < minimumRefreshInterval {
+            return false
+        }
+
+        lastDropsBackgroundRefreshStartedAt = Date()
+        isDropsBackgroundRefreshRunning = true
+        dropsBackgroundRefreshTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer {
+                self.isDropsBackgroundRefreshRunning = false
+                self.dropsBackgroundRefreshTask = nil
+            }
+
+            let coordinator = self.minerManager.dataCoordinator
             await coordinator.refreshAll()
             guard !Task.isCancelled else { return }
 
             _ = await coordinator.allCampaigns(
                 preferSteamArtwork: Settings.shared.preferSteamArtwork
             )
+            NotificationCenter.default.post(name: .dropsCampaignsDidUpdate, object: coordinator)
         }
+        return true
     }
 
     public func configureOnboardingPresentation() {
