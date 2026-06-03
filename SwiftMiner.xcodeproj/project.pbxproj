@@ -220,7 +220,7 @@
 		2D6CA94B00D120B6350CDB61 /* Channel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Channel.swift; sourceTree = "<group>"; };
 		305B04699BD520AFB3A5FA57 /* HTTPAPIServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPAPIServer.swift; sourceTree = "<group>"; };
 		320947611A8A4BB7759DAF7C /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
-		3ABC7C3BDCE6B1CE8756DA5A /* SwiftMinerServiceTool */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = text; path = SwiftMinerServiceTool; sourceTree = BUILT_PRODUCTS_DIR; };
+		3ABC7C3BDCE6B1CE8756DA5A /* SwiftMinerServiceTool */ = {isa = PBXFileReference; includeInIndex = 0; path = SwiftMinerServiceTool; sourceTree = BUILT_PRODUCTS_DIR; };
 		3AC5F2BA81633C5B76678925 /* CampaignViewData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignViewData.swift; sourceTree = "<group>"; };
 		3C67349DAA237D14A6C21D75 /* PubSubClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PubSubClient.swift; sourceTree = "<group>"; };
 		41472EDA22183F56029E12DB /* WarningSuppressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WarningSuppressionTests.swift; sourceTree = "<group>"; };
@@ -249,7 +249,7 @@
 		71FA5DF07B124B51C6C833B4 /* TwitchClientFingerprint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwitchClientFingerprint.swift; sourceTree = "<group>"; };
 		758AF13E9334C95906C1A325 /* SwiftMinerCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftMinerCore.swift; sourceTree = "<group>"; };
 		7A5BB01DA1C922DCEF69AD69 /* MinerManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinerManager.swift; sourceTree = "<group>"; };
-		7C7DCDFEAD0FB5F4149126DB /* DiscordMarkOfficial.svg */ = {isa = PBXFileReference; lastKnownFileType = text; path = DiscordMarkOfficial.svg; sourceTree = "<group>"; };
+		7C7DCDFEAD0FB5F4149126DB /* DiscordMarkOfficial.svg */ = {isa = PBXFileReference; path = DiscordMarkOfficial.svg; sourceTree = "<group>"; };
 		7CAC406A470B4B2EDE847A9E /* Account.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Account.swift; sourceTree = "<group>"; };
 		7CE5B3372E6DE02DFFFB7CDE /* Logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logger.swift; sourceTree = "<group>"; };
 		82BF51F236A3CA9B372DC12D /* DropsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropsService.swift; sourceTree = "<group>"; };
@@ -286,7 +286,7 @@
 		D0B9958B06AA9508022FD2BC /* AnimatedStatusIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimatedStatusIcon.swift; sourceTree = "<group>"; };
 		D12899BD6300ED21BCE6187E /* CampaignMergeEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignMergeEngine.swift; sourceTree = "<group>"; };
 		D227823A0CF0DEDA834B486B /* DropsServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropsServiceTests.swift; sourceTree = "<group>"; };
-		D566A4967EB868FA5FD84FED /* SparklePublisher */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = text; path = SparklePublisher; sourceTree = BUILT_PRODUCTS_DIR; };
+		D566A4967EB868FA5FD84FED /* SparklePublisher */ = {isa = PBXFileReference; includeInIndex = 0; path = SparklePublisher; sourceTree = BUILT_PRODUCTS_DIR; };
 		D66BADBB509C6B9B573607A7 /* AdminLinkingTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminLinkingTypes.swift; sourceTree = "<group>"; };
 		D7CF370FB28AF15B644BAD3E /* MinerHealthCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinerHealthCard.swift; sourceTree = "<group>"; };
 		D8A9E39DA6F930F08E6C1E1E /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
