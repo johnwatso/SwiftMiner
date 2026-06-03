@@ -7,6 +7,7 @@ SCHEME="${SWIFTMINER_SCHEME:-SwiftMiner}"
 CONFIGURATION="${SWIFTMINER_CONFIGURATION:-Debug}"
 APPCAST="$ROOT_DIR/docs/appcast.xml"
 PROJECT_YML="$ROOT_DIR/project.yml"
+EXPECTED_SPARKLE_PUBLIC_KEY="rxaJsfCpTKtpqRubSfkJwKnztT5S8RHsdAueuT+jKck="
 
 fail() {
     echo "error: $*" >&2
@@ -20,9 +21,11 @@ extract_project_value() {
 
 MARKETING_VERSION="$(extract_project_value MARKETING_VERSION)"
 CURRENT_PROJECT_VERSION="$(extract_project_value CURRENT_PROJECT_VERSION)"
+SPARKLE_PUBLIC_ED_KEY="$(extract_project_value SPARKLE_PUBLIC_ED_KEY)"
 
 [[ -n "$MARKETING_VERSION" ]] || fail "MARKETING_VERSION missing from project.yml"
 [[ -n "$CURRENT_PROJECT_VERSION" ]] || fail "CURRENT_PROJECT_VERSION missing from project.yml"
+[[ "$SPARKLE_PUBLIC_ED_KEY" == "$EXPECTED_SPARKLE_PUBLIC_KEY" ]] || fail "SPARKLE_PUBLIC_ED_KEY does not match the expected Sparkle EdDSA public key"
 [[ -f "$APPCAST" ]] || fail "docs/appcast.xml missing"
 
 APPCAST_SHORT_VERSION="$(xmllint --xpath 'string(//*[local-name()="shortVersionString"])' "$APPCAST" 2>/dev/null || true)"
@@ -72,5 +75,6 @@ BUILT_PUBLIC_KEY="$(/usr/libexec/PlistBuddy -c 'Print SUPublicEDKey' "$INFO_PLIS
 [[ "$BUILT_BUILD_VERSION" == "$CURRENT_PROJECT_VERSION" ]] || fail "built build '$BUILT_BUILD_VERSION' does not match '$CURRENT_PROJECT_VERSION'"
 [[ -n "$BUILT_FEED_URL" ]] || fail "built SUFeedURL missing"
 [[ -n "$BUILT_PUBLIC_KEY" ]] || fail "built SUPublicEDKey missing"
+[[ "$BUILT_PUBLIC_KEY" == "$EXPECTED_SPARKLE_PUBLIC_KEY" ]] || fail "built SUPublicEDKey does not match the expected Sparkle EdDSA public key"
 
 echo "Release preflight passed for SwiftMiner $MARKETING_VERSION ($CURRENT_PROJECT_VERSION)."
