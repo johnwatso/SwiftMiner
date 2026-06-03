@@ -107,10 +107,13 @@ if [[ ! -f "$APPCAST_STABLE" ]]; then
     exit 1
 fi
 
-if ! grep -q "sparkle:edSignature" "$APPCAST_STABLE"; then
-    echo "Warning: No edSignature found in stable appcast yet."
-else
+if grep -q '<enclosure ' "$APPCAST_STABLE" && ! grep -q "sparkle:edSignature" "$APPCAST_STABLE"; then
+    echo "Error: Stable appcast has an enclosure but no sparkle:edSignature."
+    exit 1
+elif grep -q "sparkle:edSignature" "$APPCAST_STABLE"; then
     echo "Stable appcast includes edSignature"
+else
+    echo "Stable appcast has no published enclosure yet"
 fi
 
 STABLE_URL=$(grep -oE 'url="https://github.com/[^"]+"' "$APPCAST_STABLE" | head -n 1 | cut -d'"' -f2 || true)
@@ -127,8 +130,9 @@ fi
 
 if [[ -f "$APPCAST_BETA" ]]; then
     echo "Beta appcast found"
-    if ! grep -q "sparkle:edSignature" "$APPCAST_BETA"; then
-        echo "Warning: No edSignature found in beta appcast yet."
+    if grep -q '<enclosure ' "$APPCAST_BETA" && ! grep -q "sparkle:edSignature" "$APPCAST_BETA"; then
+        echo "Error: Beta appcast has an enclosure but no sparkle:edSignature."
+        exit 1
     fi
 else
     echo "Beta appcast not found (optional)"
