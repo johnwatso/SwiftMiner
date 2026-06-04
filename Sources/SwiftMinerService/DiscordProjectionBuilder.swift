@@ -9,6 +9,8 @@ import SwiftMinerCore
 public protocol ProjectionStateProvider: Sendable {
     /// Returns the active campaign for a Discord user, if any.
     func activeCampaign(for discordUserId: String) async -> DiscordUserProjection.ActiveCampaign?
+    /// Returns recently completed campaigns for a Discord user, newest first.
+    func recentCompletedCampaigns(for discordUserId: String, limit: Int) async -> [DiscordUserProjection.RecentCampaign]
     /// Overrides the projection state derived from DB heuristics. Return `nil` to use DB fallback.
     func projectionState(for discordUserId: String) async -> DiscordUserProjection.ProjectionState?
 }
@@ -17,6 +19,7 @@ public protocol ProjectionStateProvider: Sendable {
 public struct DefaultProjectionStateProvider: ProjectionStateProvider {
     public init() {}
     public func activeCampaign(for discordUserId: String) async -> DiscordUserProjection.ActiveCampaign? { nil }
+    public func recentCompletedCampaigns(for discordUserId: String, limit: Int) async -> [DiscordUserProjection.RecentCampaign] { [] }
     public func projectionState(for discordUserId: String) async -> DiscordUserProjection.ProjectionState? { nil }
 }
 
@@ -42,6 +45,7 @@ public actor DiscordProjectionBuilder {
         let account = await fetchAccount(discordUserId: discordUserId)
         let issues = await fetchIssues(discordUserId: discordUserId)
         let activeCampaign = await stateProvider.activeCampaign(for: discordUserId)
+        let recentCompletedCampaigns = await stateProvider.recentCompletedCampaigns(for: discordUserId, limit: 3)
         let dmState = await fetchDMState(discordUserId: discordUserId)
 
         let state: DiscordUserProjection.ProjectionState
@@ -62,6 +66,7 @@ public actor DiscordProjectionBuilder {
             state: state,
             account: account,
             activeCampaign: activeCampaign,
+            recentCompletedCampaigns: recentCompletedCampaigns,
             issues: issues,
             dmState: dmState
         )
