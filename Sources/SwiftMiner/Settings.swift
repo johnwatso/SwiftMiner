@@ -328,9 +328,6 @@ public final class Settings: ObservableObject {
     // Important notifications default ON — these relate to account recovery and action required.
     // Activity notifications default OFF — these are informational and can be noisy.
 
-    @AppStorage("dmDropClaimedEnabled", store: Settings.appStorageStore)
-    public var dmDropClaimedEnabled: Bool = false
-
     @AppStorage("dmCampaignCompletedEnabled", store: Settings.appStorageStore)
     public var dmCampaignCompletedEnabled: Bool = false
 
@@ -800,7 +797,6 @@ public final class Settings: ObservableObject {
         swiftMinerAPIEndpoint = "http://127.0.0.1:8080"
         swiftBotHmacSecret = ""
         swiftMinerAPIKey = ""
-        dmDropClaimedEnabled = false
         dmCampaignCompletedEnabled = false
         dmConnectionExpiredEnabled = true
         dmWelcomeBackEnabled = false
@@ -865,7 +861,6 @@ public final class Settings: ObservableObject {
             swiftMinerAPIEndpoint: swiftMinerAPIEndpoint,
             swiftBotHmacSecret: includeSecrets ? swiftBotHmacSecret : "",
             swiftMinerAPIKey: includeSecrets ? swiftMinerAPIKey : "",
-            dmDropClaimedEnabled: dmDropClaimedEnabled,
             dmCampaignCompletedEnabled: dmCampaignCompletedEnabled,
             dmConnectionExpiredEnabled: dmConnectionExpiredEnabled,
             dmWelcomeBackEnabled: dmWelcomeBackEnabled,
@@ -918,7 +913,6 @@ public final class Settings: ObservableObject {
         swiftMinerAPIEndpoint = backup.swiftMinerAPIEndpoint
         if !backup.swiftBotHmacSecret.isEmpty { swiftBotHmacSecret = backup.swiftBotHmacSecret }
         if !backup.swiftMinerAPIKey.isEmpty { swiftMinerAPIKey = backup.swiftMinerAPIKey }
-        dmDropClaimedEnabled = backup.dmDropClaimedEnabled
         dmCampaignCompletedEnabled = backup.dmCampaignCompletedEnabled
         dmConnectionExpiredEnabled = backup.dmConnectionExpiredEnabled
         dmWelcomeBackEnabled = backup.dmWelcomeBackEnabled
@@ -989,7 +983,6 @@ public struct SettingsBackup: Codable, Sendable {
     public let swiftMinerAPIEndpoint: String
     public let swiftBotHmacSecret: String
     public let swiftMinerAPIKey: String
-    public let dmDropClaimedEnabled: Bool
     public let dmCampaignCompletedEnabled: Bool
     public let dmConnectionExpiredEnabled: Bool
     public let dmWelcomeBackEnabled: Bool
@@ -1034,7 +1027,6 @@ public struct SettingsBackup: Codable, Sendable {
         swiftMinerAPIEndpoint: String,
         swiftBotHmacSecret: String,
         swiftMinerAPIKey: String,
-        dmDropClaimedEnabled: Bool,
         dmCampaignCompletedEnabled: Bool,
         dmConnectionExpiredEnabled: Bool,
         dmWelcomeBackEnabled: Bool,
@@ -1078,7 +1070,6 @@ public struct SettingsBackup: Codable, Sendable {
         self.swiftMinerAPIEndpoint = swiftMinerAPIEndpoint
         self.swiftBotHmacSecret = swiftBotHmacSecret
         self.swiftMinerAPIKey = swiftMinerAPIKey
-        self.dmDropClaimedEnabled = dmDropClaimedEnabled
         self.dmCampaignCompletedEnabled = dmCampaignCompletedEnabled
         self.dmConnectionExpiredEnabled = dmConnectionExpiredEnabled
         self.dmWelcomeBackEnabled = dmWelcomeBackEnabled

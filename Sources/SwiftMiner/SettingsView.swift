@@ -944,15 +944,6 @@ private struct IntegrationsSettingsView: View {
         Section {
             VStack(alignment: .leading, spacing: 4) {
                 notificationToggleRow(
-                    title: "Drop claimed",
-                    description: "Sent when SwiftMiner successfully claims a Drop.",
-                    isOn: $settings.dmDropClaimedEnabled,
-                    previewType: .dropClaimed
-                )
-
-                Divider().padding(.vertical, 2)
-
-                notificationToggleRow(
                     title: "Campaign complete",
                     description: "Sent when all Drops in a campaign have been claimed.",
                     isOn: $settings.dmCampaignCompletedEnabled,
@@ -1069,18 +1060,7 @@ private struct IntegrationsSettingsView: View {
 
     private func sendPreview(type: SwiftBotDMMessageType) async {
         guard let discordId = debugTargetId else { return }
-        let request = SwiftBotDMRequest(
-            messageType: type,
-            debug: true,
-            twitchUsername: "preview_user",
-            priorityGames: Settings.shared.priorityGames,
-            activationCode: type == .setup ? "ABCD-EFGH" : nil,
-            activationExpiresInMinutes: type == .setup ? 29 : nil,
-            activationURL: type == .setup ? "https://www.twitch.tv/activate?code=ABCD-EFGH" : nil,
-            campaignName: "Preview Campaign",
-            milestoneTitle: "Preview Drop"
-        )
-        _ = await navigation.swiftBotConnectionService.sendDebugDM(to: discordId, request: request)
+        _ = await navigation.swiftBotConnectionService.sendDebugDM(to: discordId, request: debugDMRequest(for: type))
     }
 
     private var firstLinkedDiscordId: String? {
@@ -1159,6 +1139,26 @@ private struct IntegrationsSettingsView: View {
 
                     Spacer()
                 }
+
+                Divider().padding(.vertical, 2)
+
+                ForEach(SwiftBotDMMessageType.debugPreviewOrder) { type in
+                    HStack(spacing: 10) {
+                        Text(type.displayName)
+                            .font(.callout)
+
+                        Spacer()
+
+                        Button {
+                            Task { await sendOneDebugDM(type: type) }
+                        } label: {
+                            Label("Send", systemImage: "paperplane")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(debugTargetId == nil)
+                    }
+                }
             }
         } header: {
             Text("Debug Testing")
@@ -1199,29 +1199,74 @@ private struct IntegrationsSettingsView: View {
         debugDiscordUsers = users
     }
 
+    /// A real campaign to make the campaign-completed test DM realistic.
+    /// Prefers one that's been fully mined (all drops claimed), then any
+    /// campaign that has box art; `nil` when no campaigns are loaded.
+    private var debugSampleCampaign: Campaign? {
+        let campaigns = navigation.minerManager.campaignStore.campaigns
+        return campaigns.first(where: { $0.isFullyComplete && $0.gameImageUrl != nil })
+            ?? campaigns.first(where: { $0.gameImageUrl != nil })
+            ?? campaigns.first
+    }
+
+    /// A real game whose account isn't linked yet — so the needs-linking preview
+    /// reflects an actual unlinked game. Prefers a prioritised, unconnected
+    /// campaign, then any unconnected one, then any campaign.
+    private var debugUnlinkedGameName: String? {
+        let campaigns = navigation.minerManager.campaignStore.campaigns
+        let priority = Set(Settings.shared.priorityGames.map { $0.lowercased() })
+        return campaigns.first(where: { !$0.isAccountConnected && priority.contains($0.game.name.lowercased()) })?.game.name
+            ?? campaigns.first(where: { !$0.isAccountConnected })?.game.name
+            ?? campaigns.first?.game.name
+    }
+
+    /// Builds a fully-populated debug request for a message type, filling only
+    /// the fields each type actually renders so every DM looks realistic.
+    /// Campaign-completed pulls a real (ideally mined) campaign when available;
+    /// needs-linking follows a real unlinked game. Falls back to static values.
+    private func debugDMRequest(for type: SwiftBotDMMessageType) -> SwiftBotDMRequest {
+        let sample = type == .campaignCompleted ? debugSampleCampaign : nil
+
+        // Game-oriented DMs lead with the game name, so feed a real one:
+        // campaign-completed uses the sample campaign's game; needs-linking
+        // uses a real unlinked game.
+        let affectedGame: String
+        switch type {
+        case .campaignCompleted:
+            affectedGame = sample?.gameName ?? "The Finals"
+        case .prioritisedGameNeedsLinking:
+            affectedGame = debugUnlinkedGameName ?? "The Finals"
+        default:
+            affectedGame = "Test Game"
+        }
+
+        return SwiftBotDMRequest(
+            messageType: type,
+            debug: true,
+            twitchUsername: "test_user",
+            priorityGames: Settings.shared.priorityGames,
+            activationCode: type == .setup ? "ABCD-EFGH" : nil,
+            activationExpiresInMinutes: type == .setup ? 29 : nil,
+            activationURL: type == .setup ? "https://www.twitch.tv/activate?code=ABCD-EFGH" : nil,
+            affectedGame: affectedGame,
+            campaignName: sample?.name ?? "Test Campaign",
+            milestoneTitle: "50% Complete",
+            gameArtworkURL: type == .campaignCompleted
+                ? (sample?.gameImageUrl?.absoluteString ?? "https://static-cdn.jtvnw.net/ttv-boxart/1234_IGDB-285x380.jpg")
+                : nil,
+            recoveryReason: "Twitch token expired during mining."
+        )
+    }
+
+    private func sendOneDebugDM(type: SwiftBotDMMessageType) async {
+        guard let discordId = debugTargetId else { return }
+        _ = await navigation.swiftBotConnectionService.sendDebugDM(to: discordId, request: debugDMRequest(for: type))
+    }
+
     private func sendAllDebugDMs() async {
         guard let discordId = debugTargetId else { return }
-        let order: [SwiftBotDMMessageType] = [
-            .welcome, .discordLinked, .setup, .linked,
-            .campaignDetected, .prioritisedGameNeedsLinking,
-            .accountActionRequired, .reauth, .welcomeBack,
-            .dropClaimed, .campaignCompleted
-        ]
-        for type in order {
-            let request = SwiftBotDMRequest(
-                messageType: type,
-                debug: true,
-                twitchUsername: "test_user",
-                priorityGames: Settings.shared.priorityGames,
-                activationCode: type == .setup ? "ABCD-EFGH" : nil,
-                activationExpiresInMinutes: type == .setup ? 29 : nil,
-                activationURL: type == .setup ? "https://www.twitch.tv/activate?code=ABCD-EFGH" : nil,
-                affectedGame: "Test Game",
-                campaignName: "Test Campaign",
-                milestoneTitle: "50% Complete",
-                recoveryReason: "Twitch token expired during mining."
-            )
-            _ = await navigation.swiftBotConnectionService.sendDebugDM(to: discordId, request: request)
+        for type in SwiftBotDMMessageType.debugPreviewOrder {
+            _ = await navigation.swiftBotConnectionService.sendDebugDM(to: discordId, request: debugDMRequest(for: type))
             try? await Task.sleep(for: .milliseconds(650))
         }
     }

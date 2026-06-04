@@ -784,9 +784,11 @@ private struct DetailPanel: View {
         switch type {
         case .welcome, .discordLinked, .setup, .linked:
             return true
+        // Drop-claimed DMs are no longer sent; show any historical log entries.
+        case .dropClaimed:
+            return true
         case .reauth: return s.dmConnectionExpiredEnabled
         case .welcomeBack: return s.dmWelcomeBackEnabled
-        case .dropClaimed: return s.dmDropClaimedEnabled
         case .campaignCompleted: return s.dmCampaignCompletedEnabled
         case .campaignDetected: return s.dmCampaignDetectedEnabled
         case .accountActionRequired: return s.dmAccountActionRequiredEnabled

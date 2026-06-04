@@ -13,9 +13,6 @@ public actor SwiftMinerDMEventService {
 
     // MARK: - Dedup State (lightweight, event-side only)
 
-    /// Drop IDs we've already notified for (session-scoped). Drops can only be claimed once.
-    private var notifiedDropIds: Set<String> = []
-
     /// Campaign IDs we've already notified for (session-scoped). Campaigns stay completed.
     private var notifiedCampaignIds: Set<String> = []
 
@@ -49,34 +46,11 @@ public actor SwiftMinerDMEventService {
 
     // MARK: - Event Emitters
 
-    public func emitDropClaimed(
-        dropId: String,
-        dropName: String,
-        campaignName: String?,
-        discordUserId: String?,
-        priorityGames: [String]
-    ) async {
-        guard let discordUserId else { return }
-        guard !notifiedDropIds.contains(dropId) else { return }
-        notifiedDropIds.insert(dropId)
-
-        let request = SwiftBotDMRequest(
-            messageType: .dropClaimed,
-            debug: false,
-            twitchUsername: nil,
-            priorityGames: priorityGames,
-            campaignName: campaignName,
-            milestoneTitle: dropName,
-            eventId: "drop:\(dropId)"
-        )
-
-        dmEventLogger.info("Emitting dropClaimed discordId=\(discordUserId, privacy: .private) drop=\(dropName)")
-        _ = await connectionService.sendEventDM(to: discordUserId, request: request)
-    }
-
     public func emitCampaignCompleted(
         campaignId: String,
         campaignName: String,
+        gameName: String?,
+        gameArtworkURL: String?,
         discordUserId: String?,
         priorityGames: [String]
     ) async {
@@ -89,7 +63,9 @@ public actor SwiftMinerDMEventService {
             debug: false,
             twitchUsername: nil,
             priorityGames: priorityGames,
+            affectedGame: gameName,
             campaignName: campaignName,
+            gameArtworkURL: gameArtworkURL,
             eventId: "campaign:\(campaignId)"
         )
 
