@@ -120,7 +120,10 @@ public final class NavigationModel {
         let endpoint = Settings.shared.swiftMinerAPIEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
         let port = URL(string: endpoint)?.port.flatMap { UInt16(exactly: $0) } ?? 8080
 
-        let projectionBuilder = DiscordProjectionBuilder(manager: sqliteManager)
+        let projectionBuilder = DiscordProjectionBuilder(
+            manager: sqliteManager,
+            stateProvider: NavigationProjectionStateProvider(model: self)
+        )
         let clientId = Settings.shared.resolvedClientId
         let authService = TwitchAuthService(clientId: clientId, tokenStore: minerManager.tokenStore)
         let routes = DiscordAPIRoutes(
@@ -804,6 +807,94 @@ public final class NavigationModel {
         updateOnboardingSetupStage(.finalising)
         try? await Task.sleep(for: .milliseconds(250))
         guard !Task.isCancelled else { return }
+    }
+}
+
+private final class NavigationProjectionStateProvider: ProjectionStateProvider, @unchecked Sendable {
+    private weak var model: NavigationModel?
+
+    init(model: NavigationModel) {
+        self.model = model
+    }
+
+    func activeCampaign(for discordUserId: String) async -> DiscordUserProjection.ActiveCampaign? {
+        await MainActor.run {
+            guard let miner = model?.minerForDiscordUser(discordUserId),
+                  let campaignId = miner.currentCampaignId,
+                  let campaign = miner.allCampaigns.first(where: { $0.id == campaignId }) else {
+                return nil
+            }
+            return Self.activeCampaignProjection(from: campaign)
+        }
+    }
+
+    func recentCompletedCampaigns(
+        for discordUserId: String,
+        limit: Int
+    ) async -> [DiscordUserProjection.RecentCampaign] {
+        await MainActor.run {
+            guard let miner = model?.minerForDiscordUser(discordUserId) else { return [] }
+            return miner.allCampaigns
+                .filter { !$0.drops.isEmpty && $0.drops.allSatisfy(\.isClaimed) }
+                .sorted { Self.completedSortDate($0) > Self.completedSortDate($1) }
+                .prefix(max(limit, 0))
+                .map(Self.recentCampaignProjection)
+        }
+    }
+
+    func projectionState(for discordUserId: String) async -> DiscordUserProjection.ProjectionState? {
+        await MainActor.run {
+            guard let miner = model?.minerForDiscordUser(discordUserId) else { return nil }
+            if miner.needsAuth || miner.status == .blockedAccountNotLinked || miner.status == .error {
+                return .blocked
+            }
+            if miner.currentCampaignId != nil {
+                return .active
+            }
+            return nil
+        }
+    }
+
+    private static func activeCampaignProjection(from campaign: Campaign) -> DiscordUserProjection.ActiveCampaign {
+        let totalRequired = max(campaign.drops.map(\.requiredMinutes).reduce(0, +), 0)
+        let totalCurrent = campaign.drops.reduce(0) { total, drop in
+            total + (drop.isClaimed ? drop.requiredMinutes : min(drop.progress?.currentMinutes ?? 0, drop.requiredMinutes))
+        }
+        let pct = totalRequired > 0 ? min(Int((Double(totalCurrent) / Double(totalRequired)) * 100), 100) : 0
+        return DiscordUserProjection.ActiveCampaign(
+            campaignId: campaign.id,
+            game: campaign.game.name,
+            progress: DiscordUserProjection.Progress(
+                current: totalCurrent,
+                required: totalRequired,
+                unit: "minutes",
+                pct: pct
+            ),
+            endsAt: campaign.endDate
+        )
+    }
+
+    private static func recentCampaignProjection(from campaign: Campaign) -> DiscordUserProjection.RecentCampaign {
+        DiscordUserProjection.RecentCampaign(
+            campaignId: campaign.id,
+            campaignName: campaign.name,
+            game: campaign.game.name,
+            completedAt: completedSortDate(campaign),
+            claimedDrops: campaign.drops.filter(\.isClaimed).count,
+            totalDrops: campaign.drops.count
+        )
+    }
+
+    private static func completedSortDate(_ campaign: Campaign) -> Date {
+        min(campaign.endDate, Date())
+    }
+}
+
+private extension NavigationModel {
+    func minerForDiscordUser(_ discordUserId: String) -> MinerManager.ManagedMiner? {
+        minerManager.miners.first { miner in
+            miner.ownerDiscordId == discordUserId
+        }
     }
 }
 

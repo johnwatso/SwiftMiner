@@ -7,6 +7,7 @@ public struct DiscordUserProjection: Codable, Sendable {
     public let state: ProjectionState
     public let account: Account?
     public let activeCampaign: ActiveCampaign?
+    public let recentCompletedCampaigns: [RecentCampaign]
     public let issues: [Issue]
     public let dmState: DiscordDMState
 
@@ -15,6 +16,7 @@ public struct DiscordUserProjection: Codable, Sendable {
         state: ProjectionState,
         account: Account? = nil,
         activeCampaign: ActiveCampaign? = nil,
+        recentCompletedCampaigns: [RecentCampaign] = [],
         issues: [Issue] = [],
         dmState: DiscordDMState = DiscordDMState()
     ) {
@@ -22,6 +24,7 @@ public struct DiscordUserProjection: Codable, Sendable {
         self.state = state
         self.account = account
         self.activeCampaign = activeCampaign
+        self.recentCompletedCampaigns = recentCompletedCampaigns
         self.issues = issues
         self.dmState = dmState
     }
@@ -68,6 +71,32 @@ public struct DiscordUserProjection: Codable, Sendable {
             self.required = required
             self.unit = unit
             self.pct = pct
+        }
+    }
+
+    public struct RecentCampaign: Codable, Sendable, Identifiable {
+        public var id: String { campaignId }
+        public let campaignId: String
+        public let campaignName: String
+        public let game: String
+        public let completedAt: Date?
+        public let claimedDrops: Int
+        public let totalDrops: Int
+
+        public init(
+            campaignId: String,
+            campaignName: String,
+            game: String,
+            completedAt: Date? = nil,
+            claimedDrops: Int,
+            totalDrops: Int
+        ) {
+            self.campaignId = campaignId
+            self.campaignName = campaignName
+            self.game = game
+            self.completedAt = completedAt
+            self.claimedDrops = claimedDrops
+            self.totalDrops = totalDrops
         }
     }
 
