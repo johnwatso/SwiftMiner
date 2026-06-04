@@ -152,6 +152,10 @@ public final class NavigationModel {
             }
             return await self.handleDiscordMinerControl(discordUserId: discordUserId, action: action)
         }
+        await routes.setOnIgnoreLinkWarning { [weak self] discordUserId, gameName in
+            guard let self else { return false }
+            return await self.handleDiscordIgnoreLinkWarning(discordUserId: discordUserId, gameName: gameName)
+        }
         let router = HTTPRouter()
         await routes.configure(router)
         let server = HTTPAPIServer(port: port, apiKey: apiKey, router: router)
@@ -210,6 +214,27 @@ public final class NavigationModel {
         if Settings.shared.swiftBotEnabled {
             await eventOutboxService.start()
         }
+    }
+
+    /// Dismiss the account-link ("needs linking") warning for a game across all
+    /// of the requesting Discord user's miners — the same state the GUI dismiss
+    /// sets, so it both stops future DMs and clears the GUI warning.
+    /// Returns true when at least one owned miner was updated.
+    public func handleDiscordIgnoreLinkWarning(discordUserId: String, gameName: String) async -> Bool {
+        let owned = minerManager.miners.filter { $0.ownerDiscordId == discordUserId }
+        guard !owned.isEmpty else { return false }
+
+        // Prefer a real game id resolved from loaded campaigns; fall back to the
+        // lowercased name (the engine suppresses by either id or lowercased name).
+        let target = gameName.lowercased()
+        let gameKey = minerManager.campaignStore.campaigns
+            .first(where: { $0.game.name.lowercased() == target })?.game.id ?? target
+
+        for miner in owned {
+            await minerManager.setAccountLinkWarningIgnored(minerId: miner.id, gameId: gameKey, ignored: true)
+            Settings.shared.setIgnoreAccountLinkWarnings(true, for: miner.accountId, gameId: gameKey)
+        }
+        return true
     }
 
     public func handleDiscordMinerControl(discordUserId: String, action: MinerControlAction) async -> MinerControlResponse {
@@ -399,22 +424,8 @@ public final class NavigationModel {
         let dmEventService = SwiftMinerDMEventService(connectionService: swiftBotConnectionService)
         self.dmEventService = dmEventService
 
-        minerManager.onDropClaimedEvent = { [weak self] minerId, drop, campaignName in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                guard let miner = self.minerManager.miners.first(where: { $0.id == minerId }) else { return }
-                guard Settings.shared.dmDropClaimedEnabled else { return }
-                guard Settings.shared.allowsOperatorNotifications() else { return }
-                let priorityGames = Settings.shared.priorityGames
-                await dmEventService.emitDropClaimed(
-                    dropId: drop.id,
-                    dropName: drop.name,
-                    campaignName: campaignName,
-                    discordUserId: miner.ownerDiscordId,
-                    priorityGames: priorityGames
-                )
-            }
-        }
+        // No Discord DM is sent per drop claim — user-facing DMs are sent only
+        // when the full campaign completes, to keep DM volume low.
 
         minerManager.onAuthRequiredEvent = { [weak self] minerId in
             Task { @MainActor [weak self] in
@@ -442,6 +453,8 @@ public final class NavigationModel {
                 await dmEventService.emitCampaignCompleted(
                     campaignId: campaign.id,
                     campaignName: campaign.name,
+                    gameName: campaign.game.name,
+                    gameArtworkURL: campaign.game.boxArtURL?.absoluteString,
                     discordUserId: miner.ownerDiscordId,
                     priorityGames: priorityGames
                 )

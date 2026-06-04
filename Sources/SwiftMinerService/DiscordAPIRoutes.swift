@@ -89,6 +89,10 @@ public actor DiscordAPIRoutes {
     /// account with MinerManager and refresh the UI.
     public var onAccountActivated: (@Sendable (Account, String) async -> Void)?
     public var onMinerControl: (@Sendable (String, MinerControlAction) async -> MinerControlResponse)?
+    /// Suppress the account-link ("needs linking") warning/DM for a game.
+    /// Returns true when at least one of the user's miners was updated.
+    /// Args: (discordUserId, gameName).
+    public var onIgnoreLinkWarning: (@Sendable (String, String) async -> Bool)?
 
     // In-memory activation session store (ephemeral; DB retains audit rows)
     private var activationSessions: [String: ActivationSession] = [:]
@@ -114,6 +118,10 @@ public actor DiscordAPIRoutes {
 
     public func setOnMinerControl(_ handler: @escaping @Sendable (String, MinerControlAction) async -> MinerControlResponse) {
         self.onMinerControl = handler
+    }
+
+    public func setOnIgnoreLinkWarning(_ handler: @escaping @Sendable (String, String) async -> Bool) {
+        self.onIgnoreLinkWarning = handler
     }
 
     public func configure(_ router: HTTPRouter) async {
@@ -159,6 +167,11 @@ public actor DiscordAPIRoutes {
         // Campaign action endpoint
         await router.register(HTTPRoute(method: "POST", pattern: "/v1/users/:discordUserId/campaigns/:campaignId/:action") { request, params in
             await routes.handleCampaignAction(request: request, params: params)
+        })
+
+        // Dismiss the "needs linking" warning/DM for a specific game.
+        await router.register(HTTPRoute(method: "POST", pattern: "/v1/users/:discordUserId/link-warnings/:game/ignore") { request, params in
+            await routes.handleIgnoreLinkWarning(request: request, params: params)
         })
 
         await router.register(HTTPRoute(method: "POST", pattern: "/v1/users/:discordUserId/miner/:action") { request, params in
@@ -395,6 +408,25 @@ public actor DiscordAPIRoutes {
         activationPollTasks.removeValue(forKey: sessionId)
         activationSessions.removeValue(forKey: sessionId)
         return HTTPResponse(statusCode: 204)
+    }
+
+    private func handleIgnoreLinkWarning(request: HTTPRequest, params: [String: String]) async -> HTTPResponse {
+        guard let discordUserId = params["discordUserId"],
+              let rawGame = params["game"] else {
+            return .error(code: "bad_request", message: "Missing path parameters.", statusCode: 400)
+        }
+        let gameName = rawGame.removingPercentEncoding ?? rawGame
+        guard !gameName.isEmpty else {
+            return .error(code: "bad_request", message: "Game name is required.", statusCode: 400)
+        }
+
+        guard let handler = onIgnoreLinkWarning else {
+            return .error(code: "unavailable", message: "SwiftMiner is not available.", statusCode: 503)
+        }
+
+        let ignored = await handler(discordUserId, gameName)
+        struct IgnoreLinkWarningResponse: Codable { let ignored: Bool; let game: String }
+        return HTTPResponse.json(IgnoreLinkWarningResponse(ignored: ignored, game: gameName))
     }
 
     private func handleCampaignAction(request: HTTPRequest, params: [String: String]) async -> HTTPResponse {

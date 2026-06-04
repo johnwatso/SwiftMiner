@@ -125,6 +125,7 @@ public actor RestSwiftBotConnectionService: SwiftBotConnectionService {
                 affectedGame: request.affectedGame,
                 campaignName: request.campaignName,
                 milestoneTitle: request.milestoneTitle,
+                gameArtworkURL: request.gameArtworkURL,
                 recoveryReason: request.recoveryReason
             )
         }
