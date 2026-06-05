@@ -777,6 +777,31 @@ public final class NavigationModel {
         events.removeAll()
     }
 
+    /// Recreate the useful parts of app launch from an already-open Overview:
+    /// restart miner workers with current settings, then refresh campaign and
+    /// inventory projections so the dashboard reflects the recovered state.
+    public func restartMinersAndRefreshOverviewData() async {
+        let settings = Settings.shared
+        guard !minerManager.miners.isEmpty else {
+            await minerManager.dataCoordinator.refreshAll()
+            return
+        }
+
+        await minerManager.stopAll()
+        await minerManager.startAll(
+            priorityGames: settings.priorityGames,
+            excludedGames: settings.excludedGames,
+            strategy: settings.miningStrategy,
+            enableBadgesEmotes: settings.enableBadgesEmotes,
+            showClaimNotifications: settings.showClaimNotifications,
+            avoidDuplicateStreams: settings.avoidDuplicateStreams,
+            antiStallRecoveryEnabled: settings.antiStallRecoveryEnabled,
+            prioritiseFollowedStreamers: settings.prioritiseFollowedStreamers
+        )
+        await minerManager.forceRefreshAllMiners()
+        await minerManager.dataCoordinator.refreshAll()
+    }
+
     private var settings: Settings { Settings.shared }
 
     private func clearOnboardingPresentation() {
