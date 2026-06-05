@@ -1296,7 +1296,7 @@ private struct IntegrationsSettingsView: View {
             priorityGames: Settings.shared.priorityGames,
             activationCode: type == .setup ? "ABCD-EFGH" : nil,
             activationExpiresInMinutes: type == .setup ? 29 : nil,
-            activationURL: type == .setup ? "https://www.twitch.tv/activate?code=ABCD-EFGH" : nil,
+            activationURL: type == .setup ? "https://www.twitch.tv/activate?device-code=ABCD-EFGH" : nil,
             affectedGame: affectedGame,
             campaignName: sample?.name ?? "Test Campaign",
             milestoneTitle: "50% Complete",
