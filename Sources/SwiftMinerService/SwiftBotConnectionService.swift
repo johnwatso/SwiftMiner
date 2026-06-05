@@ -122,6 +122,7 @@ public actor RestSwiftBotConnectionService: SwiftBotConnectionService {
                 priorityGames: request.priorityGames,
                 activationCode: request.activationCode,
                 activationExpiresInMinutes: request.activationExpiresInMinutes,
+                activationURL: request.activationURL,
                 affectedGame: request.affectedGame,
                 campaignName: request.campaignName,
                 milestoneTitle: request.milestoneTitle,
