@@ -70,6 +70,9 @@ struct MinerApp: App {
                 ) { _ in
                     appModel.refreshNotificationBadge()
                 }
+                .onOpenURL { url in
+                    handleDeepLink(url)
+                }
         }
         .windowStyle(.titleBar)
         .windowToolbarStyle(.unified)
@@ -171,6 +174,18 @@ struct MinerApp: App {
 
     private func requestNotificationPermission() async {
         _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
+    }
+
+    private func handleDeepLink(_ url: URL) {
+        guard url.scheme == "swiftminer" else { return }
+        switch url.host {
+        case "pair":
+            navigation.requestSwiftBotPairing()
+            NSApp.activate(ignoringOtherApps: true)
+            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        default:
+            break
+        }
     }
 
     @MainActor
