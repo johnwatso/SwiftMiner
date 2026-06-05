@@ -288,7 +288,7 @@ struct MinerActivityCard: View {
             excludedGames: settings.excludedGames,
             strategy: settings.miningStrategy,
             includesBadgeAndEmoteCampaigns: settings.enableBadgesEmotes,
-            ignoredAccountLinkGameIds: settings.ignoredWarnings
+            ignoredAccountLinkGameIds: settings.activeIgnoredWarnings
                 .filter { $0.hasPrefix("\(miner.accountId):") && $0.hasSuffix(":accountLink") }
                 .compactMap { $0.components(separatedBy: ":").dropFirst().first }
         )

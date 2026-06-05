@@ -77,6 +77,16 @@ private struct UpdateDMStateRequest: Codable, Sendable {
     }
 }
 
+private struct PauseLinkWarningRequest: Codable, Sendable {
+    let days: Int
+}
+
+private struct PauseLinkWarningResponse: Codable, Sendable {
+    let paused: Bool
+    let game: String
+    let expiresAt: Date
+}
+
 // MARK: - API Routes
 
 public actor DiscordAPIRoutes {
@@ -93,6 +103,9 @@ public actor DiscordAPIRoutes {
     /// Returns true when at least one of the user's miners was updated.
     /// Args: (discordUserId, gameName).
     public var onIgnoreLinkWarning: (@Sendable (String, String) async -> Bool)?
+    /// Temporarily suppress the account-link warning/DM for a game.
+    /// Args: (discordUserId, gameName, expiry).
+    public var onPauseLinkWarning: (@Sendable (String, String, Date) async -> Bool)?
 
     // In-memory activation session store (ephemeral; DB retains audit rows)
     private var activationSessions: [String: ActivationSession] = [:]
@@ -122,6 +135,10 @@ public actor DiscordAPIRoutes {
 
     public func setOnIgnoreLinkWarning(_ handler: @escaping @Sendable (String, String) async -> Bool) {
         self.onIgnoreLinkWarning = handler
+    }
+
+    public func setOnPauseLinkWarning(_ handler: @escaping @Sendable (String, String, Date) async -> Bool) {
+        self.onPauseLinkWarning = handler
     }
 
     public func configure(_ router: HTTPRouter) async {
@@ -172,6 +189,10 @@ public actor DiscordAPIRoutes {
         // Dismiss the "needs linking" warning/DM for a specific game.
         await router.register(HTTPRoute(method: "POST", pattern: "/v1/users/:discordUserId/link-warnings/:game/ignore") { request, params in
             await routes.handleIgnoreLinkWarning(request: request, params: params)
+        })
+
+        await router.register(HTTPRoute(method: "POST", pattern: "/v1/users/:discordUserId/link-warnings/:game/pause") { request, params in
+            await routes.handlePauseLinkWarning(request: request, params: params)
         })
 
         await router.register(HTTPRoute(method: "POST", pattern: "/v1/users/:discordUserId/miner/:action") { request, params in
@@ -427,6 +448,39 @@ public actor DiscordAPIRoutes {
         let ignored = await handler(discordUserId, gameName)
         struct IgnoreLinkWarningResponse: Codable { let ignored: Bool; let game: String }
         return HTTPResponse.json(IgnoreLinkWarningResponse(ignored: ignored, game: gameName))
+    }
+
+    private func handlePauseLinkWarning(request: HTTPRequest, params: [String: String]) async -> HTTPResponse {
+        guard let discordUserId = params["discordUserId"],
+              Self.isValidDiscordId(discordUserId),
+              let rawGame = params["game"] else {
+            return .error(code: "bad_request", message: "Missing path parameters.", statusCode: 400)
+        }
+        let gameName = rawGame.removingPercentEncoding ?? rawGame
+        guard !gameName.isEmpty else {
+            return .error(code: "bad_request", message: "Game name is required.", statusCode: 400)
+        }
+
+        guard await userExists(discordUserId: discordUserId) else {
+            return .error(code: "user_not_found", message: "User not found. Register first.", statusCode: 404)
+        }
+
+        let days: Int
+        if request.body.isEmpty {
+            days = 7
+        } else if let body = try? JSONDecoder().decode(PauseLinkWarningRequest.self, from: request.body) {
+            days = min(max(body.days, 1), 30)
+        } else {
+            return .error(code: "invalid_payload", message: "Body must include an integer days value.", statusCode: 400)
+        }
+
+        guard let handler = onPauseLinkWarning else {
+            return .error(code: "unavailable", message: "SwiftMiner is not available.", statusCode: 503)
+        }
+
+        let expiresAt = Date().addingTimeInterval(TimeInterval(days * 24 * 60 * 60))
+        let paused = await handler(discordUserId, gameName, expiresAt)
+        return HTTPResponse.json(PauseLinkWarningResponse(paused: paused, game: gameName, expiresAt: expiresAt))
     }
 
     private func handleCampaignAction(request: HTTPRequest, params: [String: String]) async -> HTTPResponse {
