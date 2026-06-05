@@ -75,6 +75,7 @@ final class SwiftMinerDMEventServiceTests: XCTestCase {
             campaignId: "campaign-1",
             campaignName: "Launch Drops",
             gameName: "THE FINALS",
+            gameArtworkURL: "https://example.com/finals.jpg",
             discordUserId: "discord-1",
             priorityGames: ["THE FINALS"]
         )
@@ -82,6 +83,7 @@ final class SwiftMinerDMEventServiceTests: XCTestCase {
             campaignId: "campaign-1",
             campaignName: "Launch Drops",
             gameName: "THE FINALS",
+            gameArtworkURL: "https://example.com/finals.jpg",
             discordUserId: "discord-1",
             priorityGames: ["THE FINALS"]
         )
@@ -91,6 +93,7 @@ final class SwiftMinerDMEventServiceTests: XCTestCase {
         XCTAssertEqual(requests.first?.messageType, .campaignDetected)
         XCTAssertEqual(requests.first?.eventId, "campaignDetected:campaign-1")
         XCTAssertEqual(requests.first?.affectedGame, "THE FINALS")
+        XCTAssertEqual(requests.first?.gameArtworkURL, "https://example.com/finals.jpg")
     }
 }
 

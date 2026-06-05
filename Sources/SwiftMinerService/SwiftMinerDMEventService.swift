@@ -141,6 +141,7 @@ public actor SwiftMinerDMEventService {
         campaignId: String,
         campaignName: String,
         gameName: String,
+        gameArtworkURL: String?,
         discordUserId: String?,
         priorityGames: [String]
     ) async {
@@ -155,6 +156,7 @@ public actor SwiftMinerDMEventService {
             priorityGames: priorityGames,
             affectedGame: gameName,
             campaignName: campaignName,
+            gameArtworkURL: gameArtworkURL,
             eventId: "campaignDetected:\(campaignId)"
         )
 
