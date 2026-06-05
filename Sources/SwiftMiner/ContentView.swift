@@ -268,9 +268,6 @@ struct OverviewView: View {
         isRefreshing = true
         defer { isRefreshing = false }
 
-        if settings.preferSteamArtwork {
-            await navigation.minerManager.dataCoordinator.clearSteamArtworkCache()
-        }
         await navigation.restartMinersAndRefreshOverviewData()
 
         overviewCampaigns = await navigation.minerManager.dataCoordinator.allCampaigns(
