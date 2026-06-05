@@ -1199,9 +1199,8 @@ private struct IntegrationsSettingsView: View {
         debugDiscordUsers = users
     }
 
-    /// A real campaign to make the campaign-completed test DM realistic.
-    /// Prefers one that's been fully mined (all drops claimed), then any
-    /// campaign that has box art; `nil` when no campaigns are loaded.
+    /// A real campaign to make game-related test DMs realistic. Prefers a
+    /// fully mined campaign, then one with box art, then any loaded campaign.
     private var debugSampleCampaign: Campaign? {
         let campaigns = navigation.minerManager.campaignStore.campaigns
         return campaigns.first(where: { $0.isFullyComplete && $0.gameImageUrl != nil })
@@ -1210,14 +1209,61 @@ private struct IntegrationsSettingsView: View {
     }
 
     /// A real game whose account isn't linked yet — so the needs-linking preview
-    /// reflects an actual unlinked game. Prefers a prioritised, unconnected
-    /// campaign, then any unconnected one, then any campaign.
+    /// reflects an actual unlinked game. Prefers the same live "requires link"
+    /// state used by the miner UI/notifications, then falls back to cached
+    /// unconnected campaign data.
     private var debugUnlinkedGameName: String? {
+        if let liveCampaign = debugNeedsLinkingCampaign {
+            return liveCampaign.game.name
+        }
+
         let campaigns = navigation.minerManager.campaignStore.campaigns
-        let priority = Set(Settings.shared.priorityGames.map { $0.lowercased() })
-        return campaigns.first(where: { !$0.isAccountConnected && priority.contains($0.game.name.lowercased()) })?.game.name
+        let priority = debugPriorityGameKeys
+        return campaigns.first(where: { campaign in
+            !campaign.isAccountConnected &&
+                debugPriorityMatches(campaign: campaign, priority: priority)
+        })?.game.name
             ?? campaigns.first(where: { !$0.isAccountConnected })?.game.name
             ?? campaigns.first?.game.name
+    }
+
+    private var debugNeedsLinkingCampaign: Campaign? {
+        let priority = debugPriorityGameKeys
+        guard !priority.isEmpty else { return nil }
+
+        for miner in navigation.minerManager.miners {
+            if let campaign = miner.allCampaigns.first(where: { campaign in
+                debugIsNeedsLinkingCampaign(campaign, miner: miner, priority: priority)
+            }) {
+                return campaign
+            }
+        }
+        return nil
+    }
+
+    private var debugPriorityGameKeys: Set<String> {
+        Set(Settings.shared.priorityGames.map(debugNormalizedGameKey).filter { !$0.isEmpty })
+    }
+
+    private func debugIsNeedsLinkingCampaign(
+        _ campaign: Campaign,
+        miner: MinerManager.ManagedMiner,
+        priority: Set<String>
+    ) -> Bool {
+        campaign.isTimeActive &&
+            campaign.status != .disabled &&
+            campaign.activityStatus(for: miner) == .requiresLink &&
+            campaign.drops.contains(where: { !$0.isClaimed }) &&
+            debugPriorityMatches(campaign: campaign, priority: priority)
+    }
+
+    private func debugPriorityMatches(campaign: Campaign, priority: Set<String>) -> Bool {
+        priority.contains(debugNormalizedGameKey(campaign.game.name)) ||
+            priority.contains(debugNormalizedGameKey(campaign.game.id))
+    }
+
+    private func debugNormalizedGameKey(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
     /// Builds a fully-populated debug request for a message type, filling only
@@ -1225,25 +1271,28 @@ private struct IntegrationsSettingsView: View {
     /// Campaign-completed pulls a real (ideally mined) campaign when available;
     /// needs-linking follows a real unlinked game. Falls back to static values.
     private func debugDMRequest(for type: SwiftBotDMMessageType) -> SwiftBotDMRequest {
-        let sample = type == .campaignCompleted ? debugSampleCampaign : nil
+        let sample = debugSampleCampaign
+        let targetMiner = debugTargetId.flatMap { id in
+            navigation.minerManager.miners.first(where: { $0.ownerDiscordId == id })
+        } ?? navigation.minerManager.miners.first
 
         // Game-oriented DMs lead with the game name, so feed a real one:
-        // campaign-completed uses the sample campaign's game; needs-linking
-        // uses a real unlinked game.
+        // campaign-completed/new-campaign use the sample campaign's game;
+        // needs-linking uses a real unlinked game.
         let affectedGame: String
         switch type {
-        case .campaignCompleted:
+        case .campaignCompleted, .campaignDetected:
             affectedGame = sample?.gameName ?? "The Finals"
         case .prioritisedGameNeedsLinking:
             affectedGame = debugUnlinkedGameName ?? "The Finals"
         default:
-            affectedGame = "Test Game"
+            affectedGame = sample?.gameName ?? "Test Game"
         }
 
         return SwiftBotDMRequest(
             messageType: type,
             debug: true,
-            twitchUsername: "test_user",
+            twitchUsername: targetMiner?.username ?? "test_user",
             priorityGames: Settings.shared.priorityGames,
             activationCode: type == .setup ? "ABCD-EFGH" : nil,
             activationExpiresInMinutes: type == .setup ? 29 : nil,
@@ -1251,7 +1300,7 @@ private struct IntegrationsSettingsView: View {
             affectedGame: affectedGame,
             campaignName: sample?.name ?? "Test Campaign",
             milestoneTitle: "50% Complete",
-            gameArtworkURL: type == .campaignCompleted
+            gameArtworkURL: (type == .campaignCompleted || type == .campaignDetected)
                 ? (sample?.gameImageUrl?.absoluteString ?? "https://static-cdn.jtvnw.net/ttv-boxart/1234_IGDB-285x380.jpg")
                 : nil,
             recoveryReason: "Twitch token expired during mining."

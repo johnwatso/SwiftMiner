@@ -476,6 +476,7 @@ public final class NavigationModel {
                     campaignId: campaign.id,
                     campaignName: campaign.name,
                     gameName: campaign.game.name,
+                    gameArtworkURL: campaign.game.boxArtURL?.absoluteString,
                     discordUserId: miner.ownerDiscordId,
                     priorityGames: priorityGames
                 )

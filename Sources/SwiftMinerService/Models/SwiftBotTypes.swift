@@ -86,7 +86,6 @@ public enum SwiftBotDMMessageType: String, Codable, CaseIterable, Sendable, Iden
             .accountActionRequired,
             .reauth,
             .welcomeBack,
-            .dropClaimed,
             .campaignCompleted
         ]
     }
