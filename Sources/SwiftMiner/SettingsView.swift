@@ -53,6 +53,15 @@ struct SettingsView: View {
         }
         .padding(.top, -2)
         .frame(width: 520)
+        .onAppear(perform: consumePairingRequestIfNeeded)
+        .onChange(of: navigation.pendingSwiftBotPairingRequest) { _, _ in
+            consumePairingRequestIfNeeded()
+        }
+    }
+
+    private func consumePairingRequestIfNeeded() {
+        guard navigation.consumeSwiftBotPairingRequest() else { return }
+        selectedTab = .integrations
     }
 }
 
@@ -669,7 +678,7 @@ private struct IntegrationsSettingsView: View {
     @Environment(NavigationModel.self) private var navigation
     @State private var isTestingConnection = false
     @State private var connectionTestMessage: String?
-    @State private var copiedPairingBundle = false
+    @State private var pairingActionStatus: PairingActionStatus?
     @State private var debugTargetSelection: String?
     @State private var debugDiscordUsers: [SwiftBotDiscordUser] = []
     @State private var isLoadingDebugUsers = false
@@ -765,17 +774,17 @@ private struct IntegrationsSettingsView: View {
 
                     HStack(spacing: 10) {
                         Button {
-                            copyPairingBundle()
+                            pairWithSwiftBot()
                         } label: {
                             HStack(spacing: 6) {
-                                Image(systemName: copiedPairingBundle ? "checkmark.circle.fill" : "doc.on.doc")
-                                Text(copiedPairingBundle ? "Copied" : "Pair with SwiftBot")
+                                Image(systemName: pairingActionStatus == nil ? "link" : "checkmark.circle.fill")
+                                Text(pairingButtonTitle)
                             }
                         }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.regular)
 
-                        Text("Copies a pairing bundle. Paste it into SwiftBot to connect.")
+                        Text(pairingHelperText)
                             .font(.caption)
                             .foregroundStyle(.secondary)
 
@@ -792,6 +801,30 @@ private struct IntegrationsSettingsView: View {
                         .stroke(statusColor.opacity(0.14), lineWidth: 0.5)
                 )
         )
+    }
+
+    private enum PairingActionStatus {
+        case opened
+        case copied
+    }
+
+    private var pairingButtonTitle: String {
+        switch pairingActionStatus {
+        case .opened: return "Opened SwiftBot"
+        case .copied: return "Copied Pairing Link"
+        case nil: return "Pair with SwiftBot"
+        }
+    }
+
+    private var pairingHelperText: String {
+        switch pairingActionStatus {
+        case .opened:
+            return "SwiftBot should finish pairing automatically."
+        case .copied:
+            return "SwiftBot was not opened, so the pairing link was copied."
+        case nil:
+            return "Opens SwiftBot and applies the pairing automatically."
+        }
     }
 
     private var statusTitle: String {
@@ -832,7 +865,7 @@ private struct IntegrationsSettingsView: View {
 
     // MARK: - Pairing
 
-    private func copyPairingBundle() {
+    private func pairWithSwiftBot() {
         settings.ensureSwiftBotSecrets()
         let swiftBotEndpoint = normalizedValue(settings.swiftBotEndpoint) ?? defaultSwiftBotEndpoint
         let swiftBotWebhookURL = normalizedValue(settings.swiftBotWebhookURL)
@@ -862,15 +895,25 @@ private struct IntegrationsSettingsView: View {
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: bundle, options: [.sortedKeys]),
               let json = String(data: data, encoding: .utf8) else { return }
-        let token = "swiftminer://pair?b=" + Data(json.utf8).base64EncodedString()
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(token, forType: .string)
-        copiedPairingBundle = true
+        let payload = Data(json.utf8).base64EncodedString()
+
+        var components = URLComponents()
+        components.scheme = "swiftbot"
+        components.host = "swiftminer-pair"
+        components.queryItems = [URLQueryItem(name: "b", value: payload)]
+        guard let url = components.url else { return }
+
+        let opened = NSWorkspace.shared.open(url)
+        if !opened {
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.setString(url.absoluteString, forType: .string)
+        }
+        pairingActionStatus = opened ? .opened : .copied
         Task {
             try? await Task.sleep(for: .seconds(2))
             await MainActor.run {
-                copiedPairingBundle = false
+                pairingActionStatus = nil
             }
         }
     }

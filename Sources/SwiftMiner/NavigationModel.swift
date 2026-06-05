@@ -97,6 +97,7 @@ public final class NavigationModel {
     public var unownedAccounts: [Account] = []
     public var registeredUsers: [MinerUser] = []
     public var swiftBotState: SwiftBotConnectionState = .notConfigured
+    public var pendingSwiftBotPairingRequest = false
 
     public func requestDropsFilter(_ intent: DropsFilterIntent) {
         requestedDropsFilter = intent
@@ -105,6 +106,16 @@ public final class NavigationModel {
     public func consumeDropsFilterIntent() -> DropsFilterIntent? {
         defer { requestedDropsFilter = nil }
         return requestedDropsFilter
+    }
+
+    public func requestSwiftBotPairing() {
+        Settings.shared.swiftBotEnabled = true
+        pendingSwiftBotPairingRequest = true
+    }
+
+    public func consumeSwiftBotPairingRequest() -> Bool {
+        defer { pendingSwiftBotPairingRequest = false }
+        return pendingSwiftBotPairingRequest
     }
 
     /// Start the in-process HTTP server that exposes the SwiftMiner REST API to SwiftBot.
