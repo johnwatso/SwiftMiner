@@ -335,6 +335,15 @@ struct OverviewView: View {
                 }
 
                 Spacer()
+
+                Button {
+                    navigation.showAddAccountSheet = true
+                } label: {
+                    Label("Add", systemImage: "plus")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("Add a Twitch account")
             }
             .padding(.top, 10)
 
