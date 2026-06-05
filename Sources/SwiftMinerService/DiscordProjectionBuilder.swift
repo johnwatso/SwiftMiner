@@ -13,6 +13,8 @@ public protocol ProjectionStateProvider: Sendable {
     func recentCompletedCampaigns(for discordUserId: String, limit: Int) async -> [DiscordUserProjection.RecentCampaign]
     /// Overrides the projection state derived from DB heuristics. Return `nil` to use DB fallback.
     func projectionState(for discordUserId: String) async -> DiscordUserProjection.ProjectionState?
+    /// Returns the current app-level priority games, in mining order.
+    func priorityGames(for discordUserId: String) async -> [String]
 }
 
 /// Default no-op provider. All state is derived from DB queries alone.
@@ -21,6 +23,7 @@ public struct DefaultProjectionStateProvider: ProjectionStateProvider {
     public func activeCampaign(for discordUserId: String) async -> DiscordUserProjection.ActiveCampaign? { nil }
     public func recentCompletedCampaigns(for discordUserId: String, limit: Int) async -> [DiscordUserProjection.RecentCampaign] { [] }
     public func projectionState(for discordUserId: String) async -> DiscordUserProjection.ProjectionState? { nil }
+    public func priorityGames(for discordUserId: String) async -> [String] { [] }
 }
 
 // MARK: - Builder
@@ -47,6 +50,7 @@ public actor DiscordProjectionBuilder {
         let activeCampaign = await stateProvider.activeCampaign(for: discordUserId)
         let recentCompletedCampaigns = await stateProvider.recentCompletedCampaigns(for: discordUserId, limit: 3)
         let dmState = await fetchDMState(discordUserId: discordUserId)
+        let priorityGames = await stateProvider.priorityGames(for: discordUserId)
 
         let state: DiscordUserProjection.ProjectionState
         if let providerState = await stateProvider.projectionState(for: discordUserId) {
@@ -68,7 +72,8 @@ public actor DiscordProjectionBuilder {
             activeCampaign: activeCampaign,
             recentCompletedCampaigns: recentCompletedCampaigns,
             issues: issues,
-            dmState: dmState
+            dmState: dmState,
+            priorityGames: priorityGames
         )
     }
 

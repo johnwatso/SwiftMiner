@@ -121,6 +121,41 @@ final class DiscordAPIRoutesTests: XCTestCase {
         XCTAssertEqual(payload["ok"] as? Bool, false)
         XCTAssertEqual(payload["state"] as? String, "not_linked")
     }
+
+    func testPauseLinkWarningRequiresRegisteredUserAndDelegates() async throws {
+        let harness = try await RouteHarness()
+        let recorder = LinkWarningPauseRecorder()
+        await harness.routes.setOnPauseLinkWarning { discordUserId, gameName, expiresAt in
+            await recorder.record(discordUserId: discordUserId, gameName: gameName, expiresAt: expiresAt)
+            return true
+        }
+
+        let missingUser = await harness.router.handle(HTTPRequest(
+            method: "POST",
+            path: "/v1/users/\(discordUserId)/link-warnings/Black%20Ops%207/pause",
+            headers: [:],
+            body: #"{"days":7}"#.data(using: .utf8)!
+        ))
+        XCTAssertEqual(missingUser.statusCode, 404)
+        XCTAssertEqual(await recorder.callCount(), 0)
+
+        try await harness.registerUser(discordUserId)
+
+        let response = await harness.router.handle(HTTPRequest(
+            method: "POST",
+            path: "/v1/users/\(discordUserId)/link-warnings/Black%20Ops%207/pause",
+            headers: [:],
+            body: #"{"days":7}"#.data(using: .utf8)!
+        ))
+        XCTAssertEqual(response.statusCode, 200)
+        XCTAssertEqual(await recorder.callCount(), 1)
+        XCTAssertEqual(await recorder.games(), ["Black Ops 7"])
+
+        let payload = try decodeJSON(response.body)
+        XCTAssertEqual(payload["paused"] as? Bool, true)
+        XCTAssertEqual(payload["game"] as? String, "Black Ops 7")
+        XCTAssertNotNil(payload["expiresAt"] as? String)
+    }
 }
 
 private final class RouteHarness {
@@ -174,6 +209,22 @@ private actor MinerControlRecorder {
 
     func actions() -> [MinerControlAction] {
         calls.map(\.action)
+    }
+}
+
+private actor LinkWarningPauseRecorder {
+    private var calls: [(discordUserId: String, gameName: String, expiresAt: Date)] = []
+
+    func record(discordUserId: String, gameName: String, expiresAt: Date) {
+        calls.append((discordUserId, gameName, expiresAt))
+    }
+
+    func callCount() -> Int {
+        calls.count
+    }
+
+    func games() -> [String] {
+        calls.map(\.gameName)
     }
 }
 

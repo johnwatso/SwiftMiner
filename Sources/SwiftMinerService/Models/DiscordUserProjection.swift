@@ -10,6 +10,7 @@ public struct DiscordUserProjection: Codable, Sendable {
     public let recentCompletedCampaigns: [RecentCampaign]
     public let issues: [Issue]
     public let dmState: DiscordDMState
+    public let priorityGames: [String]
 
     public init(
         discordUserId: String,
@@ -18,7 +19,8 @@ public struct DiscordUserProjection: Codable, Sendable {
         activeCampaign: ActiveCampaign? = nil,
         recentCompletedCampaigns: [RecentCampaign] = [],
         issues: [Issue] = [],
-        dmState: DiscordDMState = DiscordDMState()
+        dmState: DiscordDMState = DiscordDMState(),
+        priorityGames: [String] = []
     ) {
         self.discordUserId = discordUserId
         self.state = state
@@ -27,6 +29,7 @@ public struct DiscordUserProjection: Codable, Sendable {
         self.recentCompletedCampaigns = recentCompletedCampaigns
         self.issues = issues
         self.dmState = dmState
+        self.priorityGames = priorityGames
     }
 
     public enum ProjectionState: String, Codable, Sendable {

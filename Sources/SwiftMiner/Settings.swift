@@ -200,6 +200,11 @@ public final class Settings: ObservableObject {
     @AppStorage("ignoredWarningsData", store: Settings.appStorageStore)
     private var ignoredWarningsData: String = "[]"
 
+    /// JSON-encoded temporary warning suppressions keyed by
+    /// "accountId:gameId:warningType", with ISO-8601 expiry dates.
+    @AppStorage("temporaryIgnoredWarningsData", store: Settings.appStorageStore)
+    private var temporaryIgnoredWarningsData: String = "{}"
+
     public enum WarningType: String, Codable, Sendable {
         case accountLink = "accountLink"
         case subscriptionRequired = "subscriptionRequired"
@@ -220,6 +225,55 @@ public final class Settings: ObservableObject {
                ignoredWarningsData != encoded {
                 ignoredWarningsData = encoded
             }
+        }
+    }
+
+    public var activeIgnoredWarnings: [String] {
+        pruneExpiredTemporaryIgnoredWarnings()
+        return Array(Set(ignoredWarnings + Array(temporaryIgnoredWarnings.keys))).sorted()
+    }
+
+    private var temporaryIgnoredWarnings: [String: Date] {
+        get {
+            guard let data = temporaryIgnoredWarningsData.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode([String: Date].self, from: data) else {
+                return [:]
+            }
+            return decoded
+        }
+        set {
+            if let data = try? JSONEncoder().encode(newValue),
+               let encoded = String(data: data, encoding: .utf8),
+               temporaryIgnoredWarningsData != encoded {
+                temporaryIgnoredWarningsData = encoded
+            }
+        }
+    }
+
+    public func temporaryWarningExpiry(accountId: String, gameId: String = "all", type: WarningType) -> Date? {
+        pruneExpiredTemporaryIgnoredWarnings()
+        let specific = "\(accountId):\(gameId):\(type.rawValue)"
+        let global = "\(accountId):all:\(type.rawValue)"
+        return temporaryIgnoredWarnings[specific] ?? temporaryIgnoredWarnings[global]
+    }
+
+    public func setTemporaryIgnoreWarning(
+        until expiry: Date,
+        accountId: String,
+        gameId: String = "all",
+        type: WarningType
+    ) {
+        var current = temporaryIgnoredWarnings
+        current["\(accountId):\(gameId):\(type.rawValue)"] = expiry
+        temporaryIgnoredWarnings = current
+    }
+
+    public func pruneExpiredTemporaryIgnoredWarnings(now: Date = Date()) {
+        var current = temporaryIgnoredWarnings
+        let originalCount = current.count
+        current = current.filter { $0.value > now }
+        if current.count != originalCount {
+            temporaryIgnoredWarnings = current
         }
     }
 
@@ -249,7 +303,11 @@ public final class Settings: ObservableObject {
     public func isIgnoringWarning(accountId: String, gameId: String = "all", type: WarningType) -> Bool {
         let specific = "\(accountId):\(gameId):\(type.rawValue)"
         let global = "\(accountId):all:\(type.rawValue)"
-        return ignoredWarnings.contains(specific) || ignoredWarnings.contains(global)
+        pruneExpiredTemporaryIgnoredWarnings()
+        return ignoredWarnings.contains(specific) ||
+            ignoredWarnings.contains(global) ||
+            temporaryIgnoredWarnings[specific] != nil ||
+            temporaryIgnoredWarnings[global] != nil
     }
 
     public func setIgnoreWarning(_ ignored: Bool, accountId: String, gameId: String = "all", type: WarningType) {

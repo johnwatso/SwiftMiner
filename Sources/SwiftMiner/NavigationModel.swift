@@ -159,6 +159,14 @@ public final class NavigationModel {
             guard let self else { return false }
             return await self.handleDiscordIgnoreLinkWarning(discordUserId: discordUserId, gameName: gameName)
         }
+        await routes.setOnPauseLinkWarning { [weak self] discordUserId, gameName, expiresAt in
+            guard let self else { return false }
+            return await self.handleDiscordPauseLinkWarning(
+                discordUserId: discordUserId,
+                gameName: gameName,
+                expiresAt: expiresAt
+            )
+        }
         let router = HTTPRouter()
         await routes.configure(router)
         let server = HTTPAPIServer(port: port, apiKey: apiKey, router: router)
@@ -229,15 +237,36 @@ public final class NavigationModel {
 
         // Prefer a real game id resolved from loaded campaigns; fall back to the
         // lowercased name (the engine suppresses by either id or lowercased name).
-        let target = gameName.lowercased()
-        let gameKey = minerManager.campaignStore.campaigns
-            .first(where: { $0.game.name.lowercased() == target })?.game.id ?? target
+        let gameKey = accountLinkWarningGameKey(for: gameName)
 
         for miner in owned {
             await minerManager.setAccountLinkWarningIgnored(minerId: miner.id, gameId: gameKey, ignored: true)
             Settings.shared.setIgnoreAccountLinkWarnings(true, for: miner.accountId, gameId: gameKey)
         }
         return true
+    }
+
+    public func handleDiscordPauseLinkWarning(discordUserId: String, gameName: String, expiresAt: Date) async -> Bool {
+        let owned = minerManager.miners.filter { $0.ownerDiscordId == discordUserId }
+        guard !owned.isEmpty else { return false }
+
+        let gameKey = accountLinkWarningGameKey(for: gameName)
+        for miner in owned {
+            await minerManager.setAccountLinkWarningIgnored(minerId: miner.id, gameId: gameKey, ignored: true)
+            Settings.shared.setTemporaryIgnoreWarning(
+                until: expiresAt,
+                accountId: miner.accountId,
+                gameId: gameKey,
+                type: .accountLink
+            )
+        }
+        return true
+    }
+
+    private func accountLinkWarningGameKey(for gameName: String) -> String {
+        let target = gameName.lowercased()
+        return minerManager.campaignStore.campaigns
+            .first(where: { $0.game.name.lowercased() == target })?.game.id ?? target
     }
 
     public func handleDiscordMinerControl(discordUserId: String, action: MinerControlAction) async -> MinerControlResponse {
@@ -559,7 +588,7 @@ public final class NavigationModel {
             avoidDuplicateStreams: settings.avoidDuplicateStreams,
             antiStallRecoveryEnabled: settings.antiStallRecoveryEnabled,
             prioritiseFollowedStreamers: settings.prioritiseFollowedStreamers,
-            ignoredWarnings: settings.ignoredWarnings
+            ignoredWarnings: settings.activeIgnoredWarnings
         )
         await syncMinersToSQLite()
         preloadDropsTab()
@@ -878,6 +907,13 @@ private final class NavigationProjectionStateProvider: ProjectionStateProvider, 
                 return .active
             }
             return nil
+        }
+    }
+
+    func priorityGames(for discordUserId: String) async -> [String] {
+        await MainActor.run {
+            guard model?.minerForDiscordUser(discordUserId) != nil else { return [] }
+            return Settings.shared.priorityGames
         }
     }
 
