@@ -5,7 +5,7 @@
         <item>
             <title>1.27</title>
             <pubDate>Thu, 04 Jun 2026 10:14:03 +1200</pubDate>
-            <sparkle:version>2026060514</sparkle:version>
+            <sparkle:version>2026060619</sparkle:version>
             <sparkle:shortVersionString>1.27</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
             <enclosure url="https://github.com/johnwatso/SwiftMiner/releases/download/v1.27/SwiftMiner-1.27.zip" length="9141862" type="application/octet-stream" sparkle:edSignature="zTX9BimsSUZXnX6kHOImdhTg6fmuNHydnwu7G9RBOVpIzjt/tBM1eJMMW267H+th1vWUE6Kd/IXefWYGu72PBg=="/>

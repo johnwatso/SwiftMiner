@@ -425,6 +425,10 @@ public final class Settings: ObservableObject {
     @AppStorage("excludedGamesString", store: Settings.appStorageStore)
     private var excludedGamesString: String = ""
 
+    /// JSON-encoded map of Twitch account ID -> ordered priority game names.
+    @AppStorage("accountPriorityGamesData", store: Settings.appStorageStore)
+    public var accountPriorityGamesData: String = "{}"
+
     /// Mining strategy selection
     @AppStorage("miningStrategy", store: Settings.appStorageStore)
     public var miningStrategy: MiningStrategy = .mineAll
@@ -453,6 +457,50 @@ public final class Settings: ObservableObject {
     /// Priority game names derived from preferences (backward compat for MinerEngine)
     public var priorityGames: [String] {
         gameNames(for: .preferred)
+    }
+
+    public var accountPriorityGames: [String: [String]] {
+        get {
+            guard let data = accountPriorityGamesData.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode([String: [String]].self, from: data) else {
+                return [:]
+            }
+            return decoded.mapValues(Self.normalizedPriorityGameNames)
+        }
+        set {
+            let normalized = newValue.reduce(into: [String: [String]]()) { result, entry in
+                let key = entry.key.trimmingCharacters(in: .whitespacesAndNewlines)
+                let values = Self.normalizedPriorityGameNames(entry.value)
+                if !key.isEmpty, !values.isEmpty {
+                    result[key] = values
+                }
+            }
+            if let data = try? JSONEncoder().encode(normalized),
+               let string = String(data: data, encoding: .utf8) {
+                accountPriorityGamesData = string
+            }
+        }
+    }
+
+    public func priorityGames(forAccountId accountId: String) -> [String] {
+        let key = accountId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return priorityGames }
+        return accountPriorityGames[key] ?? priorityGames
+    }
+
+    @discardableResult
+    public func prioritiseGameForAccount(accountId: String, gameName: String) -> [String] {
+        let key = accountId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let game = gameName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty, !game.isEmpty else { return priorityGames(forAccountId: accountId) }
+
+        var map = accountPriorityGames
+        let existing = map[key] ?? priorityGames
+        let remaining = existing.filter { $0.localizedCaseInsensitiveCompare(game) != .orderedSame }
+        let updated = Self.normalizedPriorityGameNames([game] + remaining)
+        map[key] = updated
+        accountPriorityGames = map
+        return updated
     }
 
     /// Excluded game names derived from preferences (backward compat for MinerEngine)
@@ -710,6 +758,18 @@ public final class Settings: ObservableObject {
         }
 
         return deduped.reversed()
+    }
+
+    private static func normalizedPriorityGameNames(_ games: [String]) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for game in games {
+            let trimmed = game.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            guard seen.insert(trimmed.lowercased()).inserted else { continue }
+            result.append(trimmed)
+        }
+        return result
     }
 
     private func preferenceMatches(_ preference: GamePreference, gameId: String, gameName: String) -> Bool {

@@ -137,7 +137,8 @@ final class DiscordAPIRoutesTests: XCTestCase {
             body: #"{"days":7}"#.data(using: .utf8)!
         ))
         XCTAssertEqual(missingUser.statusCode, 404)
-        XCTAssertEqual(await recorder.callCount(), 0)
+        let missingCallCount = await recorder.callCount()
+        XCTAssertEqual(missingCallCount, 0)
 
         try await harness.registerUser(discordUserId)
 
@@ -148,13 +149,41 @@ final class DiscordAPIRoutesTests: XCTestCase {
             body: #"{"days":7}"#.data(using: .utf8)!
         ))
         XCTAssertEqual(response.statusCode, 200)
-        XCTAssertEqual(await recorder.callCount(), 1)
-        XCTAssertEqual(await recorder.games(), ["Black Ops 7"])
+        let callCount = await recorder.callCount()
+        let pausedGames = await recorder.games()
+        XCTAssertEqual(callCount, 1)
+        XCTAssertEqual(pausedGames, ["Black Ops 7"])
 
         let payload = try decodeJSON(response.body)
         XCTAssertEqual(payload["paused"] as? Bool, true)
         XCTAssertEqual(payload["game"] as? String, "Black Ops 7")
         XCTAssertNotNil(payload["expiresAt"] as? String)
+    }
+
+    func testPriorityUpdateRequiresRegisteredUserAndDelegates() async throws {
+        let harness = try await RouteHarness()
+        try await harness.registerUser(discordUserId)
+        let recorder = PriorityUpdateRecorder()
+        await harness.routes.setOnPrioritiseGame { discordUserId, accountId, gameName in
+            await recorder.record(discordUserId: discordUserId, accountId: accountId, gameName: gameName)
+            return [gameName, "THE FINALS"]
+        }
+
+        let response = await harness.router.handle(HTTPRequest(
+            method: "POST",
+            path: "/v1/users/\(discordUserId)/miners/account-1/priorities",
+            headers: [:],
+            body: #"{"game_name":"Black Ops 7","placement":"top"}"#.data(using: .utf8)!
+        ))
+
+        XCTAssertEqual(response.statusCode, 200)
+        let priorityGames = await recorder.games()
+        XCTAssertEqual(priorityGames, ["Black Ops 7"])
+        let payload = try decodeJSON(response.body)
+        XCTAssertEqual(payload["prioritised"] as? Bool, true)
+        XCTAssertEqual(payload["account_id"] as? String, "account-1")
+        XCTAssertEqual(payload["game_name"] as? String, "Black Ops 7")
+        XCTAssertEqual(payload["priority_games"] as? [String], ["Black Ops 7", "THE FINALS"])
     }
 }
 
@@ -221,6 +250,18 @@ private actor LinkWarningPauseRecorder {
 
     func callCount() -> Int {
         calls.count
+    }
+
+    func games() -> [String] {
+        calls.map(\.gameName)
+    }
+}
+
+private actor PriorityUpdateRecorder {
+    private var calls: [(discordUserId: String, accountId: String, gameName: String)] = []
+
+    func record(discordUserId: String, accountId: String, gameName: String) {
+        calls.append((discordUserId, accountId, gameName))
     }
 
     func games() -> [String] {

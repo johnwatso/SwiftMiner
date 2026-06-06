@@ -87,6 +87,39 @@ private struct PauseLinkWarningResponse: Codable, Sendable {
     let expiresAt: Date
 }
 
+private struct UpdatePriorityRequest: Codable, Sendable {
+    let gameId: String?
+    let gameName: String
+    let placement: String?
+
+    enum CodingKeys: String, CodingKey {
+        case gameId = "game_id"
+        case gameName = "game_name"
+        case placement
+    }
+}
+
+public struct PriorityUpdateResponse: Codable, Sendable {
+    public let prioritised: Bool
+    public let accountId: String
+    public let gameName: String
+    public let priorityGames: [String]
+
+    public init(prioritised: Bool, accountId: String, gameName: String, priorityGames: [String]) {
+        self.prioritised = prioritised
+        self.accountId = accountId
+        self.gameName = gameName
+        self.priorityGames = priorityGames
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case prioritised
+        case accountId = "account_id"
+        case gameName = "game_name"
+        case priorityGames = "priority_games"
+    }
+}
+
 // MARK: - API Routes
 
 public actor DiscordAPIRoutes {
@@ -106,6 +139,9 @@ public actor DiscordAPIRoutes {
     /// Temporarily suppress the account-link warning/DM for a game.
     /// Args: (discordUserId, gameName, expiry).
     public var onPauseLinkWarning: (@Sendable (String, String, Date) async -> Bool)?
+    /// Moves a game to the top of a Discord-owned account/miner's priority list.
+    /// Args: (discordUserId, accountId, gameName).
+    public var onPrioritiseGame: (@Sendable (String, String, String) async -> [String]?)?
 
     // In-memory activation session store (ephemeral; DB retains audit rows)
     private var activationSessions: [String: ActivationSession] = [:]
@@ -139,6 +175,10 @@ public actor DiscordAPIRoutes {
 
     public func setOnPauseLinkWarning(_ handler: @escaping @Sendable (String, String, Date) async -> Bool) {
         self.onPauseLinkWarning = handler
+    }
+
+    public func setOnPrioritiseGame(_ handler: @escaping @Sendable (String, String, String) async -> [String]?) {
+        self.onPrioritiseGame = handler
     }
 
     public func configure(_ router: HTTPRouter) async {
@@ -197,6 +237,10 @@ public actor DiscordAPIRoutes {
 
         await router.register(HTTPRoute(method: "POST", pattern: "/v1/users/:discordUserId/miner/:action") { request, params in
             await routes.handleMinerControl(request: request, params: params)
+        })
+
+        await router.register(HTTPRoute(method: "POST", pattern: "/v1/users/:discordUserId/miners/:accountId/priorities") { request, params in
+            await routes.handleUpdatePriorities(request: request, params: params)
         })
     }
 
@@ -551,6 +595,44 @@ public actor DiscordAPIRoutes {
 
         let response = await onMinerControl(discordUserId, action)
         return HTTPResponse.json(response, statusCode: response.ok ? 200 : 409)
+    }
+
+    private func handleUpdatePriorities(request: HTTPRequest, params: [String: String]) async -> HTTPResponse {
+        guard let discordUserId = params["discordUserId"],
+              Self.isValidDiscordId(discordUserId),
+              let rawAccountId = params["accountId"] else {
+            return .error(code: "bad_request", message: "Missing path parameters.", statusCode: 400)
+        }
+        let accountId = rawAccountId.removingPercentEncoding ?? rawAccountId
+        guard !accountId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return .error(code: "bad_request", message: "Account ID is required.", statusCode: 400)
+        }
+        guard !request.body.isEmpty,
+              let body = try? JSONDecoder().decode(UpdatePriorityRequest.self, from: request.body) else {
+            return .error(code: "invalid_payload", message: "Body must include game_name.", statusCode: 400)
+        }
+        let gameName = body.gameName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !gameName.isEmpty else {
+            return .error(code: "invalid_payload", message: "Game name is required.", statusCode: 400)
+        }
+        guard (body.placement ?? "top") == "top" else {
+            return .error(code: "invalid_payload", message: "Only placement 'top' is supported.", statusCode: 400)
+        }
+        guard await userExists(discordUserId: discordUserId) else {
+            return .error(code: "user_not_found", message: "User not found. Register first.", statusCode: 404)
+        }
+        guard let handler = onPrioritiseGame else {
+            return .error(code: "unavailable", message: "Priority controls are not available.", statusCode: 503)
+        }
+        guard let priorities = await handler(discordUserId, accountId, gameName) else {
+            return .error(code: "account_not_found", message: "No linked miner account was found for this Discord user.", statusCode: 404)
+        }
+        return HTTPResponse.json(PriorityUpdateResponse(
+            prioritised: true,
+            accountId: accountId,
+            gameName: gameName,
+            priorityGames: priorities
+        ))
     }
 
     // MARK: - DB Helpers
