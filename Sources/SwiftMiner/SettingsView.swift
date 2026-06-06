@@ -480,7 +480,7 @@ private struct AccountSettingsView: View {
                 let settings = Settings.shared
                 try? await navigation.minerManager.startMiner(
                     minerId: minerId,
-                    priorityGames: settings.priorityGames,
+                    priorityGames: settings.priorityGames(forAccountId: account.id),
                     excludedGames: settings.excludedGames,
                     strategy: settings.miningStrategy,
                     enableBadgesEmotes: settings.enableBadgesEmotes,

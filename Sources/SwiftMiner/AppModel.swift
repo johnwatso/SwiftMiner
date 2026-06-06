@@ -90,8 +90,10 @@ public final class AppModel {
             reconcileManagerState(manager)
             refreshNotificationBadge()
 
-            // Sync priority games so state evaluation uses the current preferences
-            manager.updatePriorityGames(Settings.shared.priorityGames)
+            // Sync priority games so state evaluation uses the current preferences.
+            // Resolve per-miner so personal (e.g. DM-set) priorities are preserved
+            // rather than flattened to the global list.
+            manager.updatePriorityGames(resolving: { Settings.shared.priorityGames(forAccountId: $0.accountId) })
 
             // Sync notification preference
             await manager.updateNotificationPreference(enabled: Settings.shared.showClaimNotifications && Settings.shared.allowsOperatorNotifications())

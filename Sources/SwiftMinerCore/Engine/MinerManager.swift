@@ -1242,16 +1242,22 @@ public final class MinerManager {
         }
     }
     
-    /// Update the priority games for all miners. Call this when settings change.
-    public func updatePriorityGames(_ priorityGames: [String]) {
+    /// Update the priority games for all miners, resolving each miner's effective
+    /// list individually. Call this when global settings change: the resolver returns
+    /// a miner's personal override when it has one, otherwise the global list. This
+    /// preserves per-miner prioritisation instead of flattening everyone to the global
+    /// list (which previously wiped DM-set priorities on launch and on global reorders).
+    public func updatePriorityGames(resolving resolver: (ManagedMiner) -> [String]) {
         for index in miners.indices {
-            miners[index].priorityGames = priorityGames
-            
+            let resolved = resolver(miners[index])
+            miners[index].priorityGames = resolved
+
             // Sync with active engine if it exists
             if let engine = engines[miners[index].id] {
+                let accountId = miners[index].accountId
                 Task {
-                    await engine.updatePriorityGames(priorityGames)
-                    await engine.updateAccountLinkWarningPreference(games: Array(ignoredAccountLinkWarnings[miners[index].accountId] ?? []))
+                    await engine.updatePriorityGames(resolved)
+                    await engine.updateAccountLinkWarningPreference(games: Array(ignoredAccountLinkWarnings[accountId] ?? []))
                 }
             }
         }
