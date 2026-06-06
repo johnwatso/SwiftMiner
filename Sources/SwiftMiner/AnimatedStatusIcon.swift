@@ -91,7 +91,10 @@ struct AnimatedStatusIcon: View {
                     .foregroundStyle(effectiveColor)
                 
                 if isAnimated {
-                    base.symbolEffect(.variableColor.iterative.reversing, options: .repeating)
+                    // Mirror the macOS "searching for Wi-Fi" feel: the radio bands fill
+                    // outward and reset (cumulative, not a bouncing single highlight), at a
+                    // slow, deliberate pace rather than the default fast cycle.
+                    base.symbolEffect(.variableColor.cumulative, options: .repeating.speed(0.4))
                 } else {
                     base
                 }
