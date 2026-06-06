@@ -11,6 +11,8 @@ public struct DiscordUserProjection: Codable, Sendable {
     public let issues: [Issue]
     public let dmState: DiscordDMState
     public let priorityGames: [String]
+    /// Games prioritised specifically for this user's miner, excluding the global list.
+    public let personalPriorityGames: [String]
 
     public init(
         discordUserId: String,
@@ -20,7 +22,8 @@ public struct DiscordUserProjection: Codable, Sendable {
         recentCompletedCampaigns: [RecentCampaign] = [],
         issues: [Issue] = [],
         dmState: DiscordDMState = DiscordDMState(),
-        priorityGames: [String] = []
+        priorityGames: [String] = [],
+        personalPriorityGames: [String] = []
     ) {
         self.discordUserId = discordUserId
         self.state = state
@@ -30,6 +33,7 @@ public struct DiscordUserProjection: Codable, Sendable {
         self.issues = issues
         self.dmState = dmState
         self.priorityGames = priorityGames
+        self.personalPriorityGames = personalPriorityGames
     }
 
     public enum ProjectionState: String, Codable, Sendable {

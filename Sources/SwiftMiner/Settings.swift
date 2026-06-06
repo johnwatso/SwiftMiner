@@ -522,6 +522,22 @@ public final class Settings: ObservableObject {
         return updated
     }
 
+    /// Replace a miner's personal priority games with `games`, returning the miner's
+    /// resulting effective list. The stored override keeps the personal games ahead of
+    /// the global list (global still applies, at lower priority). Used by the Discord
+    /// "edit games" modal, which submits the whole personal list at once.
+    @discardableResult
+    public func setPersonalPriorityGames(accountId: String, games: [String]) -> [String] {
+        let key = accountId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return priorityGames(forAccountId: accountId) }
+
+        let combined = Self.normalizedPriorityGameNames(games + priorityGames)
+        var map = accountPriorityGames
+        map[key] = combined
+        accountPriorityGames = map
+        return combined
+    }
+
     /// The games prioritised specifically for one miner, excluding those already in
     /// the global priority list. Empty when the miner has no personal override.
     public func personalPriorityGames(forAccountId accountId: String) -> [String] {

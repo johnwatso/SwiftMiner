@@ -186,6 +186,14 @@ public final class NavigationModel {
                 gameName: gameName
             )
         }
+        await routes.setOnSetPriorities { [weak self] discordUserId, accountId, games in
+            guard let self else { return nil }
+            return await self.handleDiscordSetPriorities(
+                discordUserId: discordUserId,
+                accountId: accountId,
+                games: games
+            )
+        }
         let router = HTTPRouter()
         await routes.configure(router)
         let server = HTTPAPIServer(port: port, apiKey: apiKey, router: router)
@@ -287,6 +295,20 @@ public final class NavigationModel {
             return nil
         }
         let priorities = Settings.shared.prioritiseGameForAccount(accountId: accountId, gameName: gameName)
+        minerManager.updatePriorityGames(priorities, forMinerId: miner.id)
+        if miner.isRunning {
+            await minerManager.forceRefreshMiner(minerId: miner.id)
+        }
+        return priorities
+    }
+
+    /// Replace a miner's personal priority games with `games` (the Discord "edit games"
+    /// modal submits the whole personal list at once). Returns the resulting effective list.
+    public func handleDiscordSetPriorities(discordUserId: String, accountId: String, games: [String]) async -> [String]? {
+        guard let miner = minerManager.miners.first(where: { $0.ownerDiscordId == discordUserId && $0.accountId == accountId }) else {
+            return nil
+        }
+        let priorities = Settings.shared.setPersonalPriorityGames(accountId: accountId, games: games)
         minerManager.updatePriorityGames(priorities, forMinerId: miner.id)
         if miner.isRunning {
             await minerManager.forceRefreshMiner(minerId: miner.id)
@@ -965,6 +987,13 @@ private final class NavigationProjectionStateProvider: ProjectionStateProvider, 
         await MainActor.run {
             guard let model, let miner = model.minerForDiscordUser(discordUserId) else { return [] }
             return model.priorityGames(for: miner)
+        }
+    }
+
+    func personalPriorityGames(for discordUserId: String) async -> [String] {
+        await MainActor.run {
+            guard let model, let miner = model.minerForDiscordUser(discordUserId) else { return [] }
+            return Settings.shared.personalPriorityGames(forAccountId: miner.accountId)
         }
     }
 

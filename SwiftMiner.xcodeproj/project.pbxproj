@@ -36,6 +36,7 @@
 		384E1E7DF948787ACBA82CEC /* EventLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B165EA86CCC1CE19EBFD8064 /* EventLogView.swift */; };
 		3B331F247AA238C86D43C625 /* ModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FBB668242441418AE670CC4 /* ModelTests.swift */; };
 		3DB6590C2A0FE73947B1DCC9 /* CampaignService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8ACF08613C4DC075CA132ED1 /* CampaignService.swift */; };
+		3E8DEDF477B16AF4F892C943 /* AccountPriorityGamesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AA7279BA84C285A25A44F58 /* AccountPriorityGamesTests.swift */; };
 		41A66895E6BBA717795A1A28 /* Errors.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF67A51BF66C3F92815312AF /* Errors.swift */; };
 		44F65BBDCC22018702182A1D /* GameAggregate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2598F0D5C79C88A414BC39E1 /* GameAggregate.swift */; };
 		452068B427E46A9AE589897A /* Channel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D6CA94B00D120B6350CDB61 /* Channel.swift */; };
@@ -206,6 +207,7 @@
 		14199B9CF6D97675DE0107D4 /* SwiftMiner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SwiftMiner.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		19C66F8182D8FB572197B2EC /* SparkleConfigTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SparkleConfigTests.swift; sourceTree = "<group>"; };
 		1A41A42D94BFB27670F81465 /* InventoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InventoryService.swift; sourceTree = "<group>"; };
+		1AA7279BA84C285A25A44F58 /* AccountPriorityGamesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountPriorityGamesTests.swift; sourceTree = "<group>"; };
 		1B2A62D9979ADDE4DE784D49 /* MergeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MergeService.swift; sourceTree = "<group>"; };
 		1B780942F75249CF195C9244 /* MinerHealthSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinerHealthSnapshot.swift; sourceTree = "<group>"; };
 		1C43EA5DBD5E9A09117B9798 /* GitHubIssueReporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitHubIssueReporter.swift; sourceTree = "<group>"; };
@@ -562,6 +564,7 @@
 		E901A37D9DD80204A5583082 /* Tests */ = {
 			isa = PBXGroup;
 			children = (
+				1AA7279BA84C285A25A44F58 /* AccountPriorityGamesTests.swift */,
 				5F534FC0C4A706694C2C7007 /* AggregatedCampaignDataServiceTests.swift */,
 				E3C6E1FF09A07505FAF56FDF /* CampaignStateTests.swift */,
 				573073692F55774FD9E03776 /* CampaignTabRoutingTests.swift */,
@@ -950,6 +953,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3E8DEDF477B16AF4F892C943 /* AccountPriorityGamesTests.swift in Sources */,
 				E64A2E73C87D520DDF9B7BDB /* AggregatedCampaignDataServiceTests.swift in Sources */,
 				374303964418BDD39C426435 /* CampaignStateTests.swift in Sources */,
 				2D011D07DA750AF66BFC2C25 /* CampaignTabRoutingTests.swift in Sources */,
