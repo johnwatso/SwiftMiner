@@ -58,14 +58,14 @@ final class MinerActivitySnapshotTests: XCTestCase {
         )
     }
 
-    func testUpNextDoesNotShowUnlinkedCampaign() {
+    func testUpNextCanShowUnlinkedAttemptableCampaign() {
         let campaign = makeCampaign(id: "unlinked", isAccountConnected: false)
         let miner = makeMiner(campaigns: [campaign])
 
         let snapshot = resolveSnapshot(for: miner)
 
-        XCTAssertNil(snapshot.upNext)
-        XCTAssertTrue(snapshot.now.requiresAccountLink)
+        XCTAssertEqual(snapshot.upNext?.campaignId, "unlinked")
+        XCTAssertFalse(snapshot.upNext?.requiresAccountLink ?? true)
     }
 
     func testUpNextShowsLinkedEligibleCampaign() {
@@ -102,7 +102,7 @@ final class MinerActivitySnapshotTests: XCTestCase {
         XCTAssertNil(blockedSnapshot.upNext)
     }
 
-    func testDismissedMissingGameShowsCurrentStatusAsUpToDateAndBlockedUpNext() {
+    func testDismissedMissingGameShowsCurrentStatusAsUpToDateAndAttemptableUpNext() {
         let campaign = makeCampaign(id: "unlinked", isAccountConnected: false)
         let miner = makeMiner(status: .blockedAccountNotLinked, campaigns: [campaign])
 
@@ -119,7 +119,7 @@ final class MinerActivitySnapshotTests: XCTestCase {
         XCTAssertEqual(snapshot.now.title, "Up to Date")
         XCTAssertEqual(snapshot.upNext?.campaignId, "unlinked")
         XCTAssertEqual(snapshot.upNext?.title, "Test Game")
-        XCTAssertEqual(snapshot.upNext?.detail, "Blocked — account not linked")
+        XCTAssertEqual(snapshot.upNext?.detail, "Likely based on current priority rules")
         XCTAssertFalse(snapshot.upNext?.requiresAccountLink ?? true)
         XCTAssertTrue(snapshot.blockedPriority.isEmpty)
     }

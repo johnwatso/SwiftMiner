@@ -43,7 +43,14 @@ extension Campaign {
     /// Resolves the activity status for this campaign relative to a specific miner.
     @MainActor
     public func activityStatus(for miner: MinerManager.ManagedMiner) -> CampaignActivityStatus {
-        // 1. Account linkage (highest priority issue)
+        // If SwiftMiner is actively watching this campaign, surface that first.
+        // Missing game-account linkage remains a warning elsewhere, not a reason
+        // to hide active mining.
+        if miner.status == .watching && miner.currentCampaignId == id {
+            return .watching
+        }
+
+        // 1. Account linkage warning
         if !isAccountConnected {
             return .requiresLink
         }
@@ -79,12 +86,7 @@ extension Campaign {
             return .completed
         }
 
-        // 5. Execution state
-        if miner.status == .watching && miner.currentCampaignId == id {
-            return .watching
-        }
-
-        // 6. Fallback (campaign is ready but nothing to watch right now)
+        // 5. Fallback (campaign is ready but nothing to watch right now)
         return .waitingForStream
     }
 }

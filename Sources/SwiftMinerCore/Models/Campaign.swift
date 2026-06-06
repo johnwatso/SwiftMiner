@@ -379,10 +379,18 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
         (!isActive || status == .expired) && drops.allSatisfy { $0.isClaimed }
     }
 
-    /// Whether the campaign is currently eligible for mining (active, linked, and has eligible drops).
-    /// Eligible includes: earnable drops + claimable drops (ready to claim).
+    /// Whether the campaign is currently eligible for mining without warnings.
+    /// This still requires the external game account to be linked.
     public var isMiningEligible: Bool {
-        isTimeActive && status != .disabled && isAccountConnected && hasDropsEnabled && !eligibleDrops.isEmpty
+        canAttemptMining && isAccountConnected
+    }
+
+    /// Whether SwiftMiner should attempt this campaign if Twitch exposes usable drops.
+    /// Game-account linkage is intentionally not a hard gate here: Twitch is the
+    /// source of truth for whether progress can be earned, while SwiftMiner still
+    /// warns the user that an external account link may be needed for in-game delivery.
+    public var canAttemptMining: Bool {
+        isTimeActive && status != .disabled && hasDropsEnabled && !eligibleDrops.isEmpty
     }
 
     /// Drops that require purchasing subscriptions and have no progress yet.

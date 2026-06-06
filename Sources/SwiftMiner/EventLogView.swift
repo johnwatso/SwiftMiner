@@ -542,6 +542,7 @@ private func eventDisplayText(for event: EventEntry) -> EventDisplayText {
     }
 
     if lowercased.contains("account linking is required")
+        || lowercased.contains("may need linking")
         || lowercased.contains("account not linked")
         || lowercased.contains("link required")
         || lowercased.contains("not connected")
@@ -904,6 +905,10 @@ private func progressUpdate(from text: String) -> String? {
 
 private func accountLinkDetail(from text: String) -> String? {
     if let groups = matchGroups(#"Priority game blocked:\s+(.+?)\s+is prioritised"#, in: text),
+       let game = groups.first {
+        return game
+    }
+    if let groups = matchGroups(#"Priority game may need linking:\s+(.+?)\s+is prioritised"#, in: text),
        let game = groups.first {
         return game
     }

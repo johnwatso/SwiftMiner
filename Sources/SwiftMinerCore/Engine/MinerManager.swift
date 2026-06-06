@@ -917,8 +917,9 @@ public final class MinerManager {
                     continue
                 }
 
-                // Check if campaign is actively earnable for this account.
-                if campaign.isMiningEligible {
+                // Check if campaign can be attempted. Missing game-account linkage
+                // is a warning, not a hard block, when Twitch still exposes usable drops.
+                if campaign.canAttemptMining {
                     if activeCampaign == nil {
                         activeCampaign = campaign
                     }
