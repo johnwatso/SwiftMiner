@@ -1086,11 +1086,20 @@ private struct MinerSourceListRow: View {
     private var snapshot: MinerActivitySnapshot {
         MinerActivitySnapshot.resolve(
             for: miner,
-            priorityGames: settings.priorityGames,
+            priorityGames: displayedPriorityGames,
             excludedGames: settings.excludedGames,
             strategy: settings.miningStrategy,
             includesBadgeAndEmoteCampaigns: settings.enableBadgesEmotes
         )
+    }
+
+    private var displayedPriorityGames: [String] {
+        settings.priorityGames(forAccountId: miner.accountId)
+    }
+
+    private var hasMinerPriorityOverride: Bool {
+        let accountId = miner.accountId.trimmingCharacters(in: .whitespacesAndNewlines)
+        return settings.accountPriorityGames[accountId] != nil
     }
 
     private var hasBlockingIssues: Bool {
@@ -1137,6 +1146,16 @@ private struct MinerSourceListRow: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+
+                    HStack(spacing: 4) {
+                        Image(systemName: hasMinerPriorityOverride ? "person.crop.square.badge.checkmark" : "target")
+                            .font(.system(size: 9, weight: .semibold))
+
+                        Text(priorityLabel)
+                            .lineLimit(1)
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
                 }
             }
 
@@ -1181,6 +1200,17 @@ private struct MinerSourceListRow: View {
             return "Likely next: \(next.title)"
         }
         return snapshot.statusText
+    }
+
+    private var priorityLabel: String {
+        guard !displayedPriorityGames.isEmpty else {
+            return "No priority games set"
+        }
+
+        let visibleGames = displayedPriorityGames.prefix(2).joined(separator: ", ")
+        let remainingCount = displayedPriorityGames.count - 2
+        let summary = remainingCount > 0 ? "\(visibleGames) +\(remainingCount)" : visibleGames
+        return "\(hasMinerPriorityOverride ? "Miner" : "Global"): \(summary)"
     }
 }
 
