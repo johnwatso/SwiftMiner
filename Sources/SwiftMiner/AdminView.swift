@@ -457,15 +457,8 @@ private struct DiscordPersonView: View {
     @ViewBuilder
     private var avatar: some View {
         if let avatarURL {
-            AsyncImage(url: avatarURL) { phase in
-                switch phase {
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                default:
-                    fallbackAvatar
-                }
+            CachedDiscordAvatar(url: avatarURL) {
+                fallbackAvatar
             }
             .frame(width: 24, height: 24)
             .clipShape(Circle())

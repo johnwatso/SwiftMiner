@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		0043CF0EC5029EC739BE5F7F /* GamePreferenceComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = F52F9551C4B18A1F7A3D4173 /* GamePreferenceComponents.swift */; };
 		03BB858FF57F2BEAF2560EC3 /* MinerHealthSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B780942F75249CF195C9244 /* MinerHealthSnapshot.swift */; };
+		04B98A1843ABA24597802CD2 /* DiscordAvatarCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FBDA7B95B97BC454645997C /* DiscordAvatarCache.swift */; };
 		0527D2AA5B1A268EFE44380C /* SwiftMinerDMEventService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF94C5B6274D4250D2A5F940 /* SwiftMinerDMEventService.swift */; };
 		05EDE4B6BDADF449C9F36B96 /* libSwiftMinerService.a in Frameworks */ = {isa = PBXBuildFile; fileRef = F79E8CD76AF45B0FC7080868 /* libSwiftMinerService.a */; };
 		0B2E0AC6FE0D7B1B112DFD02 /* AdminLinkingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9559DA840299AFF90133587 /* AdminLinkingService.swift */; };
@@ -204,6 +205,7 @@
 		0E4586104002CEF72BA27B9E /* GQLHashes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GQLHashes.swift; sourceTree = "<group>"; };
 		0EA664151CCCAF2FE4D6598B /* MinerStateCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinerStateCard.swift; sourceTree = "<group>"; };
 		0F1E410973A71500C0EA0280 /* TDMCookieParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TDMCookieParser.swift; sourceTree = "<group>"; };
+		0FBDA7B95B97BC454645997C /* DiscordAvatarCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscordAvatarCache.swift; sourceTree = "<group>"; };
 		14199B9CF6D97675DE0107D4 /* SwiftMiner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SwiftMiner.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		19C66F8182D8FB572197B2EC /* SparkleConfigTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SparkleConfigTests.swift; sourceTree = "<group>"; };
 		1A41A42D94BFB27670F81465 /* InventoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InventoryService.swift; sourceTree = "<group>"; };
@@ -446,6 +448,7 @@
 				B27F8A9F37F60E7246A380FB /* CampaignView.swift */,
 				C67E7250E0A8C61154B61CBB /* CampaignViews.swift */,
 				A5838C1AEB6D4797976C6C65 /* ContentView.swift */,
+				0FBDA7B95B97BC454645997C /* DiscordAvatarCache.swift */,
 				1F950E8C5A6FB7A2598984E0 /* DropFilter.swift */,
 				B165EA86CCC1CE19EBFD8064 /* EventLogView.swift */,
 				F52F9551C4B18A1F7A3D4173 /* GamePreferenceComponents.swift */,
@@ -915,6 +918,7 @@
 				68E24E9AD5F109B1513A1099 /* CampaignView.swift in Sources */,
 				802FA8EC02560A28823938FA /* CampaignViews.swift in Sources */,
 				CFEDF8BC7550B1E1AF61C70D /* ContentView.swift in Sources */,
+				04B98A1843ABA24597802CD2 /* DiscordAvatarCache.swift in Sources */,
 				F4F5E8141E096FB456EEA30A /* DropFilter.swift in Sources */,
 				384E1E7DF948787ACBA82CEC /* EventLogView.swift in Sources */,
 				0043CF0EC5029EC739BE5F7F /* GamePreferenceComponents.swift in Sources */,
