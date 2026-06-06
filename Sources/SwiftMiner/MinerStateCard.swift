@@ -994,6 +994,15 @@ struct MinerActivitySnapshot {
             guard campaign.canAttemptMining else {
                 return false
             }
+            // Unlinked campaigns are only attemptable when prioritised for this miner;
+            // mirror the engine so "Up Next" doesn't surface another miner's priority.
+            if !campaign.isAccountConnected {
+                let gameName = normalizedGameKey(campaign.game.name)
+                let gameId = normalizedGameKey(campaign.game.id)
+                guard prioritySet.contains(gameName) || prioritySet.contains(gameId) else {
+                    return false
+                }
+            }
             if !includesBadgeAndEmoteCampaigns && campaign.hasOnlyBadgesOrEmotes {
                 return false
             }

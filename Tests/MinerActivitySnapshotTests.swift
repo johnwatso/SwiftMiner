@@ -68,6 +68,17 @@ final class MinerActivitySnapshotTests: XCTestCase {
         XCTAssertFalse(snapshot.upNext?.requiresAccountLink ?? true)
     }
 
+    func testUpNextHidesUnlinkedNonPrioritisedCampaign() {
+        // An unlinked campaign whose game is NOT prioritised for this miner must not
+        // surface — otherwise another miner's prioritised game leaks in here.
+        let campaign = makeCampaign(id: "unlinked-other", gameId: "game-2", gameName: "Other Game", isAccountConnected: false)
+        let miner = makeMiner(campaigns: [campaign], priorityGames: ["Test Game"])
+
+        let snapshot = resolveSnapshot(for: miner)
+
+        XCTAssertNil(snapshot.upNext)
+    }
+
     func testUpNextShowsLinkedEligibleCampaign() {
         let campaign = makeCampaign(id: "linked", isAccountConnected: true)
         let miner = makeMiner(campaigns: [campaign])
