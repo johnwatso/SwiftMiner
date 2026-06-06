@@ -62,11 +62,11 @@ final class PrimaryStateResolverTests: XCTestCase {
         XCTAssertEqual(state, .blocked(reasons: [.accountNotLinked]))
     }
 
-    func testBlockedState_AccountNotLinked_CampaignSpecific() {
+    func testUnlinkedCampaignWithUsableDropsIsReadyToAttempt() {
         let campaign = createCampaign(id: "c1", isAccountConnected: false, drops: [createDrop(id: "d1")])
         let miner = createMiner(allCampaigns: [campaign])
         let state = PrimaryStateResolver.resolve(for: miner)
-        XCTAssertEqual(state, .blocked(reasons: [.accountNotLinked]), "Should resolve to .blocked if a campaign is not linked")
+        XCTAssertEqual(state, .ready, "Missing game-account linkage should warn, not block, when Twitch exposes usable drops")
     }
 
     func testBlockedState_NoEligibleCampaign_Empty() {
@@ -149,7 +149,7 @@ final class PrimaryStateResolverTests: XCTestCase {
         }
     }
 
-    func testPriority_ReadyOverBlockedWhenAnotherPrioritisedGameIsEarnable() {
+    func testPriority_UnlinkedAttemptablePriorityCanWinOverLinkedLowerPriority() {
         let blockedCampaign = createCampaign(
             id: "c1",
             gameId: "blocked-game",
@@ -169,7 +169,7 @@ final class PrimaryStateResolverTests: XCTestCase {
         )
 
         XCTAssertEqual(miner.primaryState, .ready)
-        XCTAssertEqual(miner.resolvedPrimaryState?.resolved?.gameName, "Earnable Game")
+        XCTAssertEqual(miner.resolvedPrimaryState?.resolved?.gameName, "Blocked Game")
         XCTAssertEqual(miner.resolvedPrimaryState?.resolved?.state, .idle)
         XCTAssertEqual(miner.resolvedPrimaryState?.resolved?.reason, MinerGameStateReason.none)
     }
@@ -186,14 +186,12 @@ final class PrimaryStateResolverTests: XCTestCase {
         }
     }
 
-    func testRegression_DisconnectedAccountShowsBlocked() {
-        // Bug: "Disconnected campaign account currently shows 'Nothing to earn'"
-        // "Must show 'Link Required' instead"
+    func testDisconnectedAccountWithUsableDropsDoesNotBlockMiningAttempt() {
         let campaign = createCampaign(id: "c1", isAccountConnected: false, drops: [createDrop(id: "d1")])
         let miner = createMiner(allCampaigns: [campaign])
         
         let state = PrimaryStateResolver.resolve(for: miner)
-        XCTAssertEqual(state, .blocked(reasons: [.accountNotLinked]))
+        XCTAssertEqual(state, .ready)
     }
 
     func testDisconnectedAccountNotBlockedWhenAllClaimed() {
@@ -306,14 +304,15 @@ final class PrimaryStateResolverTests: XCTestCase {
         XCTAssertEqual(state?.gameName, "Test Game")
     }
 
-    func testPrioritisedGame_NotLinked_ProducesBlocked() {
+    func testPrioritisedGame_NotLinkedWithUsableDrops_ProducesIdleAttemptableState() {
         let campaign = createCampaign(id: "c1", isAccountConnected: false, drops: [createDrop(id: "d1")])
         let miner = createMiner(allCampaigns: [campaign], priorityGames: ["Test Game"])
 
         XCTAssertEqual(miner.gameStates.count, 1)
         let state = miner.gameStates.first
-        XCTAssertEqual(state?.state, .blocked)
-        XCTAssertEqual(state?.reason, .notLinked)
+        XCTAssertEqual(state?.state, .idle)
+        XCTAssertEqual(state?.reason, MinerGameStateReason.none)
+        XCTAssertEqual(state?.campaignId, "c1")
     }
 
     func testPrioritisedGame_NotLinkedEvenIfNoDrops_ProducesBlocked() {

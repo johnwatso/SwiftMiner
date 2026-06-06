@@ -991,9 +991,7 @@ struct MinerActivitySnapshot {
         }
 
         let eligible = candidates.filter { campaign in
-            guard campaign.isAccountConnected,
-                  campaign.hasDropsEnabled,
-                  !campaign.eligibleDrops.isEmpty else {
+            guard campaign.canAttemptMining else {
                 return false
             }
             if !includesBadgeAndEmoteCampaigns && campaign.hasOnlyBadgesOrEmotes {

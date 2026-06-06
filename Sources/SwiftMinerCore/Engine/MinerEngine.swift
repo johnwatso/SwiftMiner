@@ -1238,7 +1238,7 @@ public actor MinerEngine {
                 .joined(separator: ", ")
             let suffix = campaignsForGame.count > 2 ? ", and more" : ""
 
-            log("⚠️ Priority game blocked: \(sample.gameName) is prioritised, but account linking is required to earn drops. Active blocked campaign(s): \(campaignSummary)\(suffix).")
+            log("⚠️ Priority game may need linking: \(sample.gameName) is prioritised. SwiftMiner will still try to mine it if Twitch allows progress, but link the game account if rewards do not appear in-game. Active campaign(s): \(campaignSummary)\(suffix).")
 
             if notificationService == nil {
                 notificationService = NotificationService()
@@ -1292,24 +1292,16 @@ public actor MinerEngine {
             let gameName = normalizedGameKey(campaign.gameName)
             let gameId = normalizedGameKey(campaign.game.id)
 
-            // 1. Core Eligibility (Task 1)
-            // MUST be active, account-linked, and have eligible drops (precondition-aware).
+            // 1. Core Eligibility
+            // Mine if Twitch exposes usable drops. Missing game-account linkage
+            // remains a user warning, but it should not stop a prioritised game
+            // from being attempted if Twitch will still track inventory progress.
             guard campaign.isTimeActive && campaign.status != .disabled else {
                 filteredOutReasons["inactive", default: 0] += 1
                 return false
             }
 
-            // Task 1: account is linked to the campaign/game
-            // Debug bypass allows testing watch pipeline without link (drops won't credit)
-            if !debugBypassLinkRequirement {
-                guard campaign.isAccountConnected else {
-                    filteredOutReasons["not_connected", default: 0] += 1
-                    return false
-                }
-            }
-
-            // Task 1: campaign has eligible drops (linked + precondition-met)
-            guard campaign.hasDropsEnabled && !campaign.eligibleDrops.isEmpty else {
+            guard campaign.canAttemptMining else {
                 filteredOutReasons["no_eligible_drops", default: 0] += 1
                 return false
             }
