@@ -64,10 +64,12 @@ When updating the build number:
 - Generate the new build number from the current local time.
 - Update `CURRENT_PROJECT_VERSION` in `project.yml`.
 - Update matching `CURRENT_PROJECT_VERSION` entries in `SwiftMiner.xcodeproj/project.pbxproj`.
-- Update `docs/appcast.xml`:
-  - `sparkle:shortVersionString` should match the marketing version.
-  - `sparkle:version` should match the generated build number.
-  - Any visible release-note text that mentions the build should match.
+- **Do not touch `docs/appcast.xml` (or `docs/beta/appcast.xml`).** ShipHook owns these — see warning below.
+
+> [!WARNING]
+> **Agents must not update `docs/appcast.xml` / `docs/beta/appcast.xml`.** ShipHook generates and pushes the appcast as part of publishing a release. The appcast advertises updates to every installed copy of the app, and its `sparkle:version` must always match the `CFBundleVersion` of the exact binary at the `<enclosure url>`. If an agent bumps `sparkle:version` on an ordinary dev commit while the enclosure still points at the previously released zip, Sparkle sees a "newer" build, prompts an update, downloads the *same old* binary, and nags users in an endless loop.
+>
+> `CURRENT_PROJECT_VERSION` in `project.yml` / `project.pbxproj` may be bumped freely on dev commits — but leave the appcast to ShipHook. The **only** time the appcast is edited by hand is the deliberate post-release EdDSA re-signing step the user explicitly asks for (see "Appcast EdDSA signing" below), and even then you only insert the `sparkle:edSignature` for the binary ShipHook already published — never the version/build fields.
 - Update release notes for the active marketing version:
   - `docs/release-notes/<MARKETING_VERSION>.html`
   - `docs/release-notes/index.html`
@@ -100,7 +102,7 @@ Before reporting related work complete, verify:
 - `SUFeedURL` is present in the built app Info.plist.
 - `SUPublicEDKey` is present in the built app Info.plist.
 - `docs/appcast.xml` uses the active `MARKETING_VERSION` as `sparkle:shortVersionString`.
-- `docs/appcast.xml` uses the active `CURRENT_PROJECT_VERSION` as `sparkle:version`.
+- `docs/appcast.xml`'s `sparkle:version` matches the `CFBundleVersion` of the released binary at the `<enclosure url>` — **not** simply the current working-tree `CURRENT_PROJECT_VERSION` (these differ on any commit made after the last release).
 - Release-note links in `docs/appcast.xml` point to existing files.
 
 Before committing changes that touch Sparkle, appcast, release notes, build settings, Info.plist generation, signing/notarization settings, or version metadata, test that Sparkle update configuration still works in the built app. At minimum, build the app and verify the Sparkle Info.plist keys and appcast metadata above before committing.
