@@ -99,6 +99,25 @@ private struct UpdatePriorityRequest: Codable, Sendable {
     }
 }
 
+private struct SetPrioritiesRequest: Codable, Sendable {
+    let games: [String]
+}
+
+public struct PrioritiesResponse: Codable, Sendable {
+    public let accountId: String
+    public let priorityGames: [String]
+
+    public init(accountId: String, priorityGames: [String]) {
+        self.accountId = accountId
+        self.priorityGames = priorityGames
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case accountId = "account_id"
+        case priorityGames = "priority_games"
+    }
+}
+
 public struct PriorityUpdateResponse: Codable, Sendable {
     public let prioritised: Bool
     public let accountId: String
@@ -142,6 +161,9 @@ public actor DiscordAPIRoutes {
     /// Moves a game to the top of a Discord-owned account/miner's priority list.
     /// Args: (discordUserId, accountId, gameName).
     public var onPrioritiseGame: (@Sendable (String, String, String) async -> [String]?)?
+    /// Replaces a Discord-owned miner's personal priority games with the given list.
+    /// Args: (discordUserId, accountId, games). Returns the resulting effective list.
+    public var onSetPriorities: (@Sendable (String, String, [String]) async -> [String]?)?
 
     // In-memory activation session store (ephemeral; DB retains audit rows)
     private var activationSessions: [String: ActivationSession] = [:]
@@ -179,6 +201,10 @@ public actor DiscordAPIRoutes {
 
     public func setOnPrioritiseGame(_ handler: @escaping @Sendable (String, String, String) async -> [String]?) {
         self.onPrioritiseGame = handler
+    }
+
+    public func setOnSetPriorities(_ handler: @escaping @Sendable (String, String, [String]) async -> [String]?) {
+        self.onSetPriorities = handler
     }
 
     public func configure(_ router: HTTPRouter) async {
@@ -241,6 +267,10 @@ public actor DiscordAPIRoutes {
 
         await router.register(HTTPRoute(method: "POST", pattern: "/v1/users/:discordUserId/miners/:accountId/priorities") { request, params in
             await routes.handleUpdatePriorities(request: request, params: params)
+        })
+
+        await router.register(HTTPRoute(method: "PUT", pattern: "/v1/users/:discordUserId/miners/:accountId/priorities") { request, params in
+            await routes.handleSetPriorities(request: request, params: params)
         })
     }
 
@@ -633,6 +663,32 @@ public actor DiscordAPIRoutes {
             gameName: gameName,
             priorityGames: priorities
         ))
+    }
+
+    private func handleSetPriorities(request: HTTPRequest, params: [String: String]) async -> HTTPResponse {
+        guard let discordUserId = params["discordUserId"],
+              Self.isValidDiscordId(discordUserId),
+              let rawAccountId = params["accountId"] else {
+            return .error(code: "bad_request", message: "Missing path parameters.", statusCode: 400)
+        }
+        let accountId = rawAccountId.removingPercentEncoding ?? rawAccountId
+        guard !accountId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return .error(code: "bad_request", message: "Account ID is required.", statusCode: 400)
+        }
+        guard !request.body.isEmpty,
+              let body = try? JSONDecoder().decode(SetPrioritiesRequest.self, from: request.body) else {
+            return .error(code: "invalid_payload", message: "Body must include games.", statusCode: 400)
+        }
+        guard await userExists(discordUserId: discordUserId) else {
+            return .error(code: "user_not_found", message: "User not found. Register first.", statusCode: 404)
+        }
+        guard let handler = onSetPriorities else {
+            return .error(code: "unavailable", message: "Priority controls are not available.", statusCode: 503)
+        }
+        guard let priorities = await handler(discordUserId, accountId, body.games) else {
+            return .error(code: "account_not_found", message: "No linked miner account was found for this Discord user.", statusCode: 404)
+        }
+        return HTTPResponse.json(PrioritiesResponse(accountId: accountId, priorityGames: priorities))
     }
 
     // MARK: - DB Helpers
