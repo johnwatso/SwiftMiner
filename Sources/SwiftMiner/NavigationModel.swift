@@ -178,6 +178,14 @@ public final class NavigationModel {
                 expiresAt: expiresAt
             )
         }
+        await routes.setOnPrioritiseGame { [weak self] discordUserId, accountId, gameName in
+            guard let self else { return nil }
+            return await self.handleDiscordPrioritiseGame(
+                discordUserId: discordUserId,
+                accountId: accountId,
+                gameName: gameName
+            )
+        }
         let router = HTTPRouter()
         await routes.configure(router)
         let server = HTTPAPIServer(port: port, apiKey: apiKey, router: router)
@@ -274,6 +282,18 @@ public final class NavigationModel {
         return true
     }
 
+    public func handleDiscordPrioritiseGame(discordUserId: String, accountId: String, gameName: String) async -> [String]? {
+        guard let miner = minerManager.miners.first(where: { $0.ownerDiscordId == discordUserId && $0.accountId == accountId }) else {
+            return nil
+        }
+        let priorities = Settings.shared.prioritiseGameForAccount(accountId: accountId, gameName: gameName)
+        minerManager.updatePriorityGames(priorities, forMinerId: miner.id)
+        if miner.isRunning {
+            await minerManager.forceRefreshMiner(minerId: miner.id)
+        }
+        return priorities
+    }
+
     private func accountLinkWarningGameKey(for gameName: String) -> String {
         let target = gameName.lowercased()
         return minerManager.campaignStore.campaigns
@@ -314,7 +334,7 @@ public final class NavigationModel {
                 let settings = Settings.shared
                 try await minerManager.startMiner(
                     minerId: miner.id,
-                    priorityGames: settings.priorityGames,
+                    priorityGames: priorityGames(for: miner),
                     excludedGames: settings.excludedGames,
                     strategy: settings.miningStrategy,
                     enableBadgesEmotes: settings.enableBadgesEmotes,
@@ -349,6 +369,10 @@ public final class NavigationModel {
                 message: "Miner refresh requested for \(miner.displayName)."
             )
         }
+    }
+
+    public func priorityGames(for miner: MinerManager.ManagedMiner) -> [String] {
+        Settings.shared.priorityGames(forAccountId: miner.accountId)
     }
 
     private func startSwiftBotStateSync() {
@@ -476,7 +500,7 @@ public final class NavigationModel {
                 guard Settings.shared.dmConnectionExpiredEnabled else { return }
                 guard Settings.shared.allowsOperatorNotifications() else { return }
                 guard let miner = self.minerManager.miners.first(where: { $0.id == minerId }) else { return }
-                let priorityGames = Settings.shared.priorityGames
+                let priorityGames = self.priorityGames(for: miner)
                 await dmEventService.emitReauthRequired(
                     accountId: miner.accountId,
                     discordUserId: miner.ownerDiscordId,
@@ -492,12 +516,15 @@ public final class NavigationModel {
                 guard Settings.shared.dmCampaignCompletedEnabled else { return }
                 guard Settings.shared.allowsOperatorNotifications() else { return }
                 guard let miner = self.minerManager.miners.first(where: { $0.id == minerId }) else { return }
-                let priorityGames = Settings.shared.priorityGames
+                let priorityGames = self.priorityGames(for: miner)
                 await dmEventService.emitCampaignCompleted(
                     campaignId: campaign.id,
                     campaignName: campaign.name,
                     gameName: campaign.game.name,
+                    gameId: campaign.game.id,
                     gameArtworkURL: campaign.game.boxArtURL?.absoluteString,
+                    accountId: miner.accountId,
+                    minerDisplayName: miner.displayName,
                     discordUserId: miner.ownerDiscordId,
                     priorityGames: priorityGames
                 )
@@ -510,13 +537,16 @@ public final class NavigationModel {
                 guard Settings.shared.dmCampaignDetectedEnabled else { return }
                 guard Settings.shared.allowsOperatorNotifications() else { return }
                 guard let miner = self.minerManager.miners.first(where: { $0.id == minerId }) else { return }
-                let priorityGames = Settings.shared.priorityGames
+                let priorityGames = self.priorityGames(for: miner)
                 guard priorityGames.contains(where: { $0.caseInsensitiveCompare(campaign.game.name) == .orderedSame }) else { return }
                 await dmEventService.emitCampaignDetected(
                     campaignId: campaign.id,
                     campaignName: campaign.name,
                     gameName: campaign.game.name,
+                    gameId: campaign.game.id,
                     gameArtworkURL: campaign.game.boxArtURL?.absoluteString,
+                    accountId: miner.accountId,
+                    minerDisplayName: miner.displayName,
                     discordUserId: miner.ownerDiscordId,
                     priorityGames: priorityGames
                 )
@@ -529,9 +559,13 @@ public final class NavigationModel {
                 guard Settings.shared.dmLinkRequiredEnabled else { return }
                 guard Settings.shared.allowsOperatorNotifications() else { return }
                 guard let miner = self.minerManager.miners.first(where: { $0.id == minerId }) else { return }
-                let priorityGames = Settings.shared.priorityGames
+                let priorityGames = self.priorityGames(for: miner)
+                let gameId = self.accountLinkWarningGameKey(for: gameName)
                 await dmEventService.emitPrioritisedGameNeedsLinking(
                     gameName: gameName,
+                    gameId: gameId,
+                    accountId: miner.accountId,
+                    minerDisplayName: miner.displayName,
                     discordUserId: miner.ownerDiscordId,
                     priorityGames: priorityGames
                 )
@@ -544,7 +578,7 @@ public final class NavigationModel {
                 guard Settings.shared.dmAccountActionRequiredEnabled else { return }
                 guard Settings.shared.allowsOperatorNotifications() else { return }
                 guard let miner = self.minerManager.miners.first(where: { $0.id == minerId }) else { return }
-                let priorityGames = Settings.shared.priorityGames
+                let priorityGames = self.priorityGames(for: miner)
                 await dmEventService.emitAccountActionRequired(
                     accountId: miner.accountId,
                     reason: reason,
@@ -561,7 +595,7 @@ public final class NavigationModel {
                 guard Settings.shared.dmWelcomeBackEnabled else { return }
                 guard Settings.shared.allowsOperatorNotifications() else { return }
                 guard let miner = self.minerManager.miners.first(where: { $0.id == minerId }) else { return }
-                let priorityGames = Settings.shared.priorityGames
+                let priorityGames = self.priorityGames(for: miner)
                 await dmEventService.emitWelcomeBack(
                     accountId: miner.accountId,
                     discordUserId: miner.ownerDiscordId,
@@ -599,7 +633,10 @@ public final class NavigationModel {
             avoidDuplicateStreams: settings.avoidDuplicateStreams,
             antiStallRecoveryEnabled: settings.antiStallRecoveryEnabled,
             prioritiseFollowedStreamers: settings.prioritiseFollowedStreamers,
-            ignoredWarnings: settings.activeIgnoredWarnings
+            ignoredWarnings: settings.activeIgnoredWarnings,
+            priorityGamesForMiner: { miner in
+                settings.priorityGames(forAccountId: miner.accountId)
+            }
         )
         await syncMinersToSQLite()
         preloadDropsTab()
@@ -828,16 +865,19 @@ public final class NavigationModel {
         }
 
         await minerManager.stopAll()
-        await minerManager.startAll(
-            priorityGames: settings.priorityGames,
-            excludedGames: settings.excludedGames,
-            strategy: settings.miningStrategy,
-            enableBadgesEmotes: settings.enableBadgesEmotes,
-            showClaimNotifications: settings.showClaimNotifications,
-            avoidDuplicateStreams: settings.avoidDuplicateStreams,
-            antiStallRecoveryEnabled: settings.antiStallRecoveryEnabled,
-            prioritiseFollowedStreamers: settings.prioritiseFollowedStreamers
-        )
+        for miner in minerManager.miners {
+            try? await minerManager.startMiner(
+                minerId: miner.id,
+                priorityGames: priorityGames(for: miner),
+                excludedGames: settings.excludedGames,
+                strategy: settings.miningStrategy,
+                enableBadgesEmotes: settings.enableBadgesEmotes,
+                showClaimNotifications: settings.showClaimNotifications,
+                avoidDuplicateStreams: settings.avoidDuplicateStreams,
+                antiStallRecoveryEnabled: settings.antiStallRecoveryEnabled,
+                prioritiseFollowedStreamers: settings.prioritiseFollowedStreamers
+            )
+        }
         await minerManager.forceRefreshAllMiners()
         await minerManager.dataCoordinator.refreshAll()
     }
@@ -923,8 +963,8 @@ private final class NavigationProjectionStateProvider: ProjectionStateProvider, 
 
     func priorityGames(for discordUserId: String) async -> [String] {
         await MainActor.run {
-            guard model?.minerForDiscordUser(discordUserId) != nil else { return [] }
-            return Settings.shared.priorityGames
+            guard let model, let miner = model.minerForDiscordUser(discordUserId) else { return [] }
+            return model.priorityGames(for: miner)
         }
     }
 

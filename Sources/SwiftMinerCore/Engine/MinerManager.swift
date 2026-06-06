@@ -469,7 +469,8 @@ public final class MinerManager {
         avoidDuplicateStreams: Bool = true,
         antiStallRecoveryEnabled: Bool = true,
         prioritiseFollowedStreamers: Bool = false,
-        ignoredWarnings: [String] = []
+        ignoredWarnings: [String] = [],
+        priorityGamesForMiner: ((ManagedMiner) -> [String])? = nil
     ) async {
         await updateIgnoredAccountLinkWarnings(ignoredWarnings)
         self.currentPriorityGames = priorityGames
@@ -483,15 +484,18 @@ public final class MinerManager {
         await setup()
         if autoStart && !miners.isEmpty {
             print("[MinerManager] Auto-starting \(miners.count) miner(s) on launch")
-            await startAll(
-                priorityGames: priorityGames,
-                excludedGames: excludedGames,
-                strategy: strategy,
-                enableBadgesEmotes: enableBadgesEmotes,
-                avoidDuplicateStreams: avoidDuplicateStreams,
-                antiStallRecoveryEnabled: antiStallRecoveryEnabled,
-                prioritiseFollowedStreamers: prioritiseFollowedStreamers
-            )
+            for miner in miners {
+                try? await startMiner(
+                    minerId: miner.id,
+                    priorityGames: priorityGamesForMiner?(miner) ?? priorityGames,
+                    excludedGames: excludedGames,
+                    strategy: strategy,
+                    enableBadgesEmotes: enableBadgesEmotes,
+                    avoidDuplicateStreams: avoidDuplicateStreams,
+                    antiStallRecoveryEnabled: antiStallRecoveryEnabled,
+                    prioritiseFollowedStreamers: prioritiseFollowedStreamers
+                )
+            }
         }
     }
     
@@ -1248,6 +1252,20 @@ public final class MinerManager {
                     await engine.updatePriorityGames(priorityGames)
                     await engine.updateAccountLinkWarningPreference(games: Array(ignoredAccountLinkWarnings[miners[index].accountId] ?? []))
                 }
+            }
+        }
+        onMinersChanged?()
+    }
+
+    /// Update the priority games for one miner without changing the other miners.
+    public func updatePriorityGames(_ priorityGames: [String], forMinerId minerId: String) {
+        guard let index = miners.firstIndex(where: { $0.id == minerId }) else { return }
+        miners[index].priorityGames = priorityGames
+        if let engine = engines[minerId] {
+            let accountId = miners[index].accountId
+            Task {
+                await engine.updatePriorityGames(priorityGames)
+                await engine.updateAccountLinkWarningPreference(games: Array(ignoredAccountLinkWarnings[accountId] ?? []))
             }
         }
         onMinersChanged?()

@@ -14,6 +14,9 @@ final class SwiftMinerDMEventServiceTests: XCTestCase {
         )
         await service.emitPrioritisedGameNeedsLinking(
             gameName: "THE FINALS",
+            gameId: "game-1",
+            accountId: "account-1",
+            minerDisplayName: "miner",
             discordUserId: "discord-1",
             priorityGames: ["THE FINALS"]
         )
@@ -75,7 +78,10 @@ final class SwiftMinerDMEventServiceTests: XCTestCase {
             campaignId: "campaign-1",
             campaignName: "Launch Drops",
             gameName: "THE FINALS",
+            gameId: "game-1",
             gameArtworkURL: "https://example.com/finals.jpg",
+            accountId: "account-1",
+            minerDisplayName: "miner",
             discordUserId: "discord-1",
             priorityGames: ["THE FINALS"]
         )
@@ -83,7 +89,10 @@ final class SwiftMinerDMEventServiceTests: XCTestCase {
             campaignId: "campaign-1",
             campaignName: "Launch Drops",
             gameName: "THE FINALS",
+            gameId: "game-1",
             gameArtworkURL: "https://example.com/finals.jpg",
+            accountId: "account-1",
+            minerDisplayName: "miner",
             discordUserId: "discord-1",
             priorityGames: ["THE FINALS"]
         )
@@ -93,6 +102,8 @@ final class SwiftMinerDMEventServiceTests: XCTestCase {
         XCTAssertEqual(requests.first?.messageType, .campaignDetected)
         XCTAssertEqual(requests.first?.eventId, "campaignDetected:campaign-1")
         XCTAssertEqual(requests.first?.affectedGame, "THE FINALS")
+        XCTAssertEqual(requests.first?.affectedGameId, "game-1")
+        XCTAssertEqual(requests.first?.accountId, "account-1")
         XCTAssertEqual(requests.first?.gameArtworkURL, "https://example.com/finals.jpg")
     }
 }

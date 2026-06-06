@@ -50,7 +50,10 @@ public actor SwiftMinerDMEventService {
         campaignId: String,
         campaignName: String,
         gameName: String?,
+        gameId: String?,
         gameArtworkURL: String?,
+        accountId: String?,
+        minerDisplayName: String?,
         discordUserId: String?,
         priorityGames: [String]
     ) async {
@@ -66,6 +69,9 @@ public actor SwiftMinerDMEventService {
             affectedGame: gameName,
             campaignName: campaignName,
             gameArtworkURL: gameArtworkURL,
+            accountId: accountId,
+            minerDisplayName: minerDisplayName,
+            affectedGameId: gameId,
             eventId: "campaign:\(campaignId)"
         )
 
@@ -96,6 +102,9 @@ public actor SwiftMinerDMEventService {
 
     public func emitPrioritisedGameNeedsLinking(
         gameName: String,
+        gameId: String?,
+        accountId: String?,
+        minerDisplayName: String?,
         discordUserId: String?,
         priorityGames: [String]
     ) async {
@@ -109,6 +118,9 @@ public actor SwiftMinerDMEventService {
             twitchUsername: nil,
             priorityGames: priorityGames,
             affectedGame: gameName,
+            accountId: accountId,
+            minerDisplayName: minerDisplayName,
+            affectedGameId: gameId,
             eventId: "linkWarning:\(key):\(bucket(for: linkWarningCooldown))"
         )
 
@@ -141,7 +153,10 @@ public actor SwiftMinerDMEventService {
         campaignId: String,
         campaignName: String,
         gameName: String,
+        gameId: String?,
         gameArtworkURL: String?,
+        accountId: String?,
+        minerDisplayName: String?,
         discordUserId: String?,
         priorityGames: [String]
     ) async {
@@ -157,6 +172,9 @@ public actor SwiftMinerDMEventService {
             affectedGame: gameName,
             campaignName: campaignName,
             gameArtworkURL: gameArtworkURL,
+            accountId: accountId,
+            minerDisplayName: minerDisplayName,
+            affectedGameId: gameId,
             eventId: "campaignDetected:\(campaignId)"
         )
 

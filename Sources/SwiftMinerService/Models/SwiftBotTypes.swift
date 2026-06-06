@@ -119,6 +119,9 @@ public struct SwiftBotDMRequest: Codable, Sendable, Equatable {
     public let campaignName: String?
     public let milestoneTitle: String?
     public let gameArtworkURL: String?
+    public let accountId: String?
+    public let minerDisplayName: String?
+    public let affectedGameId: String?
     public let recoveryReason: String?
     /// Opaque event identifier for persistent deduplication on the SwiftBot side.
     public let eventId: String?
@@ -135,6 +138,9 @@ public struct SwiftBotDMRequest: Codable, Sendable, Equatable {
         campaignName: String? = nil,
         milestoneTitle: String? = nil,
         gameArtworkURL: String? = nil,
+        accountId: String? = nil,
+        minerDisplayName: String? = nil,
+        affectedGameId: String? = nil,
         recoveryReason: String? = nil,
         eventId: String? = nil
     ) {
@@ -149,6 +155,9 @@ public struct SwiftBotDMRequest: Codable, Sendable, Equatable {
         self.campaignName = campaignName
         self.milestoneTitle = milestoneTitle
         self.gameArtworkURL = gameArtworkURL
+        self.accountId = accountId
+        self.minerDisplayName = minerDisplayName
+        self.affectedGameId = affectedGameId
         self.recoveryReason = recoveryReason
         self.eventId = eventId
     }
@@ -165,6 +174,9 @@ public struct SwiftBotDMRequest: Codable, Sendable, Equatable {
         case campaignName = "campaign_name"
         case milestoneTitle = "milestone_title"
         case gameArtworkURL = "game_artwork_url"
+        case accountId = "account_id"
+        case minerDisplayName = "miner_display_name"
+        case affectedGameId = "affected_game_id"
         case recoveryReason = "recovery_reason"
         case eventId = "event_id"
     }
