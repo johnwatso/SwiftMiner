@@ -1306,6 +1306,17 @@ public actor MinerEngine {
                 return false
             }
 
+            // Linkage gate: a campaign whose game account is not linked may only
+            // be attempted when its game is prioritised for THIS miner. Otherwise an
+            // unlinked, non-prioritised campaign would leak into mining (e.g. another
+            // miner's prioritised game appearing here). Linked campaigns are unaffected.
+            if !campaign.isAccountConnected
+                && !prioritySet.contains(gameName)
+                && !prioritySet.contains(gameId) {
+                filteredOutReasons["unlinked_not_prioritised", default: 0] += 1
+                return false
+            }
+
             // 2. User Preferences
             if excludedSet.contains(gameName) || excludedSet.contains(gameId) {
                 filteredOutReasons["excluded_game", default: 0] += 1
