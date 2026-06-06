@@ -713,7 +713,7 @@ struct OverviewView: View {
                 inState: .preferred
             )
         }
-        navigation.minerManager.updatePriorityGames(settings.priorityGames)
+        navigation.minerManager.updatePriorityGames(resolving: { settings.priorityGames(forAccountId: $0.accountId) })
     }
 
     @State private var activePriorityDragIndex: Int?

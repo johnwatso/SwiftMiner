@@ -503,6 +503,34 @@ public final class Settings: ObservableObject {
         return updated
     }
 
+    /// Remove a game from a miner's personal priority override, returning the
+    /// miner's resulting effective list. Seeds the override from the global list
+    /// first (so removing a personal game doesn't accidentally re-inherit it).
+    @discardableResult
+    public func deprioritiseGameForAccount(accountId: String, gameName: String) -> [String] {
+        let key = accountId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let game = gameName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty, !game.isEmpty else { return priorityGames(forAccountId: accountId) }
+
+        var map = accountPriorityGames
+        let existing = map[key] ?? priorityGames
+        let updated = Self.normalizedPriorityGameNames(
+            existing.filter { $0.localizedCaseInsensitiveCompare(game) != .orderedSame }
+        )
+        map[key] = updated
+        accountPriorityGames = map
+        return updated
+    }
+
+    /// The games prioritised specifically for one miner, excluding those already in
+    /// the global priority list. Empty when the miner has no personal override.
+    public func personalPriorityGames(forAccountId accountId: String) -> [String] {
+        let key = accountId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty, let override = accountPriorityGames[key] else { return [] }
+        let globalKeys = Set(priorityGames.map { $0.lowercased() })
+        return override.filter { !globalKeys.contains($0.lowercased()) }
+    }
+
     /// Excluded game names derived from preferences (backward compat for MinerEngine)
     public var excludedGames: [String] {
         gameNames(for: .excluded)

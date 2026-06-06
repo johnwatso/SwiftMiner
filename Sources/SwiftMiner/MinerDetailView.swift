@@ -38,8 +38,9 @@ struct MinerDetailView: View {
 
                 secondaryStatsSection
                 watchingStreamerSection
+                personalPrioritiesSection
                 controlsSection
-                
+
                 logSection
             }
             .padding(24)
@@ -107,6 +108,49 @@ struct MinerDetailView: View {
         .glassCard()
     }
 
+    // MARK: Personal Priorities
+
+    /// Games prioritised specifically for this miner, excluding the global priority
+    /// list. Derived from the miner's reactive effective list so DM/global changes
+    /// refresh it live.
+    private var personalPriorityGames: [String] {
+        let globalKeys = Set(Settings.shared.priorityGames.map { $0.lowercased() })
+        return miner.priorityGames.filter { !globalKeys.contains($0.lowercased()) }
+    }
+
+    @ViewBuilder
+    private var personalPrioritiesSection: some View {
+        let games = personalPriorityGames
+        if !games.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Personal Priorities")
+                    .font(.headline)
+
+                Text("Games prioritised just for this miner, on top of your global list.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                FlowLayout(spacing: 6) {
+                    ForEach(games, id: \.self) { game in
+                        PersonalPriorityChip(gameName: game) {
+                            removePersonalPriority(game)
+                        }
+                    }
+                }
+            }
+            .padding(20)
+            .glassCard()
+        }
+    }
+
+    private func removePersonalPriority(_ gameName: String) {
+        let updated = Settings.shared.deprioritiseGameForAccount(accountId: miner.accountId, gameName: gameName)
+        navigation.minerManager.updatePriorityGames(updated, forMinerId: miner.id)
+        if miner.isRunning {
+            Task { await navigation.minerManager.forceRefreshMiner(minerId: miner.id) }
+        }
+    }
+
     // MARK: Controls
 
     private var controlsSection: some View {
@@ -172,6 +216,38 @@ struct MinerDetailView: View {
         .glassCard()
     }
 
+}
+
+private struct PersonalPriorityChip: View {
+    let gameName: String
+    let onRemove: () -> Void
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "star.fill")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.yellow)
+
+            Text(gameName)
+                .font(.caption)
+                .lineLimit(1)
+
+            Button(action: onRemove) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Remove \(gameName) from this miner's personal priorities")
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(Color.yellow.opacity(0.12), in: Capsule())
+        .overlay {
+            Capsule().stroke(Color.yellow.opacity(0.35), lineWidth: 1)
+        }
+        .contentShape(Capsule())
+    }
 }
 
 private struct MinerStatCard: View {
