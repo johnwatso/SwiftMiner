@@ -3,14 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>1.27 - Release Notes</title>
+  <title>SwiftMiner 1.27 - Release Notes</title>
   <style>
     :root { color-scheme: light dark; }
     body {
       margin: 0;
       padding: 32px 20px 48px;
       font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #f4f6f8;
+      background:
+        radial-gradient(circle at top left, rgba(17, 124, 182, 0.18), transparent 32rem),
+        linear-gradient(135deg, #f7fbff 0%, #f4f7fb 46%, #f7f2ff 100%);
       color: #0f1720;
     }
     main {
@@ -20,32 +22,101 @@
       border-radius: 22px;
       background: rgba(255, 255, 255, 0.86);
       box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
+      border: 1px solid rgba(82, 96, 109, 0.12);
     }
     h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
-    .meta { margin: 0 0 24px; color: #52606d; font-size: 14px; }
+    .meta { margin: 0 0 10px; color: #52606d; font-size: 14px; }
+    .intro { margin: 0 0 24px; color: #384454; }
     p { margin: 0 0 16px; }
+    section {
+      margin: 18px 0 0;
+      padding: 18px 18px 14px;
+      border: 1px solid rgba(82, 96, 109, 0.18);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.42);
+      border-left: 5px solid var(--accent, #0a67a3);
+    }
+    section.updates { --accent: #b03060; }
+    section.priority { --accent: #b76710; }
+    section.linking { --accent: #1c8c73; }
+    h2 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 4px;
+      color: var(--accent, #0a67a3);
+      font-size: 18px;
+    }
+    .badge {
+      display: inline-grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--accent, #0a67a3) 15%, transparent);
+      font-size: 16px;
+    }
+    .summary { margin: 0 0 12px; color: #52606d; font-size: 14px; }
+    ul { margin: 0; padding-left: 22px; }
+    li { margin: 0 0 8px; }
+    li:last-child { margin-bottom: 0; }
     a { color: #0a67a3; text-decoration: none; }
     a:hover { text-decoration: underline; }
     @media (prefers-color-scheme: dark) {
-      body { background: #0b1015; color: #edf2f7; }
+      body {
+        background:
+          radial-gradient(circle at top left, rgba(89, 185, 255, 0.16), transparent 32rem),
+          linear-gradient(135deg, #081019 0%, #101520 52%, #171427 100%);
+        color: #edf2f7;
+      }
       main {
         background: rgba(15, 23, 32, 0.88);
         box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+        border-color: rgba(159, 176, 194, 0.14);
       }
       .meta { color: #9fb0c2; }
+      .intro { color: #c8d3df; }
+      section {
+        border-color: rgba(159, 176, 194, 0.18);
+        background: rgba(255, 255, 255, 0.04);
+      }
+      .summary { color: #9fb0c2; }
       a { color: #73c3ff; }
     }
   </style>
 </head>
 <body>
   <main>
-    <h1>1.27</h1>
-    <p class="meta">Version 1.27</p>
-    <p>Build 2026060620</p>
-    <p>Fixed Sparkle update signing by restoring the current SPARKLE_PUBLIC_ED_KEY.</p>
-    <p>Shows each miner's active priority list in the Miners tab, including miner-specific priorities set from Discord DMs.</p>
-    <p>Prioritised games can now still be attempted when Twitch exposes usable drops, even if the external game account has not been linked yet; SwiftMiner keeps the warning visible without treating linking as a hard stop.</p>
-    <p><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/1a7fbab2d482f20132ecae46d80d4be68f9f3afc">1a7fbab</a></p>
+    <h1>SwiftMiner 1.27</h1>
+    <p class="meta">Version 1.27 · Build 2026060620</p>
+    <p class="intro">A small-but-important update for Sparkle safety and miner priorities, with fewer hard stops when Twitch still has usable drops on the table.</p>
+
+    <section class="updates">
+      <h2><span class="badge" aria-hidden="true">🛡️</span> Sparkle Signing</h2>
+      <p class="summary">The update key is back where Sparkle expects it.</p>
+      <ul>
+        <li>Restores the current Sparkle public EdDSA key in project settings.</li>
+        <li>Updates stable release metadata for SwiftMiner 1.27 build 2026060620.</li>
+      </ul>
+    </section>
+
+    <section class="priority">
+      <h2><span class="badge" aria-hidden="true">⭐</span> Miner Priorities</h2>
+      <p class="summary">Each miner's active priority list is easier to see at a glance.</p>
+      <ul>
+        <li>Shows each miner's active priority list in the Miners tab.</li>
+        <li>Includes miner-specific priorities set from Discord DMs.</li>
+      </ul>
+    </section>
+
+    <section class="linking">
+      <h2><span class="badge" aria-hidden="true">🔗</span> Linked Accounts</h2>
+      <p class="summary">Prioritised games can still be attempted when Twitch exposes usable drops.</p>
+      <ul>
+        <li>Allows prioritised games to mine even if the external game account is not linked yet.</li>
+        <li>Keeps the account-link warning visible without treating linking as an automatic hard stop.</li>
+      </ul>
+    </section>
   </main>
 </body>
 </html>

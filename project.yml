@@ -66,8 +66,8 @@ targets:
         SWIFT_STRICT_CONCURRENCY: complete
         PRODUCT_BUNDLE_IDENTIFIER: com.swiftminer.app
         MACOSX_DEPLOYMENT_TARGET: "26.0"
-        MARKETING_VERSION: "1.27"
-        CURRENT_PROJECT_VERSION: "2026060620"
+        MARKETING_VERSION: "1.28"
+        CURRENT_PROJECT_VERSION: "2026060911"
         INFOPLIST_KEY_CFBundleDisplayName: SwiftMiner
         INFOPLIST_KEY_CFBundleName: SwiftMiner
         CODE_SIGN_STYLE: Automatic

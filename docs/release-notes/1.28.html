@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SwiftMiner 1.28 - Release Notes</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      margin: 0;
+      padding: 32px 20px 48px;
+      font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(17, 124, 182, 0.18), transparent 32rem),
+        linear-gradient(135deg, #f7fbff 0%, #f4f7fb 46%, #f7f2ff 100%);
+      color: #0f1720;
+    }
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 28px;
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.86);
+      box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
+      border: 1px solid rgba(82, 96, 109, 0.12);
+    }
+    h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
+    .meta { margin: 0 0 10px; color: #52606d; font-size: 14px; }
+    .intro { margin: 0 0 24px; color: #384454; }
+    p { margin: 0 0 16px; }
+    section {
+      margin: 18px 0 0;
+      padding: 18px 18px 14px;
+      border: 1px solid rgba(82, 96, 109, 0.18);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.42);
+      border-left: 5px solid var(--accent, #0a67a3);
+    }
+    section.discord { --accent: #5f5ac8; }
+    section.priority { --accent: #b76710; }
+    section.linking { --accent: #1c8c73; }
+    section.overview { --accent: #0b7894; }
+    section.sparkle { --accent: #b03060; }
+    h2 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 4px;
+      color: var(--accent, #0a67a3);
+      font-size: 18px;
+    }
+    .badge {
+      display: inline-grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--accent, #0a67a3) 15%, transparent);
+      font-size: 16px;
+    }
+    .summary { margin: 0 0 12px; color: #52606d; font-size: 14px; }
+    ul { margin: 0; padding-left: 22px; }
+    li { margin: 0 0 8px; }
+    li:last-child { margin-bottom: 0; }
+    a { color: #0a67a3; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    @media (prefers-color-scheme: dark) {
+      body {
+        background:
+          radial-gradient(circle at top left, rgba(89, 185, 255, 0.16), transparent 32rem),
+          linear-gradient(135deg, #081019 0%, #101520 52%, #171427 100%);
+        color: #edf2f7;
+      }
+      main {
+        background: rgba(15, 23, 32, 0.88);
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+        border-color: rgba(159, 176, 194, 0.14);
+      }
+      .meta { color: #9fb0c2; }
+      .intro { color: #c8d3df; }
+      section {
+        border-color: rgba(159, 176, 194, 0.18);
+        background: rgba(255, 255, 255, 0.04);
+      }
+      .summary { color: #9fb0c2; }
+      a { color: #73c3ff; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>SwiftMiner 1.28</h1>
+    <p class="meta">Version 1.28 · Build 2026060911</p>
+    <p class="intro">A SwiftBot control-room release. Discord gets better priority buttons, miner-specific choices show up in the app, and account-link warnings are now helpful without acting like a tiny clipboard supervisor.</p>
+
+    <section class="discord">
+      <h2><span class="badge" aria-hidden="true">💬</span> SwiftBot Controls</h2>
+      <p class="summary">Discord can now steer the right miner instead of shouting into the global priority list.</p>
+      <ul>
+        <li>Adds Discord controls for miner-specific game priorities.</li>
+        <li>Adds full priority-list replacement from SwiftBot's edit-games modal.</li>
+        <li>Improves Discord status and preview messages with recent campaign context and more realistic debug samples.</li>
+        <li>Caches Discord avatars so the integrations UI feels quicker and less flickery.</li>
+      </ul>
+    </section>
+
+    <section class="priority">
+      <h2><span class="badge" aria-hidden="true">⭐</span> Personal Priorities</h2>
+      <p class="summary">The Miners tab now shows the games that belong to one miner, not everyone.</p>
+      <ul>
+        <li>Shows personal miner priorities in the miner detail view.</li>
+        <li>Adds quick removal controls for miner-specific priorities.</li>
+        <li>Preserves per-miner priority ordering so app and Discord edits stay in sync.</li>
+      </ul>
+    </section>
+
+    <section class="linking">
+      <h2><span class="badge" aria-hidden="true">🔗</span> Account-Link Warnings</h2>
+      <p class="summary">Warnings stay visible, but prioritised games can still try to earn progress when Twitch allows it.</p>
+      <ul>
+        <li>Lets prioritised unlinked games keep mining when Twitch exposes usable drops.</li>
+        <li>Only attempts unlinked campaigns when that game is prioritised for that specific miner.</li>
+        <li>Adds Discord controls to pause or ignore known account-link reminders without muting the rest of SwiftBot.</li>
+        <li>Removes noisy drop-claimed DMs so Discord focuses on decisions that actually need attention.</li>
+      </ul>
+    </section>
+
+    <section class="overview">
+      <h2><span class="badge" aria-hidden="true">🖥️</span> Overview Polish</h2>
+      <p class="summary">A few small repairs make the dashboard feel steadier during refreshes.</p>
+      <ul>
+        <li>Adds a miner account button to the overview.</li>
+        <li>Restarts miners from overview refresh without clearing campaign artwork.</li>
+        <li>Slows the Looking for Streams animation so it breathes more like macOS Wi-Fi search.</li>
+      </ul>
+    </section>
+
+    <section class="sparkle">
+      <h2><span class="badge" aria-hidden="true">🛡️</span> Update Guardrails</h2>
+      <p class="summary">The update feed stays in ShipHook's lane, with the Sparkle public key protected.</p>
+      <ul>
+        <li>Tightens project guardrails so future changes keep the Sparkle public update key intact.</li>
+        <li>Documents that ShipHook owns appcast version fields, preventing ordinary dev commits from confusing Sparkle updates.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

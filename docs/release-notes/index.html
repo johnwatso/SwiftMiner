@@ -43,20 +43,30 @@
   <main>
     <h1>SwiftMiner Release Notes</h1>
     <p class="meta">Recent Sparkle update history</p>
-    <h2>Version 1.27</h2>
+    <h2>💬 Version 1.28</h2>
+    <ul>
+      <li>Adds Discord controls for miner-specific game priorities, including full priority-list replacement from SwiftBot's edit-games modal.</li>
+      <li>Shows personal miner priorities in the Miners tab, with quick removal controls so app and Discord priority state stay easy to audit.</li>
+      <li>Lets prioritised unlinked games keep mining when Twitch exposes usable drops, while keeping account-link warnings visible instead of treating linking as a hard stop.</li>
+      <li>Adds Discord link-warning controls so known account-link reminders can be ignored or paused without muting the rest of SwiftBot.</li>
+      <li>Improves Discord status and preview messages with recent campaign context, realistic debug samples, cached avatars, and quieter notification defaults.</li>
+      <li>Polishes the overview refresh path so miners can restart from refresh without clearing artwork, adds a miner account button, and slows the Looking for Streams animation to feel more native.</li>
+      <li>Updates SwiftMiner to version 1.28 build 2026060911 and tightens Sparkle guardrails while leaving ShipHook-owned appcasts untouched.</li>
+    </ul>
+    <h2>🛡️ Version 1.27</h2>
     <ul>
       <li>Fixed Sparkle update signing by restoring the current SPARKLE_PUBLIC_ED_KEY.</li>
       <li>Shows each miner's active priority list in the Miners tab, including miner-specific priorities set from Discord DMs.</li>
       <li>Allows prioritised games to be attempted when Twitch exposes usable drops even if the external game account is not linked yet, while keeping the account-link warning visible.</li>
       <li>Updates the stable Sparkle appcast and release-note metadata for SwiftMiner 1.27 build 2026060620.</li>
     </ul>
-    <h2>Version 1.26</h2>
+    <h2>🔄 Version 1.26</h2>
     <ul>
       <li>Adds update error handling and an Updates settings surface so Sparkle failures are visible and users have a manual download fallback.</li>
       <li>Fixes merged Drops campaign account states so one claimed miner no longer makes every miner appear claimed in the card popover.</li>
       <li>Updates the stable Sparkle appcast and release-note metadata for SwiftMiner 1.26 build 2026060111.</li>
     </ul>
-    <h2>Version 1.25</h2>
+    <h2>🃏 Version 1.25</h2>
     <ul>
       <li>Redesigns Drops campaign cards into an Apple-style cohesive horizontal band, keeping game artwork as the prominent biggest card item and shrinking reward artwork (72x72) to highlight the game hero.</li>
       <li>Uses clean, content-first SF Symbols (gift, calendar, and people) in the metadata row to keep visual elements quiet, structured, and native.</li>
@@ -70,7 +80,7 @@
       <li>Refines Needs Setup and Blocked states to only trigger if a campaign has obtainable rewards remaining, ignoring fully claimed or subscription-only drops.</li>
       <li>Integrates Discord API integration tests and automated release tooling (bump_build_number.sh and preflight_release.sh).</li>
     </ul>
-    <h2>Version 1.24</h2>
+    <h2>🩺 Version 1.24</h2>
     <ul>
       <li>Moves miner diagnostics into the Miners view, directly beneath Prioritised Campaigns.</li>
       <li>Adds a collapsible diagnostics panel with miner health, recovery timeline, stall signals, and inline help explaining stall confidence.</li>
@@ -79,14 +89,14 @@
       <li>Fixes the Drops dashboard's Most active miner card so claimed counts come from inventory-backed per-account drop totals instead of the live session counter.</li>
       <li>Updates the stable Sparkle appcast and release-note metadata for SwiftMiner 1.24 build 2026052509.</li>
     </ul>
-    <h2>Version 1.23</h2>
+    <h2>🌙 Version 1.23</h2>
     <ul>
       <li>Adds quiet hours for local claim notifications and Discord DM events.</li>
       <li>Adds settings backup and restore for preferences, game rules, filters, quiet hours, and integration endpoints.</li>
       <li>Adds Discord self-service miner controls for linked users: status, pause, resume, and refresh.</li>
       <li>Updates the stable Sparkle appcast and release-note metadata for SwiftMiner 1.23 build 2026052419.</li>
     </ul>
-    <h2>Version 1.22</h2>
+    <h2>🛡️ Version 1.22</h2>
     <ul>
       <li>Raises the stall-recovery liveness threshold from 6 to 15 minutes so the supervisor no longer flags healthy miners during normal idle periods between campaign rescans.</li>
       <li>Adds a distinct yellow rotate icon and readable summaries for stall-recovery activity in the Activity Log, routed under the Warnings filter so recoveries are easy to spot and review.</li>
@@ -95,7 +105,7 @@
       <li>Changes the Discord admin Preview DM action to send the full ordered SwiftBot DM flow in DEBUG builds only.</li>
       <li>Updates the stable Sparkle appcast and release-note links for SwiftMiner 1.22 build 2026051110.</li>
     </ul>
-    <h2>Version 1.21</h2>
+    <h2>🛡️ Version 1.21</h2>
     <ul>
       <li>Adds a What's New window in the app menu so the current release notes can be opened directly from SwiftMiner.</li>
       <li>Derives release-note links from the configured stable or beta Sparkle feed, keeping in-app notes aligned with the selected update channel.</li>
@@ -123,7 +133,7 @@
       <li>Fixes completed miner rows that could appear as waiting after both accounts had already claimed the campaign.</li>
       <li>Adds a maintenance action in Advanced settings to clear cached drop history without removing accounts or app preferences.</li>
     </ul>
-    <h2>Version 1.20</h2>
+    <h2>📺 Version 1.20</h2>
     <ul>
       <li>Adds smarter stream selection, including optional stream spreading so multiple miners avoid piling onto the same verified live channel when enough alternatives are available.</li>
       <li>Adds an option to prioritise followed and subscribed Twitch streamers, with subscriptions ranked ahead of follows during channel selection.</li>
@@ -157,6 +167,7 @@
       <li>Automatically refreshes expired Twitch tokens where possible and gives clearer re-auth guidance when a session needs attention.</li>
       <li>Polishes onboarding, account details, notification handling, and the Set Steam ID flow.</li>
     </ul>
+    <p><a href="./1.28.html">Version 1.28 release page</a></p>
     <p><a href="./1.27.html">Version 1.27 release page</a></p>
     <p><a href="./1.26.html">Version 1.26 release page</a></p>
     <p><a href="./1.25.html">Version 1.25 release page</a></p>

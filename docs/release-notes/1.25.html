@@ -3,14 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Add update error handling and Updates settings - Release Notes</title>
+  <title>SwiftMiner 1.25 - Release Notes</title>
   <style>
     :root { color-scheme: light dark; }
     body {
       margin: 0;
       padding: 32px 20px 48px;
       font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #f4f6f8;
+      background:
+        radial-gradient(circle at top left, rgba(17, 124, 182, 0.18), transparent 32rem),
+        linear-gradient(135deg, #f7fbff 0%, #f4f7fb 46%, #f7f2ff 100%);
       color: #0f1720;
     }
     main {
@@ -20,32 +22,117 @@
       border-radius: 22px;
       background: rgba(255, 255, 255, 0.86);
       box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
+      border: 1px solid rgba(82, 96, 109, 0.12);
     }
     h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
-    .meta { margin: 0 0 24px; color: #52606d; font-size: 14px; }
+    .meta { margin: 0 0 10px; color: #52606d; font-size: 14px; }
+    .intro { margin: 0 0 24px; color: #384454; }
     p { margin: 0 0 16px; }
+    section {
+      margin: 18px 0 0;
+      padding: 18px 18px 14px;
+      border: 1px solid rgba(82, 96, 109, 0.18);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.42);
+      border-left: 5px solid var(--accent, #0a67a3);
+    }
+    section.cards { --accent: #0a7cbb; }
+    section.rewards { --accent: #b64b9b; }
+    section.status { --accent: #1c8c73; }
+    section.discord { --accent: #5f5ac8; }
+    h2 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 4px;
+      color: var(--accent, #0a67a3);
+      font-size: 18px;
+    }
+    .badge {
+      display: inline-grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--accent, #0a67a3) 15%, transparent);
+      font-size: 16px;
+    }
+    .summary { margin: 0 0 12px; color: #52606d; font-size: 14px; }
+    ul { margin: 0; padding-left: 22px; }
+    li { margin: 0 0 8px; }
+    li:last-child { margin-bottom: 0; }
     a { color: #0a67a3; text-decoration: none; }
     a:hover { text-decoration: underline; }
     @media (prefers-color-scheme: dark) {
-      body { background: #0b1015; color: #edf2f7; }
+      body {
+        background:
+          radial-gradient(circle at top left, rgba(89, 185, 255, 0.16), transparent 32rem),
+          linear-gradient(135deg, #081019 0%, #101520 52%, #171427 100%);
+        color: #edf2f7;
+      }
       main {
         background: rgba(15, 23, 32, 0.88);
         box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+        border-color: rgba(159, 176, 194, 0.14);
       }
       .meta { color: #9fb0c2; }
+      .intro { color: #c8d3df; }
+      section {
+        border-color: rgba(159, 176, 194, 0.18);
+        background: rgba(255, 255, 255, 0.04);
+      }
+      .summary { color: #9fb0c2; }
       a { color: #73c3ff; }
     }
   </style>
 </head>
 <body>
   <main>
-    <h1>Add update error handling and Updates settings</h1>
-    <p class="meta">Version 1.25</p>
-    <p>Add update error handling and Updates settings</p>
-<p>Add error callback and UI for update failures, and bump build number.</p>
-<p>- AppUpdater: introduce onError callback and implement updater(_:didAbortWithError:) to notify non-expected Sparkle abort errors (skips SUNoUpdate/SUInstallationCanceled codes 4001/2401/4003/2403).<br>- MinerApp: wire updater.onError to log a warning with a manual GitHub Releases download link when update checks fail.<br>- SettingsView: add an Updates tab (UpdatesSettingsView) showing current version/build, a manual GitHub Releases link, and update controls; refactor some bindings/helpers to reduce duplication.<br>- Bump build/version identifiers to 2026052921 across project.pbxproj, project.yml, docs/appcast.xml, and release notes HTML.</p>
-<p>These changes improve visibility into update failures and provide a fallback path for users to download releases manually.</p>
-    <p><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/22c9874d68b353b66f265eaa218831d95c379edc">22c9874</a></p>
+    <h1>SwiftMiner 1.25</h1>
+    <p class="meta">Version 1.25 · Build 2026052921</p>
+    <p class="intro">A visual polish pass for Drops campaign cards, with cleaner reward tiles, friendlier time labels, and a tighter inspector for checking what each miner can actually do.</p>
+
+    <section class="cards">
+      <h2><span class="badge" aria-hidden="true">🃏</span> Campaign Cards</h2>
+      <p class="summary">The game takes centre stage, with metadata kept quiet and useful.</p>
+      <ul>
+        <li>Redesigns Drops campaign cards into an Apple-style horizontal band.</li>
+        <li>Keeps game artwork as the largest visual element and shrinks reward artwork to highlight the game hero.</li>
+        <li>Uses clean SF Symbols for gift, calendar, and miner metadata.</li>
+        <li>Introduces friendly remaining-time formatting in days, weeks, and days instead of raw hours.</li>
+      </ul>
+    </section>
+
+    <section class="rewards">
+      <h2><span class="badge" aria-hidden="true">🎁</span> Reward Tiles</h2>
+      <p class="summary">Rewards are easier to scan without making each card taller than it needs to be.</p>
+      <ul>
+        <li>Moves watch-duration badges directly onto static reward cards.</li>
+        <li>Removes permanent text metadata below reward tiles.</li>
+        <li>Animates the reward name under the tile on hover.</li>
+        <li>Refines aggregate status pills with softer, lower-saturation styling.</li>
+      </ul>
+    </section>
+
+    <section class="status">
+      <h2><span class="badge" aria-hidden="true">✅</span> Status Accuracy</h2>
+      <p class="summary">Campaign states now better reflect whether there is anything useful left to earn.</p>
+      <ul>
+        <li>Introduces an Ended campaign status and filter to separate expired campaigns from completed ones.</li>
+        <li>Refines Needs Setup and Blocked states so fully claimed or subscription-only drops do not create unnecessary alerts.</li>
+        <li>Compacts the miner details inspector popover with denser native macOS styling.</li>
+        <li>Ensures only eligible and actionable miners appear on card and popover surfaces.</li>
+      </ul>
+    </section>
+
+    <section class="discord">
+      <h2><span class="badge" aria-hidden="true">🧪</span> Release Tooling</h2>
+      <p class="summary">A little release machinery joined the party behind the curtain.</p>
+      <ul>
+        <li>Integrates Discord API test coverage.</li>
+        <li>Adds automated release tooling for build bumps and preflight checks.</li>
+      </ul>
+    </section>
   </main>
 </body>
 </html>
