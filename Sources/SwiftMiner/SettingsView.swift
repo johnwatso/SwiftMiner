@@ -1101,10 +1101,12 @@ private struct IntegrationsSettingsView: View {
 
     // MARK: - Preview
 
+#if DEBUG
     private func sendPreview(type: SwiftBotDMMessageType) async {
         guard let discordId = debugTargetId else { return }
         _ = await navigation.swiftBotConnectionService.sendDebugDM(to: discordId, request: debugDMRequest(for: type))
     }
+#endif
 
     private var firstLinkedDiscordId: String? {
         navigation.minerManager.miners.compactMap(\.ownerDiscordId).first
