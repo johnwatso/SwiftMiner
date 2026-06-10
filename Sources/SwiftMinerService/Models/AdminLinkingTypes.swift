@@ -6,11 +6,15 @@ import SwiftMinerCore
 public enum OperatorIdentity: Sendable, Equatable {
     case localAdmin
     case bot(apiKeyId: String)
+    /// A self-service action a Discord user performed through the web dashboard,
+    /// authenticated by their own session. The associated value is their Discord ID.
+    case web(discordId: String)
 
     public var stringValue: String {
         switch self {
         case .localAdmin: return "local_admin"
         case .bot(let apiKeyId): return "bot:\(apiKeyId)"
+        case .web(let discordId): return "web:\(discordId)"
         }
     }
 }

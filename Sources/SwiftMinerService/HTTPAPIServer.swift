@@ -52,6 +52,27 @@ public struct HTTPResponse: Sendable {
         return HTTPResponse(statusCode: statusCode, headers: headers, body: data)
     }
 
+    public static func redirect(to location: String, setCookie: String? = nil) -> HTTPResponse {
+        var headers = ["Location": location, "Content-Length": "0"]
+        if let setCookie { headers["Set-Cookie"] = setCookie }
+        return HTTPResponse(statusCode: 302, headers: headers)
+    }
+
+    public static func html(_ markup: String, statusCode: Int = 200, setCookie: String? = nil) -> HTTPResponse {
+        let data = Data(markup.utf8)
+        var headers = [
+            "Content-Type": "text/html; charset=utf-8",
+            "Content-Length": "\(data.count)",
+            // The dashboard renders only data the session owner already controls;
+            // a strict CSP keeps the surface minimal regardless.
+            "Content-Security-Policy": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:",
+            "X-Content-Type-Options": "nosniff",
+            "Referrer-Policy": "no-referrer"
+        ]
+        if let setCookie { headers["Set-Cookie"] = setCookie }
+        return HTTPResponse(statusCode: statusCode, headers: headers, body: data)
+    }
+
     public static let notFound = HTTPResponse.error(code: "not_found", message: "Resource not found.", statusCode: 404)
     public static let methodNotAllowed = HTTPResponse.error(code: "method_not_allowed", message: "Method not allowed.", statusCode: 405)
     public static let unauthorized = HTTPResponse.error(code: "unauthorized", message: "Invalid or missing Authorization header.", statusCode: 401)
@@ -117,12 +138,33 @@ public actor HTTPAPIServer {
     private let router: HTTPRouter
     private var listener: NWListener?
     private let apiKey: String
+    private let publicPathPrefixes: [String]
+    private let publicExactPaths: Set<String>
     private var isRunning = false
 
-    public init(port: UInt16, apiKey: String, router: HTTPRouter) {
+    /// - Parameters:
+    ///   - publicPathPrefixes: paths under these prefixes bypass the shared
+    ///     Bot-key check and must enforce their own authentication (e.g. session
+    ///     cookies for the web dashboard). A prefix is matched with `hasPrefix`,
+    ///     so never pass `"/"` here — use `publicExactPaths` for the root.
+    ///   - publicExactPaths: paths that bypass the Bot-key check only on an
+    ///     exact match (e.g. `"/"` for the landing page).
+    ///
+    ///   Both default to empty, so the only unauthenticated path remains
+    ///   `/health` — behaviour is identical to before when the web dashboard is
+    ///   not configured.
+    public init(
+        port: UInt16,
+        apiKey: String,
+        router: HTTPRouter,
+        publicPathPrefixes: [String] = [],
+        publicExactPaths: Set<String> = []
+    ) {
         self.port = port
         self.apiKey = apiKey
         self.router = router
+        self.publicPathPrefixes = publicPathPrefixes.filter { $0 != "/" }
+        self.publicExactPaths = publicExactPaths
     }
 
     public func start() async throws {
@@ -305,8 +347,10 @@ public actor HTTPAPIServer {
 
         let request = HTTPRequest(method: method, path: path, headers: headers, body: body, queryParams: queryParams)
 
-        // Auth check for Bot endpoints
-        if !path.hasPrefix("/health") {
+        // Auth check for Bot endpoints. `/health` and any explicitly-registered
+        // public prefix (web dashboard OAuth + session routes) bypass the shared
+        // Bot-key gate; those routes authenticate themselves per-request.
+        if !isPublicPath(path) {
             guard let auth = request.header("authorization"),
                   auth == "Bot \(apiKey)" else {
                 await sendResponse(connection, .unauthorized)
@@ -316,6 +360,19 @@ public actor HTTPAPIServer {
 
         let response = await router.handle(request)
         await sendResponse(connection, response)
+    }
+
+    private func isPublicPath(_ path: String) -> Bool {
+        Self.isPublicPath(path, prefixes: publicPathPrefixes, exactPaths: publicExactPaths)
+    }
+
+    public static func isPublicPath(_ path: String, prefixes: [String], exactPaths: Set<String>) -> Bool {
+        if path == "/health" || path.hasPrefix("/health/") { return true }
+        if exactPaths.contains(path) { return true }
+        for prefix in prefixes where path == prefix || path.hasPrefix(prefix + "/") {
+            return true
+        }
+        return false
     }
 
     private func sendResponse(_ connection: NWConnection, _ response: HTTPResponse) async {

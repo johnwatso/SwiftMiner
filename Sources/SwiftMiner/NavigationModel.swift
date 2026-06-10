@@ -194,9 +194,32 @@ public final class NavigationModel {
                 games: games
             )
         }
+        await routes.setOnSetPrioritiesByAccount { [weak self] accountId, games in
+            guard let self else { return nil }
+            return await self.handleSetPrioritiesByAccount(accountId: accountId, games: games)
+        }
         let router = HTTPRouter()
         await routes.configure(router)
-        let server = HTTPAPIServer(port: port, apiKey: apiKey, router: router)
+
+        // Optional self-service web dashboard. Registered only when fully
+        // configured; otherwise the server is byte-for-byte as before.
+        var webPrefixes: [String] = []
+        var webExact: Set<String> = []
+        if Settings.shared.webDashboardConfigured, let webConfig = makeWebDashboardConfig() {
+            let webRoutes = WebDashboardRoutes(config: webConfig, manager: sqliteManager, apiRoutes: routes)
+            await webRoutes.configure(router)
+            webPrefixes = WebDashboardConfig.publicPrefixes
+            webExact = WebDashboardConfig.publicExactPaths
+            logEvent(message: "Web dashboard enabled at \(webConfig.normalisedBase)", level: .info)
+        }
+
+        let server = HTTPAPIServer(
+            port: port,
+            apiKey: apiKey,
+            router: router,
+            publicPathPrefixes: webPrefixes,
+            publicExactPaths: webExact
+        )
         do {
             try await server.start()
             httpAPIServer = server
@@ -206,6 +229,65 @@ public final class NavigationModel {
             logEvent(message: "API server failed on port \(port): \(error.localizedDescription)", level: .error)
             print("[NavigationModel] Failed to start HTTP server on port \(port): \(error)")
         }
+    }
+
+    /// Number of miners currently configured (used to gate web internet access).
+    public var configuredMinerCount: Int { minerManager.miners.count }
+
+    /// Asks SwiftBot to carry the dashboard's public hostname on its Cloudflare
+    /// tunnel, routed to SwiftMiner's local HTTP server. One-click alternative
+    /// to manually adding the hostname in the Cloudflare dashboard.
+    func registerWebDashboardHostnameWithSwiftBot() async -> SwiftBotTunnelRegistrationResult {
+        let s = Settings.shared
+        let raw = s.webDashboardBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: raw),
+              url.scheme?.lowercased() == "https",
+              let host = url.host, !host.isEmpty else {
+            return .failure(message: "Set a valid https Public URL first.")
+        }
+        let port = URL(string: s.swiftMinerAPIEndpoint)?.port ?? 8080
+        let result = await swiftBotConnectionService.registerTunnelHostname(
+            hostname: host,
+            service: "http://localhost:\(port)",
+            hmacSecret: s.swiftBotHmacSecret
+        )
+        switch result {
+        case .success(let publicURL):
+            logEvent(message: "Web dashboard registered on SwiftBot's tunnel at \(publicURL)", level: .info)
+        case .failure(let message):
+            logEvent(message: "Web dashboard tunnel registration failed: \(message)", level: .warning)
+        }
+        return result
+    }
+
+    /// Build the web dashboard config from Settings, or nil if no sign-in method
+    /// is available. A public URL is optional — local sign-in needs none.
+    private func makeWebDashboardConfig() -> WebDashboardConfig? {
+        let s = Settings.shared
+        func clean(_ v: String) -> String { v.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+        // Public URL is optional; only valid http(s) URLs are accepted.
+        var baseURL: URL?
+        let raw = clean(s.webDashboardBaseURL)
+        if let url = URL(string: raw), let scheme = url.scheme?.lowercased(),
+           scheme == "http" || scheme == "https", url.host != nil {
+            baseURL = url
+        }
+
+        // Discord identity is SwiftBot's job; the web dashboard offers Twitch + local only.
+        var twitch: WebProviderCredentials?
+        if s.webDashboardTwitchConfigured {
+            twitch = WebProviderCredentials(clientID: clean(s.webDashboardTwitchClientID),
+                                            clientSecret: clean(s.webDashboardTwitchClientSecret))
+        }
+        var local: WebLocalCredentials?
+        if s.webDashboardLocalConfigured {
+            local = WebLocalCredentials(username: clean(s.webDashboardLocalUsername),
+                                        passwordHash: s.webDashboardLocalPasswordHash)
+        }
+
+        let config = WebDashboardConfig(baseURL: baseURL, discord: nil, twitch: twitch, local: local)
+        return config.anyEnabled ? config : nil
     }
 
     /// Upserts every MinerManager account into SQLite so AdminLinkingService can find them.
@@ -306,6 +388,20 @@ public final class NavigationModel {
     /// modal submits the whole personal list at once). Returns the resulting effective list.
     public func handleDiscordSetPriorities(discordUserId: String, accountId: String, games: [String]) async -> [String]? {
         guard let miner = minerManager.miners.first(where: { $0.ownerDiscordId == discordUserId && $0.accountId == accountId }) else {
+            return nil
+        }
+        let priorities = Settings.shared.setPersonalPriorityGames(accountId: accountId, games: games)
+        minerManager.updatePriorityGames(priorities, forMinerId: miner.id)
+        if miner.isRunning {
+            await minerManager.forceRefreshMiner(minerId: miner.id)
+        }
+        return priorities
+    }
+
+    /// As above, but identified by Twitch account id alone — used by a
+    /// Twitch-authenticated web session, whose principal *is* the account.
+    public func handleSetPrioritiesByAccount(accountId: String, games: [String]) async -> [String]? {
+        guard let miner = minerManager.miners.first(where: { $0.accountId == accountId }) else {
             return nil
         }
         let priorities = Settings.shared.setPersonalPriorityGames(accountId: accountId, games: games)
@@ -997,6 +1093,57 @@ private final class NavigationProjectionStateProvider: ProjectionStateProvider, 
         }
     }
 
+    // MARK: - Twitch-principal variants (keyed by mined account id)
+
+    func activeCampaign(forTwitchAccount accountId: String) async -> DiscordUserProjection.ActiveCampaign? {
+        await MainActor.run {
+            guard let miner = model?.minerForAccount(accountId),
+                  let campaignId = miner.currentCampaignId,
+                  let campaign = miner.allCampaigns.first(where: { $0.id == campaignId }) else {
+                return nil
+            }
+            return Self.activeCampaignProjection(from: campaign)
+        }
+    }
+
+    func recentCompletedCampaigns(forTwitchAccount accountId: String, limit: Int) async -> [DiscordUserProjection.RecentCampaign] {
+        await MainActor.run {
+            guard let miner = model?.minerForAccount(accountId) else { return [] }
+            return miner.allCampaigns
+                .filter { !$0.drops.isEmpty && $0.drops.allSatisfy(\.isClaimed) }
+                .sorted { Self.completedSortDate($0) > Self.completedSortDate($1) }
+                .prefix(max(limit, 0))
+                .map(Self.recentCampaignProjection)
+        }
+    }
+
+    func projectionState(forTwitchAccount accountId: String) async -> DiscordUserProjection.ProjectionState? {
+        await MainActor.run {
+            guard let miner = model?.minerForAccount(accountId) else { return nil }
+            if miner.needsAuth || miner.status == .blockedAccountNotLinked || miner.status == .error {
+                return .blocked
+            }
+            if miner.currentCampaignId != nil {
+                return .active
+            }
+            return nil
+        }
+    }
+
+    func priorityGames(forTwitchAccount accountId: String) async -> [String] {
+        await MainActor.run {
+            guard let model, let miner = model.minerForAccount(accountId) else { return [] }
+            return model.priorityGames(for: miner)
+        }
+    }
+
+    func personalPriorityGames(forTwitchAccount accountId: String) async -> [String] {
+        await MainActor.run {
+            guard let model, model.minerForAccount(accountId) != nil else { return [] }
+            return Settings.shared.personalPriorityGames(forAccountId: accountId)
+        }
+    }
+
     private static func activeCampaignProjection(from campaign: Campaign) -> DiscordUserProjection.ActiveCampaign {
         let totalRequired = max(campaign.drops.map(\.requiredMinutes).reduce(0, +), 0)
         let totalCurrent = campaign.drops.reduce(0) { total, drop in
@@ -1037,6 +1184,10 @@ private extension NavigationModel {
         minerManager.miners.first { miner in
             miner.ownerDiscordId == discordUserId
         }
+    }
+
+    func minerForAccount(_ accountId: String) -> MinerManager.ManagedMiner? {
+        minerManager.miners.first { $0.accountId == accountId }
     }
 }
 

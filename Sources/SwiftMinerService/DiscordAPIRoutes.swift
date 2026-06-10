@@ -164,6 +164,10 @@ public actor DiscordAPIRoutes {
     /// Replaces a Discord-owned miner's personal priority games with the given list.
     /// Args: (discordUserId, accountId, games). Returns the resulting effective list.
     public var onSetPriorities: (@Sendable (String, String, [String]) async -> [String]?)?
+    /// Replaces a miner's personal priority games, identified by Twitch account
+    /// id alone (no Discord owner needed). Used by Twitch-authenticated web
+    /// sessions. Args: (accountId, games). Returns the resulting effective list.
+    public var onSetPrioritiesByAccount: (@Sendable (String, [String]) async -> [String]?)?
 
     // In-memory activation session store (ephemeral; DB retains audit rows)
     private var activationSessions: [String: ActivationSession] = [:]
@@ -205,6 +209,10 @@ public actor DiscordAPIRoutes {
 
     public func setOnSetPriorities(_ handler: @escaping @Sendable (String, String, [String]) async -> [String]?) {
         self.onSetPriorities = handler
+    }
+
+    public func setOnSetPrioritiesByAccount(_ handler: @escaping @Sendable (String, [String]) async -> [String]?) {
+        self.onSetPrioritiesByAccount = handler
     }
 
     public func configure(_ router: HTTPRouter) async {
@@ -689,6 +697,124 @@ public actor DiscordAPIRoutes {
             return .error(code: "account_not_found", message: "No linked miner account was found for this Discord user.", statusCode: 404)
         }
         return HTTPResponse.json(PrioritiesResponse(accountId: accountId, priorityGames: priorities))
+    }
+
+    // MARK: - Web Dashboard Delegation
+    //
+    // These public entry points exist solely for the self-service web dashboard.
+    // Every one of them takes the Discord ID *from the caller's authenticated
+    // session* (never from a request path) and reuses the exact same handler
+    // logic as the Bot-key API, so authorization is centralised. Nested ids
+    // (`accountId`, activation `sessionId`) are additionally verified to belong
+    // to the session owner here, as defense in depth.
+
+    /// Whether a Discord user is registered. Used by the web layer to decide
+    /// between onboarding and the dashboard.
+    public func webUserExists(discordId: String) async -> Bool {
+        await userExists(discordUserId: discordId)
+    }
+
+    /// Idempotently register the session's own Discord user (web-first onboarding).
+    public func webSelfRegister(discordId: String) async -> Bool {
+        let result = await adminLinkingService.registerUser(
+            discordId: discordId,
+            operatorIdentity: .web(discordId: discordId)
+        )
+        switch result {
+        case .registered, .alreadyRegistered: return true
+        case .invalidDiscordId, .internalError: return false
+        }
+    }
+
+    public func webProjection(discordId: String) async -> HTTPResponse {
+        await handleGetProjection(request: emptyRequest(), params: ["discordUserId": discordId])
+    }
+
+    public func webCampaignAction(discordId: String, campaignId: String, action: String, body: Data) async -> HTTPResponse {
+        await handleCampaignAction(
+            request: emptyRequest(body: body),
+            params: ["discordUserId": discordId, "campaignId": campaignId, "action": action]
+        )
+    }
+
+    public func webSetPriorities(discordId: String, accountId: String, body: Data) async -> HTTPResponse {
+        guard await ownsAccount(discordId: discordId, accountId: accountId) else {
+            return .error(code: "account_not_found", message: "No linked miner account was found for this user.", statusCode: 404)
+        }
+        return await handleSetPriorities(
+            request: emptyRequest(body: body),
+            params: ["discordUserId": discordId, "accountId": accountId]
+        )
+    }
+
+    public func webStartActivation(discordId: String) async -> HTTPResponse {
+        await handleStartActivation(request: emptyRequest(), params: ["discordUserId": discordId])
+    }
+
+    /// Activation polling scoped to the session owner. Returns 404 for any
+    /// session that is not owned by this Discord user, preventing cross-user
+    /// disclosure of another person's Twitch activation/username.
+    public func webActivationStatus(discordId: String, sessionId: String) async -> HTTPResponse {
+        guard activationSessions[sessionId]?.discordUserId == discordId else {
+            return .error(code: "session_not_found", message: "Session not found.", statusCode: 404)
+        }
+        return await handleGetActivationStatus(request: emptyRequest(), params: ["sessionId": sessionId])
+    }
+
+    public func webCancelActivation(discordId: String, sessionId: String) async -> HTTPResponse {
+        guard activationSessions[sessionId]?.discordUserId == discordId else {
+            return .error(code: "session_not_found", message: "Session not found.", statusCode: 404)
+        }
+        return await handleCancelActivation(request: emptyRequest(), params: ["sessionId": sessionId])
+    }
+
+    private func ownsAccount(discordId: String, accountId: String) async -> Bool {
+        await manager.ownerDiscordId(forTwitchAccount: accountId) == discordId
+    }
+
+    // MARK: - Web Dashboard Delegation (Twitch principal)
+    //
+    // For Twitch-authenticated sessions the principal *is* the mined account, so
+    // there is no Discord owner to resolve and no nested id to forge — the
+    // account id comes straight from the verified session.
+
+    public func webProjectionTwitch(twitchId: String) async -> HTTPResponse {
+        guard let projection = await projectionBuilder.buildProjection(twitchId: twitchId) else {
+            return .error(code: "miner_not_found", message: "No miner is running for this Twitch account.", statusCode: 404)
+        }
+        return HTTPResponse.json(projection)
+    }
+
+    /// Operator overview: a projection per mined account. Used by a local
+    /// (username/password) session, which represents the host, not one user.
+    public func webOverview() async -> HTTPResponse {
+        let ids = await manager.allTwitchAccountIds()
+        var projections: [DiscordUserProjection] = []
+        for id in ids {
+            if let p = await projectionBuilder.buildProjection(twitchId: id) {
+                projections.append(p)
+            }
+        }
+        struct Overview: Encodable { let miners: [DiscordUserProjection] }
+        return HTTPResponse.json(Overview(miners: projections))
+    }
+
+    public func webSetPrioritiesTwitch(twitchId: String, body: Data) async -> HTTPResponse {
+        guard !body.isEmpty,
+              let decoded = try? JSONDecoder().decode(SetPrioritiesRequest.self, from: body) else {
+            return .error(code: "invalid_payload", message: "Body must include games.", statusCode: 400)
+        }
+        guard let handler = onSetPrioritiesByAccount else {
+            return .error(code: "unavailable", message: "Priority controls are not available.", statusCode: 503)
+        }
+        guard let priorities = await handler(twitchId, decoded.games) else {
+            return .error(code: "account_not_found", message: "No miner was found for this Twitch account.", statusCode: 404)
+        }
+        return HTTPResponse.json(PrioritiesResponse(accountId: twitchId, priorityGames: priorities))
+    }
+
+    private func emptyRequest(body: Data = Data()) -> HTTPRequest {
+        HTTPRequest(method: "POST", path: "", headers: [:], body: body)
     }
 
     // MARK: - DB Helpers

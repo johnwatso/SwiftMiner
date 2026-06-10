@@ -42,12 +42,32 @@ let projectionBuilder = DiscordProjectionBuilder(manager: manager)
 let apiRoutes = DiscordAPIRoutes(manager: manager, projectionBuilder: projectionBuilder, apiKey: apiKey)
 let router = HTTPRouter()
 
+// MARK: - Optional Web Dashboard
+//
+// Activated only when Discord OAuth credentials + a public base URL are
+// configured. When unset (the default), no web routes are registered and the
+// server exposes nothing beyond the existing Bot-key API + /health.
+let webConfig = WebDashboardConfig.fromEnvironment(defaults)
+let webRoutes: WebDashboardRoutes? = webConfig.map {
+    WebDashboardRoutes(config: $0, manager: manager, apiRoutes: apiRoutes)
+}
+
 // MARK: - Server Startup
 
-let server = HTTPAPIServer(port: port, apiKey: apiKey, router: router)
+let server = HTTPAPIServer(
+    port: port,
+    apiKey: apiKey,
+    router: router,
+    publicPathPrefixes: webConfig != nil ? WebDashboardConfig.publicPrefixes : [],
+    publicExactPaths: webConfig != nil ? WebDashboardConfig.publicExactPaths : []
+)
 
 Task {
     await apiRoutes.configure(router)
+    if let webRoutes {
+        await webRoutes.configure(router)
+        print("[SwiftMinerService] Web dashboard enabled at \(webConfig!.normalisedBase)")
+    }
     do {
         try await server.start()
     } catch {
