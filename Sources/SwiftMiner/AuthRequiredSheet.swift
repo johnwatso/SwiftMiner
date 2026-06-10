@@ -11,6 +11,8 @@ struct AuthRequiredSheet: View {
 
     @State private var loginService = MinerLoginService()
     @State private var successDismissTask: Task<Void, Never>?
+    @State private var copiedCode = false
+    @Environment(\.colorScheme) private var colorScheme
 
     private let sheetCornerRadius: CGFloat = 18
 
@@ -19,19 +21,31 @@ struct AuthRequiredSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
+        VStack(alignment: .leading, spacing: 22) {
             headerSection
             contentArea
             footerBar
         }
-        .frame(width: 480, height: 430)
-        .padding(28)
+        .frame(width: 540, height: 500)
+        .padding(30)
         .background {
             sheetShape
-                .fill(Color(nsColor: .windowBackgroundColor).opacity(0.97))
+                .fill(Color(nsColor: .windowBackgroundColor).opacity(0.96))
+                .overlay {
+                    LinearGradient(
+                        colors: [
+                            Color.purple.opacity(colorScheme == .dark ? 0.16 : 0.10),
+                            Color.indigo.opacity(colorScheme == .dark ? 0.10 : 0.06),
+                            Color(nsColor: .windowBackgroundColor).opacity(0.12)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    .clipShape(sheetShape)
+                }
                 .overlay {
                     sheetShape
-                        .fill(.ultraThinMaterial.opacity(0.35))
+                        .fill(.ultraThinMaterial.opacity(0.28))
                 }
                 .shadow(color: .black.opacity(0.14), radius: 16, y: 10)
         }
@@ -58,14 +72,37 @@ struct AuthRequiredSheet: View {
     // MARK: - Header
 
     private var headerSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label("Add Twitch Account", systemImage: "tv.fill")
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(.primary)
+        HStack(alignment: .top, spacing: 16) {
+            ZStack {
+                RoundedRectangle(cornerRadius: GlassRadius.large, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.57, green: 0.28, blue: 1.0),
+                                Color(red: 0.36, green: 0.18, blue: 0.88)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
 
-            Text("Authorize a Twitch account to join your miner dashboard. SwiftMiner will open Twitch in your browser and keep watching for confirmation here.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
+                Image(systemName: "tv.fill")
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(.white)
+            }
+            .frame(width: 52, height: 52)
+            .shadow(color: Color.purple.opacity(0.24), radius: 10, y: 5)
+
+            VStack(alignment: .leading, spacing: 7) {
+                Text("Add Twitch Account")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(.primary)
+
+                Text("SwiftMiner opens Twitch in your browser, then finishes here as soon as the account is approved.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
@@ -102,16 +139,23 @@ struct AuthRequiredSheet: View {
 
     private func statusView(title: String, description: String) -> some View {
         VStack(spacing: 20) {
-            ProgressView()
-                .controlSize(.large)
+            ZStack {
+                RoundedRectangle(cornerRadius: GlassRadius.large, style: .continuous)
+                    .fill(Color.purple.opacity(0.12))
+                    .frame(width: 72, height: 72)
+
+                ProgressView()
+                    .controlSize(.large)
+            }
 
             VStack(spacing: 6) {
                 Text(title)
-                    .font(.headline)
+                    .font(.title3.weight(.semibold))
 
                 Text(description)
                     .font(.callout)
                     .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
@@ -120,66 +164,130 @@ struct AuthRequiredSheet: View {
     // MARK: - Waiting for user
 
     private func waitingView(code: String, url: URL, expiresIn: Int) -> some View {
-        VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("1. Open Twitch")
-                    .font(.headline)
-                Text("Open the activation page in your browser, then enter the code shown below.")
+        VStack(alignment: .leading, spacing: 16) {
+            stepRow(
+                number: "1",
+                title: "Open Twitch",
+                detail: "Use the activation page in your browser."
+            ) {
+                Button {
+                    NSWorkspace.shared.open(url)
+                } label: {
+                    Label("Open Activation Page", systemImage: "safari")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+            }
+
+            stepRow(
+                number: "2",
+                title: "Enter the code",
+                detail: "Paste this code on Twitch to approve SwiftMiner."
+            ) {
+                codePanel(code: code, expiresIn: expiresIn)
+            }
+
+            waitingStatusPanel
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func stepRow<Content: View>(
+        number: String,
+        title: String,
+        detail: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            Text(number)
+                .font(.callout.weight(.bold))
+                .foregroundStyle(.white)
+                .frame(width: 28, height: 28)
+                .background(Color.purple, in: Circle())
+
+            VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.headline)
+
+                    Text(detail)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+
+                content()
+            }
+        }
+        .padding(14)
+        .background(.thinMaterial.opacity(0.72), in: RoundedRectangle(cornerRadius: GlassRadius.large, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: GlassRadius.large, style: .continuous)
+                .strokeBorder(.white.opacity(0.12), lineWidth: 1)
+        }
+    }
+
+    private func codePanel(code: String, expiresIn: Int) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 12) {
+                Text(code)
+                    .font(.system(size: 36, weight: .bold, design: .monospaced))
+                    .tracking(5)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                    .textSelection(.enabled)
+
+                Spacer(minLength: 12)
+
+                Button {
+                    copyCode(code)
+                } label: {
+                    Label(copiedCode ? "Copied" : "Copy", systemImage: copiedCode ? "checkmark" : "doc.on.doc")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+                .help("Copy code")
+            }
+
+            HStack(spacing: 8) {
+                Image(systemName: "clock")
+                    .foregroundStyle(.tertiary)
+                Text("Expires in \(max(expiresIn / 60, 1)) minutes")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(Color(nsColor: .textBackgroundColor).opacity(0.34), in: RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
+                .strokeBorder(Color.purple.opacity(0.20), lineWidth: 1)
+        }
+    }
+
+    private var waitingStatusPanel: some View {
+        HStack(spacing: 12) {
+            ProgressView()
+                .controlSize(.small)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Waiting for confirmation")
+                    .font(.callout.weight(.medium))
+                Text("This sheet closes automatically after Twitch approves the login.")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            Button {
-                NSWorkspace.shared.open(url)
-            } label: {
-                Label("Open Twitch Activation Page", systemImage: "safari")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-
-            VStack(alignment: .leading, spacing: 10) {
-                Text("2. Enter this code")
-                    .font(.headline)
-
-                HStack(spacing: 12) {
-                    Text(code)
-                        .font(.system(size: 34, weight: .bold, design: .monospaced))
-                        .tracking(6)
-                        .textSelection(.enabled)
-
-                    Button {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(code, forType: .string)
-                    } label: {
-                        Label("Copy", systemImage: "doc.on.doc")
-                    }
-                    .buttonStyle(.bordered)
-                    .help("Copy code")
-                }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 18)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
-
-                Text("Code expires in \(expiresIn / 60) minutes")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
-
-            HStack(spacing: 10) {
-                ProgressView()
-                    .controlSize(.small)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Waiting for confirmation")
-                        .font(.callout.weight(.medium))
-                    Text("This window will finish automatically after Twitch approves the login.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
+            Spacer()
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(Color.green.opacity(0.08), in: RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
+                .strokeBorder(Color.green.opacity(0.16), lineWidth: 1)
+        }
     }
 
     // MARK: - Polling
@@ -194,38 +302,49 @@ struct AuthRequiredSheet: View {
     // MARK: - Success
 
     private var successView: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(spacing: 16) {
             AnimatedStatusIcon(symbol: "checkmark.circle.fill", color: .green, size: 48)
             Text("Account Added!")
                 .font(.title3.weight(.semibold))
             Text("Your Twitch account has been connected.")
+                .font(.callout)
                 .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
 
     // MARK: - Failure
 
     private func failureView(message: String) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 44))
-                .foregroundStyle(.orange)
+        VStack(spacing: 16) {
+            ZStack {
+                RoundedRectangle(cornerRadius: GlassRadius.large, style: .continuous)
+                    .fill(Color.orange.opacity(0.14))
+                    .frame(width: 72, height: 72)
+
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 34, weight: .semibold))
+                    .foregroundStyle(.orange)
+            }
 
             Text(failureTitle(for: message))
-                .font(.headline)
+                .font(.title3.weight(.semibold))
 
             Text(message)
                 .font(.callout)
                 .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
 
             Button("Try Again") {
                 loginService.cancel()
                 loginService.startDeviceAuth()
             }
             .buttonStyle(.borderedProminent)
+            .controlSize(.large)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
 
     // MARK: - Footer
@@ -267,6 +386,20 @@ struct AuthRequiredSheet: View {
         successDismissTask?.cancel()
         successDismissTask = nil
         isPresented = false
+    }
+
+    private func copyCode(_ code: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(code, forType: .string)
+
+        copiedCode = true
+        Task {
+            try? await Task.sleep(nanoseconds: 1_400_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                copiedCode = false
+            }
+        }
     }
 
     private func failureTitle(for message: String) -> String {

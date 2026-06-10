@@ -227,6 +227,21 @@ public protocol SwiftBotConnectionService: Sendable {
     /// SwiftMiner's local dashboard (`service`, e.g. http://localhost:8080).
     /// Signed with the shared pairing secret.
     func registerTunnelHostname(hostname: String, service: String, hmacSecret: String) async -> SwiftBotTunnelRegistrationResult
+
+    /// Fetches SwiftBot's tunnel domain/readiness so the dashboard only needs a
+    /// subdomain from the user. Returns nil when SwiftBot is unreachable or too
+    /// old to support the endpoint.
+    func fetchTunnelInfo() async -> SwiftBotTunnelInfo?
+}
+
+/// SwiftBot's public-tunnel facts, used to compose the dashboard hostname.
+public struct SwiftBotTunnelInfo: Sendable, Decodable {
+    /// Whether SwiftBot's Internet Access (Cloudflare tunnel) is fully set up.
+    public let internetAccessEnabled: Bool
+    /// The apex domain (Cloudflare zone), e.g. "example.com".
+    public let domain: String
+    /// SwiftBot's own hostname, e.g. "swiftbot.example.com".
+    public let swiftBotHostname: String
 }
 
 /// Outcome of registering a hostname on SwiftBot's Cloudflare tunnel.
@@ -241,4 +256,7 @@ public extension SwiftBotConnectionService {
     func registerTunnelHostname(hostname: String, service: String, hmacSecret: String) async -> SwiftBotTunnelRegistrationResult {
         .failure(message: "Tunnel registration is not supported by this connection.")
     }
+
+    /// Default for implementations (and test doubles) without tunnel info.
+    func fetchTunnelInfo() async -> SwiftBotTunnelInfo? { nil }
 }

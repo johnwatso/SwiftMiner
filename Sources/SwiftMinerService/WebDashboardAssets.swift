@@ -145,10 +145,15 @@ enum WebDashboardAssets {
 
     /// Sign-in chooser. Renders a button per enabled provider, plus a local
     /// username/password form when local sign-in is available on this request.
-    static func loginPage(discord: Bool, twitch: Bool, local: Bool) -> String {
+    /// `discordSSOURL` is SwiftBot's companion-SSO entry point (Discord
+    /// sign-in brokered by the paired SwiftBot).
+    static func loginPage(discordSSOURL: String?, twitch: Bool, local: Bool) -> String {
         var blocks = ""
-        if discord {
-            blocks += #"<a class="btn discord" href="/login/discord">Sign in with Discord</a>"#
+        if let discordSSOURL {
+            let href = discordSSOURL
+                .replacingOccurrences(of: "&", with: "&amp;")
+                .replacingOccurrences(of: "\"", with: "&quot;")
+            blocks += #"<a class="btn discord" href="\#(href)">Sign in with Discord</a>"#
         }
         if twitch {
             blocks += #"<a class="btn twitch" href="/login/twitch">Sign in with Twitch</a>"#

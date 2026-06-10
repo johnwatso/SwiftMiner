@@ -689,6 +689,8 @@ private struct WebDashboardSettingsView: View {
     @State private var isRegisteringTunnel = false
     @State private var tunnelRegistrationMessage: String?
     @State private var tunnelRegistrationSucceeded = false
+    @State private var swiftBotTunnelInfo: SwiftBotTunnelInfo?
+    @State private var isFetchingTunnelInfo = false
 
     /// Internet access (Twitch sign-in over a tunnel) is only offered when the
     /// Discord/SwiftBot integration is on or the host mines for several people —
@@ -761,11 +763,44 @@ private struct WebDashboardSettingsView: View {
 
     @ViewBuilder private var oauthSections: some View {
         Section {
-            TextField("Public URL", text: $settings.webDashboardBaseURL, prompt: Text("https://swiftminer.example.com"))
-                .textContentType(.URL)
-            SettingsSecondaryText("Your dashboard's own subdomain (e.g. swiftminer.yourdomain.com), carried on SwiftBot's existing Cloudflare tunnel — SwiftMiner doesn't run its own.")
-
             if settings.swiftBotEnabled {
+                if let info = swiftBotTunnelInfo, !info.domain.isEmpty {
+                    // Domain comes from SwiftBot — the user only picks a subdomain.
+                    HStack(spacing: 4) {
+                        TextField("Subdomain", text: $settings.webDashboardSubdomain, prompt: Text("swiftminer"))
+                            .frame(maxWidth: 150)
+                        Text(".\(info.domain)")
+                            .font(.system(size: 13, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                    }
+                    SettingsSecondaryText("Domain pulled from SwiftBot. Your dashboard will be at https://\(composedHostname(domain: info.domain) ?? "…").")
+
+                    if !info.internetAccessEnabled {
+                        Label("SwiftBot's Internet Access isn't set up yet — finish that in SwiftBot first.", systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+                } else {
+                    HStack(spacing: 8) {
+                        if isFetchingTunnelInfo {
+                            ProgressView().controlSize(.mini)
+                            Text("Asking SwiftBot for your domain…")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Label("Couldn't get the domain from SwiftBot (is it running and up to date?).", systemImage: "exclamationmark.triangle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                            Button("Retry") { Task { await loadSwiftBotTunnelInfo() } }
+                                .controlSize(.small)
+                        }
+                        Spacer()
+                    }
+                    TextField("Public URL", text: $settings.webDashboardBaseURL, prompt: Text("https://swiftminer.example.com"))
+                        .textContentType(.URL)
+                }
+
                 HStack(spacing: 10) {
                     Button {
                         registerTunnelHostname()
@@ -786,12 +821,16 @@ private struct WebDashboardSettingsView: View {
                 }
                 SettingsSecondaryText("One click: SwiftBot adds the subdomain to its tunnel and creates the DNS record for you. Requires SwiftBot's Internet Access to be set up and the apps to be paired.")
             } else {
+                TextField("Public URL", text: $settings.webDashboardBaseURL, prompt: Text("https://swiftminer.example.com"))
+                    .textContentType(.URL)
                 copyableValueRow(label: "Local target", value: localTarget)
                 SettingsSecondaryText("Add the subdomain above as a public hostname on your Cloudflare tunnel, routed to this local address — or enable the Discord integration to register it through SwiftBot automatically.")
             }
         } header: {
             Text("Internet Access")
         }
+        .task { await loadSwiftBotTunnelInfo() }
+        .onChange(of: settings.webDashboardSubdomain) { _, _ in syncComposedBaseURL() }
 
         Section {
             TextField("Twitch Client ID", text: $settings.webDashboardTwitchClientID)
@@ -829,10 +868,9 @@ private struct WebDashboardSettingsView: View {
     }
 
     /// Trailing-slash-normalised public origin, or nil if empty/invalid.
+    /// Lenient: a bare hostname is treated as https.
     private var webDashboardOrigin: String? {
-        let raw = settings.webDashboardBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !raw.isEmpty, let url = URL(string: raw), let scheme = url.scheme?.lowercased(),
-              scheme == "http" || scheme == "https", url.host != nil else { return nil }
+        guard let url = Settings.normalizedWebDashboardURL(from: settings.webDashboardBaseURL) else { return nil }
         var s = url.absoluteString
         while s.hasSuffix("/") { s.removeLast() }
         return s
@@ -846,6 +884,41 @@ private struct WebDashboardSettingsView: View {
     private var localTarget: String {
         let port = URL(string: settings.swiftMinerAPIEndpoint)?.port ?? 8080
         return "http://localhost:\(port)"
+    }
+
+    /// Subdomain restricted to DNS-label characters, or nil if unusable.
+    private var sanitizedSubdomain: String? {
+        let cleaned = settings.webDashboardSubdomain
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .filter { $0.isLetter || $0.isNumber || $0 == "-" }
+        return cleaned.isEmpty ? nil : cleaned
+    }
+
+    private func composedHostname(domain: String) -> String? {
+        guard let sub = sanitizedSubdomain else { return nil }
+        return "\(sub).\(domain)"
+    }
+
+    /// Writes the composed https URL into `webDashboardBaseURL`, which stays the
+    /// single source of truth for the redirect URL, the server config, and the
+    /// tunnel registration call.
+    private func syncComposedBaseURL() {
+        guard let info = swiftBotTunnelInfo, !info.domain.isEmpty,
+              let hostname = composedHostname(domain: info.domain) else { return }
+        settings.webDashboardBaseURL = "https://\(hostname)"
+    }
+
+    private func loadSwiftBotTunnelInfo() async {
+        guard settings.swiftBotEnabled, !isFetchingTunnelInfo else { return }
+        isFetchingTunnelInfo = true
+        swiftBotTunnelInfo = await navigation.fetchSwiftBotTunnelInfo()
+        isFetchingTunnelInfo = false
+        if let host = swiftBotTunnelInfo?.swiftBotHostname, !host.isEmpty {
+            // Cached so Discord-via-SwiftBot sign-in works from next launch.
+            settings.webDashboardSwiftBotHostname = host
+        }
+        syncComposedBaseURL()
     }
 
     private func registerTunnelHostname() {

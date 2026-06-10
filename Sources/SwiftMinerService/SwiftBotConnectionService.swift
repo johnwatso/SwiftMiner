@@ -86,6 +86,21 @@ public actor RestSwiftBotConnectionService: SwiftBotConnectionService {
         return await outbox.sendTestWebhook()
     }
 
+    /// Fetches SwiftBot's tunnel domain/readiness (GET /v1/tunnel/info).
+    public func fetchTunnelInfo() async -> SwiftBotTunnelInfo? {
+        guard let url = endpoint else { return nil }
+        var request = URLRequest(url: url.appendingPathComponent("v1/tunnel/info"))
+        request.httpMethod = "GET"
+        request.timeoutInterval = 5.0
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else { return nil }
+            return try JSONDecoder().decode(SwiftBotTunnelInfo.self, from: data)
+        } catch {
+            return nil
+        }
+    }
+
     /// Asks SwiftBot to carry `hostname` on its Cloudflare tunnel, routed to
     /// SwiftMiner's local dashboard. Signed with the shared pairing secret using
     /// the same scheme as webhook deliveries (SwiftBot verifies fail-closed).
