@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Gate sendPreview behind #if DEBUG to fix Release build - Release Notes</title>
+  <title>SwiftMiner 1.28 - Release Notes</title>
   <style>
     :root { color-scheme: light dark; }
     body {
@@ -39,12 +39,11 @@
 </head>
 <body>
   <main>
-    <h1>Gate sendPreview behind #if DEBUG to fix Release build</h1>
+    <h1>SwiftMiner 1.28</h1>
     <p class="meta">Version 1.28</p>
-    <p>Gate sendPreview behind #if DEBUG to fix Release build</p>
-<p>sendPreview called debugDMRequest, which is DEBUG-only, breaking the<br>Release archive build. The function is only invoked from a DEBUG-gated<br>preview button, so wrap it in #if DEBUG too.</p>
-<p>Co-Authored-By: Claude Opus 4.8 &lt;noreply@anthropic.com&gt;</p>
-    <p><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/28939e913d92a4611ff3667042c8501b5ec1a061">28939e9</a></p>
+    <p>Adds an optional web dashboard for browser-based miner visibility, with local operator sign-in and Twitch sign-in scoped to the user's own mined account.</p>
+    <p>Tightens the web dashboard's public route matching so only intended dashboard paths bypass the Bot-key API gate.</p>
+    <p>Updates SwiftMiner to version 1.28 build 2026061012 while leaving ShipHook-owned appcasts untouched.</p>
   </main>
 </body>
 </html>

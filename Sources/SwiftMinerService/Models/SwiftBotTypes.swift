@@ -222,4 +222,23 @@ public protocol SwiftBotConnectionService: Sendable {
     /// Sends a production DM event to SwiftBot.
     /// The caller (SwiftMiner) provides the event payload; SwiftBot decides notification behavior.
     func sendEventDM(to discordUserId: String, request: SwiftBotDMRequest) async -> Bool
+
+    /// Asks SwiftBot to carry `hostname` on its Cloudflare tunnel, routed to
+    /// SwiftMiner's local dashboard (`service`, e.g. http://localhost:8080).
+    /// Signed with the shared pairing secret.
+    func registerTunnelHostname(hostname: String, service: String, hmacSecret: String) async -> SwiftBotTunnelRegistrationResult
+}
+
+/// Outcome of registering a hostname on SwiftBot's Cloudflare tunnel.
+public enum SwiftBotTunnelRegistrationResult: Sendable {
+    case success(publicURL: String)
+    case failure(message: String)
+}
+
+public extension SwiftBotConnectionService {
+    /// Default for implementations (and test doubles) that don't support
+    /// tunnel hostname registration.
+    func registerTunnelHostname(hostname: String, service: String, hmacSecret: String) async -> SwiftBotTunnelRegistrationResult {
+        .failure(message: "Tunnel registration is not supported by this connection.")
+    }
 }

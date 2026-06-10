@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SwiftMiner — Dashboard preview</title>
+  <!--
+    STANDALONE DESIGN PREVIEW — not wired into the build.
+    Styling borrowed from SwiftBot's admin webui design tokens
+    (SwiftBotApp/Resources/admin/index.html). Mock data is inline so you can
+    just open this file in a browser. Once you're happy with the look, this CSS
+    gets ported into Sources/SwiftMinerService/WebDashboardAssets.swift
+    (HTML/CSS inline, JS served externally to satisfy the CSP).
+  -->
+  <style>
+    :root {
+      --bg-a: #0a0a0a; --bg-b: #121212; --bg-c: #1a1a1a; --bg-d: #202020;
+      --text: rgba(255,255,255,0.94); --muted: rgba(255,255,255,0.62);
+      --glass-top: rgba(255,255,255,0.08); --glass-bottom: rgba(255,255,255,0.03);
+      --glass-stroke: rgba(255,255,255,0.10); --shadow: 0 16px 40px rgba(0,0,0,0.28);
+      --blue-a: #56bcff; --blue-b: #208cff; --blue-c: #1669dd;
+      --success: #34c759; --error: #ff3b30;
+      --radius-xl: 20px; --radius-lg: 18px; --radius-md: 14px; --radius-sm: 10px;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg-a: #f5f5f7; --bg-b: #ffffff; --bg-c: #f0f0f2; --bg-d: #e5e5e7;
+        --text: #1d1d1f; --muted: rgba(0,0,0,0.56);
+        --glass-top: rgba(255,255,255,0.82); --glass-bottom: rgba(255,255,255,0.72);
+        --glass-stroke: rgba(0,0,0,0.08); --shadow: 0 12px 32px rgba(0,0,0,0.08);
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif;
+      background:
+        radial-gradient(1200px 800px at 80% -10%, rgba(86,188,255,0.10), transparent 60%),
+        linear-gradient(180deg, var(--bg-a), var(--bg-b) 40%, var(--bg-c));
+      background-attachment: fixed;
+      display: flex; justify-content: center; padding: 3rem 1rem;
+    }
+    .shell { width: 100%; max-width: 560px; }
+    .brand { display: flex; align-items: center; gap: 0.6rem; margin: 0 0 1.5rem; }
+    .brand .logo {
+      width: 34px; height: 34px; border-radius: 9px;
+      background: linear-gradient(135deg, var(--blue-a), var(--blue-c));
+      box-shadow: 0 6px 16px rgba(32,140,255,0.35);
+    }
+    .brand h1 { font-size: 1.25rem; font-weight: 650; margin: 0; letter-spacing: -0.01em; }
+    .brand .sub { color: var(--muted); font-size: 0.85rem; margin-left: auto; }
+
+    .card {
+      background: linear-gradient(180deg, var(--glass-top), var(--glass-bottom));
+      border: 1px solid var(--glass-stroke);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(24px) saturate(1.4);
+      -webkit-backdrop-filter: blur(24px) saturate(1.4);
+      padding: 1.15rem 1.3rem; margin-bottom: 1rem;
+    }
+    .row { display: flex; align-items: center; gap: 0.75rem; }
+    .avatar {
+      width: 42px; height: 42px; border-radius: 50%; flex: none;
+      background: linear-gradient(135deg, #9146ff, #5b2bb5);
+      display: grid; place-items: center; font-weight: 700; color: #fff;
+    }
+    .name { font-weight: 600; font-size: 1.05rem; }
+    .pill {
+      font-size: 0.72rem; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase;
+      padding: 0.2rem 0.55rem; border-radius: 999px;
+      background: rgba(52,199,89,0.16); color: var(--success);
+      border: 1px solid rgba(52,199,89,0.3);
+    }
+    .muted { color: var(--muted); }
+    .label { color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.5rem; }
+    .game { font-size: 1.1rem; font-weight: 650; margin-bottom: 0.1rem; }
+
+    .mining { display: flex; gap: 1rem; align-items: stretch; }
+    .mining .info { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+    .boxart {
+      width: 70px; height: 94px; flex: none; border-radius: 12px; object-fit: cover;
+      border: 1px solid var(--glass-stroke);
+      box-shadow: 0 8px 22px rgba(0,0,0,0.35);
+      /* Shown until/if the Twitch image loads (or fails). */
+      background: linear-gradient(135deg, var(--bg-d), var(--bg-c));
+    }
+    .bar { height: 10px; border-radius: 999px; background: rgba(127,127,127,0.18); overflow: hidden; margin: 0.7rem 0 0.4rem; }
+    .bar > i {
+      display: block; height: 100%; border-radius: 999px;
+      background: linear-gradient(90deg, var(--blue-a), var(--blue-b));
+      box-shadow: 0 0 14px rgba(86,188,255,0.55);
+    }
+    .meta { display: flex; justify-content: space-between; font-size: 0.82rem; }
+
+    .issue { display: flex; gap: 0.6rem; align-items: flex-start; padding: 0.55rem 0; border-top: 1px solid var(--glass-stroke); }
+    .issue:first-of-type { border-top: none; }
+    .issue .dot { color: #ffb340; font-size: 1.05rem; line-height: 1.2; }
+
+    /* Priorities */
+    .card-head { display: flex; align-items: center; margin-bottom: 0.6rem; }
+    .card-head .label { margin: 0; }
+    .card-head .count { margin-left: auto; color: var(--muted); font-size: 0.8rem; }
+    .plist { list-style: none; margin: 0; padding: 0; }
+    .pitem {
+      display: flex; align-items: center; gap: 0.6rem; padding: 0.5rem 0.6rem; margin: 0.3rem 0;
+      border: 1px solid var(--glass-stroke); border-radius: var(--radius-sm);
+      background: rgba(127,127,127,0.06); cursor: grab; user-select: none;
+    }
+    .pitem.dragging { opacity: 0.5; }
+    .pitem .grip { color: var(--muted); cursor: grab; letter-spacing: -2px; }
+    .pitem .rank {
+      width: 22px; height: 22px; flex: none; border-radius: 6px; font-size: 0.75rem; font-weight: 700;
+      display: grid; place-items: center; color: #fff;
+      background: linear-gradient(135deg, var(--blue-a), var(--blue-c));
+    }
+    /* Small box-art tile in the native 3:4 portrait ratio (same source as
+       "Now mining") — keeps Twitch art looking correct instead of square-cropped. */
+    .thumb {
+      width: 32px; height: 43px; flex: none; border-radius: 7px; object-fit: cover;
+      border: 1px solid var(--glass-stroke);
+      background: linear-gradient(135deg, var(--bg-d), var(--bg-c));
+    }
+    .pitem .pname { font-weight: 550; }
+    .pitem .remove {
+      margin-left: auto; border: none; background: transparent; color: var(--muted);
+      font-size: 1.1rem; line-height: 1; padding: 0.2rem 0.4rem; cursor: pointer; border-radius: 6px;
+    }
+    .pitem .remove:hover { color: var(--error); background: rgba(255,59,48,0.12); }
+    .addrow { display: flex; gap: 0.5rem; margin-top: 0.7rem; }
+    .addrow input {
+      flex: 1; font: inherit; color: var(--text); padding: 0.55rem 0.75rem;
+      border: 1px solid var(--glass-stroke); border-radius: var(--radius-sm); background: rgba(127,127,127,0.08);
+    }
+    .addrow input::placeholder { color: var(--muted); }
+
+    /* Drops */
+    .drop { display: flex; align-items: center; gap: 0.7rem; padding: 0.55rem 0; border-top: 1px solid var(--glass-stroke); }
+    .drop:first-of-type { border-top: none; }
+    .drop .icon { width: 34px; height: 45px; flex: none; border-radius: 8px; object-fit: cover; background: linear-gradient(135deg, var(--bg-d), var(--bg-c)); border: 1px solid var(--glass-stroke); }
+    .drop .reward { font-weight: 550; }
+    .drop .when { margin-left: auto; color: var(--muted); font-size: 0.8rem; white-space: nowrap; }
+    .stat { display: flex; gap: 1.4rem; margin-bottom: 0.2rem; }
+    .stat .n { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; }
+    .stat .k { color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; }
+
+    code {
+      font-family: "SF Mono", SFMono-Regular, ui-monospace, monospace;
+      background: rgba(127,127,127,0.16); padding: 0.12rem 0.4rem; border-radius: 6px; font-size: 0.95em;
+    }
+    button, .btn {
+      font: inherit; font-weight: 600; cursor: pointer; border-radius: var(--radius-sm);
+      padding: 0.6rem 1rem; border: 1px solid var(--glass-stroke);
+      background: linear-gradient(180deg, var(--glass-top), var(--glass-bottom));
+      color: var(--text); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    }
+    .btn-primary {
+      border: none; color: #fff;
+      background: linear-gradient(135deg, var(--blue-a), var(--blue-c));
+      box-shadow: 0 8px 20px rgba(32,140,255,0.35);
+    }
+    .actions { display: flex; gap: 0.6rem; margin-top: 0.4rem; }
+    .footer { display: flex; justify-content: flex-end; margin-top: 1.25rem; }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="brand">
+      <div class="logo"></div>
+      <h1>SwiftMiner</h1>
+      <span class="sub">signed in as <strong>@john</strong></span>
+    </div>
+
+    <!-- Account -->
+    <div class="card">
+      <div class="row">
+        <div class="avatar">J</div>
+        <div>
+          <div class="name">john_streams</div>
+          <div class="muted" style="font-size:0.85rem">Twitch account linked</div>
+        </div>
+        <span class="pill" style="margin-left:auto">Active</span>
+      </div>
+    </div>
+
+    <!-- Active campaign -->
+    <div class="card">
+      <div class="label">Now mining</div>
+      <div class="mining">
+        <!-- Box art straight from Twitch's CDN (by game name). Falls back to the
+             gradient placeholder if the image can't load. -->
+        <img class="boxart" alt="Fortnite box art"
+             src="https://static-cdn.jtvnw.net/ttv-boxart/Fortnite-144x192.jpg"
+             onerror="this.removeAttribute('src')">
+        <div class="info">
+          <div class="game">Fortnite</div>
+          <div class="muted" style="font-size:0.85rem">Chapter 5 Drops · ends in 2d 6h</div>
+          <div class="bar"><i style="width:75%"></i></div>
+          <div class="meta"><span class="muted">45 / 60 minutes</span><span style="color:var(--blue-a)">75%</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Priorities: drag to reorder, add, remove -->
+    <div class="card">
+      <div class="card-head">
+        <div class="label">Priority games</div>
+        <span class="count">drag to reorder</span>
+      </div>
+      <ul class="plist" id="plist">
+        <li class="pitem" draggable="true"><span class="grip">⠿</span><span class="rank">1</span><img class="thumb"><span class="pname">Fortnite</span><button class="remove" title="Remove">×</button></li>
+        <li class="pitem" draggable="true"><span class="grip">⠿</span><span class="rank">2</span><img class="thumb"><span class="pname">Valorant</span><button class="remove" title="Remove">×</button></li>
+        <li class="pitem" draggable="true"><span class="grip">⠿</span><span class="rank">3</span><img class="thumb"><span class="pname">Apex Legends</span><button class="remove" title="Remove">×</button></li>
+        <li class="pitem" draggable="true"><span class="grip">⠿</span><span class="rank">4</span><img class="thumb"><span class="pname">Rust</span><button class="remove" title="Remove">×</button></li>
+      </ul>
+      <div class="addrow">
+        <input id="addgame" type="text" placeholder="Add a game…" list="gamesuggest" autocomplete="off">
+        <datalist id="gamesuggest">
+          <option value="Counter-Strike 2"></option><option value="Dota 2"></option>
+          <option value="League of Legends"></option><option value="Overwatch 2"></option>
+        </datalist>
+        <button class="btn-primary" id="addbtn">Add</button>
+      </div>
+    </div>
+
+    <!-- Claimed drops -->
+    <div class="card">
+      <div class="card-head">
+        <div class="label">Drops</div>
+        <span class="count">last 30 days</span>
+      </div>
+      <div class="stat">
+        <div><div class="n">12</div><div class="k">Claimed</div></div>
+        <div><div class="n">1</div><div class="k">In progress</div></div>
+        <div><div class="n">3</div><div class="k">Games</div></div>
+      </div>
+      <div style="margin-top:0.6rem">
+        <div class="drop"><img class="icon" data-game="Fortnite"><div><div class="reward">Renegade Raider Spray</div><div class="muted" style="font-size:0.82rem">Fortnite</div></div><span class="when">2h ago</span></div>
+        <div class="drop"><img class="icon" data-game="Valorant"><div><div class="reward">Champions Capsule</div><div class="muted" style="font-size:0.82rem">Valorant</div></div><span class="when">yesterday</span></div>
+        <div class="drop"><img class="icon" data-game="Apex Legends"><div><div class="reward">Octane Weapon Charm</div><div class="muted" style="font-size:0.82rem">Apex Legends</div></div><span class="when">3 days ago</span></div>
+      </div>
+    </div>
+
+    <!-- Issues -->
+    <div class="card">
+      <div class="label">Needs attention</div>
+      <div class="issue">
+        <span class="dot">⚠️</span>
+        <div>
+          <div>You're eligible for <strong>Apex Legends</strong> drops but it isn't in your priorities.</div>
+          <div class="actions">
+            <button class="btn-primary">Prioritise</button>
+            <button>Ignore</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <button>Sign out</button>
+    </div>
+  </div>
+
+  <!--
+    Preview-only interactivity (drag-reorder, add, remove). In the real build
+    this logic lives in /app/app.js (external, CSP-compliant) and each change
+    POSTs the new order to PUT /me/miners/:accountId/priorities.
+  -->
+  <script>
+    // Twitch box-art CDN by game name — the same source as the "Now mining" art,
+    // cropped square via CSS object-fit. Falls back to the gradient placeholder.
+    function boxart(name, w = 72, h = 96) {
+      return `https://static-cdn.jtvnw.net/ttv-boxart/${encodeURIComponent(name)}-${w}x${h}.jpg`;
+    }
+    function setThumb(img, name) {
+      img.onerror = () => img.removeAttribute('src');
+      img.alt = name;
+      img.src = boxart(name);
+    }
+    // Priority-list thumbnails read the game name from their row.
+    document.querySelectorAll('#plist .thumb').forEach(img =>
+      setThumb(img, img.parentElement.querySelector('.pname').textContent));
+    // Drops thumbnails read it from data-game.
+    document.querySelectorAll('.drop .icon[data-game]').forEach(img =>
+      setThumb(img, img.dataset.game));
+
+    const list = document.getElementById('plist');
+    function renumber() {
+      [...list.children].forEach((li, i) => li.querySelector('.rank').textContent = i + 1);
+      // Real version would PUT the new order here.
+    }
+    function wireRemove(li) {
+      li.querySelector('.remove').onclick = () => { li.remove(); renumber(); };
+    }
+    [...list.children].forEach(wireRemove);
+
+    let dragEl = null;
+    list.addEventListener('dragstart', e => { dragEl = e.target.closest('.pitem'); dragEl.classList.add('dragging'); });
+    list.addEventListener('dragend', () => { dragEl && dragEl.classList.remove('dragging'); dragEl = null; renumber(); });
+    list.addEventListener('dragover', e => {
+      e.preventDefault();
+      const after = [...list.querySelectorAll('.pitem:not(.dragging)')].find(li => {
+        const r = li.getBoundingClientRect();
+        return e.clientY < r.top + r.height / 2;
+      });
+      if (!dragEl) return;
+      after ? list.insertBefore(dragEl, after) : list.appendChild(dragEl);
+    });
+
+    const input = document.getElementById('addgame');
+    function addGame() {
+      const name = input.value.trim();
+      if (!name) return;
+      const li = document.createElement('li');
+      li.className = 'pitem'; li.draggable = true;
+      li.innerHTML = '<span class="grip">⠿</span><span class="rank"></span><img class="thumb"><span class="pname"></span><button class="remove" title="Remove">×</button>';
+      li.querySelector('.pname').textContent = name;
+      setThumb(li.querySelector('.thumb'), name);
+      list.appendChild(li); wireRemove(li); renumber();
+      input.value = ''; input.focus();
+    }
+    document.getElementById('addbtn').onclick = addGame;
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') addGame(); });
+  </script>
+</body>
+</html>

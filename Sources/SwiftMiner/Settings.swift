@@ -379,6 +379,71 @@ public final class Settings: ObservableObject {
     @AppStorage("swiftMinerAPIKey", store: Settings.appStorageStore)
     public var swiftMinerAPIKey: String = ""
 
+    // MARK: - Web Dashboard
+    //
+    // Optional self-service browser dashboard. Independent of SwiftBot — it only
+    // needs a Discord OAuth app (for sign-in) and a public origin. Disabled by
+    // default; the in-process HTTP server registers its routes only when enabled.
+
+    /// Whether the self-service web dashboard is enabled
+    @AppStorage("webDashboardEnabled", store: Settings.appStorageStore)
+    public var webDashboardEnabled: Bool = false
+
+    /// Public origin the dashboard is served from (e.g. https://swiftminer.example.com)
+    @AppStorage("webDashboardBaseURL", store: Settings.appStorageStore)
+    public var webDashboardBaseURL: String = ""
+
+    // Discord identity is handled by SwiftBot (DMs/linking), so the web
+    // dashboard intentionally offers only Twitch and local sign-in.
+
+    /// Twitch OAuth application client ID used for web sign-in
+    @AppStorage("webDashboardTwitchClientID", store: Settings.appStorageStore)
+    public var webDashboardTwitchClientID: String = ""
+
+    /// Twitch OAuth application client secret used for web sign-in
+    @AppStorage("webDashboardTwitchClientSecret", store: Settings.appStorageStore)
+    public var webDashboardTwitchClientSecret: String = ""
+
+    /// Whether local username/password sign-in is allowed (default on). Only
+    /// honoured for local/LAN access, never over the public domain.
+    @AppStorage("webDashboardLocalEnabled", store: Settings.appStorageStore)
+    public var webDashboardLocalEnabled: Bool = true
+
+    /// Username for local sign-in.
+    @AppStorage("webDashboardLocalUsername", store: Settings.appStorageStore)
+    public var webDashboardLocalUsername: String = "admin"
+
+    /// Encoded salted hash of the local password ("iterations:saltHex:hashHex").
+    /// Empty until the operator sets a password; local sign-in is unavailable
+    /// until then (no default credential ships).
+    @AppStorage("webDashboardLocalPasswordHash", store: Settings.appStorageStore)
+    public var webDashboardLocalPasswordHash: String = ""
+
+    private func isBlank(_ s: String) -> Bool {
+        s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Whether local sign-in is fully set up (enabled, username, password set).
+    public var webDashboardLocalConfigured: Bool {
+        webDashboardLocalEnabled && !isBlank(webDashboardLocalUsername) && !isBlank(webDashboardLocalPasswordHash)
+    }
+
+    /// Whether Twitch web sign-in has complete credentials.
+    public var webDashboardTwitchConfigured: Bool {
+        !isBlank(webDashboardTwitchClientID) && !isBlank(webDashboardTwitchClientSecret)
+    }
+
+    /// Whether Twitch OAuth sign-in is fully configured (needs the public URL).
+    public var webDashboardOAuthConfigured: Bool {
+        !isBlank(webDashboardBaseURL) && webDashboardTwitchConfigured
+    }
+
+    /// Whether the dashboard is usable: enabled, and at least one sign-in method
+    /// available — local username/password, or an OAuth provider with a URL.
+    public var webDashboardConfigured: Bool {
+        webDashboardEnabled && (webDashboardLocalConfigured || webDashboardOAuthConfigured)
+    }
+
     // MARK: - Discord DM Notification Preferences
 
     // MARK: - Discord DM Notification Preferences

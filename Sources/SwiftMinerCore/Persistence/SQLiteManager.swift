@@ -297,6 +297,57 @@ public actor SQLiteManager {
             }
             try execute("INSERT OR IGNORE INTO _schema_migrations (version) VALUES (8);")
         }
+
+        // Web dashboard sessions + OAuth state. Only ever written when the
+        // optional web dashboard feature is configured; inert otherwise.
+        if !isMigrationApplied(9) {
+            try execute("""
+            CREATE TABLE IF NOT EXISTS web_sessions (
+                id TEXT PRIMARY KEY,
+                discord_id TEXT NOT NULL,
+                csrf_token TEXT NOT NULL,
+                created_at REAL NOT NULL,
+                expires_at REAL NOT NULL,
+                FOREIGN KEY(discord_id) REFERENCES miner_users(discord_id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_web_sessions_expires ON web_sessions(expires_at);
+            CREATE INDEX IF NOT EXISTS idx_web_sessions_discord ON web_sessions(discord_id);
+
+            CREATE TABLE IF NOT EXISTS web_oauth_states (
+                state TEXT PRIMARY KEY,
+                created_at REAL NOT NULL,
+                expires_at REAL NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_web_oauth_states_expires ON web_oauth_states(expires_at);
+            """)
+            try execute("INSERT OR IGNORE INTO _schema_migrations (version) VALUES (9);")
+        }
+
+        // Generalise web sessions to support multiple identity providers
+        // (Discord OR Twitch). The dashboard is unreleased, so any existing
+        // sessions can be dropped rather than migrated. `principal_id` holds a
+        // discord_id or a twitch_id depending on `principal_type` — so there is
+        // no longer a foreign key to miner_users (Twitch principals have none).
+        if !isMigrationApplied(10) {
+            try execute("""
+            DROP TABLE IF EXISTS web_sessions;
+            CREATE TABLE web_sessions (
+                id TEXT PRIMARY KEY,
+                principal_type TEXT NOT NULL DEFAULT 'discord',
+                principal_id TEXT NOT NULL,
+                csrf_token TEXT NOT NULL,
+                created_at REAL NOT NULL,
+                expires_at REAL NOT NULL
+            );
+            CREATE INDEX idx_web_sessions_expires ON web_sessions(expires_at);
+            CREATE INDEX idx_web_sessions_principal ON web_sessions(principal_type, principal_id);
+            """)
+            // Bind each OAuth state to the provider that minted it.
+            if !columnExists("provider", in: "web_oauth_states") {
+                try execute("ALTER TABLE web_oauth_states ADD COLUMN provider TEXT NOT NULL DEFAULT 'discord';")
+            }
+            try execute("INSERT OR IGNORE INTO _schema_migrations (version) VALUES (10);")
+        }
     }
 
     private func isMigrationApplied(_ version: Int) -> Bool {
@@ -362,4 +413,176 @@ public actor SQLiteManager {
 
     // Internal helper for raw pointer access (for TokenStore)
     internal var dbPointer: OpaquePointer? { db }
+
+    // MARK: - Web Dashboard Sessions
+
+    /// Persist a new web session. Caller supplies cryptographically random `id`
+    /// and `csrfToken`. `principalType` is "discord" or "twitch"; `principalId`
+    /// is the corresponding id. Times are `Date.timeIntervalSince1970`.
+    public func createWebSession(id: String, principalType: String, principalId: String, csrfToken: String, createdAt: Double, expiresAt: Double) throws {
+        guard let db else { throw SQLiteWebError.notOpen }
+        let sql = "INSERT INTO web_sessions (id, principal_type, principal_id, csrf_token, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?);"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { throw SQLiteWebError.prepareFailed }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_text(stmt, 1, id, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(stmt, 2, principalType, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(stmt, 3, principalId, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(stmt, 4, csrfToken, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_double(stmt, 5, createdAt)
+        sqlite3_bind_double(stmt, 6, expiresAt)
+        guard sqlite3_step(stmt) == SQLITE_DONE else { throw SQLiteWebError.stepFailed }
+    }
+
+    /// Fetch a non-expired session by id. Returns nil if absent or expired.
+    public func fetchWebSession(id: String, now: Double) -> WebSessionRecord? {
+        guard let db else { return nil }
+        let sql = "SELECT principal_type, principal_id, csrf_token, expires_at FROM web_sessions WHERE id = ? AND expires_at > ?;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_text(stmt, 1, id, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_double(stmt, 2, now)
+        guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
+        let principalType = String(cString: sqlite3_column_text(stmt, 0))
+        let principalId = String(cString: sqlite3_column_text(stmt, 1))
+        let csrf = String(cString: sqlite3_column_text(stmt, 2))
+        let expiresAt = sqlite3_column_double(stmt, 3)
+        return WebSessionRecord(id: id, principalType: principalType, principalId: principalId, csrfToken: csrf, expiresAt: expiresAt)
+    }
+
+    public func deleteWebSession(id: String) {
+        guard let db else { return }
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "DELETE FROM web_sessions WHERE id = ?;", -1, &stmt, nil) == SQLITE_OK else { return }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_text(stmt, 1, id, -1, SQLITE_TRANSIENT)
+        _ = sqlite3_step(stmt)
+    }
+
+    public func purgeExpiredWebSessions(now: Double) {
+        guard let db else { return }
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "DELETE FROM web_sessions WHERE expires_at <= ?;", -1, &stmt, nil) == SQLITE_OK else { return }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_double(stmt, 1, now)
+        _ = sqlite3_step(stmt)
+    }
+
+    /// Record a one-time OAuth `state` value (bound to the minting provider) for
+    /// CSRF protection of the login flow.
+    public func createOAuthState(_ state: String, provider: String, createdAt: Double, expiresAt: Double) throws {
+        guard let db else { throw SQLiteWebError.notOpen }
+        let sql = "INSERT INTO web_oauth_states (state, provider, created_at, expires_at) VALUES (?, ?, ?, ?);"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { throw SQLiteWebError.prepareFailed }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_text(stmt, 1, state, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(stmt, 2, provider, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_double(stmt, 3, createdAt)
+        sqlite3_bind_double(stmt, 4, expiresAt)
+        guard sqlite3_step(stmt) == SQLITE_DONE else { throw SQLiteWebError.stepFailed }
+    }
+
+    /// Atomically consume an OAuth `state`: deletes it and returns the provider
+    /// that minted it ("discord"/"twitch") if it existed and was unexpired, or
+    /// nil otherwise. Single-use by construction — a state can never be replayed,
+    /// and the returned provider tells the single callback which flow to run.
+    public func consumeOAuthState(_ state: String, now: Double) -> String? {
+        guard let db else { return nil }
+        var sel: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "SELECT expires_at, provider FROM web_oauth_states WHERE state = ?;", -1, &sel, nil) == SQLITE_OK else { return nil }
+        sqlite3_bind_text(sel, 1, state, -1, SQLITE_TRANSIENT)
+        let found = sqlite3_step(sel) == SQLITE_ROW
+        let expiresAt = found ? sqlite3_column_double(sel, 0) : 0
+        let storedProvider = found ? (sqlite3_column_text(sel, 1).map { String(cString: $0) } ?? "") : ""
+        sqlite3_finalize(sel)
+
+        guard found else { return nil }
+        // Always delete on lookup so a state can never be replayed.
+        var del: OpaquePointer?
+        if sqlite3_prepare_v2(db, "DELETE FROM web_oauth_states WHERE state = ?;", -1, &del, nil) == SQLITE_OK {
+            sqlite3_bind_text(del, 1, state, -1, SQLITE_TRANSIENT)
+            _ = sqlite3_step(del)
+        }
+        sqlite3_finalize(del)
+        return expiresAt > now ? storedProvider : nil
+    }
+
+    public func purgeExpiredOAuthStates(now: Double) {
+        guard let db else { return }
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "DELETE FROM web_oauth_states WHERE expires_at <= ?;", -1, &stmt, nil) == SQLITE_OK else { return }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_double(stmt, 1, now)
+        _ = sqlite3_step(stmt)
+    }
+
+    /// Returns the Discord owner of a Twitch account, or nil if the account is
+    /// unknown or unowned. Used to enforce per-session ownership of nested ids.
+    public func ownerDiscordId(forTwitchAccount twitchId: String) -> String? {
+        guard let db else { return nil }
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "SELECT owner_discord_id FROM twitch_accounts WHERE twitch_id = ?;", -1, &stmt, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_text(stmt, 1, twitchId, -1, SQLITE_TRANSIENT)
+        guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
+        guard let c = sqlite3_column_text(stmt, 0) else { return nil }
+        return String(cString: c)
+    }
+
+    /// All mined Twitch account ids, for the operator (local) overview.
+    public func allTwitchAccountIds() -> [String] {
+        guard let db else { return [] }
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "SELECT twitch_id FROM twitch_accounts ORDER BY username;", -1, &stmt, nil) == SQLITE_OK else { return [] }
+        defer { sqlite3_finalize(stmt) }
+        var ids: [String] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            if let c = sqlite3_column_text(stmt, 0) { ids.append(String(cString: c)) }
+        }
+        return ids
+    }
+
+    /// Look up a mined Twitch account by id. Returns its username and current
+    /// Discord owner (nil if unowned), or nil if SwiftMiner doesn't know the
+    /// account at all — which is how a Twitch web login is rejected for someone
+    /// whose account isn't mined here.
+    public func twitchAccount(twitchId: String) -> (username: String, ownerDiscordId: String?)? {
+        guard let db else { return nil }
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "SELECT username, owner_discord_id FROM twitch_accounts WHERE twitch_id = ?;", -1, &stmt, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_text(stmt, 1, twitchId, -1, SQLITE_TRANSIENT)
+        guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
+        let username = sqlite3_column_text(stmt, 0).map { String(cString: $0) } ?? ""
+        let owner = sqlite3_column_text(stmt, 1).map { String(cString: $0) }
+        return (username, owner)
+    }
 }
+
+/// A persisted web dashboard session, surfaced to the service layer.
+/// `principalType` is "discord" or "twitch"; `principalId` is the matching id.
+public struct WebSessionRecord: Sendable {
+    public let id: String
+    public let principalType: String
+    public let principalId: String
+    public let csrfToken: String
+    public let expiresAt: Double
+
+    public init(id: String, principalType: String, principalId: String, csrfToken: String, expiresAt: Double) {
+        self.id = id
+        self.principalType = principalType
+        self.principalId = principalId
+        self.csrfToken = csrfToken
+        self.expiresAt = expiresAt
+    }
+}
+
+enum SQLiteWebError: Error {
+    case notOpen
+    case prepareFailed
+    case stepFailed
+}
+
+private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)

@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import OSLog
 import SwiftMinerCore
@@ -83,6 +84,53 @@ public actor RestSwiftBotConnectionService: SwiftBotConnectionService {
     public func sendTestEvent() async -> Bool {
         guard let outbox = outboxProvider() else { return false }
         return await outbox.sendTestWebhook()
+    }
+
+    /// Asks SwiftBot to carry `hostname` on its Cloudflare tunnel, routed to
+    /// SwiftMiner's local dashboard. Signed with the shared pairing secret using
+    /// the same scheme as webhook deliveries (SwiftBot verifies fail-closed).
+    public func registerTunnelHostname(hostname: String, service: String, hmacSecret: String) async -> SwiftBotTunnelRegistrationResult {
+        guard let url = endpoint else {
+            return .failure(message: "SwiftBot endpoint is not configured.")
+        }
+        let secret = hmacSecret.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !secret.isEmpty else {
+            return .failure(message: "Pair with SwiftBot first — the shared secret is missing.")
+        }
+
+        struct Payload: Encodable { let hostname: String; let service: String; let label: String }
+        guard let body = try? JSONEncoder().encode(Payload(hostname: hostname, service: service, label: "SwiftMiner")) else {
+            return .failure(message: "Could not encode request.")
+        }
+
+        let timestamp = Int(Date().timeIntervalSince1970)
+        let message = "\(timestamp).\(String(data: body, encoding: .utf8) ?? "")"
+        let key = SymmetricKey(data: Data(secret.utf8))
+        let mac = HMAC<SHA256>.authenticationCode(for: Data(message.utf8), using: key)
+        let signature = "v1=" + mac.map { String(format: "%02x", $0) }.joined()
+
+        var request = URLRequest(url: url.appendingPathComponent("v1/tunnel/hostnames"))
+        request.httpMethod = "POST"
+        request.httpBody = body
+        request.timeoutInterval = 30
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("\(timestamp)", forHTTPHeaderField: "X-SwiftMiner-Timestamp")
+        request.setValue(signature, forHTTPHeaderField: "X-SwiftMiner-Signature")
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            if (200...299).contains(status), let publicURL = json?["publicURL"] as? String {
+                swiftBotConnectionLogger.info("Tunnel hostname registered: \(publicURL, privacy: .public)")
+                return .success(publicURL: publicURL)
+            }
+            let detail = json?["message"] as? String ?? "SwiftBot returned HTTP \(status)."
+            swiftBotConnectionLogger.error("Tunnel hostname registration failed: \(detail, privacy: .public)")
+            return .failure(message: detail)
+        } catch {
+            return .failure(message: "Could not reach SwiftBot: \(error.localizedDescription)")
+        }
     }
 
     public func fetchDiscordUsers() async -> [SwiftBotDiscordUser] {

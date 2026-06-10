@@ -22,6 +22,15 @@ public protocol ProjectionStateProvider: Sendable {
 
 public extension ProjectionStateProvider {
     func personalPriorityGames(for discordUserId: String) async -> [String] { [] }
+
+    // Twitch-principal variants, resolved by the mined account id directly
+    // (no Discord owner required). Default to empty so existing providers that
+    // only implement the Discord-keyed methods keep compiling unchanged.
+    func activeCampaign(forTwitchAccount accountId: String) async -> DiscordUserProjection.ActiveCampaign? { nil }
+    func recentCompletedCampaigns(forTwitchAccount accountId: String, limit: Int) async -> [DiscordUserProjection.RecentCampaign] { [] }
+    func projectionState(forTwitchAccount accountId: String) async -> DiscordUserProjection.ProjectionState? { nil }
+    func priorityGames(forTwitchAccount accountId: String) async -> [String] { [] }
+    func personalPriorityGames(forTwitchAccount accountId: String) async -> [String] { [] }
 }
 
 /// Default no-op provider. All state is derived from DB queries alone.
@@ -75,6 +84,49 @@ public actor DiscordProjectionBuilder {
 
         return DiscordUserProjection(
             discordUserId: discordUserId,
+            state: state,
+            account: account,
+            activeCampaign: activeCampaign,
+            recentCompletedCampaigns: recentCompletedCampaigns,
+            issues: issues,
+            dmState: dmState,
+            priorityGames: priorityGames,
+            personalPriorityGames: personalPriorityGames
+        )
+    }
+
+    /// Build a projection for a Twitch-authenticated principal, keyed on the
+    /// mined account directly. Works whether or not the account has a Discord
+    /// owner. Returns `nil` if SwiftMiner doesn't mine this Twitch account.
+    public func buildProjection(twitchId: String) async -> DiscordUserProjection? {
+        guard let acct = await manager.twitchAccount(twitchId: twitchId) else {
+            return nil
+        }
+        let ownerDiscordId = acct.ownerDiscordId
+
+        let account = DiscordUserProjection.Account(twitchAccountId: twitchId, username: acct.username)
+        // Issues / DM state are Discord-keyed; only present if the account is linked.
+        let issues = ownerDiscordId != nil ? await fetchIssues(discordUserId: ownerDiscordId!) : []
+        let dmState = ownerDiscordId != nil ? await fetchDMState(discordUserId: ownerDiscordId!) : DiscordDMState()
+
+        let activeCampaign = await stateProvider.activeCampaign(forTwitchAccount: twitchId)
+        let recentCompletedCampaigns = await stateProvider.recentCompletedCampaigns(forTwitchAccount: twitchId, limit: 3)
+        let priorityGames = await stateProvider.priorityGames(forTwitchAccount: twitchId)
+        let personalPriorityGames = await stateProvider.personalPriorityGames(forTwitchAccount: twitchId)
+
+        let state: DiscordUserProjection.ProjectionState
+        if let providerState = await stateProvider.projectionState(forTwitchAccount: twitchId) {
+            state = providerState
+        } else if !issues.isEmpty {
+            state = .blocked
+        } else if activeCampaign != nil {
+            state = .active
+        } else {
+            state = .idle
+        }
+
+        return DiscordUserProjection(
+            discordUserId: ownerDiscordId ?? "",
             state: state,
             account: account,
             activeCampaign: activeCampaign,

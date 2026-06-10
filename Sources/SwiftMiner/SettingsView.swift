@@ -39,6 +39,12 @@ struct SettingsView: View {
                     .tag(SettingsTab.integrations)
             }
 
+            WebDashboardSettingsView(settings: settings)
+                .tabItem {
+                    SettingsTabItem(tab: .web)
+                }
+                .tag(SettingsTab.web)
+
             AdvancedSettingsView(settings: settings)
                 .tabItem {
                     SettingsTabItem(tab: .advanced)
@@ -70,6 +76,7 @@ private enum SettingsTab: String, CaseIterable, Hashable, Identifiable {
     case accounts
     case mining
     case integrations
+    case web
     case advanced
     case updates
 
@@ -81,6 +88,7 @@ private enum SettingsTab: String, CaseIterable, Hashable, Identifiable {
         case .accounts: return "Accounts"
         case .mining: return "Mining"
         case .integrations: return "Integrations"
+        case .web: return "Web"
         case .advanced: return "Advanced"
         case .updates: return "Updates"
         }
@@ -92,6 +100,7 @@ private enum SettingsTab: String, CaseIterable, Hashable, Identifiable {
         case .accounts: return "person.2"
         case .mining: return "cpu"
         case .integrations: return "app.connected.to.app.below.fill"
+        case .web: return "globe"
         case .advanced: return "gearshape.2"
         case .updates: return "arrow.clockwise.circle"
         }
@@ -672,6 +681,264 @@ private struct MiningSettingsView: View {
 }
 
 // MARK: - Integrations Settings
+
+private struct WebDashboardSettingsView: View {
+    @ObservedObject var settings: Settings
+    @Environment(NavigationModel.self) private var navigation
+    @State private var newPassword: String = ""
+    @State private var isRegisteringTunnel = false
+    @State private var tunnelRegistrationMessage: String?
+    @State private var tunnelRegistrationSucceeded = false
+
+    /// Internet access (Twitch sign-in over a tunnel) is only offered when the
+    /// Discord/SwiftBot integration is on or the host mines for several people —
+    /// the cases where letting friends self-serve actually matters.
+    private var internetEligible: Bool {
+        settings.swiftBotEnabled || navigation.configuredMinerCount > 1
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Enable Web Dashboard", isOn: $settings.webDashboardEnabled)
+                SettingsSecondaryText("A browser dashboard for managing miners. Reach it locally with a username and password (below). When you run the Discord integration or mine for more than one person, you can also let users sign in over the internet to manage their own miner. Changes take effect after restarting SwiftMiner.")
+            } header: {
+                Text("Web Dashboard")
+            }
+
+            if settings.webDashboardEnabled {
+                localAccessSection
+                if internetEligible {
+                    oauthSections
+                } else {
+                    Section {
+                        Label("The dashboard is local-only right now. Internet access (Twitch sign-in) becomes available when the Discord integration is enabled or you have more than one miner.", systemImage: "lock.fill")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } header: {
+                        Text("Internet Access")
+                    }
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .padding(.horizontal, 24)
+        .padding(.bottom, 20)
+        .padding(.top, 10)
+    }
+
+    // MARK: - Local Access
+
+    private var localAccessSection: some View {
+        Section {
+            Toggle("Allow local sign-in", isOn: $settings.webDashboardLocalEnabled)
+            SettingsSecondaryText("Sign in with a username and password from this machine or your local network. Never accepted over your public domain, so it stays off the internet.")
+
+            if settings.webDashboardLocalEnabled {
+                TextField("Username", text: $settings.webDashboardLocalUsername)
+                HStack {
+                    SecureField(settings.webDashboardLocalPasswordHash.isEmpty ? "Set a password" : "Change password", text: $newPassword)
+                    Button("Set") {
+                        settings.webDashboardLocalPasswordHash = WebSecurity.hashLocalPassword(newPassword)
+                        newPassword = ""
+                    }
+                    .disabled(newPassword.count < 6)
+                }
+                if settings.webDashboardLocalPasswordHash.isEmpty {
+                    Label("Set a password (6+ characters) to enable local sign-in.", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption).foregroundStyle(.orange)
+                } else {
+                    Label("Password set. The operator view shows all miners.", systemImage: "checkmark.circle.fill")
+                        .font(.caption).foregroundStyle(.green)
+                }
+            }
+        } header: {
+            Text("Local Access")
+        }
+    }
+
+    // MARK: - OAuth (internet access)
+
+    @ViewBuilder private var oauthSections: some View {
+        Section {
+            TextField("Public URL", text: $settings.webDashboardBaseURL, prompt: Text("https://swiftminer.example.com"))
+                .textContentType(.URL)
+            SettingsSecondaryText("Your dashboard's own subdomain (e.g. swiftminer.yourdomain.com), carried on SwiftBot's existing Cloudflare tunnel — SwiftMiner doesn't run its own.")
+
+            if settings.swiftBotEnabled {
+                HStack(spacing: 10) {
+                    Button {
+                        registerTunnelHostname()
+                    } label: {
+                        if isRegisteringTunnel {
+                            ProgressView().controlSize(.mini)
+                        } else {
+                            Label("Register on SwiftBot's tunnel", systemImage: "antenna.radiowaves.left.and.right")
+                        }
+                    }
+                    .disabled(isRegisteringTunnel || webDashboardOrigin == nil)
+                    Spacer()
+                }
+                if let tunnelRegistrationMessage {
+                    Label(tunnelRegistrationMessage, systemImage: tunnelRegistrationSucceeded ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(tunnelRegistrationSucceeded ? .green : .orange)
+                }
+                SettingsSecondaryText("One click: SwiftBot adds the subdomain to its tunnel and creates the DNS record for you. Requires SwiftBot's Internet Access to be set up and the apps to be paired.")
+            } else {
+                copyableValueRow(label: "Local target", value: localTarget)
+                SettingsSecondaryText("Add the subdomain above as a public hostname on your Cloudflare tunnel, routed to this local address — or enable the Discord integration to register it through SwiftBot automatically.")
+            }
+        } header: {
+            Text("Internet Access")
+        }
+
+        Section {
+            TextField("Twitch Client ID", text: $settings.webDashboardTwitchClientID)
+            SecureField("Twitch Client Secret", text: $settings.webDashboardTwitchClientSecret)
+            SettingsSecondaryText("From your Twitch application (dev.twitch.tv/console → register an app with the redirect URL below). Enables “Sign in with Twitch”, letting users reach their own miner over the web.")
+        } header: {
+            HStack(spacing: 6) {
+                TwitchLogo()
+                    .frame(width: 13, height: 14)
+                    .accessibilityHidden(true)
+                Text("Twitch Sign-In")
+            }
+        }
+
+        Section {
+            if let redirect = webRedirectURL {
+                copyableValueRow(label: "Redirect URL", value: redirect)
+                SettingsSecondaryText("Register this exact URL as an OAuth Redirect URL in your Twitch application (dev.twitch.tv/console).")
+            } else if !settings.webDashboardBaseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Label("Enter a valid http(s) Public URL above to see the redirect URL to register.", systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            } else {
+                SettingsSecondaryText("Set a Public URL above to get the redirect URL to register with Twitch.")
+            }
+
+            if !settings.webDashboardConfigured {
+                Label("Set a local password, or add a Public URL plus Twitch credentials, to enable sign-in.", systemImage: "info.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("Setup")
+        }
+    }
+
+    /// Trailing-slash-normalised public origin, or nil if empty/invalid.
+    private var webDashboardOrigin: String? {
+        let raw = settings.webDashboardBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty, let url = URL(string: raw), let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https", url.host != nil else { return nil }
+        var s = url.absoluteString
+        while s.hasSuffix("/") { s.removeLast() }
+        return s
+    }
+
+    private var webRedirectURL: String? {
+        webDashboardOrigin.map { $0 + "/oauth/callback" }
+    }
+
+    /// The local address a tunnel should route the subdomain to.
+    private var localTarget: String {
+        let port = URL(string: settings.swiftMinerAPIEndpoint)?.port ?? 8080
+        return "http://localhost:\(port)"
+    }
+
+    private func registerTunnelHostname() {
+        isRegisteringTunnel = true
+        tunnelRegistrationMessage = nil
+        Task {
+            let result = await navigation.registerWebDashboardHostnameWithSwiftBot()
+            switch result {
+            case .success(let publicURL):
+                tunnelRegistrationSucceeded = true
+                tunnelRegistrationMessage = "Registered — dashboard reachable at \(publicURL)"
+            case .failure(let message):
+                tunnelRegistrationSucceeded = false
+                tunnelRegistrationMessage = message
+            }
+            isRegisteringTunnel = false
+        }
+    }
+
+    /// A monospaced, selectable value with a copy button — used for the local
+    /// target and the OAuth redirect URL.
+    private func copyableValueRow(label: String, value: String) -> some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(label)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                Text(value)
+                    .font(.system(size: 12, design: .monospaced))
+                    .textSelection(.enabled)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            Spacer(minLength: 8)
+            Button {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(value, forType: .string)
+            } label: {
+                Image(systemName: "doc.on.doc")
+                    .font(.system(size: 11))
+            }
+            .buttonStyle(.borderless)
+            .help("Copy")
+        }
+    }
+}
+
+/// The Twitch wordmark glyph, drawn from its 24×24 SVG path so no image asset
+/// is needed. Even-odd fill cuts out the screen and leaves the two purple eyes.
+private struct TwitchLogo: View {
+    var color = Color(red: 0.5686, green: 0.2745, blue: 1.0) // #9146FF
+
+    var body: some View {
+        TwitchGlyphShape()
+            .fill(color, style: FillStyle(eoFill: true))
+    }
+}
+
+private struct TwitchGlyphShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+            CGPoint(x: rect.minX + x / 24 * rect.width,
+                    y: rect.minY + y / 24 * rect.height)
+        }
+        let w = rect.width / 24, h = rect.height / 24
+        var path = Path()
+        // Body
+        path.move(to: p(6, 0))
+        path.addLine(to: p(1.714, 4.286))
+        path.addLine(to: p(1.714, 19.714))
+        path.addLine(to: p(6.857, 19.714))
+        path.addLine(to: p(6.857, 24))
+        path.addLine(to: p(11.143, 19.714))
+        path.addLine(to: p(14.571, 19.714))
+        path.addLine(to: p(22.286, 12))
+        path.addLine(to: p(22.286, 0))
+        path.closeSubpath()
+        // Inner screen (hole)
+        path.move(to: p(20.571, 11.143))
+        path.addLine(to: p(17.143, 14.571))
+        path.addLine(to: p(13.714, 14.571))
+        path.addLine(to: p(10.714, 17.571))
+        path.addLine(to: p(10.714, 14.571))
+        path.addLine(to: p(6.857, 14.571))
+        path.addLine(to: p(6.857, 1.714))
+        path.addLine(to: p(20.571, 1.714))
+        path.closeSubpath()
+        // Eyes
+        path.addRect(CGRect(origin: p(11.571, 4.714), size: CGSize(width: 1.715 * w, height: 5.143 * h)))
+        path.addRect(CGRect(origin: p(16.286, 4.714), size: CGSize(width: 1.714 * w, height: 5.143 * h)))
+        return path
+    }
+}
 
 private struct IntegrationsSettingsView: View {
     @ObservedObject var settings: Settings
