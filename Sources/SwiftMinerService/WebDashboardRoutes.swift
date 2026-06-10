@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import OSLog
 import SwiftMinerCore
@@ -48,6 +49,9 @@ public actor WebDashboardRoutes {
         })
         await router.register(HTTPRoute(method: "GET", pattern: WebDashboardConfig.callbackPath) { req, _ in
             await me.handleCallback(req)
+        })
+        await router.register(HTTPRoute(method: "GET", pattern: "/oauth/swiftbot/callback") { req, _ in
+            await me.handleSwiftBotSSOCallback(req)
         })
         await router.register(HTTPRoute(method: "GET", pattern: WebDashboardConfig.appPath) { req, _ in
             await me.handleApp(req)
@@ -190,10 +194,20 @@ public actor WebDashboardRoutes {
         // domain), so the password box never appears over the tunnel.
         let localAvailable = config.localEnabled && isLocalRequest(req)
         return .html(WebDashboardAssets.loginPage(
-            discord: config.discordEnabled,
+            discordSSOURL: swiftBotSSOStartURL(),
             twitch: config.twitchEnabled,
             local: localAvailable
         ))
+    }
+
+    /// URL of SwiftBot's companion-SSO entry point, with our callback as the
+    /// return target. Nil when SSO isn't available.
+    private func swiftBotSSOStartURL() -> String? {
+        guard config.swiftBotSSOEnabled, let sso = config.swiftBotSSO, let base = config.normalisedBase else { return nil }
+        let returnTo = base + "/oauth/swiftbot/callback"
+        var comps = URLComponents(string: sso.origin + "/auth/companion/discord")
+        comps?.queryItems = [URLQueryItem(name: "return_to", value: returnTo)]
+        return comps?.url?.absoluteString
     }
 
     /// True when the request is NOT addressed to the configured public domain —
@@ -284,6 +298,56 @@ public actor WebDashboardRoutes {
         }
 
         return await issueSession(principalType: principal.type.rawValue, principalId: principal.id)
+    }
+
+    /// Completes Discord sign-in brokered by SwiftBot. Verifies the assertion's
+    /// HMAC (pairing secret, constant-time), expiry, and single-use nonce, then
+    /// issues a normal Discord-principal session.
+    private func handleSwiftBotSSOCallback(_ req: HTTPRequest) async -> HTTPResponse {
+        guard config.swiftBotSSOEnabled, let sso = config.swiftBotSSO else {
+            return .html(WebDashboardAssets.message("Discord sign-in isn't available.", linkToLogin: true), statusCode: 404)
+        }
+        guard let payload = req.queryParams["sso"], !payload.isEmpty,
+              let signature = req.queryParams["sig"], !signature.isEmpty else {
+            return .html(WebDashboardAssets.message("Invalid sign-in response.", linkToLogin: true), statusCode: 400)
+        }
+
+        let key = SymmetricKey(data: Data(sso.hmacSecret.utf8))
+        let expected = HMAC<SHA256>.authenticationCode(for: Data(payload.utf8), using: key)
+            .map { String(format: "%02x", $0) }
+            .joined()
+        guard WebSecurity.constantTimeEquals(expected, signature.lowercased()) else {
+            webLogger.notice("SwiftBot SSO rejected: bad signature")
+            return .html(WebDashboardAssets.message("Sign-in could not be verified.", linkToLogin: true), statusCode: 403)
+        }
+
+        let now = Date().timeIntervalSince1970
+        guard let data = Self.base64URLDecode(payload),
+              let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let discordId = object["discordUserId"] as? String, isValidSnowflake(discordId),
+              let exp = object["exp"] as? Int, Double(exp) >= now,
+              let nonce = object["nonce"] as? String, !nonce.isEmpty else {
+            return .html(WebDashboardAssets.message("Sign-in expired. Please try again.", linkToLogin: true), statusCode: 400)
+        }
+
+        // Single-use: recording the nonce fails on replay (primary-key insert).
+        do {
+            try await manager.createOAuthState("sso-nonce:\(nonce)", provider: "swiftbot-sso", createdAt: now, expiresAt: Double(exp))
+        } catch {
+            webLogger.notice("SwiftBot SSO rejected: replayed nonce")
+            return .html(WebDashboardAssets.message("Sign-in expired. Please try again.", linkToLogin: true), statusCode: 400)
+        }
+
+        guard await apiRoutes.webSelfRegister(discordId: discordId) else {
+            return .html(WebDashboardAssets.message("Could not set up your account.", linkToLogin: true), statusCode: 500)
+        }
+        return await issueSession(principalType: WebProvider.discord.rawValue, principalId: discordId)
+    }
+
+    private static func base64URLDecode(_ value: String) -> Data? {
+        var s = value.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        while s.count % 4 != 0 { s += "=" }
+        return Data(base64Encoded: s)
     }
 
     private func issueSession(principalType: String, principalId: String) async -> HTTPResponse {

@@ -205,6 +205,14 @@ public final class NavigationModel {
         // configured; otherwise the server is byte-for-byte as before.
         var webPrefixes: [String] = []
         var webExact: Set<String> = []
+        // Refresh SwiftBot's public hostname (for Discord SSO) before building
+        // the config; fall back to the cached value if SwiftBot is unreachable.
+        if Settings.shared.webDashboardEnabled, Settings.shared.swiftBotEnabled {
+            if let info = await swiftBotConnectionService.fetchTunnelInfo(),
+               !info.swiftBotHostname.isEmpty {
+                Settings.shared.webDashboardSwiftBotHostname = info.swiftBotHostname
+            }
+        }
         if Settings.shared.webDashboardConfigured, let webConfig = makeWebDashboardConfig() {
             let webRoutes = WebDashboardRoutes(config: webConfig, manager: sqliteManager, apiRoutes: routes)
             await webRoutes.configure(router)
@@ -234,13 +242,17 @@ public final class NavigationModel {
     /// Number of miners currently configured (used to gate web internet access).
     public var configuredMinerCount: Int { minerManager.miners.count }
 
+    /// Fetches SwiftBot's tunnel domain so the Web tab only needs a subdomain.
+    func fetchSwiftBotTunnelInfo() async -> SwiftBotTunnelInfo? {
+        await swiftBotConnectionService.fetchTunnelInfo()
+    }
+
     /// Asks SwiftBot to carry the dashboard's public hostname on its Cloudflare
     /// tunnel, routed to SwiftMiner's local HTTP server. One-click alternative
     /// to manually adding the hostname in the Cloudflare dashboard.
     func registerWebDashboardHostnameWithSwiftBot() async -> SwiftBotTunnelRegistrationResult {
         let s = Settings.shared
-        let raw = s.webDashboardBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: raw),
+        guard let url = Settings.normalizedWebDashboardURL(from: s.webDashboardBaseURL),
               url.scheme?.lowercased() == "https",
               let host = url.host, !host.isEmpty else {
             return .failure(message: "Set a valid https Public URL first.")
@@ -266,13 +278,8 @@ public final class NavigationModel {
         let s = Settings.shared
         func clean(_ v: String) -> String { v.trimmingCharacters(in: .whitespacesAndNewlines) }
 
-        // Public URL is optional; only valid http(s) URLs are accepted.
-        var baseURL: URL?
-        let raw = clean(s.webDashboardBaseURL)
-        if let url = URL(string: raw), let scheme = url.scheme?.lowercased(),
-           scheme == "http" || scheme == "https", url.host != nil {
-            baseURL = url
-        }
+        // Public URL is optional; bare hostnames are treated as https.
+        let baseURL = Settings.normalizedWebDashboardURL(from: s.webDashboardBaseURL)
 
         // Discord identity is SwiftBot's job; the web dashboard offers Twitch + local only.
         var twitch: WebProviderCredentials?
@@ -286,7 +293,16 @@ public final class NavigationModel {
                                         passwordHash: s.webDashboardLocalPasswordHash)
         }
 
-        let config = WebDashboardConfig(baseURL: baseURL, discord: nil, twitch: twitch, local: local)
+        // Discord sign-in brokered via the paired SwiftBot — needs SwiftBot's
+        // public hostname (cached from its tunnel info) and the pairing secret.
+        var swiftBotSSO: WebSwiftBotSSO?
+        let botHost = clean(s.webDashboardSwiftBotHostname).lowercased()
+        let pairingSecret = clean(s.swiftBotHmacSecret)
+        if s.swiftBotEnabled, !botHost.isEmpty, !pairingSecret.isEmpty {
+            swiftBotSSO = WebSwiftBotSSO(origin: "https://\(botHost)", hmacSecret: pairingSecret)
+        }
+
+        let config = WebDashboardConfig(baseURL: baseURL, discord: nil, twitch: twitch, local: local, swiftBotSSO: swiftBotSSO)
         return config.anyEnabled ? config : nil
     }
 

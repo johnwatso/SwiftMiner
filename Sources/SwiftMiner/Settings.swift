@@ -389,9 +389,21 @@ public final class Settings: ObservableObject {
     @AppStorage("webDashboardEnabled", store: Settings.appStorageStore)
     public var webDashboardEnabled: Bool = false
 
-    /// Public origin the dashboard is served from (e.g. https://swiftminer.example.com)
+    /// Public origin the dashboard is served from (e.g. https://swiftminer.example.com).
+    /// When SwiftBot is paired this is composed automatically from
+    /// `webDashboardSubdomain` + the domain SwiftBot reports.
     @AppStorage("webDashboardBaseURL", store: Settings.appStorageStore)
     public var webDashboardBaseURL: String = ""
+
+    /// Subdomain for the dashboard when the domain comes from SwiftBot
+    /// (e.g. "swiftminer" → swiftminer.example.com).
+    @AppStorage("webDashboardSubdomain", store: Settings.appStorageStore)
+    public var webDashboardSubdomain: String = "swiftminer"
+
+    /// SwiftBot's public hostname (e.g. swiftbot.example.com), cached from its
+    /// tunnel info. Used for Discord sign-in brokered via SwiftBot.
+    @AppStorage("webDashboardSwiftBotHostname", store: Settings.appStorageStore)
+    public var webDashboardSwiftBotHostname: String = ""
 
     // Discord identity is handled by SwiftBot (DMs/linking), so the web
     // dashboard intentionally offers only Twitch and local sign-in.
@@ -433,15 +445,41 @@ public final class Settings: ObservableObject {
         !isBlank(webDashboardTwitchClientID) && !isBlank(webDashboardTwitchClientSecret)
     }
 
+    /// Parses the user-entered Public URL leniently: a bare hostname like
+    /// "swiftminer.example.com" is treated as https. Returns nil only when the
+    /// value is empty or genuinely not a usable http(s) origin.
+    public static func normalizedWebDashboardURL(from raw: String) -> URL? {
+        var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !s.isEmpty else { return nil }
+        if !s.contains("://") { s = "https://" + s }
+        guard let url = URL(string: s),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "https" || scheme == "http",
+              let host = url.host, host.contains(".") || host == "localhost" else {
+            return nil
+        }
+        return url
+    }
+
     /// Whether Twitch OAuth sign-in is fully configured (needs the public URL).
     public var webDashboardOAuthConfigured: Bool {
         !isBlank(webDashboardBaseURL) && webDashboardTwitchConfigured
     }
 
+    /// Whether Discord sign-in brokered via the paired SwiftBot is available
+    /// (needs the public URL, the pairing secret, and SwiftBot's hostname).
+    public var webDashboardSwiftBotSSOConfigured: Bool {
+        swiftBotEnabled
+            && !isBlank(webDashboardBaseURL)
+            && !isBlank(swiftBotHmacSecret)
+            && !isBlank(webDashboardSwiftBotHostname)
+    }
+
     /// Whether the dashboard is usable: enabled, and at least one sign-in method
-    /// available — local username/password, or an OAuth provider with a URL.
+    /// available — local username/password, Twitch OAuth, or Discord via SwiftBot.
     public var webDashboardConfigured: Bool {
-        webDashboardEnabled && (webDashboardLocalConfigured || webDashboardOAuthConfigured)
+        webDashboardEnabled
+            && (webDashboardLocalConfigured || webDashboardOAuthConfigured || webDashboardSwiftBotSSOConfigured)
     }
 
     // MARK: - Discord DM Notification Preferences

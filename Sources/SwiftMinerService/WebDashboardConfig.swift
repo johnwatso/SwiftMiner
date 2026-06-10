@@ -31,6 +31,20 @@ public struct WebLocalCredentials: Sendable {
     }
 }
 
+/// Discord sign-in brokered through a paired SwiftBot: SwiftBot runs its own
+/// Discord OAuth and hands back a short-lived identity assertion signed with
+/// the shared pairing secret. No Discord app credentials live in SwiftMiner.
+public struct WebSwiftBotSSO: Sendable {
+    /// SwiftBot's public origin, e.g. "https://swiftbot.example.com".
+    public let origin: String
+    /// The shared pairing secret used to verify assertions.
+    public let hmacSecret: String
+    public init(origin: String, hmacSecret: String) {
+        self.origin = origin
+        self.hmacSecret = hmacSecret
+    }
+}
+
 /// Configuration for the optional self-service web dashboard.
 ///
 /// The dashboard is **disabled unless at least one provider is configured** —
@@ -44,6 +58,7 @@ public struct WebDashboardConfig: Sendable {
     public let discord: WebProviderCredentials?
     public let twitch: WebProviderCredentials?
     public let local: WebLocalCredentials?
+    public let swiftBotSSO: WebSwiftBotSSO?
 
     /// Path segments. A single callback serves both providers — the provider is
     /// recovered from the one-time `state` — so only one redirect URL needs to
@@ -67,7 +82,13 @@ public struct WebDashboardConfig: Sendable {
     public var discordEnabled: Bool { baseURL != nil && discord != nil }
     public var twitchEnabled: Bool { baseURL != nil && twitch != nil }
     public var localEnabled: Bool { local != nil }
-    public var anyProviderEnabled: Bool { discordEnabled || twitchEnabled }
+    /// Discord-via-SwiftBot needs the public URL too: the assertion comes back
+    /// to the dashboard's own https callback.
+    public var swiftBotSSOEnabled: Bool {
+        baseURL != nil && swiftBotSSO != nil
+            && !(swiftBotSSO?.hmacSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+    }
+    public var anyProviderEnabled: Bool { discordEnabled || twitchEnabled || swiftBotSSOEnabled }
     public var anyEnabled: Bool { anyProviderEnabled || localEnabled }
 
     public func credentials(for provider: WebProvider) -> WebProviderCredentials? {
@@ -97,11 +118,18 @@ public struct WebDashboardConfig: Sendable {
     /// behind a TLS tunnel). Omitted for plain-HTTP local access.
     public var useSecureCookies: Bool { baseURL?.scheme?.lowercased() == "https" }
 
-    public init(baseURL: URL?, discord: WebProviderCredentials?, twitch: WebProviderCredentials?, local: WebLocalCredentials? = nil) {
+    public init(
+        baseURL: URL?,
+        discord: WebProviderCredentials?,
+        twitch: WebProviderCredentials?,
+        local: WebLocalCredentials? = nil,
+        swiftBotSSO: WebSwiftBotSSO? = nil
+    ) {
         self.baseURL = baseURL
         self.discord = discord
         self.twitch = twitch
         self.local = local
+        self.swiftBotSSO = swiftBotSSO
     }
 
     /// Build from environment, falling back to `UserDefaults`. Returns `nil`
