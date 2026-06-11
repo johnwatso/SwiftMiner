@@ -139,6 +139,40 @@ public struct PriorityUpdateResponse: Codable, Sendable {
     }
 }
 
+public struct WebCampaignSummary: Codable, Sendable {
+    public let campaignId: String
+    public let campaignName: String
+    public let game: String
+    public let status: String
+    public let startsAt: Date
+    public let endsAt: Date
+    public let dropCount: Int
+    public let claimedDrops: Int
+    public let boxArtURL: String?
+
+    public init(
+        campaignId: String,
+        campaignName: String,
+        game: String,
+        status: String,
+        startsAt: Date,
+        endsAt: Date,
+        dropCount: Int,
+        claimedDrops: Int,
+        boxArtURL: String?
+    ) {
+        self.campaignId = campaignId
+        self.campaignName = campaignName
+        self.game = game
+        self.status = status
+        self.startsAt = startsAt
+        self.endsAt = endsAt
+        self.dropCount = dropCount
+        self.claimedDrops = claimedDrops
+        self.boxArtURL = boxArtURL
+    }
+}
+
 // MARK: - API Routes
 
 public actor DiscordAPIRoutes {
@@ -217,9 +251,15 @@ public actor DiscordAPIRoutes {
 
     /// Known campaign game names, for the web dashboard's add-game autocomplete.
     public var onKnownGames: (@Sendable () async -> [String])?
+    /// Active/upcoming campaign summaries for the web dashboard browser.
+    public var onCampaignSummaries: (@Sendable (String) async -> [WebCampaignSummary])?
 
     public func setOnKnownGames(_ handler: @escaping @Sendable () async -> [String]) {
         self.onKnownGames = handler
+    }
+
+    public func setOnCampaignSummaries(_ handler: @escaping @Sendable (String) async -> [WebCampaignSummary]) {
+        self.onCampaignSummaries = handler
     }
 
     /// Game names with active campaigns — feeds the dashboard's autocomplete.
@@ -227,6 +267,13 @@ public actor DiscordAPIRoutes {
         struct Games: Encodable { let games: [String] }
         let games = await onKnownGames?() ?? []
         return HTTPResponse.json(Games(games: games))
+    }
+
+    /// Compact read-only campaign feed for the web dashboard.
+    public func webCampaigns(accountId: String) async -> HTTPResponse {
+        struct Campaigns: Encodable { let campaigns: [WebCampaignSummary] }
+        let campaigns = await onCampaignSummaries?(accountId) ?? []
+        return HTTPResponse.json(Campaigns(campaigns: campaigns))
     }
 
     public func configure(_ router: HTTPRouter) async {

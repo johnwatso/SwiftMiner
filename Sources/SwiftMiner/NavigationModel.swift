@@ -205,6 +205,36 @@ public final class NavigationModel {
                 return Array(Set(names)).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
             }
         }
+        await routes.setOnCampaignSummaries { [weak self] accountId in
+            guard let self else { return [] }
+            return await MainActor.run {
+                guard let miner = self.minerForAccount(accountId) else { return [] }
+                let now = Date()
+                let priorityKeys = Set(self.priorityGames(for: miner).map(Self.normalizedGameKey).filter { !$0.isEmpty })
+                return miner.allCampaigns
+                    .filter { campaign in
+                        guard campaign.endDate > now,
+                              campaign.status != .disabled,
+                              !campaign.drops.isEmpty,
+                              !campaign.drops.allSatisfy(\.isClaimed),
+                              campaign.isAccountConnected else {
+                            return false
+                        }
+                        guard !priorityKeys.isEmpty else { return true }
+                        let gameName = Self.normalizedGameKey(campaign.game.name)
+                        let gameId = Self.normalizedGameKey(campaign.game.id)
+                        return priorityKeys.contains(gameName) || priorityKeys.contains(gameId)
+                    }
+                    .sorted { lhs, rhs in
+                        if lhs.isTimeActive != rhs.isTimeActive { return lhs.isTimeActive }
+                        return lhs.endDate < rhs.endDate
+                    }
+                    .prefix(12)
+                    .map { campaign in
+                        Self.webCampaignSummary(from: campaign)
+                    }
+            }
+        }
         let router = HTTPRouter()
         await routes.configure(router)
 
@@ -639,6 +669,24 @@ public final class NavigationModel {
 
     public func priorityGames(for miner: MinerManager.ManagedMiner) -> [String] {
         Settings.shared.priorityGames(forAccountId: miner.accountId)
+    }
+
+    private static func webCampaignSummary(from campaign: Campaign) -> WebCampaignSummary {
+        WebCampaignSummary(
+            campaignId: campaign.id,
+            campaignName: campaign.name,
+            game: campaign.game.name,
+            status: campaign.isTimeActive ? "available" : "upcoming",
+            startsAt: campaign.startDate,
+            endsAt: campaign.endDate,
+            dropCount: campaign.drops.count,
+            claimedDrops: campaign.drops.filter(\.isClaimed).count,
+            boxArtURL: campaign.game.boxArtURL?.absoluteString
+        )
+    }
+
+    private static func normalizedGameKey(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
     private func startSwiftBotStateSync() {

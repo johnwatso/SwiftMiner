@@ -1,4 +1,5 @@
 import Foundation
+import SQLite3
 import XCTest
 @testable import SwiftMinerService
 import SwiftMinerCore
@@ -185,6 +186,80 @@ final class DiscordAPIRoutesTests: XCTestCase {
         XCTAssertEqual(payload["game_name"] as? String, "Black Ops 7")
         XCTAssertEqual(payload["priority_games"] as? [String], ["Black Ops 7", "THE FINALS"])
     }
+
+    func testWebCampaignsReturnsConfiguredCampaignSummaries() async throws {
+        let harness = try await RouteHarness()
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let end = Date(timeIntervalSince1970: 1_800_086_400)
+        await harness.routes.setOnCampaignSummaries { accountId in
+            XCTAssertEqual(accountId, "account-1")
+            return [
+                WebCampaignSummary(
+                    campaignId: "campaign-1",
+                    campaignName: "Launch Drops",
+                    game: "Black Ops 7",
+                    status: "upcoming",
+                    startsAt: start,
+                    endsAt: end,
+                    dropCount: 4,
+                    claimedDrops: 1,
+                    boxArtURL: "https://example.com/box.jpg"
+                )
+            ]
+        }
+
+        let response = await harness.routes.webCampaigns(accountId: "account-1")
+        XCTAssertEqual(response.statusCode, 200)
+
+        let payload = try decodeJSON(response.body)
+        let campaigns = try XCTUnwrap(payload["campaigns"] as? [[String: Any]])
+        XCTAssertEqual(campaigns.count, 1)
+        XCTAssertEqual(campaigns.first?["campaignId"] as? String, "campaign-1")
+        XCTAssertEqual(campaigns.first?["game"] as? String, "Black Ops 7")
+        XCTAssertEqual(campaigns.first?["status"] as? String, "upcoming")
+        XCTAssertEqual(campaigns.first?["dropCount"] as? Int, 4)
+        XCTAssertEqual(campaigns.first?["claimedDrops"] as? Int, 1)
+        XCTAssertEqual(campaigns.first?["boxArtURL"] as? String, "https://example.com/box.jpg")
+    }
+
+    func testDiscordProjectionUsesLinkedTwitchRuntimeState() async throws {
+        let harness = try await RouteHarness()
+        let twitchAccountId = "twitch-1"
+        try await harness.manager.execute { db in
+            let sql = """
+            INSERT INTO miner_users (discord_id, status) VALUES ('123456789012345678', 'registered');
+            INSERT INTO twitch_accounts (
+                twitch_id, owner_discord_id, username, access_token, refresh_token, token_expiry, scopes, link_state
+            ) VALUES (
+                'twitch-1', '123456789012345678', 'linkedminer', 'access', 'refresh', '2099-01-01T00:00:00Z', '', 'linked'
+            );
+            """
+            var error: UnsafeMutablePointer<CChar>?
+            guard sqlite3_exec(db, sql, nil, nil, &error) == SQLITE_OK else {
+                let message = error.map { String(cString: $0) } ?? "unknown SQLite error"
+                sqlite3_free(error)
+                throw NSError(domain: "DiscordAPIRoutesTests", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
+            }
+        }
+
+        let builder = DiscordProjectionBuilder(
+            manager: harness.manager,
+            stateProvider: LinkedTwitchProjectionStateProvider()
+        )
+
+        let maybeDiscordProjection = await builder.buildProjection(discordUserId: discordUserId)
+        let maybeTwitchProjection = await builder.buildProjection(twitchId: twitchAccountId)
+        let discordProjection = try XCTUnwrap(maybeDiscordProjection)
+        let twitchProjection = try XCTUnwrap(maybeTwitchProjection)
+
+        XCTAssertEqual(discordProjection.account?.twitchAccountId, twitchAccountId)
+        XCTAssertEqual(discordProjection.state, twitchProjection.state)
+        XCTAssertEqual(discordProjection.activeCampaign?.campaignId, twitchProjection.activeCampaign?.campaignId)
+        XCTAssertEqual(discordProjection.activeCampaign?.game, "Linked Twitch Game")
+        XCTAssertEqual(discordProjection.recentCompletedCampaigns.map(\.campaignId), twitchProjection.recentCompletedCampaigns.map(\.campaignId))
+        XCTAssertEqual(discordProjection.priorityGames, twitchProjection.priorityGames)
+        XCTAssertEqual(discordProjection.personalPriorityGames, twitchProjection.personalPriorityGames)
+    }
 }
 
 private final class RouteHarness {
@@ -266,6 +341,70 @@ private actor PriorityUpdateRecorder {
 
     func games() -> [String] {
         calls.map(\.gameName)
+    }
+}
+
+private struct LinkedTwitchProjectionStateProvider: ProjectionStateProvider {
+    func activeCampaign(for discordUserId: String) async -> DiscordUserProjection.ActiveCampaign? {
+        DiscordUserProjection.ActiveCampaign(
+            campaignId: "discord-stale",
+            game: "Discord Stale Game",
+            progress: DiscordUserProjection.Progress(current: 1, required: 10, unit: "minutes", pct: 10),
+            endsAt: Date(timeIntervalSince1970: 1_800_086_400)
+        )
+    }
+
+    func recentCompletedCampaigns(for discordUserId: String, limit: Int) async -> [DiscordUserProjection.RecentCampaign] {
+        [
+            DiscordUserProjection.RecentCampaign(
+                campaignId: "discord-history",
+                campaignName: "Discord History",
+                game: "Discord Stale Game",
+                claimedDrops: 1,
+                totalDrops: 1
+            )
+        ]
+    }
+
+    func projectionState(for discordUserId: String) async -> DiscordUserProjection.ProjectionState? {
+        .blocked
+    }
+
+    func priorityGames(for discordUserId: String) async -> [String] {
+        ["Discord Stale Game"]
+    }
+
+    func activeCampaign(forTwitchAccount accountId: String) async -> DiscordUserProjection.ActiveCampaign? {
+        DiscordUserProjection.ActiveCampaign(
+            campaignId: "twitch-current",
+            game: "Linked Twitch Game",
+            progress: DiscordUserProjection.Progress(current: 7, required: 10, unit: "minutes", pct: 70),
+            endsAt: Date(timeIntervalSince1970: 1_800_086_400)
+        )
+    }
+
+    func recentCompletedCampaigns(forTwitchAccount accountId: String, limit: Int) async -> [DiscordUserProjection.RecentCampaign] {
+        [
+            DiscordUserProjection.RecentCampaign(
+                campaignId: "twitch-history",
+                campaignName: "Twitch History",
+                game: "Linked Twitch Game",
+                claimedDrops: 2,
+                totalDrops: 2
+            )
+        ]
+    }
+
+    func projectionState(forTwitchAccount accountId: String) async -> DiscordUserProjection.ProjectionState? {
+        .active
+    }
+
+    func priorityGames(forTwitchAccount accountId: String) async -> [String] {
+        ["Linked Twitch Game"]
+    }
+
+    func personalPriorityGames(forTwitchAccount accountId: String) async -> [String] {
+        ["Linked Twitch Game"]
     }
 }
 

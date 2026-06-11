@@ -124,6 +124,9 @@ public actor WebDashboardRoutes {
         await router.register(HTTPRoute(method: "GET", pattern: "/me/games") { req, _ in
             await me.withSession(req) { _ in await me.apiRoutes.webKnownGames() }
         })
+        await router.register(HTTPRoute(method: "GET", pattern: "/me/campaigns") { req, _ in
+            await me.withSession(req) { s in await me.campaigns(for: s) }
+        })
         await router.register(HTTPRoute(method: "POST", pattern: WebDashboardConfig.logoutPath) { req, _ in
             await me.withSession(req, requireCSRF: true) { s in await me.handleLogout(s) }
         })
@@ -203,6 +206,21 @@ public actor WebDashboardRoutes {
             discordId = s.principalId
         }
         return await apiRoutes.webCampaignAction(discordId: discordId, campaignId: campaignId, action: action, body: body)
+    }
+
+    private func campaigns(for s: WebSessionRecord) async -> HTTPResponse {
+        struct Campaigns: Encodable { let campaigns: [WebCampaignSummary] }
+        switch s.principalType {
+        case WebProvider.twitch.rawValue:
+            return await apiRoutes.webCampaigns(accountId: s.principalId)
+        case WebProvider.discord.rawValue:
+            guard let accountId = await manager.firstTwitchAccountId(ownerDiscordId: s.principalId) else {
+                return HTTPResponse.json(Campaigns(campaigns: []))
+            }
+            return await apiRoutes.webCampaigns(accountId: accountId)
+        default:
+            return HTTPResponse.json(Campaigns(campaigns: []))
+        }
     }
 
     /// Principal type stored for local username/password sessions.
@@ -302,6 +320,9 @@ public actor WebDashboardRoutes {
               let creds = config.credentials(for: provider) else {
             return .html(WebDashboardAssets.message("That sign-in method isn't available.", linkToLogin: true), statusCode: 404)
         }
+        guard provider != .discord else {
+            return .html(WebDashboardAssets.message("Discord sign-in is handled through SwiftBot so server membership can be verified.", linkToLogin: true), statusCode: 403)
+        }
         let now = Date().timeIntervalSince1970
         await manager.purgeExpiredOAuthStates(now: now)
         let state = WebSecurity.randomToken()
@@ -386,6 +407,14 @@ public actor WebDashboardRoutes {
               let nonce = object["nonce"] as? String, !nonce.isEmpty else {
             return .html(WebDashboardAssets.message("Sign-in expired. Please try again.", linkToLogin: true), statusCode: 400)
         }
+        guard Self.swiftBotSSOConfirmsGuildMembership(object) else {
+            webLogger.notice("SwiftBot SSO rejected: user is not a member of the attached server")
+            return .html(WebDashboardAssets.statusMessage(
+                title: "Not in this server",
+                text: "Your Discord account is not part of the server attached to this SwiftMiner. Ask the person who runs the miner to invite you, then try signing in again.",
+                linkText: "Back to sign in"
+            ), statusCode: 403)
+        }
 
         // Single-use: recording the nonce fails on replay (primary-key insert).
         do {
@@ -401,6 +430,29 @@ public actor WebDashboardRoutes {
         let displayName = (object["username"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Discord user \(discordId)"
         await audit?("\(displayName) signed in to the web dashboard (Discord)")
         return await issueSession(principalType: WebProvider.discord.rawValue, principalId: discordId)
+    }
+
+    private static func swiftBotSSOConfirmsGuildMembership(_ object: [String: Any]) -> Bool {
+        for key in ["isGuildMember", "guildMember", "isServerMember", "serverMember", "memberOfAttachedServer"] {
+            guard let rawValue = object[key] else { continue }
+            if let value = rawValue as? Bool {
+                return value
+            }
+            if let value = rawValue as? NSNumber {
+                return value.boolValue
+            }
+            if let value = rawValue as? String {
+                switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+                case "true", "1", "yes":
+                    return true
+                case "false", "0", "no":
+                    return false
+                default:
+                    continue
+                }
+            }
+        }
+        return false
     }
 
     private static func base64URLDecode(_ value: String) -> Data? {
