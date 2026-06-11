@@ -531,6 +531,19 @@ public actor SQLiteManager {
         return String(cString: c)
     }
 
+    /// Returns the first mined Twitch account owned by a Discord user, if any.
+    /// The web dashboard uses this to scope session-owned campaign browsing.
+    public func firstTwitchAccountId(ownerDiscordId discordId: String) -> String? {
+        guard let db else { return nil }
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "SELECT twitch_id FROM twitch_accounts WHERE owner_discord_id = ? ORDER BY username LIMIT 1;", -1, &stmt, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_text(stmt, 1, discordId, -1, SQLITE_TRANSIENT)
+        guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
+        guard let c = sqlite3_column_text(stmt, 0) else { return nil }
+        return String(cString: c)
+    }
+
     /// All mined Twitch account ids, for the operator (local) overview.
     public func allTwitchAccountIds() -> [String] {
         guard let db else { return [] }

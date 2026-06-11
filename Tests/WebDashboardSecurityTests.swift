@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 import XCTest
 @testable import SwiftMinerService
 import SwiftMinerCore
@@ -197,6 +198,163 @@ final class WebDashboardSecurityTests: XCTestCase {
         XCTAssertNil(owner)
     }
 
+    func testSwiftBotSSORegistersNewDiscordUserWithoutMiner() async throws {
+        let mgr = try await openTempManager()
+        defer { Task { await mgr.close() } }
+        let apiRoutes = DiscordAPIRoutes(
+            manager: mgr,
+            projectionBuilder: DiscordProjectionBuilder(manager: mgr),
+            apiKey: "test-api-key"
+        )
+        let secret = "shared-pairing-secret"
+        let webRoutes = WebDashboardRoutes(
+            config: WebDashboardConfig(
+                baseURL: URL(string: "https://swiftminer.example.com")!,
+                discord: nil,
+                twitch: nil,
+                swiftBotSSO: WebSwiftBotSSO(origin: "https://swiftbot.example.com", hmacSecret: secret)
+            ),
+            manager: mgr,
+            apiRoutes: apiRoutes
+        )
+        let router = HTTPRouter()
+        await webRoutes.configure(router)
+
+        let discordId = "123456789012345678"
+        let payload = try swiftBotPayload(
+            discordId: discordId,
+            username: "New Discord User",
+            nonce: UUID().uuidString,
+            exp: Int(Date().timeIntervalSince1970) + 600,
+            isGuildMember: true
+        )
+        let signature = swiftBotSignature(payload: payload, secret: secret)
+
+        let response = await router.handle(HTTPRequest(
+            method: "GET",
+            path: "/oauth/swiftbot/callback",
+            headers: [:],
+            body: Data(),
+            queryParams: ["sso": payload, "sig": signature]
+        ))
+
+        XCTAssertEqual(response.statusCode, 302)
+        XCTAssertEqual(response.headers["Location"], WebDashboardConfig.appPath)
+        let userExists = await apiRoutes.webUserExists(discordId: discordId)
+        XCTAssertTrue(userExists)
+
+        let setCookie = try XCTUnwrap(response.headers["Set-Cookie"])
+        let sessionId = try XCTUnwrap(WebCookie.parse(setCookie)[WebDashboardConfig.sessionCookieName])
+        let session = await mgr.fetchWebSession(id: sessionId, now: Date().timeIntervalSince1970)
+        XCTAssertEqual(session?.principalType, WebProvider.discord.rawValue)
+        XCTAssertEqual(session?.principalId, discordId)
+
+        let projection = await apiRoutes.webProjection(discordId: discordId)
+        XCTAssertEqual(projection.statusCode, 200)
+        let payloadJSON = try decodeJSON(projection.body)
+        XCTAssertEqual(payloadJSON["state"] as? String, "notConfigured")
+        XCTAssertNil(payloadJSON["account"] as? [String: Any])
+    }
+
+    func testSwiftBotSSORejectsDiscordUserOutsideAttachedServer() async throws {
+        let mgr = try await openTempManager()
+        defer { Task { await mgr.close() } }
+        let apiRoutes = DiscordAPIRoutes(
+            manager: mgr,
+            projectionBuilder: DiscordProjectionBuilder(manager: mgr),
+            apiKey: "test-api-key"
+        )
+        let secret = "shared-pairing-secret"
+        let webRoutes = WebDashboardRoutes(
+            config: WebDashboardConfig(
+                baseURL: URL(string: "https://swiftminer.example.com")!,
+                discord: nil,
+                twitch: nil,
+                swiftBotSSO: WebSwiftBotSSO(origin: "https://swiftbot.example.com", hmacSecret: secret)
+            ),
+            manager: mgr,
+            apiRoutes: apiRoutes
+        )
+        let router = HTTPRouter()
+        await webRoutes.configure(router)
+
+        let discordId = "123456789012345678"
+        let payload = try swiftBotPayload(
+            discordId: discordId,
+            username: "Outside User",
+            nonce: UUID().uuidString,
+            exp: Int(Date().timeIntervalSince1970) + 600,
+            isGuildMember: false
+        )
+        let signature = swiftBotSignature(payload: payload, secret: secret)
+
+        let response = await router.handle(HTTPRequest(
+            method: "GET",
+            path: "/oauth/swiftbot/callback",
+            headers: [:],
+            body: Data(),
+            queryParams: ["sso": payload, "sig": signature]
+        ))
+
+        XCTAssertEqual(response.statusCode, 403)
+        XCTAssertNil(response.headers["Set-Cookie"])
+        XCTAssertNil(response.headers["Location"])
+        let html = String(decoding: response.body, as: UTF8.self)
+        XCTAssertTrue(html.contains("Not in this server"))
+        XCTAssertTrue(html.contains("not part of the server attached to this SwiftMiner"))
+        let userExists = await apiRoutes.webUserExists(discordId: discordId)
+        XCTAssertFalse(userExists)
+    }
+
+    func testUnknownTwitchAccountCannotUseWebDashboard() async throws {
+        let mgr = try await openTempManager()
+        defer { Task { await mgr.close() } }
+        let apiRoutes = DiscordAPIRoutes(
+            manager: mgr,
+            projectionBuilder: DiscordProjectionBuilder(manager: mgr),
+            apiKey: "test-api-key"
+        )
+
+        let response = await apiRoutes.webProjectionTwitch(twitchId: "unknown-twitch-account")
+        XCTAssertEqual(response.statusCode, 404)
+        let body = try decodeJSON(response.body)
+        XCTAssertEqual(body["error"] as? String, "miner_not_found")
+    }
+
+    func testDirectDiscordOAuthIsRejectedBecauseServerMembershipIsUnverified() async throws {
+        let mgr = try await openTempManager()
+        defer { Task { await mgr.close() } }
+        let apiRoutes = DiscordAPIRoutes(
+            manager: mgr,
+            projectionBuilder: DiscordProjectionBuilder(manager: mgr),
+            apiKey: "test-api-key"
+        )
+        let webRoutes = WebDashboardRoutes(
+            config: WebDashboardConfig(
+                baseURL: URL(string: "https://swiftminer.example.com")!,
+                discord: WebProviderCredentials(clientID: "discord-client", clientSecret: "discord-secret"),
+                twitch: nil,
+                swiftBotSSO: WebSwiftBotSSO(origin: "https://swiftbot.example.com", hmacSecret: "shared-pairing-secret")
+            ),
+            manager: mgr,
+            apiRoutes: apiRoutes
+        )
+        let router = HTTPRouter()
+        await webRoutes.configure(router)
+
+        let response = await router.handle(HTTPRequest(
+            method: "GET",
+            path: "/login/discord",
+            headers: [:],
+            body: Data()
+        ))
+
+        XCTAssertEqual(response.statusCode, 403)
+        XCTAssertNil(response.headers["Location"])
+        let userExists = await apiRoutes.webUserExists(discordId: "123456789012345678")
+        XCTAssertFalse(userExists)
+    }
+
     // MARK: - Helpers
 
     private func openTempManager() async throws -> SQLiteManager {
@@ -205,5 +363,35 @@ final class WebDashboardSecurityTests: XCTestCase {
         let mgr = SQLiteManager(databaseURL: url)
         try await mgr.open()
         return mgr
+    }
+
+    private func swiftBotPayload(discordId: String, username: String, nonce: String, exp: Int, isGuildMember: Bool) throws -> String {
+        let object: [String: Any] = [
+            "discordUserId": discordId,
+            "username": username,
+            "nonce": nonce,
+            "exp": exp,
+            "isGuildMember": isGuildMember
+        ]
+        let data = try JSONSerialization.data(withJSONObject: object)
+        return base64URL(data)
+    }
+
+    private func swiftBotSignature(payload: String, secret: String) -> String {
+        let key = SymmetricKey(data: Data(secret.utf8))
+        return HMAC<SHA256>.authenticationCode(for: Data(payload.utf8), using: key)
+            .map { String(format: "%02x", $0) }
+            .joined()
+    }
+
+    private func base64URL(_ data: Data) -> String {
+        data.base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+    }
+
+    private func decodeJSON(_ data: Data) throws -> [String: Any] {
+        try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
     }
 }

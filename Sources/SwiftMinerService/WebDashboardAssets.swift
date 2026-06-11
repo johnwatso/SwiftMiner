@@ -121,6 +121,34 @@ enum WebDashboardAssets {
           background: linear-gradient(135deg, var(--blue-a), var(--blue-c));
           box-shadow: 0 8px 18px rgba(32,140,255,0.30);
         }
+        .btn-secondary {
+          font: 650 13px/1 inherit; font-family: inherit; color: var(--text); cursor: pointer;
+          padding: 10px 13px; border-radius: 11px; border: 1px solid var(--glass-stroke);
+          background: linear-gradient(180deg, var(--glass-top), var(--glass-bottom));
+        }
+        .btn-secondary:disabled, .btn-primary:disabled { opacity: 0.45; cursor: default; }
+        .issue-row {
+          display: flex; align-items: flex-start; gap: 10px; padding: 10px 0;
+          border-top: 1px solid var(--glass-stroke);
+        }
+        .issue-row:first-of-type { border-top: none; padding-top: 0; }
+        .issue-body { flex: 1; min-width: 0; font-size: 14px; line-height: 1.35; }
+        .issue-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 9px; }
+        .activation-code {
+          display: inline-flex; align-items: center; justify-content: center;
+          min-width: 136px; padding: 10px 14px; border-radius: 12px;
+          font: 750 22px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.08em;
+          color: #fff; background: rgba(255,255,255,0.08); border: 1px solid var(--glass-stroke);
+        }
+        .campaign-list { display: flex; flex-direction: column; gap: 10px; }
+        .campaign-row {
+          display: flex; align-items: center; gap: 11px; padding: 9px;
+          border: 1px solid var(--glass-stroke); border-radius: 13px; background: var(--field);
+        }
+        .campaign-row .copy { flex: 1; min-width: 0; }
+        .campaign-row .title { font-size: 14px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .campaign-row .details { font-size: 12px; color: var(--muted); margin-top: 3px; }
+        .campaign-row .boxart { width: 42px; height: 56px; border-radius: 8px; }
         .drop { display: flex; align-items: center; gap: 11px; padding: 8px 0; border-top: 1px solid var(--glass-stroke); }
         .drop:first-of-type { border-top: none; padding-top: 0; }
         .drop .icon { width: 34px; height: 45px; flex: none; border-radius: 8px; object-fit: cover;
@@ -283,7 +311,11 @@ enum WebDashboardAssets {
     static let appJS = """
     const $ = (id) => document.getElementById(id);
     let CSRF = null;
+    let SESSION = null;
     let PROJ = null;          // last projection (user sessions)
+    let CAMPAIGNS = [];
+    let ACTIVATION = null;
+    let activationTimer = null;
     let personal = [];        // editable personal priority list (working copy)
 
     async function api(path, opts = {}) {
@@ -313,6 +345,12 @@ enum WebDashboardAssets {
       if (h >= 48) return Math.floor(h / 24) + 'd ago';
       if (h >= 1) return h + 'h ago';
       return Math.max(1, Math.floor(ms / 60000)) + 'm ago';
+    }
+    function dateLabel(iso, prefix) {
+      if (!iso) return '';
+      const d = new Date(iso);
+      if (isNaN(d)) return '';
+      return prefix + ' ' + d.toLocaleDateString([], { month: 'short', day: 'numeric' });
     }
     function boxart(name, w = 144, h = 192) {
       return 'https://static-cdn.jtvnw.net/ttv-boxart/' + encodeURIComponent(name) + '-' + w + 'x' + h + '.jpg';
@@ -351,7 +389,7 @@ enum WebDashboardAssets {
           };
         }
       } else if (p.state === 'blocked') {
-        const hasUnlinked = p.issues && p.issues.some(is => is.type === 'accountNotLinked');
+        const hasUnlinked = p.issues && p.issues.some(is => is.type === 'accountNotLinked' || is.type === 'account_not_linked');
         return {
           headline: hasUnlinked ? 'Blocked — Account not linked' : 'Needs attention',
           subtitle: p.issues && p.issues.length ? p.issues[0].message : 'Link your account to earn drops.',
@@ -374,7 +412,7 @@ enum WebDashboardAssets {
       } else {
         return {
           headline: 'Not Configured',
-          subtitle: 'Ask the operator to finish setup.',
+          subtitle: SESSION && SESSION.provider === 'discord' ? 'Link Twitch to start mining.' : 'Ask the operator to finish setup.',
           color: '#8e8e93',
           icon: `<svg class="status-svg" viewBox="0 0 24 24" fill="none" stroke="#8e8e93" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="10"></circle>
@@ -459,10 +497,57 @@ enum WebDashboardAssets {
       `;
     }
 
+    function activationCard(p) {
+      if (!SESSION || SESSION.provider !== 'discord' || (p.account && p.account.twitchAccountId)) return '';
+      if (!ACTIVATION) {
+        return `<div class="card">
+          <div class="label">Link Twitch</div>
+          <div class="row" style="align-items:flex-start">
+            <div style="flex:1;min-width:0">
+              <div class="name">Connect your Twitch account</div>
+              <div class="muted" style="font-size:13px;margin-top:4px">Start the Twitch device-code flow from here, then SwiftMiner will begin mining automatically.</div>
+            </div>
+            <button class="btn-primary" id="startactivation" style="height:40px">Link</button>
+          </div>
+          <div class="savemsg" id="activationmsg"></div>
+        </div>`;
+      }
+      return `<div class="card">
+        <div class="label">Link Twitch</div>
+        <div class="row" style="align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div>
+            <div class="muted" style="font-size:12px;margin-bottom:6px">Enter this code at Twitch</div>
+            <div class="activation-code">${esc(ACTIVATION.userCode)}</div>
+          </div>
+          <a class="btn-primary" style="display:inline-flex;align-items:center;height:40px;text-decoration:none" href="${esc(ACTIVATION.verificationUri)}" target="_blank" rel="noreferrer">Open Twitch</a>
+        </div>
+        <div class="muted" style="font-size:12px">Polling for authorization${dateLabel(ACTIVATION.expiresAt, ' · expires') || ''}</div>
+        <div class="savemsg" id="activationmsg"></div>
+      </div>`;
+    }
+
+    function issueButtons(is) {
+      const action = String(is.action || '');
+      let buttons = '';
+      if (action.includes('link_account') && SESSION && SESSION.provider === 'discord' && !(PROJ && PROJ.account)) {
+        buttons += '<button class="btn-secondary issue-action" data-action="activation">Link Twitch</button>';
+      }
+      if (is.game) {
+        buttons += `<button class="btn-secondary issue-action" data-action="priority-game" data-game="${esc(is.game)}" ${PROJ && PROJ.account ? '' : 'disabled'}>Prioritise</button>`;
+      }
+      if (action.includes('ignore_campaign') && is.campaignId) {
+        buttons += `<button class="btn-secondary issue-action" data-action="ignore" data-campaign="${esc(is.campaignId)}" data-scope="campaign">Ignore campaign</button>`;
+      }
+      if (action.includes('ignore_game') && is.campaignId) {
+        buttons += `<button class="btn-secondary issue-action" data-action="ignore" data-campaign="${esc(is.campaignId)}" data-scope="game">Ignore game</button>`;
+      }
+      return buttons ? `<div class="issue-actions">${buttons}</div>` : '';
+    }
+
     function issuesCard(p) {
       if (!p.issues || !p.issues.length) return '';
       let rows = '';
-      for (const is of p.issues) rows += `<div class="row" style="padding:5px 0">⚠️&nbsp; <span style="font-size:14px">${esc(is.message || is.type)}</span></div>`;
+      for (const is of p.issues) rows += `<div class="issue-row"><span aria-hidden="true">⚠️</span><div class="issue-body"><div>${esc(is.message || is.type)}</div>${issueButtons(is)}</div></div>`;
       return `<div class="card"><div class="label">Needs attention</div>${rows}</div>`;
     }
 
@@ -495,11 +580,32 @@ enum WebDashboardAssets {
           ${items || '<span class="muted" style="font-size:13px">No personal priorities yet — add a game below.</span>'}
         </div>
         <div class="addrow">
-          <input id="addgame" placeholder="Add a game…" autocapitalize="words" autocomplete="off">
+          <input id="addgame" placeholder="Add a game…" autocapitalize="words" autocomplete="off" list="gamesuggest">
           <button class="btn-primary" id="addbtn">Add</button>
         </div>
+        <datalist id="gamesuggest"></datalist>
         <div class="savemsg" id="savemsg"></div>
       </div>`;
+    }
+
+    function upNextCard(p) {
+      const campaigns = CAMPAIGNS.slice(0, 6);
+      if (!campaigns.length) return '';
+      const accountId = p && p.account && p.account.twitchAccountId;
+      let rows = '';
+      for (const c of campaigns) {
+        const active = c.status === 'available';
+        const when = active ? endsIn(c.endsAt) : dateLabel(c.startsAt, 'starts');
+        rows += `<div class="campaign-row">
+          <img class="boxart" alt="" data-game="${esc(c.game)}" data-art="${esc(c.boxArtURL || '')}">
+          <div class="copy">
+            <div class="title">${esc(c.game)}</div>
+            <div class="details">${esc(c.dropCount || 0)} drops${when ? ' · ' + esc(when) : ''}</div>
+          </div>
+          <button class="btn-secondary campaign-priority" data-game="${esc(c.game)}" ${accountId ? '' : 'disabled'}>${personal.some(g => g.toLowerCase() === String(c.game || '').toLowerCase()) ? 'Prioritised' : 'Prioritise'}</button>
+        </div>`;
+      }
+      return `<div class="card"><div class="label">Up next</div><div class="campaign-list">${rows}</div>${accountId ? '' : '<div class="muted" style="font-size:12px;margin-top:10px">Link Twitch before setting priorities.</div>'}</div>`;
     }
 
     function dropsCard(p) {
@@ -519,8 +625,11 @@ enum WebDashboardAssets {
     function render(p) {
       PROJ = p;
       personal = (p.personalPriorityGames || []).slice();
-      $('app').innerHTML = heroStateCard(p) + statsRow(p) + issuesCard(p) + globalCard(p) + personalCard() + dropsCard(p);
+      $('app').innerHTML = heroStateCard(p) + statsRow(p) + activationCard(p) + issuesCard(p) + upNextCard(p) + globalCard(p) + personalCard() + dropsCard(p);
       hydrateArt();
+      wireActivation();
+      wireIssues();
+      wireCampaigns();
       wirePersonal();
       fillGameOptions();
     }
@@ -555,6 +664,79 @@ enum WebDashboardAssets {
       };
       $('addbtn').addEventListener('click', add);
       input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+    }
+
+    function addPersonalGame(name) {
+      name = String(name || '').trim();
+      if (!name) return;
+      if (!personal.some(g => g.toLowerCase() === name.toLowerCase())) personal.unshift(name);
+      commit();
+    }
+
+    function wireCampaigns() {
+      document.querySelectorAll('.campaign-priority').forEach(btn => {
+        btn.addEventListener('click', () => addPersonalGame(btn.dataset.game));
+      });
+    }
+
+    function wireIssues() {
+      document.querySelectorAll('.issue-action').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (btn.dataset.action === 'activation') { await startActivation(); return; }
+          if (btn.dataset.action === 'priority-game') { addPersonalGame(btn.dataset.game); return; }
+          btn.disabled = true;
+          const r = await api('/me/campaigns/' + encodeURIComponent(btn.dataset.campaign) + '/' + encodeURIComponent(btn.dataset.action), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ scope: btn.dataset.scope || 'campaign' })
+          });
+          if (r && r.ok) await load(false);
+          else btn.disabled = false;
+        });
+      });
+    }
+
+    function wireActivation() {
+      const start = $('startactivation');
+      if (start) start.addEventListener('click', startActivation);
+    }
+
+    async function startActivation() {
+      const msg = $('activationmsg');
+      if (msg) { msg.textContent = 'Starting Twitch linking…'; msg.className = 'savemsg'; }
+      const r = await api('/me/activation', { method: 'POST' });
+      if (!r) return;
+      if (!r.ok) {
+        let detail = 'Could not start Twitch linking.';
+        try { detail = (await r.json()).message || detail; } catch {}
+        if (msg) { msg.textContent = detail; msg.className = 'savemsg err'; }
+        return;
+      }
+      ACTIVATION = await r.json();
+      render(PROJ);
+      pollActivation();
+    }
+
+    async function pollActivation() {
+      if (!ACTIVATION || !ACTIVATION.sessionId) return;
+      if (activationTimer) clearTimeout(activationTimer);
+      const r = await api('/me/activation/' + encodeURIComponent(ACTIVATION.sessionId));
+      if (!r) return;
+      if (r.ok) {
+        const status = await r.json();
+        if (status.status === 'authorized') {
+          ACTIVATION = null;
+          await load(false);
+          return;
+        }
+        if (status.status === 'failed' || status.status === 'expired') {
+          const msg = $('activationmsg');
+          if (msg) { msg.textContent = status.failureReason || 'Activation expired. Start again when you are ready.'; msg.className = 'savemsg err'; }
+          return;
+        }
+      }
+      const wait = Math.max(3, Number(ACTIVATION.intervalSeconds || 5)) * 1000;
+      activationTimer = setTimeout(pollActivation, wait);
     }
 
     async function commit() {
@@ -696,8 +878,10 @@ enum WebDashboardAssets {
       const sr = await api('/me/session');
       if (!sr) return;
       const session = await sr.json();
+      SESSION = session;
       CSRF = session.csrfToken;
       if (!GAMES.length) loadGames();
+      await loadCampaigns();
       const pr = await api('/me/projection');
       if (!pr) return;
       if (pr.status === 404) { $('app').innerHTML = '<div class="card muted">No miner found for your account yet.</div>'; return; }
@@ -726,6 +910,13 @@ enum WebDashboardAssets {
         if (!r || !r.ok) return;
         GAMES = (await r.json()).games || [];
         fillGameOptions();
+      } catch {}
+    }
+    async function loadCampaigns() {
+      try {
+        const r = await api('/me/campaigns');
+        if (!r || !r.ok) return;
+        CAMPAIGNS = (await r.json()).campaigns || [];
       } catch {}
     }
     function fillGameOptions() {
@@ -1024,10 +1215,30 @@ enum WebDashboardAssets {
     /// A standalone status page (used for OAuth error/landing messages),
     /// styled to match the login card.
     static func message(_ text: String, linkToLogin: Bool = false) -> String {
-        let link = linkToLogin ? #"<a class="again" href="/login">Try again</a>"# : ""
+        statusMessage(title: "SwiftMiner", text: text, linkText: linkToLogin ? "Try again" : nil, linkURL: "/login")
+    }
+
+    static func statusMessage(title: String, text: String, linkText: String? = nil, linkURL: String = "/login") -> String {
+        let safeTitle = title.replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+        let safeText = text.replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+        let safeURL = linkURL.replacingOccurrences(of: "\"", with: "&quot;")
+        let safeLinkText = linkText.map {
+            $0.replacingOccurrences(of: "&", with: "&amp;")
+                .replacingOccurrences(of: "<", with: "&lt;")
+                .replacingOccurrences(of: ">", with: "&gt;")
+        }
+        let link = safeLinkText.map { #"<a class="again" href="\#(safeURL)">\#($0)</a>"# } ?? ""
+        return statusPage(title: safeTitle, text: safeText, link: link)
+    }
+
+    private static func statusPage(title: String, text: String, link: String) -> String {
         return """
         <!doctype html><html lang="en"><head><meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1"><title>SwiftMiner</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1"><title>\(title) · SwiftMiner</title>
         <style>
           :root {
             --bg-a: #0a0a0a; --bg-b: #121212; --bg-c: #1a1a1a;
@@ -1078,7 +1289,7 @@ enum WebDashboardAssets {
         </style></head>
         <body>
           <canvas id="nebula-canvas"></canvas>
-          <main class="card"><h1>SwiftMiner</h1><p>\(text)</p>\(link)</main>
+          <main class="card"><h1>\(title)</h1><p>\(text)</p>\(link)</main>
           <script src="/app/login.js?v=\(assetVersion)"></script>
         </body></html>
         """
