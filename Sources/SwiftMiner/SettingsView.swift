@@ -691,6 +691,9 @@ private struct WebDashboardSettingsView: View {
     @State private var tunnelRegistrationSucceeded = false
     @State private var swiftBotTunnelInfo: SwiftBotTunnelInfo?
     @State private var isFetchingTunnelInfo = false
+    @State private var showingTwitchOAuthSetup = false
+    @State private var draftTwitchClientID = ""
+    @State private var draftTwitchClientSecret = ""
 
     /// Internet access (Twitch sign-in over a tunnel) is only offered when the
     /// Discord/SwiftBot integration is on or the host mines for several people —
@@ -727,6 +730,9 @@ private struct WebDashboardSettingsView: View {
         .padding(.horizontal, 24)
         .padding(.bottom, 20)
         .padding(.top, 10)
+        .sheet(isPresented: $showingTwitchOAuthSetup) {
+            twitchOAuthSetupSheet
+        }
     }
 
     // MARK: - Local Access
@@ -833,8 +839,23 @@ private struct WebDashboardSettingsView: View {
         .onChange(of: settings.webDashboardSubdomain) { _, _ in syncComposedBaseURL() }
 
         Section {
-            TextField("Twitch Client ID", text: $settings.webDashboardTwitchClientID)
-            SecureField("Twitch Client Secret", text: $settings.webDashboardTwitchClientSecret)
+            if settings.webDashboardTwitchConfigured {
+                Label("Twitch sign-in configured", systemImage: "checkmark.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.green)
+                Button("Replace Twitch OAuth Details") {
+                    openTwitchOAuthSetup()
+                }
+            } else {
+                Button {
+                    openTwitchOAuthSetup()
+                } label: {
+                    Label("Set Up Twitch OAuth", systemImage: "key.fill")
+                }
+                Label("Twitch sign-in is not configured yet.", systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
             SettingsSecondaryText("From your Twitch application (dev.twitch.tv/console → register an app with the redirect URL below). Enables “Sign in with Twitch”, letting users reach their own miner over the web.")
         } header: {
             HStack(spacing: 6) {
@@ -865,6 +886,73 @@ private struct WebDashboardSettingsView: View {
         } header: {
             Text("Setup")
         }
+    }
+
+    private var twitchOAuthSetupSheet: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 8) {
+                TwitchLogo()
+                    .frame(width: 18, height: 20)
+                    .accessibilityHidden(true)
+                Text(settings.webDashboardTwitchConfigured ? "Replace Twitch OAuth Details" : "Set Up Twitch OAuth")
+                    .font(.headline)
+            }
+
+            SettingsSecondaryText("Enter the client ID and client secret from your Twitch application. These are used only for web dashboard sign-in.")
+
+            Form {
+                TextField("Client ID", text: $draftTwitchClientID)
+                    .textContentType(.username)
+                SecureField("Client Secret", text: $draftTwitchClientSecret)
+                    .textContentType(.password)
+            }
+            .formStyle(.grouped)
+
+            if let redirect = webRedirectURL {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Redirect URL")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(redirect)
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            HStack {
+                Spacer()
+                Button("Cancel", role: .cancel) {
+                    showingTwitchOAuthSetup = false
+                }
+                Button("Save") {
+                    saveTwitchOAuthDetails()
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(!draftTwitchOAuthIsValid)
+            }
+        }
+        .padding(24)
+        .frame(width: 420)
+    }
+
+    private var draftTwitchOAuthIsValid: Bool {
+        !draftTwitchClientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !draftTwitchClientSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func openTwitchOAuthSetup() {
+        draftTwitchClientID = settings.webDashboardTwitchClientID
+        draftTwitchClientSecret = settings.webDashboardTwitchClientSecret
+        showingTwitchOAuthSetup = true
+    }
+
+    private func saveTwitchOAuthDetails() {
+        settings.webDashboardTwitchClientID = draftTwitchClientID.trimmingCharacters(in: .whitespacesAndNewlines)
+        settings.webDashboardTwitchClientSecret = draftTwitchClientSecret.trimmingCharacters(in: .whitespacesAndNewlines)
+        draftTwitchClientID = ""
+        draftTwitchClientSecret = ""
+        showingTwitchOAuthSetup = false
     }
 
     /// Trailing-slash-normalised public origin, or nil if empty/invalid.

@@ -16,7 +16,7 @@ enum WebDashboardAssets {
     <html lang="en">
     <head>
       <meta charset="utf-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" type="image/png" href="/app/logo-dark.png?v=\(assetVersion)"><link rel="apple-touch-icon" href="/app/logo-dark.png?v=\(assetVersion)">
       <title>SwiftMiner</title>
       <style>
         :root {
@@ -139,6 +139,35 @@ enum WebDashboardAssets {
           min-width: 136px; padding: 10px 14px; border-radius: 12px;
           font: 750 22px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.08em;
           color: #fff; background: rgba(255,255,255,0.08); border: 1px solid var(--glass-stroke);
+        }
+        .onboarding-hero {
+          background: linear-gradient(180deg, rgba(86,188,255,0.12), rgba(255,255,255,0.03));
+          border: 1px solid rgba(86,188,255,0.22); border-radius: 18px;
+          box-shadow: 0 18px 44px rgba(0,0,0,0.28);
+          backdrop-filter: blur(24px) saturate(1.4); -webkit-backdrop-filter: blur(24px) saturate(1.4);
+          padding: 24px; margin: 0 0 14px; animation: rise 0.4s cubic-bezier(0.21,1,0.27,1) both;
+        }
+        .onboarding-title { margin: 0 0 7px; font-size: 24px; line-height: 1.1; letter-spacing: 0; }
+        .onboarding-copy { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.45; max-width: 520px; }
+        .onboarding-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; align-items: center; }
+        .onboarding-actions .btn-primary,
+        .onboarding-actions .btn-secondary {
+          display: inline-flex; align-items: center; justify-content: center; min-height: 42px; text-decoration: none;
+        }
+        .onboarding-steps { display: grid; gap: 10px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0 0 14px; }
+        .onboarding-step {
+          border: 1px solid var(--glass-stroke); border-radius: 14px; padding: 13px;
+          background: rgba(255,255,255,0.055);
+        }
+        .onboarding-step .n {
+          width: 24px; height: 24px; border-radius: 8px; display: grid; place-items: center;
+          color: #fff; font-size: 12px; font-weight: 750; margin-bottom: 9px;
+          background: linear-gradient(135deg, var(--blue-a), var(--blue-c));
+        }
+        .onboarding-step .t { font-size: 13px; font-weight: 650; margin-bottom: 3px; }
+        .onboarding-step .d { font-size: 12px; color: var(--muted); line-height: 1.35; }
+        @media (max-width: 560px) {
+          .onboarding-steps { grid-template-columns: 1fr; }
         }
         .campaign-list { display: flex; flex-direction: column; gap: 10px; }
         .campaign-row {
@@ -526,6 +555,48 @@ enum WebDashboardAssets {
       </div>`;
     }
 
+    function needsOnboarding(p) {
+      return SESSION && SESSION.provider === 'discord' && !(p && p.account && p.account.twitchAccountId);
+    }
+
+    function onboardingHTML() {
+      const activationActive = ACTIVATION && ACTIVATION.userCode;
+      const actionHTML = activationActive ? `
+        <div class="onboarding-actions">
+          <div>
+            <div class="muted" style="font-size:12px;margin-bottom:6px">Enter this code at Twitch</div>
+            <div class="activation-code">${esc(ACTIVATION.userCode)}</div>
+          </div>
+          <a class="btn-primary" href="${esc(ACTIVATION.verificationUri)}" target="_blank" rel="noreferrer">Open Twitch</a>
+        </div>
+        <div class="muted" style="font-size:12px;margin-top:10px">Waiting for Twitch authorization${dateLabel(ACTIVATION.expiresAt, ' · expires') || ''}</div>
+      ` : `
+        <div class="onboarding-actions">
+          <button class="btn-primary" id="startactivation" style="height:42px">Link Twitch</button>
+        </div>
+      `;
+      return `
+        <div class="onboarding-hero">
+          <h2 class="onboarding-title">Set up your miner</h2>
+          <p class="onboarding-copy">Connect your Twitch account to this Discord sign-in. Once Twitch confirms the link, SwiftMiner will create your miner and take you to the dashboard automatically.</p>
+          ${actionHTML}
+          <div class="savemsg" id="activationmsg"></div>
+        </div>
+        <div class="onboarding-steps">
+          <div class="onboarding-step"><div class="n">1</div><div class="t">Start linking</div><div class="d">SwiftMiner creates a short Twitch activation code.</div></div>
+          <div class="onboarding-step"><div class="n">2</div><div class="t">Confirm on Twitch</div><div class="d">Open Twitch, enter the code, and approve the connection.</div></div>
+          <div class="onboarding-step"><div class="n">3</div><div class="t">Mining starts</div><div class="d">Your dashboard appears as soon as the miner is ready.</div></div>
+        </div>
+      `;
+    }
+
+    function renderOnboarding(p) {
+      PROJ = p;
+      personal = [];
+      $('app').innerHTML = onboardingHTML();
+      wireActivation();
+    }
+
     function issueButtons(is) {
       const action = String(is.action || '');
       let buttons = '';
@@ -624,6 +695,10 @@ enum WebDashboardAssets {
 
     function render(p) {
       PROJ = p;
+      if (needsOnboarding(p)) {
+        renderOnboarding(p);
+        return;
+      }
       personal = (p.personalPriorityGames || []).slice();
       $('app').innerHTML = heroStateCard(p) + statsRow(p) + activationCard(p) + issuesCard(p) + upNextCard(p) + globalCard(p) + personalCard() + dropsCard(p);
       hydrateArt();
@@ -1109,7 +1184,7 @@ enum WebDashboardAssets {
         }
         return """
         <!doctype html><html lang="en"><head><meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1"><title>Sign in · SwiftMiner</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" type="image/png" href="/app/logo-dark.png?v=\(assetVersion)"><link rel="apple-touch-icon" href="/app/logo-dark.png?v=\(assetVersion)"><title>Sign in · SwiftMiner</title>
         <style>
           :root {
             --bg-a: #0a0a0a; --bg-b: #121212; --bg-c: #1a1a1a;
@@ -1238,7 +1313,7 @@ enum WebDashboardAssets {
     private static func statusPage(title: String, text: String, link: String) -> String {
         return """
         <!doctype html><html lang="en"><head><meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1"><title>\(title) · SwiftMiner</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" type="image/png" href="/app/logo-dark.png?v=\(assetVersion)"><link rel="apple-touch-icon" href="/app/logo-dark.png?v=\(assetVersion)"><title>\(title) · SwiftMiner</title>
         <style>
           :root {
             --bg-a: #0a0a0a; --bg-b: #121212; --bg-c: #1a1a1a;
