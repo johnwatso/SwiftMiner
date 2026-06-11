@@ -72,6 +72,7 @@ public enum SwiftBotDMMessageType: String, Codable, CaseIterable, Sendable, Iden
     case campaignDetected = "campaign_detected"
     case accountActionRequired = "account_action_required"
     case prioritisedGameNeedsLinking = "prioritised_game_needs_linking"
+    case webDashboardAvailable = "web_dashboard_available"
 
     public var id: String { rawValue }
 
@@ -86,7 +87,8 @@ public enum SwiftBotDMMessageType: String, Codable, CaseIterable, Sendable, Iden
             .accountActionRequired,
             .reauth,
             .welcomeBack,
-            .campaignCompleted
+            .campaignCompleted,
+            .webDashboardAvailable
         ]
     }
 
@@ -103,6 +105,7 @@ public enum SwiftBotDMMessageType: String, Codable, CaseIterable, Sendable, Iden
         case .campaignDetected: return "New Campaign"
         case .accountActionRequired: return "Needs a Look"
         case .prioritisedGameNeedsLinking: return "Link Twitch to Claim Drops"
+        case .webDashboardAvailable: return "Web Dashboard Live"
         }
     }
 }

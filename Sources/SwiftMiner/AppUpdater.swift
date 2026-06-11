@@ -49,6 +49,14 @@ final class AppUpdater: NSObject, ObservableObject {
     private let currentShortVersion: String
     private var autoCheckTask: Task<Void, Never>?
     var onError: ((Error) -> Void)?
+    /// Called when an update check completes and the app is already current.
+    var onUpToDate: (() -> Void)?
+    /// Called when a downloaded update is ready. Arguments are the new version
+    /// and a human-readable description of when it will install.
+    var onAutoInstall: ((String, String) -> Void)?
+    /// Answers whether installing (and relaunching) right now would interrupt
+    /// active mining. Wired by the app; nil means "always safe".
+    var isSafeToInstallNow: (() -> Bool)?
 
     init(bundle: Bundle = .main) {
         let persistedChannelRaw = UserDefaults.standard.string(forKey: Self.updateChannelDefaultsKey) ?? UpdateChannel.stable.rawValue
@@ -79,6 +87,14 @@ final class AppUpdater: NSObject, ObservableObject {
                 updaterDelegate: self,
                 userDriverDelegate: nil
             )
+            // Hands-free updates by default: check + download silently. One-time
+            // seed so a user who later opts out in the Updates tab stays opted out.
+            let autoDefaultsKey = "SwiftMinerAutoUpdateDefaultApplied"
+            if !UserDefaults.standard.bool(forKey: autoDefaultsKey) {
+                updaterController?.updater.automaticallyChecksForUpdates = true
+                updaterController?.updater.automaticallyDownloadsUpdates = true
+                UserDefaults.standard.set(true, forKey: autoDefaultsKey)
+            }
             automaticallyChecksForUpdates = updaterController?.updater.automaticallyChecksForUpdates ?? false
             automaticallyDownloadsUpdates = updaterController?.updater.automaticallyDownloadsUpdates ?? false
             canCheckForUpdates = true
@@ -221,21 +237,77 @@ extension AppUpdater: SPUUpdaterDelegate {
 
     func updater(_ updater: SPUUpdater, didAbortWithError error: Error) {
         let nsError = error as NSError
-        // Skip expected non-failure errors:
-        // SUNoUpdateError = 4001 or 2401
-        // SUInstallationCanceledError = 4003 or 2403
         if nsError.domain == "SUSparkleErrorDomain" {
             let code = nsError.code
-            if code == 4001 || code == 4003 || code == 2401 || code == 2403 {
+            // Sparkle 2's SUNoUpdateError is 1001 — "no update" is success,
+            // not failure. (4001/2401 kept from the old, incorrect mapping in
+            // case older Sparkle builds report them.)
+            if code == 1001 || code == 4001 || code == 2401 {
+                onUpToDate?()
+                return
+            }
+            // User-cancelled installs are not failures either.
+            if code == 4003 || code == 2403 {
                 return
             }
         }
-        
+
         onError?(error)
     }
 
     func updaterShouldRelaunchApplication(_ updater: SPUUpdater) -> Bool {
         true
+    }
+
+    /// Sparkle stages silently-downloaded updates to install "on quit" — but a
+    /// 24/7 miner never quits, so without this hook automatic updates would
+    /// never actually complete. Returning true and invoking the block installs
+    /// the update now; Sparkle relaunches the app afterwards and mining
+    /// auto-resumes on startup.
+    func updater(_ updater: SPUUpdater, willInstallUpdateOnQuit item: SUAppcastItem, immediateInstallationBlock: @escaping () -> Void) -> Bool {
+        let version = item.displayVersionString
+        Task { @MainActor in
+            let settings = Settings.shared
+            switch settings.autoUpdateInstallPolicy {
+            case .immediate:
+                self.onAutoInstall?(version, "installing now")
+                // Give the log line a moment to land before the relaunch.
+                try? await Task.sleep(for: .seconds(2))
+
+            case .whenIdle:
+                if self.isSafeToInstallNow?() ?? true {
+                    self.onAutoInstall?(version, "miners are idle — installing now")
+                    try? await Task.sleep(for: .seconds(2))
+                } else {
+                    self.onAutoInstall?(version, "waiting for miners to finish (installs within 24h regardless)")
+                    // Poll each minute; install at first idle moment, or after
+                    // 24h so a nonstop miner can't defer updates forever.
+                    let deadline = Date().addingTimeInterval(24 * 60 * 60)
+                    while Date() < deadline, !(self.isSafeToInstallNow?() ?? true) {
+                        try? await Task.sleep(for: .seconds(60))
+                    }
+                }
+
+            case .scheduled:
+                if let target = Calendar.current.nextDate(
+                    after: Date(),
+                    matching: DateComponents(hour: settings.autoUpdateInstallHour, minute: 0),
+                    matchingPolicy: .nextTime
+                ) {
+                    self.onAutoInstall?(version, "installing at \(target.formatted(date: .omitted, time: .shortened))")
+                    // One-minute steps so Mac sleep can't stretch a long sleep
+                    // past the window.
+                    while Date() < target {
+                        try? await Task.sleep(for: .seconds(60))
+                    }
+                } else {
+                    self.onAutoInstall?(version, "installing now")
+                    try? await Task.sleep(for: .seconds(2))
+                }
+            }
+            immediateInstallationBlock()
+        }
+        return true
     }
 }
 #endif

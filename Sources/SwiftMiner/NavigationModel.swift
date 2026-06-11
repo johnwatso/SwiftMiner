@@ -300,6 +300,19 @@ public final class NavigationModel {
     /// Number of miners currently configured (used to gate web internet access).
     public var configuredMinerCount: Int { minerManager.miners.count }
 
+    /// True when it's safe to install an update and relaunch: no miner is
+    /// actively earning progress. Stalled, errored, or auth-blocked miners
+    /// don't block the install — an update may be exactly what fixes them.
+    public var isSafeToInstallUpdateNow: Bool {
+        !minerManager.miners.contains { miner in
+            miner.isRunning
+                && miner.currentCampaignId != nil
+                && !miner.needsAuth
+                && miner.status != .error
+                && miner.status != .blockedAccountNotLinked
+        }
+    }
+
     /// Records a web-dashboard audit entry in the Activity Log. The raw message
     /// carries the `[web-audit]` tag so the log's Audit filter picks it up.
     public func logWebAudit(_ message: String) {
@@ -365,12 +378,41 @@ public final class NavigationModel {
         switch result {
         case .success(let publicURL):
             logEvent(message: "Web dashboard registered on SwiftBot's tunnel at \(publicURL)", level: .info)
+            await announceWebDashboardIfNeeded()
         case .failure(let message):
             if logFailures {
                 logEvent(message: "Web dashboard tunnel registration failed: \(message)", level: .warning)
             }
         }
         return result
+    }
+
+    /// One-time "your web dashboard is live" DM to every registered Discord
+    /// user, sent only after the dashboard is confirmed working (a successful
+    /// tunnel registration). Never resent on updates or relaunches.
+    private func announceWebDashboardIfNeeded() async {
+        guard !Settings.shared.webDashboardAnnounced, Settings.shared.swiftBotEnabled else { return }
+        let users = await adminLinkingService.getAllUsers()
+        guard !users.isEmpty else {
+            // No one to tell yet — keep the flag clear so the first user
+            // linked after launch still gets the announcement.
+            return
+        }
+        var sent = 0
+        for user in users {
+            let request = SwiftBotDMRequest(
+                messageType: .webDashboardAvailable,
+                debug: false,
+                eventId: "webDashboardAvailable:\(user.discordId)"
+            )
+            if await swiftBotConnectionService.sendEventDM(to: user.discordId, request: request) {
+                sent += 1
+            }
+        }
+        if sent > 0 {
+            Settings.shared.webDashboardAnnounced = true
+            logWebAudit("Web dashboard announcement sent to \(sent) Discord user\(sent == 1 ? "" : "s")")
+        }
     }
 
     /// Re-asserts the dashboard's hostname on SwiftBot's tunnel at launch, so a

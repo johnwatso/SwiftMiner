@@ -135,11 +135,19 @@ public final class Settings: ObservableObject {
 
     /// JSON-encoded array of EventFilter for the Events view.
     @AppStorage("selectedEventFiltersData", store: Settings.appStorageStore)
-    private var selectedEventFiltersData: String = "[\"drops\",\"errors\",\"heartbeats\",\"mining\",\"system\",\"warnings\"]"
+    private var selectedEventFiltersData: String = "[\"audit\",\"drops\",\"errors\",\"heartbeats\",\"mining\",\"system\",\"updates\",\"warnings\"]"
 
     /// One-time migration so existing users see heartbeat diagnostics after upgrading.
     @AppStorage("eventFiltersHeartbeatDefaultApplied", store: Settings.appStorageStore)
     private var eventFiltersHeartbeatDefaultApplied: Bool = false
+
+    /// One-time migration so existing users see web-audit entries after upgrading.
+    @AppStorage("eventFiltersAuditDefaultApplied", store: Settings.appStorageStore)
+    private var eventFiltersAuditDefaultApplied: Bool = false
+
+    /// One-time migration so existing users see update entries after upgrading.
+    @AppStorage("eventFiltersUpdatesDefaultApplied", store: Settings.appStorageStore)
+    private var eventFiltersUpdatesDefaultApplied: Bool = false
 
     /// Persistent filter selection for the Events view.
     public var selectedEventFilters: Set<EventFilter> {
@@ -163,6 +171,22 @@ public final class Settings: ObservableObject {
     /// Apply the one-time migration that enables heartbeat diagnostics for existing users.
     /// Must be called from init(), not from a property getter, to avoid mutating
     /// @AppStorage during a view update (which triggers the SwiftUI runtime warning).
+    private func applyUpdatesFilterDefaultIfNeeded() {
+        guard !eventFiltersUpdatesDefaultApplied else { return }
+        var filters = selectedEventFilters
+        filters.insert(.updates)
+        selectedEventFilters = filters
+        eventFiltersUpdatesDefaultApplied = true
+    }
+
+    private func applyAuditFilterDefaultIfNeeded() {
+        guard !eventFiltersAuditDefaultApplied else { return }
+        var filters = selectedEventFilters
+        filters.insert(.audit)
+        selectedEventFilters = filters
+        eventFiltersAuditDefaultApplied = true
+    }
+
     private func applyHeartbeatFilterDefaultIfNeeded() {
         guard !eventFiltersHeartbeatDefaultApplied else { return }
         var filters = selectedEventFilters
@@ -176,7 +200,7 @@ public final class Settings: ObservableObject {
     }
 
     private static var defaultEventFilters: Set<EventFilter> {
-        [.mining, .heartbeats, .drops, .warnings, .errors, .discord, .system]
+        [.mining, .heartbeats, .drops, .warnings, .errors, .discord, .audit, .updates, .system]
     }
 
 #if DEBUG
@@ -399,6 +423,20 @@ public final class Settings: ObservableObject {
     /// (e.g. "swiftminer" → swiftminer.example.com).
     @AppStorage("webDashboardSubdomain", store: Settings.appStorageStore)
     public var webDashboardSubdomain: String = "swiftminer"
+
+    /// When a downloaded update gets installed (the install relaunches the app).
+    @AppStorage("autoUpdateInstallPolicy", store: Settings.appStorageStore)
+    public var autoUpdateInstallPolicy: AutoUpdateInstallPolicy = .whenIdle
+
+    /// Hour of day (0–23) for scheduled update installs.
+    @AppStorage("autoUpdateInstallHour", store: Settings.appStorageStore)
+    public var autoUpdateInstallHour: Int = 3
+
+    /// Whether the one-time "web dashboard is live" DM announcement has been
+    /// sent. Set after the first confirmed tunnel registration; never resent on
+    /// updates or relaunches.
+    @AppStorage("webDashboardAnnounced", store: Settings.appStorageStore)
+    public var webDashboardAnnounced: Bool = false
 
     /// SwiftBot's public hostname (e.g. swiftbot.example.com), cached from its
     /// tunnel info. Used for Discord sign-in brokered via SwiftBot.
@@ -838,6 +876,8 @@ public final class Settings: ObservableObject {
         }
         migrateFromLegacyIfNeeded()
         applyHeartbeatFilterDefaultIfNeeded()
+        applyAuditFilterDefaultIfNeeded()
+        applyUpdatesFilterDefaultIfNeeded()
     }
 
     /// One-time migration from old comma-separated strings to new JSON model
@@ -1432,5 +1472,27 @@ extension Settings.LogLevel {
             return true
         }
         return levelIndex >= selfIndex
+    }
+}
+
+
+/// When automatically downloaded updates are installed.
+public enum AutoUpdateInstallPolicy: String, CaseIterable, Identifiable {
+    /// Install (and relaunch) as soon as the download finishes.
+    case immediate
+    /// Wait until no miner is actively mining. Stalled, errored, or
+    /// auth-blocked miners count as idle — an update may be the fix.
+    case whenIdle
+    /// Wait for a fixed hour of day.
+    case scheduled
+
+    public var id: String { rawValue }
+
+    public var label: String {
+        switch self {
+        case .immediate: return "Immediately"
+        case .whenIdle: return "When miners are idle"
+        case .scheduled: return "At a scheduled time"
+        }
     }
 }
