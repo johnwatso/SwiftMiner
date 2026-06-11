@@ -103,6 +103,18 @@ public actor WebDashboardRoutes {
                                    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"],
                          body: Data(WebDashboardAssets.loginJS.utf8))
         })
+        // Browsers request /favicon.ico unprompted; modern ones accept PNG
+        // bytes there. The <link rel="icon"> tags on each page make the format
+        // explicit anyway.
+        if let favicon = logoDarkPNG {
+            await router.register(HTTPRoute(method: "GET", pattern: "/favicon.ico") { _, _ in
+                HTTPResponse(statusCode: 200,
+                             headers: ["Content-Type": "image/png",
+                                       "Cache-Control": "public, max-age=86400",
+                                       "Content-Length": "\(favicon.count)"],
+                             body: favicon)
+            })
+        }
         for (path, data) in [("/app/logo-dark.png", logoDarkPNG), ("/app/logo-light.png", logoLightPNG)] {
             guard let data else { continue }
             await router.register(HTTPRoute(method: "GET", pattern: path) { _, _ in
