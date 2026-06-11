@@ -34,20 +34,12 @@ enum WebDashboardAssets {
           font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif;
           font-size: 15px; color: var(--text);
           background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
-          background-size: 400% 400%;
-          animation: gradient-pan 20s ease infinite alternate;
           background-attachment: fixed;
-        }
-        @keyframes gradient-pan {
-          0% { background-position: 0% 50%; }
-          100% { background-position: 100% 50%; }
         }
         .shell { max-width: 640px; margin: 0 auto; }
         header {
           display: flex; align-items: center; gap: 10px; padding: 18px 2px 14px;
-          position: sticky; top: 0; z-index: 5;
-          background: linear-gradient(180deg, rgba(15,12,41,0.88), transparent);
-          backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+
         }
         header img { width: 34px; height: 34px; }
         header h1 { margin: 0; font-size: 19px; letter-spacing: -0.02em; }
@@ -304,6 +296,24 @@ enum WebDashboardAssets {
     }
 
     function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+    function endsIn(iso) {
+      if (!iso) return '';
+      const ms = new Date(iso) - Date.now();
+      if (isNaN(ms) || ms <= 0) return '';
+      const h = Math.floor(ms / 3600000);
+      if (h >= 48) return 'ends in ' + Math.floor(h / 24) + 'd';
+      if (h >= 1) return 'ends in ' + h + 'h';
+      return 'ends in ' + Math.max(1, Math.floor(ms / 60000)) + 'm';
+    }
+    function agoText(iso) {
+      if (!iso) return '';
+      const ms = Date.now() - new Date(iso);
+      if (isNaN(ms) || ms < 0) return '';
+      const h = Math.floor(ms / 3600000);
+      if (h >= 48) return Math.floor(h / 24) + 'd ago';
+      if (h >= 1) return h + 'h ago';
+      return Math.max(1, Math.floor(ms / 60000)) + 'm ago';
+    }
     function boxart(name, w = 144, h = 192) {
       return 'https://static-cdn.jtvnw.net/ttv-boxart/' + encodeURIComponent(name) + '-' + w + 'x' + h + '.jpg';
     }
@@ -382,7 +392,10 @@ enum WebDashboardAssets {
         const c = p.activeCampaign;
         const pr = c.progress || {};
         const isCompleted = pr.pct >= 100;
-        const metaStatus = isCompleted ? '<span style="color:var(--green);font-weight:600;">Ready to claim!</span>' : '<span>Mining active drops</span>';
+        const ends = endsIn(c.endsAt);
+        const metaStatus = isCompleted
+          ? '<span style="color:var(--green);font-weight:600;">Ready to claim!</span>'
+          : `<span>Mining${ends ? ' · ' + ends : ''}</span>`;
         progressHTML = `
           <div class="hero-progress">
             <div class="progress-header">
@@ -498,7 +511,7 @@ enum WebDashboardAssets {
           ? `${esc(c.game)} — ${esc(c.campaignName)}` : esc(c.game);
         rows += `<div class="drop"><img class="icon" alt="" data-game="${esc(c.game)}" data-art="${esc(c.boxArtURL || '')}">
           <div class="t"><div class="reward">${title}</div>
-          <div class="muted" style="font-size:12px">${esc(c.claimedDrops)} / ${esc(c.totalDrops)} drops claimed</div></div></div>`;
+          <div class="muted" style="font-size:12px">${esc(c.claimedDrops)} / ${esc(c.totalDrops)} drops claimed${agoText(c.completedAt) ? ' · ' + agoText(c.completedAt) : ''}</div></div></div>`;
       }
       return `<div class="card"><div class="label">Recently completed</div>${rows}</div>`;
     }
