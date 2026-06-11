@@ -33,17 +33,21 @@ enum WebDashboardAssets {
           margin: 0; min-height: 100vh; padding: 0 16px 48px;
           font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif;
           font-size: 15px; color: var(--text);
-          background:
-            radial-gradient(900px 600px at 85% -10%, rgba(86,188,255,0.12), transparent 60%),
-            radial-gradient(700px 500px at -10% 110%, rgba(145,70,255,0.08), transparent 60%),
-            linear-gradient(180deg, var(--bg-a), var(--bg-b) 45%, var(--bg-c));
+          background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+          background-size: 400% 400%;
+          animation: gradient-pan 20s ease infinite alternate;
           background-attachment: fixed;
+        }
+        @keyframes gradient-pan {
+          0% { background-position: 0% 50%; }
+          100% { background-position: 100% 50%; }
         }
         .shell { max-width: 640px; margin: 0 auto; }
         header {
           display: flex; align-items: center; gap: 10px; padding: 18px 2px 14px;
           position: sticky; top: 0; z-index: 5;
-          background: linear-gradient(180deg, var(--bg-a) 60%, transparent);
+          background: linear-gradient(180deg, rgba(15,12,41,0.88), transparent);
+          backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
         }
         header img { width: 34px; height: 34px; }
         header h1 { margin: 0; font-size: 19px; letter-spacing: -0.02em; }
@@ -54,13 +58,15 @@ enum WebDashboardAssets {
           background: linear-gradient(180deg, var(--glass-top), var(--glass-bottom));
         }
         .card {
-          background: linear-gradient(180deg, var(--glass-top), var(--glass-bottom));
-          border: 1px solid var(--glass-stroke); border-radius: 18px;
-          box-shadow: 0 16px 40px rgba(0,0,0,0.22);
-          backdrop-filter: blur(24px) saturate(1.4); -webkit-backdrop-filter: blur(24px) saturate(1.4);
+          background: rgba(25, 20, 40, 0.45);
+          border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 18px;
+          box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+          backdrop-filter: blur(28px) saturate(1.6); -webkit-backdrop-filter: blur(28px) saturate(1.6);
           padding: 16px 18px; margin: 0 0 14px;
           animation: rise 0.4s cubic-bezier(0.21,1,0.27,1) both;
         }
+        /* Entrance animation only on first paint — refreshes must not flicker. */
+        body.loaded .card { animation: none; }
         @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
         .row { display: flex; align-items: center; gap: 10px; }
         .label { color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; }
@@ -664,7 +670,16 @@ enum WebDashboardAssets {
       location.href = '/login';
     }
 
+    let lastPayload = null;
+
+    function editingNow() {
+      const a = document.activeElement;
+      return a && (a.id === 'addgame' || a.tagName === 'INPUT');
+    }
+
     async function load(soft) {
+      // Never clobber the page while the user is typing or mid-save.
+      if (soft && editingNow()) return;
       const sr = await api('/me/session');
       if (!sr) return;
       const session = await sr.json();
@@ -673,7 +688,11 @@ enum WebDashboardAssets {
       const pr = await api('/me/projection');
       if (!pr) return;
       if (pr.status === 404) { $('app').innerHTML = '<div class="card muted">No miner found for your account yet.</div>'; return; }
-      const data = await pr.json();
+      const text = await pr.text();
+      // Background refresh with identical data: leave the DOM alone entirely.
+      if (soft && text === lastPayload) return;
+      lastPayload = text;
+      const data = JSON.parse(text);
       if (session.provider === 'local') {
         const miners = data.miners || [];
         if (miners.length === 1) {
@@ -684,6 +703,7 @@ enum WebDashboardAssets {
       } else {
         render(data);
       }
+      document.body.classList.add('loaded');
     }
 
     let GAMES = [];

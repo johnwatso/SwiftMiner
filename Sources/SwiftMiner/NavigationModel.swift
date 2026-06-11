@@ -259,6 +259,7 @@ public final class NavigationModel {
             try await server.start()
             httpAPIServer = server
             logEvent(message: "API server listening on port \(port)", level: .info)
+            autoRegisterWebDashboardHostnameIfNeeded()
             print("[NavigationModel] SwiftMiner HTTP server listening on port \(port)")
         } catch {
             logEvent(message: "API server failed on port \(port): \(error.localizedDescription)", level: .error)
@@ -316,7 +317,9 @@ public final class NavigationModel {
     /// Asks SwiftBot to carry the dashboard's public hostname on its Cloudflare
     /// tunnel, routed to SwiftMiner's local HTTP server. One-click alternative
     /// to manually adding the hostname in the Cloudflare dashboard.
-    func registerWebDashboardHostnameWithSwiftBot() async -> SwiftBotTunnelRegistrationResult {
+    /// `logFailures` is off for the launch-time auto attempt so retries while
+    /// SwiftBot is still starting don't spam the Activity Log.
+    func registerWebDashboardHostnameWithSwiftBot(logFailures: Bool = true) async -> SwiftBotTunnelRegistrationResult {
         let s = Settings.shared
         guard let url = Settings.normalizedWebDashboardURL(from: s.webDashboardBaseURL),
               url.scheme?.lowercased() == "https",
@@ -333,9 +336,44 @@ public final class NavigationModel {
         case .success(let publicURL):
             logEvent(message: "Web dashboard registered on SwiftBot's tunnel at \(publicURL)", level: .info)
         case .failure(let message):
-            logEvent(message: "Web dashboard tunnel registration failed: \(message)", level: .warning)
+            if logFailures {
+                logEvent(message: "Web dashboard tunnel registration failed: \(message)", level: .warning)
+            }
         }
         return result
+    }
+
+    /// Re-asserts the dashboard's hostname on SwiftBot's tunnel at launch, so a
+    /// configured setup self-heals (tunnel reset, restored settings, SwiftBot
+    /// reinstalls) without anyone clicking the Register button again. Retries
+    /// quietly for a while because SwiftBot may still be starting up; logs one
+    /// warning only if every attempt fails.
+    private func autoRegisterWebDashboardHostnameIfNeeded() {
+        let s = Settings.shared
+        guard s.webDashboardEnabled, s.swiftBotEnabled,
+              !s.swiftBotHmacSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let url = Settings.normalizedWebDashboardURL(from: s.webDashboardBaseURL),
+              url.scheme?.lowercased() == "https" else {
+            return
+        }
+        Task { [weak self] in
+            var lastFailure = "SwiftBot was unreachable."
+            for attempt in 0..<5 {
+                if attempt > 0 { try? await Task.sleep(for: .seconds(20)) }
+                guard let self else { return }
+                let result = await self.registerWebDashboardHostnameWithSwiftBot(logFailures: false)
+                switch result {
+                case .success:
+                    return // success is logged by the register call itself
+                case .failure(let message):
+                    lastFailure = message
+                }
+            }
+            guard let self else { return }
+            await MainActor.run {
+                self.logEvent(message: "Web dashboard tunnel auto-registration failed: \(lastFailure)", level: .warning)
+            }
+        }
     }
 
     /// Bundled login-logo PNG (light/dark exports of the gem artwork with
