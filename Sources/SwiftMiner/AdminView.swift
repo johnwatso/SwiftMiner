@@ -786,6 +786,8 @@ private struct DetailPanel: View {
         case .campaignDetected: return s.dmCampaignDetectedEnabled
         case .accountActionRequired: return s.dmAccountActionRequiredEnabled
         case .prioritisedGameNeedsLinking: return s.dmLinkRequiredEnabled
+        // One-time announcement; always show in history.
+        case .webDashboardAvailable: return true
         }
     }
 

@@ -285,6 +285,23 @@ private struct GeneralSettingsView: View {
 
 private struct UpdatesSettingsView: View {
     @EnvironmentObject private var updater: AppUpdater
+    @ObservedObject private var settings = Settings.shared
+
+    private var updateInstallPolicyDescription: String {
+        switch settings.autoUpdateInstallPolicy {
+        case .immediate:
+            return "Updates install (and relaunch SwiftMiner) as soon as they finish downloading."
+        case .whenIdle:
+            return "Updates download silently anytime, then install the moment no miner is actively earning progress. Stalled or errored miners don't delay it — an update may be the fix. Installs within 24 hours regardless."
+        case .scheduled:
+            return "Updates download silently anytime, but the install and relaunch wait until \(updateHourLabel(settings.autoUpdateInstallHour))."
+        }
+    }
+
+    private func updateHourLabel(_ hour: Int) -> String {
+        let date = Calendar.current.date(from: DateComponents(hour: hour, minute: 0)) ?? Date()
+        return date.formatted(date: .omitted, time: .shortened)
+    }
 
     var body: some View {
         Form {
@@ -310,6 +327,24 @@ private struct UpdatesSettingsView: View {
                 Toggle("Allow unattended updates", isOn: automaticUpdatesBinding)
                     .disabled(!updater.canCheckForUpdates || !updater.automaticallyChecksForUpdates)
                 SettingsSecondaryText("Download and install eligible updates in the background when macOS does not require authorization.")
+
+                if updater.automaticallyDownloadsUpdates {
+                    Picker("Install timing", selection: $settings.autoUpdateInstallPolicy) {
+                        ForEach(AutoUpdateInstallPolicy.allCases) { policy in
+                            Text(policy.label).tag(policy)
+                        }
+                    }
+                    .frame(maxWidth: 320)
+                    if settings.autoUpdateInstallPolicy == .scheduled {
+                        Picker("Install time", selection: $settings.autoUpdateInstallHour) {
+                            ForEach(0..<24, id: \.self) { hour in
+                                Text(updateHourLabel(hour)).tag(hour)
+                            }
+                        }
+                        .frame(maxWidth: 220)
+                    }
+                    SettingsSecondaryText(updateInstallPolicyDescription)
+                }
 
                 Button("Check for Updates...") {
                     updater.checkForUpdates()
@@ -685,7 +720,11 @@ private struct MiningSettingsView: View {
 private struct WebDashboardSettingsView: View {
     @ObservedObject var settings: Settings
     @Environment(NavigationModel.self) private var navigation
-    @State private var newPassword: String = ""
+    @State private var showingInternetSetup = false
+    @State private var showingLocalSetup = false
+    @State private var draftLocalUsername = ""
+    @State private var draftLocalPassword = ""
+    @State private var showLocalPassword = false
     @State private var isRegisteringTunnel = false
     @State private var tunnelRegistrationMessage: String?
     @State private var tunnelRegistrationSucceeded = false
@@ -733,6 +772,12 @@ private struct WebDashboardSettingsView: View {
         .sheet(isPresented: $showingTwitchOAuthSetup) {
             twitchOAuthSetupSheet
         }
+        .sheet(isPresented: $showingInternetSetup) {
+            internetAccessSetupSheet
+        }
+        .sheet(isPresented: $showingLocalSetup) {
+            localAccessSetupSheet
+        }
     }
 
     // MARK: - Local Access
@@ -740,47 +785,240 @@ private struct WebDashboardSettingsView: View {
     private var localAccessSection: some View {
         Section {
             Toggle("Allow local sign-in", isOn: $settings.webDashboardLocalEnabled)
-            SettingsSecondaryText("Sign in with a username and password from this machine or your local network. Never accepted over your public domain, so it stays off the internet.")
 
             if settings.webDashboardLocalEnabled {
-                TextField("Username", text: $settings.webDashboardLocalUsername)
-                HStack {
-                    SecureField(settings.webDashboardLocalPasswordHash.isEmpty ? "Set a password" : "Change password", text: $newPassword)
-                    Button("Set") {
-                        settings.webDashboardLocalPasswordHash = WebSecurity.hashLocalPassword(newPassword)
-                        newPassword = ""
+                if settings.webDashboardLocalConfigured {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Label("Local sign-in configured", systemImage: "checkmark.circle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.green)
+                            Text(settings.webDashboardLocalUsername)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button {
+                            openLocalSetup()
+                        } label: {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                                .font(.system(size: 12, weight: .medium))
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Change local sign-in details")
+                        .accessibilityLabel("Change local sign-in details")
                     }
-                    .disabled(newPassword.count < 6)
-                }
-                if settings.webDashboardLocalPasswordHash.isEmpty {
-                    Label("Set a password (6+ characters) to enable local sign-in.", systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption).foregroundStyle(.orange)
                 } else {
-                    Label("Password set. The operator view shows all miners.", systemImage: "checkmark.circle.fill")
-                        .font(.caption).foregroundStyle(.green)
+                    Button {
+                        openLocalSetup()
+                    } label: {
+                        Label("Set Up Local Sign-In", systemImage: "person.badge.key.fill")
+                    }
+                    Label("Local sign-in is not configured yet.", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
                 }
             }
+            SettingsSecondaryText("Sign in with a username and password from this machine or your local network. Never accepted over your public domain, so it stays off the internet. The operator view shows all miners.")
         } header: {
             Text("Local Access")
         }
+    }
+
+    private var localAccessSetupSheet: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 8) {
+                Image(systemName: "person.badge.key.fill")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.tint)
+                Text(settings.webDashboardLocalConfigured ? "Change Local Sign-In" : "Set Up Local Sign-In")
+                    .font(.headline)
+            }
+
+            SettingsSecondaryText("The operator account for local and LAN access. The password is stored as a salted hash and is never accepted over your public domain.")
+
+            Form {
+                TextField("Username", text: $draftLocalUsername)
+                    .textContentType(.username)
+                HStack {
+                    Group {
+                        if showLocalPassword {
+                            TextField(localPasswordPrompt, text: $draftLocalPassword)
+                        } else {
+                            SecureField(localPasswordPrompt, text: $draftLocalPassword)
+                        }
+                    }
+                    .textContentType(.password)
+                    Button {
+                        showLocalPassword.toggle()
+                    } label: {
+                        Image(systemName: showLocalPassword ? "eye.slash" : "eye")
+                            .font(.system(size: 12))
+                    }
+                    .buttonStyle(.borderless)
+                    .help(showLocalPassword ? "Hide password" : "Show password")
+                }
+            }
+            .formStyle(.grouped)
+
+            HStack {
+                Spacer()
+                Button("Cancel", role: .cancel) {
+                    showingLocalSetup = false
+                }
+                Button("Save") {
+                    saveLocalAccessDetails()
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(!draftLocalIsValid)
+            }
+        }
+        .padding(24)
+        .frame(width: 420)
+    }
+
+    private var draftLocalIsValid: Bool {
+        let usernameOK = !draftLocalUsername.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        // An already-configured account may keep its password (blank field).
+        let passwordOK = draftLocalPassword.count >= 6
+            || (settings.webDashboardLocalConfigured && draftLocalPassword.isEmpty)
+        return usernameOK && passwordOK
+    }
+
+    private var localPasswordPrompt: String {
+        settings.webDashboardLocalConfigured ? "New password (leave blank to keep)" : "Password (6+ characters)"
+    }
+
+    private func openLocalSetup() {
+        draftLocalUsername = settings.webDashboardLocalUsername
+        draftLocalPassword = ""
+        showLocalPassword = false
+        showingLocalSetup = true
+    }
+
+    private func saveLocalAccessDetails() {
+        settings.webDashboardLocalUsername = draftLocalUsername.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !draftLocalPassword.isEmpty {
+            settings.webDashboardLocalPasswordHash = WebSecurity.hashLocalPassword(draftLocalPassword)
+        }
+        draftLocalPassword = ""
+        showingLocalSetup = false
     }
 
     // MARK: - OAuth (internet access)
 
     @ViewBuilder private var oauthSections: some View {
         Section {
+            if let origin = webDashboardOrigin {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Label("Internet access configured", systemImage: "checkmark.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.green)
+                        // At-a-glance: just the domain in the UI font. The full
+                        // copy-exact URL (mono) lives in the setup sheet.
+                        Text(Settings.normalizedWebDashboardURL(from: settings.webDashboardBaseURL)?.host ?? origin)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    Spacer()
+                    Button {
+                        showingInternetSetup = true
+                    } label: {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Change internet access settings")
+                    .accessibilityLabel("Change internet access settings")
+                }
+            } else {
+                Button {
+                    showingInternetSetup = true
+                } label: {
+                    Label("Set Up Internet Access", systemImage: "globe")
+                }
+                Label("Internet access is not configured yet.", systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+            SettingsSecondaryText("Your dashboard's public address, carried on SwiftBot's existing Cloudflare tunnel — SwiftMiner doesn't run its own.")
+        } header: {
+            Text("Internet Access")
+        }
+        .task { await loadSwiftBotTunnelInfo() }
+        .onChange(of: settings.webDashboardSubdomain) { _, _ in syncComposedBaseURL() }
+
+        Section {
+            if settings.webDashboardTwitchConfigured {
+                HStack {
+                    Label("Twitch sign-in configured", systemImage: "checkmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                    Spacer()
+                    Button {
+                        openTwitchOAuthSetup()
+                    } label: {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Replace Twitch OAuth details")
+                    .accessibilityLabel("Replace Twitch OAuth details")
+                }
+            } else {
+                Button {
+                    openTwitchOAuthSetup()
+                } label: {
+                    Label("Set Up Twitch OAuth", systemImage: "key.fill")
+                }
+                Label("Twitch sign-in is not configured yet.", systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+            SettingsSecondaryText("From your Twitch application (dev.twitch.tv/console → register an app with the redirect URL below). Enables “Sign in with Twitch”, letting users reach their own miner over the web.")
+        } header: {
+            HStack(spacing: 6) {
+                TwitchLogo()
+                    .frame(width: 13, height: 14)
+                    .accessibilityHidden(true)
+                Text("Twitch Sign-In")
+            }
+        }
+
+    }
+
+    private var internetAccessSetupSheet: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 8) {
+                Image(systemName: "globe")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.tint)
+                Text(webDashboardOrigin == nil ? "Set Up Internet Access" : "Internet Access")
+                    .font(.headline)
+            }
+
+            SettingsSecondaryText("Pick the public address for your dashboard. SwiftBot carries it on its Cloudflare tunnel — one click registers the route and DNS for you.")
+
             if settings.swiftBotEnabled {
                 if let info = swiftBotTunnelInfo, !info.domain.isEmpty {
                     // Domain comes from SwiftBot — the user only picks a subdomain.
-                    HStack(spacing: 4) {
-                        TextField("Subdomain", text: $settings.webDashboardSubdomain, prompt: Text("swiftminer"))
-                            .frame(maxWidth: 150)
-                        Text(".\(info.domain)")
-                            .font(.system(size: 13, design: .monospaced))
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Subdomain")
+                            .font(.caption)
                             .foregroundStyle(.secondary)
-                        Spacer()
+                        HStack(spacing: 4) {
+                            TextField("swiftminer", text: $settings.webDashboardSubdomain)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(maxWidth: 160)
+                            Text(".\(info.domain)")
+                                .font(.system(size: 13, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                        }
+                        SettingsSecondaryText("Your dashboard will be at https://\(composedHostname(domain: info.domain) ?? "…").")
                     }
-                    SettingsSecondaryText("Domain pulled from SwiftBot. Your dashboard will be at https://\(composedHostname(domain: info.domain) ?? "…").")
 
                     if !info.internetAccessEnabled {
                         Label("SwiftBot's Internet Access isn't set up yet — finish that in SwiftBot first.", systemImage: "exclamationmark.triangle.fill")
@@ -804,88 +1042,44 @@ private struct WebDashboardSettingsView: View {
                         Spacer()
                     }
                     TextField("Public URL", text: $settings.webDashboardBaseURL, prompt: Text("https://swiftminer.example.com"))
+                        .textFieldStyle(.roundedBorder)
                         .textContentType(.URL)
                 }
 
-                HStack(spacing: 10) {
-                    Button {
-                        registerTunnelHostname()
-                    } label: {
-                        if isRegisteringTunnel {
-                            ProgressView().controlSize(.mini)
-                        } else {
-                            Label("Register on SwiftBot's tunnel", systemImage: "antenna.radiowaves.left.and.right")
-                        }
+                Button {
+                    registerTunnelHostname()
+                } label: {
+                    if isRegisteringTunnel {
+                        ProgressView().controlSize(.mini)
+                    } else {
+                        Label("Register on SwiftBot's tunnel", systemImage: "antenna.radiowaves.left.and.right")
                     }
-                    .disabled(isRegisteringTunnel || webDashboardOrigin == nil)
-                    Spacer()
                 }
+                .disabled(isRegisteringTunnel || webDashboardOrigin == nil)
                 if let tunnelRegistrationMessage {
                     Label(tunnelRegistrationMessage, systemImage: tunnelRegistrationSucceeded ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                         .font(.caption)
                         .foregroundStyle(tunnelRegistrationSucceeded ? .green : .orange)
                 }
-                SettingsSecondaryText("One click: SwiftBot adds the subdomain to its tunnel and creates the DNS record for you. Requires SwiftBot's Internet Access to be set up and the apps to be paired.")
             } else {
                 TextField("Public URL", text: $settings.webDashboardBaseURL, prompt: Text("https://swiftminer.example.com"))
+                    .textFieldStyle(.roundedBorder)
                     .textContentType(.URL)
                 copyableValueRow(label: "Local target", value: localTarget)
-                SettingsSecondaryText("Add the subdomain above as a public hostname on your Cloudflare tunnel, routed to this local address — or enable the Discord integration to register it through SwiftBot automatically.")
+                SettingsSecondaryText("Add the address above as a public hostname on your Cloudflare tunnel, routed to this local target — or enable the Discord integration to register it through SwiftBot automatically.")
             }
-        } header: {
-            Text("Internet Access")
+
+            HStack {
+                Spacer()
+                Button("Done") {
+                    showingInternetSetup = false
+                }
+                .keyboardShortcut(.defaultAction)
+            }
         }
+        .padding(24)
+        .frame(width: 420)
         .task { await loadSwiftBotTunnelInfo() }
-        .onChange(of: settings.webDashboardSubdomain) { _, _ in syncComposedBaseURL() }
-
-        Section {
-            if settings.webDashboardTwitchConfigured {
-                Label("Twitch sign-in configured", systemImage: "checkmark.circle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.green)
-                Button("Replace Twitch OAuth Details") {
-                    openTwitchOAuthSetup()
-                }
-            } else {
-                Button {
-                    openTwitchOAuthSetup()
-                } label: {
-                    Label("Set Up Twitch OAuth", systemImage: "key.fill")
-                }
-                Label("Twitch sign-in is not configured yet.", systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-            }
-            SettingsSecondaryText("From your Twitch application (dev.twitch.tv/console → register an app with the redirect URL below). Enables “Sign in with Twitch”, letting users reach their own miner over the web.")
-        } header: {
-            HStack(spacing: 6) {
-                TwitchLogo()
-                    .frame(width: 13, height: 14)
-                    .accessibilityHidden(true)
-                Text("Twitch Sign-In")
-            }
-        }
-
-        Section {
-            if let redirect = webRedirectURL {
-                copyableValueRow(label: "Redirect URL", value: redirect)
-                SettingsSecondaryText("Register this exact URL as an OAuth Redirect URL in your Twitch application (dev.twitch.tv/console).")
-            } else if !settings.webDashboardBaseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Label("Enter a valid http(s) Public URL above to see the redirect URL to register.", systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-            } else {
-                SettingsSecondaryText("Set a Public URL above to get the redirect URL to register with Twitch.")
-            }
-
-            if !settings.webDashboardConfigured {
-                Label("Set a local password, or add a Public URL plus Twitch credentials, to enable sign-in.", systemImage: "info.circle")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        } header: {
-            Text("Setup")
-        }
     }
 
     private var twitchOAuthSetupSheet: some View {
@@ -909,15 +1103,8 @@ private struct WebDashboardSettingsView: View {
             .formStyle(.grouped)
 
             if let redirect = webRedirectURL {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Redirect URL")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text(redirect)
-                        .font(.system(.caption, design: .monospaced))
-                        .textSelection(.enabled)
-                        .foregroundStyle(.secondary)
-                }
+                copyableValueRow(label: "Redirect URL", value: redirect)
+                SettingsSecondaryText("Register this exact URL under OAuth Redirect URLs in your Twitch application.")
             }
 
             HStack {

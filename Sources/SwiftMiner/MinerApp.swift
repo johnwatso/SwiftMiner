@@ -43,7 +43,24 @@ struct MinerApp: App {
                     updater.onError = { error in
                         navigation.logEvent(
                             message: "Update check failed: \(error.localizedDescription). You can download manually from https://github.com/johnwatso/SwiftMiner/releases",
-                            level: .warning
+                            level: .warning,
+                            rawMessage: "[update] Update check failed: \(error.localizedDescription)"
+                        )
+                    }
+                    updater.isSafeToInstallNow = { navigation.isSafeToInstallUpdateNow }
+                    updater.onAutoInstall = { version, plan in
+                        navigation.logEvent(
+                            message: "⬇️ SwiftMiner \(version) downloaded — \(plan); the app will relaunch itself and resume mining.",
+                            level: .info,
+                            rawMessage: "[update] SwiftMiner \(version) downloaded — \(plan)"
+                        )
+                    }
+                    updater.onUpToDate = {
+                        let version = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? ""
+                        navigation.logEvent(
+                            message: "✅ Already up to date\(version.isEmpty ? "" : " — SwiftMiner \(version)")",
+                            level: .info,
+                            rawMessage: "[update] Already up to date \(version)"
                         )
                     }
                     navigation.configureOnboardingPresentation()

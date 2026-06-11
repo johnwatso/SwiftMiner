@@ -165,9 +165,43 @@ struct EventLogView: View {
         }
     }
 
+    private var allFiltersSelected: Bool {
+        Set(availableFilters).isSubset(of: selectedFilters)
+    }
+
     private var filterChipsRow: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                        selectedFilters = allFiltersSelected ? [] : Set(availableFilters)
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: allFiltersSelected ? "checklist.checked" : "checklist")
+                            .font(.caption.weight(.semibold))
+                        Text("All")
+                            .font(.subheadline.weight(.medium))
+                    }
+                    .foregroundStyle(allFiltersSelected ? .primary : .secondary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(
+                        Group {
+                            if allFiltersSelected {
+                                Capsule().fill(.thinMaterial.opacity(0.95))
+                            } else {
+                                Capsule().fill(Color.clear)
+                            }
+                        }
+                    )
+                    .overlay(Capsule().stroke(.quaternary, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .help(allFiltersSelected ? "Turn all filters off" : "Turn all filters on")
+
+                Divider().frame(height: 18)
+
                 ForEach(availableFilters) { option in
                     let isSelected = selectedFilters.contains(option)
                     Button {
@@ -595,6 +629,12 @@ private func eventFilters(for event: EventEntry) -> Set<EventFilter> {
         return event.level == .error ? [.audit, .errors] : [.audit]
     }
 
+    if isUpdateEvent(text) {
+        if event.level == .error { return [.updates, .errors] }
+        if event.level == .warning { return [.updates, .warnings] }
+        return [.updates]
+    }
+
     if isDiscordEvent(text) {
         return event.level == .error ? [.discord, .errors] : [.discord]
     }
@@ -637,6 +677,7 @@ private func primaryEventFilter(for event: EventEntry) -> EventFilter {
         .warnings,
         .accountLink,
         .audit,
+        .updates,
         .discord,
         .drops,
         .heartbeats,
@@ -660,6 +701,7 @@ private extension EventFilter {
         case .scan: return .teal
         case .discord: return .indigo
         case .audit: return .mint
+        case .updates: return .cyan
         case .system: return .gray
         }
     }
@@ -679,6 +721,12 @@ private let webAuditTag = "[web-audit]"
 
 private func isWebAuditEvent(_ text: String) -> Bool {
     text.contains(webAuditTag)
+}
+
+private let updateEventTag = "[update]"
+
+private func isUpdateEvent(_ text: String) -> Bool {
+    text.contains(updateEventTag)
 }
 
 private func isStallRecoveryEvent(_ text: String) -> Bool {
