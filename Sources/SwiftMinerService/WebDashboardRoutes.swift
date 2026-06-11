@@ -20,14 +20,47 @@ public actor WebDashboardRoutes {
     private let manager: SQLiteManager
     private let apiRoutes: DiscordAPIRoutes
     private let urlSession: URLSession
+    /// Resolves SwiftBot SSO availability live, so pairing/tunnel info gathered
+    /// after server start (e.g. SwiftBot launched later) still lights up the
+    /// Discord button without a relaunch. Falls back to `config.swiftBotSSO`.
+    private let swiftBotSSOProvider: (@Sendable () async -> WebSwiftBotSSO?)?
+    /// Login-page logo PNGs, served at /app/logo-dark.png and
+    /// /app/logo-light.png; the page picks per color scheme. When nil the page
+    /// falls back to a drawn gem mark.
+    private let logoDarkPNG: Data?
+    private let logoLightPNG: Data?
+    /// Receives human-readable audit sentences ("Gabe signed in …") for the
+    /// app's Activity Log. Optional; auditing is best-effort.
+    private let audit: (@Sendable (String) async -> Void)?
 
-    public init(config: WebDashboardConfig, manager: SQLiteManager, apiRoutes: DiscordAPIRoutes) {
+    public init(
+        config: WebDashboardConfig,
+        manager: SQLiteManager,
+        apiRoutes: DiscordAPIRoutes,
+        swiftBotSSOProvider: (@Sendable () async -> WebSwiftBotSSO?)? = nil,
+        logoDarkPNG: Data? = nil,
+        logoLightPNG: Data? = nil,
+        audit: (@Sendable (String) async -> Void)? = nil
+    ) {
         self.config = config
         self.manager = manager
         self.apiRoutes = apiRoutes
+        self.swiftBotSSOProvider = swiftBotSSOProvider
+        self.logoDarkPNG = logoDarkPNG
+        self.logoLightPNG = logoLightPNG
+        self.audit = audit
         let cfg = URLSessionConfiguration.ephemeral
         cfg.timeoutIntervalForRequest = 10
         self.urlSession = URLSession(configuration: cfg)
+    }
+
+    /// Current SwiftBot SSO config, or nil when unavailable. Requires a public
+    /// base URL (the assertion returns to our https callback) and a secret.
+    private func currentSwiftBotSSO() async -> WebSwiftBotSSO? {
+        guard config.baseURL != nil else { return nil }
+        let sso = await swiftBotSSOProvider?() ?? config.swiftBotSSO
+        guard let sso, !sso.hmacSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return sso
     }
 
     // MARK: - Registration
@@ -59,9 +92,27 @@ public actor WebDashboardRoutes {
         await router.register(HTTPRoute(method: "GET", pattern: "/app/app.js") { _, _ in
             HTTPResponse(statusCode: 200,
                          headers: ["Content-Type": "application/javascript; charset=utf-8",
-                                   "X-Content-Type-Options": "nosniff"],
+                                   "X-Content-Type-Options": "nosniff",
+                                   "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"],
                          body: Data(WebDashboardAssets.appJS.utf8))
         })
+        await router.register(HTTPRoute(method: "GET", pattern: "/app/login.js") { _, _ in
+            HTTPResponse(statusCode: 200,
+                         headers: ["Content-Type": "application/javascript; charset=utf-8",
+                                   "X-Content-Type-Options": "nosniff",
+                                   "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"],
+                         body: Data(WebDashboardAssets.loginJS.utf8))
+        })
+        for (path, data) in [("/app/logo-dark.png", logoDarkPNG), ("/app/logo-light.png", logoLightPNG)] {
+            guard let data else { continue }
+            await router.register(HTTPRoute(method: "GET", pattern: path) { _, _ in
+                HTTPResponse(statusCode: 200,
+                             headers: ["Content-Type": "image/png",
+                                       "Cache-Control": "public, max-age=86400",
+                                       "Content-Length": "\(data.count)"],
+                             body: data)
+            })
+        }
 
         // Session-scoped API. Each resolves the principal from the cookie.
         await router.register(HTTPRoute(method: "GET", pattern: "/me/session") { req, _ in
@@ -69,6 +120,9 @@ public actor WebDashboardRoutes {
         })
         await router.register(HTTPRoute(method: "GET", pattern: "/me/projection") { req, _ in
             await me.withSession(req) { s in await me.projection(for: s) }
+        })
+        await router.register(HTTPRoute(method: "GET", pattern: "/me/games") { req, _ in
+            await me.withSession(req) { _ in await me.apiRoutes.webKnownGames() }
         })
         await router.register(HTTPRoute(method: "POST", pattern: WebDashboardConfig.logoutPath) { req, _ in
             await me.withSession(req, requireCSRF: true) { s in await me.handleLogout(s) }
@@ -194,16 +248,17 @@ public actor WebDashboardRoutes {
         // domain), so the password box never appears over the tunnel.
         let localAvailable = config.localEnabled && isLocalRequest(req)
         return .html(WebDashboardAssets.loginPage(
-            discordSSOURL: swiftBotSSOStartURL(),
+            discordSSOURL: await swiftBotSSOStartURL(),
             twitch: config.twitchEnabled,
-            local: localAvailable
+            local: localAvailable,
+            appIcon: logoDarkPNG != nil && logoLightPNG != nil
         ))
     }
 
     /// URL of SwiftBot's companion-SSO entry point, with our callback as the
     /// return target. Nil when SSO isn't available.
-    private func swiftBotSSOStartURL() -> String? {
-        guard config.swiftBotSSOEnabled, let sso = config.swiftBotSSO, let base = config.normalisedBase else { return nil }
+    private func swiftBotSSOStartURL() async -> String? {
+        guard let sso = await currentSwiftBotSSO(), let base = config.normalisedBase else { return nil }
         let returnTo = base + "/oauth/swiftbot/callback"
         var comps = URLComponents(string: sso.origin + "/auth/companion/discord")
         comps?.queryItems = [URLQueryItem(name: "return_to", value: returnTo)]
@@ -238,6 +293,7 @@ public actor WebDashboardRoutes {
               WebSecurity.verifyLocalPassword(password, encoded: creds.passwordHash) else {
             return .html(WebDashboardAssets.message("Incorrect username or password.", linkToLogin: true), statusCode: 401)
         }
+        await audit?("\(creds.username) signed in to the web dashboard (local)")
         return await issueSession(principalType: Self.localPrincipal, principalId: creds.username)
     }
 
@@ -291,9 +347,10 @@ public actor WebDashboardRoutes {
                 return .html(WebDashboardAssets.message("Could not complete Twitch login.", linkToLogin: true), statusCode: 502)
             }
             // Only Twitch accounts that SwiftMiner actually mines may sign in.
-            guard await manager.twitchAccount(twitchId: id) != nil else {
+            guard let account = await manager.twitchAccount(twitchId: id) else {
                 return .html(WebDashboardAssets.message("This Twitch account isn't being mined here. Ask the operator to add it first.", linkToLogin: true), statusCode: 403)
             }
+            await audit?("\(account.username) signed in to the web dashboard (Twitch)")
             principal = (.twitch, id)
         }
 
@@ -304,7 +361,7 @@ public actor WebDashboardRoutes {
     /// HMAC (pairing secret, constant-time), expiry, and single-use nonce, then
     /// issues a normal Discord-principal session.
     private func handleSwiftBotSSOCallback(_ req: HTTPRequest) async -> HTTPResponse {
-        guard config.swiftBotSSOEnabled, let sso = config.swiftBotSSO else {
+        guard let sso = await currentSwiftBotSSO() else {
             return .html(WebDashboardAssets.message("Discord sign-in isn't available.", linkToLogin: true), statusCode: 404)
         }
         guard let payload = req.queryParams["sso"], !payload.isEmpty,
@@ -341,6 +398,8 @@ public actor WebDashboardRoutes {
         guard await apiRoutes.webSelfRegister(discordId: discordId) else {
             return .html(WebDashboardAssets.message("Could not set up your account.", linkToLogin: true), statusCode: 500)
         }
+        let displayName = (object["username"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Discord user \(discordId)"
+        await audit?("\(displayName) signed in to the web dashboard (Discord)")
         return await issueSession(principalType: WebProvider.discord.rawValue, principalId: discordId)
     }
 
@@ -389,6 +448,16 @@ public actor WebDashboardRoutes {
 
     private func handleLogout(_ s: WebSessionRecord) async -> HTTPResponse {
         await manager.deleteWebSession(id: s.id)
+        let actor: String
+        switch s.principalType {
+        case WebProvider.twitch.rawValue:
+            actor = await manager.twitchAccount(twitchId: s.principalId)?.username ?? "Twitch user \(s.principalId)"
+        case Self.localPrincipal:
+            actor = s.principalId
+        default:
+            actor = "Discord user \(s.principalId)"
+        }
+        await audit?("\(actor) signed out of the web dashboard")
         let cleared = WebCookie.expiredCookie(name: WebDashboardConfig.sessionCookieName, secure: config.useSecureCookies)
         return .redirect(to: WebDashboardConfig.loginPath, setCookie: cleared)
     }

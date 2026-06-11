@@ -591,6 +591,10 @@ private func eventFilters(for event: EventEntry) -> Set<EventFilter> {
         return [.warnings]
     }
 
+    if isWebAuditEvent(text) {
+        return event.level == .error ? [.audit, .errors] : [.audit]
+    }
+
     if isDiscordEvent(text) {
         return event.level == .error ? [.discord, .errors] : [.discord]
     }
@@ -632,6 +636,7 @@ private func primaryEventFilter(for event: EventEntry) -> EventFilter {
         .errors,
         .warnings,
         .accountLink,
+        .audit,
         .discord,
         .drops,
         .heartbeats,
@@ -654,6 +659,7 @@ private extension EventFilter {
         case .accountLink: return .purple
         case .scan: return .teal
         case .discord: return .indigo
+        case .audit: return .mint
         case .system: return .gray
         }
     }
@@ -667,6 +673,12 @@ private let discordEventTag = "[discord-dm]"
 
 private func isDiscordEvent(_ text: String) -> Bool {
     text.contains(discordEventTag)
+}
+
+private let webAuditTag = "[web-audit]"
+
+private func isWebAuditEvent(_ text: String) -> Bool {
+    text.contains(webAuditTag)
 }
 
 private func isStallRecoveryEvent(_ text: String) -> Bool {

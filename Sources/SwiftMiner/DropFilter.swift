@@ -41,6 +41,7 @@ public enum EventFilter: String, CaseIterable, Identifiable, Hashable, Codable {
     case accountLink
     case scan
     case discord
+    case audit
     case system
 
     public var id: String { rawValue }
@@ -55,6 +56,7 @@ public enum EventFilter: String, CaseIterable, Identifiable, Hashable, Codable {
         case .accountLink: return "Linking"
         case .scan: return "Scan"
         case .discord: return "Discord"
+        case .audit: return "Audit"
         case .system: return "System"
         }
     }
@@ -69,6 +71,7 @@ public enum EventFilter: String, CaseIterable, Identifiable, Hashable, Codable {
         case .accountLink: return "personalhotspot.slash"
         case .scan: return "barcode.viewfinder"
         case .discord: return "checkmark.message.fill"
+        case .audit: return "person.text.rectangle"
         case .system: return "gearshape"
         }
     }
@@ -91,6 +94,8 @@ public enum EventFilter: String, CaseIterable, Identifiable, Hashable, Codable {
             return "Campaign checks and why some campaigns were skipped."
         case .discord:
             return "DMs sent to linked Discord users for setup, drops, and recovery."
+        case .audit:
+            return "Web dashboard activity: sign-ins and priority changes made by users."
         case .system:
             return "App startup, setup, and other general messages."
         }

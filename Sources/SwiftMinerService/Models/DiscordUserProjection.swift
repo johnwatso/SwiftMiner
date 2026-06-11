@@ -58,12 +58,16 @@ public struct DiscordUserProjection: Codable, Sendable {
         public let game: String
         public let progress: Progress
         public let endsAt: Date
+        /// Twitch box art for the game, when known — lets web clients show the
+        /// same artwork as the native GUI instead of guessing CDN URLs.
+        public let boxArtURL: String?
 
-        public init(campaignId: String, game: String, progress: Progress, endsAt: Date) {
+        public init(campaignId: String, game: String, progress: Progress, endsAt: Date, boxArtURL: String? = nil) {
             self.campaignId = campaignId
             self.game = game
             self.progress = progress
             self.endsAt = endsAt
+            self.boxArtURL = boxArtURL
         }
     }
 
@@ -89,6 +93,8 @@ public struct DiscordUserProjection: Codable, Sendable {
         public let completedAt: Date?
         public let claimedDrops: Int
         public let totalDrops: Int
+        /// Twitch box art for the game, when known.
+        public let boxArtURL: String?
 
         public init(
             campaignId: String,
@@ -96,7 +102,8 @@ public struct DiscordUserProjection: Codable, Sendable {
             game: String,
             completedAt: Date? = nil,
             claimedDrops: Int,
-            totalDrops: Int
+            totalDrops: Int,
+            boxArtURL: String? = nil
         ) {
             self.campaignId = campaignId
             self.campaignName = campaignName
@@ -104,6 +111,7 @@ public struct DiscordUserProjection: Codable, Sendable {
             self.completedAt = completedAt
             self.claimedDrops = claimedDrops
             self.totalDrops = totalDrops
+            self.boxArtURL = boxArtURL
         }
     }
 

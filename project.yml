@@ -38,6 +38,12 @@ targets:
       - path: SwiftMiner.icon
         type: file
         buildPhase: resources
+      - path: Sources/SwiftMiner/WebAssets/web-logo-dark.png
+        type: file
+        buildPhase: resources
+      - path: Sources/SwiftMiner/WebAssets/web-logo-light.png
+        type: file
+        buildPhase: resources
     dependencies:
       - target: SwiftMinerCore
       - target: SwiftMinerService
@@ -67,7 +73,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.swiftminer.app
         MACOSX_DEPLOYMENT_TARGET: "26.0"
         MARKETING_VERSION: "1.28"
-        CURRENT_PROJECT_VERSION: "2026061016"
+        CURRENT_PROJECT_VERSION: "2026061113"
         INFOPLIST_KEY_CFBundleDisplayName: SwiftMiner
         INFOPLIST_KEY_CFBundleName: SwiftMiner
         CODE_SIGN_STYLE: Automatic
