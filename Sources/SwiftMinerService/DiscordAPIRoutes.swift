@@ -215,6 +215,20 @@ public actor DiscordAPIRoutes {
         self.onSetPrioritiesByAccount = handler
     }
 
+    /// Known campaign game names, for the web dashboard's add-game autocomplete.
+    public var onKnownGames: (@Sendable () async -> [String])?
+
+    public func setOnKnownGames(_ handler: @escaping @Sendable () async -> [String]) {
+        self.onKnownGames = handler
+    }
+
+    /// Game names with active campaigns — feeds the dashboard's autocomplete.
+    public func webKnownGames() async -> HTTPResponse {
+        struct Games: Encodable { let games: [String] }
+        let games = await onKnownGames?() ?? []
+        return HTTPResponse.json(Games(games: games))
+    }
+
     public func configure(_ router: HTTPRouter) async {
         let routes = self
 

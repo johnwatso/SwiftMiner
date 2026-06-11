@@ -71,6 +71,7 @@
 		8A189758FADFEF7A7FB91DE3 /* DropsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82BF51F236A3CA9B372DC12D /* DropsService.swift */; };
 		8D71FE57EFA3703D10CF66D1 /* DropEventsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA4CEDB6297B13DCF0FDD8A7 /* DropEventsService.swift */; };
 		8DA23974E71E2FB5922603A6 /* libSwiftMinerCore.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 8F71839BFA92F8055C552374 /* libSwiftMinerCore.a */; };
+		9095EC6A0117EEC54E815CAD /* web-logo-dark.png in Resources */ = {isa = PBXBuildFile; fileRef = E0D96F4913241E9ABE990164 /* web-logo-dark.png */; };
 		920D17943E1A62FA72CF046D /* GQLHashes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E4586104002CEF72BA27B9E /* GQLHashes.swift */; };
 		92F50709B99C5BF86A6FE6AE /* AdminLinkingTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D66BADBB509C6B9B573607A7 /* AdminLinkingTypes.swift */; };
 		939EF6722C3666DD63CDC642 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAF81B3BBAA69FF63BECA50C /* SidebarView.swift */; };
@@ -89,6 +90,7 @@
 		A443288FDCAF0E2F9EB174FF /* EventEmitterService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0658398231AD4B7BD6AF16C5 /* EventEmitterService.swift */; };
 		A46C78368503613F92B006BB /* NotificationServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 512C3988013AEF59E9617A61 /* NotificationServiceTests.swift */; };
 		A99DA21D645821C4EFA9D53A /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 2B1CADAC413BEE9A9D77EF7D /* Sparkle */; };
+		AAA2F4F27D6418383B8B9681 /* web-logo-light.png in Resources */ = {isa = PBXBuildFile; fileRef = 57FA1EDC268748340DA9F991 /* web-logo-light.png */; };
 		ABC825A2520C21C44782D27B /* libSwiftMinerCore.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 8F71839BFA92F8055C552374 /* libSwiftMinerCore.a */; };
 		AD395777B7BEDF7B4230F15D /* SQLiteTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E8311BE15D3372DD6D2F2CA /* SQLiteTokenStore.swift */; };
 		ADAE5122C334F0F8BE0C4296 /* MergeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B2A62D9979ADDE4DE784D49 /* MergeService.swift */; };
@@ -246,6 +248,7 @@
 		550FD9B06CAA7B5FEE2FA010 /* ServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceTests.swift; sourceTree = "<group>"; };
 		573073692F55774FD9E03776 /* CampaignTabRoutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignTabRoutingTests.swift; sourceTree = "<group>"; };
 		573283C16E2BE14FF4AB880C /* KeychainTokenStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainTokenStore.swift; sourceTree = "<group>"; };
+		57FA1EDC268748340DA9F991 /* web-logo-light.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "web-logo-light.png"; sourceTree = "<group>"; };
 		58CE4A1460AC0FDF90CDCAA5 /* MinerGameState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinerGameState.swift; sourceTree = "<group>"; };
 		5A79F35AB0C08E6F2BE9A648 /* LiquidGlass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidGlass.swift; sourceTree = "<group>"; };
 		5BF00FC996141AD5345CE864 /* AuthRequiredSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthRequiredSheet.swift; sourceTree = "<group>"; };
@@ -306,6 +309,7 @@
 		DF414565BE5F618A1909D947 /* LogRedactor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogRedactor.swift; sourceTree = "<group>"; };
 		DF67A51BF66C3F92815312AF /* Errors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Errors.swift; sourceTree = "<group>"; };
 		DFFD9A8926BF9E803210F27B /* APIModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIModels.swift; sourceTree = "<group>"; };
+		E0D96F4913241E9ABE990164 /* web-logo-dark.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "web-logo-dark.png"; sourceTree = "<group>"; };
 		E226CD7402250468FFD4C2DF /* Progress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Progress.swift; sourceTree = "<group>"; };
 		E26B1BFE29C45B4FDBD798AA /* EventOutboxService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventOutboxService.swift; sourceTree = "<group>"; };
 		E28062B84C1F7D5591CB6B2E /* DiscordProjectionBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscordProjectionBuilder.swift; sourceTree = "<group>"; };
@@ -390,6 +394,15 @@
 				B973441312A34CB1FD0E87F2 /* PrimaryStateResolver.swift */,
 			);
 			path = Engine;
+			sourceTree = "<group>";
+		};
+		2E7021CD696E2108084C0A3E /* WebAssets */ = {
+			isa = PBXGroup;
+			children = (
+				E0D96F4913241E9ABE990164 /* web-logo-dark.png */,
+				57FA1EDC268748340DA9F991 /* web-logo-light.png */,
+			);
+			path = WebAssets;
 			sourceTree = "<group>";
 		};
 		33D3714930D449ED44CCC477 /* Models */ = {
@@ -481,6 +494,7 @@
 				DAF81B3BBAA69FF63BECA50C /* SidebarView.swift */,
 				B987C70E0E71C5210198E0FA /* TDMCookieParser.swift */,
 				DFD96667CE7294FEC80F9D0E /* Resources */,
+				2E7021CD696E2108084C0A3E /* WebAssets */,
 			);
 			path = SwiftMiner;
 			sourceTree = "<group>";
@@ -790,6 +804,8 @@
 			files = (
 				5FCB29AB39702C89A1B9369F /* DiscordMarkOfficial.svg in Resources */,
 				5636165D5B221BDF695FD882 /* SwiftMiner.icon in Resources */,
+				9095EC6A0117EEC54E815CAD /* web-logo-dark.png in Resources */,
+				AAA2F4F27D6418383B8B9681 /* web-logo-light.png in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1087,7 +1103,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026061016;
+				CURRENT_PROJECT_VERSION = 2026061113;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;
@@ -1247,7 +1263,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026061016;
+				CURRENT_PROJECT_VERSION = 2026061113;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;

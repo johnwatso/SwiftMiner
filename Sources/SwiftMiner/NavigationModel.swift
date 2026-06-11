@@ -198,6 +198,13 @@ public final class NavigationModel {
             guard let self else { return nil }
             return await self.handleSetPrioritiesByAccount(accountId: accountId, games: games)
         }
+        await routes.setOnKnownGames { [weak self] in
+            guard let self else { return [] }
+            return await MainActor.run {
+                let names = self.minerManager.campaignStore.campaigns.map(\.game.name)
+                return Array(Set(names)).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+            }
+        }
         let router = HTTPRouter()
         await routes.configure(router)
 
@@ -214,7 +221,27 @@ public final class NavigationModel {
             }
         }
         if Settings.shared.webDashboardConfigured, let webConfig = makeWebDashboardConfig() {
-            let webRoutes = WebDashboardRoutes(config: webConfig, manager: sqliteManager, apiRoutes: routes)
+            let webRoutes = WebDashboardRoutes(
+                config: webConfig,
+                manager: sqliteManager,
+                apiRoutes: routes,
+                swiftBotSSOProvider: {
+                    // Resolved per-request so pairing or tunnel info that
+                    // arrives after launch enables Discord sign-in immediately.
+                    await MainActor.run {
+                        let s = Settings.shared
+                        let host = s.webDashboardSwiftBotHostname.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                        let secret = s.swiftBotHmacSecret.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard s.swiftBotEnabled, !host.isEmpty, !secret.isEmpty else { return nil }
+                        return WebSwiftBotSSO(origin: "https://\(host)", hmacSecret: secret)
+                    }
+                },
+                logoDarkPNG: Self.webLogoPNGData(named: "web-logo-dark"),
+                logoLightPNG: Self.webLogoPNGData(named: "web-logo-light"),
+                audit: { [weak self] message in
+                    await MainActor.run { self?.logWebAudit(message) }
+                }
+            )
             await webRoutes.configure(router)
             webPrefixes = WebDashboardConfig.publicPrefixes
             webExact = WebDashboardConfig.publicExactPaths
@@ -241,6 +268,45 @@ public final class NavigationModel {
 
     /// Number of miners currently configured (used to gate web internet access).
     public var configuredMinerCount: Int { minerManager.miners.count }
+
+    /// Records a web-dashboard audit entry in the Activity Log. The raw message
+    /// carries the `[web-audit]` tag so the log's Audit filter picks it up.
+    public func logWebAudit(_ message: String) {
+        logEvent(message: message, level: .info, rawMessage: "[web-audit] \(message)")
+    }
+
+    /// Human-readable name for a web principal, for audit entries.
+    func webAuditActorName(principalType: String, principalId: String) -> String {
+        switch principalType {
+        case "twitch":
+            return minerManager.miners.first { $0.accountId == principalId }?.username ?? "Twitch user \(principalId)"
+        case "discord":
+            if let miner = minerManager.miners.first(where: { $0.ownerDiscordId == principalId }) {
+                return miner.username
+            }
+            return "Discord user \(principalId)"
+        case "local":
+            return principalId
+        default:
+            return principalId
+        }
+    }
+
+    /// Audits the difference between two priority lists as plain sentences,
+    /// e.g. "Gabe added Titanfall to their priority list".
+    private func auditPriorityChange(actor: String, old: [String], new: [String]) {
+        let added = new.filter { !old.contains($0) }
+        let removed = old.filter { !new.contains($0) }
+        for game in added {
+            logWebAudit("\(actor) added \(game) to their priority list")
+        }
+        for game in removed {
+            logWebAudit("\(actor) removed \(game) from their priority list")
+        }
+        if added.isEmpty, removed.isEmpty, old != new {
+            logWebAudit("\(actor) reordered their priority list")
+        }
+    }
 
     /// Fetches SwiftBot's tunnel domain so the Web tab only needs a subdomain.
     func fetchSwiftBotTunnelInfo() async -> SwiftBotTunnelInfo? {
@@ -270,6 +336,30 @@ public final class NavigationModel {
             logEvent(message: "Web dashboard tunnel registration failed: \(message)", level: .warning)
         }
         return result
+    }
+
+    /// Bundled login-logo PNG (light/dark exports of the gem artwork with
+    /// mode-appropriate shadows baked in). Falls back to rendering the live app
+    /// icon if the bundled asset is somehow missing.
+    private static func webLogoPNGData(named name: String) -> Data? {
+        if let url = Bundle.main.url(forResource: name, withExtension: "png"),
+           let data = try? Data(contentsOf: url) {
+            return data
+        }
+        return appIconPNGData()
+    }
+
+    /// The app icon rendered to a 128pt PNG — fallback for the login logo.
+    private static func appIconPNGData() -> Data? {
+        guard let icon = NSApplication.shared.applicationIconImage else { return nil }
+        let size = NSSize(width: 128, height: 128)
+        let rendered = NSImage(size: size)
+        rendered.lockFocus()
+        icon.draw(in: NSRect(origin: .zero, size: size))
+        rendered.unlockFocus()
+        guard let tiff = rendered.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff) else { return nil }
+        return rep.representation(using: .png, properties: [:])
     }
 
     /// Build the web dashboard config from Settings, or nil if no sign-in method
@@ -406,7 +496,9 @@ public final class NavigationModel {
         guard let miner = minerManager.miners.first(where: { $0.ownerDiscordId == discordUserId && $0.accountId == accountId }) else {
             return nil
         }
+        let previous = Settings.shared.personalPriorityGames(forAccountId: accountId)
         let priorities = Settings.shared.setPersonalPriorityGames(accountId: accountId, games: games)
+        auditPriorityChange(actor: miner.username, old: previous, new: games)
         minerManager.updatePriorityGames(priorities, forMinerId: miner.id)
         if miner.isRunning {
             await minerManager.forceRefreshMiner(minerId: miner.id)
@@ -420,7 +512,9 @@ public final class NavigationModel {
         guard let miner = minerManager.miners.first(where: { $0.accountId == accountId }) else {
             return nil
         }
+        let previous = Settings.shared.personalPriorityGames(forAccountId: accountId)
         let priorities = Settings.shared.setPersonalPriorityGames(accountId: accountId, games: games)
+        auditPriorityChange(actor: miner.username, old: previous, new: games)
         minerManager.updatePriorityGames(priorities, forMinerId: miner.id)
         if miner.isRunning {
             await minerManager.forceRefreshMiner(minerId: miner.id)
@@ -1175,7 +1269,8 @@ private final class NavigationProjectionStateProvider: ProjectionStateProvider, 
                 unit: "minutes",
                 pct: pct
             ),
-            endsAt: campaign.endDate
+            endsAt: campaign.endDate,
+            boxArtURL: campaign.game.boxArtURL?.absoluteString
         )
     }
 
@@ -1186,7 +1281,8 @@ private final class NavigationProjectionStateProvider: ProjectionStateProvider, 
             game: campaign.game.name,
             completedAt: completedSortDate(campaign),
             claimedDrops: campaign.drops.filter(\.isClaimed).count,
-            totalDrops: campaign.drops.count
+            totalDrops: campaign.drops.count,
+            boxArtURL: campaign.game.boxArtURL?.absoluteString
         )
     }
 
