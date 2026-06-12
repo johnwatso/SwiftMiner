@@ -144,6 +144,19 @@ public actor SQLiteManager {
         );
         CREATE INDEX IF NOT EXISTS idx_dm_log_discord_recent ON dm_log(discord_id, sent_at DESC);
 
+        -- 13. activity_log_entries
+        CREATE TABLE IF NOT EXISTS activity_log_entries (
+            id TEXT PRIMARY KEY,
+            timestamp REAL NOT NULL,
+            message TEXT NOT NULL,
+            level TEXT NOT NULL CHECK(level IN ('info', 'warning', 'error')),
+            miner_id TEXT,
+            raw_message TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_activity_log_timestamp ON activity_log_entries(timestamp DESC);
+        CREATE INDEX IF NOT EXISTS idx_activity_log_raw_message ON activity_log_entries(raw_message);
+
         -- 11. user_campaign_decisions
         CREATE TABLE IF NOT EXISTS user_campaign_decisions (
             discord_id TEXT,
@@ -347,6 +360,30 @@ public actor SQLiteManager {
                 try execute("ALTER TABLE web_oauth_states ADD COLUMN provider TEXT NOT NULL DEFAULT 'discord';")
             }
             try execute("INSERT OR IGNORE INTO _schema_migrations (version) VALUES (10);")
+        }
+
+        if !isMigrationApplied(11) {
+            try execute("""
+            CREATE TABLE IF NOT EXISTS activity_log_entries (
+                id TEXT PRIMARY KEY,
+                timestamp REAL NOT NULL,
+                message TEXT NOT NULL,
+                level TEXT NOT NULL CHECK(level IN ('info', 'warning', 'error')),
+                miner_id TEXT,
+                raw_message TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_activity_log_timestamp ON activity_log_entries(timestamp DESC);
+            CREATE INDEX IF NOT EXISTS idx_activity_log_raw_message ON activity_log_entries(raw_message);
+            """)
+            try execute("INSERT OR IGNORE INTO _schema_migrations (version) VALUES (11);")
+        }
+
+        if !isMigrationApplied(12) {
+            if !columnExists("is_operator", in: "twitch_accounts") {
+                try execute("ALTER TABLE twitch_accounts ADD COLUMN is_operator INTEGER DEFAULT 0;")
+            }
+            try execute("INSERT OR IGNORE INTO _schema_migrations (version) VALUES (12);")
         }
     }
 
@@ -571,6 +608,53 @@ public actor SQLiteManager {
         let username = sqlite3_column_text(stmt, 0).map { String(cString: $0) } ?? ""
         let owner = sqlite3_column_text(stmt, 1).map { String(cString: $0) }
         return (username, owner)
+    }
+
+    public func isOperatorTwitchAccount(twitchId: String) async -> Bool {
+        do {
+            return try await query { db in
+                let sql = "SELECT 1 FROM twitch_accounts WHERE twitch_id = ? AND is_operator = 1;"
+                var stmt: OpaquePointer?
+                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return false }
+                defer { sqlite3_finalize(stmt) }
+                sqlite3_bind_text(stmt, 1, twitchId, -1, SQLITE_TRANSIENT)
+                return sqlite3_step(stmt) == SQLITE_ROW
+            }
+        } catch {
+            return false
+        }
+    }
+
+    public func isOperatorDiscordUser(discordId: String) async -> Bool {
+        do {
+            return try await query { db in
+                let sql = "SELECT 1 FROM twitch_accounts WHERE owner_discord_id = ? AND is_operator = 1;"
+                var stmt: OpaquePointer?
+                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return false }
+                defer { sqlite3_finalize(stmt) }
+                sqlite3_bind_text(stmt, 1, discordId, -1, SQLITE_TRANSIENT)
+                return sqlite3_step(stmt) == SQLITE_ROW
+            }
+        } catch {
+            return false
+        }
+    }
+
+    public func fetchClaimsCountToday() async -> Int {
+        do {
+            return try await query { db in
+                let sql = "SELECT COUNT(*) FROM reward_ledger WHERE datetime(claimed_at) >= datetime('now', 'start of day');"
+                var stmt: OpaquePointer?
+                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return 0 }
+                defer { sqlite3_finalize(stmt) }
+                if sqlite3_step(stmt) == SQLITE_ROW {
+                    return Int(sqlite3_column_int(stmt, 0))
+                }
+                return 0
+            }
+        } catch {
+            return 0
+        }
     }
 }
 

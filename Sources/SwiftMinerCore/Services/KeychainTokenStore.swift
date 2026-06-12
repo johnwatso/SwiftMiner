@@ -94,7 +94,8 @@ public actor KeychainTokenStore: TokenStore {
             accessToken: accessToken,
             refreshToken: refreshToken ?? existing.refreshToken,
             tokenExpiry: expiry,
-            scopes: existing.scopes
+            scopes: existing.scopes,
+            isOperator: existing.isOperator
         )
         accounts[index] = updated
         try writeAll(accounts)
@@ -113,7 +114,47 @@ public actor KeychainTokenStore: TokenStore {
             accessToken: existing.accessToken,
             refreshToken: existing.refreshToken,
             tokenExpiry: existing.tokenExpiry,
-            scopes: existing.scopes
+            scopes: existing.scopes,
+            isOperator: existing.isOperator
+        )
+        try writeAll(accounts)
+    }
+
+    public func updateOperatorStatus(twitchUserId: String, isOperator: Bool) async throws {
+        var accounts = readAll()
+        if isOperator {
+            for idx in accounts.indices {
+                if accounts[idx].id != twitchUserId && accounts[idx].isOperator {
+                    let existing = accounts[idx]
+                    accounts[idx] = Account(
+                        id: existing.id,
+                        username: existing.username,
+                        nickname: existing.nickname,
+                        ownerDiscordId: existing.ownerDiscordId,
+                        accessToken: existing.accessToken,
+                        refreshToken: existing.refreshToken,
+                        tokenExpiry: existing.tokenExpiry,
+                        scopes: existing.scopes,
+                        isOperator: false
+                    )
+                }
+            }
+        }
+        guard let index = accounts.firstIndex(where: { $0.id == twitchUserId }) else {
+            try writeAll(accounts)
+            return
+        }
+        let existing = accounts[index]
+        accounts[index] = Account(
+            id: existing.id,
+            username: existing.username,
+            nickname: existing.nickname,
+            ownerDiscordId: existing.ownerDiscordId,
+            accessToken: existing.accessToken,
+            refreshToken: existing.refreshToken,
+            tokenExpiry: existing.tokenExpiry,
+            scopes: existing.scopes,
+            isOperator: isOperator
         )
         try writeAll(accounts)
     }

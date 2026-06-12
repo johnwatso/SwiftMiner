@@ -36,6 +36,25 @@ final class AccountPriorityGamesTests: XCTestCase {
         XCTAssertEqual(settings.personalPriorityGames(forAccountId: account), ["Personal Game"])
     }
 
+    func testCanOptOutOfGlobalPriorityGames() {
+        settings.addGamePreference(Game(id: "g-global", name: "Global Game"), state: .preferred)
+        settings.setPersonalPriorityGames(accountId: account, games: ["Personal Game"])
+
+        settings.setIncludesGlobalPriorityGames(false, forAccountId: account)
+
+        XCTAssertFalse(settings.includesGlobalPriorityGames(forAccountId: account))
+        XCTAssertEqual(settings.priorityGames(forAccountId: account), ["Personal Game"])
+        XCTAssertEqual(settings.personalPriorityGames(forAccountId: account), ["Personal Game"])
+    }
+
+    func testOptingOutWithEmptyPersonalListUsesNoPriorities() {
+        settings.addGamePreference(Game(id: "g-global", name: "Global Game"), state: .preferred)
+
+        settings.setIncludesGlobalPriorityGames(false, forAccountId: account)
+
+        XCTAssertEqual(settings.priorityGames(forAccountId: account), [])
+    }
+
     func testClearingPersonalGamesFallsBackToGlobal() {
         settings.addGamePreference(Game(id: "g-global", name: "Global Game"), state: .preferred)
         settings.setPersonalPriorityGames(accountId: account, games: ["Personal Game"])

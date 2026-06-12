@@ -41,6 +41,7 @@ public final class MinerManager {
         public var workerTaskID: String?
         public var isHealthy: Bool = true
         public var isStalled: Bool = false
+        public var isOperator: Bool = false
         
         /// Resolved "Primary State" for the user-facing activity UI (Phase 4).
         @MainActor
@@ -127,7 +128,8 @@ public final class MinerManager {
             workerState: MinerWorkerState = .idle,
             workerTaskID: String? = nil,
             isHealthy: Bool = true,
-            isStalled: Bool = false
+            isStalled: Bool = false,
+            isOperator: Bool = false
         ) {
             self.id = id
             self.accountId = accountId
@@ -150,6 +152,7 @@ public final class MinerManager {
             self.workerTaskID = workerTaskID
             self.isHealthy = isHealthy
             self.isStalled = isStalled
+            self.isOperator = isOperator
         }
 
         public var displayName: String {
@@ -520,7 +523,8 @@ public final class MinerManager {
             accountId: account.id,
             username: account.username,
             nickname: account.nickname,
-            ownerDiscordId: account.ownerDiscordId
+            ownerDiscordId: account.ownerDiscordId,
+            isOperator: account.isOperator
         )
         miners.append(miner)
         onMinersChanged?()
@@ -614,6 +618,28 @@ public final class MinerManager {
             print("[MinerManager] Failed to update nickname for \(miners[index].accountId): \(error)")
         }
 
+        onMinersChanged?()
+    }
+
+    public func updateMinerOperatorStatus(minerId: String, isOperator: Bool) async {
+        guard let index = miners.firstIndex(where: { $0.id == minerId }) else { return }
+        
+        if isOperator {
+            for idx in miners.indices {
+                if miners[idx].id != minerId && miners[idx].isOperator {
+                    miners[idx].isOperator = false
+                    try? await tokenStore.updateOperatorStatus(twitchUserId: miners[idx].accountId, isOperator: false)
+                }
+            }
+        }
+        
+        miners[index].isOperator = isOperator
+        do {
+            try await tokenStore.updateOperatorStatus(twitchUserId: miners[index].accountId, isOperator: isOperator)
+        } catch {
+            print("[MinerManager] Failed to update operator status for \(miners[index].accountId): \(error)")
+        }
+        
         onMinersChanged?()
     }
     

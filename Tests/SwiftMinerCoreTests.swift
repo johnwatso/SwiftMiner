@@ -175,6 +175,51 @@ final class SwiftMinerCoreTests: XCTestCase {
 
         await manager.close()
     }
+
+    func testSQLiteTokenStoreOperatorExclusivity() async throws {
+        let databaseURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftMinerTests-\(UUID().uuidString).sqlite")
+        let manager = SQLiteManager(databaseURL: databaseURL)
+        try await manager.open()
+        defer {
+            try? FileManager.default.removeItem(at: databaseURL)
+        }
+
+        let store = SQLiteTokenStore(manager: manager)
+        let account1 = Account(
+            id: "twitch-1", username: "miner1", nickname: nil, ownerDiscordId: nil,
+            accessToken: "access1", refreshToken: "refresh1", tokenExpiry: Date().addingTimeInterval(3600),
+            scopes: [], isOperator: false
+        )
+        let account2 = Account(
+            id: "twitch-2", username: "miner2", nickname: nil, ownerDiscordId: nil,
+            accessToken: "access2", refreshToken: "refresh2", tokenExpiry: Date().addingTimeInterval(3600),
+            scopes: [], isOperator: false
+        )
+
+        try await store.save(account: account1)
+        try await store.save(account: account2)
+
+        try await store.updateOperatorStatus(twitchUserId: "twitch-1", isOperator: true)
+        
+        let a1 = try await store.loadAccount(twitchUserId: "twitch-1")
+        let a2 = try await store.loadAccount(twitchUserId: "twitch-2")
+        let loaded1 = try XCTUnwrap(a1)
+        let loaded2 = try XCTUnwrap(a2)
+        XCTAssertTrue(loaded1.isOperator)
+        XCTAssertFalse(loaded2.isOperator)
+
+        try await store.updateOperatorStatus(twitchUserId: "twitch-2", isOperator: true)
+
+        let a1After = try await store.loadAccount(twitchUserId: "twitch-1")
+        let a2After = try await store.loadAccount(twitchUserId: "twitch-2")
+        let loaded1After = try XCTUnwrap(a1After)
+        let loaded2After = try XCTUnwrap(a2After)
+        XCTAssertFalse(loaded1After.isOperator)
+        XCTAssertTrue(loaded2After.isOperator)
+
+        await manager.close()
+    }
 }
 
 actor TestTokenStore: TokenStore {
@@ -202,7 +247,8 @@ actor TestTokenStore: TokenStore {
             accessToken: accessToken,
             refreshToken: refreshToken ?? existing.refreshToken,
             tokenExpiry: expiry,
-            scopes: existing.scopes
+            scopes: existing.scopes,
+            isOperator: existing.isOperator
         )
     }
 
@@ -216,7 +262,40 @@ actor TestTokenStore: TokenStore {
             accessToken: existing.accessToken,
             refreshToken: existing.refreshToken,
             tokenExpiry: existing.tokenExpiry,
-            scopes: existing.scopes
+            scopes: existing.scopes,
+            isOperator: existing.isOperator
+        )
+    }
+
+    func updateOperatorStatus(twitchUserId: String, isOperator: Bool) async throws {
+        if isOperator {
+            for (id, acc) in accounts {
+                if id != twitchUserId && acc.isOperator {
+                    accounts[id] = Account(
+                        id: acc.id,
+                        username: acc.username,
+                        nickname: acc.nickname,
+                        ownerDiscordId: acc.ownerDiscordId,
+                        accessToken: acc.accessToken,
+                        refreshToken: acc.refreshToken,
+                        tokenExpiry: acc.tokenExpiry,
+                        scopes: acc.scopes,
+                        isOperator: false
+                    )
+                }
+            }
+        }
+        guard let existing = accounts[twitchUserId] else { return }
+        accounts[twitchUserId] = Account(
+            id: existing.id,
+            username: existing.username,
+            nickname: existing.nickname,
+            ownerDiscordId: existing.ownerDiscordId,
+            accessToken: existing.accessToken,
+            refreshToken: existing.refreshToken,
+            tokenExpiry: existing.tokenExpiry,
+            scopes: existing.scopes,
+            isOperator: isOperator
         )
     }
 

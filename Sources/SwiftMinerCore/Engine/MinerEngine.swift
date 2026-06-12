@@ -191,7 +191,7 @@ public actor MinerEngine {
     /// and picks a random live channel for any time-active campaign. For testing only.
     public func setDebugBypassLinkRequirement(_ enabled: Bool) {
         if debugBypassLinkRequirement != enabled {
-            log(enabled ? "🧪 Debug: bypassing link requirement — will watch any live channel" : "🧪 Debug: link requirement re-enabled")
+            log(enabled ? "Debug: bypassing link requirement — will watch any live channel" : "Debug: link requirement re-enabled")
         }
         debugBypassLinkRequirement = enabled
         shouldRescanCampaigns = true
@@ -621,7 +621,7 @@ public actor MinerEngine {
                     dropId: event.dropId,
                     dropLabel: dropName
                 )
-                log("✅ Auto-claimed drop from PubSub: \(event.dropInstanceId)")
+                log("Auto-claimed drop from PubSub: \(event.dropInstanceId)")
                 if let message = formatProgressTransition(trackerResult.transition) {
                     log(message)
                 }
@@ -648,10 +648,10 @@ public actor MinerEngine {
                 }
 
                 session?.dropsClaimed += 1
-            } else {                log("⚠️ Drop claim returned status: \(response.status)")
+            } else {                log("Warning: Drop claim returned status: \(response.status)")
             }
         } catch {
-            log("❌ Failed to auto-claim drop: \(error.localizedDescription)")
+            log("Failed to auto-claim drop: \(error.localizedDescription)")
         }
     }
 
@@ -671,7 +671,7 @@ public actor MinerEngine {
     }
 
     private func handleWatchSessionError(_ error: TwitchMinerError) async {
-        log("⚠️ Watch session warning: \(error.localizedDescription)")
+        log("Watch session warning: \(error.localizedDescription)")
         let (category, detail) = Self.classifyIssue(error)
         onOperationalEvent?(.issueDetected(category: category, detail: detail))
     }
@@ -732,7 +732,7 @@ public actor MinerEngine {
             // 2. Ensure API Client is in sync
             await apiClient.updateAccessToken(token)
             
-            log("✅ Maintenance: Token validated/refreshed")
+            log("Maintenance: Token validated/refreshed")
             onOperationalEvent?(.authRefreshed)
             
             // 3. Check for major campaign updates (TDM parity)
@@ -740,7 +740,7 @@ public actor MinerEngine {
             // every few maintenance cycles. For now, we rely on the 5m loop in runMiningLoop.
             
         } catch {
-            log("⚠️ Maintenance task warning: \(error.localizedDescription)")
+            log("Maintenance task warning: \(error.localizedDescription)")
         }
     }
     
@@ -777,7 +777,7 @@ public actor MinerEngine {
                 // Log expired campaigns that might be incorrectly marked as eligible.
                 let expiredButEligible = allEnriched.filter { $0.miningStatus == .expired && $0.isMiningEligible }
                 if !expiredButEligible.isEmpty {
-                    log("⚠️ WARNING: \(expiredButEligible.count) expired campaigns incorrectly marked as mining-eligible:")
+                    log("Warning: \(expiredButEligible.count) expired campaigns incorrectly marked as mining-eligible:")
                     for c in expiredButEligible {
                         log("   - \(c.name) (endDate: \(c.endDate), isTimeActive: \(c.isTimeActive), isAccountConnected: \(c.isAccountConnected))")
                     }
@@ -962,14 +962,14 @@ public actor MinerEngine {
                                     if emptyCurrentDropPolls == 1 {
                                         log("Awaiting Twitch drop progress confirmation for \(campaign.name) on \(channel.displayName)")
                                     } else if emptyCurrentDropPolls % 5 == 0 {
-                                        log("⚠️ Twitch still has not reported an active drop session after \(emptyCurrentDropPolls) progress checks")
+                                        log("Warning: Twitch still has not reported an active drop session after \(emptyCurrentDropPolls) progress checks")
                                     }
                                 }
                             }
                         } catch {
                             emptyCurrentDropPolls += 1
                             emitIssue(error)
-                            log("⚠️ Could not verify current drop progress: \(error.localizedDescription)")
+                            log("Could not verify current drop progress: \(error.localizedDescription)")
                         }
                     }
 
@@ -979,7 +979,7 @@ public actor MinerEngine {
                     extraMinutesWatched = Int(elapsed / 60)
 
                     if extraMinutesWatched >= Self.maxExtraMinutes {
-                        log("⚠️ Progress stalled for \(extraMinutesWatched) mins. Refreshing inventory to check for external claims...")
+                        log("Progress stalled for \(extraMinutesWatched) mins. Refreshing inventory to check for external claims...")
                         
                         // ENHANCEMENT: Force inventory refresh before switching channels
                         // This catches drops claimed on other devices or via Twitch UI
@@ -990,7 +990,7 @@ public actor MinerEngine {
                             onOperationalEvent?(.successfulPoll)
                             onOperationalEvent?(.inventoryRefresh)
                             
-                            log("📋 Inventory refreshed: \(freshInventory.benefitIDs.count) claimed benefits, \(freshInventory.progress.count) in-progress drops")
+                            log("Inventory refreshed: \(freshInventory.benefitIDs.count) claimed benefits, \(freshInventory.progress.count) in-progress drops")
                             
                             // Check if ANY drop in current campaign was recently claimed
                             // This handles the case where user claimed via Twitch UI or another device
@@ -1000,19 +1000,19 @@ public actor MinerEngine {
                             }
                             
                             if !newlyClaimedDrops.isEmpty {
-                                log("✅ \(newlyClaimedDrops.count) drop(s) were claimed externally. Updating local state, resetting stall counter.")
+                                log("\(newlyClaimedDrops.count) drop(s) were claimed externally. Updating local state, resetting stall counter.")
                                 extraMinutesWatched = 0 // Reset stall counter
                                 lastProgressUpdateAt = Date()
                                 // Don't switch channel - continue mining remaining drops in campaign
                             } else {
-                                log("🔄 Progress genuinely stalled (no external claims detected). Switching channel.")
+                                log("Progress genuinely stalled (no external claims detected). Switching channel.")
                                 lastSwitchReason = .stallDetected(minutes: extraMinutesWatched)
                                 lastSwitchAt = Date()
                                 shouldSwitchChannel = true
                             }
                         } catch {
                             emitIssue(error)
-                            log("⚠️ Inventory refresh failed: \(error.localizedDescription). Switching channel as fallback.")
+                            log("Warning: Inventory refresh failed: \(error.localizedDescription). Switching channel as fallback.")
                             shouldSwitchChannel = true
                         }
                     }
@@ -1030,7 +1030,7 @@ public actor MinerEngine {
                             // If the current campaign no longer exists in the API response,
                             // clear it from session state and rescan immediately.
                             if !fetched.contains(where: { $0.id == campaign.id }) {
-                                log("⚠️ Campaign '\(campaign.name)' no longer returned by API — clearing and rescanning.")
+                                log("Warning: Campaign '\(campaign.name)' no longer returned by API — clearing and rescanning.")
                                 session?.currentCampaignId = nil
                                 shouldSwitchChannel = true
                             } else if let bestCampaign = candidateCampaigns(
@@ -1039,7 +1039,7 @@ public actor MinerEngine {
                                 excludedGames: excludedGames,
                                 strategy: miningStrategy
                             ).first, bestCampaign.id != campaign.id {
-                                log("🔄 Better campaign now available: \(bestCampaign.name) (\(bestCampaign.gameName)). Switching from \(campaign.name).")
+                                log("Better campaign now available: \(bestCampaign.name) (\(bestCampaign.gameName)). Switching from \(campaign.name).")
                                 shouldSwitchChannel = true
                             }
                         }
@@ -1128,7 +1128,7 @@ public actor MinerEngine {
             for progress in claimable {
                 let result = await claimService.claimDrop(progress)
                 if result.success {
-                    log("✅ Claimed drop: \(result.dropName)")
+                    log("Claimed drop: \(result.dropName)")
 
                     // TDM PARITY: Delete notification after successful claim
                     try? await apiClient.deleteNotification(id: progress.id)
@@ -1156,7 +1156,7 @@ public actor MinerEngine {
                     }
                 } else {
                     let reason = result.error.map { " (\($0))" } ?? ""
-                    log("⚠️ Drop claim returned not-success for \(progress.dropName)\(reason)")
+                    log("Warning: Drop claim returned not-success for \(progress.dropName)\(reason)")
                 }
 
                 // Small delay between claims
@@ -1238,7 +1238,7 @@ public actor MinerEngine {
                 .joined(separator: ", ")
             let suffix = campaignsForGame.count > 2 ? ", and more" : ""
 
-            log("⚠️ Priority game may need linking: \(sample.gameName) is prioritised. SwiftMiner will still try to mine it if Twitch allows progress, but link the game account if rewards do not appear in-game. Active campaign(s): \(campaignSummary)\(suffix).")
+            log("Priority game may need linking: \(sample.gameName) is prioritised. SwiftMiner will still try to mine it if Twitch allows progress, but link the game account if rewards do not appear in-game. Active campaign(s): \(campaignSummary)\(suffix).")
 
             if notificationService == nil {
                 notificationService = NotificationService()
@@ -1269,7 +1269,7 @@ public actor MinerEngine {
         for campaign in subscriptionCampaigns {
             let drops = campaign.subscriptionRequiredDrops.filter { !$0.isClaimed }
             let dropNames = drops.map(\.name).joined(separator: ", ")
-            log("⚠️ Subscription required: \(campaign.name) has drops that require purchasing Twitch subscriptions: \(dropNames). These drops are being skipped.")
+            log("Subscription required: \(campaign.name) has drops that require purchasing Twitch subscriptions: \(dropNames). These drops are being skipped.")
         }
     }
 
@@ -1479,7 +1479,7 @@ public actor MinerEngine {
                 .first!
             let resolved = await resolveChannelIdIfNeeded(bestLive)
             let randomCandidate = candidates.randomElement() ?? primary
-            log("[ChannelSelect]   🧪 Debug bypass: picking \(resolved.displayName) for random candidate \(randomCandidate.name)")
+            log("[ChannelSelect]   Debug bypass: picking \(resolved.displayName) for random candidate \(randomCandidate.name)")
             currentChannelName = resolved.displayName
             currentChannelId = resolved.id
             return (randomCandidate, resolved)
@@ -1528,7 +1528,7 @@ public actor MinerEngine {
                 let matches = eligibleForChannel.filter { activeCampaignIds.contains($0.id) }
                 if !matches.isEmpty {
                     let names = matches.map(\.name).joined(separator: ", ")
-                    log("[ChannelSelect]     ✓ Verified! \(names) active on \(channel.displayName)")
+                    log("[ChannelSelect]     Verified: \(names) active on \(channel.displayName)")
                     for match in matches {
                         let alreadyRecorded = verifiedMatches.contains {
                             $0.campaign.id == match.id &&
@@ -1552,12 +1552,12 @@ public actor MinerEngine {
 
                 let activeKnown = activeCampaignIds.filter { candidateIds.contains($0) }
                 if activeKnown.isEmpty {
-                    log("[ChannelSelect]     ✗ None of our candidates active here. Channel drops: \(activeCampaignIds.joined(separator: ", "))")
+                    log("[ChannelSelect]     None of our candidates active here. Channel drops: \(activeCampaignIds.joined(separator: ", "))")
                 } else {
-                    log("[ChannelSelect]     ✗ ACL blocked match on \(channel.displayName) (active ids: \(activeKnown.joined(separator: ", ")))")
+                    log("[ChannelSelect]     ACL blocked match on \(channel.displayName) (active ids: \(activeKnown.joined(separator: ", ")))")
                 }
             } catch {
-                log("[ChannelSelect]     ⚠️ Verification failed for \(channel.displayName): \(error.localizedDescription)")
+                log("[ChannelSelect]     Warning: Verification failed for \(channel.displayName): \(error.localizedDescription)")
                 if fallbackPair == nil, let best = eligibleForChannel.first {
                     fallbackPair = (best, channel)
                 }
@@ -1577,7 +1577,7 @@ public actor MinerEngine {
                     let activeCampaignIds = try await apiClient.fetchAvailableDrops(channelId: channel.id)
                     anyVerificationSucceeded = true
                     if activeCampaignIds.contains(candidate.id) {
-                        log("[ChannelSelect]     ✓ Verified! \(candidate.name) active on approved channel \(channel.displayName)")
+                        log("[ChannelSelect]     Verified: \(candidate.name) active on approved channel \(channel.displayName)")
                         let alreadyRecorded = verifiedMatches.contains {
                             $0.campaign.id == candidate.id &&
                                 Self.normalizedChannelIdentity($0.channel.id) == Self.normalizedChannelIdentity(channel.id)
@@ -1588,7 +1588,7 @@ public actor MinerEngine {
                         }
                     }
                 } catch {
-                    log("[ChannelSelect]     ⚠️ Approved-channel verification failed: \(error.localizedDescription)")
+                    log("[ChannelSelect]     Warning: Approved-channel verification failed: \(error.localizedDescription)")
                     if fallbackPair == nil { fallbackPair = (candidate, channel) }
                 }
             }
@@ -1708,7 +1708,7 @@ public actor MinerEngine {
             log("[ChannelSelect]   Found \(liveChannels.count) live candidate channels")
             
             guard !liveChannels.isEmpty else {
-                log("[ChannelSelect]   ✗ No live channels found for '\(campaign.gameName)'")
+                log("[ChannelSelect]   No live channels found for '\(campaign.gameName)'")
                 return nil
             }
 
@@ -1744,7 +1744,7 @@ public actor MinerEngine {
             }
 
             guard !verificationCandidates.isEmpty else {
-                log("[ChannelSelect]   ✗ No candidate channels matched campaign requirements")
+                log("[ChannelSelect]   No candidate channels matched campaign requirements")
                 return nil
             }
 
@@ -1758,7 +1758,7 @@ public actor MinerEngine {
 
                 // If it's not a Special Event, we can filter by campaign restrictions early
                 if campaign.hasChannelRestrictions && !Self.channelMatchesCampaignACL(channel, campaign: campaign) {
-                    log("[ChannelSelect]     ✗ Skipping: not in campaign ACL")
+                    log("[ChannelSelect]     Skipping: not in campaign ACL")
                     allVerificationsFailed = false  // not an error — campaign restriction mismatch
                     continue
                 }
@@ -1768,16 +1768,16 @@ public actor MinerEngine {
                     let activeCampaignIds = try await apiClient.fetchAvailableDrops(channelId: channel.id)
                     allVerificationsFailed = false  // GQL responded — campaign simply not active here
                     if activeCampaignIds.contains(campaign.id) {
-                        log("[ChannelSelect]     ✓ Verified! Campaign \(campaign.id) is active on \(channel.displayName)")
+                        log("[ChannelSelect]     Verified: Campaign \(campaign.id) is active on \(channel.displayName)")
                         // Track selected channel for UI
                         currentChannelName = channel.displayName
                         currentChannelId = channel.id
                         return channel
                     } else {
-                        log("[ChannelSelect]     ✗ Campaign mismatch. Active IDs: \(activeCampaignIds.joined(separator: ", "))")
+                        log("[ChannelSelect]     Campaign mismatch. Active IDs: \(activeCampaignIds.joined(separator: ", "))")
                     }
                 } catch {
-                    log("[ChannelSelect]     ⚠️ Verification failed for \(channel.displayName): \(error.localizedDescription)")
+                    log("[ChannelSelect]     Warning: Verification failed for \(channel.displayName): \(error.localizedDescription)")
                     // allVerificationsFailed remains true for this channel — it errored
                 }
             }
@@ -1830,7 +1830,7 @@ public actor MinerEngine {
                 aclBased: channel.aclBased
             )
         } catch {
-            log("[ChannelSelect]   ⚠️ Could not resolve channel ID for \(channel.login): \(error.localizedDescription)")
+            log("[ChannelSelect]   Could not resolve channel ID for \(channel.login): \(error.localizedDescription)")
             return channel
         }
     }
@@ -1865,7 +1865,7 @@ public actor MinerEngine {
                     aclBased: true
                 ))
             } catch {
-                log("[ChannelSelect]   ⚠️ Could not check live state for approved channel \(channel.displayName): \(error.localizedDescription)")
+                log("[ChannelSelect]   Could not check live state for approved channel \(channel.displayName): \(error.localizedDescription)")
             }
         }
 

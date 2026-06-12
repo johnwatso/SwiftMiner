@@ -9,6 +9,7 @@ struct MinerDetailView: View {
     let miner: MinerManager.ManagedMiner
 
     @Environment(NavigationModel.self) private var navigation
+    @ObservedObject private var settings = Settings.shared
     @State private var activitySummary: MinerManager.MinerActivitySummary?
 
     var body: some View {
@@ -114,22 +115,37 @@ struct MinerDetailView: View {
     /// list. Derived from the miner's reactive effective list so DM/global changes
     /// refresh it live.
     private var personalPriorityGames: [String] {
-        let globalKeys = Set(Settings.shared.priorityGames.map { $0.lowercased() })
+        let globalKeys = Set(settings.priorityGames.map { $0.lowercased() })
         return miner.priorityGames.filter { !globalKeys.contains($0.lowercased()) }
     }
 
-    @ViewBuilder
+    private var includesGlobalPriorityGames: Bool {
+        settings.includesGlobalPriorityGames(forAccountId: miner.accountId)
+    }
+
     private var personalPrioritiesSection: some View {
         let games = personalPriorityGames
-        if !games.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Personal Priorities")
-                    .font(.headline)
+        return VStack(alignment: .leading, spacing: 12) {
+            Text("Personal Priorities")
+                .font(.headline)
 
-                Text("Games prioritised just for this miner, on top of your global list.")
+            Toggle("Use global priorities", isOn: Binding(
+                get: { includesGlobalPriorityGames },
+                set: { updateGlobalPriorityInclusion($0) }
+            ))
+            .toggleStyle(.switch)
+
+            Text(includesGlobalPriorityGames
+                ? "This miner uses its own list first, then the global list."
+                : "This miner only uses its own priority list.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            if games.isEmpty {
+                Text("No personal priorities yet.")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
-
+                    .foregroundStyle(.tertiary)
+            } else {
                 FlowLayout(spacing: 6) {
                     ForEach(games, id: \.self) { game in
                         PersonalPriorityChip(gameName: game) {
@@ -138,13 +154,22 @@ struct MinerDetailView: View {
                     }
                 }
             }
-            .padding(20)
-            .glassCard()
         }
+        .padding(20)
+        .glassCard()
     }
 
     private func removePersonalPriority(_ gameName: String) {
-        let updated = Settings.shared.deprioritiseGameForAccount(accountId: miner.accountId, gameName: gameName)
+        let updated = settings.deprioritiseGameForAccount(accountId: miner.accountId, gameName: gameName)
+        navigation.minerManager.updatePriorityGames(updated, forMinerId: miner.id)
+        if miner.isRunning {
+            Task { await navigation.minerManager.forceRefreshMiner(minerId: miner.id) }
+        }
+    }
+
+    private func updateGlobalPriorityInclusion(_ include: Bool) {
+        settings.setIncludesGlobalPriorityGames(include, forAccountId: miner.accountId)
+        let updated = settings.priorityGames(forAccountId: miner.accountId)
         navigation.minerManager.updatePriorityGames(updated, forMinerId: miner.id)
         if miner.isRunning {
             Task { await navigation.minerManager.forceRefreshMiner(minerId: miner.id) }

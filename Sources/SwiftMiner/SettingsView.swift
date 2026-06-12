@@ -610,6 +610,18 @@ private struct AccountSettingsAccountRow: View {
                     .help("Clear nickname")
                 }
             }
+
+            Toggle("Mark as operator", isOn: Binding(
+                get: { miner.isOperator },
+                set: { newValue in
+                    Task {
+                        await navigation.minerManager.updateMinerOperatorStatus(minerId: miner.id, isOperator: newValue)
+                    }
+                }
+            ))
+            .toggleStyle(.checkbox)
+            .font(.caption)
+            .foregroundStyle(.secondary)
         }
         .padding(14)
         .onChange(of: miner.nickname) { _, newValue in
@@ -725,6 +737,7 @@ private struct WebDashboardSettingsView: View {
     @State private var draftLocalUsername = ""
     @State private var draftLocalPassword = ""
     @State private var showLocalPassword = false
+    @State private var localAccessErrorMessage: String?
     @State private var isRegisteringTunnel = false
     @State private var tunnelRegistrationMessage: String?
     @State private var tunnelRegistrationSucceeded = false
@@ -799,6 +812,15 @@ private struct WebDashboardSettingsView: View {
                         }
                         Spacer()
                         Button {
+                            openWebpage(localTarget)
+                        } label: {
+                            Label("Open Webpage", systemImage: "safari")
+                        }
+                        .buttonStyle(.borderless)
+                        .controlSize(.small)
+                        .help("Open local dashboard")
+                        .accessibilityLabel("Open local dashboard")
+                        Button {
                             openLocalSetup()
                         } label: {
                             Image(systemName: "arrow.triangle.2.circlepath")
@@ -835,7 +857,7 @@ private struct WebDashboardSettingsView: View {
                     .font(.headline)
             }
 
-            SettingsSecondaryText("The operator account for local and LAN access. The password is stored as a salted hash and is never accepted over your public domain.")
+            SettingsSecondaryText("The operator account for local and LAN access. The password is saved in Keychain and is never accepted over your public domain.")
 
             Form {
                 TextField("Username", text: $draftLocalUsername)
@@ -861,6 +883,12 @@ private struct WebDashboardSettingsView: View {
             }
             .formStyle(.grouped)
 
+            if let localAccessErrorMessage {
+                Label(localAccessErrorMessage, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+
             HStack {
                 Spacer()
                 Button("Cancel", role: .cancel) {
@@ -879,30 +907,33 @@ private struct WebDashboardSettingsView: View {
 
     private var draftLocalIsValid: Bool {
         let usernameOK = !draftLocalUsername.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        // An already-configured account may keep its password (blank field).
-        let passwordOK = draftLocalPassword.count >= 6
-            || (settings.webDashboardLocalConfigured && draftLocalPassword.isEmpty)
-        return usernameOK && passwordOK
+        return usernameOK && draftLocalPassword.count >= 6
     }
 
     private var localPasswordPrompt: String {
-        settings.webDashboardLocalConfigured ? "New password (leave blank to keep)" : "Password (6+ characters)"
+        "Password (6+ characters)"
     }
 
     private func openLocalSetup() {
         draftLocalUsername = settings.webDashboardLocalUsername
-        draftLocalPassword = ""
+        draftLocalPassword = settings.webDashboardLocalPassword() ?? ""
         showLocalPassword = false
+        localAccessErrorMessage = nil
         showingLocalSetup = true
     }
 
     private func saveLocalAccessDetails() {
-        settings.webDashboardLocalUsername = draftLocalUsername.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !draftLocalPassword.isEmpty {
+        let username = draftLocalUsername.trimmingCharacters(in: .whitespacesAndNewlines)
+        do {
+            try settings.saveWebDashboardLocalPassword(draftLocalPassword, username: username)
+            settings.webDashboardLocalUsername = username
             settings.webDashboardLocalPasswordHash = WebSecurity.hashLocalPassword(draftLocalPassword)
+            draftLocalPassword = ""
+            localAccessErrorMessage = nil
+            showingLocalSetup = false
+        } catch {
+            localAccessErrorMessage = error.localizedDescription
         }
-        draftLocalPassword = ""
-        showingLocalSetup = false
     }
 
     // MARK: - OAuth (internet access)
@@ -924,6 +955,15 @@ private struct WebDashboardSettingsView: View {
                             .truncationMode(.middle)
                     }
                     Spacer()
+                    Button {
+                        openWebpage(origin)
+                    } label: {
+                        Label("Open Webpage", systemImage: "safari")
+                    }
+                    .buttonStyle(.borderless)
+                    .controlSize(.small)
+                    .help("Open web dashboard")
+                    .accessibilityLabel("Open web dashboard")
                     Button {
                         showingInternetSetup = true
                     } label: {
@@ -1159,6 +1199,11 @@ private struct WebDashboardSettingsView: View {
     private var localTarget: String {
         let port = URL(string: settings.swiftMinerAPIEndpoint)?.port ?? 8080
         return "http://localhost:\(port)"
+    }
+
+    private func openWebpage(_ value: String) {
+        guard let url = Settings.normalizedWebDashboardURL(from: value) else { return }
+        NSWorkspace.shared.open(url)
     }
 
     /// Subdomain restricted to DNS-label characters, or nil if unusable.

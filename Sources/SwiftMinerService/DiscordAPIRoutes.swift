@@ -101,20 +101,29 @@ private struct UpdatePriorityRequest: Codable, Sendable {
 
 private struct SetPrioritiesRequest: Codable, Sendable {
     let games: [String]
+    let includeGlobalPriorities: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case games
+        case includeGlobalPriorities = "include_global_priorities"
+    }
 }
 
 public struct PrioritiesResponse: Codable, Sendable {
     public let accountId: String
     public let priorityGames: [String]
+    public let includeGlobalPriorities: Bool
 
-    public init(accountId: String, priorityGames: [String]) {
+    public init(accountId: String, priorityGames: [String], includeGlobalPriorities: Bool = true) {
         self.accountId = accountId
         self.priorityGames = priorityGames
+        self.includeGlobalPriorities = includeGlobalPriorities
     }
 
     enum CodingKeys: String, CodingKey {
         case accountId = "account_id"
         case priorityGames = "priority_games"
+        case includeGlobalPriorities = "include_global_priorities"
     }
 }
 
@@ -196,12 +205,15 @@ public actor DiscordAPIRoutes {
     /// Args: (discordUserId, accountId, gameName).
     public var onPrioritiseGame: (@Sendable (String, String, String) async -> [String]?)?
     /// Replaces a Discord-owned miner's personal priority games with the given list.
-    /// Args: (discordUserId, accountId, games). Returns the resulting effective list.
-    public var onSetPriorities: (@Sendable (String, String, [String]) async -> [String]?)?
+    /// Args: (discordUserId, accountId, games, include globals). Returns the resulting effective list.
+    public var onSetPriorities: (@Sendable (String, String, [String], Bool?) async -> [String]?)?
     /// Replaces a miner's personal priority games, identified by Twitch account
     /// id alone (no Discord owner needed). Used by Twitch-authenticated web
-    /// sessions. Args: (accountId, games). Returns the resulting effective list.
-    public var onSetPrioritiesByAccount: (@Sendable (String, [String]) async -> [String]?)?
+    /// sessions. Args: (accountId, games, include globals). Returns the resulting effective list.
+    public var onSetPrioritiesByAccount: (@Sendable (String, [String], Bool?) async -> [String]?)?
+    /// Controls a miner, identified by Twitch account id alone (no Discord owner needed).
+    /// Used by Twitch-authenticated or operator web sessions. Args: (accountId, action).
+    public var onMinerControlByAccount: (@Sendable (String, MinerControlAction) async -> MinerControlResponse)?
 
     // In-memory activation session store (ephemeral; DB retains audit rows)
     private var activationSessions: [String: ActivationSession] = [:]
@@ -241,12 +253,16 @@ public actor DiscordAPIRoutes {
         self.onPrioritiseGame = handler
     }
 
-    public func setOnSetPriorities(_ handler: @escaping @Sendable (String, String, [String]) async -> [String]?) {
+    public func setOnSetPriorities(_ handler: @escaping @Sendable (String, String, [String], Bool?) async -> [String]?) {
         self.onSetPriorities = handler
     }
 
-    public func setOnSetPrioritiesByAccount(_ handler: @escaping @Sendable (String, [String]) async -> [String]?) {
+    public func setOnSetPrioritiesByAccount(_ handler: @escaping @Sendable (String, [String], Bool?) async -> [String]?) {
         self.onSetPrioritiesByAccount = handler
+    }
+
+    public func setOnMinerControlByAccount(_ handler: @escaping @Sendable (String, MinerControlAction) async -> MinerControlResponse) {
+        self.onMinerControlByAccount = handler
     }
 
     /// Known campaign game names, for the web dashboard's add-game autocomplete.
@@ -754,10 +770,10 @@ public actor DiscordAPIRoutes {
         guard let handler = onSetPriorities else {
             return .error(code: "unavailable", message: "Priority controls are not available.", statusCode: 503)
         }
-        guard let priorities = await handler(discordUserId, accountId, body.games) else {
+        guard let priorities = await handler(discordUserId, accountId, body.games, body.includeGlobalPriorities) else {
             return .error(code: "account_not_found", message: "No linked miner account was found for this Discord user.", statusCode: 404)
         }
-        return HTTPResponse.json(PrioritiesResponse(accountId: accountId, priorityGames: priorities))
+        return HTTPResponse.json(PrioritiesResponse(accountId: accountId, priorityGames: priorities, includeGlobalPriorities: body.includeGlobalPriorities ?? true))
     }
 
     // MARK: - Web Dashboard Delegation
@@ -833,6 +849,21 @@ public actor DiscordAPIRoutes {
         await manager.ownerDiscordId(forTwitchAccount: accountId) == discordId
     }
 
+    public func webVerifiesDiscordOwnership(discordId: String, accountId: String) async -> Bool {
+        await ownsAccount(discordId: discordId, accountId: accountId)
+    }
+
+    public func hasMinerControlByAccount() async -> Bool {
+        onMinerControlByAccount != nil
+    }
+
+    public func executeMinerControlByAccount(accountId: String, action: MinerControlAction) async -> MinerControlResponse {
+        guard let onMinerControlByAccount else {
+            return MinerControlResponse(ok: false, action: action.rawValue, state: "unavailable", twitchUsername: nil, message: "Miner controls are not available.")
+        }
+        return await onMinerControlByAccount(accountId, action)
+    }
+
     // MARK: - Web Dashboard Delegation (Twitch principal)
     //
     // For Twitch-authenticated sessions the principal *is* the mined account, so
@@ -846,6 +877,14 @@ public actor DiscordAPIRoutes {
         return HTTPResponse.json(projection)
     }
 
+    public func isOperatorTwitch(twitchId: String) async -> Bool {
+        return await manager.isOperatorTwitchAccount(twitchId: twitchId)
+    }
+
+    public func isOperatorDiscord(discordId: String) async -> Bool {
+        return await manager.isOperatorDiscordUser(discordId: discordId)
+    }
+
     /// Operator overview: a projection per mined account. Used by a local
     /// (username/password) session, which represents the host, not one user.
     public func webOverview() async -> HTTPResponse {
@@ -856,8 +895,22 @@ public actor DiscordAPIRoutes {
                 projections.append(p)
             }
         }
-        struct Overview: Encodable { let miners: [DiscordUserProjection] }
-        return HTTPResponse.json(Overview(miners: projections))
+        let totalMiners = projections.count
+        let activeMiners = projections.filter { $0.state == .active }.count
+        let claimsToday = await manager.fetchClaimsCountToday()
+
+        struct Overview: Encodable {
+            let miners: [DiscordUserProjection]
+            let totalMiners: Int
+            let activeMiners: Int
+            let claimsToday: Int
+        }
+        return HTTPResponse.json(Overview(
+            miners: projections,
+            totalMiners: totalMiners,
+            activeMiners: activeMiners,
+            claimsToday: claimsToday
+        ))
     }
 
     public func webSetPrioritiesTwitch(twitchId: String, body: Data) async -> HTTPResponse {
@@ -868,10 +921,10 @@ public actor DiscordAPIRoutes {
         guard let handler = onSetPrioritiesByAccount else {
             return .error(code: "unavailable", message: "Priority controls are not available.", statusCode: 503)
         }
-        guard let priorities = await handler(twitchId, decoded.games) else {
+        guard let priorities = await handler(twitchId, decoded.games, decoded.includeGlobalPriorities) else {
             return .error(code: "account_not_found", message: "No miner was found for this Twitch account.", statusCode: 404)
         }
-        return HTTPResponse.json(PrioritiesResponse(accountId: twitchId, priorityGames: priorities))
+        return HTTPResponse.json(PrioritiesResponse(accountId: twitchId, priorityGames: priorities, includeGlobalPriorities: decoded.includeGlobalPriorities ?? true))
     }
 
     private func emptyRequest(body: Data = Data()) -> HTTPRequest {

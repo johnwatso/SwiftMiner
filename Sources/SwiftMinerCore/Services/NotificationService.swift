@@ -49,7 +49,7 @@ public actor NotificationService {
                 do {
                     _ = try await center.requestAuthorization(options: [.alert, .sound, .badge])
                 } catch {
-                    print("⚠️ Notification authorization failed: \(error.localizedDescription)")
+                    print("Warning: Notification authorization failed: \(error.localizedDescription)")
                 }
             }
         }
@@ -68,7 +68,7 @@ public actor NotificationService {
         guard isEnabled else { return }
         
         let content = UNMutableNotificationContent()
-        content.title = "Drop Claimed! 🎉"
+        content.title = "Drop Claimed!"
         content.body = "\(dropName) from \(campaignName)"
         content.categoryIdentifier = "drop_claim"
         
@@ -85,7 +85,7 @@ public actor NotificationService {
         do {
             try await center.add(request)
         } catch {
-            print("⚠️ Failed to send notification: \(error.localizedDescription)")
+            print("Warning: Failed to send notification: \(error.localizedDescription)")
         }
     }
     
@@ -102,7 +102,7 @@ public actor NotificationService {
         guard isEnabled else { return }
         
         let content = UNMutableNotificationContent()
-        content.title = "Drop Ready to Claim! ✨"
+        content.title = "Drop Ready to Claim!"
         content.body = "\(dropName) from \(campaignName) is ready!"
         content.categoryIdentifier = "drop_claimable"
         
@@ -119,7 +119,7 @@ public actor NotificationService {
         do {
             try await center.add(request)
         } catch {
-            print("⚠️ Failed to send notification: \(error.localizedDescription)")
+            print("Warning: Failed to send notification: \(error.localizedDescription)")
         }
     }
 
@@ -151,7 +151,7 @@ public actor NotificationService {
         do {
             try await center.add(request)
         } catch {
-            print("⚠️ Failed to send notification: \(error.localizedDescription)")
+            print("Warning: Failed to send notification: \(error.localizedDescription)")
         }
     }
 
@@ -183,7 +183,7 @@ public actor NotificationService {
         do {
             try await center.add(request)
         } catch {
-            print("⚠️ Failed to send notification: \(error.localizedDescription)")
+            print("Warning: Failed to send notification: \(error.localizedDescription)")
         }
     }
     
@@ -202,7 +202,7 @@ public actor NotificationService {
         if #available(macOS 13.0, *) {
             UNUserNotificationCenter.current().setBadgeCount(visible ? 1 : 0) { error in
                 guard let error else { return }
-                print("⚠️ Failed to update notification badge count: \(error.localizedDescription)")
+                print("Warning: Failed to update notification badge count: \(error.localizedDescription)")
             }
         }
     }

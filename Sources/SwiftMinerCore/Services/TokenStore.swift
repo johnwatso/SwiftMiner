@@ -17,6 +17,9 @@ public protocol TokenStore: Sendable {
 
     /// Update an account's local display nickname without changing token material.
     func updateNickname(twitchUserId: String, nickname: String?) async throws
+
+    /// Update whether an account is designated as operator (limit one operator app-wide).
+    func updateOperatorStatus(twitchUserId: String, isOperator: Bool) async throws
     
     /// Remove an account and its tokens from the store.
     func deleteAccount(twitchUserId: String) async throws

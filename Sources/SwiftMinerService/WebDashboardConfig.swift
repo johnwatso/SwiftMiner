@@ -133,36 +133,53 @@ public struct WebDashboardConfig: Sendable {
     }
 
     /// Build from environment, falling back to `UserDefaults`. Returns `nil`
-    /// unless a valid base URL and at least one provider's credentials are set.
+    /// unless at least one sign-in method is configured. OAuth providers need a
+    /// valid public base URL; local sign-in does not.
     public static func fromEnvironment(_ defaults: UserDefaults = .standard) -> WebDashboardConfig? {
         let env = ProcessInfo.processInfo.environment
-        func value(_ envKey: String, _ defaultsKey: String) -> String? {
+        func value(_ envKey: String, _ defaultsKeys: String...) -> String? {
             if let v = env[envKey], !v.isEmpty { return v }
-            if let v = defaults.string(forKey: defaultsKey), !v.isEmpty { return v }
+            for defaultsKey in defaultsKeys {
+                if let v = defaults.string(forKey: defaultsKey), !v.isEmpty { return v }
+            }
             return nil
         }
 
-        guard let baseRaw = value("SWIFTMINER_WEB_BASE_URL", "swiftMinerWebBaseURL"),
-              let baseURL = URL(string: baseRaw),
-              let scheme = baseURL.scheme?.lowercased(),
-              scheme == "https" || scheme == "http",
-              baseURL.host != nil else {
-            return nil
+        let baseURL: URL?
+        if let baseRaw = value("SWIFTMINER_WEB_BASE_URL", "webDashboardBaseURL", "swiftMinerWebBaseURL"),
+           let url = URL(string: baseRaw),
+           let scheme = url.scheme?.lowercased(),
+           (scheme == "https" || scheme == "http"),
+           url.host != nil {
+            baseURL = url
+        } else {
+            baseURL = nil
         }
 
         var discord: WebProviderCredentials?
-        if let id = value("SWIFTMINER_DISCORD_CLIENT_ID", "swiftMinerDiscordClientID"),
-           let secret = value("SWIFTMINER_DISCORD_CLIENT_SECRET", "swiftMinerDiscordClientSecret") {
+        if let id = value("SWIFTMINER_DISCORD_CLIENT_ID", "webDashboardDiscordClientID", "swiftMinerDiscordClientID"),
+           let secret = value("SWIFTMINER_DISCORD_CLIENT_SECRET", "webDashboardDiscordClientSecret", "swiftMinerDiscordClientSecret") {
             discord = WebProviderCredentials(clientID: id, clientSecret: secret)
         }
         var twitch: WebProviderCredentials?
-        if let id = value("SWIFTMINER_TWITCH_CLIENT_ID", "swiftMinerTwitchClientID"),
-           let secret = value("SWIFTMINER_TWITCH_CLIENT_SECRET", "swiftMinerTwitchClientSecret") {
+        if let id = value("SWIFTMINER_TWITCH_CLIENT_ID", "webDashboardTwitchClientID", "swiftMinerTwitchClientID"),
+           let secret = value("SWIFTMINER_TWITCH_CLIENT_SECRET", "webDashboardTwitchClientSecret", "swiftMinerTwitchClientSecret") {
             twitch = WebProviderCredentials(clientID: id, clientSecret: secret)
         }
 
-        guard discord != nil || twitch != nil else { return nil }
-        return WebDashboardConfig(baseURL: baseURL, discord: discord, twitch: twitch)
+        var local: WebLocalCredentials?
+        let localEnabled = defaults.object(forKey: "webDashboardLocalEnabled") as? Bool ?? true
+        if localEnabled,
+           let username = value("SWIFTMINER_WEB_LOCAL_USERNAME", "webDashboardLocalUsername"),
+           let passwordHash = value("SWIFTMINER_WEB_LOCAL_PASSWORD_HASH", "webDashboardLocalPasswordHash") {
+            let cleanUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !cleanUsername.isEmpty {
+                local = WebLocalCredentials(username: cleanUsername, passwordHash: passwordHash)
+            }
+        }
+
+        let config = WebDashboardConfig(baseURL: baseURL, discord: discord, twitch: twitch, local: local)
+        return config.anyEnabled ? config : nil
     }
 }
 

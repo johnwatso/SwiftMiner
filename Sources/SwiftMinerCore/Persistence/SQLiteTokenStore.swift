@@ -61,7 +61,7 @@ public final class SQLiteTokenStore: TokenStore, Sendable {
 
     public func loadAllAccounts() async throws -> [Account] {
         return try await manager.query { db in
-            let sql = "SELECT twitch_id, username, nickname, access_token, refresh_token, token_expiry, scopes, owner_discord_id FROM twitch_accounts;"
+            let sql = "SELECT twitch_id, username, nickname, access_token, refresh_token, token_expiry, scopes, owner_discord_id, is_operator FROM twitch_accounts;"
             var statement: OpaquePointer?
             guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
                 throw self.dbError(db)
@@ -78,7 +78,7 @@ public final class SQLiteTokenStore: TokenStore, Sendable {
 
     public func loadAccount(twitchUserId: String) async throws -> Account? {
         return try await manager.query { db in
-            let sql = "SELECT twitch_id, username, nickname, access_token, refresh_token, token_expiry, scopes, owner_discord_id FROM twitch_accounts WHERE twitch_id = ?;"
+            let sql = "SELECT twitch_id, username, nickname, access_token, refresh_token, token_expiry, scopes, owner_discord_id, is_operator FROM twitch_accounts WHERE twitch_id = ?;"
             var statement: OpaquePointer?
             guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
                 throw self.dbError(db)
@@ -136,6 +136,33 @@ public final class SQLiteTokenStore: TokenStore, Sendable {
         }
     }
 
+    public func updateOperatorStatus(twitchUserId: String, isOperator: Bool) async throws {
+        try await manager.execute { db in
+            if isOperator {
+                let clearSql = "UPDATE twitch_accounts SET is_operator = 0;"
+                var clearStmt: OpaquePointer?
+                if sqlite3_prepare_v2(db, clearSql, -1, &clearStmt, nil) == SQLITE_OK {
+                    sqlite3_step(clearStmt)
+                    sqlite3_finalize(clearStmt)
+                }
+            }
+            
+            let sql = "UPDATE twitch_accounts SET is_operator = ? WHERE twitch_id = ?;"
+            var statement: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+                throw self.dbError(db)
+            }
+            defer { sqlite3_finalize(statement) }
+
+            sqlite3_bind_int(statement, 1, isOperator ? 1 : 0)
+            sqlite3_bind_text(statement, 2, twitchUserId, -1, SQLITE_TRANSIENT)
+
+            guard sqlite3_step(statement) == SQLITE_DONE else {
+                throw self.dbError(db)
+            }
+        }
+    }
+
     public func deleteAccount(twitchUserId: String) async throws {
         try await manager.execute { db in
             let sql = "DELETE FROM twitch_accounts WHERE twitch_id = ?;"
@@ -162,6 +189,7 @@ public final class SQLiteTokenStore: TokenStore, Sendable {
         let expiryStr = String(cString: sqlite3_column_text(statement, 5))
         let scopesStr = String(cString: sqlite3_column_text(statement, 6))
         let ownerDiscordId = sqlite3_column_text(statement, 7).map { String(cString: $0) }
+        let isOperator = sqlite3_column_int(statement, 8) != 0
         
         let expiry = dateFormatter.date(from: expiryStr) ?? Date()
         let scopes = Self.parseScopes(scopesStr)
@@ -174,7 +202,8 @@ public final class SQLiteTokenStore: TokenStore, Sendable {
             accessToken: accessToken,
             refreshToken: refreshToken ?? "",
             tokenExpiry: expiry,
-            scopes: scopes
+            scopes: scopes,
+            isOperator: isOperator
         )
     }
 

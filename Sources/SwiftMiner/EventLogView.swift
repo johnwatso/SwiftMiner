@@ -218,10 +218,11 @@ struct EventLogView: View {
                         HStack(spacing: 6) {
                             Image(systemName: option.symbol)
                                 .font(.caption.weight(.semibold))
+                                .foregroundStyle(option.eventColor.opacity(isSelected ? 1 : 0.45))
                             Text(option.title)
                                 .font(.subheadline.weight(.medium))
+                                .foregroundStyle(isSelected ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
                         }
-                        .foregroundStyle(isSelected ? .primary : .secondary)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 7)
                         .background(
@@ -700,7 +701,7 @@ private extension EventFilter {
         case .accountLink: return .purple
         case .scan: return .teal
         case .discord: return .indigo
-        case .audit: return .mint
+        case .audit: return .brown
         case .updates: return .cyan
         case .system: return .gray
         }
@@ -862,7 +863,7 @@ private func cleanedEventText(_ message: String) -> String {
         .replacingOccurrences(of: #"^Miner\s+[A-Za-z0-9_-]+:\s*"#, with: "", options: .regularExpression)
         .replacingOccurrences(of: #"^\s*[•·]\s*"#, with: "", options: .regularExpression)
 
-    for marker in ["⚠️", "❌", "✅", "🔄", "📋", "🧪", "✓", "✗"] {
+    for marker in legacyLogGlyphs {
         text = text.replacingOccurrences(of: marker, with: "")
     }
 
@@ -870,6 +871,17 @@ private func cleanedEventText(_ message: String) -> String {
         .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
         .trimmingCharacters(in: .whitespacesAndNewlines)
 }
+
+private let legacyLogGlyphs = [
+    "\u{26A0}\u{FE0F}",
+    "\u{274C}",
+    "\u{2705}",
+    "\u{1F504}",
+    "\u{1F4CB}",
+    "\u{1F9EA}",
+    "\u{2713}",
+    "\u{2717}"
+]
 
 private func value(after prefix: String, in text: String) -> String? {
     guard let range = text.range(of: prefix, options: .caseInsensitive) else { return nil }

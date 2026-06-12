@@ -50,7 +50,7 @@ struct MinerApp: App {
                     updater.isSafeToInstallNow = { navigation.isSafeToInstallUpdateNow }
                     updater.onAutoInstall = { version, plan in
                         navigation.logEvent(
-                            message: "⬇️ SwiftMiner \(version) downloaded — \(plan); the app will relaunch itself and resume mining.",
+                            message: "SwiftMiner \(version) downloaded — \(plan); the app will relaunch itself and resume mining.",
                             level: .info,
                             rawMessage: "[update] SwiftMiner \(version) downloaded — \(plan)"
                         )
@@ -58,7 +58,7 @@ struct MinerApp: App {
                     updater.onUpToDate = {
                         let version = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? ""
                         navigation.logEvent(
-                            message: "✅ Already up to date\(version.isEmpty ? "" : " — SwiftMiner \(version)")",
+                            message: "Already up to date\(version.isEmpty ? "" : " — SwiftMiner \(version)")",
                             level: .info,
                             rawMessage: "[update] Already up to date \(version)"
                         )

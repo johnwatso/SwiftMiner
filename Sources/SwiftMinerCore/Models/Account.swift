@@ -10,6 +10,7 @@ public struct Account: Codable, Sendable, Equatable, Identifiable {
     public let refreshToken: String
     public let tokenExpiry: Date
     public let scopes: [String]
+    public let isOperator: Bool
 
     public init(
         id: String,
@@ -19,7 +20,8 @@ public struct Account: Codable, Sendable, Equatable, Identifiable {
         accessToken: String,
         refreshToken: String,
         tokenExpiry: Date,
-        scopes: [String]
+        scopes: [String],
+        isOperator: Bool = false
     ) {
         self.id = id
         self.username = username
@@ -29,6 +31,7 @@ public struct Account: Codable, Sendable, Equatable, Identifiable {
         self.refreshToken = refreshToken
         self.tokenExpiry = tokenExpiry
         self.scopes = scopes
+        self.isOperator = isOperator
     }
 
     /// Check if the access token is valid (not expired, with 5 minute buffer)
