@@ -71,7 +71,7 @@ public struct HTTPResponse: Sendable {
             "Content-Length": "\(data.count)",
             // The dashboard renders only data the session owner already controls;
             // a strict CSP keeps the surface minimal regardless.
-            "Content-Security-Policy": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:",
+            "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:",
             "X-Content-Type-Options": "nosniff",
             "Referrer-Policy": "no-referrer",
             "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"

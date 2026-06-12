@@ -367,6 +367,7 @@ enum WebDashboardAssets {
     """
 
     static let appJS = """
+    (() => {
     const $ = (id) => document.getElementById(id);
     let CSRF = null;
     let SESSION = null;
@@ -1237,6 +1238,7 @@ enum WebDashboardAssets {
     load();
     // Keep progress fresh without being chatty.
     setInterval(() => load(true), 60000);
+    })();
     """
 
     static let loginJS = """
