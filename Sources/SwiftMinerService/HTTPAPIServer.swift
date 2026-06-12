@@ -179,8 +179,9 @@ public actor HTTPAPIServer {
         guard let nwPort = NWEndpoint.Port(rawValue: port) else {
             throw NSError(domain: "HTTPAPIServer", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid port"])
         }
-        // Plain TCP, bound to loopback only. NWParameters.requiredLocalEndpoint applies to
-        // outbound connections — setting it on listener parameters can prevent binding.
+        // Plain TCP on the configured port. Leaving the local endpoint unset lets
+        // the dashboard answer localhost and LAN addresses; the web routes decide
+        // which sign-in methods are available for each Host header.
         let parameters = NWParameters.tcp
         if let tcp = parameters.defaultProtocolStack.transportProtocol as? NWProtocolTCP.Options {
             tcp.connectionTimeout = 5

@@ -140,7 +140,7 @@ public actor WebDashboardRoutes {
             await me.withSession(req) { s in await me.campaigns(for: s) }
         })
         await router.register(HTTPRoute(method: "POST", pattern: WebDashboardConfig.logoutPath) { req, _ in
-            await me.withSession(req, requireCSRF: true) { s in await me.handleLogout(s) }
+            await me.handleLogout(req)
         })
         await router.register(HTTPRoute(method: "POST", pattern: "/me/campaigns/:campaignId/:action") { req, params in
             await me.withSession(req, requireCSRF: true) { s in
@@ -152,6 +152,13 @@ public actor WebDashboardRoutes {
             await me.withSession(req, requireCSRF: true) { s in
                 guard let accountId = params["accountId"] else { return .badRequest }
                 return await me.setPriorities(for: s, accountId: accountId, body: req.body)
+            }
+        })
+        await router.register(HTTPRoute(method: "POST", pattern: "/me/miners/:accountId/control/:action") { req, params in
+            await me.withSession(req, requireCSRF: true) { s in
+                guard let accountId = params["accountId"], let actionStr = params["action"],
+                      let action = MinerControlAction(rawValue: actionStr) else { return .badRequest }
+                return await me.controlMiner(for: s, accountId: accountId, action: action)
             }
         })
         // Activation (linking a Twitch account) only applies to a Discord principal.
@@ -176,13 +183,18 @@ public actor WebDashboardRoutes {
     // MARK: - Principal-aware dispatch
 
     private func projection(for s: WebSessionRecord) async -> HTTPResponse {
-        switch s.principalType {
-        case Self.localPrincipal:
-            return await apiRoutes.webOverview()
-        case WebProvider.twitch.rawValue:
+        if s.principalType == WebProvider.twitch.rawValue {
+            if await apiRoutes.isOperatorTwitch(twitchId: s.principalId) {
+                return await apiRoutes.webOverview()
+            }
             return await apiRoutes.webProjectionTwitch(twitchId: s.principalId)
-        default:
+        } else if s.principalType == WebProvider.discord.rawValue {
+            if await apiRoutes.isOperatorDiscord(discordId: s.principalId) {
+                return await apiRoutes.webOverview()
+            }
             return await apiRoutes.webProjection(discordId: s.principalId)
+        } else {
+            return await apiRoutes.webOverview()
         }
     }
 
@@ -192,15 +204,45 @@ public actor WebDashboardRoutes {
             // The operator may manage any mined account.
             return await apiRoutes.webSetPrioritiesTwitch(twitchId: accountId, body: body)
         case WebProvider.twitch.rawValue:
-            // A Twitch principal owns exactly one account: itself. The path id
-            // must match the session's account — nothing else is addressable.
-            guard accountId == s.principalId else {
+            let isOperator = await apiRoutes.isOperatorTwitch(twitchId: s.principalId)
+            guard accountId == s.principalId || isOperator else {
                 return .error(code: "forbidden", message: "You can only manage your own miner.", statusCode: 403)
             }
-            return await apiRoutes.webSetPrioritiesTwitch(twitchId: s.principalId, body: body)
+            return await apiRoutes.webSetPrioritiesTwitch(twitchId: accountId, body: body)
         default:
-            return await apiRoutes.webSetPriorities(discordId: s.principalId, accountId: accountId, body: body)
+            let isOperator = await apiRoutes.isOperatorDiscord(discordId: s.principalId)
+            let owns = await apiRoutes.webVerifiesDiscordOwnership(discordId: s.principalId, accountId: accountId)
+            guard owns || isOperator else {
+                return .error(code: "forbidden", message: "You can only manage your own miner.", statusCode: 403)
+            }
+            return await apiRoutes.webSetPrioritiesTwitch(twitchId: accountId, body: body)
         }
+    }
+
+    private func controlMiner(for s: WebSessionRecord, accountId: String, action: MinerControlAction) async -> HTTPResponse {
+        let isAllowed: Bool
+        switch s.principalType {
+        case Self.localPrincipal:
+            isAllowed = true
+        case WebProvider.twitch.rawValue:
+            let isOperator = await apiRoutes.isOperatorTwitch(twitchId: s.principalId)
+            isAllowed = (s.principalId == accountId) || isOperator
+        default:
+            let isOperator = await apiRoutes.isOperatorDiscord(discordId: s.principalId)
+            let owns = await apiRoutes.webVerifiesDiscordOwnership(discordId: s.principalId, accountId: accountId)
+            isAllowed = owns || isOperator
+        }
+
+        guard isAllowed else {
+            return .error(code: "forbidden", message: "You cannot control this miner.", statusCode: 403)
+        }
+
+        guard await apiRoutes.hasMinerControlByAccount() else {
+            return .error(code: "control_unavailable", message: "Miner controls are not available.", statusCode: 503)
+        }
+
+        let response = await apiRoutes.executeMinerControlByAccount(accountId: accountId, action: action)
+        return HTTPResponse.json(response, statusCode: response.ok ? 200 : 409)
     }
 
     private func campaignAction(for s: WebSessionRecord, campaignId: String, action: String, body: Data) async -> HTTPResponse {
@@ -253,6 +295,8 @@ public actor WebDashboardRoutes {
         if requireCSRF {
             guard let presented = req.header(WebDashboardConfig.csrfHeaderName),
                   WebSecurity.constantTimeEquals(presented, session.csrfToken) else {
+                let actor = await actorName(session)
+                await audit?("Blocked a request from \(actor) — missing or invalid CSRF token")
                 return .error(code: "csrf_failed", message: "Missing or invalid CSRF token.", statusCode: 403)
             }
         }
@@ -277,10 +321,18 @@ public actor WebDashboardRoutes {
         // Only offer the local form when this request is local (not the public
         // domain), so the password box never appears over the tunnel.
         let localAvailable = config.localEnabled && isLocalRequest(req)
+        if localAvailable {
+            return .html(WebDashboardAssets.loginPage(
+                discordSSOURL: nil,
+                twitch: false,
+                local: true,
+                appIcon: logoDarkPNG != nil && logoLightPNG != nil
+            ))
+        }
         return .html(WebDashboardAssets.loginPage(
             discordSSOURL: await swiftBotSSOStartURL(),
             twitch: config.twitchEnabled,
-            local: localAvailable,
+            local: false,
             appIcon: logoDarkPNG != nil && logoLightPNG != nil
         ))
     }
@@ -313,6 +365,7 @@ public actor WebDashboardRoutes {
         }
         guard isLocalRequest(req) else {
             // Local credentials must never be accepted over the public domain.
+            await audit?("Blocked a local sign-in attempt over the public domain")
             return .error(code: "forbidden", message: "Local sign-in is only available on the local network.", statusCode: 403)
         }
         let form = WebForm.parse(req.body)
@@ -321,16 +374,21 @@ public actor WebDashboardRoutes {
         // Constant-time username check + hashed password verify.
         guard WebSecurity.constantTimeEquals(username, creds.username),
               WebSecurity.verifyLocalPassword(password, encoded: creds.passwordHash) else {
+            let attempted = String(username.prefix(32))
+            await audit?("Failed local sign-in attempt\(attempted.isEmpty ? "" : " (username “\(attempted)”)")")
             return .html(WebDashboardAssets.message("Incorrect username or password.", linkToLogin: true), statusCode: 401)
         }
         await audit?("\(creds.username) signed in to the web dashboard (local)")
-        return await issueSession(principalType: Self.localPrincipal, principalId: creds.username)
+        return await issueSession(principalType: Self.localPrincipal, principalId: creds.username, secureCookie: false)
     }
 
     private func handleProviderLogin(_ req: HTTPRequest, providerRaw: String?) async -> HTTPResponse {
         guard let raw = providerRaw, let provider = WebProvider(rawValue: raw),
               let creds = config.credentials(for: provider) else {
             return .html(WebDashboardAssets.message("That sign-in method isn't available.", linkToLogin: true), statusCode: 404)
+        }
+        if isLocalRequest(req) {
+            return .html(WebDashboardAssets.message("Use local sign-in from this address.", linkToLogin: true), statusCode: 403)
         }
         guard provider != .discord else {
             return .html(WebDashboardAssets.message("Discord sign-in is handled through SwiftBot so server membership can be verified.", linkToLogin: true), statusCode: 403)
@@ -376,11 +434,13 @@ public actor WebDashboardRoutes {
 
         case .twitch:
             guard let token = await exchangeCode(code, provider: .twitch, creds: creds),
-                  let id = await fetchTwitchUserId(accessToken: token, clientID: creds.clientID) else {
+                  let twitchUser = await fetchTwitchUser(accessToken: token, clientID: creds.clientID) else {
                 return .html(WebDashboardAssets.message("Could not complete Twitch login.", linkToLogin: true), statusCode: 502)
             }
+            let id = twitchUser.id
             // Only Twitch accounts that SwiftMiner actually mines may sign in.
             guard let account = await manager.twitchAccount(twitchId: id) else {
+                await audit?("Twitch user \(twitchUser.login) tried to sign in, but their account isn't mined here")
                 return .html(WebDashboardAssets.message("This Twitch account isn't being mined here. Ask the operator to add it first.", linkToLogin: true), statusCode: 403)
             }
             await audit?("\(account.username) signed in to the web dashboard (Twitch)")
@@ -408,6 +468,8 @@ public actor WebDashboardRoutes {
             .joined()
         guard WebSecurity.constantTimeEquals(expected, signature.lowercased()) else {
             webLogger.notice("SwiftBot SSO rejected: bad signature")
+            // Unverified payload — its claims can't be trusted, so no identity here.
+            await audit?("Blocked a Discord sign-in with an invalid SwiftBot signature")
             return .html(WebDashboardAssets.message("Sign-in could not be verified.", linkToLogin: true), statusCode: 403)
         }
 
@@ -417,10 +479,14 @@ public actor WebDashboardRoutes {
               let discordId = object["discordUserId"] as? String, isValidSnowflake(discordId),
               let exp = object["exp"] as? Int, Double(exp) >= now,
               let nonce = object["nonce"] as? String, !nonce.isEmpty else {
+            await audit?("Rejected an expired or malformed Discord sign-in assertion")
             return .html(WebDashboardAssets.message("Sign-in expired. Please try again.", linkToLogin: true), statusCode: 400)
         }
+        // Signature verified above, so the payload's claims are trustworthy.
+        let displayName = (object["username"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Discord user \(discordId)"
         guard Self.swiftBotSSOConfirmsGuildMembership(object) else {
             webLogger.notice("SwiftBot SSO rejected: user is not a member of the attached server")
+            await audit?("\(displayName) tried to sign in with Discord but isn't in the server")
             return .html(WebDashboardAssets.statusMessage(
                 title: "Not in this server",
                 text: "Your Discord account is not part of the server attached to this SwiftMiner. Ask the person who runs the miner to invite you, then try signing in again.",
@@ -433,13 +499,13 @@ public actor WebDashboardRoutes {
             try await manager.createOAuthState("sso-nonce:\(nonce)", provider: "swiftbot-sso", createdAt: now, expiresAt: Double(exp))
         } catch {
             webLogger.notice("SwiftBot SSO rejected: replayed nonce")
+            await audit?("Rejected a replayed Discord sign-in for \(displayName)")
             return .html(WebDashboardAssets.message("Sign-in expired. Please try again.", linkToLogin: true), statusCode: 400)
         }
 
         guard await apiRoutes.webSelfRegister(discordId: discordId) else {
             return .html(WebDashboardAssets.message("Could not set up your account.", linkToLogin: true), statusCode: 500)
         }
-        let displayName = (object["username"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Discord user \(discordId)"
         await audit?("\(displayName) signed in to the web dashboard (Discord)")
         return await issueSession(principalType: WebProvider.discord.rawValue, principalId: discordId)
     }
@@ -473,7 +539,7 @@ public actor WebDashboardRoutes {
         return Data(base64Encoded: s)
     }
 
-    private func issueSession(principalType: String, principalId: String) async -> HTTPResponse {
+    private func issueSession(principalType: String, principalId: String, secureCookie: Bool? = nil) async -> HTTPResponse {
         let now = Date().timeIntervalSince1970
         await manager.purgeExpiredWebSessions(now: now)
         let sessionId = WebSecurity.randomToken()
@@ -494,7 +560,7 @@ public actor WebDashboardRoutes {
             name: WebDashboardConfig.sessionCookieName,
             value: sessionId,
             maxAge: WebDashboardConfig.sessionTTL,
-            secure: config.useSecureCookies
+            secure: secureCookie ?? config.useSecureCookies
         )
         webLogger.info("Web session issued (\(principalType, privacy: .public))")
         return .redirect(to: WebDashboardConfig.appPath, setCookie: cookie)
@@ -510,19 +576,28 @@ public actor WebDashboardRoutes {
         return .json(Info(provider: s.principalType, csrfToken: s.csrfToken))
     }
 
-    private func handleLogout(_ s: WebSessionRecord) async -> HTTPResponse {
-        await manager.deleteWebSession(id: s.id)
-        let actor: String
+    /// Human-readable name for a session's principal, for audit entries.
+    private func actorName(_ s: WebSessionRecord) async -> String {
         switch s.principalType {
         case WebProvider.twitch.rawValue:
-            actor = await manager.twitchAccount(twitchId: s.principalId)?.username ?? "Twitch user \(s.principalId)"
+            return await manager.twitchAccount(twitchId: s.principalId)?.username ?? "Twitch user \(s.principalId)"
         case Self.localPrincipal:
-            actor = s.principalId
+            return s.principalId
         default:
-            actor = "Discord user \(s.principalId)"
+            return "Discord user \(s.principalId)"
         }
-        await audit?("\(actor) signed out of the web dashboard")
-        let cleared = WebCookie.expiredCookie(name: WebDashboardConfig.sessionCookieName, secure: config.useSecureCookies)
+    }
+
+    private func handleLogout(_ req: HTTPRequest) async -> HTTPResponse {
+        if let s = await currentSession(req) {
+            await manager.deleteWebSession(id: s.id)
+            let actor = await actorName(s)
+            await audit?("\(actor) signed out of the web dashboard")
+        }
+        let cleared = WebCookie.expiredCookie(
+            name: WebDashboardConfig.sessionCookieName,
+            secure: config.useSecureCookies && !isLocalRequest(req)
+        )
         return .redirect(to: WebDashboardConfig.loginPath, setCookie: cleared)
     }
 
@@ -590,7 +665,7 @@ public actor WebDashboardRoutes {
         return await getJSONString(req, key: "id")
     }
 
-    private func fetchTwitchUserId(accessToken: String, clientID: String) async -> String? {
+    private func fetchTwitchUser(accessToken: String, clientID: String) async -> (id: String, login: String)? {
         var req = URLRequest(url: URL(string: "https://api.twitch.tv/helix/users")!)
         req.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         req.setValue(clientID, forHTTPHeaderField: "Client-Id")
@@ -598,8 +673,10 @@ public actor WebDashboardRoutes {
             let (data, resp) = try await urlSession.data(for: req)
             guard let http = resp as? HTTPURLResponse, (200...299).contains(http.statusCode) else { return nil }
             let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-            let arr = json?["data"] as? [[String: Any]]
-            return arr?.first?["id"] as? String
+            guard let user = (json?["data"] as? [[String: Any]])?.first,
+                  let id = user["id"] as? String else { return nil }
+            let login = (user["display_name"] as? String) ?? (user["login"] as? String) ?? "id \(id)"
+            return (id, login)
         } catch {
             webLogger.error("helix/users error: \(error.localizedDescription, privacy: .public)")
             return nil

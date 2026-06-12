@@ -50,7 +50,25 @@ final class WebDashboardSecurityTests: XCTestCase {
         // Skip if the host environment happens to inject real Discord creds.
         let env = ProcessInfo.processInfo.environment
         try XCTSkipIf(env["SWIFTMINER_DISCORD_CLIENT_ID"] != nil)
+        try XCTSkipIf(env["SWIFTMINER_WEB_LOCAL_PASSWORD_HASH"] != nil)
         XCTAssertNil(WebDashboardConfig.fromEnvironment(suite))
+    }
+
+    func testLocalConfigFromDefaultsNeedsNoBaseURL() {
+        let suiteName = "web-test-local-\(UUID().uuidString)"
+        let suite = UserDefaults(suiteName: suiteName)!
+        defer { suite.removePersistentDomain(forName: suiteName) }
+        let hash = WebSecurity.hashLocalPassword("localpass", iterations: 1_000)
+        suite.set("operator", forKey: "webDashboardLocalUsername")
+        suite.set(hash, forKey: "webDashboardLocalPasswordHash")
+
+        let config = WebDashboardConfig.fromEnvironment(suite)
+
+        XCTAssertEqual(config?.local?.username, "operator")
+        XCTAssertEqual(config?.local?.passwordHash, hash)
+        XCTAssertTrue(config?.localEnabled == true)
+        XCTAssertNil(config?.baseURL)
+        XCTAssertFalse(config?.anyProviderEnabled == true)
     }
 
     func testRedirectURIAndSecureCookiePolicy() {
@@ -128,6 +146,161 @@ final class WebDashboardSecurityTests: XCTestCase {
         XCTAssertFalse(HTTPAPIServer.isPublicPath("/application", prefixes: prefixes, exactPaths: exact))
         XCTAssertFalse(HTTPAPIServer.isPublicPath("/healthz", prefixes: prefixes, exactPaths: exact))
         XCTAssertFalse(HTTPAPIServer.isPublicPath("/api/users", prefixes: prefixes, exactPaths: exact))
+    }
+
+    func testLocalLoginPageShowsOnlyUsernamePasswordForm() async throws {
+        let mgr = try await openTempManager()
+        defer { Task { await mgr.close() } }
+        let router = try await configuredWebRouter(manager: mgr)
+
+        let response = await router.handle(HTTPRequest(
+            method: "GET",
+            path: "/login",
+            headers: ["host": "localhost:8080"],
+            body: Data()
+        ))
+
+        XCTAssertEqual(response.statusCode, 200)
+        let html = String(decoding: response.body, as: UTF8.self)
+        XCTAssertTrue(html.contains("name=\"username\""))
+        XCTAssertTrue(html.contains("name=\"password\""))
+        XCTAssertTrue(html.contains("Sign in locally"))
+        XCTAssertFalse(html.contains("Sign in with Twitch"))
+        XCTAssertFalse(html.contains("Sign in with Discord"))
+    }
+
+    func testLANLoginPageShowsLocalUsernamePasswordForm() async throws {
+        let mgr = try await openTempManager()
+        defer { Task { await mgr.close() } }
+        let router = try await configuredWebRouter(manager: mgr)
+
+        let response = await router.handle(HTTPRequest(
+            method: "GET",
+            path: "/login",
+            headers: ["host": "192.168.1.50:8080"],
+            body: Data()
+        ))
+
+        XCTAssertEqual(response.statusCode, 200)
+        let html = String(decoding: response.body, as: UTF8.self)
+        XCTAssertTrue(html.contains("name=\"username\""))
+        XCTAssertTrue(html.contains("name=\"password\""))
+        XCTAssertTrue(html.contains("Sign in locally"))
+        XCTAssertTrue(html.contains("Sign in locally with your operator account"))
+        XCTAssertFalse(html.contains("Sign in with Twitch"))
+        XCTAssertFalse(html.contains("Sign in with Discord"))
+    }
+
+    func testLANProviderLoginIsRejected() async throws {
+        let mgr = try await openTempManager()
+        defer { Task { await mgr.close() } }
+        let router = try await configuredWebRouter(manager: mgr)
+
+        let response = await router.handle(HTTPRequest(
+            method: "GET",
+            path: "/login/twitch",
+            headers: ["host": "192.168.1.50:8080"],
+            body: Data()
+        ))
+
+        XCTAssertEqual(response.statusCode, 403)
+        XCTAssertNil(response.headers["Location"])
+    }
+
+    func testPublicLoginPageKeepsOAuthAndHidesLocalForm() async throws {
+        let mgr = try await openTempManager()
+        defer { Task { await mgr.close() } }
+        let router = try await configuredWebRouter(manager: mgr)
+
+        let response = await router.handle(HTTPRequest(
+            method: "GET",
+            path: "/login",
+            headers: ["host": "swiftminer.example.com"],
+            body: Data()
+        ))
+
+        XCTAssertEqual(response.statusCode, 200)
+        let html = String(decoding: response.body, as: UTF8.self)
+        XCTAssertTrue(html.contains("Sign in with Twitch"))
+        XCTAssertTrue(html.contains("Sign in with Discord"))
+        XCTAssertFalse(html.contains("name=\"username\""))
+        XCTAssertFalse(html.contains("Sign in locally"))
+    }
+
+    func testLocalProviderLoginIsRejected() async throws {
+        let mgr = try await openTempManager()
+        defer { Task { await mgr.close() } }
+        let router = try await configuredWebRouter(manager: mgr)
+
+        let response = await router.handle(HTTPRequest(
+            method: "GET",
+            path: "/login/twitch",
+            headers: ["host": "localhost:8080"],
+            body: Data()
+        ))
+
+        XCTAssertEqual(response.statusCode, 403)
+        XCTAssertNil(response.headers["Location"])
+        let html = String(decoding: response.body, as: UTF8.self)
+        XCTAssertTrue(html.contains("Use local sign-in from this address."))
+    }
+
+    func testLocalLoginIssuesNonSecureCookieForHTTPAccess() async throws {
+        let mgr = try await openTempManager()
+        defer { Task { await mgr.close() } }
+        let router = try await configuredWebRouter(manager: mgr)
+
+        let body = Data("username=admin&password=password".utf8)
+        let login = await router.handle(HTTPRequest(
+            method: "POST",
+            path: "/login/local",
+            headers: ["host": "localhost:8080"],
+            body: body
+        ))
+
+        XCTAssertEqual(login.statusCode, 302)
+        XCTAssertEqual(login.headers["Location"], WebDashboardConfig.appPath)
+        let setCookie = try XCTUnwrap(login.headers["Set-Cookie"])
+        XCTAssertFalse(setCookie.contains("Secure"))
+
+        let app = await router.handle(HTTPRequest(
+            method: "GET",
+            path: WebDashboardConfig.appPath,
+            headers: ["host": "localhost:8080", "cookie": setCookie],
+            body: Data()
+        ))
+
+        XCTAssertEqual(app.statusCode, 200)
+    }
+
+    func testLogoutClearsLocalSessionEvenBeforeCSRFLoads() async throws {
+        let mgr = try await openTempManager()
+        defer { Task { await mgr.close() } }
+        let router = try await configuredWebRouter(manager: mgr)
+
+        let login = await router.handle(HTTPRequest(
+            method: "POST",
+            path: "/login/local",
+            headers: ["host": "localhost:8080"],
+            body: Data("username=admin&password=password".utf8)
+        ))
+        let loginCookie = try XCTUnwrap(login.headers["Set-Cookie"])
+        let sessionId = try XCTUnwrap(WebCookie.parse(loginCookie)[WebDashboardConfig.sessionCookieName])
+
+        let logout = await router.handle(HTTPRequest(
+            method: "POST",
+            path: WebDashboardConfig.logoutPath,
+            headers: ["host": "localhost:8080", "cookie": loginCookie],
+            body: Data()
+        ))
+
+        XCTAssertEqual(logout.statusCode, 302)
+        XCTAssertEqual(logout.headers["Location"], WebDashboardConfig.loginPath)
+        let clearCookie = try XCTUnwrap(logout.headers["Set-Cookie"])
+        XCTAssertTrue(clearCookie.contains("Max-Age=0"))
+        XCTAssertFalse(clearCookie.contains("Secure"))
+        let session = await mgr.fetchWebSession(id: sessionId, now: Date().timeIntervalSince1970)
+        XCTAssertNil(session)
     }
 
     // MARK: - Session & OAuth-state persistence
@@ -363,6 +536,31 @@ final class WebDashboardSecurityTests: XCTestCase {
         let mgr = SQLiteManager(databaseURL: url)
         try await mgr.open()
         return mgr
+    }
+
+    private func configuredWebRouter(manager: SQLiteManager) async throws -> HTTPRouter {
+        let apiRoutes = DiscordAPIRoutes(
+            manager: manager,
+            projectionBuilder: DiscordProjectionBuilder(manager: manager),
+            apiKey: "test-api-key"
+        )
+        let webRoutes = WebDashboardRoutes(
+            config: WebDashboardConfig(
+                baseURL: URL(string: "https://swiftminer.example.com")!,
+                discord: nil,
+                twitch: WebProviderCredentials(clientID: "twitch-client", clientSecret: "twitch-secret"),
+                local: WebLocalCredentials(
+                    username: "admin",
+                    passwordHash: WebSecurity.hashLocalPassword("password", iterations: 1_000)
+                ),
+                swiftBotSSO: WebSwiftBotSSO(origin: "https://swiftbot.example.com", hmacSecret: "shared-pairing-secret")
+            ),
+            manager: manager,
+            apiRoutes: apiRoutes
+        )
+        let router = HTTPRouter()
+        await webRoutes.configure(router)
+        return router
     }
 
     private func swiftBotPayload(discordId: String, username: String, nonce: String, exp: Int, isGuildMember: Bool) throws -> String {

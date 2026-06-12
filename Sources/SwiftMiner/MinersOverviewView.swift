@@ -1099,7 +1099,7 @@ private struct MinerSourceListRow: View {
 
     private var hasMinerPriorityOverride: Bool {
         let accountId = miner.accountId.trimmingCharacters(in: .whitespacesAndNewlines)
-        return settings.accountPriorityGames[accountId] != nil
+        return settings.accountPriorityGames[accountId] != nil || !settings.includesGlobalPriorityGames(forAccountId: accountId)
     }
 
     private var hasBlockingIssues: Bool {
@@ -1210,6 +1210,9 @@ private struct MinerSourceListRow: View {
         let visibleGames = displayedPriorityGames.prefix(2).joined(separator: ", ")
         let remainingCount = displayedPriorityGames.count - 2
         let summary = remainingCount > 0 ? "\(visibleGames) +\(remainingCount)" : visibleGames
+        if !settings.includesGlobalPriorityGames(forAccountId: miner.accountId) {
+            return "Miner only: \(summary)"
+        }
         return "\(hasMinerPriorityOverride ? "Miner" : "Global"): \(summary)"
     }
 }

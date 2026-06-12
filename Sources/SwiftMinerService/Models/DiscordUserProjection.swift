@@ -13,6 +13,8 @@ public struct DiscordUserProjection: Codable, Sendable {
     public let priorityGames: [String]
     /// Games prioritised specifically for this user's miner, excluding the global list.
     public let personalPriorityGames: [String]
+    /// Whether the operator-level priority list is appended after personal priorities.
+    public let includesGlobalPriorityGames: Bool
 
     public init(
         discordUserId: String,
@@ -23,7 +25,8 @@ public struct DiscordUserProjection: Codable, Sendable {
         issues: [Issue] = [],
         dmState: DiscordDMState = DiscordDMState(),
         priorityGames: [String] = [],
-        personalPriorityGames: [String] = []
+        personalPriorityGames: [String] = [],
+        includesGlobalPriorityGames: Bool = true
     ) {
         self.discordUserId = discordUserId
         self.state = state
@@ -34,6 +37,7 @@ public struct DiscordUserProjection: Codable, Sendable {
         self.dmState = dmState
         self.priorityGames = priorityGames
         self.personalPriorityGames = personalPriorityGames
+        self.includesGlobalPriorityGames = includesGlobalPriorityGames
     }
 
     public enum ProjectionState: String, Codable, Sendable {
@@ -61,13 +65,25 @@ public struct DiscordUserProjection: Codable, Sendable {
         /// Twitch box art for the game, when known — lets web clients show the
         /// same artwork as the native GUI instead of guessing CDN URLs.
         public let boxArtURL: String?
+        public let currentChannelName: String?
+        public let currentChannelId: String?
 
-        public init(campaignId: String, game: String, progress: Progress, endsAt: Date, boxArtURL: String? = nil) {
+        public init(
+            campaignId: String,
+            game: String,
+            progress: Progress,
+            endsAt: Date,
+            boxArtURL: String? = nil,
+            currentChannelName: String? = nil,
+            currentChannelId: String? = nil
+        ) {
             self.campaignId = campaignId
             self.game = game
             self.progress = progress
             self.endsAt = endsAt
             self.boxArtURL = boxArtURL
+            self.currentChannelName = currentChannelName
+            self.currentChannelId = currentChannelId
         }
     }
 

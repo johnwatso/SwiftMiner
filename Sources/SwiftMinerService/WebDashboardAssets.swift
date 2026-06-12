@@ -57,6 +57,17 @@ enum WebDashboardAssets {
           padding: 16px 18px; margin: 0 0 14px;
           animation: rise 0.4s cubic-bezier(0.21,1,0.27,1) both;
         }
+        .miner-card {
+          cursor: pointer;
+          transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+        }
+        .miner-card:hover,
+        .miner-card:focus-visible {
+          transform: translateY(-1px);
+          border-color: rgba(86, 188, 255, 0.36);
+          background: rgba(34, 30, 54, 0.56);
+          outline: none;
+        }
         /* Entrance animation only on first paint — refreshes must not flicker. */
         body.loaded .card { animation: none; }
         @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
@@ -127,11 +138,28 @@ enum WebDashboardAssets {
           background: linear-gradient(180deg, var(--glass-top), var(--glass-bottom));
         }
         .btn-secondary:disabled, .btn-primary:disabled { opacity: 0.45; cursor: default; }
+        .detail-nav { margin: 0 0 14px; }
+        .back-row { display: flex; align-items: center; gap: 10px; }
+        .back-row .hero-info { min-width: 0; }
+        .toggle-row {
+          display: flex; align-items: center; justify-content: space-between; gap: 12px;
+          margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--glass-stroke);
+          border-radius: 8px; background: rgba(255,255,255,0.035);
+        }
+        .toggle-row .toggle-copy { min-width: 0; }
+        .toggle-row .toggle-title { font-size: 13px; font-weight: 800; color: var(--text); }
+        .toggle-row input { width: 18px; height: 18px; flex: 0 0 auto; accent-color: var(--blue-a); }
         .issue-row {
           display: flex; align-items: flex-start; gap: 10px; padding: 10px 0;
           border-top: 1px solid var(--glass-stroke);
         }
         .issue-row:first-of-type { border-top: none; padding-top: 0; }
+        .issue-icon {
+          flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+          width: 18px; height: 18px; border-radius: 50%; margin-top: 1px;
+          background: rgba(255, 159, 10, 0.16); color: #ff9f0a;
+          font-size: 12px; font-weight: 800; line-height: 1;
+        }
         .issue-body { flex: 1; min-width: 0; font-size: 14px; line-height: 1.35; }
         .issue-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 9px; }
         .activation-code {
@@ -300,7 +328,8 @@ enum WebDashboardAssets {
           transition: all 0.2s ease;
         }
         .priority-chip .star {
-          color: #ff9f0a; font-size: 9px; display: inline-flex; align-items: center;
+          width: 7px; height: 7px; border-radius: 50%; display: inline-flex; align-items: center;
+          background: #ff9f0a; box-shadow: 0 0 0 3px rgba(255, 159, 10, 0.12);
         }
         .priority-chip .remove-btn {
           background: none; border: none; padding: 0; cursor: pointer; color: var(--muted);
@@ -346,14 +375,31 @@ enum WebDashboardAssets {
     let ACTIVATION = null;
     let activationTimer = null;
     let personal = [];        // editable personal priority list (working copy)
+    let includeGlobalPriorities = true;
+    let OPERATOR_MINERS = [];
+    let OPERATOR_STATE = { selectedMinerId: null };
 
     async function api(path, opts = {}) {
+      const timeoutMs = opts.timeoutMs || 15000;
+      delete opts.timeoutMs;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
       opts.headers = opts.headers || {};
       if (CSRF && opts.method && opts.method !== 'GET') opts.headers['X-SM-CSRF'] = CSRF;
       opts.credentials = 'same-origin';
-      const r = await fetch(path, opts);
-      if (r.status === 401) { location.href = '/login'; return null; }
-      return r;
+      opts.signal = opts.signal || controller.signal;
+      try {
+        const r = await fetch(path, opts);
+        if (r.status === 401) { location.href = '/login'; return null; }
+        return r;
+      } catch (err) {
+        if (err && err.name === 'AbortError') {
+          throw new Error('Request timed out while loading ' + path);
+        }
+        throw err;
+      } finally {
+        clearTimeout(timeout);
+      }
     }
 
     function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
@@ -396,9 +442,10 @@ enum WebDashboardAssets {
     function getStatusConfig(p) {
       if (p.state === 'active') {
         if (p.activeCampaign) {
+          const streamer = p.activeCampaign.currentChannelName;
           return {
             headline: 'Watching ' + p.activeCampaign.game,
-            subtitle: 'Mining active drops',
+            subtitle: streamer ? 'Watching ' + streamer : 'Mining active drops',
             color: '#34c759',
             icon: `<svg class="status-svg" viewBox="0 0 24 24" fill="none" stroke="#34c759" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="2"></circle>
@@ -454,6 +501,7 @@ enum WebDashboardAssets {
 
     function heroStateCard(p) {
       const cfg = getStatusConfig(p);
+      const accId = p.account && p.account.twitchAccountId ? String(p.account.twitchAccountId) : '';
       let progressHTML = '';
       if (p.activeCampaign) {
         const c = p.activeCampaign;
@@ -480,14 +528,17 @@ enum WebDashboardAssets {
       
       return `
         <div class="hero-card">
-          <div class="hero-header">
-            <div class="status-icon-container" style="background-color: ${cfg.color}1e; --icon-bg: ${cfg.color}1a;">
-              ${cfg.icon}
+          <div class="hero-header" style="align-items: center; justify-content: space-between; width: 100%;">
+            <div style="display: flex; align-items: center; gap: 16px;">
+              <div class="status-icon-container" style="background-color: ${cfg.color}1e; --icon-bg: ${cfg.color}1a;">
+                ${cfg.icon}
+              </div>
+              <div class="hero-info">
+                <h2 class="hero-headline">${esc(cfg.headline)}</h2>
+                ${cfg.subtitle ? `<p class="hero-subtitle">${esc(cfg.subtitle)}</p>` : ''}
+              </div>
             </div>
-            <div class="hero-info">
-              <h2 class="hero-headline">${esc(cfg.headline)}</h2>
-              ${cfg.subtitle ? `<p class="hero-subtitle">${esc(cfg.subtitle)}</p>` : ''}
-            </div>
+            ${accId ? `<button class="btn-secondary refresh-btn" data-account-id="${esc(accId)}" style="padding: 6px 12px; font-size: 12px; height: 28px; line-height: 1; flex-shrink: 0; margin-left: auto;">Refresh</button>` : ''}
           </div>
           ${progressHTML}
         </div>
@@ -618,11 +669,15 @@ enum WebDashboardAssets {
     function issuesCard(p) {
       if (!p.issues || !p.issues.length) return '';
       let rows = '';
-      for (const is of p.issues) rows += `<div class="issue-row"><span aria-hidden="true">⚠️</span><div class="issue-body"><div>${esc(is.message || is.type)}</div>${issueButtons(is)}</div></div>`;
+      for (const is of p.issues) rows += `<div class="issue-row"><span class="issue-icon" aria-hidden="true">!</span><div class="issue-body"><div>${esc(is.message || is.type)}</div>${issueButtons(is)}</div></div>`;
       return `<div class="card"><div class="label">Needs attention</div>${rows}</div>`;
     }
 
     function globalCard(p) {
+      if (p.includesGlobalPriorityGames === false) {
+        return `<div class="card"><div class="label">Global priorities</div>
+          <div class="muted" style="font-size:13px">Off for this miner. Only your own list will be used.</div></div>`;
+      }
       const personalSet = new Set((p.personalPriorityGames || []).map(g => g.toLowerCase()));
       const global = (p.priorityGames || []).filter(g => !personalSet.has(g.toLowerCase()));
       if (!global.length) return '';
@@ -634,11 +689,15 @@ enum WebDashboardAssets {
     }
 
     function personalCard() {
+      const globalChecked = includeGlobalPriorities ? 'checked' : '';
+      const helper = includeGlobalPriorities
+        ? 'Your list runs first, then the operator list fills in behind it.'
+        : 'Only this miner\'s list will be used.';
       let items = '';
       personal.forEach((g, i) => {
         items += `
           <span class="priority-chip" data-i="${i}">
-            <span class="star">★</span>
+            <span class="star" aria-hidden="true"></span>
             <span>${esc(g)}</span>
             <button class="remove-btn del" aria-label="Remove ${esc(g)}">×</button>
           </span>
@@ -646,7 +705,13 @@ enum WebDashboardAssets {
       });
       return `<div class="card">
         <div class="label">Your priorities</div>
-        <p class="muted" style="font-size:12px; margin: -4px 0 10px 0;">Games prioritised just for this miner, on top of your global list.</p>
+        <label class="toggle-row">
+          <span class="toggle-copy">
+            <span class="toggle-title">Use global priorities</span>
+            <span class="muted" style="display:block;font-size:12px;margin-top:2px">${helper}</span>
+          </span>
+          <input id="globaltoggle" type="checkbox" ${globalChecked}>
+        </label>
         <div class="priorities-flow" id="priorities-flow">
           ${items || '<span class="muted" style="font-size:13px">No personal priorities yet — add a game below.</span>'}
         </div>
@@ -693,6 +758,20 @@ enum WebDashboardAssets {
       return `<div class="card"><div class="label">Recently completed</div>${rows}</div>`;
     }
 
+    function operatorBackCard(p) {
+      if (!(SESSION && SESSION.provider === 'local') || OPERATOR_MINERS.length <= 1) return '';
+      const acc = p.account || {};
+      return `<div class="card detail-nav">
+        <div class="back-row">
+          <button class="btn-secondary" id="backoverview" type="button">All miners</button>
+          <div class="hero-info">
+            <div class="label" style="margin:0 0 3px">Viewing miner</div>
+            <div class="name">${esc(acc.username || 'Account')}</div>
+          </div>
+        </div>
+      </div>`;
+    }
+
     function render(p) {
       PROJ = p;
       if (needsOnboarding(p)) {
@@ -700,9 +779,11 @@ enum WebDashboardAssets {
         return;
       }
       personal = (p.personalPriorityGames || []).slice();
-      $('app').innerHTML = heroStateCard(p) + statsRow(p) + activationCard(p) + issuesCard(p) + upNextCard(p) + globalCard(p) + personalCard() + dropsCard(p);
+      includeGlobalPriorities = p.includesGlobalPriorityGames !== false;
+      $('app').innerHTML = operatorBackCard(p) + heroStateCard(p) + statsRow(p) + activationCard(p) + issuesCard(p) + upNextCard(p) + globalCard(p) + personalCard() + dropsCard(p);
       hydrateArt();
       wireActivation();
+      wireOperatorBack();
       wireIssues();
       wireCampaigns();
       wirePersonal();
@@ -724,6 +805,11 @@ enum WebDashboardAssets {
 
     function wirePersonal() {
       const flow = $('priorities-flow');
+      const globalToggle = $('globaltoggle');
+      if (globalToggle) globalToggle.addEventListener('change', () => {
+        includeGlobalPriorities = globalToggle.checked;
+        commit();
+      });
       if (flow) flow.addEventListener('click', (e) => {
         const item = e.target.closest('.priority-chip'); if (!item) return;
         const i = Number(item.dataset.i);
@@ -821,7 +907,7 @@ enum WebDashboardAssets {
       const r = await api('/me/miners/' + encodeURIComponent(accountId) + '/priorities', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ games: personal })
+        body: JSON.stringify({ games: personal, include_global_priorities: includeGlobalPriorities })
       });
       if (!r) return;
       if (r.ok) {
@@ -849,7 +935,20 @@ enum WebDashboardAssets {
 
     // ---------- operator overview (local sign-in) ----------
 
-    function renderOverview(miners) {
+    function minerId(p) {
+      return p && p.account && p.account.twitchAccountId ? String(p.account.twitchAccountId) : '';
+    }
+
+    function renderOverview(miners, data = {}) {
+      OPERATOR_MINERS.splice(0, OPERATOR_MINERS.length, ...miners);
+      const totalMiners = data.totalMiners || miners.length;
+      const activeMiners = data.activeMiners || miners.filter(m => m.state === 'active').length;
+      const claimsToday = data.claimsToday || 0;
+
+      const pcIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="18" height="12" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="15" x2="12" y2="21"></line></svg>`;
+      const playIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`;
+      const giftIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"></polyline><rect x="2" y="7" width="20" height="5"></rect><line x1="12" y1="22" x2="12" y2="7"></line><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"></path><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"></path></svg>`;
+
       let html = `<div class="hero-card">
         <div class="hero-header">
           <div class="status-icon-container" style="background-color: var(--blue-a)1e; --icon-bg: var(--blue-a)1a;">
@@ -860,10 +959,37 @@ enum WebDashboardAssets {
           </div>
           <div class="hero-info">
             <h2 class="hero-headline">Operator Overview</h2>
-            <p class="hero-subtitle">${miners.length} active miner${miners.length === 1 ? '' : 's'}</p>
+            <p class="hero-subtitle">${totalMiners} configured miner${totalMiners === 1 ? '' : 's'}</p>
           </div>
         </div>
       </div>`;
+
+      // Render the stats row
+      html += `
+        <div class="stats-row" style="margin-bottom: 24px;">
+          <div class="stat-card">
+            <div class="stat-icon-wrapper" style="background-color: rgba(86, 188, 255, 0.12); color: var(--blue-a); --tint-rgb: 86, 188, 255;">
+              ${pcIcon}
+            </div>
+            <div class="stat-value">${totalMiners}</div>
+            <div class="stat-label">Total Miners</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon-wrapper" style="background-color: rgba(52, 199, 89, 0.12); color: #34C759; --tint-rgb: 52, 199, 89;">
+              ${playIcon}
+            </div>
+            <div class="stat-value">${activeMiners}</div>
+            <div class="stat-label">Active Miners</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon-wrapper" style="background-color: rgba(255, 149, 0, 0.12); color: #FF9500; --tint-rgb: 255, 149, 0;">
+              ${giftIcon}
+            </div>
+            <div class="stat-value">${claimsToday}</div>
+            <div class="stat-label">Claims Today</div>
+          </div>
+        </div>
+      `;
 
       if (!miners.length) {
         html += '<div class="card muted">No miners configured yet.</div>';
@@ -872,6 +998,12 @@ enum WebDashboardAssets {
       for (const p of miners) {
         const acc = p.account || {};
         const cfg = getStatusConfig(p);
+        const id = minerId(p);
+        
+        let watchingHTML = '';
+        if (p.activeCampaign && p.activeCampaign.currentChannelName) {
+          watchingHTML = ` · watching ${esc(p.activeCampaign.currentChannelName)}`;
+        }
         
         let progressHTML = '';
         if (p.activeCampaign) {
@@ -899,7 +1031,7 @@ enum WebDashboardAssets {
           prio.forEach((g) => {
             chips += `
               <span class="priority-chip" style="background: rgba(86, 188, 255, 0.10); border-color: rgba(86, 188, 255, 0.25);">
-                <span class="star" style="color: var(--blue-a);">★</span>
+                <span class="star" style="background: var(--blue-a); box-shadow: 0 0 0 3px rgba(86, 188, 255, 0.12);" aria-hidden="true"></span>
                 <span>${esc(g)}</span>
               </span>
             `;
@@ -913,15 +1045,18 @@ enum WebDashboardAssets {
         }
 
         html += `
-          <div class="card" style="padding: 20px;">
-            <div class="hero-header" style="gap: 14px;">
-              <div class="status-icon-container" style="width: 38px; height: 38px; background-color: ${cfg.color}1e; --icon-bg: ${cfg.color}1a;">
-                ${cfg.icon.replace('class="status-svg"', 'class="status-svg" style="width: 18px; height: 18px;"')}
+          <div class="card miner-card" style="padding: 20px;" data-miner-id="${esc(id)}" role="button" tabindex="0" aria-label="Open ${esc(acc.username || 'miner')}">
+            <div class="hero-header" style="gap: 14px; align-items: center; justify-content: space-between; width: 100%;">
+              <div style="display: flex; align-items: center; gap: 14px;">
+                <div class="status-icon-container" style="width: 38px; height: 38px; background-color: ${cfg.color}1e; --icon-bg: ${cfg.color}1a;">
+                  ${cfg.icon.replace('class="status-svg"', 'class="status-svg" style="width: 18px; height: 18px;"')}
+                </div>
+                <div class="hero-info">
+                  <h3 class="hero-headline" style="font-size: 16px; margin-bottom: 2px;">${esc(acc.username || 'Account')}</h3>
+                  <p class="hero-subtitle" style="font-size: 12px; color: ${cfg.color}">${esc(cfg.headline)}${watchingHTML}</p>
+                </div>
               </div>
-              <div class="hero-info">
-                <h3 class="hero-headline" style="font-size: 16px; margin-bottom: 2px;">${esc(acc.username || 'Account')}</h3>
-                <p class="hero-subtitle" style="font-size: 12px; color: ${cfg.color}">${esc(cfg.headline)}</p>
-              </div>
+              <button class="btn-secondary refresh-btn" data-account-id="${esc(acc.twitchAccountId)}" style="padding: 6px 12px; font-size: 12px; height: 28px; line-height: 1; flex-shrink: 0; margin-left: auto;">Refresh</button>
             </div>
             ${progressHTML}
             ${prioHTML}
@@ -931,6 +1066,38 @@ enum WebDashboardAssets {
 
       $('app').innerHTML = html;
       hydrateArt();
+      wireOperatorOverview();
+    }
+
+    function showOperatorMiner(id) {
+      const p = OPERATOR_MINERS.find(m => minerId(m) === String(id));
+      if (!p) return;
+      OPERATOR_STATE.selectedMinerId = String(id);
+      render(p);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function wireOperatorOverview() {
+      document.querySelectorAll('.miner-card').forEach(card => {
+        const open = () => showOperatorMiner(card.dataset.minerId);
+        card.addEventListener('click', open);
+        card.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            open();
+          }
+        });
+      });
+    }
+
+    function wireOperatorBack() {
+      const back = $('backoverview');
+      if (!back) return;
+      back.addEventListener('click', () => {
+        OPERATOR_STATE.selectedMinerId = null;
+        renderOverview(OPERATOR_MINERS);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
     }
 
     // ---------- bootstrap ----------
@@ -950,32 +1117,64 @@ enum WebDashboardAssets {
     async function load(soft) {
       // Never clobber the page while the user is typing or mid-save.
       if (soft && editingNow()) return;
-      const sr = await api('/me/session');
-      if (!sr) return;
-      const session = await sr.json();
-      SESSION = session;
-      CSRF = session.csrfToken;
-      if (!GAMES.length) loadGames();
-      await loadCampaigns();
-      const pr = await api('/me/projection');
-      if (!pr) return;
-      if (pr.status === 404) { $('app').innerHTML = '<div class="card muted">No miner found for your account yet.</div>'; return; }
-      const text = await pr.text();
-      // Background refresh with identical data: leave the DOM alone entirely.
-      if (soft && text === lastPayload) return;
-      lastPayload = text;
-      const data = JSON.parse(text);
-      if (session.provider === 'local') {
-        const miners = data.miners || [];
-        if (miners.length === 1) {
-          render(miners[0]);
+      try {
+        const sr = await api('/me/session');
+        if (!sr) return;
+        if (!sr.ok) throw new Error('Session request failed with status ' + sr.status);
+        const session = await sr.json();
+        SESSION = session;
+        CSRF = session.csrfToken;
+        if (!GAMES.length) loadGames();
+        const campaignsReady = loadCampaigns();
+        const pr = await api('/me/projection');
+        if (!pr) return;
+        if (pr.status === 404) { $('app').innerHTML = '<div class="card muted">No miner found for your account yet.</div>'; return; }
+        if (!pr.ok) throw new Error('Projection request failed with status ' + pr.status);
+        const text = await pr.text();
+        // Background refresh with identical data: leave the DOM alone entirely.
+        if (soft && text === lastPayload) return;
+        lastPayload = text;
+        const data = JSON.parse(text);
+        if (data.miners) {
+          const miners = data.miners || [];
+          if (miners.length === 1) {
+            OPERATOR_STATE.selectedMinerId = null;
+            render(miners[0]);
+          } else if (OPERATOR_STATE.selectedMinerId) {
+            OPERATOR_MINERS.splice(0, OPERATOR_MINERS.length, ...miners);
+            const selected = miners.find(m => minerId(m) === OPERATOR_STATE.selectedMinerId);
+            if (selected) render(selected);
+            else {
+              OPERATOR_STATE.selectedMinerId = null;
+              renderOverview(miners, data);
+            }
+          } else {
+            renderOverview(miners, data);
+          }
         } else {
-          renderOverview(miners);
+          render(data);
         }
-      } else {
-        render(data);
+        document.body.classList.add('loaded');
+        campaignsReady.then(() => {
+          if (!PROJ || editingNow()) return;
+          render(PROJ);
+        }).catch(() => {});
+      } catch (err) {
+        console.error('Failed to load dashboard:', err);
+        if (!soft || !document.body.classList.contains('loaded')) {
+          $('app').innerHTML = `
+            <div class="card" style="padding: 30px; text-align: center; max-width: 400px; margin: 40px auto;">
+              <div class="issue-icon" style="width: 42px; height: 42px; margin: 0 auto 16px; font-size: 22px;">!</div>
+              <h2 style="margin: 0 0 10px 0; font-size: 20px;">Could not load dashboard</h2>
+              <p class="muted" style="font-size: 14px; margin-bottom: 24px; line-height: 1.5;">${esc(err.message || err)}</p>
+              <button class="btn-primary" id="retryload" style="height: 40px; padding: 0 24px;">Retry</button>
+            </div>
+          `;
+          const retry = $('retryload');
+          if (retry) retry.addEventListener('click', () => window.location.reload());
+          document.body.classList.add('loaded');
+        }
       }
-      document.body.classList.add('loaded');
     }
 
     let GAMES = [];
@@ -999,6 +1198,38 @@ enum WebDashboardAssets {
       if (!dl) return;
       dl.innerHTML = GAMES.map(g => `<option value="${esc(g)}"></option>`).join('');
     }
+
+    document.addEventListener('click', async (e) => {
+      const btn = e.target.closest('.refresh-btn');
+      if (!btn) return;
+      e.stopPropagation();
+      e.preventDefault();
+      
+      const accountId = btn.dataset.accountId;
+      if (!accountId) return;
+      
+      const originalText = btn.textContent;
+      btn.textContent = 'Refreshed';
+      btn.disabled = true;
+      
+      try {
+        const r = await api('/me/miners/' + encodeURIComponent(accountId) + '/control/refresh', {
+          method: 'POST'
+        });
+        if (r && r.ok) {
+          await load(true);
+        } else {
+          let detail = 'Refresh failed';
+          try { detail = (await r.json()).message || detail; } catch {}
+          alert(detail);
+        }
+      } catch (err) {
+        alert('Failed to trigger refresh: ' + err.message);
+      } finally {
+        btn.textContent = originalText;
+        btn.disabled = false;
+      }
+    });
 
     const hdr = $('hdrlogo');
     if (hdr) hideOnError(hdr);
@@ -1144,6 +1375,20 @@ enum WebDashboardAssets {
     <svg class="mark" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M6 0 1.714 4.286V19.714H6.857V24l4.286-4.286h3.428L22.286 12V0Zm14.571 11.143-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714ZM11.571 4.714h1.715v5.143h-1.715Zm4.715 0H18v5.143h-1.714Z"/></svg>
     """
 
+    private static let loginTaglines = [
+        "Twitch Drops... now hands-free",
+        "Drops handled. Tabs optional.",
+        "Quietly keeping an eye on Drops.",
+        "Less babysitting, more claiming.",
+        "Your Drops desk, minus the desk.",
+        "Campaigns tracked without the tab juggling.",
+        "Drop watch, minus the watch duty.",
+        "Keeping the Drops queue moving.",
+        "Press F to pay respects to missed Drops.",
+        "A tiny control room for Twitch Drops.",
+        "Twitch Drops, handled in the background"
+    ]
+
     /// Sign-in chooser. Renders a button per enabled provider, plus a local
     /// username/password form when local sign-in is available on this request.
     /// `discordSSOURL` is SwiftBot's companion-SSO entry point (Discord
@@ -1182,6 +1427,10 @@ enum WebDashboardAssets {
         if blocks.isEmpty {
             blocks = #"<p class="hint">No sign-in methods are configured yet. Ask the operator to finish setup in SwiftMiner's Web settings.</p>"#
         }
+        let subtitle = local && discordSSOURL == nil && !twitch
+            ? "Sign in locally with your operator account"
+            : "Sign in to manage your miner"
+        let tagline = loginTaglines.randomElement() ?? "Twitch Drops, handled in the background"
         return """
         <!doctype html><html lang="en"><head><meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" type="image/png" href="/app/logo-dark.png?v=\(assetVersion)"><link rel="apple-touch-icon" href="/app/logo-dark.png?v=\(assetVersion)"><title>Sign in · SwiftMiner</title>
@@ -1278,9 +1527,9 @@ enum WebDashboardAssets {
           <main class="card">
             \(logoBlock)
             <h1>SwiftMiner</h1>
-            <p class="sub">Sign in to manage your miner</p>
+            <p class="sub">\(subtitle)</p>
             <div class="stack">\(blocks)</div>
-            <p class="foot">Twitch Drops, mined while you sleep</p>
+            <p class="foot">\(tagline)</p>
           </main>
           <script src="/app/login.js?v=\(assetVersion)"></script>
         </body></html>

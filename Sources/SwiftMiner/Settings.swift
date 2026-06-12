@@ -469,6 +469,28 @@ public final class Settings: ObservableObject {
     @AppStorage("webDashboardLocalPasswordHash", store: Settings.appStorageStore)
     public var webDashboardLocalPasswordHash: String = ""
 
+    private static let webDashboardLocalPasswordService = "com.swiftminer.app.web-dashboard.local-password"
+
+    public func webDashboardLocalPassword() -> String? {
+        Self.readWebDashboardLocalPassword(username: webDashboardLocalUsername)
+    }
+
+    public func saveWebDashboardLocalPassword(_ password: String, username: String) throws {
+        let cleanUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanUsername.isEmpty else { return }
+
+        let oldUsername = webDashboardLocalUsername.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !oldUsername.isEmpty, oldUsername != cleanUsername {
+            Self.deleteWebDashboardLocalPassword(username: oldUsername)
+        }
+
+        try Self.writeWebDashboardLocalPassword(password, username: cleanUsername)
+    }
+
+    public func deleteWebDashboardLocalPassword(username: String? = nil) {
+        Self.deleteWebDashboardLocalPassword(username: username ?? webDashboardLocalUsername)
+    }
+
     private func isBlank(_ s: String) -> Bool {
         s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
@@ -570,6 +592,12 @@ public final class Settings: ObservableObject {
     @AppStorage("accountPriorityGamesData", store: Settings.appStorageStore)
     public var accountPriorityGamesData: String = "{}"
 
+    /// JSON-encoded map of Twitch account ID -> whether global priority games
+    /// should be appended after the miner's own list. Missing means true for
+    /// backward compatibility.
+    @AppStorage("accountIncludesGlobalPriorityGamesData", store: Settings.appStorageStore)
+    public var accountIncludesGlobalPriorityGamesData: String = "{}"
+
     /// Mining strategy selection
     @AppStorage("miningStrategy", store: Settings.appStorageStore)
     public var miningStrategy: MiningStrategy = .mineAll
@@ -626,7 +654,50 @@ public final class Settings: ObservableObject {
     public func priorityGames(forAccountId accountId: String) -> [String] {
         let key = accountId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return priorityGames }
-        return accountPriorityGames[key] ?? priorityGames
+        let personal = personalPriorityGames(forAccountId: key)
+        guard includesGlobalPriorityGames(forAccountId: key) else { return personal }
+        return Self.normalizedPriorityGameNames(personal + priorityGames)
+    }
+
+    public var accountIncludesGlobalPriorityGames: [String: Bool] {
+        get {
+            guard let data = accountIncludesGlobalPriorityGamesData.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode([String: Bool].self, from: data) else {
+                return [:]
+            }
+            return decoded.reduce(into: [String: Bool]()) { result, entry in
+                let key = entry.key.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !key.isEmpty {
+                    result[key] = entry.value
+                }
+            }
+        }
+        set {
+            let normalized = newValue.reduce(into: [String: Bool]()) { result, entry in
+                let key = entry.key.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !key.isEmpty {
+                    result[key] = entry.value
+                }
+            }
+            if let data = try? JSONEncoder().encode(normalized),
+               let string = String(data: data, encoding: .utf8) {
+                accountIncludesGlobalPriorityGamesData = string
+            }
+        }
+    }
+
+    public func includesGlobalPriorityGames(forAccountId accountId: String) -> Bool {
+        let key = accountId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return true }
+        return accountIncludesGlobalPriorityGames[key] ?? true
+    }
+
+    public func setIncludesGlobalPriorityGames(_ include: Bool, forAccountId accountId: String) {
+        let key = accountId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return }
+        var map = accountIncludesGlobalPriorityGames
+        map[key] = include
+        accountIncludesGlobalPriorityGames = map
     }
 
     @discardableResult
@@ -636,12 +707,12 @@ public final class Settings: ObservableObject {
         guard !key.isEmpty, !game.isEmpty else { return priorityGames(forAccountId: accountId) }
 
         var map = accountPriorityGames
-        let existing = map[key] ?? priorityGames
+        let existing = priorityGames(forAccountId: key)
         let remaining = existing.filter { $0.localizedCaseInsensitiveCompare(game) != .orderedSame }
         let updated = Self.normalizedPriorityGameNames([game] + remaining)
         map[key] = updated
         accountPriorityGames = map
-        return updated
+        return priorityGames(forAccountId: key)
     }
 
     /// Remove a game from a miner's personal priority override, returning the
@@ -654,13 +725,13 @@ public final class Settings: ObservableObject {
         guard !key.isEmpty, !game.isEmpty else { return priorityGames(forAccountId: accountId) }
 
         var map = accountPriorityGames
-        let existing = map[key] ?? priorityGames
+        let existing = priorityGames(forAccountId: key)
         let updated = Self.normalizedPriorityGameNames(
             existing.filter { $0.localizedCaseInsensitiveCompare(game) != .orderedSame }
         )
         map[key] = updated
         accountPriorityGames = map
-        return updated
+        return priorityGames(forAccountId: key)
     }
 
     /// Replace a miner's personal priority games with `games`, returning the miner's
@@ -672,11 +743,11 @@ public final class Settings: ObservableObject {
         let key = accountId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return priorityGames(forAccountId: accountId) }
 
-        let combined = Self.normalizedPriorityGameNames(games + priorityGames)
+        let combined = Self.normalizedPriorityGameNames(games)
         var map = accountPriorityGames
         map[key] = combined
         accountPriorityGames = map
-        return combined
+        return priorityGames(forAccountId: key)
     }
 
     /// The games prioritised specifically for one miner, excluding those already in
@@ -1023,6 +1094,63 @@ public final class Settings: ObservableObject {
         guard let url, url.isFileURL, FileManager.default.fileExists(atPath: url.path) else { return }
         try? FileManager.default.removeItem(at: url)
     }
+
+    private static func readWebDashboardLocalPassword(username: String) -> String? {
+        let cleanUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanUsername.isEmpty else { return nil }
+
+        var query = webDashboardLocalPasswordQuery(username: cleanUsername)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+
+        var item: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        guard status == errSecSuccess, let data = item as? Data else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    private static func writeWebDashboardLocalPassword(_ password: String, username: String) throws {
+        let data = Data(password.utf8)
+        let query = webDashboardLocalPasswordQuery(username: username)
+        let update: [String: Any] = [kSecValueData as String: data]
+
+        let status = SecItemUpdate(query as CFDictionary, update as CFDictionary)
+        if status == errSecSuccess { return }
+        if status != errSecItemNotFound {
+            throw keychainError(status, operation: "update")
+        }
+
+        var add = query
+        add[kSecValueData as String] = data
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        let addStatus = SecItemAdd(add as CFDictionary, nil)
+        guard addStatus == errSecSuccess else {
+            throw keychainError(addStatus, operation: "save")
+        }
+    }
+
+    private static func deleteWebDashboardLocalPassword(username: String) {
+        let cleanUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanUsername.isEmpty else { return }
+        SecItemDelete(webDashboardLocalPasswordQuery(username: cleanUsername) as CFDictionary)
+    }
+
+    private static func webDashboardLocalPasswordQuery(username: String) -> [String: Any] {
+        [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: webDashboardLocalPasswordService,
+            kSecAttrAccount as String: username
+        ]
+    }
+
+    private static func keychainError(_ status: OSStatus, operation: String) -> NSError {
+        let message = SecCopyErrorMessageString(status, nil) as String? ?? "OSStatus \(status)"
+        return NSError(
+            domain: "SwiftMiner.WebDashboardLocalPassword",
+            code: Int(status),
+            userInfo: [NSLocalizedDescriptionKey: "Could not \(operation) the local dashboard password in Keychain: \(message)"]
+        )
+    }
     
     // MARK: - Reset
     
@@ -1073,6 +1201,7 @@ public final class Settings: ObservableObject {
 
     /// Reset all settings to defaults
     public func resetToDefaults() {
+        let previousLocalUsername = webDashboardLocalUsername
         autoClaimEnabled = true
         autoClaimPointsEnabled = true
         logLevel = .info
@@ -1102,6 +1231,11 @@ public final class Settings: ObservableObject {
         swiftMinerAPIEndpoint = "http://127.0.0.1:8080"
         swiftBotHmacSecret = ""
         swiftMinerAPIKey = ""
+        webDashboardLocalEnabled = true
+        webDashboardLocalUsername = "admin"
+        webDashboardLocalPasswordHash = ""
+        deleteWebDashboardLocalPassword(username: previousLocalUsername)
+        deleteWebDashboardLocalPassword(username: "admin")
         dmCampaignCompletedEnabled = false
         dmConnectionExpiredEnabled = true
         dmWelcomeBackEnabled = false
@@ -1112,6 +1246,8 @@ public final class Settings: ObservableObject {
         quietHoursStartMinute = 22 * 60
         quietHoursEndMinute = 7 * 60
         gamePreferencesData = "[]"
+        accountPriorityGamesData = "{}"
+        accountIncludesGlobalPriorityGamesData = "{}"
         selectedDropsFiltersData = "[\"active\"]"
         miningStrategy = .mineAll
         preferSteamArtwork = true

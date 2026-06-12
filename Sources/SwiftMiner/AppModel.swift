@@ -141,14 +141,14 @@ public final class AppModel {
 
         await engine.setDropClaimedHandler { [weak self] drop in
             Task { @MainActor [weak self] in
-                self?.appendLog("✅ Claimed drop: \(drop.name)", level: .info)
+                self?.appendLog("Claimed drop: \(drop.name)", level: .info)
             }
         }
 
         await engine.setErrorHandler { [weak self] error in
             Task { @MainActor [weak self] in
                 self?.lastError = error
-                self?.appendLog("❌ \(error.localizedDescription)", level: .error)
+                self?.appendLog(error.localizedDescription, level: .error)
             }
         }
 
@@ -363,7 +363,7 @@ public final class AppModel {
         if #available(macOS 13.0, *) {
             UNUserNotificationCenter.current().setBadgeCount(count) { error in
                 guard let error else { return }
-                print("⚠️ Failed to update notification badge count: \(error.localizedDescription)")
+                print("Warning: Failed to update notification badge count: \(error.localizedDescription)")
             }
         }
     }

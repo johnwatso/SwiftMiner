@@ -166,6 +166,12 @@ public final class NavigationModel {
             }
             return await self.handleDiscordMinerControl(discordUserId: discordUserId, action: action)
         }
+        await routes.setOnMinerControlByAccount { [weak self] accountId, action in
+            guard let self else {
+                return MinerControlResponse(ok: false, action: action.rawValue, state: "unavailable", twitchUsername: nil, message: "SwiftMiner is not available.")
+            }
+            return await self.handleAccountMinerControl(accountId: accountId, action: action)
+        }
         await routes.setOnIgnoreLinkWarning { [weak self] discordUserId, gameName in
             guard let self else { return false }
             return await self.handleDiscordIgnoreLinkWarning(discordUserId: discordUserId, gameName: gameName)
@@ -186,17 +192,18 @@ public final class NavigationModel {
                 gameName: gameName
             )
         }
-        await routes.setOnSetPriorities { [weak self] discordUserId, accountId, games in
+        await routes.setOnSetPriorities { [weak self] discordUserId, accountId, games, includeGlobalPriorities in
             guard let self else { return nil }
             return await self.handleDiscordSetPriorities(
                 discordUserId: discordUserId,
                 accountId: accountId,
-                games: games
+                games: games,
+                includeGlobalPriorities: includeGlobalPriorities
             )
         }
-        await routes.setOnSetPrioritiesByAccount { [weak self] accountId, games in
+        await routes.setOnSetPrioritiesByAccount { [weak self] accountId, games, includeGlobalPriorities in
             guard let self else { return nil }
-            return await self.handleSetPrioritiesByAccount(accountId: accountId, games: games)
+            return await self.handleSetPrioritiesByAccount(accountId: accountId, games: games, includeGlobalPriorities: includeGlobalPriorities)
         }
         await routes.setOnKnownGames { [weak self] in
             guard let self else { return [] }
@@ -602,11 +609,14 @@ public final class NavigationModel {
 
     /// Replace a miner's personal priority games with `games` (the Discord "edit games"
     /// modal submits the whole personal list at once). Returns the resulting effective list.
-    public func handleDiscordSetPriorities(discordUserId: String, accountId: String, games: [String]) async -> [String]? {
+    public func handleDiscordSetPriorities(discordUserId: String, accountId: String, games: [String], includeGlobalPriorities: Bool? = nil) async -> [String]? {
         guard let miner = minerManager.miners.first(where: { $0.ownerDiscordId == discordUserId && $0.accountId == accountId }) else {
             return nil
         }
         let previous = Settings.shared.personalPriorityGames(forAccountId: accountId)
+        if let includeGlobalPriorities {
+            Settings.shared.setIncludesGlobalPriorityGames(includeGlobalPriorities, forAccountId: accountId)
+        }
         let priorities = Settings.shared.setPersonalPriorityGames(accountId: accountId, games: games)
         auditPriorityChange(actor: miner.username, old: previous, new: games)
         minerManager.updatePriorityGames(priorities, forMinerId: miner.id)
@@ -618,11 +628,14 @@ public final class NavigationModel {
 
     /// As above, but identified by Twitch account id alone — used by a
     /// Twitch-authenticated web session, whose principal *is* the account.
-    public func handleSetPrioritiesByAccount(accountId: String, games: [String]) async -> [String]? {
+    public func handleSetPrioritiesByAccount(accountId: String, games: [String], includeGlobalPriorities: Bool? = nil) async -> [String]? {
         guard let miner = minerManager.miners.first(where: { $0.accountId == accountId }) else {
             return nil
         }
         let previous = Settings.shared.personalPriorityGames(forAccountId: accountId)
+        if let includeGlobalPriorities {
+            Settings.shared.setIncludesGlobalPriorityGames(includeGlobalPriorities, forAccountId: accountId)
+        }
         let priorities = Settings.shared.setPersonalPriorityGames(accountId: accountId, games: games)
         auditPriorityChange(actor: miner.username, old: previous, new: games)
         minerManager.updatePriorityGames(priorities, forMinerId: miner.id)
@@ -646,6 +659,77 @@ public final class NavigationModel {
                 state: "not_linked",
                 twitchUsername: nil,
                 message: "No linked Twitch account was found for this Discord user."
+            )
+        }
+
+        switch action {
+        case .status:
+            return MinerControlResponse(
+                ok: true,
+                action: action.rawValue,
+                state: miner.status.rawValue,
+                twitchUsername: miner.username,
+                message: miner.statusLabel
+            )
+        case .pause:
+            await minerManager.stopMiner(minerId: miner.id)
+            return MinerControlResponse(
+                ok: true,
+                action: action.rawValue,
+                state: "PAUSED",
+                twitchUsername: miner.username,
+                message: "Miner paused for \(miner.displayName)."
+            )
+        case .resume:
+            do {
+                let settings = Settings.shared
+                try await minerManager.startMiner(
+                    minerId: miner.id,
+                    priorityGames: priorityGames(for: miner),
+                    excludedGames: settings.excludedGames,
+                    strategy: settings.miningStrategy,
+                    enableBadgesEmotes: settings.enableBadgesEmotes,
+                    showClaimNotifications: settings.showClaimNotifications && settings.allowsOperatorNotifications(),
+                    avoidDuplicateStreams: settings.avoidDuplicateStreams,
+                    antiStallRecoveryEnabled: settings.antiStallRecoveryEnabled,
+                    prioritiseFollowedStreamers: settings.prioritiseFollowedStreamers
+                )
+                return MinerControlResponse(
+                    ok: true,
+                    action: action.rawValue,
+                    state: "RESUMING",
+                    twitchUsername: miner.username,
+                    message: "Miner resume requested for \(miner.displayName)."
+                )
+            } catch {
+                return MinerControlResponse(
+                    ok: false,
+                    action: action.rawValue,
+                    state: "ERROR",
+                    twitchUsername: miner.username,
+                    message: error.localizedDescription
+                )
+            }
+        case .refresh:
+            await minerManager.forceRefreshMiner(minerId: miner.id)
+            return MinerControlResponse(
+                ok: true,
+                action: action.rawValue,
+                state: miner.status.rawValue,
+                twitchUsername: miner.username,
+                message: "Miner refresh requested for \(miner.displayName)."
+            )
+        }
+    }
+
+    public func handleAccountMinerControl(accountId: String, action: MinerControlAction) async -> MinerControlResponse {
+        guard let miner = minerManager.miners.first(where: { $0.accountId == accountId }) else {
+            return MinerControlResponse(
+                ok: false,
+                action: action.rawValue,
+                state: "not_found",
+                twitchUsername: nil,
+                message: "No miner was found for this Twitch account."
             )
         }
 
@@ -770,6 +854,7 @@ public final class NavigationModel {
     public private(set) var discordDisplayNamesById: [String: String] = [:]
     public private(set) var discordUsersById: [String: SwiftBotDiscordUser] = [:]
     private let sqliteManager: SQLiteManager
+    private let activityLogStore: ActivityLogStore
     private var httpAPIServer: HTTPAPIServer?
     private var onboardingSetupTask: Task<Void, Never>?
     @ObservationIgnored private var dropsPreloadTask: Task<Void, Never>?
@@ -792,6 +877,7 @@ public final class NavigationModel {
         let dbURL = folderURL.appendingPathComponent("miner.db")
         let manager = SQLiteManager(databaseURL: dbURL)
         self.sqliteManager = manager
+        self.activityLogStore = ActivityLogStore(manager: manager)
         self.adminLinkingService = SQLiteAdminLinkingService(manager: manager)
         self.eventEmitter = EventEmitterService(manager: manager)
         let dmLogStore = DMLogStore(manager: manager)
@@ -824,6 +910,7 @@ public final class NavigationModel {
         // Phase 1: Open DB before any service calls
         do {
             try await sqliteManager.open()
+            await loadPersistentAuditEvents()
         } catch {
             print("[NavigationModel] Failed to open database: \(error)")
         }
@@ -1117,7 +1204,7 @@ public final class NavigationModel {
     }
 
     private func processLogMessage(minerId: String, message: String) {
-        let level: EventLevel = message.contains("⚠️") ? .warning : (message.contains("❌") || message.contains("Error")) ? .error : .info
+        let level = eventLevel(forLogMessage: message)
         
         // Transform common logs into readable events
         var displayMessage = message
@@ -1130,11 +1217,57 @@ public final class NavigationModel {
         logEvent(message: displayMessage, level: level, minerId: minerId, rawMessage: message)
     }
 
+    private func eventLevel(forLogMessage message: String) -> EventLevel {
+        let lowercased = message.lowercased()
+        if lowercased.contains("\u{26A0}\u{FE0F}")
+            || lowercased.hasPrefix("warning")
+            || lowercased.contains(" warning")
+            || lowercased.contains("could not")
+            || lowercased.contains("progress stalled")
+            || lowercased.contains("subscription required")
+            || lowercased.contains("may need linking") {
+            return .warning
+        }
+
+        if lowercased.contains("\u{274C}")
+            || lowercased.hasPrefix("error")
+            || lowercased.contains(" error:")
+            || lowercased.contains("failed to")
+            || lowercased.contains("failure") {
+            return .error
+        }
+
+        return .info
+    }
+
     public func logEvent(message: String, level: EventLevel = .info, minerId: String? = nil, rawMessage: String? = nil) {
         let entry = EventEntry(message: message, level: level, minerId: minerId, rawMessage: rawMessage)
         events.insert(entry, at: 0)
         if events.count > maxEvents {
             events.removeLast()
+        }
+        persistIfAuditEntry(entry)
+    }
+
+    private func loadPersistentAuditEvents() async {
+        let persisted = await activityLogStore.loadPersistentAuditEntries(limit: maxEvents)
+        guard !persisted.isEmpty else { return }
+
+        var entriesById = Dictionary(uniqueKeysWithValues: events.map { ($0.id, $0) })
+        for entry in persisted {
+            entriesById[entry.id] = entry
+        }
+
+        events = entriesById.values
+            .sorted { $0.timestamp > $1.timestamp }
+            .prefix(maxEvents)
+            .map(\.self)
+    }
+
+    private func persistIfAuditEntry(_ entry: EventEntry) {
+        guard entry.rawMessage?.contains("[web-audit]") == true else { return }
+        Task { [activityLogStore] in
+            await activityLogStore.save(entry)
         }
     }
 
@@ -1208,6 +1341,9 @@ public final class NavigationModel {
     /// Clear all events.
     public func clearEvents() {
         events.removeAll()
+        Task { [activityLogStore] in
+            await activityLogStore.clearPersistentAuditEntries()
+        }
     }
 
     /// Recreate the useful parts of app launch from an already-open Overview:
@@ -1280,13 +1416,20 @@ private final class NavigationProjectionStateProvider: ProjectionStateProvider, 
     }
 
     func activeCampaign(for discordUserId: String) async -> DiscordUserProjection.ActiveCampaign? {
-        await MainActor.run {
-            guard let miner = model?.minerForDiscordUser(discordUserId),
-                  let campaignId = miner.currentCampaignId,
+        let optionalMiner = await MainActor.run { model?.minerForDiscordUser(discordUserId) }
+        guard let miner = optionalMiner else { return nil }
+        let summary = await model?.minerManager.getMinerActivitySummary(minerId: miner.id)
+        
+        return await MainActor.run {
+            guard let campaignId = miner.currentCampaignId,
                   let campaign = miner.allCampaigns.first(where: { $0.id == campaignId }) else {
                 return nil
             }
-            return Self.activeCampaignProjection(from: campaign)
+            return Self.activeCampaignProjection(
+                from: campaign,
+                currentChannelName: summary?.currentChannelName,
+                currentChannelId: summary?.currentChannelId
+            )
         }
     }
 
@@ -1331,16 +1474,30 @@ private final class NavigationProjectionStateProvider: ProjectionStateProvider, 
         }
     }
 
+    func includesGlobalPriorityGames(for discordUserId: String) async -> Bool {
+        await MainActor.run {
+            guard let model, let miner = model.minerForDiscordUser(discordUserId) else { return true }
+            return Settings.shared.includesGlobalPriorityGames(forAccountId: miner.accountId)
+        }
+    }
+
     // MARK: - Twitch-principal variants (keyed by mined account id)
 
     func activeCampaign(forTwitchAccount accountId: String) async -> DiscordUserProjection.ActiveCampaign? {
-        await MainActor.run {
-            guard let miner = model?.minerForAccount(accountId),
-                  let campaignId = miner.currentCampaignId,
+        let optionalMiner = await MainActor.run { model?.minerForAccount(accountId) }
+        guard let miner = optionalMiner else { return nil }
+        let summary = await model?.minerManager.getMinerActivitySummary(minerId: miner.id)
+        
+        return await MainActor.run {
+            guard let campaignId = miner.currentCampaignId,
                   let campaign = miner.allCampaigns.first(where: { $0.id == campaignId }) else {
                 return nil
             }
-            return Self.activeCampaignProjection(from: campaign)
+            return Self.activeCampaignProjection(
+                from: campaign,
+                currentChannelName: summary?.currentChannelName,
+                currentChannelId: summary?.currentChannelId
+            )
         }
     }
 
@@ -1382,7 +1539,18 @@ private final class NavigationProjectionStateProvider: ProjectionStateProvider, 
         }
     }
 
-    private static func activeCampaignProjection(from campaign: Campaign) -> DiscordUserProjection.ActiveCampaign {
+    func includesGlobalPriorityGames(forTwitchAccount accountId: String) async -> Bool {
+        await MainActor.run {
+            guard let model, model.minerForAccount(accountId) != nil else { return true }
+            return Settings.shared.includesGlobalPriorityGames(forAccountId: accountId)
+        }
+    }
+
+    private static func activeCampaignProjection(
+        from campaign: Campaign,
+        currentChannelName: String? = nil,
+        currentChannelId: String? = nil
+    ) -> DiscordUserProjection.ActiveCampaign {
         let totalRequired = max(campaign.drops.map(\.requiredMinutes).reduce(0, +), 0)
         let totalCurrent = campaign.drops.reduce(0) { total, drop in
             total + (drop.isClaimed ? drop.requiredMinutes : min(drop.progress?.currentMinutes ?? 0, drop.requiredMinutes))
@@ -1398,7 +1566,9 @@ private final class NavigationProjectionStateProvider: ProjectionStateProvider, 
                 pct: pct
             ),
             endsAt: campaign.endDate,
-            boxArtURL: campaign.game.boxArtURL?.absoluteString
+            boxArtURL: campaign.game.boxArtURL?.absoluteString,
+            currentChannelName: currentChannelName,
+            currentChannelId: currentChannelId
         )
     }
 
@@ -1440,10 +1610,26 @@ public enum EventLevel: String, Codable, Sendable {
 }
 
 public struct EventEntry: Identifiable, Sendable, Equatable {
-    public let id = UUID()
-    public let timestamp = Date()
+    public let id: UUID
+    public let timestamp: Date
     public let message: String
     public let level: EventLevel
     public let minerId: String?
     public let rawMessage: String?
+
+    public init(
+        id: UUID = UUID(),
+        timestamp: Date = Date(),
+        message: String,
+        level: EventLevel,
+        minerId: String? = nil,
+        rawMessage: String? = nil
+    ) {
+        self.id = id
+        self.timestamp = timestamp
+        self.message = message
+        self.level = level
+        self.minerId = minerId
+        self.rawMessage = rawMessage
+    }
 }

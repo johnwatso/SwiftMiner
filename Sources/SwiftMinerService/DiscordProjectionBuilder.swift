@@ -18,6 +18,8 @@ public protocol ProjectionStateProvider: Sendable {
     /// Returns the games prioritised specifically for this user's miner, excluding the
     /// global priority list. Used by the Discord "edit games" modal.
     func personalPriorityGames(for discordUserId: String) async -> [String]
+    /// Whether global priorities are appended after this user's personal list.
+    func includesGlobalPriorityGames(for discordUserId: String) async -> Bool
     /// Returns the active campaign for a mined Twitch account, if any.
     func activeCampaign(forTwitchAccount accountId: String) async -> DiscordUserProjection.ActiveCampaign?
     /// Returns recently completed campaigns for a mined Twitch account, newest first.
@@ -28,15 +30,19 @@ public protocol ProjectionStateProvider: Sendable {
     func priorityGames(forTwitchAccount accountId: String) async -> [String]
     /// Returns games prioritised specifically for this mined Twitch account.
     func personalPriorityGames(forTwitchAccount accountId: String) async -> [String]
+    /// Whether global priorities are appended after this mined Twitch account's personal list.
+    func includesGlobalPriorityGames(forTwitchAccount accountId: String) async -> Bool
 }
 
 public extension ProjectionStateProvider {
     func personalPriorityGames(for discordUserId: String) async -> [String] { [] }
+    func includesGlobalPriorityGames(for discordUserId: String) async -> Bool { true }
     func activeCampaign(forTwitchAccount accountId: String) async -> DiscordUserProjection.ActiveCampaign? { nil }
     func recentCompletedCampaigns(forTwitchAccount accountId: String, limit: Int) async -> [DiscordUserProjection.RecentCampaign] { [] }
     func projectionState(forTwitchAccount accountId: String) async -> DiscordUserProjection.ProjectionState? { nil }
     func priorityGames(forTwitchAccount accountId: String) async -> [String] { [] }
     func personalPriorityGames(forTwitchAccount accountId: String) async -> [String] { [] }
+    func includesGlobalPriorityGames(forTwitchAccount accountId: String) async -> Bool { true }
 }
 
 /// Default no-op provider. All state is derived from DB queries alone.
@@ -46,6 +52,7 @@ public struct DefaultProjectionStateProvider: ProjectionStateProvider {
     public func recentCompletedCampaigns(for discordUserId: String, limit: Int) async -> [DiscordUserProjection.RecentCampaign] { [] }
     public func projectionState(for discordUserId: String) async -> DiscordUserProjection.ProjectionState? { nil }
     public func priorityGames(for discordUserId: String) async -> [String] { [] }
+    public func includesGlobalPriorityGames(for discordUserId: String) async -> Bool { true }
 }
 
 // MARK: - Builder
@@ -74,6 +81,7 @@ public actor DiscordProjectionBuilder {
         let providerState: DiscordUserProjection.ProjectionState?
         let priorityGames: [String]
         let personalPriorityGames: [String]
+        let includesGlobalPriorityGames: Bool
         if let account {
             if let accountActive = await stateProvider.activeCampaign(forTwitchAccount: account.twitchAccountId) {
                 activeCampaign = accountActive
@@ -88,12 +96,14 @@ public actor DiscordProjectionBuilder {
             }
             priorityGames = await stateProvider.priorityGames(forTwitchAccount: account.twitchAccountId)
             personalPriorityGames = await stateProvider.personalPriorityGames(forTwitchAccount: account.twitchAccountId)
+            includesGlobalPriorityGames = await stateProvider.includesGlobalPriorityGames(forTwitchAccount: account.twitchAccountId)
         } else {
             activeCampaign = await stateProvider.activeCampaign(for: discordUserId)
             recentCompletedCampaigns = await stateProvider.recentCompletedCampaigns(for: discordUserId, limit: 3)
             providerState = await stateProvider.projectionState(for: discordUserId)
             priorityGames = await stateProvider.priorityGames(for: discordUserId)
             personalPriorityGames = await stateProvider.personalPriorityGames(for: discordUserId)
+            includesGlobalPriorityGames = await stateProvider.includesGlobalPriorityGames(for: discordUserId)
         }
         let dmState = await fetchDMState(discordUserId: discordUserId)
 
@@ -119,7 +129,8 @@ public actor DiscordProjectionBuilder {
             issues: issues,
             dmState: dmState,
             priorityGames: priorityGames,
-            personalPriorityGames: personalPriorityGames
+            personalPriorityGames: personalPriorityGames,
+            includesGlobalPriorityGames: includesGlobalPriorityGames
         )
     }
 
@@ -141,6 +152,7 @@ public actor DiscordProjectionBuilder {
         let recentCompletedCampaigns = await stateProvider.recentCompletedCampaigns(forTwitchAccount: twitchId, limit: 3)
         let priorityGames = await stateProvider.priorityGames(forTwitchAccount: twitchId)
         let personalPriorityGames = await stateProvider.personalPriorityGames(forTwitchAccount: twitchId)
+        let includesGlobalPriorityGames = await stateProvider.includesGlobalPriorityGames(forTwitchAccount: twitchId)
 
         let state: DiscordUserProjection.ProjectionState
         if let providerState = await stateProvider.projectionState(forTwitchAccount: twitchId) {
@@ -162,7 +174,8 @@ public actor DiscordProjectionBuilder {
             issues: issues,
             dmState: dmState,
             priorityGames: priorityGames,
-            personalPriorityGames: personalPriorityGames
+            personalPriorityGames: personalPriorityGames,
+            includesGlobalPriorityGames: includesGlobalPriorityGames
         )
     }
 

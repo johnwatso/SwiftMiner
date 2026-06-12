@@ -52,7 +52,7 @@ final class NotificationServiceTests: XCTestCase {
         await service.notifyDropClaimed(campaignName: "Overwatch 2", dropName: "Skin")
         
         XCTAssertTrue(mockCenter.addCalled)
-        XCTAssertEqual(mockCenter.lastRequest?.content.title, "Drop Claimed! 🎉")
+        XCTAssertEqual(mockCenter.lastRequest?.content.title, "Drop Claimed!")
         XCTAssertEqual(mockCenter.lastRequest?.content.body, "Skin from Overwatch 2")
     }
     
@@ -64,7 +64,7 @@ final class NotificationServiceTests: XCTestCase {
         await service.notifyDropClaimable(campaignName: "Valorant", dropName: "Spray")
         
         XCTAssertTrue(mockCenter.addCalled)
-        XCTAssertEqual(mockCenter.lastRequest?.content.title, "Drop Ready to Claim! ✨")
+        XCTAssertEqual(mockCenter.lastRequest?.content.title, "Drop Ready to Claim!")
         XCTAssertEqual(mockCenter.lastRequest?.content.body, "Spray from Valorant is ready!")
     }
 
