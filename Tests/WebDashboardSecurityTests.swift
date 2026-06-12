@@ -148,6 +148,13 @@ final class WebDashboardSecurityTests: XCTestCase {
         XCTAssertFalse(HTTPAPIServer.isPublicPath("/api/users", prefixes: prefixes, exactPaths: exact))
     }
 
+    func testDashboardScriptIsScopedAndAllowedByCSP() {
+        XCTAssertTrue(WebDashboardAssets.appJS.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("(() => {"))
+        let response = HTTPResponse.html(WebDashboardAssets.appHTML)
+        let csp = response.headers["Content-Security-Policy"] ?? ""
+        XCTAssertTrue(csp.contains("script-src 'self'"))
+    }
+
     func testLocalLoginPageShowsOnlyUsernamePasswordForm() async throws {
         let mgr = try await openTempManager()
         defer { Task { await mgr.close() } }
