@@ -527,7 +527,7 @@ public actor AggregatedCampaignDataService {
             accountCampaigns: accountCampaigns
         )
         let allClaimed = !accountStates.isEmpty
-            ? accountStates.allSatisfy { $0.miningStatus == .claimed }
+            ? accountStates.allSatisfy { $0.miningStatus == .claimed || $0.miningStatus == .claimedUnlinked }
             : (!accountCampaigns.isEmpty && accountCampaigns.allSatisfy { $0.1.isClaimed })
         let miningStatus = mergedMiningStatus(
             for: data,
@@ -589,7 +589,8 @@ public actor AggregatedCampaignDataService {
             if needsAuth {
                 state = .needsAuth
             } else if campaign?.isClaimed == true || campaign?.miningStatus == .claimed {
-                state = .claimed
+                // Claimed, but the reward can't reach the game until linked.
+                state = campaign?.isAccountConnected == false ? .claimedUnlinked : .claimed
             } else if isActiveOnThis {
                 state = .mining
             } else if campaign?.isAccountConnected == false {
@@ -619,7 +620,7 @@ public actor AggregatedCampaignDataService {
             )
         }
         .sorted { lhs, rhs in
-            let order: [AccountMiningStatus: Int] = [.needsAuth: 0, .blocked: 1, .mining: 2, .ready: 3, .claimed: 4, .idle: 5]
+            let order: [AccountMiningStatus: Int] = [.needsAuth: 0, .blocked: 1, .mining: 2, .ready: 3, .claimedUnlinked: 4, .claimed: 5, .idle: 6]
             return (order[lhs.miningStatus] ?? 4) < (order[rhs.miningStatus] ?? 4)
         }
     }

@@ -755,6 +755,12 @@ public final class Settings: ObservableObject {
     public func personalPriorityGames(forAccountId accountId: String) -> [String] {
         let key = accountId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty, let override = accountPriorityGames[key] else { return [] }
+        // Hide global duplicates only while the global list still applies to
+        // this miner — there they'd be redundant. When the miner opts out of
+        // global priorities, a personally-added game must stand on its own even
+        // if it also appears globally; filtering it here made adding such a
+        // game silently do nothing.
+        guard includesGlobalPriorityGames(forAccountId: key) else { return override }
         let globalKeys = Set(priorityGames.map { $0.lowercased() })
         return override.filter { !globalKeys.contains($0.lowercased()) }
     }

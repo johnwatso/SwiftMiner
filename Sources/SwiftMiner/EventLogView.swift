@@ -1098,7 +1098,7 @@ private func humanReadableFallback(_ text: String) -> String {
     return readable
 }
 
-// MARK: - Legacy row (used by MinerDetailView)
+// MARK: - Legacy row
 
 struct MinerEventRow: View {
     let event: EventEntry

@@ -142,6 +142,8 @@ struct MinersOverviewView: View {
 
                     selectedMinerWatchingStreamerSection(for: miner)
 
+                    minerPrioritiesSection(for: miner)
+
                     minerCampaignsSection(for: miner, campaigns: activeCampaigns)
 
                     minerDiagnosticsSection(for: miner)
@@ -353,6 +355,117 @@ struct MinersOverviewView: View {
         .overlay {
             RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
                 .strokeBorder(.separator.opacity(0.32), lineWidth: 1)
+        }
+    }
+
+    // MARK: - Priorities
+
+    /// Games prioritised specifically for this miner. Derived from the miner's
+    /// reactive effective list so DM/web/global changes refresh it live. Global
+    /// duplicates are hidden only while the global list applies — when this
+    /// miner opts out of global priorities, its own entries stand alone.
+    private func personalPriorityGames(for miner: MinerManager.ManagedMiner) -> [String] {
+        guard settings.includesGlobalPriorityGames(forAccountId: miner.accountId) else {
+            return miner.priorityGames
+        }
+        let globalKeys = Set(settings.priorityGames.map { $0.lowercased() })
+        return miner.priorityGames.filter { !globalKeys.contains($0.lowercased()) }
+    }
+
+    private func minerPrioritiesSection(for miner: MinerManager.ManagedMiner) -> some View {
+        let includesGlobal = settings.includesGlobalPriorityGames(forAccountId: miner.accountId)
+        let personal = personalPriorityGames(for: miner)
+        let personalKeys = Set(personal.map { $0.lowercased() })
+        let global = includesGlobal
+            ? settings.priorityGames.filter { !personalKeys.contains($0.lowercased()) }
+            : []
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Priorities")
+                    .font(.headline)
+                Spacer()
+                Toggle("Use global priorities", isOn: Binding(
+                    get: { settings.includesGlobalPriorityGames(forAccountId: miner.accountId) },
+                    set: { include in
+                        settings.setIncludesGlobalPriorityGames(include, forAccountId: miner.accountId)
+                        let updated = settings.priorityGames(forAccountId: miner.accountId)
+                        navigation.minerManager.updatePriorityGames(updated, forMinerId: miner.id)
+                        if miner.isRunning {
+                            Task { await navigation.minerManager.forceRefreshMiner(minerId: miner.id) }
+                        }
+                    }
+                ))
+                .toggleStyle(.switch)
+                .controlSize(.small)
+            }
+
+            Text(includesGlobal
+                ? "Mining order: this miner's own games first, then the global list."
+                : "Mining order: this miner's own games only — the global list is ignored.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("THIS MINER")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .kerning(0.8)
+
+                if personal.isEmpty {
+                    Text("No personal priorities yet — add games from the web dashboard or Discord.")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                } else {
+                    FlowLayout(spacing: 6) {
+                        ForEach(Array(personal.enumerated()), id: \.element) { index, game in
+                            RankedPriorityChip(
+                                rank: index + 1,
+                                gameName: game,
+                                isGlobal: false,
+                                onRemove: { removePersonalPriority(game, from: miner) }
+                            )
+                        }
+                    }
+                }
+            }
+
+            if includesGlobal {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("THEN GLOBAL")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .kerning(0.8)
+
+                    if global.isEmpty {
+                        Text(settings.priorityGames.isEmpty
+                            ? "The global list is empty."
+                            : "All global games are already covered by this miner's own list.")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    } else {
+                        FlowLayout(spacing: 6) {
+                            ForEach(Array(global.enumerated()), id: \.element) { index, game in
+                                RankedPriorityChip(
+                                    rank: personal.count + index + 1,
+                                    gameName: game,
+                                    isGlobal: true,
+                                    onRemove: nil
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .padding(20)
+        .glassCard()
+    }
+
+    private func removePersonalPriority(_ gameName: String, from miner: MinerManager.ManagedMiner) {
+        let updated = settings.deprioritiseGameForAccount(accountId: miner.accountId, gameName: gameName)
+        navigation.minerManager.updatePriorityGames(updated, forMinerId: miner.id)
+        if miner.isRunning {
+            Task { await navigation.minerManager.forceRefreshMiner(minerId: miner.id) }
         }
     }
 
@@ -1388,10 +1501,21 @@ private struct CampaignStatusRow: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-            Image(systemName: statusIcon)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(statusColor)
-                .frame(width: 18, height: 18)
+            Group {
+                if status == .completed && !campaign.isAccountConnected {
+                    // Claimed, but the game account isn't linked — the reward
+                    // won't reach the game until the user links it on Twitch.
+                    Image(systemName: "checkmark.circle.badge.questionmark.fill")
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.red, .green)
+                        .help("Claimed, but this game isn't linked on Twitch — link it so the reward reaches the game.")
+                } else {
+                    Image(systemName: statusIcon)
+                        .foregroundStyle(statusColor)
+                }
+            }
+            .font(.system(size: 12, weight: .semibold))
+            .frame(width: 18, height: 18)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(campaign.game.name)
@@ -1567,6 +1691,50 @@ private struct EmptyMinersStateView: View {
         }
         .frame(maxWidth: .infinity, minHeight: 300)
         .padding(24)
+    }
+}
+
+private struct RankedPriorityChip: View {
+    let rank: Int
+    let gameName: String
+    let isGlobal: Bool
+    let onRemove: (() -> Void)?
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Text("\(rank)")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 15, height: 15)
+                .background(
+                    Circle().fill(isGlobal ? AnyShapeStyle(Color.gray.opacity(0.55)) : AnyShapeStyle(Color.accentColor))
+                )
+
+            Text(gameName)
+                .font(.caption)
+                .lineLimit(1)
+                .foregroundStyle(isGlobal ? .secondary : .primary)
+
+            if let onRemove {
+                Button(action: onRemove) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Remove \(gameName) from this miner's personal priorities")
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background((isGlobal ? Color.gray.opacity(0.10) : Color.accentColor.opacity(0.12)), in: Capsule())
+        .overlay {
+            Capsule().stroke(
+                isGlobal ? Color.gray.opacity(0.25) : Color.accentColor.opacity(0.35),
+                lineWidth: 1
+            )
+        }
+        .contentShape(Capsule())
     }
 }
 

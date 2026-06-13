@@ -134,7 +134,7 @@ public struct CampaignViewData: Codable, Sendable, Identifiable, Equatable {
 
     private var isFullyClaimedByUser: Bool {
         if !accountStates.isEmpty {
-            return accountStates.allSatisfy { $0.miningStatus == .claimed }
+            return accountStates.allSatisfy { $0.miningStatus == .claimed || $0.miningStatus == .claimedUnlinked }
         }
         if totalDrops > 0 {
             return dropsClaimed >= totalDrops
@@ -264,6 +264,9 @@ public enum AccountMiningStatus: String, Codable, Sendable, Equatable {
     case mining = "MINING"
     /// All drops in this campaign are claimed for this account
     case claimed = "CLAIMED"
+    /// All drops claimed, but the game account isn't linked — rewards won't
+    /// reach the game until the user links it on Twitch.
+    case claimedUnlinked = "CLAIMED_UNLINKED"
     /// Account needs manual re-authentication before mining can continue
     case needsAuth = "NEEDS_AUTH"
     /// Account needs game/account linking before this campaign can be mined
@@ -294,7 +297,7 @@ public extension CampaignViewData {
     /// inventory-backed drop state only for older data without account states.
     var isCompleted: Bool {
         if !accountStates.isEmpty {
-            return accountStates.allSatisfy { $0.miningStatus == .claimed }
+            return accountStates.allSatisfy { $0.miningStatus == .claimed || $0.miningStatus == .claimedUnlinked }
         }
         if totalDrops > 0 {
             return dropsClaimed >= totalDrops
