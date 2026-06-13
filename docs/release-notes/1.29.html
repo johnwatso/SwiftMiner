@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SwiftMiner 1.29 - Release Notes</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      margin: 0;
+      padding: 32px 20px 48px;
+      font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(17, 124, 182, 0.18), transparent 32rem),
+        linear-gradient(135deg, #f7fbff 0%, #f4f7fb 46%, #f7f2ff 100%);
+      color: #0f1720;
+    }
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 28px;
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.86);
+      box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
+      border: 1px solid rgba(82, 96, 109, 0.12);
+    }
+    h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
+    .meta { margin: 0 0 10px; color: #52606d; font-size: 14px; }
+    .intro { margin: 0 0 24px; color: #384454; }
+    p { margin: 0 0 16px; }
+    section {
+      margin: 18px 0 0;
+      padding: 18px 18px 14px;
+      border: 1px solid rgba(82, 96, 109, 0.18);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.42);
+      border-left: 5px solid var(--accent, #0a67a3);
+    }
+    section.dashboard { --accent: #1c8c73; }
+    section.signin { --accent: #7b4bd9; }
+    section.updates { --accent: #b03060; }
+    section.miners { --accent: #b76710; }
+    section.safety { --accent: #5f5ac8; }
+    h2 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 4px;
+      color: var(--accent, #0a67a3);
+      font-size: 18px;
+    }
+    .badge {
+      display: inline-grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--accent, #0a67a3) 15%, transparent);
+      font-size: 16px;
+    }
+    .summary { margin: 0 0 12px; color: #52606d; font-size: 14px; }
+    ul { margin: 0; padding-left: 22px; }
+    li { margin: 0 0 8px; }
+    li:last-child { margin-bottom: 0; }
+    a { color: #0a67a3; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    @media (prefers-color-scheme: dark) {
+      body {
+        background:
+          radial-gradient(circle at top left, rgba(89, 185, 255, 0.16), transparent 32rem),
+          linear-gradient(135deg, #081019 0%, #101520 52%, #171427 100%);
+        color: #edf2f7;
+      }
+      main {
+        background: rgba(15, 23, 32, 0.88);
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+        border-color: rgba(159, 176, 194, 0.14);
+      }
+      .meta { color: #9fb0c2; }
+      .intro { color: #c8d3df; }
+      section {
+        border-color: rgba(159, 176, 194, 0.18);
+        background: rgba(255, 255, 255, 0.04);
+      }
+      .summary { color: #9fb0c2; }
+      a { color: #73c3ff; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>SwiftMiner 1.29</h1>
+    <p class="meta">Version 1.29 · Build 2026061317</p>
+    <p class="intro">A web-dashboard release for checking and managing miners from the browser, with safer sign-in, clearer update controls, and better visibility into each miner's priority and account-link state.</p>
+
+    <section class="dashboard">
+      <h2><span class="badge" aria-hidden="true">🌐</span> Web Dashboard</h2>
+      <p class="summary">SwiftMiner can now expose a browser dashboard when configured.</p>
+      <ul>
+        <li>Adds an optional web dashboard for browser-based miner visibility.</li>
+        <li>Adds a local operator view for checking the whole miner fleet from the local network.</li>
+        <li>Adds a Discord-user view that is scoped to the signed-in user's own mined Twitch account.</li>
+        <li>Adds an Up Next campaign browser with box art, start/end timing, issue buttons, and one-tap prioritising for linked miners.</li>
+        <li>Adds polished web sign-in assets, app icons, favicons, timing refinements, and dashboard loading fixes.</li>
+        <li>Adds a small sign-in easter egg: pressing F while the missed Drops respect line is shown sends salute emojis floating behind the login card.</li>
+      </ul>
+    </section>
+
+    <section class="signin">
+      <h2><span class="badge" aria-hidden="true">🔐</span> Sign-In &amp; Linking</h2>
+      <p class="summary">Browser sessions are narrower, more auditable, and easier to complete.</p>
+      <ul>
+        <li>Adds SwiftBot-backed Discord sign-in with signed assertions, replay protection, and normal dashboard sessions after handoff.</li>
+        <li>Adds local username/password sign-in that is only offered from local requests, keeping operator access off the public dashboard domain.</li>
+        <li>Adds Twitch sign-in scoped to the user's own mined account.</li>
+        <li>Restores self-service Twitch linking for Discord web sessions with a device-code card, activation polling, and automatic dashboard refresh once linking completes.</li>
+        <li>Auto-registers the SwiftMiner dashboard hostname with SwiftBot's tunnel when the integration can provide tunnel details.</li>
+        <li>Adds web sign-in, sign-out, blocked-attempt, and session audit events to the Activity Log.</li>
+      </ul>
+    </section>
+
+    <section class="updates">
+      <h2><span class="badge" aria-hidden="true">🔄</span> Updates</h2>
+      <p class="summary">Sparkle update behaviour is easier to inspect and control.</p>
+      <ul>
+        <li>Adds update events to the Activity Log so checks, available updates, installs, and failures are easier to trace.</li>
+        <li>Adds settings for automatic update checks and unattended install options when macOS allows them.</li>
+        <li>Improves update settings with clearer state, manual actions, and fallback messaging.</li>
+        <li>Updates SwiftMiner to version 1.29 build 2026061317 while leaving ShipHook-owned appcasts untouched.</li>
+      </ul>
+    </section>
+
+    <section class="miners">
+      <h2><span class="badge" aria-hidden="true">⛏️</span> Miners &amp; Campaigns</h2>
+      <p class="summary">The Miners tab and campaign cards now explain priority and linking state more directly.</p>
+      <ul>
+        <li>Adds a dedicated Priorities section to each miner showing personal games first and the global list behind them.</li>
+        <li>Adds a per-miner Use global priorities toggle, with running miners refreshed after priority changes.</li>
+        <li>Allows personal priorities to stand on their own when a miner opts out of global priorities, even if the same game is also global.</li>
+        <li>Shows claimed-but-unlinked campaigns as completed with a distinct question-badge status, so users know the drop is claimed but the game still needs linking.</li>
+        <li>Fixes completed campaign timing in the web projection so active-but-already-claimed campaigns no longer look like they completed one minute ago forever.</li>
+        <li>Removes the unused miner detail panel so the Miners tab is the single source of truth for priority, streamer, campaign, controls, and log UI.</li>
+      </ul>
+    </section>
+
+    <section class="safety">
+      <h2><span class="badge" aria-hidden="true">🛡️</span> Safety &amp; Polish</h2>
+      <p class="summary">Public routes and embedded dashboard scripts now have tighter guardrails.</p>
+      <ul>
+        <li>Tightens public route matching so only intended dashboard paths bypass the Bot-key API gate.</li>
+        <li>Adds regression coverage for local sign-in, session cookies, CSRF handling, Discord dashboard sign-in, dashboard route exposure, and web activation flows.</li>
+        <li>Adds JavaScript syntax coverage for emitted dashboard scripts to prevent broken web UI bundles from shipping.</li>
+        <li>Modernizes the Add Twitch Account login sheet with a cleaner two-step approval flow, stronger code presentation, copy feedback, and clearer waiting, success, and retry states.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>
