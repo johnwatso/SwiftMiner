@@ -807,7 +807,7 @@ struct DropsListView: View {
                 return !activeAccounts.isEmpty && !activeAccounts.contains(account.accountId)
             case .ready, .idle:
                 return activity.state == .active || activity.state == .inProgress
-            case .claimed:
+            case .claimed, .claimedUnlinked:
                 return false
             }
         }.count
@@ -902,6 +902,7 @@ private struct GameCampaignDeckCard: View {
 
         return currentCampaign.accountStates.filter { account in
             account.miningStatus == .claimed
+                || account.miningStatus == .claimedUnlinked
                 || account.claimedDropCount > 0
                 || (account.progressFraction ?? 0) >= 0.995
         }.count
@@ -973,12 +974,14 @@ private struct GameCampaignDeckCard: View {
             let title = activeCount == 1 ? "1 Miner Active" : "\(activeCount) Miners Active"
             return CardStatusSummary(title: title, icon: "dot.radiowaves.left.and.right")
         }
+        let hasUnlinkedClaim = minerAccountStates.contains { $0.miningStatus == .claimedUnlinked }
+        let claimedIcon = hasUnlinkedClaim ? "checkmark.circle.badge.questionmark.fill" : "checkmark.circle.fill"
         if claimedCount == totalCount && totalCount > 0 {
-            return CardStatusSummary(title: "Completed", icon: "checkmark.circle.fill")
+            return CardStatusSummary(title: hasUnlinkedClaim ? "Completed · not linked" : "Completed", icon: claimedIcon)
         }
         if claimedCount > 0 {
             let title = claimedCount == 1 ? "1 Miner Completed" : "\(claimedCount) Miners Completed"
-            return CardStatusSummary(title: title, icon: "checkmark.circle.fill")
+            return CardStatusSummary(title: title, icon: claimedIcon)
         }
         if group.aggregateState == .actionRequired {
             return CardStatusSummary(title: "Needs Setup", icon: "exclamationmark.triangle.fill")
@@ -1649,10 +1652,23 @@ struct CampaignMinerInspectorPopover: View {
                 VStack(spacing: 6) {
                     ForEach(miners) { account in
                         HStack(spacing: 8) {
-                            Image(systemName: statusIcon(for: account.miningStatus))
-                                .font(.system(size: 13, weight: .bold))
-                                .foregroundStyle(statusColor(for: account.miningStatus))
-                                .frame(width: 18)
+                            Group {
+                                if account.miningStatus == .claimedUnlinked {
+                                    // Green tick, red question badge: claimed,
+                                    // but the game account isn't linked yet.
+                                    Image(systemName: "checkmark.circle.badge.questionmark.fill")
+                                        .symbolRenderingMode(.palette)
+                                        .foregroundStyle(.red, .green)
+                                } else {
+                                    Image(systemName: statusIcon(for: account.miningStatus))
+                                        .foregroundStyle(statusColor(for: account.miningStatus))
+                                }
+                            }
+                            .font(.system(size: 13, weight: .bold))
+                            .frame(width: 18)
+                            .help(account.miningStatus == .claimedUnlinked
+                                ? "Claimed, but this game isn't linked on Twitch — the reward won't reach the game until it is."
+                                : statusLabel(for: account.miningStatus))
 
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(navigation.minerManager.displayName(forAccountId: account.accountId, fallback: account.username))
@@ -1690,6 +1706,7 @@ struct CampaignMinerInspectorPopover: View {
         switch status {
         case .mining: return "play.circle.fill"
         case .claimed: return "checkmark.circle.fill"
+        case .claimedUnlinked: return "checkmark.circle.badge.questionmark.fill"
         case .ready, .idle: return "pause.circle.fill"
         case .blocked: return "personalhotspot.slash"
         case .needsAuth: return "exclamationmark.triangle.fill"
@@ -1700,7 +1717,7 @@ struct CampaignMinerInspectorPopover: View {
         switch status {
         case .mining:
             return .green
-        case .claimed:
+        case .claimed, .claimedUnlinked:
             return .green
         case .ready, .idle:
             return .secondary
@@ -1717,6 +1734,8 @@ struct CampaignMinerInspectorPopover: View {
             return "Watching"
         case .claimed:
             return "Claimed"
+        case .claimedUnlinked:
+            return "Claimed · not linked"
         case .ready, .idle:
             return "Waiting"
         case .blocked:

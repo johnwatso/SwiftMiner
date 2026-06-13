@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import JavaScriptCore
 import XCTest
 @testable import SwiftMinerService
 import SwiftMinerCore
@@ -536,6 +537,23 @@ final class WebDashboardSecurityTests: XCTestCase {
     }
 
     // MARK: - Helpers
+
+    /// A single bad quote in the embedded dashboard JS once shipped a
+    /// SyntaxError that broke the whole web UI ("Loading…" forever). Parse the
+    /// emitted scripts with JavaScriptCore — `new Function` compiles without
+    /// executing, so only syntax errors throw.
+    func testEmittedWebScriptsHaveValidSyntax() throws {
+        let scripts: [(name: String, source: String)] = [
+            ("app.js", WebDashboardAssets.appJS),
+            ("login.js", WebDashboardAssets.loginJS)
+        ]
+        for script in scripts {
+            let context = try XCTUnwrap(JSContext())
+            context.setObject(script.source, forKeyedSubscript: "src" as NSString)
+            context.evaluateScript("new Function(src)")
+            XCTAssertNil(context.exception, "\(script.name) failed to parse: \(context.exception?.toString() ?? "unknown error")")
+        }
+    }
 
     private func openTempManager() async throws -> SQLiteManager {
         let url = FileManager.default.temporaryDirectory

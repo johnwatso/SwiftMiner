@@ -1577,7 +1577,11 @@ private final class NavigationProjectionStateProvider: ProjectionStateProvider, 
             campaignId: campaign.id,
             campaignName: campaign.name,
             game: campaign.game.name,
-            completedAt: completedSortDate(campaign),
+            // Only report a completion time we actually know: the campaign's
+            // end. For campaigns finished early (all drops claimed while the
+            // window is still open) min(endDate, now) would just be "now" on
+            // every refresh — the web showed a perpetual "1m ago".
+            completedAt: campaign.endDate <= Date() ? campaign.endDate : nil,
             claimedDrops: campaign.drops.filter(\.isClaimed).count,
             totalDrops: campaign.drops.count,
             boxArtURL: campaign.game.boxArtURL?.absoluteString

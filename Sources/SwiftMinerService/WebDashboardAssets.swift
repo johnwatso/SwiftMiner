@@ -693,7 +693,7 @@ enum WebDashboardAssets {
       const globalChecked = includeGlobalPriorities ? 'checked' : '';
       const helper = includeGlobalPriorities
         ? 'Your list runs first, then the operator list fills in behind it.'
-        : 'Only this miner\'s list will be used.';
+        : "Only this miner's list will be used.";
       let items = '';
       personal.forEach((g, i) => {
         items += `
@@ -1254,6 +1254,50 @@ enum WebDashboardAssets {
         width = canvas.width = window.innerWidth;
         height = canvas.height = window.innerHeight;
       });
+
+      const saluteLayer = document.querySelector('.salute-layer');
+      const saluteEnabled = document.body?.dataset.saluteEasterEgg === 'true';
+      const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+      let lastSaluteAt = 0;
+
+      function spawnSalutes() {
+        if (!saluteLayer) return;
+
+        const now = Date.now();
+        if (now - lastSaluteAt < 650) return;
+        lastSaluteAt = now;
+
+        const count = prefersReducedMotion.matches ? 12 : 36;
+        for (let i = 0; i < count; i++) {
+          const salute = document.createElement('span');
+          salute.className = 'salute';
+          salute.textContent = '🫡';
+          salute.style.left = `${10 + Math.random() * 80}%`;
+          salute.style.setProperty('--drift', `${Math.random() * 180 - 90}px`);
+          salute.style.setProperty('--rise', `${240 + Math.random() * 180}px`);
+          salute.style.setProperty('--spin', `${Math.random() * 42 - 21}deg`);
+          salute.style.setProperty('--scale', `${0.72 + Math.random() * 0.72}`);
+          salute.style.animationDuration = `${3.1 + Math.random() * 1.4}s`;
+          salute.style.animationDelay = `${Math.random() * 0.35}s`;
+          saluteLayer.appendChild(salute);
+          window.setTimeout(() => salute.remove(), 5200);
+        }
+      }
+
+      document.addEventListener('keydown', (event) => {
+        if (!saluteEnabled || event.key.toLowerCase() !== 'f') return;
+        if (event.metaKey || event.ctrlKey || event.altKey) return;
+
+        const target = event.target;
+        const isTyping = target && (
+          target.matches?.('input, textarea, select') ||
+          target.isContentEditable
+        );
+        if (isTyping) return;
+
+        event.preventDefault();
+        spawnSalutes();
+      });
       
       const cloudColors = [
         { r: 145, g: 70,  b: 255 },
@@ -1433,6 +1477,7 @@ enum WebDashboardAssets {
             ? "Sign in locally with your operator account"
             : "Sign in to manage your miner"
         let tagline = loginTaglines.randomElement() ?? "Twitch Drops, handled in the background"
+        let saluteEasterEgg = tagline == "Press F to pay respects to missed Drops."
         return """
         <!doctype html><html lang="en"><head><meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" type="image/png" href="/app/logo-dark.png?v=\(assetVersion)"><link rel="apple-touch-icon" href="/app/logo-dark.png?v=\(assetVersion)"><title>Sign in · SwiftMiner</title>
@@ -1467,6 +1512,25 @@ enum WebDashboardAssets {
             top: 0; left: 0; width: 100%; height: 100%;
             z-index: 0;
             pointer-events: none;
+          }
+          .salute-layer {
+            position: fixed; inset: 0; overflow: hidden;
+            z-index: 0; pointer-events: none;
+          }
+          .salute {
+            position: absolute; bottom: clamp(7rem, 18vh, 12rem);
+            font-size: clamp(24px, 4.8vw, 46px); line-height: 1;
+            opacity: 0;
+            filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.35));
+            transform: translate3d(0, 42px, 0) scale(0.72) rotate(calc(var(--spin, 0deg) * -1));
+            animation: salute-rise 3.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            will-change: transform, opacity;
+          }
+          @keyframes salute-rise {
+            0% { opacity: 0; transform: translate3d(0, 42px, 0) scale(0.72) rotate(calc(var(--spin, 0deg) * -1)); }
+            12% { opacity: 0.95; }
+            78% { opacity: 0.9; }
+            100% { opacity: 0; transform: translate3d(var(--drift, 0), calc(var(--rise, 320px) * -1), 0) scale(var(--scale, 1)) rotate(var(--spin, 0deg)); }
           }
           .card {
             width: min(380px, 100%); padding: 32px; border-radius: 28px; text-align: center;
@@ -1524,8 +1588,9 @@ enum WebDashboardAssets {
           .hint { margin: 0; font-size: 13px; line-height: 1.5; color: var(--muted); }
           .foot { margin-top: 22px; font-size: 11px; color: var(--muted); opacity: 0.8; }
         </style></head>
-        <body>
+        <body data-salute-easter-egg="\(saluteEasterEgg ? "true" : "false")">
           <canvas id="nebula-canvas"></canvas>
+          <div class="salute-layer" aria-hidden="true"></div>
           <main class="card">
             \(logoBlock)
             <h1>SwiftMiner</h1>
