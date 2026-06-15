@@ -111,7 +111,10 @@ public actor DropsService {
                 var d = drop
                 // SOURCE OF TRUTH: Only check inventory benefit IDs. 
                 // Ignore transient 'isClaimed' flags in progress dicts.
-                let claimedFromInventory = !drop.benefitID.isEmpty && snapshot.benefitIDs.contains(drop.benefitID)
+                let knownBenefitIds = drop.benefitIds.isEmpty
+                    ? (drop.benefitID.isEmpty ? [] : [drop.benefitID])
+                    : drop.benefitIds
+                let claimedFromInventory = knownBenefitIds.contains { snapshot.benefitIDs.contains($0) }
                 d.isClaimed = claimedFromInventory
 
                 if let progress = progressByDropId[drop.id] {

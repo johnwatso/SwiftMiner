@@ -88,8 +88,8 @@
 <body>
   <main>
     <h1>SwiftMiner 1.28</h1>
-    <p class="meta">Version 1.28 · Build 2026061317</p>
-    <p class="intro">A web-dashboard and sign-in update for browser-based miner visibility, tighter route handling, and a calmer Twitch account login flow.</p>
+    <p class="meta">Version 1.28 · Build 2026061513</p>
+    <p class="intro">A web-dashboard, sign-in, and mining reliability update for browser-based miner visibility, tighter route handling, and sturdier Twitch Drops claim handling.</p>
 
     <section class="dashboard">
       <h2><span class="badge" aria-hidden="true">🌐</span> Web Dashboard</h2>
@@ -109,7 +109,7 @@
       <ul>
         <li>Tightens public route matching so only intended dashboard paths bypass the Bot-key API gate.</li>
         <li>Removes the unused miner detail panel so the Miners tab is the single source of truth for priority, streamer, campaign, controls, and log UI.</li>
-        <li>Updates SwiftMiner to version 1.28 build 2026061317 while leaving ShipHook-owned appcasts untouched.</li>
+        <li>Updates SwiftMiner to version 1.28 build 2026061513 while leaving ShipHook-owned appcasts untouched.</li>
       </ul>
     </section>
 
@@ -119,6 +119,7 @@
       <ul>
         <li>Modernizes the Add Twitch Account login sheet with a cleaner two-step approval flow.</li>
         <li>Improves code presentation, copy feedback, and waiting, success, and retry states.</li>
+        <li>Improves mining reliability by recognizing claimed multi-reward drops from any matching Twitch benefit ID and by continuing inventory claim checks even when a claimable drop only appears in Twitch inventory.</li>
       </ul>
     </section>
   </main>

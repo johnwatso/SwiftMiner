@@ -16,6 +16,13 @@
   <img src="https://img.shields.io/badge/status-active%20development-orange" alt="Status badge">
 </p>
 
+## Highlights
+
+- Web UI for remote monitoring and management
+- Discord DM support via SwiftBot
+- Notarized by Apple for trusted macOS installs
+- Built-in update management with Sparkle
+
 **SwiftMiner** is a high-performance, native macOS application designed to automate **Twitch Drops farming** across multiple accounts simultaneously. Built with Swift 6 and SwiftUI, it provides a lightweight, background-ready solution for claiming Twitch rewards without the need for browser automation or heavy external dependencies.
 
 It is written in Swift using SwiftUI and standard macOS frameworks. Each account runs in its own isolated miner, and the app provides a single interface to monitor progress, claim state, and activity.

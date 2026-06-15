@@ -41,7 +41,7 @@ final class DropsServiceTests: XCTestCase {
         XCTAssertTrue(updatedDrop.isClaimed, "Drop should be claimed via benefitId matching")
     }
     
-    func testMergeInventoryClaimedStateUsesPrimaryBenefitIDOnly() async throws {
+    func testMergeInventoryClaimedStateUsesAnyKnownBenefitID() async throws {
         let campaignId = "c1"
         let dropId = "d1"
         let primaryBenefitId = "primary_benefit"
@@ -77,7 +77,8 @@ final class DropsServiceTests: XCTestCase {
         let enriched = DropsService.mergeInventory(snapshot, into: [campaign])
         
         let updatedDrop = enriched[0].drops[0]
-        XCTAssertFalse(updatedDrop.isClaimed, "Claimed state must use the primary benefitID only")
+        XCTAssertTrue(updatedDrop.isClaimed, "Claimed state should match any benefit ID attached to the drop")
+        XCTAssertEqual(updatedDrop.progress?.currentMinutes, 60)
     }
 
     func testMergeInventoryClaimedFallback_NoMatch() async throws {
