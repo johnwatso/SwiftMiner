@@ -1091,16 +1091,8 @@ public actor MinerEngine {
     }
     
     private func claimReadyDrops() async -> Bool {
-        // Conditional check: Only poll for claims when there are potentially claimable drops
-        // This avoids unnecessary API calls when all campaigns are either empty or fully claimed
-        let hasClaimableCampaigns = allCampaigns.contains { campaign in
-            campaign.drops.contains { drop in !drop.isClaimed }
-        }
-        
-        guard hasClaimableCampaigns || session?.currentCampaignId != nil else {
-            return false // No claimable campaigns, skip polling to reduce churn
-        }
-        
+        // Always ask inventory for claimable drops. Twitch can expose a ready claim there
+        // after the campaign disappears from dashboard data or local campaign state.
         var didClaimAnyDrop = false
         do {
             let inventoryService = await dropsService.getInventoryService()
