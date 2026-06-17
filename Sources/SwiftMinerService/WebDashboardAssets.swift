@@ -162,6 +162,45 @@ enum WebDashboardAssets {
         }
         .issue-body { flex: 1; min-width: 0; font-size: 14px; line-height: 1.35; }
         .issue-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 9px; }
+        .triage-toolbar {
+          display: flex; flex-wrap: wrap; gap: 9px; align-items: center;
+          margin: 0 0 14px; padding: 10px;
+          border: 1px solid var(--glass-stroke); border-radius: 14px;
+          background: rgba(255,255,255,0.045);
+        }
+        .triage-search {
+          flex: 1 1 180px; min-width: 0; font: 14px inherit; font-family: inherit; color: var(--text);
+          padding: 10px 12px; border-radius: 11px; background: var(--field); border: 1px solid var(--field-stroke); outline: none;
+        }
+        .triage-search:focus { border-color: var(--blue-a); box-shadow: 0 0 0 3px rgba(86,188,255,0.18); }
+        .segmented { display: flex; flex-wrap: wrap; gap: 6px; }
+        .segmented button {
+          font: 650 12px/1 inherit; font-family: inherit; color: var(--muted); cursor: pointer;
+          padding: 8px 10px; border-radius: 999px; border: 1px solid var(--glass-stroke);
+          background: transparent;
+        }
+        .segmented button.active {
+          color: var(--text); border-color: rgba(86,188,255,0.38);
+          background: rgba(86,188,255,0.13);
+        }
+        .diagnostic-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
+        .diagnostic-stat {
+          padding: 10px; border-radius: 11px; border: 1px solid var(--glass-stroke); background: var(--field);
+          min-width: 0;
+        }
+        .diagnostic-stat .v { font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .diagnostic-stat .k { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 4px; }
+        .signal-list { display: flex; flex-direction: column; gap: 7px; margin-top: 12px; }
+        .signal-row { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--muted); }
+        .signal-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--orange); flex: 0 0 auto; margin-top: 5px; }
+        .event-list { display: flex; flex-direction: column; gap: 9px; margin-top: 12px; }
+        .event-row { display: flex; gap: 9px; align-items: flex-start; padding-top: 9px; border-top: 1px solid var(--glass-stroke); }
+        .event-row:first-child { border-top: none; padding-top: 0; }
+        .event-type { font-size: 11px; font-weight: 700; color: var(--text); }
+        .event-summary { font-size: 13px; color: var(--muted); line-height: 1.35; }
+        @media (max-width: 560px) {
+          .diagnostic-grid { grid-template-columns: 1fr; }
+        }
         .activation-code {
           display: inline-flex; align-items: center; justify-content: center;
           min-width: 136px; padding: 10px 14px; border-radius: 12px;
@@ -378,7 +417,8 @@ enum WebDashboardAssets {
     let personal = [];        // editable personal priority list (working copy)
     let includeGlobalPriorities = true;
     let OPERATOR_MINERS = [];
-    let OPERATOR_STATE = { selectedMinerId: null };
+    let OPERATOR_STATE = { selectedMinerId: null, query: '', filter: 'all' };
+    var DIAGNOSTICS_OPEN = false;
 
     async function api(path, opts = {}) {
       const timeoutMs = opts.timeoutMs || 15000;
@@ -427,6 +467,65 @@ enum WebDashboardAssets {
       const d = new Date(iso);
       if (isNaN(d)) return '';
       return prefix + ' ' + d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    }
+    function shortDateTime(iso) {
+      if (!iso) return '—';
+      const d = new Date(iso);
+      if (isNaN(d)) return '—';
+      return d.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    }
+    function healthConfig(d) {
+      const h = d && d.health ? String(d.health) : '';
+      if (h === 'mining') return { label: 'Mining', color: '#34c759' };
+      if (h === 'blocked' || h === 'needsAuth' || h === 'stalled' || h === 'attention') return { label: h === 'stalled' ? 'Stalled' : 'Attention', color: '#ff9f0a' };
+      if (h === 'recovering') return { label: 'Recovering', color: '#56bcff' };
+      return { label: 'Idle', color: '#8e8e93' };
+    }
+    function diagnosticsButton(p) {
+      if (!(p && p.diagnostics)) return '';
+      const d = p.diagnostics;
+      const h = healthConfig(d);
+      const label = DIAGNOSTICS_OPEN ? 'Hide diagnostics' : 'Diagnostics';
+      return `<button class="btn-secondary diagnostics-toggle" type="button" style="padding: 6px 12px; font-size: 12px; height: 28px; line-height: 1; border-color:${h.color}55">${esc(label)}</button>`;
+    }
+    function diagnosticsCard(p) {
+      const d = p && p.diagnostics;
+      if (!d) return '';
+      const h = healthConfig(d);
+      const pct = Math.max(0, Math.min(100, Number(d.stallConfidencePercent || 0)));
+      const signals = d.stallSignals || [];
+      let signalHTML = signals.length
+        ? signals.map(s => `<div class="signal-row"><span class="signal-dot"></span><span>${esc(s)}</span></div>`).join('')
+        : '<div class="signal-row"><span class="signal-dot" style="background:var(--green)"></span><span>Recent poll, event and worker signals look normal.</span></div>';
+      let events = (d.recentEvents || []).slice(0, 5).map(ev => `
+        <div class="event-row">
+          <div style="flex:1;min-width:0">
+            <div class="event-type">${esc(ev.type || 'Event')} · ${esc(agoText(ev.timestamp) || shortDateTime(ev.timestamp))}</div>
+            <div class="event-summary">${esc(ev.summary || '')}</div>
+          </div>
+        </div>
+      `).join('');
+      if (!events) events = '<div class="muted" style="font-size:13px;margin-top:12px">No recent diagnostic events for this miner.</div>';
+      return `<div class="card">
+        <div class="row" style="align-items:center;margin-bottom:12px">
+          <div>
+            <div class="label" style="margin-bottom:4px">Diagnostics</div>
+            <div class="name" style="color:${h.color}">${esc(d.statusLabel || h.label)}</div>
+          </div>
+          <span class="pill" style="background:${h.color}26;color:${h.color};border:1px solid ${h.color}4d">${pct}% stall confidence</span>
+        </div>
+        <div class="bar" aria-hidden="true"><i style="width:${pct}%;background:linear-gradient(90deg, ${h.color}, ${h.color});box-shadow:0 0 12px ${h.color}66"></i></div>
+        <div class="diagnostic-grid" style="margin-top:12px">
+          <div class="diagnostic-stat"><div class="v">${esc(d.currentChannelName || '—')}</div><div class="k">Channel</div></div>
+          <div class="diagnostic-stat"><div class="v">${d.minutesSinceLastProgress == null ? '—' : esc(d.minutesSinceLastProgress + 'm')}</div><div class="k">Since Progress</div></div>
+          <div class="diagnostic-stat"><div class="v">${esc(shortDateTime(d.lastSuccessfulPollAt))}</div><div class="k">Last Poll</div></div>
+          <div class="diagnostic-stat"><div class="v">${esc(shortDateTime(d.lastEventAt))}</div><div class="k">Last Event</div></div>
+          <div class="diagnostic-stat"><div class="v">${esc(shortDateTime(d.lastCampaignRefreshAt))}</div><div class="k">Campaign Refresh</div></div>
+          <div class="diagnostic-stat"><div class="v">${esc(d.lastSwitchReason || '—')}</div><div class="k">Last Switch</div></div>
+        </div>
+        <div class="signal-list">${signalHTML}</div>
+        <div class="event-list">${events}</div>
+      </div>`;
     }
     function boxart(name, w = 144, h = 192) {
       return 'https://static-cdn.jtvnw.net/ttv-boxart/' + encodeURIComponent(name) + '-' + w + 'x' + h + '.jpg';
@@ -500,25 +599,24 @@ enum WebDashboardAssets {
       }
     }
 
-    function heroStateCard(p) {
-      const cfg = getStatusConfig(p);
-      const accId = p.account && p.account.twitchAccountId ? String(p.account.twitchAccountId) : '';
-      let progressHTML = '';
+    function progressStateCard(p, cfg, style = '') {
+      const styleAttr = style ? ` style="${style}"` : '';
       if (p.activeCampaign) {
         const c = p.activeCampaign;
         const pr = c.progress || {};
-        const isCompleted = pr.pct >= 100;
+        const pct = Math.max(0, Math.min(100, Number(pr.pct || 0)));
+        const isCompleted = pct >= 100;
         const ends = endsIn(c.endsAt);
         const metaStatus = isCompleted
           ? '<span style="color:var(--green);font-weight:600;">Ready to claim!</span>'
           : `<span>Mining${ends ? ' · ' + ends : ''}</span>`;
-        progressHTML = `
-          <div class="hero-progress">
+        return `
+          <div class="hero-progress"${styleAttr}>
             <div class="progress-header">
               <span class="progress-title">${esc(c.game)}</span>
-              <span class="progress-pct" style="color: ${isCompleted ? 'var(--green)' : 'var(--blue-a)'}">${Number(pr.pct || 0)}%</span>
+              <span class="progress-pct" style="color: ${isCompleted ? 'var(--green)' : 'var(--blue-a)'}">${pct}%</span>
             </div>
-            <div class="bar"><i style="width:${Math.min(100, Number(pr.pct || 0))}%${isCompleted ? ';background:linear-gradient(90deg, var(--green), #30d158);box-shadow:0 0 12px rgba(52,199,89,0.45);' : ''}"></i></div>
+            <div class="bar"><i style="width:${pct}%${isCompleted ? ';background:linear-gradient(90deg, var(--green), #30d158);box-shadow:0 0 12px rgba(52,199,89,0.45);' : ''}"></i></div>
             <div class="progress-meta">
               <span>${esc(pr.current || 0)} / ${esc(pr.required || 0)} ${esc(pr.unit || '')}</span>
               ${metaStatus}
@@ -526,6 +624,30 @@ enum WebDashboardAssets {
           </div>
         `;
       }
+
+      const title = p.state === 'idle' ? 'Idle - no campaigns' : cfg.headline;
+      const meta = p.state === 'idle'
+        ? 'No active drop campaigns are available right now.'
+        : (cfg.subtitle || 'Waiting for the next campaign update.');
+      return `
+        <div class="hero-progress"${styleAttr}>
+          <div class="progress-header">
+            <span class="progress-title">${esc(title)}</span>
+            <span class="progress-pct" style="color:${cfg.color}">0%</span>
+          </div>
+          <div class="bar"><i style="width:0%;background:linear-gradient(90deg, ${cfg.color}, ${cfg.color});box-shadow:none"></i></div>
+          <div class="progress-meta">
+            <span>${esc(meta)}</span>
+            <span>${esc(p.state || 'idle')}</span>
+          </div>
+        </div>
+      `;
+    }
+
+    function heroStateCard(p) {
+      const cfg = getStatusConfig(p);
+      const accId = p.account && p.account.twitchAccountId ? String(p.account.twitchAccountId) : '';
+      const progressHTML = progressStateCard(p, cfg);
       
       return `
         <div class="hero-card">
@@ -539,7 +661,10 @@ enum WebDashboardAssets {
                 ${cfg.subtitle ? `<p class="hero-subtitle">${esc(cfg.subtitle)}</p>` : ''}
               </div>
             </div>
-            ${accId ? `<button class="btn-secondary refresh-btn" data-account-id="${esc(accId)}" style="padding: 6px 12px; font-size: 12px; height: 28px; line-height: 1; flex-shrink: 0; margin-left: auto;">Refresh</button>` : ''}
+            <div style="display:flex;align-items:center;gap:8px;margin-left:auto;flex-shrink:0">
+              ${diagnosticsButton(p)}
+              ${accId ? `<button class="btn-secondary refresh-btn" data-account-id="${esc(accId)}" style="padding: 6px 12px; font-size: 12px; height: 28px; line-height: 1; flex-shrink: 0;">Refresh</button>` : ''}
+            </div>
           </div>
           ${progressHTML}
         </div>
@@ -781,10 +906,11 @@ enum WebDashboardAssets {
       }
       personal = (p.personalPriorityGames || []).slice();
       includeGlobalPriorities = p.includesGlobalPriorityGames !== false;
-      $('app').innerHTML = operatorBackCard(p) + heroStateCard(p) + statsRow(p) + activationCard(p) + issuesCard(p) + upNextCard(p) + globalCard(p) + personalCard() + dropsCard(p);
+      $('app').innerHTML = operatorBackCard(p) + heroStateCard(p) + statsRow(p) + (DIAGNOSTICS_OPEN ? diagnosticsCard(p) : '') + activationCard(p) + issuesCard(p) + upNextCard(p) + globalCard(p) + personalCard() + dropsCard(p);
       hydrateArt();
       wireActivation();
       wireOperatorBack();
+      wireDiagnosticsToggle();
       wireIssues();
       wireCampaigns();
       wirePersonal();
@@ -826,6 +952,15 @@ enum WebDashboardAssets {
       };
       $('addbtn').addEventListener('click', add);
       input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+    }
+
+    function wireDiagnosticsToggle() {
+      document.querySelectorAll('.diagnostics-toggle').forEach(btn => {
+        btn.addEventListener('click', () => {
+          DIAGNOSTICS_OPEN = !DIAGNOSTICS_OPEN;
+          render(PROJ);
+        });
+      });
     }
 
     function addPersonalGame(name) {
@@ -945,6 +1080,31 @@ enum WebDashboardAssets {
       const totalMiners = data.totalMiners || miners.length;
       const activeMiners = data.activeMiners || miners.filter(m => m.state === 'active').length;
       const claimsToday = data.claimsToday || 0;
+      const query = String(OPERATOR_STATE.query || '').trim().toLowerCase();
+      const filter = OPERATOR_STATE.filter || 'all';
+      const attentionCount = miners.filter(m => m.state === 'blocked' || (m.diagnostics && ['blocked','needsAuth','stalled','attention'].includes(String(m.diagnostics.health || '')))).length;
+      const idleCount = miners.filter(m => m.state !== 'active' && m.state !== 'blocked').length;
+      const visibleMiners = miners.filter(m => {
+        const d = m.diagnostics || {};
+        const health = String(d.health || '');
+        const isAttention = m.state === 'blocked' || ['blocked','needsAuth','stalled','attention'].includes(health);
+        if (filter === 'active' && m.state !== 'active') return false;
+        if (filter === 'attention' && !isAttention) return false;
+        if (filter === 'idle' && (m.state === 'active' || isAttention)) return false;
+        if (!query) return true;
+        const acc = m.account || {};
+        const haystack = [
+          acc.username,
+          acc.twitchAccountId,
+          m.state,
+          d.statusLabel,
+          d.currentChannelName,
+          ...(m.priorityGames || []),
+          ...(m.personalPriorityGames || []),
+          ...((m.issues || []).map(is => is.message || is.type || ''))
+        ].join(' ').toLowerCase();
+        return haystack.includes(query);
+      });
 
       const pcIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="18" height="12" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="15" x2="12" y2="21"></line></svg>`;
       const playIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`;
@@ -952,7 +1112,7 @@ enum WebDashboardAssets {
 
       let html = `<div class="hero-card">
         <div class="hero-header">
-          <div class="status-icon-container" style="background-color: var(--blue-a)1e; --icon-bg: var(--blue-a)1a;">
+          <div class="status-icon-container" style="background-color: rgba(86, 188, 255, 0.12); --icon-bg: rgba(86, 188, 255, 0.10);">
             <svg class="status-svg" viewBox="0 0 24 24" fill="none" stroke="var(--blue-a)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
               <line x1="9" y1="3" x2="9" y2="21"></line>
@@ -986,44 +1146,41 @@ enum WebDashboardAssets {
             <div class="stat-icon-wrapper" style="background-color: rgba(255, 149, 0, 0.12); color: #FF9500; --tint-rgb: 255, 149, 0;">
               ${giftIcon}
             </div>
-            <div class="stat-value">${claimsToday}</div>
-            <div class="stat-label">Claims Today</div>
+            <div class="stat-value">${attentionCount}</div>
+            <div class="stat-label">Need Attention</div>
+          </div>
+        </div>
+      `;
+      html += `
+        <div class="triage-toolbar">
+          <input class="triage-search" id="operatorsearch" placeholder="Search miners, channels, games…" value="${esc(OPERATOR_STATE.query || '')}" autocomplete="off">
+          <div class="segmented" role="group" aria-label="Filter miners">
+            <button type="button" data-filter="all" class="${filter === 'all' ? 'active' : ''}">All ${totalMiners}</button>
+            <button type="button" data-filter="active" class="${filter === 'active' ? 'active' : ''}">Active ${activeMiners}</button>
+            <button type="button" data-filter="attention" class="${filter === 'attention' ? 'active' : ''}">Attention ${attentionCount}</button>
+            <button type="button" data-filter="idle" class="${filter === 'idle' ? 'active' : ''}">Idle ${idleCount}</button>
           </div>
         </div>
       `;
 
       if (!miners.length) {
         html += '<div class="card muted">No miners configured yet.</div>';
+      } else if (!visibleMiners.length) {
+        html += '<div class="card muted">No miners match the current filter.</div>';
       }
 
-      for (const p of miners) {
+      for (const p of visibleMiners) {
         const acc = p.account || {};
         const cfg = getStatusConfig(p);
         const id = minerId(p);
+        const diag = p.diagnostics || {};
         
         let watchingHTML = '';
-        if (p.activeCampaign && p.activeCampaign.currentChannelName) {
-          watchingHTML = ` · watching ${esc(p.activeCampaign.currentChannelName)}`;
+        if (diag.currentChannelName || (p.activeCampaign && p.activeCampaign.currentChannelName)) {
+          watchingHTML = ` · watching ${esc(diag.currentChannelName || p.activeCampaign.currentChannelName)}`;
         }
         
-        let progressHTML = '';
-        if (p.activeCampaign) {
-          const c = p.activeCampaign;
-          const pr = c.progress || {};
-          const isCompleted = pr.pct >= 100;
-          progressHTML = `
-            <div class="hero-progress" style="margin-top: 14px;">
-              <div class="progress-header">
-                <span class="progress-title">${esc(c.game)}</span>
-                <span class="progress-pct">${Number(pr.pct || 0)}%</span>
-              </div>
-              <div class="bar"><i style="width:${Math.min(100, Number(pr.pct || 0))}%${isCompleted ? ';background:linear-gradient(90deg, var(--green), #30d158);box-shadow:0 0 12px rgba(52,199,89,0.45);' : ''}"></i></div>
-              <div class="progress-meta">
-                <span>${esc(pr.current || 0)} / ${esc(pr.required || 0)} ${esc(pr.unit || '')}</span>
-              </div>
-            </div>
-          `;
-        }
+        const progressHTML = progressStateCard(p, cfg, 'margin-top: 14px;');
 
         let prioHTML = '';
         const prio = p.priorityGames || [];
@@ -1057,7 +1214,9 @@ enum WebDashboardAssets {
                   <p class="hero-subtitle" style="font-size: 12px; color: ${cfg.color}">${esc(cfg.headline)}${watchingHTML}</p>
                 </div>
               </div>
-              <button class="btn-secondary refresh-btn" data-account-id="${esc(acc.twitchAccountId)}" style="padding: 6px 12px; font-size: 12px; height: 28px; line-height: 1; flex-shrink: 0; margin-left: auto;">Refresh</button>
+              <div style="display:flex;align-items:center;gap:8px;margin-left:auto;flex-shrink:0">
+                <button class="btn-secondary refresh-btn" data-account-id="${esc(acc.twitchAccountId)}" style="padding: 6px 12px; font-size: 12px; height: 28px; line-height: 1; flex-shrink: 0;">Refresh</button>
+              </div>
             </div>
             ${progressHTML}
             ${prioHTML}
@@ -1074,14 +1233,37 @@ enum WebDashboardAssets {
       const p = OPERATOR_MINERS.find(m => minerId(m) === String(id));
       if (!p) return;
       OPERATOR_STATE.selectedMinerId = String(id);
+      DIAGNOSTICS_OPEN = false;
       render(p);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     function wireOperatorOverview() {
+      const search = $('operatorsearch');
+      if (search) {
+        search.addEventListener('input', () => {
+          OPERATOR_STATE.query = search.value;
+          renderOverview(OPERATOR_MINERS);
+          const fresh = $('operatorsearch');
+          if (fresh) {
+            fresh.focus();
+            const end = fresh.value.length;
+            fresh.setSelectionRange(end, end);
+          }
+        });
+      }
+      document.querySelectorAll('[data-filter]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          OPERATOR_STATE.filter = btn.dataset.filter || 'all';
+          renderOverview(OPERATOR_MINERS);
+        });
+      });
       document.querySelectorAll('.miner-card').forEach(card => {
         const open = () => showOperatorMiner(card.dataset.minerId);
-        card.addEventListener('click', open);
+        card.addEventListener('click', (e) => {
+          if (e.target.closest('.refresh-btn')) return;
+          open();
+        });
         card.addEventListener('keydown', (e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();

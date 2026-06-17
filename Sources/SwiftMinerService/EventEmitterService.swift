@@ -4,7 +4,7 @@ import SwiftMinerCore
 
 // MARK: - EventEmitterService
 
-/// Emits the 4 projection-level events to `event_outbox` for delivery by `EventOutboxService`.
+/// Emits projection and SwiftMiner-level events to `event_outbox` for delivery by `EventOutboxService`.
 /// Stores the full schema-v2 event envelope in the payload column.
 /// Call sites are responsible for determining when a projection state change has occurred.
 public actor EventEmitterService {
@@ -124,6 +124,51 @@ public actor EventEmitterService {
         ))
     }
 
+    /// Emit when SwiftMiner discovers a new Twitch Drops campaign that should be
+    /// announced in the configured server channel by SwiftBot.
+    public func emitSwiftMinerCampaignAnnounced(
+        campaign: Campaign,
+        occurredAt: Date = Date()
+    ) async {
+        let artwork = campaign.drops
+            .compactMap { drop -> EventDataValue? in
+                let imageURL = drop.imageURL ?? drop.reward?.imageURL
+                guard let imageURL else { return nil }
+                return .object([
+                    "dropId": .string(drop.id),
+                    "name": .string(drop.name),
+                    "imageURL": .string(imageURL.absoluteString)
+                ])
+            }
+            .prefix(3)
+            .map { $0 }
+
+        var data: [String: EventDataValue] = [
+            "campaignId": .string(campaign.id),
+            "campaignName": .string(campaign.name),
+            "gameId": .string(campaign.game.id),
+            "gameName": .string(campaign.game.name),
+            "status": .string(campaign.status.rawValue),
+            "startsAt": .string(iso8601(campaign.startDate)),
+            "endsAt": .string(iso8601(campaign.endDate)),
+            "dropCount": .int(campaign.drops.count),
+            "dropArtwork": .array(Array(artwork)),
+            "occurredAt": .string(iso8601(occurredAt))
+        ]
+        if let gameArtworkURL = campaign.game.boxArtURL?.absoluteString {
+            data["gameArtworkURL"] = .string(gameArtworkURL)
+        }
+
+        let key = "swiftminer.campaignAnnounced:campaign:\(campaign.id)"
+        await insert(envelope: makeEnvelope(
+            eventType: "swiftminer.campaignAnnounced",
+            discordUserId: "swiftminer",
+            idempotencyKey: key,
+            occurredAt: occurredAt,
+            data: data
+        ))
+    }
+
     // MARK: - Internal
 
     private func makeEnvelope(
@@ -199,6 +244,8 @@ public enum EventDataValue: Codable, Sendable, Equatable {
     case string(String)
     case int(Int)
     case bool(Bool)
+    case array([EventDataValue])
+    case object([String: EventDataValue])
 
     public func encode(to encoder: Encoder) throws {
         var c = encoder.singleValueContainer()
@@ -206,6 +253,8 @@ public enum EventDataValue: Codable, Sendable, Equatable {
         case .string(let v): try c.encode(v)
         case .int(let v):    try c.encode(v)
         case .bool(let v):   try c.encode(v)
+        case .array(let v):  try c.encode(v)
+        case .object(let v): try c.encode(v)
         }
     }
 
@@ -214,6 +263,8 @@ public enum EventDataValue: Codable, Sendable, Equatable {
         if let v = try? c.decode(Bool.self)   { self = .bool(v);   return }
         if let v = try? c.decode(Int.self)    { self = .int(v);    return }
         if let v = try? c.decode(String.self) { self = .string(v); return }
+        if let v = try? c.decode([EventDataValue].self) { self = .array(v); return }
+        if let v = try? c.decode([String: EventDataValue].self) { self = .object(v); return }
         throw DecodingError.dataCorruptedError(in: c, debugDescription: "Unsupported EventDataValue type")
     }
 }
