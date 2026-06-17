@@ -977,8 +977,13 @@ public final class NavigationModel {
         minerManager.onCampaignDetectedEvent = { [weak self] minerId, campaign in
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                guard Settings.shared.dmCampaignDetectedEnabled else { return }
                 guard Settings.shared.allowsOperatorNotifications() else { return }
+
+                if Settings.shared.swiftBotEnabled {
+                    await self.eventEmitter.emitSwiftMinerCampaignAnnounced(campaign: campaign)
+                }
+
+                guard Settings.shared.dmCampaignDetectedEnabled else { return }
                 guard let miner = self.minerManager.miners.first(where: { $0.id == minerId }) else { return }
                 let priorityGames = self.priorityGames(for: miner)
                 guard priorityGames.contains(where: { $0.caseInsensitiveCompare(campaign.game.name) == .orderedSame }) else { return }
@@ -1481,6 +1486,15 @@ private final class NavigationProjectionStateProvider: ProjectionStateProvider, 
         }
     }
 
+    func diagnostics(for discordUserId: String) async -> DiscordUserProjection.Diagnostics? {
+        let optionalMiner = await MainActor.run { model?.minerForDiscordUser(discordUserId) }
+        guard let miner = optionalMiner else { return nil }
+        let summary = await model?.minerManager.getMinerActivitySummary(minerId: miner.id)
+        return await MainActor.run {
+            Self.diagnosticsProjection(from: miner, summary: summary)
+        }
+    }
+
     // MARK: - Twitch-principal variants (keyed by mined account id)
 
     func activeCampaign(forTwitchAccount accountId: String) async -> DiscordUserProjection.ActiveCampaign? {
@@ -1546,6 +1560,15 @@ private final class NavigationProjectionStateProvider: ProjectionStateProvider, 
         }
     }
 
+    func diagnostics(forTwitchAccount accountId: String) async -> DiscordUserProjection.Diagnostics? {
+        let optionalMiner = await MainActor.run { model?.minerForAccount(accountId) }
+        guard let miner = optionalMiner else { return nil }
+        let summary = await model?.minerManager.getMinerActivitySummary(minerId: miner.id)
+        return await MainActor.run {
+            Self.diagnosticsProjection(from: miner, summary: summary)
+        }
+    }
+
     private static func activeCampaignProjection(
         from campaign: Campaign,
         currentChannelName: String? = nil,
@@ -1585,6 +1608,39 @@ private final class NavigationProjectionStateProvider: ProjectionStateProvider, 
             claimedDrops: campaign.drops.filter(\.isClaimed).count,
             totalDrops: campaign.drops.count,
             boxArtURL: campaign.game.boxArtURL?.absoluteString
+        )
+    }
+
+    @MainActor
+    private static func diagnosticsProjection(
+        from miner: MinerManager.ManagedMiner,
+        summary: MinerManager.MinerActivitySummary?
+    ) -> DiscordUserProjection.Diagnostics {
+        let snapshot = MinerHealthSnapshot.make(miner: miner)
+        return DiscordUserProjection.Diagnostics(
+            health: snapshot.health.rawValue,
+            statusRaw: miner.status.rawValue,
+            statusLabel: snapshot.statusLabel,
+            isRunning: miner.isRunning,
+            isHealthy: miner.isHealthy,
+            isStalled: miner.isStalled,
+            stallConfidencePercent: snapshot.stallConfidencePercent,
+            stallSignals: snapshot.stallSignals,
+            lastSuccessfulPollAt: snapshot.lastSuccessfulPollAt,
+            lastEventAt: snapshot.lastEventAt,
+            lastCampaignRefreshAt: snapshot.lastCampaignRefreshAt,
+            minutesSinceLastProgress: summary?.minutesSinceLastProgress,
+            currentChannelName: summary?.currentChannelName,
+            currentChannelId: summary?.currentChannelId,
+            lastSwitchReason: summary?.lastSwitchReason?.summary,
+            lastSwitchAt: summary?.lastSwitchAt,
+            recentEvents: summary?.recentEvents.map {
+                DiscordUserProjection.DiagnosticEvent(
+                    timestamp: $0.timestamp,
+                    type: $0.type.rawValue,
+                    summary: $0.summary
+                )
+            } ?? []
         )
     }
 

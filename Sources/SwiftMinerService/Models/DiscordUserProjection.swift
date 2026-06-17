@@ -15,6 +15,8 @@ public struct DiscordUserProjection: Codable, Sendable {
     public let personalPriorityGames: [String]
     /// Whether the operator-level priority list is appended after personal priorities.
     public let includesGlobalPriorityGames: Bool
+    /// Live health details for browser triage. Nil when the miner is not available.
+    public let diagnostics: Diagnostics?
 
     public init(
         discordUserId: String,
@@ -26,7 +28,8 @@ public struct DiscordUserProjection: Codable, Sendable {
         dmState: DiscordDMState = DiscordDMState(),
         priorityGames: [String] = [],
         personalPriorityGames: [String] = [],
-        includesGlobalPriorityGames: Bool = true
+        includesGlobalPriorityGames: Bool = true,
+        diagnostics: Diagnostics? = nil
     ) {
         self.discordUserId = discordUserId
         self.state = state
@@ -38,6 +41,7 @@ public struct DiscordUserProjection: Codable, Sendable {
         self.priorityGames = priorityGames
         self.personalPriorityGames = personalPriorityGames
         self.includesGlobalPriorityGames = includesGlobalPriorityGames
+        self.diagnostics = diagnostics
     }
 
     public enum ProjectionState: String, Codable, Sendable {
@@ -128,6 +132,77 @@ public struct DiscordUserProjection: Codable, Sendable {
             self.claimedDrops = claimedDrops
             self.totalDrops = totalDrops
             self.boxArtURL = boxArtURL
+        }
+    }
+
+    public struct Diagnostics: Codable, Sendable {
+        public let health: String
+        public let statusRaw: String
+        public let statusLabel: String
+        public let isRunning: Bool
+        public let isHealthy: Bool
+        public let isStalled: Bool
+        public let stallConfidencePercent: Int
+        public let stallSignals: [String]
+        public let lastSuccessfulPollAt: Date?
+        public let lastEventAt: Date?
+        public let lastCampaignRefreshAt: Date?
+        public let minutesSinceLastProgress: Int?
+        public let currentChannelName: String?
+        public let currentChannelId: String?
+        public let lastSwitchReason: String?
+        public let lastSwitchAt: Date?
+        public let recentEvents: [DiagnosticEvent]
+
+        public init(
+            health: String,
+            statusRaw: String,
+            statusLabel: String,
+            isRunning: Bool,
+            isHealthy: Bool,
+            isStalled: Bool,
+            stallConfidencePercent: Int,
+            stallSignals: [String],
+            lastSuccessfulPollAt: Date?,
+            lastEventAt: Date?,
+            lastCampaignRefreshAt: Date?,
+            minutesSinceLastProgress: Int?,
+            currentChannelName: String?,
+            currentChannelId: String?,
+            lastSwitchReason: String?,
+            lastSwitchAt: Date?,
+            recentEvents: [DiagnosticEvent]
+        ) {
+            self.health = health
+            self.statusRaw = statusRaw
+            self.statusLabel = statusLabel
+            self.isRunning = isRunning
+            self.isHealthy = isHealthy
+            self.isStalled = isStalled
+            self.stallConfidencePercent = stallConfidencePercent
+            self.stallSignals = stallSignals
+            self.lastSuccessfulPollAt = lastSuccessfulPollAt
+            self.lastEventAt = lastEventAt
+            self.lastCampaignRefreshAt = lastCampaignRefreshAt
+            self.minutesSinceLastProgress = minutesSinceLastProgress
+            self.currentChannelName = currentChannelName
+            self.currentChannelId = currentChannelId
+            self.lastSwitchReason = lastSwitchReason
+            self.lastSwitchAt = lastSwitchAt
+            self.recentEvents = recentEvents
+        }
+    }
+
+    public struct DiagnosticEvent: Codable, Sendable, Identifiable {
+        public var id: String { "\(timestamp.timeIntervalSince1970)-\(type)-\(summary)" }
+        public let timestamp: Date
+        public let type: String
+        public let summary: String
+
+        public init(timestamp: Date, type: String, summary: String) {
+            self.timestamp = timestamp
+            self.type = type
+            self.summary = summary
         }
     }
 
