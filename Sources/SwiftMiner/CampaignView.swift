@@ -11,7 +11,6 @@ struct DropsListView: View {
     @State private var isRefreshing = false
     @State private var searchText: String = ""
     @State private var selectedMinerFilterId: String = DropsListView.allMinersFilterId
-    @State private var gameExpansionOverrides: [String: Bool] = [:]
     @State private var visibleGroupLimit = 24
     @AppStorage("preferSteamArtwork", store: Settings.appStorageStore) private var preferSteamArtwork: Bool = false
     @ObservedObject private var settings = Settings.shared
@@ -33,6 +32,8 @@ struct DropsListView: View {
     }
 
     var body: some View {
+        let context = makeRenderContext()
+
         Group {
             if !hasAccounts {
                 noAccountsState
@@ -47,7 +48,7 @@ struct DropsListView: View {
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 18) {
-                        dashboardHeader
+                        dashboardHeader(context)
                         searchAndMinerControls
                         filterChipsRow
 
@@ -55,16 +56,14 @@ struct DropsListView: View {
                             fallbackBanner(message)
                         }
 
-                        if renderedCampaigns.isEmpty {
+                        if context.renderedCampaigns.isEmpty {
                             fallbackBanner(emptyFilterMessage)
                         } else {
-                            ForEach(visibleGroupedCampaigns) { group in
+                            ForEach(context.visibleGroupedCampaigns) { group in
                                 GameCampaignDeckCard(
                                     group: group,
-                                    activityProvider: activity(for:),
-                                    isExpanded: gameExpansionOverrides[group.id] ?? shouldExpandByDefault(group),
-                                    onExpansionChange: { isExpanded in
-                                        gameExpansionOverrides[group.id] = isExpanded
+                                    activityProvider: { campaign in
+                                        context.activityByCampaignId[campaign.id] ?? activity(for: campaign)
                                     },
                                     onSteamIdSet: { appId in
                                         await SteamArtworkService.shared.setManualAppId(for: group.gameName, appId: appId)
@@ -75,7 +74,7 @@ struct DropsListView: View {
                                 .transition(.opacity.combined(with: .scale(scale: 0.985)))
                             }
 
-                            if groupedCampaigns.count > visibleGroupLimit {
+                            if context.groupedCampaigns.count > visibleGroupLimit {
                                 Color.clear
                                     .frame(height: 1)
                                     .onAppear {
@@ -86,7 +85,7 @@ struct DropsListView: View {
                     }
                     .padding(24)
                 }
-                .animation(.easeInOut(duration: 0.28), value: renderSignature)
+                .animation(.easeInOut(duration: 0.28), value: context.renderSignature)
             }
         }
         .navigationTitle("Drops")
@@ -315,31 +314,71 @@ struct DropsListView: View {
 
     // MARK: - Data
 
-    private var feedCampaigns: [CampaignViewData] {
-        campaigns
-            .map(applyingCustomArtwork)
-            .sorted(by: campaignSort)
+    private func makeRenderContext() -> DropsListRenderContext {
+        let now = Date()
+        let activeMinerCandidates = miners.filter { $0.status == .watching || $0.status == .claiming }
+        let customizedCampaigns = campaigns.map(applyingCustomArtwork)
+        let activityByCampaignId = activitySnapshots(
+            for: customizedCampaigns,
+            activeMinerCandidates: activeMinerCandidates,
+            now: now
+        )
+
+        let feedCampaigns = customizedCampaigns
             .filter { !isExcludedCampaign($0) }
-    }
-
-    private var activeMiningCampaigns: [CampaignViewData] {
-        feedCampaigns
-            .filter { campaign in
-                activity(for: campaign).state == .active
+            .sorted {
+                campaignSort(lhs: $0, rhs: $1, activityByCampaignId: activityByCampaignId)
             }
-    }
 
-    private var claimableCampaigns: [CampaignViewData] {
-        feedCampaigns
-            .filter { activity(for: $0).claimableDropCount > 0 }
-    }
-
-    private var renderedCampaigns: [CampaignViewData] {
-        feedCampaigns.filter { campaign in
-            matchesSelectedFilters(campaign, activity: activity(for: campaign))
+        let renderedCampaigns = feedCampaigns.filter { campaign in
+            guard let activity = activityByCampaignId[campaign.id] else { return false }
+            return matchesSelectedFilters(campaign, activity: activity, now: now)
                 && matchesSelectedMiner(campaign)
                 && matchesSearch(campaign)
         }
+
+        let groupedCampaigns = groupedCampaigns(from: renderedCampaigns, now: now)
+        let visibleGroupedCampaigns = Array(groupedCampaigns.prefix(visibleGroupLimit))
+        let rewardsClaimedCount = feedCampaigns.reduce(0) { total, campaign in
+            total + (activityByCampaignId[campaign.id]?.claimedRewardCount ?? 0)
+        }
+
+        let renderSignature = feedCampaigns.map { campaign in
+            let snapshot = activityByCampaignId[campaign.id]
+            return "\(campaign.id)-\(snapshot?.state.rawValue ?? "unknown")-\(snapshot?.claimableDropCount ?? 0)-\(snapshot?.claimedRewardCount ?? 0)"
+        }
+
+        return DropsListRenderContext(
+            feedCampaigns: feedCampaigns,
+            renderedCampaigns: renderedCampaigns,
+            groupedCampaigns: groupedCampaigns,
+            visibleGroupedCampaigns: visibleGroupedCampaigns,
+            activityByCampaignId: activityByCampaignId,
+            renderSignature: renderSignature,
+            activeMiningCampaignCount: feedCampaigns.filter { activityByCampaignId[$0.id]?.state == .active }.count,
+            rewardsClaimedCount: rewardsClaimedCount,
+            topClaimedGame: topClaimedGame(in: feedCampaigns, activityByCampaignId: activityByCampaignId),
+            mostActiveMiner: mostActiveMiner(in: feedCampaigns)
+        )
+    }
+
+    private func activitySnapshots(
+        for campaigns: [CampaignViewData],
+        activeMinerCandidates: [MinerManager.ManagedMiner],
+        now: Date
+    ) -> [String: CampaignActivitySnapshot] {
+        var snapshots: [String: CampaignActivitySnapshot] = [:]
+        snapshots.reserveCapacity(campaigns.count)
+
+        for campaign in campaigns {
+            snapshots[campaign.id] = activity(
+                for: campaign,
+                activeMinerCandidates: activeMinerCandidates,
+                now: now
+            )
+        }
+
+        return snapshots
     }
 
     private func matchesSelectedMiner(_ campaign: CampaignViewData) -> Bool {
@@ -355,12 +394,12 @@ struct DropsListView: View {
         return haystack.localizedCaseInsensitiveContains(query)
     }
 
-    private var groupedCampaigns: [GameAggregate] {
-        let activeCampaigns = renderedCampaigns.filter { !$0.isExpired() }
-        let endedCampaigns = renderedCampaigns.filter { $0.isExpired() }
+    private func groupedCampaigns(from renderedCampaigns: [CampaignViewData], now: Date) -> [GameAggregate] {
+        let activeCampaigns = renderedCampaigns.filter { !$0.isExpired(now: now) }
+        let endedCampaigns = renderedCampaigns.filter { $0.isExpired(now: now) }
 
-        let activeGroups = GameAggregateBuilder.buildDrops(from: activeCampaigns)
-        let endedGroups = endedCampaigns.map(endedCampaignGroup)
+        let activeGroups = GameAggregateBuilder.buildDrops(from: activeCampaigns, now: now)
+        let endedGroups = endedCampaigns.map { endedCampaignGroup(for: $0, now: now) }
 
         return (activeGroups + endedGroups)
             .filter { group in
@@ -380,15 +419,11 @@ struct DropsListView: View {
             }
     }
 
-    private var visibleGroupedCampaigns: ArraySlice<GameAggregate> {
-        groupedCampaigns.prefix(visibleGroupLimit)
-    }
-
     private func resetVisibleGroups() {
         visibleGroupLimit = 24
     }
 
-    private func endedCampaignGroup(for campaign: CampaignViewData) -> GameAggregate {
+    private func endedCampaignGroup(for campaign: CampaignViewData, now: Date) -> GameAggregate {
         GameAggregate(
             id: "\(campaign.aggregateGameGroupKey):ended:\(campaign.id)",
             gameName: campaign.gameName,
@@ -400,10 +435,10 @@ struct DropsListView: View {
             campaigns: [
                 GameAggregateCampaign(
                     campaign: campaign,
-                    state: campaign.gameAggregateState()
+                    state: campaign.gameAggregateState(now: now)
                 )
             ],
-            aggregateState: campaign.gameAggregateState()
+            aggregateState: campaign.gameAggregateState(now: now)
         )
     }
 
@@ -476,43 +511,36 @@ struct DropsListView: View {
         return "No campaigns match the selected filters."
     }
 
-    private var renderSignature: [String] {
-        feedCampaigns.map { campaign in
-            let snapshot = activity(for: campaign)
-            return "\(campaign.id)-\(snapshot.state.rawValue)-\(snapshot.claimableDropCount)-\(snapshot.claimedRewardCount)"
-        }
-    }
-
-    private var dashboardHeader: some View {
+    private func dashboardHeader(_ context: DropsListRenderContext) -> some View {
         HStack(spacing: 12) {
             DashboardMetricCard(
                 title: "Active miners",
                 value: "\(miners.filter { $0.status == .watching || $0.status == .claiming }.count)",
-                detail: "\(activeMiningCampaigns.count) \(activeMiningCampaigns.count == 1 ? "campaign" : "campaigns") in motion",
+                detail: "\(context.activeMiningCampaignCount) \(context.activeMiningCampaignCount == 1 ? "campaign" : "campaigns") in motion",
                 tint: .green,
                 systemImage: "person.2.fill"
             )
 
             DashboardMetricCard(
                 title: "Top game",
-                value: topClaimedGame?.name ?? "None yet",
-                detail: topClaimedGame.map { top in
+                value: context.topClaimedGame?.name ?? "None yet",
+                detail: context.topClaimedGame.map { top in
                     "\(top.count) \(top.count == 1 ? "reward" : "rewards") claimed"
                 } ?? "Claim a reward to crown a winner",
                 tint: .orange,
                 systemImage: "trophy.fill",
-                isMuted: topClaimedGame == nil
+                isMuted: context.topClaimedGame == nil
             )
 
             DashboardMetricCard(
                 title: "Rewards claimed",
-                value: "\(feedCampaigns.reduce(0) { $0 + activity(for: $1).claimedRewardCount })",
-                detail: "\(feedCampaigns.count) \(feedCampaigns.count == 1 ? "campaign" : "campaigns") tracked",
+                value: "\(context.rewardsClaimedCount)",
+                detail: "\(context.feedCampaigns.count) \(context.feedCampaigns.count == 1 ? "campaign" : "campaigns") tracked",
                 tint: .blue,
                 systemImage: "checkmark.circle.fill"
             )
 
-            if miners.count > 1, let leader = mostActiveMiner {
+            if miners.count > 1, let leader = context.mostActiveMiner {
                 DashboardMetricCard(
                     title: "Most active miner",
                     value: leader.name,
@@ -525,9 +553,9 @@ struct DropsListView: View {
         }
     }
 
-    private var mostActiveMiner: (name: String, count: Int)? {
+    private func mostActiveMiner(in feedCampaigns: [CampaignViewData]) -> (name: String, count: Int)? {
         guard miners.count > 1 else { return nil }
-        let claimedCountsByAccount = claimedRewardCountsByAccount()
+        let claimedCountsByAccount = claimedRewardCountsByAccount(in: feedCampaigns)
         guard let leader = miners.max(by: { lhs, rhs in
             let lhsCount = claimedCountsByAccount[lhs.accountId] ?? lhs.dropsClaimed
             let rhsCount = claimedCountsByAccount[rhs.accountId] ?? rhs.dropsClaimed
@@ -539,7 +567,7 @@ struct DropsListView: View {
         return (name: leader.displayName, count: leaderCount)
     }
 
-    private func claimedRewardCountsByAccount() -> [String: Int] {
+    private func claimedRewardCountsByAccount(in feedCampaigns: [CampaignViewData]) -> [String: Int] {
         var counts: [String: Int] = [:]
         for campaign in feedCampaigns {
             for account in campaign.accountStates {
@@ -549,14 +577,13 @@ struct DropsListView: View {
         return counts
     }
 
-    private var claimableRewardCount: Int {
-        feedCampaigns.reduce(0) { $0 + activity(for: $1).claimableDropCount }
-    }
-
-    private var topClaimedGame: (name: String, count: Int)? {
+    private func topClaimedGame(
+        in feedCampaigns: [CampaignViewData],
+        activityByCampaignId: [String: CampaignActivitySnapshot]
+    ) -> (name: String, count: Int)? {
         var counts: [String: Int] = [:]
         for campaign in feedCampaigns {
-            let claimed = activity(for: campaign).claimedRewardCount
+            let claimed = activityByCampaignId[campaign.id]?.claimedRewardCount ?? 0
             guard claimed > 0 else { continue }
             counts[campaign.gameName, default: 0] += claimed
         }
@@ -599,12 +626,12 @@ struct DropsListView: View {
         }
     }
 
-    private func activeMiners(for campaign: CampaignViewData) -> [MinerManager.ManagedMiner] {
-        miners.filter { miner in
-            guard miner.status == .watching || miner.status == .claiming else {
-                return false
-            }
-
+    private func activeMiners(
+        for campaign: CampaignViewData,
+        in activeMinerCandidates: [MinerManager.ManagedMiner]? = nil
+    ) -> [MinerManager.ManagedMiner] {
+        let candidates = activeMinerCandidates ?? miners.filter { $0.status == .watching || $0.status == .claiming }
+        return candidates.filter { miner in
             if let id = miner.currentCampaignId {
                 return id == campaign.id
             }
@@ -613,9 +640,13 @@ struct DropsListView: View {
         }
     }
 
-    private func campaignSort(lhs: CampaignViewData, rhs: CampaignViewData) -> Bool {
-        let lhsActivity = activity(for: lhs)
-        let rhsActivity = activity(for: rhs)
+    private func campaignSort(
+        lhs: CampaignViewData,
+        rhs: CampaignViewData,
+        activityByCampaignId: [String: CampaignActivitySnapshot]
+    ) -> Bool {
+        let lhsActivity = activityByCampaignId[lhs.id] ?? activity(for: lhs)
+        let rhsActivity = activityByCampaignId[rhs.id] ?? activity(for: rhs)
 
         if lhsActivity.state.priority != rhsActivity.state.priority {
             return lhsActivity.state.priority < rhsActivity.state.priority
@@ -643,15 +674,15 @@ struct DropsListView: View {
         }
     }
 
-    private func matchesActiveFilter(_ campaign: CampaignViewData, activity: CampaignActivitySnapshot) -> Bool {
-        guard !matchesCompletedFilter(campaign, activity: activity) else {
+    private func matchesActiveFilter(_ campaign: CampaignViewData, activity: CampaignActivitySnapshot, now: Date) -> Bool {
+        guard !matchesCompletedFilter(campaign, activity: activity, now: now) else {
             return false
         }
         guard !isBlockedCampaign(campaign, activity: activity) else {
             return false
         }
 
-        guard campaign.startDate <= Date(), campaign.endDate > Date() else {
+        guard campaign.startDate <= now, campaign.endDate > now else {
             return false
         }
 
@@ -663,13 +694,13 @@ struct DropsListView: View {
         }
     }
 
-    private func matchesNeedsSetupFilter(_ campaign: CampaignViewData, activity: CampaignActivitySnapshot) -> Bool {
+    private func matchesNeedsSetupFilter(_ campaign: CampaignViewData, activity: CampaignActivitySnapshot, now: Date) -> Bool {
         // Needs setup must only contain active, live, and mineable/actionable campaigns
-        guard campaign.startDate <= Date() else {
+        guard campaign.startDate <= now else {
             return false
         }
         // It must NOT contain ended/expired campaigns
-        guard !campaign.isExpired() && campaign.endDate > Date() else {
+        guard !campaign.isExpired(now: now) && campaign.endDate > now else {
             return false
         }
         // It must NOT contain completed/fully claimed campaigns
@@ -684,55 +715,59 @@ struct DropsListView: View {
         return isBlockedCampaign(campaign, activity: activity)
     }
 
-    private func matchesUpcomingFilter(_ campaign: CampaignViewData, activity: CampaignActivitySnapshot) -> Bool {
-        guard campaign.startDate > Date() else {
+    private func matchesUpcomingFilter(_ campaign: CampaignViewData, activity: CampaignActivitySnapshot, now: Date) -> Bool {
+        guard campaign.startDate > now else {
             return false
         }
-        return !matchesCompletedFilter(campaign, activity: activity) && !matchesEndedFilter(campaign, activity: activity)
+        return !matchesCompletedFilter(campaign, activity: activity, now: now) && !matchesEndedFilter(campaign, activity: activity, now: now)
     }
 
-    private func matchesCompletedFilter(_ campaign: CampaignViewData, activity: CampaignActivitySnapshot) -> Bool {
-        return !campaign.isExpired() && (activity.state == .claimed || campaign.isCompleted)
+    private func matchesCompletedFilter(_ campaign: CampaignViewData, activity: CampaignActivitySnapshot, now: Date) -> Bool {
+        return !campaign.isExpired(now: now) && (activity.state == .claimed || campaign.isCompleted)
     }
 
-    private func matchesEndedFilter(_ campaign: CampaignViewData, activity: CampaignActivitySnapshot) -> Bool {
-        return campaign.isExpired()
+    private func matchesEndedFilter(_ campaign: CampaignViewData, activity: CampaignActivitySnapshot, now: Date) -> Bool {
+        return campaign.isExpired(now: now)
     }
 
     private func isBlockedCampaign(_ campaign: CampaignViewData, activity: CampaignActivitySnapshot) -> Bool {
         !campaign.isAccountConnected || !activity.blockedAccounts.isEmpty
     }
 
-    private func filters(for campaign: CampaignViewData, activity: CampaignActivitySnapshot) -> Set<DropFilter> {
-        if matchesNeedsSetupFilter(campaign, activity: activity) {
+    private func filters(for campaign: CampaignViewData, activity: CampaignActivitySnapshot, now: Date) -> Set<DropFilter> {
+        if matchesNeedsSetupFilter(campaign, activity: activity, now: now) {
             return [.needsSetup]
         }
 
         var filters: Set<DropFilter> = []
-        if matchesActiveFilter(campaign, activity: activity) {
+        if matchesActiveFilter(campaign, activity: activity, now: now) {
             filters.insert(.active)
         }
-        if matchesUpcomingFilter(campaign, activity: activity) {
+        if matchesUpcomingFilter(campaign, activity: activity, now: now) {
             filters.insert(.upcoming)
         }
-        if matchesCompletedFilter(campaign, activity: activity) {
+        if matchesCompletedFilter(campaign, activity: activity, now: now) {
             filters.insert(.completed)
         }
-        if matchesEndedFilter(campaign, activity: activity) {
+        if matchesEndedFilter(campaign, activity: activity, now: now) {
             filters.insert(.ended)
         }
         return filters
     }
 
-    private func matchesSelectedFilters(_ campaign: CampaignViewData, activity: CampaignActivitySnapshot) -> Bool {
+    private func matchesSelectedFilters(_ campaign: CampaignViewData, activity: CampaignActivitySnapshot, now: Date) -> Bool {
         guard !selectedFilters.isEmpty else {
             return false
         }
-        return !filters(for: campaign, activity: activity).intersection(selectedFilters).isEmpty
+        return !filters(for: campaign, activity: activity, now: now).intersection(selectedFilters).isEmpty
     }
 
-    private func activity(for campaign: CampaignViewData) -> CampaignActivitySnapshot {
-        let activeMiners = activeMiners(for: campaign)
+    private func activity(
+        for campaign: CampaignViewData,
+        activeMinerCandidates: [MinerManager.ManagedMiner]? = nil,
+        now: Date = Date()
+    ) -> CampaignActivitySnapshot {
+        let activeMiners = activeMiners(for: campaign, in: activeMinerCandidates)
         let claimedAccounts = campaign.accountStates.filter { $0.miningStatus == .claimed }
         let needsAuthAccounts = campaign.accountStates.filter { $0.miningStatus == .needsAuth }
         let blockedAccounts = campaign.accountStates.filter { $0.miningStatus == .blocked || $0.miningStatus == .needsAuth }
@@ -742,14 +777,14 @@ struct DropsListView: View {
             campaign.drops.filter(\.isClaimed).count
         )
         let remainingRewardCount = max(campaign.totalDrops - claimedRewardCount, 0)
-        let isExpired = campaign.isExpired()
+        let isExpired = campaign.isExpired(now: now)
         let combinedProgress = campaign.combinedProgressFraction
 
         let state: CampaignCardState
 
         if isExpired {
             state = .expired
-        } else if campaign.startDate > Date() {
+        } else if campaign.startDate > now {
             state = .ready
         } else if combinedProgress >= 0.995 || campaign.isCompleted {
             state = .claimed
@@ -774,44 +809,6 @@ struct DropsListView: View {
             remainingRewardCount: remainingRewardCount
         )
     }
-
-    private func shouldExpandByDefault(_ group: GameAggregate) -> Bool {
-        guard group.aggregateState == .inProgress || group.aggregateState == .actionRequired else {
-            return false
-        }
-
-        if group.claimableRewardCount > 0 {
-            return true
-        }
-
-        for item in group.campaigns {
-            let snapshot = activity(for: item.campaign)
-            if !snapshot.blockedAccounts.isEmpty || !snapshot.needsAuthAccounts.isEmpty {
-                return true
-            }
-            if minerSyncIssueCount(for: item.campaign, activity: snapshot) > 0 {
-                return true
-            }
-        }
-
-        return false
-    }
-
-    private func minerSyncIssueCount(for campaign: CampaignViewData, activity: CampaignActivitySnapshot) -> Int {
-        let activeAccounts = Set(activity.activeMiners.map(\.accountId))
-        return campaign.accountStates.filter { account in
-            switch account.miningStatus {
-            case .blocked, .needsAuth:
-                return true
-            case .mining:
-                return !activeAccounts.isEmpty && !activeAccounts.contains(account.accountId)
-            case .ready, .idle:
-                return activity.state == .active || activity.state == .inProgress
-            case .claimed, .claimedUnlinked:
-                return false
-            }
-        }.count
-    }
 }
 
 
@@ -820,8 +817,6 @@ struct DropsListView: View {
 private struct GameCampaignDeckCard: View {
     let group: GameAggregate
     let activityProvider: (CampaignViewData) -> CampaignActivitySnapshot
-    let isExpanded: Bool // Kept for compatibility, but not used since we have clean popover inspector
-    let onExpansionChange: (Bool) -> Void // Kept for compatibility
     var onSteamIdSet: ((String) async -> Void)?
 
     @State private var isHovered = false
@@ -852,15 +847,6 @@ private struct GameCampaignDeckCard: View {
         return SteamArtworkService.supportsSteamArtwork(forGameName: group.gameName, gameId: firstCampaign?.gameId)
     }
 
-    private var totalRewardCount: Int {
-        // Match the deduplicated reward tiles shown on the card.
-        displayDrops.count
-    }
-
-    private var claimedRewardCount: Int {
-        group.campaigns.reduce(0) { $0 + min(activityProvider($1.campaign).claimedRewardCount, max($1.campaign.totalDrops, $1.campaign.drops.count)) }
-    }
-
     private var minerAccountStates: [AccountState] {
         var mergedStates: [String: AccountState] = [:]
 
@@ -889,17 +875,6 @@ private struct GameCampaignDeckCard: View {
             }
             return $0.username.localizedCaseInsensitiveCompare($1.username) == .orderedAscending
         }
-    }
-
-    /// True when this campaign's reward claims come only from accounts that
-    /// aren't linked to the game — claimed on Twitch's side but undeliverable.
-    /// Used to render the drop checkmarks distinctly from a real, delivered
-    /// claim so a "claimed · not linked" campaign doesn't look fully done.
-    private var isUnlinkedClaimOnly: Bool {
-        let states = minerAccountStates
-        let hasUnlinked = states.contains { $0.miningStatus == .claimedUnlinked }
-        let hasDelivered = states.contains { $0.miningStatus == .claimed }
-        return hasUnlinked && !hasDelivered
     }
 
     private var activeMinerCount: Int {
@@ -946,7 +921,7 @@ private struct GameCampaignDeckCard: View {
         return lhs.claimedDropCount >= rhs.claimedDropCount ? lhs : rhs
     }
 
-    private var eligibleMiners: [AccountState] {
+    private func eligibleMiners(from minerAccountStates: [AccountState]) -> [AccountState] {
         minerAccountStates.filter { account in
             if Settings.shared.excludedGames.contains(where: { $0.localizedCaseInsensitiveCompare(group.gameName) == .orderedSame }) {
                 return false
@@ -964,10 +939,6 @@ private struct GameCampaignDeckCard: View {
         }
     }
 
-    private var eligibleMinerCount: Int {
-        eligibleMiners.count
-    }
-
     private var campaignExpiryText: String {
         guard let firstCampaign = group.campaigns.first?.campaign else { return "" }
         if firstCampaign.endDate <= Date() {
@@ -977,23 +948,21 @@ private struct GameCampaignDeckCard: View {
         return remaining.formattedRemaining
     }
 
-    private var aggregateStatusSummary: CardStatusSummary {
-        let activeCount = activeMinerCount
-        let claimedCount = completedCurrentRewardMinerCount
-        let totalCount = minerAccountStates.count
-
+    private func aggregateStatusSummary(
+        minerAccountStates: [AccountState],
+        activeCount: Int,
+        claimedCount: Int
+    ) -> CardStatusSummary {
         if activeCount > 0 {
             let title = activeCount == 1 ? "1 Miner Active" : "\(activeCount) Miners Active"
             return CardStatusSummary(title: title, icon: "dot.radiowaves.left.and.right")
         }
-        let hasUnlinkedClaim = minerAccountStates.contains { $0.miningStatus == .claimedUnlinked }
-        let claimedIcon = hasUnlinkedClaim ? "checkmark.circle.badge.questionmark.fill" : "checkmark.circle.fill"
-        if claimedCount == totalCount && totalCount > 0 {
-            return CardStatusSummary(title: hasUnlinkedClaim ? "Completed · not linked" : "Completed", icon: claimedIcon)
+        if claimedCount == minerAccountStates.count && !minerAccountStates.isEmpty {
+            return CardStatusSummary(title: "Completed", icon: "checkmark.circle.fill")
         }
         if claimedCount > 0 {
             let title = claimedCount == 1 ? "1 Miner Completed" : "\(claimedCount) Miners Completed"
-            return CardStatusSummary(title: title, icon: claimedIcon)
+            return CardStatusSummary(title: title, icon: "checkmark.circle.fill")
         }
         if group.aggregateState == .actionRequired {
             return CardStatusSummary(title: "Needs Setup", icon: "exclamationmark.triangle.fill")
@@ -1043,7 +1012,13 @@ private struct GameCampaignDeckCard: View {
 
     var body: some View {
         let drops = displayDrops
-        let status = aggregateStatusSummary
+        let accountStates = minerAccountStates
+        let eligibleMiners = eligibleMiners(from: accountStates)
+        let status = aggregateStatusSummary(
+            minerAccountStates: accountStates,
+            activeCount: activeMinerCount,
+            claimedCount: completedCurrentRewardMinerCount
+        )
 
         HStack(alignment: .center, spacing: 16) {
             // LEFT ARTWORK (Anchors the cluster, prominent 120x160 size)
@@ -1068,7 +1043,7 @@ private struct GameCampaignDeckCard: View {
                     HStack(spacing: 12) {
                         HStack(spacing: 4) {
                             Image(systemName: "gift.fill")
-                            Text("\(totalRewardCount) \(totalRewardCount == 1 ? "reward" : "rewards")")
+                            Text("\(drops.count) \(drops.count == 1 ? "reward" : "rewards")")
                         }
                         
                         if !campaignExpiryText.isEmpty {
@@ -1078,7 +1053,7 @@ private struct GameCampaignDeckCard: View {
                             }
                         }
                         
-                        let count = eligibleMinerCount
+                        let count = eligibleMiners.count
                         if count > 0 {
                             HStack(spacing: 4) {
                                 Image(systemName: "person.2.fill")
@@ -1096,7 +1071,7 @@ private struct GameCampaignDeckCard: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         LazyHStack(spacing: 8) {
                             ForEach(drops) { drop in
-                                BeautifulRewardCard(drop: drop, unlinkedClaimOnly: isUnlinkedClaimOnly)
+                                BeautifulRewardCard(drop: drop)
                             }
                         }
                         .padding(.vertical, 4)
@@ -1247,9 +1222,6 @@ private struct GameArtworkCard: View {
 
 private struct BeautifulRewardCard: View {
     let drop: DropViewData
-    /// When true, a claimed drop was only claimed by an unlinked account, so it
-    /// can't be delivered to the game — render it distinctly from a real claim.
-    var unlinkedClaimOnly: Bool = false
     @State private var isHovered = false
 
     var body: some View {
@@ -1285,24 +1257,13 @@ private struct BeautifulRewardCard: View {
                         .frame(width: 18, height: 18)
                         .shadow(color: .black.opacity(0.12), radius: 2)
 
-                    if unlinkedClaimOnly {
-                        // Claimed on Twitch but not deliverable (account not linked):
-                        // a normal green claimed check, with an orange "?" badge
-                        // flagging the link issue. Palette layers are
-                        // checkmark / circle / question badge.
-                        Image(systemName: "checkmark.circle.badge.questionmark.fill")
-                            .symbolRenderingMode(.palette)
-                            .foregroundStyle(.white, Color.green, Color.orange)
-                            .font(.system(size: 16, weight: .bold))
-                    } else {
-                        Circle()
-                            .fill(Color.green)
-                            .frame(width: 13, height: 13)
+                    Circle()
+                        .fill(Color.green)
+                        .frame(width: 13, height: 13)
 
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 7.5, weight: .bold))
-                            .foregroundStyle(.white)
-                    }
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 7.5, weight: .bold))
+                        .foregroundStyle(.white)
                 }
                 .frame(width: 76, height: 76, alignment: .topTrailing)
                 .padding(4)
@@ -1325,26 +1286,6 @@ private struct BeautifulRewardCard: View {
                 .padding(4)
             }
 
-            // Progress bar
-            if drop.progress > 0 && drop.progress < 1.0 {
-                GeometryReader { geo in
-                    VStack {
-                        Spacer()
-                        ZStack(alignment: .leading) {
-                            RoundedRectangle(cornerRadius: 2)
-                                .fill(.black.opacity(0.45))
-                                .frame(height: 3)
-                            
-                            RoundedRectangle(cornerRadius: 2)
-                                .fill(Color.blue)
-                                .frame(width: geo.size.width * drop.progress, height: 3)
-                        }
-                    }
-                }
-                .frame(width: 76, height: 76)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            }
-
             // Duration Overlay Badge (Bottom Right)
             Text("\(drop.requiredMinutes)m")
                 .font(.system(size: 8, weight: .bold, design: .rounded))
@@ -1361,12 +1302,12 @@ private struct BeautifulRewardCard: View {
             isHovered = hovering
         }
         .popover(isPresented: $isHovered, arrowEdge: .top) {
-            BeautifulRewardHoverCard(drop: drop, unlinkedClaimOnly: unlinkedClaimOnly)
+            BeautifulRewardHoverCard(drop: drop)
         }
     }
 
     private var statusTitle: String {
-        if drop.isClaimed { return unlinkedClaimOnly ? "Claimed · not linked" : "Claimed" }
+        if drop.isClaimed { return "Claimed" }
         if drop.isClaimable { return "Ready to Claim" }
         if drop.progress > 0 { return "Mining (\(Int(drop.progress * 100))%)" }
         return "Locked"
@@ -1399,7 +1340,6 @@ private struct CardStatusSummary {
 // MARK: - Premium Frosted Hover Card Popover
 private struct BeautifulRewardHoverCard: View {
     let drop: DropViewData
-    var unlinkedClaimOnly: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1450,14 +1390,14 @@ private struct BeautifulRewardHoverCard: View {
     }
 
     private var statusText: String {
-        if drop.isClaimed { return unlinkedClaimOnly ? "Claimed · not linked" : "Claimed" }
+        if drop.isClaimed { return "Claimed" }
         if drop.isClaimable { return "Ready to Claim" }
         if drop.progress > 0 { return "Mining (\(Int(drop.progress * 100))%)" }
         return "Locked"
     }
 
     private var statusColor: Color {
-        if drop.isClaimed { return unlinkedClaimOnly ? .orange : .green }
+        if drop.isClaimed { return .green }
         if drop.isClaimable { return .orange }
         if drop.progress > 0 { return .blue }
         return .secondary
@@ -1546,6 +1486,19 @@ struct CampaignActivitySnapshot {
     let claimableDropCount: Int
     let claimedRewardCount: Int
     let remainingRewardCount: Int
+}
+
+private struct DropsListRenderContext {
+    let feedCampaigns: [CampaignViewData]
+    let renderedCampaigns: [CampaignViewData]
+    let groupedCampaigns: [GameAggregate]
+    let visibleGroupedCampaigns: [GameAggregate]
+    let activityByCampaignId: [String: CampaignActivitySnapshot]
+    let renderSignature: [String]
+    let activeMiningCampaignCount: Int
+    let rewardsClaimedCount: Int
+    let topClaimedGame: (name: String, count: Int)?
+    let mostActiveMiner: (name: String, count: Int)?
 }
 
 enum CampaignCardState: String {
@@ -1699,11 +1652,11 @@ struct CampaignMinerInspectorPopover: View {
                         HStack(spacing: 8) {
                             Group {
                                 if account.miningStatus == .claimedUnlinked {
-                                    // Green tick, red question badge: claimed,
+                                    // Green tick, orange question badge: claimed,
                                     // but the game account isn't linked yet.
                                     Image(systemName: "checkmark.circle.badge.questionmark.fill")
                                         .symbolRenderingMode(.palette)
-                                        .foregroundStyle(.red, .green)
+                                        .foregroundStyle(.orange, .green)
                                 } else {
                                     Image(systemName: statusIcon(for: account.miningStatus))
                                         .foregroundStyle(statusColor(for: account.miningStatus))

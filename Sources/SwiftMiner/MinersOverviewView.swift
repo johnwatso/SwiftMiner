@@ -1507,7 +1507,7 @@ private struct CampaignStatusRow: View {
                     // won't reach the game until the user links it on Twitch.
                     Image(systemName: "checkmark.circle.badge.questionmark.fill")
                         .symbolRenderingMode(.palette)
-                        .foregroundStyle(.red, .green)
+                        .foregroundStyle(.orange, .green)
                         .help("Claimed, but this game isn't linked on Twitch — link it so the reward reaches the game.")
                 } else {
                     Image(systemName: statusIcon)
