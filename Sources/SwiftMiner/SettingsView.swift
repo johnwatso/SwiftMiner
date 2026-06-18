@@ -1405,6 +1405,7 @@ private struct IntegrationsSettingsView: View {
                         } else {
                             Image(systemName: "arrow.clockwise")
                                 .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
                         }
                     }
                     .buttonStyle(.borderless)
@@ -1816,6 +1817,7 @@ private struct IntegrationsSettingsView: View {
                         } else {
                             Image(systemName: "arrow.clockwise")
                                 .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
                         }
                     }
                     .buttonStyle(.borderless)

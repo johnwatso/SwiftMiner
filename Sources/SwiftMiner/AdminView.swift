@@ -532,7 +532,11 @@ private struct DetailPanel: View {
         .padding(.vertical, 18)
         .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color(white: 0.97))
+                .fill(Color(nsColor: .controlBackgroundColor))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(Color(nsColor: .separatorColor).opacity(0.55), lineWidth: 0.5)
+                )
         )
         .padding(.horizontal, 8)
         .padding(.vertical, 4)

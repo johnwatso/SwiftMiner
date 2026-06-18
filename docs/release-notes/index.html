@@ -49,6 +49,8 @@
       <li>Adds SwiftBot-backed Discord sign-in with signed assertions, replay protection, local-only operator login, Twitch sign-in, session audit events, and self-service Twitch linking from the dashboard.</li>
       <li>Adds an Up Next campaign browser with box art, start/end timing, issue buttons, and one-tap prioritising for linked miners.</li>
       <li>Adds polished web sign-in assets, app icons, favicons, dashboard timing refinements, loading fixes, and a small salute easter egg on the missed Drops tagline.</li>
+      <li>Adds SwiftMiner campaign events for SwiftBot Patchy announcements, including game artwork and up to three drop reward images for rich Discord embeds.</li>
+      <li>Keeps progress/status cards separate from diagnostics so <strong>Idle - no campaigns</strong> remains visible while stall confidence stays hidden until requested.</li>
       <li>Auto-registers the SwiftMiner dashboard hostname with SwiftBot's tunnel when tunnel details are available.</li>
       <li>Adds update events to the Activity Log and settings for automatic update checks and unattended install options when macOS allows them.</li>
       <li>Adds a dedicated Priorities section to each miner, including personal-first ordering, global-priority opt-in/out, quick removal, and refreshes for running miners after priority changes.</li>
@@ -57,7 +59,7 @@
       <li>Tightens public dashboard route matching and adds regression coverage for local sign-in, sessions, CSRF handling, Discord sign-in, activation flows, route exposure, and emitted dashboard JavaScript syntax.</li>
       <li>Modernizes the Add Twitch Account login sheet with a cleaner approval flow, stronger code presentation, copy feedback, and clearer waiting, success, and retry states.</li>
       <li>Removes the unused miner detail panel so the Miners tab is the single source of truth for priority, streamer, campaign, controls, and log UI.</li>
-      <li>Updates SwiftMiner to version 1.29 build 2026061317 while leaving ShipHook-owned appcasts untouched.</li>
+      <li>Updates SwiftMiner build metadata to 2026061811 while leaving ShipHook-owned appcasts untouched.</li>
     </ul>
     <h2>💬 Version 1.28</h2>
     <ul>
@@ -68,6 +70,8 @@
       <li>Improves Discord status and preview messages with recent campaign context, realistic debug samples, cached avatars, and quieter notification defaults.</li>
       <li>Adds an optional web dashboard for browser-based miner visibility, with local operator sign-in and Twitch sign-in scoped to the user's own mined account.</li>
       <li>Emits SwiftMiner campaign events for SwiftBot Patchy targets, including game artwork and up to three drop reward images for Discord announcements.</li>
+      <li>Keeps the regular progress/status card visible separately from diagnostics, including an <strong>Idle - no campaigns</strong> state when no active campaign is mining.</li>
+      <li>Hides stall confidence and diagnostic details by default behind a Diagnostics toggle for cleaner everyday dashboard use.</li>
       <li>Adds a tiny web sign-in easter egg: when the missed Drops respect line appears, pressing F sends salute emojis floating behind the login card.</li>
       <li>Restores the Discord web onboarding loop with in-dashboard Twitch device-code linking, actionable issue buttons, and an Up Next campaign browser with one-tap prioritising.</li>
       <li>Tightens the web dashboard's public route matching so only intended dashboard paths bypass the Bot-key API gate.</li>
@@ -75,7 +79,7 @@
       <li>Improves mining reliability by recognizing claimed multi-reward drops from any matching Twitch benefit ID and by continuing inventory claim checks even when a claimable drop only appears in Twitch inventory.</li>
       <li>Polishes the overview refresh path so miners can restart from refresh without clearing artwork, adds a miner account button, and slows the Looking for Streams animation to feel more native.</li>
       <li>Removes the unused miner detail panel so the Miners tab is the single source of truth for priority, streamer, campaign, controls, and log UI.</li>
-      <li>Updates SwiftMiner to version 1.28 build 2026061809 and tightens Sparkle guardrails while leaving ShipHook-owned appcasts untouched.</li>
+      <li>Updates SwiftMiner to version 1.28 build 2026061811 and tightens Sparkle guardrails while leaving ShipHook-owned appcasts untouched.</li>
     </ul>
     <h2>🛡️ Version 1.27</h2>
     <ul>

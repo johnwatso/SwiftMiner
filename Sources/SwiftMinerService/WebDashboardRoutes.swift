@@ -483,7 +483,7 @@ public actor WebDashboardRoutes {
             return .html(WebDashboardAssets.message("Sign-in expired. Please try again.", linkToLogin: true), statusCode: 400)
         }
         // Signature verified above, so the payload's claims are trustworthy.
-        let displayName = (object["username"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Discord user \(discordId)"
+        let displayName = (object["username"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Discord user"
         guard Self.swiftBotSSOConfirmsGuildMembership(object) else {
             webLogger.notice("SwiftBot SSO rejected: user is not a member of the attached server")
             await audit?("\(displayName) tried to sign in with Discord but isn't in the server")
@@ -580,11 +580,17 @@ public actor WebDashboardRoutes {
     private func actorName(_ s: WebSessionRecord) async -> String {
         switch s.principalType {
         case WebProvider.twitch.rawValue:
-            return await manager.twitchAccount(twitchId: s.principalId)?.username ?? "Twitch user \(s.principalId)"
+            return await manager.twitchAccount(twitchId: s.principalId)?.username ?? "Twitch user"
         case Self.localPrincipal:
             return s.principalId
+        case WebProvider.discord.rawValue:
+            if let accountId = await manager.firstTwitchAccountId(ownerDiscordId: s.principalId),
+               let account = await manager.twitchAccount(twitchId: accountId) {
+                return account.username
+            }
+            return "Discord user"
         default:
-            return "Discord user \(s.principalId)"
+            return "Web user"
         }
     }
 
