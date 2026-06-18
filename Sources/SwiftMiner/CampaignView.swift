@@ -890,6 +890,17 @@ private struct GameCampaignDeckCard: View {
         }
     }
 
+    /// True when this campaign's reward claims come only from accounts that
+    /// aren't linked to the game — claimed on Twitch's side but undeliverable.
+    /// Used to render the drop checkmarks distinctly from a real, delivered
+    /// claim so a "claimed · not linked" campaign doesn't look fully done.
+    private var isUnlinkedClaimOnly: Bool {
+        let states = minerAccountStates
+        let hasUnlinked = states.contains { $0.miningStatus == .claimedUnlinked }
+        let hasDelivered = states.contains { $0.miningStatus == .claimed }
+        return hasUnlinked && !hasDelivered
+    }
+
     private var activeMinerCount: Int {
         Set(group.campaigns.flatMap { activityProvider($0.campaign).activeMiners.map(\.accountId) }).count
     }
@@ -1066,7 +1077,7 @@ private struct GameCampaignDeckCard: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         LazyHStack(spacing: 8) {
                             ForEach(drops) { drop in
-                                BeautifulRewardCard(drop: drop)
+                                BeautifulRewardCard(drop: drop, unlinkedClaimOnly: isUnlinkedClaimOnly)
                             }
                         }
                         .padding(.vertical, 4)
@@ -1217,6 +1228,9 @@ private struct GameArtworkCard: View {
 
 private struct BeautifulRewardCard: View {
     let drop: DropViewData
+    /// When true, a claimed drop was only claimed by an unlinked account, so it
+    /// can't be delivered to the game — render it distinctly from a real claim.
+    var unlinkedClaimOnly: Bool = false
     @State private var isHovered = false
 
     var body: some View {
@@ -1251,14 +1265,23 @@ private struct BeautifulRewardCard: View {
                         .fill(.ultraThinMaterial)
                         .frame(width: 18, height: 18)
                         .shadow(color: .black.opacity(0.12), radius: 2)
-                    
-                    Circle()
-                        .fill(Color.green)
-                        .frame(width: 13, height: 13)
-                    
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 7.5, weight: .bold))
-                        .foregroundStyle(.white)
+
+                    if unlinkedClaimOnly {
+                        // Claimed on Twitch but not deliverable (account not linked):
+                        // amber question-badge, matching the card's "not linked" cue.
+                        Image(systemName: "checkmark.circle.badge.questionmark.fill")
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(.white, Color.orange)
+                            .font(.system(size: 16, weight: .bold))
+                    } else {
+                        Circle()
+                            .fill(Color.green)
+                            .frame(width: 13, height: 13)
+
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 7.5, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
                 }
                 .frame(width: 76, height: 76, alignment: .topTrailing)
                 .padding(4)
@@ -1317,12 +1340,12 @@ private struct BeautifulRewardCard: View {
             isHovered = hovering
         }
         .popover(isPresented: $isHovered, arrowEdge: .top) {
-            BeautifulRewardHoverCard(drop: drop)
+            BeautifulRewardHoverCard(drop: drop, unlinkedClaimOnly: unlinkedClaimOnly)
         }
     }
 
     private var statusTitle: String {
-        if drop.isClaimed { return "Claimed" }
+        if drop.isClaimed { return unlinkedClaimOnly ? "Claimed · not linked" : "Claimed" }
         if drop.isClaimable { return "Ready to Claim" }
         if drop.progress > 0 { return "Mining (\(Int(drop.progress * 100))%)" }
         return "Locked"
@@ -1355,6 +1378,7 @@ private struct CardStatusSummary {
 // MARK: - Premium Frosted Hover Card Popover
 private struct BeautifulRewardHoverCard: View {
     let drop: DropViewData
+    var unlinkedClaimOnly: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1405,14 +1429,14 @@ private struct BeautifulRewardHoverCard: View {
     }
 
     private var statusText: String {
-        if drop.isClaimed { return "Claimed" }
+        if drop.isClaimed { return unlinkedClaimOnly ? "Claimed · not linked" : "Claimed" }
         if drop.isClaimable { return "Ready to Claim" }
         if drop.progress > 0 { return "Mining (\(Int(drop.progress * 100))%)" }
         return "Locked"
     }
 
     private var statusColor: Color {
-        if drop.isClaimed { return .green }
+        if drop.isClaimed { return unlinkedClaimOnly ? .orange : .green }
         if drop.isClaimable { return .orange }
         if drop.progress > 0 { return .blue }
         return .secondary

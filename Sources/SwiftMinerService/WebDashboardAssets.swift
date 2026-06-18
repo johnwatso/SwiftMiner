@@ -165,7 +165,7 @@ enum WebDashboardAssets {
         .triage-toolbar {
           display: flex; flex-wrap: wrap; gap: 9px; align-items: center;
           margin: 0 0 14px; padding: 10px;
-          border: 1px solid var(--glass-stroke); border-radius: 14px;
+          border: 1px solid var(--glass-stroke); border-radius: 18px;
           background: rgba(255,255,255,0.045);
         }
         .triage-search {
