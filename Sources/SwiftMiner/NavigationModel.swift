@@ -330,16 +330,16 @@ public final class NavigationModel {
     func webAuditActorName(principalType: String, principalId: String) -> String {
         switch principalType {
         case "twitch":
-            return minerManager.miners.first { $0.accountId == principalId }?.username ?? "Twitch user \(principalId)"
+            return minerManager.miners.first { $0.accountId == principalId }?.username ?? "Twitch user"
         case "discord":
             if let miner = minerManager.miners.first(where: { $0.ownerDiscordId == principalId }) {
                 return miner.username
             }
-            return "Discord user \(principalId)"
+            return "Discord user"
         case "local":
             return principalId
         default:
-            return principalId
+            return "Web user"
         }
     }
 

@@ -311,6 +311,46 @@ final class WebDashboardSecurityTests: XCTestCase {
         XCTAssertNil(session)
     }
 
+    func testDiscordLogoutAuditUsesLinkedMinerNameNotRawDiscordId() async throws {
+        let mgr = try await openTempManager()
+        defer { Task { await mgr.close() } }
+
+        let discordId = "123456789012345678"
+        try await mgr.execute("""
+        INSERT INTO miner_users (discord_id, status) VALUES ('\(discordId)', 'registered');
+        INSERT INTO twitch_accounts (
+            twitch_id, owner_discord_id, username, access_token, refresh_token, token_expiry, scopes, link_state
+        ) VALUES (
+            'twitch-1', '\(discordId)', 'Jonwatso', 'access', 'refresh', '2099-01-01T00:00:00Z', '', 'linked'
+        );
+        """)
+        try await mgr.createWebSession(
+            id: "discord-session",
+            principalType: "discord",
+            principalId: discordId,
+            csrfToken: "csrf",
+            createdAt: Date().timeIntervalSince1970,
+            expiresAt: Date().addingTimeInterval(60).timeIntervalSince1970
+        )
+
+        let recorder = AuditRecorder()
+        let router = try await configuredWebRouter(manager: mgr, audit: { message in
+            await recorder.record(message)
+        })
+
+        let response = await router.handle(HTTPRequest(
+            method: "POST",
+            path: WebDashboardConfig.logoutPath,
+            headers: ["host": "localhost:8080", "cookie": "\(WebDashboardConfig.sessionCookieName)=discord-session"],
+            body: Data()
+        ))
+
+        XCTAssertEqual(response.statusCode, 302)
+        let messages = await recorder.messages
+        XCTAssertEqual(messages, ["Jonwatso signed out of the web dashboard"])
+        XCTAssertFalse(messages.joined(separator: "\n").contains(discordId))
+    }
+
     // MARK: - Session & OAuth-state persistence
 
     func testWebSessionLifecycleAndExpiry() async throws {
@@ -563,7 +603,10 @@ final class WebDashboardSecurityTests: XCTestCase {
         return mgr
     }
 
-    private func configuredWebRouter(manager: SQLiteManager) async throws -> HTTPRouter {
+    private func configuredWebRouter(
+        manager: SQLiteManager,
+        audit: (@Sendable (String) async -> Void)? = nil
+    ) async throws -> HTTPRouter {
         let apiRoutes = DiscordAPIRoutes(
             manager: manager,
             projectionBuilder: DiscordProjectionBuilder(manager: manager),
@@ -581,7 +624,8 @@ final class WebDashboardSecurityTests: XCTestCase {
                 swiftBotSSO: WebSwiftBotSSO(origin: "https://swiftbot.example.com", hmacSecret: "shared-pairing-secret")
             ),
             manager: manager,
-            apiRoutes: apiRoutes
+            apiRoutes: apiRoutes,
+            audit: audit
         )
         let router = HTTPRouter()
         await webRoutes.configure(router)
@@ -616,5 +660,13 @@ final class WebDashboardSecurityTests: XCTestCase {
 
     private func decodeJSON(_ data: Data) throws -> [String: Any] {
         try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    }
+}
+
+private actor AuditRecorder {
+    private(set) var messages: [String] = []
+
+    func record(_ message: String) {
+        messages.append(message)
     }
 }

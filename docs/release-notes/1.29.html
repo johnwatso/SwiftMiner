@@ -90,8 +90,8 @@
 <body>
   <main>
     <h1>SwiftMiner 1.29</h1>
-    <p class="meta">Version 1.29 · Build 2026061317</p>
-    <p class="intro">A web-dashboard release for checking and managing miners from the browser, with safer sign-in, clearer update controls, and better visibility into each miner's priority and account-link state.</p>
+    <p class="meta">Version 1.29 · Build 2026061811</p>
+    <p class="intro">A web-dashboard release for checking and managing miners from the browser, with safer sign-in, clearer update controls, SwiftBot Patchy campaign announcements, and better visibility into each miner's priority and account-link state.</p>
 
     <section class="dashboard">
       <h2><span class="badge" aria-hidden="true">🌐</span> Web Dashboard</h2>
@@ -102,7 +102,19 @@
         <li>Adds a Discord-user view that is scoped to the signed-in user's own mined Twitch account.</li>
         <li>Adds an Up Next campaign browser with box art, start/end timing, issue buttons, and one-tap prioritising for linked miners.</li>
         <li>Adds polished web sign-in assets, app icons, favicons, timing refinements, and dashboard loading fixes.</li>
+        <li>Keeps the normal progress/status card separate from diagnostics, so idle miners still show <strong>Idle - no campaigns</strong> while deeper health details stay tucked away until requested.</li>
+        <li>Adds a Diagnostics toggle for operator triage, hiding stall confidence and recent health signals by default while preserving quick access when troubleshooting.</li>
         <li>Adds a small sign-in easter egg: pressing F while the missed Drops respect line is shown sends salute emojis floating behind the login card.</li>
+      </ul>
+    </section>
+
+    <section class="dashboard">
+      <h2><span class="badge" aria-hidden="true">📣</span>SwiftBot Patchy Announcements</h2>
+      <p class="summary">New Twitch Drops campaigns can now flow into Patchy-powered Discord announcements.</p>
+      <ul>
+        <li>Emits SwiftMiner campaign events when new Twitch Drops campaigns are discovered while SwiftBot integration is enabled.</li>
+        <li>Includes campaign and game metadata, game artwork, and up to three drop reward images so SwiftBot can build rich announcement embeds.</li>
+        <li>Dedupe-protects campaign announcement events by campaign ID, preventing repeated Discord posts for the same discovered campaign.</li>
       </ul>
     </section>
 
@@ -126,7 +138,7 @@
         <li>Adds update events to the Activity Log so checks, available updates, installs, and failures are easier to trace.</li>
         <li>Adds settings for automatic update checks and unattended install options when macOS allows them.</li>
         <li>Improves update settings with clearer state, manual actions, and fallback messaging.</li>
-        <li>Updates SwiftMiner to version 1.29 build 2026061317 while leaving ShipHook-owned appcasts untouched.</li>
+        <li>Updates SwiftMiner build metadata to 2026061811 while leaving ShipHook-owned appcasts untouched.</li>
       </ul>
     </section>
 

@@ -88,8 +88,8 @@
 <body>
   <main>
     <h1>SwiftMiner 1.28</h1>
-    <p class="meta">Version 1.28 · Build 2026061809</p>
-    <p class="intro">A web-dashboard, sign-in, and mining reliability update for browser-based miner visibility, tighter route handling, and sturdier Twitch Drops claim handling.</p>
+    <p class="meta">Version 1.28 · Build 2026061811</p>
+    <p class="intro">A web-dashboard, sign-in, SwiftBot Patchy announcement, and mining reliability update for browser-based miner visibility, tighter route handling, and sturdier Twitch Drops claim handling.</p>
 
     <section class="dashboard">
       <h2><span class="badge" aria-hidden="true">🌐</span> Web Dashboard</h2>
@@ -101,6 +101,8 @@
         <li>Restores self-service Twitch linking for Discord web sessions with a device-code card, activation polling, and automatic dashboard refresh once the account is linked.</li>
         <li>Adds actionable dashboard issue buttons plus an Up Next campaign browser with box art, end/start timing, and one-tap prioritising for linked miners.</li>
         <li>Emits SwiftMiner campaign events for SwiftBot Patchy targets, including game artwork and up to three drop reward images for Discord announcements.</li>
+        <li>Keeps the regular progress/status card visible separately from diagnostics, including an <strong>Idle - no campaigns</strong> state when no active campaign is mining.</li>
+        <li>Hides stall confidence and diagnostic details by default behind a Diagnostics toggle for cleaner everyday dashboard use.</li>
       </ul>
     </section>
 
@@ -110,7 +112,7 @@
       <ul>
         <li>Tightens public route matching so only intended dashboard paths bypass the Bot-key API gate.</li>
         <li>Removes the unused miner detail panel so the Miners tab is the single source of truth for priority, streamer, campaign, controls, and log UI.</li>
-        <li>Updates SwiftMiner to version 1.28 build 2026061809 while leaving ShipHook-owned appcasts untouched.</li>
+        <li>Updates SwiftMiner to version 1.28 build 2026061811 while leaving ShipHook-owned appcasts untouched.</li>
       </ul>
     </section>
 
