@@ -78,9 +78,12 @@
       <li>Modernizes the Add Twitch Account login sheet with a cleaner approval flow, stronger code presentation, and clearer waiting, success, and retry states.</li>
       <li>Improves mining reliability by recognizing claimed multi-reward drops from any matching Twitch benefit ID and by continuing inventory claim checks even when a claimable drop only appears in Twitch inventory.</li>
       <li>Deduplicates repeated reward tiles in grouped Drops cards so the shown reward count matches the visible rewards.</li>
+      <li>Clarifies Drops campaign cards so claimed-but-unlinked rewards are the visible account-link state, while pre-claim unlinked prioritised games no longer appear as a separate actionable setup state.</li>
+      <li>Preloads the Drops view from cached campaign data on launch and replaces the empty first-load placeholder with an animated loading splash.</li>
+      <li>Removes per-reward progress strips from grouped Drops cards and keeps the claimed-but-unlinked icon as a green check with an orange question badge.</li>
       <li>Polishes the overview refresh path so miners can restart from refresh without clearing artwork, adds a miner account button, and slows the Looking for Streams animation to feel more native.</li>
       <li>Removes the unused miner detail panel so the Miners tab is the single source of truth for priority, streamer, campaign, controls, and log UI.</li>
-      <li>Updates SwiftMiner to version 1.28 build 2026061820 and tightens Sparkle guardrails while leaving ShipHook-owned appcasts untouched.</li>
+      <li>Updates SwiftMiner to version 1.28 build 2026061909 and tightens Sparkle guardrails while leaving ShipHook-owned appcasts untouched.</li>
     </ul>
     <h2>🛡️ Version 1.27</h2>
     <ul>
