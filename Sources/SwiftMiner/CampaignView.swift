@@ -853,7 +853,8 @@ private struct GameCampaignDeckCard: View {
     }
 
     private var totalRewardCount: Int {
-        group.campaigns.reduce(0) { $0 + max($1.campaign.totalDrops, $1.campaign.drops.count) }
+        // Match the deduplicated reward tiles shown on the card.
+        displayDrops.count
     }
 
     private var claimedRewardCount: Int {
@@ -1019,7 +1020,25 @@ private struct GameCampaignDeckCard: View {
     }
 
     private var displayDrops: [DropViewData] {
-        group.campaigns.flatMap { $0.campaign.drops }
+        // Collapse repeated rewards across every campaign in this game group.
+        // Twitch can expose the same reward through more than one campaign entry
+        // (e.g. duplicate/region variants or a creators campaign that shares the
+        // base drops), which would otherwise render the same reward tile twice.
+        // Identity is the reward name + required watch time; fall back to the
+        // drop id only when the name is missing.
+        var seen = Set<String>()
+        var result: [DropViewData] = []
+        for item in group.campaigns {
+            for drop in item.campaign.drops {
+                let key = drop.name.isEmpty
+                    ? drop.id
+                    : "\(drop.name.lowercased())|\(drop.requiredMinutes)"
+                if seen.insert(key).inserted {
+                    result.append(drop)
+                }
+            }
+        }
+        return result
     }
 
     var body: some View {
@@ -1268,10 +1287,12 @@ private struct BeautifulRewardCard: View {
 
                     if unlinkedClaimOnly {
                         // Claimed on Twitch but not deliverable (account not linked):
-                        // amber question-badge, matching the card's "not linked" cue.
+                        // a normal green claimed check, with an orange "?" badge
+                        // flagging the link issue. Palette layers are
+                        // checkmark / circle / question badge.
                         Image(systemName: "checkmark.circle.badge.questionmark.fill")
                             .symbolRenderingMode(.palette)
-                            .foregroundStyle(.white, Color.orange)
+                            .foregroundStyle(.white, Color.green, Color.orange)
                             .font(.system(size: 16, weight: .bold))
                     } else {
                         Circle()
