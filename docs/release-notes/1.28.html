@@ -88,8 +88,8 @@
 <body>
   <main>
     <h1>SwiftMiner 1.28</h1>
-    <p class="meta">Version 1.28 · Build 2026061820</p>
-    <p class="intro">A web-dashboard, sign-in, SwiftBot Patchy announcement, and mining reliability update for browser-based miner visibility, tighter route handling, and sturdier Twitch Drops claim handling.</p>
+    <p class="meta">Version 1.28 · Build 2026061909</p>
+    <p class="intro">A web-dashboard, sign-in, SwiftBot Patchy announcement, mining reliability, and Drops view polish update for browser-based miner visibility, tighter route handling, sturdier Twitch Drops claim handling, and clearer claimed-but-unlinked rewards.</p>
 
     <section class="dashboard">
       <h2><span class="badge" aria-hidden="true">🌐</span> Web Dashboard</h2>
@@ -104,6 +104,8 @@
         <li>Keeps the regular progress/status card visible separately from diagnostics, including an <strong>Idle - no campaigns</strong> state when no active campaign is mining.</li>
         <li>Hides stall confidence and diagnostic details by default behind a Diagnostics toggle for cleaner everyday dashboard use.</li>
         <li>Deduplicates repeated reward tiles in grouped Drops cards so the shown reward count matches the visible rewards.</li>
+        <li>Preloads the Drops view from the last known campaign feed during launch so opening Drops is less likely to show an empty placeholder while fresh Twitch data syncs.</li>
+        <li>Adds a polished Drops loading splash with an animated SF Symbol for first-load campaign syncs.</li>
       </ul>
     </section>
 
@@ -113,7 +115,7 @@
       <ul>
         <li>Tightens public route matching so only intended dashboard paths bypass the Bot-key API gate.</li>
         <li>Removes the unused miner detail panel so the Miners tab is the single source of truth for priority, streamer, campaign, controls, and log UI.</li>
-        <li>Updates SwiftMiner to version 1.28 build 2026061820 while leaving ShipHook-owned appcasts untouched.</li>
+        <li>Updates SwiftMiner to version 1.28 build 2026061909 while leaving ShipHook-owned appcasts untouched.</li>
       </ul>
     </section>
 
@@ -124,6 +126,9 @@
         <li>Modernizes the Add Twitch Account login sheet with a cleaner two-step approval flow.</li>
         <li>Improves code presentation, copy feedback, and waiting, success, and retry states.</li>
         <li>Improves mining reliability by recognizing claimed multi-reward drops from any matching Twitch benefit ID and by continuing inventory claim checks even when a claimable drop only appears in Twitch inventory.</li>
+        <li>Clarifies Drops campaign cards so pre-claim unlinked games no longer appear as a separate actionable setup state; claimed rewards that still need the game linked now show as <strong>Claimed · not linked</strong>.</li>
+        <li>Uses a green claimed check with an orange question badge for claimed-but-unlinked miner states, making the reward state and missing game link visible at the same time.</li>
+        <li>Removes the small per-reward progress strips from grouped Drops cards for a cleaner reward shelf.</li>
       </ul>
     </section>
   </main>
