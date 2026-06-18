@@ -1298,6 +1298,18 @@ public actor MinerEngine {
                 return false
             }
 
+            // Nothing left to EARN by watching: every remaining unclaimed drop is
+            // already fully earned (claimable). Such a campaign must not pin the
+            // miner in "Waiting for an eligible live stream" — there is no progress
+            // to make. This is common for unlinked accounts, whose earned drops
+            // can't be claimed through and otherwise stay claimable forever.
+            // The claim step (claimReadyDrops) handles delivering these drops
+            // independently of this stream-watching candidate set.
+            guard !campaign.earnableDrops.isEmpty else {
+                filteredOutReasons["no_earnable_drops", default: 0] += 1
+                return false
+            }
+
             // Linkage gate: a campaign whose game account is not linked may only
             // be attempted when its game is prioritised for THIS miner. Otherwise an
             // unlinked, non-prioritised campaign would leak into mining (e.g. another

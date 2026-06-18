@@ -342,7 +342,6 @@ struct OverviewView: View {
                 .controlSize(.small)
                 .help("Add a Twitch account")
             }
-            .padding(.top, 10)
 
             if miners.isEmpty {
                 MaterialEmptyStatePanel(
@@ -1412,9 +1411,11 @@ private struct OverviewSystemStateBanner: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
+        // Match the corner radius of the Miner Activity cards below, which use
+        // `.glassCard()` (default radius 18).
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .strokeBorder(state.color.opacity(0.2), lineWidth: 1)
         }
     }
