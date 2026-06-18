@@ -43,6 +43,11 @@ struct AnimatedStatusIcon: View {
                     weight: weight,
                     isAnimated: isAnimated
                 )
+            } else if symbol == "checkmark.circle.badge.questionmark.fill" {
+                Image(systemName: symbol)
+                    .font(.system(size: size, weight: weight))
+                    .symbolRenderingMode(settings.coloredStatusIcons ? .palette : .monochrome)
+                    .foregroundStyle(settings.coloredStatusIcons ? .orange : effectiveColor, settings.coloredStatusIcons ? .green : effectiveColor)
             } else if symbol == "clock.badge.exclamationmark" {
                 if settings.coloredStatusIcons {
                     let base = Image(systemName: symbol)
