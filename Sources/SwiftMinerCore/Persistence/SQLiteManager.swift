@@ -656,6 +656,28 @@ public actor SQLiteManager {
             return 0
         }
     }
+
+    /// Count of drops claimed by a single Twitch account within a trailing
+    /// window (rolling, relative to now). Backs the dashboard's "Drops Claimed
+    /// This Week" stat. Defaults to 7 days.
+    public func fetchClaimsCount(twitchId: String, withinDays days: Int = 7) async -> Int {
+        do {
+            return try await query { db in
+                let sql = "SELECT COUNT(*) FROM reward_ledger WHERE twitch_id = ? AND datetime(claimed_at) >= datetime('now', ?);"
+                var stmt: OpaquePointer?
+                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return 0 }
+                defer { sqlite3_finalize(stmt) }
+                sqlite3_bind_text(stmt, 1, twitchId, -1, SQLITE_TRANSIENT)
+                sqlite3_bind_text(stmt, 2, "-\(max(days, 0)) days", -1, SQLITE_TRANSIENT)
+                if sqlite3_step(stmt) == SQLITE_ROW {
+                    return Int(sqlite3_column_int(stmt, 0))
+                }
+                return 0
+            }
+        } catch {
+            return 0
+        }
+    }
 }
 
 /// A persisted web dashboard session, surfaced to the service layer.
