@@ -90,8 +90,8 @@
 <body>
   <main>
     <h1>SwiftMiner 1.29</h1>
-    <p class="meta">Version 1.29 · Build 2026061811</p>
-    <p class="intro">A web-dashboard release for checking and managing miners from the browser, with safer sign-in, clearer update controls, SwiftBot Patchy campaign announcements, and better visibility into each miner's priority and account-link state.</p>
+    <p class="meta">Version 1.29 · Build 2026061909</p>
+    <p class="intro">A web-dashboard and Drops polish release for checking and managing miners from the browser, with safer sign-in, clearer update controls, SwiftBot Patchy campaign announcements, and better visibility into each miner's priority and claimed-but-unlinked reward state.</p>
 
     <section class="dashboard">
       <h2><span class="badge" aria-hidden="true">🌐</span> Web Dashboard</h2>
@@ -138,7 +138,7 @@
         <li>Adds update events to the Activity Log so checks, available updates, installs, and failures are easier to trace.</li>
         <li>Adds settings for automatic update checks and unattended install options when macOS allows them.</li>
         <li>Improves update settings with clearer state, manual actions, and fallback messaging.</li>
-        <li>Updates SwiftMiner build metadata to 2026061811 while leaving ShipHook-owned appcasts untouched.</li>
+        <li>Updates SwiftMiner build metadata to 2026061909 while leaving ShipHook-owned appcasts untouched.</li>
       </ul>
     </section>
 
@@ -152,6 +152,18 @@
         <li>Shows claimed-but-unlinked campaigns as completed with a distinct question-badge status, so users know the drop is claimed but the game still needs linking.</li>
         <li>Fixes completed campaign timing in the web projection so active-but-already-claimed campaigns no longer look like they completed one minute ago forever.</li>
         <li>Removes the unused miner detail panel so the Miners tab is the single source of truth for priority, streamer, campaign, controls, and log UI.</li>
+      </ul>
+    </section>
+
+    <section class="miners">
+      <h2><span class="badge" aria-hidden="true">🎮</span> Drops View</h2>
+      <p class="summary">Claimed-but-unlinked rewards are clearer, and opening Drops feels steadier.</p>
+      <ul>
+        <li>Clarifies Drops campaign cards so pre-claim unlinked games no longer appear as a separate actionable setup state; claimed rewards that still need the game linked now show as <strong>Claimed · not linked</strong>.</li>
+        <li>Uses a green claimed check with an orange question badge for claimed-but-unlinked miner states, making the reward state and missing game link visible at the same time.</li>
+        <li>Preloads the Drops view from the last known campaign feed during launch so opening Drops is less likely to show an empty placeholder while fresh Twitch data syncs.</li>
+        <li>Adds a polished Drops loading splash with an animated SF Symbol for first-load campaign syncs.</li>
+        <li>Removes the small per-reward progress strips from grouped Drops cards for a cleaner reward shelf.</li>
       </ul>
     </section>
 
