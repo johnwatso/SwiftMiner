@@ -8,6 +8,8 @@ public struct DiscordUserProjection: Codable, Sendable {
     public let account: Account?
     public let activeCampaign: ActiveCampaign?
     public let recentCompletedCampaigns: [RecentCampaign]
+    /// Drops claimed by this account within the trailing 7 days (rolling).
+    public let dropsClaimedThisWeek: Int
     public let issues: [Issue]
     public let dmState: DiscordDMState
     public let priorityGames: [String]
@@ -24,6 +26,7 @@ public struct DiscordUserProjection: Codable, Sendable {
         account: Account? = nil,
         activeCampaign: ActiveCampaign? = nil,
         recentCompletedCampaigns: [RecentCampaign] = [],
+        dropsClaimedThisWeek: Int = 0,
         issues: [Issue] = [],
         dmState: DiscordDMState = DiscordDMState(),
         priorityGames: [String] = [],
@@ -36,6 +39,7 @@ public struct DiscordUserProjection: Codable, Sendable {
         self.account = account
         self.activeCampaign = activeCampaign
         self.recentCompletedCampaigns = recentCompletedCampaigns
+        self.dropsClaimedThisWeek = dropsClaimedThisWeek
         self.issues = issues
         self.dmState = dmState
         self.priorityGames = priorityGames

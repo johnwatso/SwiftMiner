@@ -90,6 +90,7 @@ public actor DiscordProjectionBuilder {
         let personalPriorityGames: [String]
         let includesGlobalPriorityGames: Bool
         let diagnostics: DiscordUserProjection.Diagnostics?
+        let dropsClaimedThisWeek: Int
         if let account {
             if let accountActive = await stateProvider.activeCampaign(forTwitchAccount: account.twitchAccountId) {
                 activeCampaign = accountActive
@@ -97,6 +98,7 @@ public actor DiscordProjectionBuilder {
                 activeCampaign = await stateProvider.activeCampaign(for: discordUserId)
             }
             recentCompletedCampaigns = await stateProvider.recentCompletedCampaigns(forTwitchAccount: account.twitchAccountId, limit: 3)
+            dropsClaimedThisWeek = await manager.fetchClaimsCount(twitchId: account.twitchAccountId, withinDays: 7)
             if let accountState = await stateProvider.projectionState(forTwitchAccount: account.twitchAccountId) {
                 providerState = accountState
             } else {
@@ -109,6 +111,7 @@ public actor DiscordProjectionBuilder {
         } else {
             activeCampaign = await stateProvider.activeCampaign(for: discordUserId)
             recentCompletedCampaigns = await stateProvider.recentCompletedCampaigns(for: discordUserId, limit: 3)
+            dropsClaimedThisWeek = 0
             providerState = await stateProvider.projectionState(for: discordUserId)
             priorityGames = await stateProvider.priorityGames(for: discordUserId)
             personalPriorityGames = await stateProvider.personalPriorityGames(for: discordUserId)
@@ -136,6 +139,7 @@ public actor DiscordProjectionBuilder {
             account: account,
             activeCampaign: activeCampaign,
             recentCompletedCampaigns: recentCompletedCampaigns,
+            dropsClaimedThisWeek: dropsClaimedThisWeek,
             issues: issues,
             dmState: dmState,
             priorityGames: priorityGames,
@@ -161,6 +165,7 @@ public actor DiscordProjectionBuilder {
 
         let activeCampaign = await stateProvider.activeCampaign(forTwitchAccount: twitchId)
         let recentCompletedCampaigns = await stateProvider.recentCompletedCampaigns(forTwitchAccount: twitchId, limit: 3)
+        let dropsClaimedThisWeek = await manager.fetchClaimsCount(twitchId: twitchId, withinDays: 7)
         let priorityGames = await stateProvider.priorityGames(forTwitchAccount: twitchId)
         let personalPriorityGames = await stateProvider.personalPriorityGames(forTwitchAccount: twitchId)
         let includesGlobalPriorityGames = await stateProvider.includesGlobalPriorityGames(forTwitchAccount: twitchId)
@@ -183,6 +188,7 @@ public actor DiscordProjectionBuilder {
             account: account,
             activeCampaign: activeCampaign,
             recentCompletedCampaigns: recentCompletedCampaigns,
+            dropsClaimedThisWeek: dropsClaimedThisWeek,
             issues: issues,
             dmState: dmState,
             priorityGames: priorityGames,

@@ -418,7 +418,6 @@ enum WebDashboardAssets {
     let includeGlobalPriorities = true;
     let OPERATOR_MINERS = [];
     let OPERATOR_STATE = { selectedMinerId: null, query: '', filter: 'all' };
-    var DIAGNOSTICS_OPEN = false;
 
     async function api(path, opts = {}) {
       const timeoutMs = opts.timeoutMs || 15000;
@@ -480,52 +479,6 @@ enum WebDashboardAssets {
       if (h === 'blocked' || h === 'needsAuth' || h === 'stalled' || h === 'attention') return { label: h === 'stalled' ? 'Stalled' : 'Attention', color: '#ff9f0a' };
       if (h === 'recovering') return { label: 'Recovering', color: '#56bcff' };
       return { label: 'Idle', color: '#8e8e93' };
-    }
-    function diagnosticsButton(p) {
-      if (!(p && p.diagnostics)) return '';
-      const d = p.diagnostics;
-      const h = healthConfig(d);
-      const label = DIAGNOSTICS_OPEN ? 'Hide diagnostics' : 'Diagnostics';
-      return `<button class="btn-secondary diagnostics-toggle" type="button" style="padding: 6px 12px; font-size: 12px; height: 28px; line-height: 1; border-color:${h.color}55">${esc(label)}</button>`;
-    }
-    function diagnosticsCard(p) {
-      const d = p && p.diagnostics;
-      if (!d) return '';
-      const h = healthConfig(d);
-      const pct = Math.max(0, Math.min(100, Number(d.stallConfidencePercent || 0)));
-      const signals = d.stallSignals || [];
-      let signalHTML = signals.length
-        ? signals.map(s => `<div class="signal-row"><span class="signal-dot"></span><span>${esc(s)}</span></div>`).join('')
-        : '<div class="signal-row"><span class="signal-dot" style="background:var(--green)"></span><span>Recent poll, event and worker signals look normal.</span></div>';
-      let events = (d.recentEvents || []).slice(0, 5).map(ev => `
-        <div class="event-row">
-          <div style="flex:1;min-width:0">
-            <div class="event-type">${esc(ev.type || 'Event')} · ${esc(agoText(ev.timestamp) || shortDateTime(ev.timestamp))}</div>
-            <div class="event-summary">${esc(ev.summary || '')}</div>
-          </div>
-        </div>
-      `).join('');
-      if (!events) events = '<div class="muted" style="font-size:13px;margin-top:12px">No recent diagnostic events for this miner.</div>';
-      return `<div class="card">
-        <div class="row" style="align-items:center;margin-bottom:12px">
-          <div>
-            <div class="label" style="margin-bottom:4px">Diagnostics</div>
-            <div class="name" style="color:${h.color}">${esc(d.statusLabel || h.label)}</div>
-          </div>
-          <span class="pill" style="background:${h.color}26;color:${h.color};border:1px solid ${h.color}4d">${pct}% stall confidence</span>
-        </div>
-        <div class="bar" aria-hidden="true"><i style="width:${pct}%;background:linear-gradient(90deg, ${h.color}, ${h.color});box-shadow:0 0 12px ${h.color}66"></i></div>
-        <div class="diagnostic-grid" style="margin-top:12px">
-          <div class="diagnostic-stat"><div class="v">${esc(d.currentChannelName || '—')}</div><div class="k">Channel</div></div>
-          <div class="diagnostic-stat"><div class="v">${d.minutesSinceLastProgress == null ? '—' : esc(d.minutesSinceLastProgress + 'm')}</div><div class="k">Since Progress</div></div>
-          <div class="diagnostic-stat"><div class="v">${esc(shortDateTime(d.lastSuccessfulPollAt))}</div><div class="k">Last Poll</div></div>
-          <div class="diagnostic-stat"><div class="v">${esc(shortDateTime(d.lastEventAt))}</div><div class="k">Last Event</div></div>
-          <div class="diagnostic-stat"><div class="v">${esc(shortDateTime(d.lastCampaignRefreshAt))}</div><div class="k">Campaign Refresh</div></div>
-          <div class="diagnostic-stat"><div class="v">${esc(d.lastSwitchReason || '—')}</div><div class="k">Last Switch</div></div>
-        </div>
-        <div class="signal-list">${signalHTML}</div>
-        <div class="event-list">${events}</div>
-      </div>`;
     }
     function boxart(name, w = 144, h = 192) {
       return 'https://static-cdn.jtvnw.net/ttv-boxart/' + encodeURIComponent(name) + '-' + w + 'x' + h + '.jpg';
@@ -647,8 +600,7 @@ enum WebDashboardAssets {
     function heroStateCard(p) {
       const cfg = getStatusConfig(p);
       const accId = p.account && p.account.twitchAccountId ? String(p.account.twitchAccountId) : '';
-      const progressHTML = progressStateCard(p, cfg);
-      
+
       return `
         <div class="hero-card">
           <div class="hero-header" style="align-items: center; justify-content: space-between; width: 100%;">
@@ -662,20 +614,22 @@ enum WebDashboardAssets {
               </div>
             </div>
             <div style="display:flex;align-items:center;gap:8px;margin-left:auto;flex-shrink:0">
-              ${diagnosticsButton(p)}
               ${accId ? `<button class="btn-secondary refresh-btn" data-account-id="${esc(accId)}" style="padding: 6px 12px; font-size: 12px; height: 28px; line-height: 1; flex-shrink: 0;">Refresh</button>` : ''}
             </div>
           </div>
-          ${progressHTML}
         </div>
       `;
     }
 
+    function progressCard(p) {
+      const cfg = getStatusConfig(p);
+      return `<div class="card"><div class="label" style="margin-bottom:12px">Progress</div>${progressStateCard(p, cfg, 'background:transparent;border:none;padding:0')}</div>`;
+    }
+
     function statsRow(p) {
       const acc = p.account || {};
-      const recents = p.recentCompletedCampaigns || [];
-      const totalDropsClaimed = recents.reduce((sum, c) => sum + (c.claimedDrops || 0), 0);
-      
+      const dropsThisWeek = Number(p.dropsClaimedThisWeek || 0);
+
       const twitchVal = acc.username ? esc(acc.username) : 'Not Linked';
       const twitchLabel = acc.twitchAccountId ? 'Twitch Linked' : 'Twitch Account';
       
@@ -696,8 +650,8 @@ enum WebDashboardAssets {
             <div class="stat-icon-wrapper" style="background-color: rgba(52, 199, 89, 0.12); color: #34C759; --tint-rgb: 52, 199, 89;">
               ${giftIcon}
             </div>
-            <div class="stat-value">${totalDropsClaimed}</div>
-            <div class="stat-label">Drops Claimed</div>
+            <div class="stat-value">${dropsThisWeek}</div>
+            <div class="stat-label">Drops Claimed This Week</div>
           </div>
         </div>
       `;
@@ -906,11 +860,10 @@ enum WebDashboardAssets {
       }
       personal = (p.personalPriorityGames || []).slice();
       includeGlobalPriorities = p.includesGlobalPriorityGames !== false;
-      $('app').innerHTML = operatorBackCard(p) + heroStateCard(p) + statsRow(p) + (DIAGNOSTICS_OPEN ? diagnosticsCard(p) : '') + activationCard(p) + issuesCard(p) + upNextCard(p) + globalCard(p) + personalCard() + dropsCard(p);
+      $('app').innerHTML = operatorBackCard(p) + heroStateCard(p) + statsRow(p) + progressCard(p) + activationCard(p) + issuesCard(p) + upNextCard(p) + globalCard(p) + personalCard() + dropsCard(p);
       hydrateArt();
       wireActivation();
       wireOperatorBack();
-      wireDiagnosticsToggle();
       wireIssues();
       wireCampaigns();
       wirePersonal();
@@ -952,15 +905,6 @@ enum WebDashboardAssets {
       };
       $('addbtn').addEventListener('click', add);
       input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
-    }
-
-    function wireDiagnosticsToggle() {
-      document.querySelectorAll('.diagnostics-toggle').forEach(btn => {
-        btn.addEventListener('click', () => {
-          DIAGNOSTICS_OPEN = !DIAGNOSTICS_OPEN;
-          render(PROJ);
-        });
-      });
     }
 
     function addPersonalGame(name) {
@@ -1233,7 +1177,6 @@ enum WebDashboardAssets {
       const p = OPERATOR_MINERS.find(m => minerId(m) === String(id));
       if (!p) return;
       OPERATOR_STATE.selectedMinerId = String(id);
-      DIAGNOSTICS_OPEN = false;
       render(p);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
