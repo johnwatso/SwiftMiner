@@ -424,7 +424,7 @@ public actor WebDashboardRoutes {
         case .discord:
             guard let token = await exchangeCode(code, provider: .discord, creds: creds),
                   let id = await fetchDiscordUserId(accessToken: token), isValidSnowflake(id) else {
-                return .html(WebDashboardAssets.message("Could not complete Discord login.", linkToLogin: true), statusCode: 502)
+                return .html(WebDashboardAssets.message("Could not complete Discord login.", linkToLogin: true), statusCode: 400)
             }
             // Web-first onboarding: ensure the Discord user row exists.
             guard await apiRoutes.webSelfRegister(discordId: id) else {
@@ -435,7 +435,7 @@ public actor WebDashboardRoutes {
         case .twitch:
             guard let token = await exchangeCode(code, provider: .twitch, creds: creds),
                   let twitchUser = await fetchTwitchUser(accessToken: token, clientID: creds.clientID) else {
-                return .html(WebDashboardAssets.message("Could not complete Twitch login.", linkToLogin: true), statusCode: 502)
+                return .html(WebDashboardAssets.message("Could not complete Twitch login.", linkToLogin: true), statusCode: 400)
             }
             let id = twitchUser.id
             // Only Twitch accounts that SwiftMiner actually mines may sign in.
@@ -654,13 +654,19 @@ public actor WebDashboardRoutes {
         do {
             let (data, resp) = try await urlSession.data(for: req)
             guard let http = resp as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-                webLogger.error("\(provider.rawValue, privacy: .public) token exchange non-2xx")
+                let status = (resp as? HTTPURLResponse)?.statusCode ?? -1
+                let bodyString = String(data: data, encoding: .utf8) ?? "non-utf8"
+                let errorMsg = "\(provider.rawValue) token exchange failed: status=\(status) body=\(bodyString)"
+                webLogger.error("\(errorMsg, privacy: .public)")
+                await audit?(errorMsg)
                 return nil
             }
             let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
             return json?["access_token"] as? String
         } catch {
-            webLogger.error("token exchange error: \(error.localizedDescription, privacy: .public)")
+            let errorMsg = "\(provider.rawValue) token exchange error: \(error.localizedDescription)"
+            webLogger.error("\(errorMsg, privacy: .public)")
+            await audit?(errorMsg)
             return nil
         }
     }
@@ -677,14 +683,29 @@ public actor WebDashboardRoutes {
         req.setValue(clientID, forHTTPHeaderField: "Client-Id")
         do {
             let (data, resp) = try await urlSession.data(for: req)
-            guard let http = resp as? HTTPURLResponse, (200...299).contains(http.statusCode) else { return nil }
+            guard let http = resp as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+                let status = (resp as? HTTPURLResponse)?.statusCode ?? -1
+                let bodyString = String(data: data, encoding: .utf8) ?? "non-utf8"
+                let errorMsg = "Twitch fetch user failed: status=\(status) body=\(bodyString)"
+                webLogger.error("\(errorMsg, privacy: .public)")
+                await audit?(errorMsg)
+                return nil
+            }
             let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
             guard let user = (json?["data"] as? [[String: Any]])?.first,
-                  let id = user["id"] as? String else { return nil }
+                  let id = user["id"] as? String else {
+                let bodyString = String(data: data, encoding: .utf8) ?? "non-utf8"
+                let errorMsg = "Twitch fetch user parsed invalid structure: body=\(bodyString)"
+                webLogger.error("\(errorMsg, privacy: .public)")
+                await audit?(errorMsg)
+                return nil
+            }
             let login = (user["display_name"] as? String) ?? (user["login"] as? String) ?? "id \(id)"
             return (id, login)
         } catch {
-            webLogger.error("helix/users error: \(error.localizedDescription, privacy: .public)")
+            let errorMsg = "Twitch fetch user connection error: \(error.localizedDescription)"
+            webLogger.error("\(errorMsg, privacy: .public)")
+            await audit?(errorMsg)
             return nil
         }
     }
@@ -692,10 +713,20 @@ public actor WebDashboardRoutes {
     private func getJSONString(_ req: URLRequest, key: String) async -> String? {
         do {
             let (data, resp) = try await urlSession.data(for: req)
-            guard let http = resp as? HTTPURLResponse, (200...299).contains(http.statusCode) else { return nil }
+            guard let http = resp as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+                let status = (resp as? HTTPURLResponse)?.statusCode ?? -1
+                let bodyString = String(data: data, encoding: .utf8) ?? "non-utf8"
+                let errorMsg = "getJSONString failed: status=\(status) body=\(bodyString)"
+                webLogger.error("\(errorMsg, privacy: .public)")
+                await audit?(errorMsg)
+                return nil
+            }
             let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
             return json?[key] as? String
         } catch {
+            let errorMsg = "getJSONString error: \(error.localizedDescription)"
+            webLogger.error("\(errorMsg, privacy: .public)")
+            await audit?(errorMsg)
             return nil
         }
     }
