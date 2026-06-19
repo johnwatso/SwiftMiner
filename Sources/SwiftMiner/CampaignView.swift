@@ -324,7 +324,7 @@ struct DropsListView: View {
         )
 
         let feedCampaigns = customizedCampaigns
-            .filter { !isExcludedCampaign($0) }
+            .filter { !isExcludedCampaign($0) && $0.relevance != .irrelevant }
             .sorted {
                 campaignSort(lhs: $0, rhs: $1, activityByCampaignId: activityByCampaignId)
             }
