@@ -11,6 +11,18 @@ public struct Account: Codable, Sendable, Equatable, Identifiable {
     public let tokenExpiry: Date
     public let scopes: [String]
     public let isOperator: Bool
+    
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case username
+        case nickname
+        case ownerDiscordId
+        case accessToken
+        case refreshToken
+        case tokenExpiry
+        case scopes
+        case isOperator
+    }
 
     public init(
         id: String,
@@ -32,6 +44,32 @@ public struct Account: Codable, Sendable, Equatable, Identifiable {
         self.tokenExpiry = tokenExpiry
         self.scopes = scopes
         self.isOperator = isOperator
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decode(String.self, forKey: .id)
+        self.username = try container.decode(String.self, forKey: .username)
+        self.nickname = try container.decodeIfPresent(String.self, forKey: .nickname)
+        self.ownerDiscordId = try container.decodeIfPresent(String.self, forKey: .ownerDiscordId)
+        self.accessToken = try container.decode(String.self, forKey: .accessToken)
+        self.refreshToken = try container.decode(String.self, forKey: .refreshToken)
+        self.tokenExpiry = try container.decode(Date.self, forKey: .tokenExpiry)
+        self.scopes = try container.decode([String].self, forKey: .scopes)
+        self.isOperator = try container.decodeIfPresent(Bool.self, forKey: .isOperator) ?? false
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(username, forKey: .username)
+        try container.encode(nickname, forKey: .nickname)
+        try container.encode(ownerDiscordId, forKey: .ownerDiscordId)
+        try container.encode(accessToken, forKey: .accessToken)
+        try container.encode(refreshToken, forKey: .refreshToken)
+        try container.encode(tokenExpiry, forKey: .tokenExpiry)
+        try container.encode(scopes, forKey: .scopes)
+        try container.encode(isOperator, forKey: .isOperator)
     }
 
     /// Check if the access token is valid (not expired, with 5 minute buffer)
