@@ -125,7 +125,11 @@ public struct WebDashboardConfig: Sendable {
         local: WebLocalCredentials? = nil,
         swiftBotSSO: WebSwiftBotSSO? = nil
     ) {
-        self.baseURL = baseURL
+        if baseURL == nil, let swiftBotSSO {
+            self.baseURL = URL(string: swiftBotSSO.origin)
+        } else {
+            self.baseURL = baseURL
+        }
         self.discord = discord
         self.twitch = twitch
         self.local = local

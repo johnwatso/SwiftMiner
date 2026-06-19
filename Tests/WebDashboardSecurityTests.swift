@@ -127,6 +127,20 @@ final class WebDashboardSecurityTests: XCTestCase {
         XCTAssertFalse(cfg.useSecureCookies)
     }
 
+    func testSwiftBotSSOConfigWithoutBaseURLFallsBackToOrigin() {
+        let cfg = WebDashboardConfig(
+            baseURL: nil,
+            discord: nil,
+            twitch: nil,
+            swiftBotSSO: WebSwiftBotSSO(origin: "https://swiftminer.roon.nz", hmacSecret: "secret")
+        )
+        XCTAssertEqual(cfg.baseURL, URL(string: "https://swiftminer.roon.nz"))
+        XCTAssertTrue(cfg.swiftBotSSOEnabled)
+        XCTAssertTrue(cfg.anyEnabled)
+        XCTAssertEqual(cfg.redirectURI, "https://swiftminer.roon.nz/oauth/callback")
+        XCTAssertTrue(cfg.useSecureCookies)
+    }
+
     func testRootIsNeverAPublicPrefix() {
         // hasPrefix("/") matches everything — the root must only ever be an
         // *exact* public path, never a prefix, or the Bot-key API would leak.
