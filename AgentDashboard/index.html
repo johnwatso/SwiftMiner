@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-950 text-slate-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SwiftMiner Agent Dashboard</title>
+  
+  <!-- TailwindCSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              purple: '#9333ea',
+              violet: '#7c3aed',
+              emerald: '#10b981',
+              dark: '#090514',
+              accent: '#3b82f6',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  
+  <!-- Google Fonts - Outfit & Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  
+  <!-- Custom styles -->
+  <link rel="stylesheet" href="index.css">
+</head>
+<body class="h-full flex overflow-hidden font-['Inter']">
+
+  <!-- Sidebar Navigation -->
+  <aside class="w-64 bg-brand-dark border-r border-slate-800 flex flex-col justify-between z-10">
+    <div>
+      <!-- Logo Header -->
+      <div class="p-6 flex items-center gap-3 border-b border-slate-900">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-purple to-brand-emerald flex items-center justify-center shadow-lg shadow-purple-900/30 ring-1 ring-white/10">
+          <i class="fa-solid fa-cube text-white text-xl"></i>
+        </div>
+        <div>
+          <h1 class="font-['Outfit'] font-extrabold text-lg bg-gradient-to-r from-white via-slate-200 to-brand-emerald bg-clip-text text-transparent leading-none">SwiftMiner</h1>
+          <span class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Agent Dashboard</span>
+        </div>
+      </div>
+      
+      <!-- Nav Items -->
+      <nav class="p-4 space-y-1">
+        <button onclick="switchTab('overview')" id="nav-overview" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200 bg-purple-950/40 text-brand-emerald border-l-2 border-brand-emerald">
+          <i class="fa-solid fa-chart-line text-lg w-5"></i>
+          Overview
+        </button>
+        <button onclick="switchTab('sandbox')" id="nav-sandbox" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200 text-slate-400 hover:text-white hover:bg-slate-900">
+          <i class="fa-solid fa-flask text-lg w-5"></i>
+          Agent Sandbox
+        </button>
+        <button onclick="switchTab('history')" id="nav-history" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200 text-slate-400 hover:text-white hover:bg-slate-900">
+          <i class="fa-solid fa-clock-rotate-left text-lg w-5"></i>
+          Run History
+        </button>
+      </nav>
+    </div>
+    
+    <!-- Operator Card -->
+    <div class="p-4 border-t border-slate-900 bg-slate-950/50">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-full bg-slate-800 flex items-center justify-center font-bold text-slate-300 ring-2 ring-brand-purple/50">
+          J
+        </div>
+        <div class="min-w-0 flex-1">
+          <p class="text-xs font-semibold text-slate-200 truncate">John Henderson</p>
+          <span class="text-[9px] uppercase font-bold text-brand-emerald flex items-center gap-1">
+            <span class="w-1.5 h-1.5 rounded-full bg-brand-emerald animate-pulse"></span>
+            Agent Engine Live
+          </span>
+        </div>
+        <button class="text-slate-400 hover:text-white transition-colors" title="Settings">
+          <i class="fa-solid fa-cog"></i>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Container -->
+  <main class="flex-1 flex flex-col min-w-0 bg-slate-950 overflow-hidden relative">
+    
+    <!-- Background Ambient Glows -->
+    <div class="absolute top-0 right-0 w-96 h-96 bg-brand-purple/5 rounded-full blur-3xl pointer-events-none"></div>
+    <div class="absolute bottom-0 left-0 w-96 h-96 bg-brand-emerald/5 rounded-full blur-3xl pointer-events-none"></div>
+
+    <!-- Top Header -->
+    <header class="h-16 border-b border-slate-900 bg-slate-950/70 backdrop-blur-md flex items-center justify-between px-8 z-10">
+      <div class="flex items-center gap-4">
+        <h2 id="page-title" class="text-xl font-bold font-['Outfit'] text-white">Dashboard Overview</h2>
+        <span class="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-slate-900 border border-slate-800 text-slate-400 flex items-center gap-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+          v1.29.3
+        </span>
+      </div>
+      
+      <!-- Quick Status Dashboard -->
+      <div class="flex items-center gap-6 text-sm text-slate-400">
+        <div class="flex items-center gap-2">
+          <span>Total Cost:</span>
+          <span id="header-total-cost" class="font-semibold text-white">$142.84</span>
+        </div>
+        <div class="w-px h-4 bg-slate-800"></div>
+        <div class="flex items-center gap-2">
+          <span>Avg Success Rate:</span>
+          <span class="font-semibold text-brand-emerald">94.2%</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Tab Contents Container -->
+    <div class="flex-1 overflow-y-auto p-8 relative z-10">
+      
+      <!-- ================= OVERVIEW TAB ================= -->
+      <section id="tab-overview" class="space-y-8 block">
+        <!-- KPI Cards Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+          
+          <!-- Card 1: Total Runs -->
+          <div class="glass-card p-6 flex flex-col justify-between">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Executions</span>
+              <div class="w-8 h-8 rounded-lg bg-purple-500/10 text-brand-purple flex items-center justify-center ring-1 ring-brand-purple/20">
+                <i class="fa-solid fa-terminal"></i>
+              </div>
+            </div>
+            <div class="mt-4">
+              <h3 class="text-3xl font-extrabold text-white font-['Outfit']">1,248</h3>
+              <p class="text-xs text-brand-emerald mt-1 flex items-center gap-1">
+                <i class="fa-solid fa-arrow-up-long"></i>
+                <span>+12.4% vs last week</span>
+              </p>
+            </div>
+          </div>
+
+          <!-- Card 2: Total Tokens -->
+          <div class="glass-card p-6 flex flex-col justify-between">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Tokens Processed</span>
+              <div class="w-8 h-8 rounded-lg bg-emerald-500/10 text-brand-emerald flex items-center justify-center ring-1 ring-brand-emerald/20">
+                <i class="fa-solid fa-microchip"></i>
+              </div>
+            </div>
+            <div class="mt-4">
+              <h3 class="text-3xl font-extrabold text-white font-['Outfit']">14.8M</h3>
+              <p class="text-xs text-brand-emerald mt-1 flex items-center gap-1">
+                <i class="fa-solid fa-arrow-up-long"></i>
+                <span>+8.2% vs last week</span>
+              </p>
+            </div>
+          </div>
+
+          <!-- Card 3: Accumulated Cost -->
+          <div class="glass-card p-6 flex flex-col justify-between">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Model Cost</span>
+              <div class="w-8 h-8 rounded-lg bg-blue-500/10 text-brand-accent flex items-center justify-center ring-1 ring-brand-accent/20">
+                <i class="fa-solid fa-dollar-sign"></i>
+              </div>
+            </div>
+            <div class="mt-4">
+              <h3 id="overview-total-cost" class="text-3xl font-extrabold text-white font-['Outfit']">$142.84</h3>
+              <p class="text-xs text-brand-emerald mt-1 flex items-center gap-1">
+                <i class="fa-solid fa-arrow-down-long"></i>
+                <span>-3.1% (model optimization)</span>
+              </p>
+            </div>
+          </div>
+
+          <!-- Card 4: Avg Run Duration -->
+          <div class="glass-card p-6 flex flex-col justify-between">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Avg Run Duration</span>
+              <div class="w-8 h-8 rounded-lg bg-orange-500/10 text-orange-400 flex items-center justify-center ring-1 ring-orange-500/20">
+                <i class="fa-solid fa-hourglass-half"></i>
+              </div>
+            </div>
+            <div class="mt-4">
+              <h3 class="text-3xl font-extrabold text-white font-['Outfit']">48.2s</h3>
+              <p class="text-xs text-orange-400 mt-1 flex items-center gap-1">
+                <i class="fa-solid fa-circle-exclamation"></i>
+                <span>Slightly higher latency today</span>
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Charts Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <!-- Main Chart -->
+          <div class="glass-card p-6 lg:col-span-2 space-y-4">
+            <div class="flex justify-between items-center">
+              <div>
+                <h4 class="font-bold text-white font-['Outfit']">Token & Cost Trends</h4>
+                <p class="text-xs text-slate-400">Daily token consumption compared to cost accumulation.</p>
+              </div>
+              <div class="flex gap-2">
+                <span class="px-3 py-1 rounded-lg bg-slate-900 border border-slate-800 text-xs font-semibold text-brand-purple">Tokens</span>
+                <span class="px-3 py-1 rounded-lg bg-slate-900 border border-slate-800 text-xs font-semibold text-brand-emerald">Cost</span>
+              </div>
+            </div>
+            <div class="h-64 relative">
+              <canvas id="tokenTrendChart"></canvas>
+            </div>
+          </div>
+
+          <!-- Breakdown Chart -->
+          <div class="glass-card p-6 space-y-4">
+            <div>
+              <h4 class="font-bold text-white font-['Outfit']">Agent Cost Breakdown</h4>
+              <p class="text-xs text-slate-400">Cost allocation across primary model classes.</p>
+            </div>
+            <div class="h-64 relative flex items-center justify-center">
+              <canvas id="costBreakdownChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent Runs Queue -->
+        <div class="glass-card p-6">
+          <div class="flex justify-between items-center mb-6">
+            <div>
+              <h4 class="font-bold text-white font-['Outfit']">Recent Agent Runs</h4>
+              <p class="text-xs text-slate-400">Latest completed and active system tasks.</p>
+            </div>
+            <button onclick="switchTab('history')" class="text-xs font-bold text-brand-emerald hover:underline">View All Runs <i class="fa-solid fa-arrow-right-long ml-1"></i></button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="border-b border-slate-800 text-slate-400 text-xs uppercase tracking-wider font-bold">
+                  <th class="py-3 px-4">Run ID</th>
+                  <th class="py-3 px-4">Task Name</th>
+                  <th class="py-3 px-4">Model</th>
+                  <th class="py-3 px-4">Tokens</th>
+                  <th class="py-3 px-4">Cost</th>
+                  <th class="py-3 px-4">Duration</th>
+                  <th class="py-3 px-4">Status</th>
+                </tr>
+              </thead>
+              <tbody id="overview-runs-tbody" class="text-sm divide-y divide-slate-900/60">
+                <!-- JavaScript populated -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= SANDBOX TAB ================= -->
+      <section id="tab-sandbox" class="space-y-6 hidden h-full flex flex-col">
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 items-stretch">
+          
+          <!-- Left Config Panel -->
+          <div class="glass-card p-6 flex flex-col justify-between space-y-6 lg:col-span-1 bg-slate-900/40">
+            <div class="space-y-4">
+              <h3 class="font-bold text-lg font-['Outfit'] text-white flex items-center gap-2">
+                <i class="fa-solid fa-sliders text-brand-emerald"></i>
+                Sandbox Config
+              </h3>
+              
+              <!-- Agent Model -->
+              <div class="space-y-1.5">
+                <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Agent Model</label>
+                <select id="config-model" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-brand-emerald transition-colors">
+                  <option value="gpt-4o-mini">Fast (GPT-4o Mini)</option>
+                  <option value="claude-3-5" selected>Smart (Claude 3.5 Sonnet)</option>
+                  <option value="o1-pro">Slow/Reasoning (o1 Pro)</option>
+                </select>
+              </div>
+
+              <!-- Speed Mode -->
+              <div class="space-y-1.5">
+                <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Simulation Speed</label>
+                <select id="config-speed" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-brand-emerald transition-colors">
+                  <option value="fast">Turbo (Instant)</option>
+                  <option value="normal" selected>Normal (Streaming)</option>
+                  <option value="realtime">Realistic (Slow)</option>
+                </select>
+              </div>
+
+              <!-- Complexity -->
+              <div class="space-y-1.5">
+                <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Code Complexity</label>
+                <select id="config-complexity" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-brand-emerald transition-colors">
+                  <option value="simple">Simple Fix (1-2 steps)</option>
+                  <option value="moderate" selected>Medium Feature (3-5 steps)</option>
+                  <option value="complex">Complex Architecture (6-8 steps)</option>
+                </select>
+              </div>
+
+              <!-- Web Search toggle -->
+              <div class="flex items-center justify-between py-2 border-t border-b border-slate-900">
+                <div>
+                  <p class="text-sm font-semibold text-slate-200">Web Search</p>
+                  <p class="text-[10px] text-slate-500">Enable Google / Web API search</p>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" id="config-websearch" class="sr-only peer" checked>
+                  <div class="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-300 after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-emerald"></div>
+                </label>
+              </div>
+
+              <!-- Code Refinement toggle -->
+              <div class="flex items-center justify-between py-2 border-b border-slate-900">
+                <div>
+                  <p class="text-sm font-semibold text-slate-200">Self-Repair</p>
+                  <p class="text-[10px] text-slate-500">Run linter and fix errors</p>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" id="config-selfrepair" class="sr-only peer" checked>
+                  <div class="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-300 after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-emerald"></div>
+                </label>
+              </div>
+            </div>
+
+            <!-- Run Button -->
+            <button id="btn-run-sandbox" onclick="startSandboxSimulation()" class="w-full py-3 bg-gradient-to-r from-brand-purple to-brand-emerald hover:opacity-95 text-white font-bold rounded-xl shadow-lg shadow-purple-900/30 transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center gap-2">
+              <i class="fa-solid fa-play"></i>
+              Start Mock Agent
+            </button>
+          </div>
+
+          <!-- Dynamic DAG / Tree and Live Stream Terminal -->
+          <div class="lg:col-span-3 flex flex-col gap-6">
+            
+            <!-- DAG Panel -->
+            <div class="glass-card p-6 flex-1 flex flex-col justify-between min-h-[300px]">
+              <div class="flex justify-between items-center mb-4">
+                <div>
+                  <h3 class="font-bold font-['Outfit'] text-white">Task Dependency graph (DAG)</h3>
+                  <p class="text-xs text-slate-400">Hierarchical task execution graph updated in real-time.</p>
+                </div>
+                <div class="flex gap-4 text-xs text-slate-400">
+                  <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded bg-slate-800 border border-slate-700"></span> Pending</span>
+                  <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded bg-blue-500/20 border border-blue-400 animate-pulse"></span> Running</span>
+                  <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded bg-brand-emerald/20 border border-brand-emerald"></span> Success</span>
+                </div>
+              </div>
+              
+              <!-- DAG Canvas / Grid -->
+              <div id="dag-container" class="flex-1 bg-slate-950/60 rounded-2xl border border-slate-900 relative overflow-hidden flex flex-col items-center justify-center p-6 min-h-[220px]">
+                <!-- Interactive DAG will be drawn here dynamically by JS -->
+                <div class="text-slate-500 flex flex-col items-center gap-3">
+                  <i class="fa-solid fa-circle-nodes text-4xl animate-pulse"></i>
+                  <span>Ready to trigger agent execution.</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Terminal and Artifacts Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 h-[260px] items-stretch">
+              
+              <!-- Console Log Terminal -->
+              <div class="md:col-span-2 glass-card p-4 flex flex-col h-full overflow-hidden bg-black/80 ring-1 ring-slate-800">
+                <div class="flex items-center justify-between border-b border-slate-900 pb-2 mb-2 text-xs text-slate-400">
+                  <span class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-brand-emerald"></span> Live Agent Output Console</span>
+                  <span id="terminal-status">Idle</span>
+                </div>
+                <div id="terminal-console" class="flex-1 overflow-y-auto space-y-1 font-mono text-xs text-slate-300 pr-2 scrollbar-thin">
+                  <!-- Monospace logs -->
+                  <div class="text-slate-500">// Terminal log stream empty. Start a mock run.</div>
+                </div>
+              </div>
+
+              <!-- Artifacts Drawer -->
+              <div class="glass-card p-4 flex flex-col h-full overflow-hidden">
+                <h3 class="font-bold text-sm text-white mb-2 flex items-center gap-2">
+                  <i class="fa-solid fa-file-code text-brand-purple"></i>
+                  Artifacts Generated
+                </h3>
+                <div id="artifacts-list" class="flex-1 overflow-y-auto space-y-2 pr-2 scrollbar-thin">
+                  <!-- Generated files list -->
+                  <div class="text-xs text-slate-500 italic p-3 text-center">No files generated yet.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= HISTORY TAB ================= -->
+      <section id="tab-history" class="space-y-6 hidden">
+        <div class="glass-card p-6 space-y-6">
+          <div class="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
+            <div>
+              <h3 class="font-bold font-['Outfit'] text-white text-lg">Execution History</h3>
+              <p class="text-xs text-slate-400">Complete archive of agent runs, token counts, and cost details.</p>
+            </div>
+            
+            <!-- Filters & Search -->
+            <div class="flex flex-wrap gap-3 w-full md:w-auto">
+              <input type="text" id="history-search" oninput="applyHistoryFilters()" placeholder="Search task name or model..." class="bg-slate-900 border border-slate-800 rounded-xl px-4 py-2 text-sm text-slate-200 focus:outline-none focus:border-brand-emerald w-full md:w-64">
+              <select id="history-filter-status" onchange="applyHistoryFilters()" class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-brand-emerald">
+                <option value="all">All Statuses</option>
+                <option value="success">Success</option>
+                <option value="failed">Failed</option>
+                <option value="running">Running</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- History Table -->
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="border-b border-slate-800 text-slate-400 text-xs uppercase tracking-wider font-bold">
+                  <th class="py-3 px-4">Run ID</th>
+                  <th class="py-3 px-4">Task Name</th>
+                  <th class="py-3 px-4">Model</th>
+                  <th class="py-3 px-4">Date & Time</th>
+                  <th class="py-3 px-4">Tokens</th>
+                  <th class="py-3 px-4">Cost</th>
+                  <th class="py-3 px-4">Duration</th>
+                  <th class="py-3 px-4">Status</th>
+                  <th class="py-3 px-4">Action</th>
+                </tr>
+              </thead>
+              <tbody id="history-runs-tbody" class="text-sm divide-y divide-slate-900/60">
+                <!-- JS populated -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- Artifact Detail Modal -->
+  <div id="artifact-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-6 hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-3xl w-full h-[550px] flex flex-col overflow-hidden animate-rise">
+      <div class="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
+        <div>
+          <h3 id="modal-filename" class="font-bold text-white text-lg flex items-center gap-2">
+            <i class="fa-solid fa-file-lines text-brand-purple"></i>
+            file.txt
+          </h3>
+          <span id="modal-filesize" class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Size: 0 Bytes</span>
+        </div>
+        <button onclick="closeModal()" class="text-slate-400 hover:text-white transition-colors p-2">
+          <i class="fa-solid fa-xmark text-xl"></i>
+        </button>
+      </div>
+      <div class="flex-1 p-6 overflow-y-auto bg-slate-950">
+        <pre class="text-xs font-mono text-slate-300 whitespace-pre-wrap"><code id="modal-content"></code></pre>
+      </div>
+    </div>
+  </div>
+
+  <script src="index.js"></script>
+</body>
+</html>
