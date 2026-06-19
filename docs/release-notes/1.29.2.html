@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>fix: twitch account loading backward-compatibility for version 1.29.1 - Release Notes</title>
+  <title>fix: default web dashboard base URL to SwiftBot SSO origin when paired - Release Notes</title>
   <style>
     :root { color-scheme: light dark; }
     body {
@@ -39,11 +39,11 @@
 </head>
 <body>
   <main>
-    <h1>fix: twitch account loading backward-compatibility for version 1.29.1</h1>
-    <p class="meta">Version 1.29.1</p>
-    <p>fix: twitch account loading backward-compatibility for version 1.29.1</p>
-<p>- Add custom Codable implementation in Account model to support backward compatibility.<br>- Ensure that older saved JSON payloads lacking the newly added 'isOperator' field default to false instead of failing to decode entirely.<br>- Add testAccountDecodingBackwardCompatibility unit test to verify decoding logic with older-format payloads.<br>- Bump MARKETING_VERSION to 1.29.1 and update CURRENT_PROJECT_VERSION to 2026061913.<br>- Update release note references and rename 1.29.html to 1.29.1.html.<br>- Regenerate the Xcode project from project.yml.</p>
-    <p><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/27a160025c01b193a6069c82e17e800824b46186">27a1600</a></p>
+    <h1>fix: default web dashboard base URL to SwiftBot SSO origin when paired</h1>
+    <p class="meta">Version 1.29.2</p>
+    <p>fix: default web dashboard base URL to SwiftBot SSO origin when paired</p>
+<p>- Update WebDashboardConfig initializer to automatically default baseURL to swiftBotSSO.origin if baseURL is nil.<br>- Update Settings.swift to make webDashboardBaseURL optional for webDashboardSwiftBotSSOConfigured, as the tunnel hostname acts as the public dashboard URL.<br>- Add testSwiftBotSSOConfigWithoutBaseURLFallsBackToOrigin unit test.<br>- Bump CURRENT_PROJECT_VERSION to 2026061914 and update release notes index.<br>- Regenerate Xcode project with XcodeGen.</p>
+    <p><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/00cb002b8d5a7114674ff8f395669b2d075ebf91">00cb002</a></p>
   </main>
 </body>
 </html>
