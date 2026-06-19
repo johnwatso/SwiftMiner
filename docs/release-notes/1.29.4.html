@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>fix(webui): Twitch OAuth diagnostics and proxy error handling - Release Notes</title>
+  <title>release: bump marketing version to 1.29.4 - Release Notes</title>
   <style>
     :root { color-scheme: light dark; }
     body {
@@ -39,15 +39,11 @@
 </head>
 <body>
   <main>
-    <h1>fix(webui): Twitch OAuth diagnostics and proxy error handling</h1>
+    <h1>release: bump marketing version to 1.29.4</h1>
     <p class="meta">Version 1.29.4</p>
-    <p>Fixes Twitch OAuth callback failure routing and diagnostics under reverse proxy environments:</p>
-    <ul>
-      <li>Changes OAuth token exchange and user fetch failure status codes from 502 to 400. This prevents reverse proxies (like Cloudflare or Nginx) from intercepting the failure and replacing it with a generic "Bad Gateway" page, ensuring the user can see the actual error page.</li>
-      <li>Implements verbose logging for OAuth failures, writing raw Twitch/Discord API response payloads and HTTP status codes to OSLog and the Activity Log (audit callback).</li>
-      <li>Includes the new standalone interactive Agent Dashboard prototype in the <code>AgentDashboard/</code> directory.</li>
-    </ul>
-    <p>Bumps marketing version to `1.29.4` and build version (`CURRENT_PROJECT_VERSION`) to `2026061916`.</p>
+    <p>release: bump marketing version to 1.29.4</p>
+<p>- Update MARKETING_VERSION to 1.29.4 in project.yml.<br>- Update release note index and add 1.29.4.html.<br>- Link version 1.29.3 and 1.29.4 release notes.<br>- Regenerate Xcode project with XcodeGen.</p>
+    <p><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/f94c3d80d94b372350807e8e7a7e124cba215f0f">f94c3d8</a></p>
   </main>
 </body>
 </html>
