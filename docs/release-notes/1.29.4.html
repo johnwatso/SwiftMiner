@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>fix(webui): Twitch OAuth diagnostics and proxy error handling - Release Notes</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      margin: 0;
+      padding: 32px 20px 48px;
+      font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f4f6f8;
+      color: #0f1720;
+    }
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 28px;
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.86);
+      box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
+    }
+    h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
+    .meta { margin: 0 0 24px; color: #52606d; font-size: 14px; }
+    p { margin: 0 0 16px; }
+    a { color: #0a67a3; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #0b1015; color: #edf2f7; }
+      main {
+        background: rgba(15, 23, 32, 0.88);
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+      }
+      .meta { color: #9fb0c2; }
+      a { color: #73c3ff; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>fix(webui): Twitch OAuth diagnostics and proxy error handling</h1>
+    <p class="meta">Version 1.29.4</p>
+    <p>Fixes Twitch OAuth callback failure routing and diagnostics under reverse proxy environments:</p>
+    <ul>
+      <li>Changes OAuth token exchange and user fetch failure status codes from 502 to 400. This prevents reverse proxies (like Cloudflare or Nginx) from intercepting the failure and replacing it with a generic "Bad Gateway" page, ensuring the user can see the actual error page.</li>
+      <li>Implements verbose logging for OAuth failures, writing raw Twitch/Discord API response payloads and HTTP status codes to OSLog and the Activity Log (audit callback).</li>
+      <li>Includes the new standalone interactive Agent Dashboard prototype in the <code>AgentDashboard/</code> directory.</li>
+    </ul>
+    <p>Bumps marketing version to `1.29.4` and build version (`CURRENT_PROJECT_VERSION`) to `2026061916`.</p>
+  </main>
+</body>
+</html>
