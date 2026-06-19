@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>SwiftMiner 1.29.1 - Release Notes</title>
+  <title>fix: twitch account loading backward-compatibility for version 1.29.1 - Release Notes</title>
   <style>
     :root { color-scheme: light dark; }
     body {
@@ -39,94 +39,11 @@
 </head>
 <body>
   <main>
-    <h1>SwiftMiner 1.29.1</h1>
-    <p class="meta">Version 1.29.1 · Build 2026061913</p>
-    <p class="intro">A web-dashboard and Drops polish release for checking and managing miners from the browser, with safer sign-in, clearer update controls, SwiftBot Patchy campaign announcements, and better visibility into each miner's priority and claimed-but-unlinked reward state.</p>
-
-    <section class="dashboard">
-      <h2><span class="badge" aria-hidden="true">🌐</span> Web Dashboard</h2>
-      <p class="summary">SwiftMiner can now expose a browser dashboard when configured.</p>
-      <ul>
-        <li>Adds an optional web dashboard for browser-based miner visibility.</li>
-        <li>Adds a local operator view for checking the whole miner fleet from the local network.</li>
-        <li>Adds a Discord-user view that is scoped to the signed-in user's own mined Twitch account.</li>
-        <li>Adds an Up Next campaign browser with box art, start/end timing, issue buttons, and one-tap prioritising for linked miners.</li>
-        <li>Adds polished web sign-in assets, app icons, favicons, dashboard timing refinements, loading fixes, and a small salute easter egg on the missed Drops tagline.</li>
-        <li>Keeps the normal progress/status card separate from diagnostics, so idle miners still show <strong>Idle - no campaigns</strong> while deeper health details stay tucked away until requested.</li>
-        <li>Adds a Diagnostics toggle for operator triage, hiding stall confidence and recent health signals by default while preserving quick access when troubleshooting.</li>
-        <li>Adds a small sign-in easter egg: pressing F while the missed Drops respect line is shown sends salute emojis floating behind the login card.</li>
-      </ul>
-    </section>
-
-    <section class="dashboard">
-      <h2><span class="badge" aria-hidden="true">📣</span>SwiftBot Patchy Announcements</h2>
-      <p class="summary">New Twitch Drops campaigns can now flow into Patchy-powered Discord announcements.</p>
-      <ul>
-        <li>Emits SwiftMiner campaign events when new Twitch Drops campaigns are discovered while SwiftBot integration is enabled.</li>
-        <li>Includes campaign and game metadata, game artwork, and up to three drop reward images so SwiftBot can build rich announcement embeds.</li>
-        <li>Dedupe-protects campaign announcement events by campaign ID, preventing repeated Discord posts for the same discovered campaign.</li>
-      </ul>
-    </section>
-
-    <section class="signin">
-      <h2><span class="badge" aria-hidden="true">🔐</span> Sign-In &amp; Linking</h2>
-      <p class="summary">Browser sessions are narrower, more auditable, and easier to complete.</p>
-      <ul>
-        <li>Adds SwiftBot-backed Discord sign-in with signed assertions, replay protection, and normal dashboard sessions after handoff.</li>
-        <li>Adds local username/password sign-in that is only offered from local requests, keeping operator access off the public dashboard domain.</li>
-        <li>Adds Twitch sign-in scoped to the user's own mined account.</li>
-        <li>Restores self-service Twitch linking for Discord web sessions with a device-code card, activation polling, and automatic dashboard refresh once linking completes.</li>
-        <li>Auto-registers the SwiftMiner dashboard hostname with SwiftBot's tunnel when the integration can provide tunnel details.</li>
-        <li>Adds web sign-in, sign-out, blocked-attempt, and session audit events to the Activity Log.</li>
-      </ul>
-    </section>
-
-    <section class="updates">
-      <h2><span class="badge" aria-hidden="true">🔄</span> Updates</h2>
-      <p class="summary">Sparkle update behaviour is easier to inspect and control.</p>
-      <ul>
-        <li>Adds update events to the Activity Log so checks, available updates, installs, and failures are easier to trace.</li>
-        <li>Adds settings for automatic update checks and unattended install options when macOS allows them.</li>
-        <li>Improves update settings with clearer state, manual actions, and fallback messaging.</li>
-        <li>Updates SwiftMiner build metadata to 2026061913 while leaving ShipHook-owned appcasts untouched.</li>
-      </ul>
-    </section>
-
-    <section class="miners">
-      <h2><span class="badge" aria-hidden="true">⛏️</span> Miners &amp; Campaigns</h2>
-      <p class="summary">The Miners tab and campaign cards now explain priority and linking state more directly.</p>
-      <ul>
-        <li>Adds a dedicated Priorities section to each miner showing personal games first and the global list behind them.</li>
-        <li>Adds a per-miner Use global priorities toggle, with running miners refreshed after priority changes.</li>
-        <li>Allows personal priorities to stand on their own when a miner opts out of global priorities, even if the same game is also global.</li>
-        <li>Shows claimed-but-unlinked campaigns as completed with a distinct question-badge status, so users know the drop is claimed but the game still needs linking.</li>
-        <li>Fixes completed campaign timing in the web projection so active-but-already-claimed campaigns no longer look like they completed one minute ago forever.</li>
-        <li>Removes the unused miner detail panel so the Miners tab is the single source of truth for priority, streamer, campaign, controls, and log UI.</li>
-      </ul>
-    </section>
-
-    <section class="miners">
-      <h2><span class="badge" aria-hidden="true">🎮</span> Drops View</h2>
-      <p class="summary">Claimed-but-unlinked rewards are clearer, and opening Drops feels steadier.</p>
-      <ul>
-        <li>Clarifies Drops campaign cards so pre-claim unlinked games no longer appear as a separate actionable setup state; claimed rewards that still need the game linked now show as <strong>Claimed · not linked</strong>.</li>
-        <li>Uses a green claimed check with an orange question badge for claimed-but-unlinked miner states, making the reward state and missing game link visible at the same time.</li>
-        <li>Preloads the Drops view from the last known campaign feed during launch so opening Drops is less likely to show an empty placeholder while fresh Twitch data syncs.</li>
-        <li>Adds a polished Drops loading splash with an animated SF Symbol for first-load campaign syncs.</li>
-        <li>Removes the small per-reward progress strips from grouped Drops cards for a cleaner reward shelf.</li>
-      </ul>
-    </section>
-
-    <section class="safety">
-      <h2><span class="badge" aria-hidden="true">🛡️</span> Safety &amp; Polish</h2>
-      <p class="summary">Public routes and embedded dashboard scripts now have tighter guardrails.</p>
-      <ul>
-        <li>Tightens public route matching so only intended dashboard paths bypass the Bot-key API gate.</li>
-        <li>Adds regression coverage for local sign-in, session cookies, CSRF handling, Discord dashboard sign-in, dashboard route exposure, and web activation flows.</li>
-        <li>Adds JavaScript syntax coverage for emitted dashboard scripts to prevent broken web UI bundles from shipping.</li>
-        <li>Modernizes the Add Twitch Account login sheet with a cleaner two-step approval flow, stronger code presentation, copy feedback, and clearer waiting, success, and retry states.</li>
-      </ul>
-    </section>
+    <h1>fix: twitch account loading backward-compatibility for version 1.29.1</h1>
+    <p class="meta">Version 1.29.1</p>
+    <p>fix: twitch account loading backward-compatibility for version 1.29.1</p>
+<p>- Add custom Codable implementation in Account model to support backward compatibility.<br>- Ensure that older saved JSON payloads lacking the newly added 'isOperator' field default to false instead of failing to decode entirely.<br>- Add testAccountDecodingBackwardCompatibility unit test to verify decoding logic with older-format payloads.<br>- Bump MARKETING_VERSION to 1.29.1 and update CURRENT_PROJECT_VERSION to 2026061913.<br>- Update release note references and rename 1.29.html to 1.29.1.html.<br>- Regenerate the Xcode project from project.yml.</p>
+    <p><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/27a160025c01b193a6069c82e17e800824b46186">27a1600</a></p>
   </main>
 </body>
 </html>
