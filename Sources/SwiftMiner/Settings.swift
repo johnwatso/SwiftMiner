@@ -526,11 +526,8 @@ public final class Settings: ObservableObject {
         !isBlank(webDashboardBaseURL) && webDashboardTwitchConfigured
     }
 
-    /// Whether Discord sign-in brokered via the paired SwiftBot is available
-    /// (needs the public URL, the pairing secret, and SwiftBot's hostname).
     public var webDashboardSwiftBotSSOConfigured: Bool {
         swiftBotEnabled
-            && !isBlank(webDashboardBaseURL)
             && !isBlank(swiftBotHmacSecret)
             && !isBlank(webDashboardSwiftBotHostname)
     }
