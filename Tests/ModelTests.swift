@@ -25,6 +25,30 @@ final class ModelTests: XCTestCase {
         XCTAssertFalse(account.isTokenValid)
     }
 
+    func testAccountDecodingBackwardCompatibility() throws {
+        // JSON representing a legacy account missing optional/new fields (nickname, ownerDiscordId, isOperator)
+        let oldAccountJSON = """
+        {
+            "id": "123",
+            "username": "testuser",
+            "accessToken": "access_token",
+            "refreshToken": "refresh_token",
+            "tokenExpiry": 1774000000.0,
+            "scopes": ["user:read:email"]
+        }
+        """.data(using: .utf8)!
+
+        let decoded = try JSONDecoder().decode(Account.self, from: oldAccountJSON)
+        XCTAssertEqual(decoded.id, "123")
+        XCTAssertEqual(decoded.username, "testuser")
+        XCTAssertEqual(decoded.accessToken, "access_token")
+        XCTAssertEqual(decoded.refreshToken, "refresh_token")
+        XCTAssertEqual(decoded.scopes, ["user:read:email"])
+        XCTAssertNil(decoded.nickname)
+        XCTAssertNil(decoded.ownerDiscordId)
+        XCTAssertFalse(decoded.isOperator)
+    }
+
     // MARK: - Drop
 
     func testDropNotClaimedByDefault() {
