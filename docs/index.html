@@ -10,6 +10,11 @@
     <meta property="og:type" content="website">
     <title>SwiftMiner - Native macOS Twitch Drops Automation</title>
     
+    <!-- Google Fonts - Outfit & Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -23,15 +28,17 @@
                 extend: {
                     colors: {
                         brand: {
-                            dark: '#0a0a0a',
-                            blue: '#56bcff',
-                            blueDark: '#208cff',
-                            purple: '#9146ff',
-                            border: 'rgba(255, 255, 255, 0.10)'
+                            dark: '#090514',
+                            purple: '#9333ea',
+                            violet: '#7c3aed',
+                            emerald: '#10b981',
+                            accent: '#3b82f6',
+                            border: 'rgba(255, 255, 255, 0.08)'
                         }
                     },
                     fontFamily: {
-                        sans: ['-apple-system', 'BlinkMacSystemFont', '"SF Pro Display"', 'system-ui', 'sans-serif'],
+                        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],
+                        display: ['Outfit', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],
                     }
                 }
             }
@@ -40,20 +47,41 @@
 
     <style>
         body {
-            background-color: #0a0a0a;
+            background: linear-gradient(135deg, #090514, #120e2e, #090616);
+            background-size: 400% 400%;
+            animation: gradient-pan 20s ease infinite alternate;
+            background-attachment: fixed;
             color: rgba(255, 255, 255, 0.94);
+            font-family: 'Inter', -apple-system, sans-serif;
             overflow: hidden; /* Main wrapper handles scrolling */
         }
 
+        @keyframes gradient-pan {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        h1, h2, h3, .font-display {
+            font-family: 'Outfit', -apple-system, sans-serif !important;
+        }
+
         .glass-panel {
-            background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
-            border: 1px solid var(--tw-colors-brand-border);
-            backdrop-filter: blur(24px);
-            -webkit-backdrop-filter: blur(24px);
+            background: rgba(25, 20, 40, 0.45);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 24px 64px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(28px) saturate(1.6);
+            -webkit-backdrop-filter: blur(28px) saturate(1.6);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .glass-panel:hover {
+            border-color: rgba(147, 51, 234, 0.25);
+            box-shadow: 0 12px 40px rgba(147, 51, 234, 0.1);
         }
 
         .text-gradient {
-            background: linear-gradient(90deg, #ffffff, #56bcff);
+            background: linear-gradient(90deg, #ffffff, #10b981);
             -webkit-background-clip: text;
             background-clip: text;
             color: transparent;
@@ -71,10 +99,10 @@
             width: 8px;
         }
         .snap-scroller::-webkit-scrollbar-track {
-            background: #0a0a0a; 
+            background: #090514; 
         }
         .snap-scroller::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.2); 
+            background: rgba(255, 255, 255, 0.15); 
             border-radius: 4px;
         }
 
@@ -99,19 +127,19 @@
         }
     </style>
 </head>
-<body class="antialiased selection:bg-brand-blue selection:text-white relative">
+<body class="antialiased selection:bg-brand-emerald selection:text-white relative">
 
     <!-- Background Particle Canvas -->
     <canvas id="particles" class="fixed inset-0 w-full h-full z-0 pointer-events-none opacity-60"></canvas>
 
     <!-- Navigation -->
-    <nav class="fixed top-0 w-full z-50 bg-[#0a0a0a]/70 backdrop-blur-xl border-b border-white/10 transition-all duration-300">
+    <nav class="fixed top-0 w-full z-50 bg-[#090514]/70 backdrop-blur-xl border-b border-white/10 transition-all duration-300">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
             <a href="#" class="flex items-center gap-3 group">
-                <img src="./assets/landing/swiftminer-icon.png" onerror="this.src='https://placehold.co/128x128/9146ff/ffffff?text=SM'" alt="SwiftMiner Logo" class="w-9 h-9 rounded-[10px] shadow-[0_4px_12px_rgba(86,188,255,0.2)] border border-white/10 group-hover:scale-105 transition-transform">
+                <img src="./assets/landing/swiftminer-icon.png" onerror="this.src='https://placehold.co/128x128/9333ea/ffffff?text=SM'" alt="SwiftMiner Logo" class="w-9 h-9 rounded-[10px] shadow-[0_4px_12px_rgba(147,51,234,0.3)] border border-white/10 group-hover:scale-105 transition-transform">
                 <div class="flex flex-col">
                     <span class="font-bold text-sm leading-none text-white tracking-tight">SwiftMiner</span>
-                    <span class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-0.5">Twitch Drops</span>
+                    <span class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-0.5">Twitch Drops Automation</span>
                 </div>
             </a>
             <div class="hidden md:flex items-center gap-8 text-sm font-semibold text-gray-400">
@@ -137,13 +165,14 @@
                     
                     <!-- Hero Text -->
                     <div class="flex-1 text-center lg:text-left reveal">
-                        <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/10 bg-white/5 backdrop-blur-sm text-xs font-semibold text-brand-blue mb-6 shadow-xl">
+                        <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/10 bg-white/5 backdrop-blur-sm text-xs font-semibold text-brand-emerald mb-6 shadow-xl">
                             <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
                             Native macOS App
                         </div>
                         
                         <h1 class="text-5xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight mb-6 leading-[1.05] text-white drop-shadow-2xl">
-                            <span class="text-gradient">SwiftMiner</span>
+                            Mine Twitch Drops. <br/>
+                            <span class="text-gradient">On Autopilot.</span>
                         </h1>
                         
                         <p class="text-lg sm:text-xl text-gray-400 mb-10 max-w-2xl mx-auto lg:mx-0 leading-relaxed font-light">
@@ -151,7 +180,7 @@
                         </p>
                         
                         <div class="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4">
-                            <a href="https://github.com/johnwatso/SwiftMiner/releases/latest" class="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-br from-brand-blue to-brand-blueDark rounded-xl text-white font-bold text-lg hover:shadow-[0_8px_30px_rgba(86,188,255,0.4)] hover:-translate-y-1 transition-all">
+                            <a href="https://github.com/johnwatso/SwiftMiner/releases/latest" class="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-br from-brand-purple to-brand-violet rounded-xl text-white font-bold text-lg hover:shadow-[0_8px_30px_rgba(147,51,234,0.4)] hover:-translate-y-1 transition-all">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" fill="currentColor" class="w-5 h-5"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></svg>
                                 Download for macOS
                             </a>
@@ -168,7 +197,7 @@
                     <div class="flex-1 perspective-container w-full reveal" style="transition-delay: 200ms;">
                         <div class="relative tilt-element group">
                             <!-- Glow behind image -->
-                            <div class="absolute -inset-4 bg-gradient-to-tr from-brand-blue/30 via-brand-purple/20 to-transparent rounded-[2rem] blur-2xl opacity-60 group-hover:opacity-100 transition-opacity duration-700"></div>
+                            <div class="absolute -inset-4 bg-gradient-to-tr from-brand-purple/30 via-brand-emerald/20 to-transparent rounded-[2rem] blur-2xl opacity-60 group-hover:opacity-100 transition-opacity duration-700"></div>
                             
                             <!-- Browser mock wrapper -->
                             <div class="relative glass-panel rounded-[1.5rem] p-2 sm:p-4 shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-white/10 bg-[#121212]/80">
@@ -177,7 +206,7 @@
                                     <div class="w-3 h-3 rounded-full bg-yellow-500/80"></div>
                                     <div class="w-3 h-3 rounded-full bg-green-500/80"></div>
                                 </div>
-                                <img src="./assets/landing/overview.png" onerror="this.src='https://placehold.co/800x550/1a1a1a/56bcff?text=SwiftMiner+App+Interface'" alt="App UI" class="w-full rounded-xl border border-white/5 shadow-inner">
+                                <img src="./assets/landing/overview.png" onerror="this.src='https://placehold.co/800x550/1a1a1a/10b981?text=SwiftMiner+App+Interface'" alt="App UI" class="w-full rounded-xl border border-white/5 shadow-inner">
                             </div>
                         </div>
                     </div>
@@ -190,29 +219,31 @@
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
                 
                 <div class="text-center mb-16 reveal">
-                    <h2 class="text-3xl md:text-5xl font-bold mb-4 text-white drop-shadow-lg tracking-tight">Everything important, <br/><span class="text-brand-blue">visible at a glance.</span></h2>
+                    <h2 class="text-3xl md:text-5xl font-bold mb-4 text-white drop-shadow-lg tracking-tight">Everything important, <br/><span class="text-brand-emerald">visible at a glance.</span></h2>
                     <p class="text-gray-400 text-lg max-w-2xl mx-auto">SwiftMiner watches campaigns, tracks progress, selects streams, and claims completed Drops across multiple accounts from one native interface.</p>
                 </div>
 
                 <!-- Bento Grid -->
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 auto-rows-[260px]">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 auto-rows-[200px]">
                     
                     <!-- Card 1: Multi-Account (Spans 2 cols, 2 rows) -->
-                    <div class="glass-panel group rounded-3xl p-8 md:col-span-2 md:row-span-2 flex flex-col relative overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:border-brand-purple/30 hover:shadow-[0_8px_30px_rgba(145,70,255,0.15)] reveal">
+                    <div class="glass-panel group rounded-3xl p-8 md:col-span-2 md:row-span-2 flex flex-col relative overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:border-brand-purple/30 hover:shadow-[0_8px_30px_rgba(147,51,234,0.2)] reveal">
                         <div class="absolute inset-0 bg-gradient-to-br from-brand-purple/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 z-0"></div>
-                        <div class="relative z-10 h-full flex flex-col">
-                            <div class="w-14 h-14 rounded-2xl bg-brand-purple/20 flex items-center justify-center text-brand-purple mb-6 border border-brand-purple/30 shadow-lg">
-                                <i class="ph-fill ph-users-three text-3xl"></i>
+                        <div class="relative z-10 h-full flex flex-col justify-between">
+                            <div>
+                                <div class="w-14 h-14 rounded-2xl bg-brand-purple/20 flex items-center justify-center text-brand-purple mb-6 border border-brand-purple/30 shadow-lg">
+                                    <i class="ph-fill ph-users-three text-3xl"></i>
+                                </div>
+                                <h3 class="text-3xl font-bold mb-4 text-white drop-shadow-md">Multi-Account</h3>
                             </div>
-                            <h3 class="text-3xl font-bold mb-4 text-white drop-shadow-md">Multi-Account</h3>
                             <p class="text-gray-400 text-lg max-w-md leading-relaxed">Run separate miners for each of your Twitch accounts simultaneously. Monitor all campaigns, drops progress, and active streams from one screen without juggling browser windows.</p>
                         </div>
                     </div>
 
                     <!-- Card 2: Auto Claim -->
-                    <div class="glass-panel group rounded-3xl p-8 flex flex-col relative overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:border-brand-blue/30 hover:shadow-[0_8px_30px_rgba(86,188,255,0.15)] reveal" style="transition-delay: 100ms;">
+                    <div class="glass-panel group rounded-3xl p-8 flex flex-col relative overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:border-brand-emerald/30 hover:shadow-[0_8px_30px_rgba(16,185,129,0.2)] reveal" style="transition-delay: 100ms;">
                         <div class="relative z-10 flex flex-col h-full">
-                            <div class="w-12 h-12 rounded-full bg-brand-blue/20 flex items-center justify-center text-brand-blue mb-4 border border-brand-blue/30">
+                            <div class="w-12 h-12 rounded-full bg-brand-emerald/20 flex items-center justify-center text-brand-emerald mb-4 border border-brand-emerald/30">
                                 <i class="ph-fill ph-magic-wand text-2xl"></i>
                             </div>
                             <h3 class="text-xl font-bold mb-2 text-white">Automatic Claiming</h3>
@@ -232,9 +263,9 @@
                     </div>
 
                     <!-- Card 4: Local WebUI -->
-                    <div class="glass-panel group rounded-3xl p-8 md:col-span-3 lg:col-span-2 flex flex-col md:flex-row items-center md:items-start gap-8 relative overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:border-[#34c759]/30 hover:shadow-[0_8px_30px_rgba(52,199,89,0.15)] reveal" style="transition-delay: 100ms;">
-                        <div class="absolute inset-0 bg-gradient-to-br from-[#34c759]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 z-0"></div>
-                        <div class="flex-shrink-0 w-16 h-16 rounded-2xl bg-[#34c759]/20 flex items-center justify-center text-[#34c759] border border-[#34c759]/30 shadow-lg relative z-10">
+                    <div class="glass-panel group rounded-3xl p-8 md:col-span-3 lg:col-span-2 flex flex-col md:flex-row items-center md:items-start gap-8 relative overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:border-brand-emerald/30 hover:shadow-[0_8px_30px_rgba(16,185,129,0.2)] reveal" style="transition-delay: 100ms;">
+                        <div class="absolute inset-0 bg-gradient-to-br from-brand-emerald/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 z-0"></div>
+                        <div class="flex-shrink-0 w-16 h-16 rounded-2xl bg-brand-emerald/20 flex items-center justify-center text-brand-emerald border border-brand-emerald/30 shadow-lg relative z-10">
                             <i class="ph-fill ph-devices text-3xl"></i>
                         </div>
                         <div class="relative z-10 text-center md:text-left">
@@ -269,9 +300,9 @@
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
                     
                     <div class="order-2 lg:order-1 relative group reveal" style="transition-delay: 200ms;">
-                        <div class="absolute -inset-2 bg-gradient-to-r from-brand-blue/20 to-brand-purple/20 rounded-3xl blur-xl opacity-50 group-hover:opacity-100 transition-opacity"></div>
-                        <img src="./assets/landing/drops.png" onerror="this.src='https://placehold.co/600x450/1a1a1a/9146ff?text=Drops+Screen'" alt="Miners Interface" class="relative w-full rounded-2xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
-                        <img src="./assets/landing/miners.png" onerror="this.src='https://placehold.co/400x300/1a1a1a/56bcff?text=Miners'" alt="Drops Overlay" class="absolute -bottom-8 -right-8 w-2/3 rounded-2xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.6)] group-hover:-translate-y-2 group-hover:translate-x-2 transition-transform duration-500 hidden sm:block">
+                        <div class="absolute -inset-2 bg-gradient-to-r from-brand-purple/20 to-brand-emerald/20 rounded-3xl blur-xl opacity-50 group-hover:opacity-100 transition-opacity"></div>
+                        <img src="./assets/landing/drops.png" onerror="this.src='https://placehold.co/600x450/1a1a1a/9333ea?text=Drops+Screen'" alt="Miners Interface" class="relative w-full rounded-2xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
+                        <img src="./assets/landing/miners.png" onerror="this.src='https://placehold.co/400x300/1a1a1a/10b981?text=Miners'" alt="Drops Overlay" class="absolute -bottom-8 -right-8 w-2/3 rounded-2xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.6)] group-hover:-translate-y-2 group-hover:translate-x-2 transition-transform duration-500 hidden sm:block">
                     </div>
 
                     <div class="order-1 lg:order-2 reveal">
@@ -282,7 +313,7 @@
                         
                         <div class="grid grid-cols-2 gap-4">
                             <div class="glass-panel rounded-xl p-4 border border-white/5">
-                                <span class="block text-brand-blue font-bold text-2xl mb-1">8.3k+</span>
+                                <span class="block text-brand-emerald font-bold text-2xl mb-1">8.3k+</span>
                                 <span class="text-xs text-gray-400 font-bold uppercase tracking-wider">Downloads</span>
                             </div>
                             <div class="glass-panel rounded-xl p-4 border border-white/5">
@@ -301,19 +332,19 @@
             <div class="flex-1 flex flex-col justify-center max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 w-full text-center reveal">
                 <div class="glass-panel rounded-[2.5rem] p-10 md:p-16 border border-white/10 shadow-2xl relative overflow-hidden group">
                     <!-- Glow effect inside card -->
-                    <div class="absolute top-0 left-1/2 -translate-x-1/2 w-[500px] h-[300px] bg-brand-blue/20 blur-[80px] rounded-full pointer-events-none group-hover:bg-brand-blue/30 transition-colors duration-700"></div>
+                    <div class="absolute top-0 left-1/2 -translate-x-1/2 w-[500px] h-[300px] bg-brand-purple/20 blur-[80px] rounded-full pointer-events-none group-hover:bg-brand-purple/35 transition-colors duration-700"></div>
                     
                     <div class="relative z-10 flex flex-col items-center">
                         <img src="./assets/landing/swiftminer-icon.png" 
-                             onerror="this.src='https://placehold.co/128x128/9146ff/ffffff?text=SM'" 
-                             class="w-24 h-24 rounded-[20px] shadow-[0_10px_30px_rgba(86,188,255,0.3)] mb-8 border border-white/20" alt="SwiftMiner Icon">
+                             onerror="this.src='https://placehold.co/128x128/9333ea/ffffff?text=SM'" 
+                             class="w-24 h-24 rounded-[20px] shadow-[0_10px_30px_rgba(147,51,234,0.3)] mb-8 border border-white/20" alt="SwiftMiner Icon">
                         
-                        <h2 class="text-4xl md:text-6xl font-bold mb-6 text-white drop-shadow-lg tracking-tight">Ready for the <span class="text-brand-blue">next campaign.</span></h2>
+                        <h2 class="text-4xl md:text-6xl font-bold mb-6 text-white drop-shadow-lg tracking-tight">Ready for the <span class="text-brand-purple">next campaign.</span></h2>
                         <p class="text-lg text-gray-400 mb-10 max-w-xl mx-auto leading-relaxed">
                             Download the latest signed release from GitHub. SwiftMiner is independent software and is not affiliated with Twitch.
                         </p>
                         
-                        <a href="https://github.com/johnwatso/SwiftMiner/releases/latest" class="flex items-center gap-3 px-10 py-5 bg-gradient-to-br from-brand-blue to-brand-blueDark rounded-2xl text-white font-bold text-xl hover:shadow-[0_12px_40px_rgba(86,188,255,0.4)] hover:-translate-y-1 transition-all">
+                        <a href="https://github.com/johnwatso/SwiftMiner/releases/latest" class="flex items-center gap-3 px-10 py-5 bg-gradient-to-br from-brand-purple to-brand-violet rounded-2xl text-white font-bold text-xl hover:shadow-[0_12px_40px_rgba(147,51,234,0.4)] hover:-translate-y-1 transition-all">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" fill="currentColor" class="w-6 h-6"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></svg>
                             Get SwiftMiner
                         </a>
@@ -323,7 +354,7 @@
             </div>
 
             <!-- Footer -->
-            <footer class="w-full border-t border-white/10 bg-[#0a0a0a]/80 backdrop-blur-md mt-16 z-20 relative">
+            <footer class="w-full border-t border-white/10 bg-[#090514]/80 backdrop-blur-md mt-16 z-20 relative">
                 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col md:flex-row items-center justify-between gap-4">
                     <span class="text-sm text-gray-500">SwiftMiner is open source. Not affiliated with Twitch.</span>
                     <div class="flex flex-wrap items-center justify-center gap-6 text-sm font-semibold text-gray-400">
@@ -399,7 +430,7 @@
                         vx: (Math.random() - 0.5) * 0.4,
                         vy: (Math.random() - 0.5) * 0.4,
                         size: Math.random() * 1.5 + 0.5,
-                        color: Math.random() > 0.5 ? 'rgba(86, 188, 255, 0.4)' : 'rgba(145, 70, 255, 0.4)'
+                        color: Math.random() > 0.5 ? 'rgba(16, 185, 129, 0.4)' : 'rgba(147, 51, 234, 0.4)'
                     });
                 }
             }

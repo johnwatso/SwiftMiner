@@ -162,9 +162,25 @@ public final class MinerManager {
             nickname ?? username
         }
 
+        /// Normalize a user-entered channel reference into a bare Twitch login.
+        /// Accepts a plain username, an `@handle`, or a full/partial stream URL
+        /// (e.g. `https://www.twitch.tv/Flats?foo=bar`, `twitch.tv/flats/`).
         public static func normalizedStreamOverrideLogin(_ login: String?) -> String? {
             guard let login else { return nil }
-            let cleaned = login
+            var value = login.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !value.isEmpty else { return nil }
+
+            // If it's a Twitch URL, keep only what follows the host.
+            if let hostRange = value.range(of: "twitch.tv/", options: [.caseInsensitive]) {
+                value = String(value[hostRange.upperBound...])
+            }
+
+            // Keep just the first path component, dropping any /sub-path, ?query, or #fragment.
+            if let stop = value.firstIndex(where: { $0 == "/" || $0 == "?" || $0 == "#" }) {
+                value = String(value[..<stop])
+            }
+
+            let cleaned = value
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .trimmingCharacters(in: CharacterSet(charactersIn: "@"))
                 .lowercased()
