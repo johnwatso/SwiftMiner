@@ -550,15 +550,19 @@
             // Theme Toggle Logic
             const themeToggleBtn = document.getElementById('theme-toggle');
             
-            function applyTheme(isLight) {
+            function applyTheme(isLight, savePreference = true) {
                 if (isLight) {
                     document.documentElement.classList.add('light');
                     document.documentElement.classList.remove('dark');
-                    localStorage.setItem('theme', 'light');
+                    if (savePreference) {
+                        localStorage.setItem('theme', 'light');
+                    }
                 } else {
                     document.documentElement.classList.add('dark');
                     document.documentElement.classList.remove('light');
-                    localStorage.setItem('theme', 'dark');
+                    if (savePreference) {
+                        localStorage.setItem('theme', 'dark');
+                    }
                 }
                 
                 // Swap screenshots based on mode
@@ -573,14 +577,23 @@
                 }
             }
 
-            // Sync toggle state and apply initial theme images
-            const currentIsLight = document.documentElement.classList.contains('light');
-            applyTheme(currentIsLight);
+            // Sync toggle state and apply initial theme images on load
+            const savedTheme = localStorage.getItem('theme');
+            const systemPrefersLight = window.matchMedia('(prefers-color-scheme: light)').matches;
+            const initialIsLight = savedTheme === 'light' || (!savedTheme && systemPrefersLight);
+            applyTheme(initialIsLight, false);
+
+            // Listen to OS theme changes
+            window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', (e) => {
+                // When system theme changes, automatically follow it and clear any manual override
+                localStorage.removeItem('theme');
+                applyTheme(e.matches, false);
+            });
 
             if (themeToggleBtn) {
                 themeToggleBtn.addEventListener('click', () => {
                     const isLight = !document.documentElement.classList.contains('light');
-                    applyTheme(isLight);
+                    applyTheme(isLight, true);
                 });
             }
 
