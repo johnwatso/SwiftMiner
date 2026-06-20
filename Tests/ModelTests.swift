@@ -66,6 +66,11 @@ final class ModelTests: XCTestCase {
     func testManagedMinerNormalizesStreamOverrideLogin() {
         XCTAssertEqual(MinerManager.ManagedMiner.normalizedStreamOverrideLogin("  @Flats "), "flats")
         XCTAssertNil(MinerManager.ManagedMiner.normalizedStreamOverrideLogin("   "))
+
+        // Full and partial Twitch URLs resolve to the bare login.
+        XCTAssertEqual(MinerManager.ManagedMiner.normalizedStreamOverrideLogin("https://www.twitch.tv/Flats"), "flats")
+        XCTAssertEqual(MinerManager.ManagedMiner.normalizedStreamOverrideLogin("twitch.tv/flats/"), "flats")
+        XCTAssertEqual(MinerManager.ManagedMiner.normalizedStreamOverrideLogin("https://m.twitch.tv/flats?tt_content=foo"), "flats")
     }
 
     // MARK: - Drop
