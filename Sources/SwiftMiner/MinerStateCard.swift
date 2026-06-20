@@ -276,6 +276,8 @@ struct MinerActivityCard: View {
     var onLinkAccount: (() -> Void)? = nil
     var onEditNickname: (() -> Void)? = nil
     var onClearNickname: (() -> Void)? = nil
+    var onOverrideStream: (() -> Void)? = nil
+    var onClearStreamOverride: (() -> Void)? = nil
 
     @ObservedObject private var settings = Settings.shared
     @State private var activityRefreshPulse = Date()
@@ -378,18 +380,30 @@ struct MinerActivityCard: View {
                 .font(.title3.weight(.semibold))
                 .lineLimit(1)
                 .contextMenu {
-                    nicknameContextMenu
+                    minerContextMenu
                 }
 
             Spacer(minLength: 8)
         }
         .contextMenu {
-            nicknameContextMenu
+            minerContextMenu
         }
     }
 
     @ViewBuilder
-    private var nicknameContextMenu: some View {
+    private var minerContextMenu: some View {
+        if let onOverrideStream {
+            Button(action: onOverrideStream) {
+                Label("Override Stream...", systemImage: "dot.radiowaves.left.and.right")
+            }
+        }
+
+        if miner.streamOverrideLogin != nil, let onClearStreamOverride {
+            Button(action: onClearStreamOverride) {
+                Label("Clear Stream Override", systemImage: "xmark.circle")
+            }
+        }
+
         if let onEditNickname {
             Button(action: onEditNickname) {
                 Label(miner.nickname == nil ? "Add Nickname" : "Edit Nickname", systemImage: "pencil")
@@ -416,6 +430,13 @@ struct MinerActivityCard: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let overrideLogin = miner.streamOverrideLogin {
+                Label("@\(overrideLogin)", systemImage: "dot.radiowaves.left.and.right")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
 
             if let progress = snapshot.now.progressFraction {

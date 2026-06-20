@@ -13,6 +13,7 @@ struct MinersOverviewView: View {
     @State private var previousLinkIssuesById: [String: PrioritisedLinkIssue] = [:]
     @State private var linkNotice: LinkNotice?
     @State private var nicknameEditor: MinerNicknameEditorPresentation?
+    @State private var streamOverrideEditor: MinerStreamOverridePresentation?
     @State private var isDiagnosticsHelpPresented = false
 
     private var miners: [MinerManager.ManagedMiner] {
@@ -61,6 +62,12 @@ struct MinersOverviewView: View {
                 navigation: navigation
             )
         }
+        .sheet(item: $streamOverrideEditor) { presentation in
+            MinerStreamOverrideSheet(
+                miner: presentation.miner,
+                navigation: navigation
+            )
+        }
     }
 
     private var minerListPane: some View {
@@ -77,12 +84,14 @@ struct MinersOverviewView: View {
                                     compact: !hasMultipleMiners,
                                     isSelected: selectionBinding.wrappedValue == miner.id,
                                     onEditNickname: { presentNicknameEditor(for: miner) },
-                                    onClearNickname: { clearNickname(for: miner) }
+                                    onClearNickname: { clearNickname(for: miner) },
+                                    onOverrideStream: { presentStreamOverrideEditor(for: miner) },
+                                    onClearStreamOverride: { clearStreamOverride(for: miner) }
                                 )
                             }
                             .buttonStyle(.plain)
                             .contextMenu {
-                                nicknameContextMenu(for: miner)
+                                minerContextMenu(for: miner)
                             }
                             .modifier(NicknameTipAttachment(isFirstRow: index == 0))
 
@@ -130,6 +139,10 @@ struct MinersOverviewView: View {
                         presentNicknameEditor(for: miner)
                     }, onClearNickname: {
                         clearNickname(for: miner)
+                    }, onOverrideStream: {
+                        presentStreamOverrideEditor(for: miner)
+                    }, onClearStreamOverride: {
+                        clearStreamOverride(for: miner)
                     })
 
                     if let linkNotice {
@@ -228,8 +241,32 @@ struct MinersOverviewView: View {
         }
     }
 
+    private func presentStreamOverrideEditor(for miner: MinerManager.ManagedMiner) {
+        streamOverrideEditor = MinerStreamOverridePresentation(miner: miner)
+    }
+
+    private func clearStreamOverride(for miner: MinerManager.ManagedMiner) {
+        Task {
+            await navigation.minerManager.clearStreamOverride(minerId: miner.id)
+        }
+    }
+
     @ViewBuilder
-    private func nicknameContextMenu(for miner: MinerManager.ManagedMiner) -> some View {
+    private func minerContextMenu(for miner: MinerManager.ManagedMiner) -> some View {
+        Button {
+            presentStreamOverrideEditor(for: miner)
+        } label: {
+            Label("Override Stream...", systemImage: "dot.radiowaves.left.and.right")
+        }
+
+        if miner.streamOverrideLogin != nil {
+            Button {
+                clearStreamOverride(for: miner)
+            } label: {
+                Label("Clear Stream Override", systemImage: "xmark.circle")
+            }
+        }
+
         Button {
             presentNicknameEditor(for: miner)
         } label: {
@@ -1188,12 +1225,22 @@ private struct MinerNicknameEditorPresentation: Identifiable {
     }
 }
 
+private struct MinerStreamOverridePresentation: Identifiable {
+    let miner: MinerManager.ManagedMiner
+
+    var id: String {
+        miner.id
+    }
+}
+
 private struct MinerSourceListRow: View {
     let miner: MinerManager.ManagedMiner
     let compact: Bool
     let isSelected: Bool
     let onEditNickname: () -> Void
     let onClearNickname: () -> Void
+    let onOverrideStream: () -> Void
+    let onClearStreamOverride: () -> Void
     @ObservedObject private var settings = Settings.shared
 
     private var snapshot: MinerActivitySnapshot {
@@ -1243,6 +1290,16 @@ private struct MinerSourceListRow: View {
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .contextMenu {
+                        Button(action: onOverrideStream) {
+                            Label("Override Stream...", systemImage: "dot.radiowaves.left.and.right")
+                        }
+
+                        if miner.streamOverrideLogin != nil {
+                            Button(action: onClearStreamOverride) {
+                                Label("Clear Stream Override", systemImage: "xmark.circle")
+                            }
+                        }
+
                         Button(action: onEditNickname) {
                             Label(miner.nickname == nil ? "Add Nickname" : "Edit Nickname", systemImage: "pencil")
                         }
@@ -1259,6 +1316,18 @@ private struct MinerSourceListRow: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+
+                    if let overrideLogin = miner.streamOverrideLogin {
+                        HStack(spacing: 4) {
+                            Image(systemName: "dot.radiowaves.left.and.right")
+                                .font(.system(size: 9, weight: .semibold))
+
+                            Text("@\(overrideLogin)")
+                                .lineLimit(1)
+                        }
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                    }
 
                     HStack(spacing: 4) {
                         Image(systemName: hasMinerPriorityOverride ? "person.crop.square.badge.checkmark" : "target")
@@ -1407,6 +1476,90 @@ private struct MinerNicknameEditorSheet: View {
             await navigation.minerManager.updateMinerNickname(
                 minerId: miner.id,
                 nickname: normalizedNickname
+            )
+        }
+        dismiss()
+    }
+}
+
+private struct MinerStreamOverrideSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let miner: MinerManager.ManagedMiner
+    let navigation: NavigationModel
+    @State private var streamLogin: String
+    @FocusState private var isStreamFocused: Bool
+
+    init(miner: MinerManager.ManagedMiner, navigation: NavigationModel) {
+        self.miner = miner
+        self.navigation = navigation
+        self._streamLogin = State(initialValue: miner.streamOverrideLogin.map { "@\($0)" } ?? "")
+    }
+
+    private var normalizedLogin: String? {
+        MinerManager.ManagedMiner.normalizedStreamOverrideLogin(streamLogin)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Override Stream")
+                    .font(.title3.weight(.semibold))
+
+                Text(miner.displayName)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            TextField("Streamer login", text: $streamLogin)
+                .textFieldStyle(.roundedBorder)
+                .focused($isStreamFocused)
+                .onSubmit {
+                    saveAndDismiss()
+                }
+
+            HStack(spacing: 10) {
+                if miner.streamOverrideLogin != nil {
+                    Button {
+                        streamLogin = ""
+                        saveAndDismiss()
+                    } label: {
+                        Label("Clear", systemImage: "xmark.circle")
+                    }
+                    .buttonStyle(.bordered)
+                }
+
+                Spacer()
+
+                Button("Cancel") {
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+
+                Button("Save") {
+                    saveAndDismiss()
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+                .disabled(normalizedLogin == nil && miner.streamOverrideLogin == nil)
+            }
+        }
+        .padding(22)
+        .frame(width: 360)
+        .onAppear {
+            isStreamFocused = true
+        }
+    }
+
+    private func saveAndDismiss() {
+        guard normalizedLogin != miner.streamOverrideLogin else {
+            dismiss()
+            return
+        }
+
+        Task {
+            await navigation.minerManager.setStreamOverride(
+                minerId: miner.id,
+                login: normalizedLogin
             )
         }
         dismiss()
