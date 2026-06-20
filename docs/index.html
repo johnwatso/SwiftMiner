@@ -204,7 +204,7 @@
         .hero-section {
             align-items: flex-start;
             padding-top: clamp(5.5rem, 10vh, 7.5rem) !important;
-            padding-bottom: 0 !important;
+            padding-bottom: clamp(5rem, 9vw, 8rem) !important;
         }
 
         .site-nav {
@@ -221,7 +221,6 @@
 
         .hero-title-line {
             display: block;
-            white-space: nowrap;
         }
 
         .hero-brand-title {
@@ -240,7 +239,7 @@
         .screenshot-frame {
             border-radius: 18px;
             border: 1px solid rgba(255, 255, 255, 0.12);
-            box-shadow: 0 26px 80px rgba(0, 0, 0, 0.28);
+            box-shadow: 0 30px 90px rgba(0, 0, 0, 0.42), 0 0 90px rgba(147, 51, 234, 0.14);
             overflow: hidden;
         }
 
@@ -249,56 +248,163 @@
             box-shadow: 0 26px 80px rgba(15, 23, 42, 0.12);
         }
 
-        .showcase-shell {
-            max-width: min(92vw, 1760px);
+        .section-shell {
+            width: 100%;
+            max-width: min(92vw, 1480px);
+            margin: 0 auto;
+            padding-left: 1rem;
+            padding-right: 1rem;
         }
 
-        .showcase-grid {
+        .trust-strip {
+            margin: 2rem auto 0;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 0.75rem;
+            max-width: 980px;
+        }
+
+        .trust-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            border-radius: 999px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.06);
+            padding: 0.625rem 0.9rem;
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: rgba(255, 255, 255, 0.82);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+
+        html.light .trust-badge {
+            border-color: rgba(15, 23, 42, 0.08);
+            background: rgba(255, 255, 255, 0.58);
+            color: rgba(51, 65, 85, 0.92);
+        }
+
+        #theme-toggle .theme-icon-light,
+        html.light #theme-toggle .theme-icon-dark {
+            display: none;
+        }
+
+        html.light #theme-toggle .theme-icon-light,
+        #theme-toggle .theme-icon-dark {
             display: block;
         }
 
-        .showcase-copy {
-            max-width: 380px;
+        .content-section {
+            position: relative;
+            min-height: 100dvh;
+            display: flex;
+            align-items: center;
+            padding: clamp(7rem, 10vw, 9rem) 0;
+            overflow: hidden;
         }
 
-        .showcase-copy > p {
-            margin-bottom: 1.5rem;
+        @media (min-width: 768px) {
+            body.sections-ready .snap-scroller > section {
+                opacity: 0.06;
+                filter: saturate(0.75);
+                transition: opacity 0.35s ease, filter 0.35s ease;
+            }
+
+            body.sections-ready .snap-scroller > section.is-current-section {
+                opacity: 1;
+                filter: saturate(1);
+            }
+
+            body.sections-ready .screenshot-card.reveal.active {
+                opacity: 0.12;
+                filter: saturate(0.75);
+                transition: opacity 0.35s ease, filter 0.35s ease, transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+            }
+
+            body.sections-ready .screenshot-card.reveal.active.is-current-card {
+                opacity: 1;
+                filter: saturate(1);
+            }
         }
 
-        .showcase-tabs {
-            gap: 0.625rem;
+        .screenshot-showcase {
+            display: grid;
+            gap: 3rem;
         }
 
-        .showcase-tab {
-            padding: 0.875rem 1rem;
-            border-radius: 1rem;
+        .screenshot-card {
+            display: grid;
+            gap: clamp(2rem, 4vw, 4rem);
+            align-items: center;
         }
 
-        .showcase-shot {
-            transform: none;
+        .screenshot-copy {
+            max-width: 460px;
+        }
+
+        .step-grid,
+        .privacy-grid {
+            display: grid;
+            grid-template-columns: repeat(1, minmax(0, 1fr));
+            gap: 1.25rem;
+        }
+
+        .step-grid > *,
+        .privacy-grid > * {
+            min-width: 0;
+        }
+
+        .step-grid h3,
+        .privacy-grid h3 {
+            line-height: 1.15;
+        }
+
+        .utility-card {
+            padding: clamp(1.4rem, 2vw, 1.9rem);
+        }
+
+        .privacy-layout {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: clamp(2rem, 4vw, 3.5rem);
+            align-items: center;
         }
 
         @media (min-width: 1024px) {
-            .showcase-grid {
-                display: grid;
-                grid-template-columns: minmax(320px, 380px) minmax(0, 1fr);
-                gap: clamp(1.75rem, 2.5vw, 3rem);
-                align-items: start;
+            .screenshot-card {
+                grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
             }
 
-            .showcase-shot {
-                transform: none;
+            .screenshot-card:nth-child(even) {
+                grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
             }
 
-            #sticky-tabs-container .showcase-copy {
-                min-height: min(62vh, 660px);
-                transform: none;
+            .screenshot-card:nth-child(even) .screenshot-copy {
+                order: 2;
             }
         }
 
-        @media (max-width: 639px) {
-            .hero-title-line {
-                white-space: normal;
+        @media (min-width: 768px) {
+            .step-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .privacy-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (min-width: 1024px) {
+            .privacy-layout {
+                grid-template-columns: minmax(300px, 0.75fr) minmax(0, 1.45fr);
+            }
+        }
+
+        @media (min-width: 1280px) {
+            .step-grid {
+                grid-template-columns: repeat(4, minmax(0, 1fr));
             }
         }
 
@@ -320,13 +426,10 @@
             const savedTheme = localStorage.getItem('theme');
             const systemPrefersLight = window.matchMedia('(prefers-color-scheme: light)').matches;
             const isLight = savedTheme === 'light' || (!savedTheme && systemPrefersLight);
-            if (isLight) {
-                document.documentElement.classList.add('light');
-                document.documentElement.classList.remove('dark');
-            } else {
-                document.documentElement.classList.add('dark');
-                document.documentElement.classList.remove('light');
-            }
+            const root = document.documentElement;
+            root.classList.toggle('light', isLight);
+            root.classList.toggle('dark', !isLight);
+            root.dataset.theme = isLight ? 'light' : 'dark';
         })();
 
         if ('scrollRestoration' in history) {
@@ -356,8 +459,8 @@
         <div class="flex items-center gap-3">
             <!-- Theme Toggle Button -->
             <button id="theme-toggle" class="w-9 h-9 rounded-full flex items-center justify-center border border-black/10 dark:border-white/10 text-slate-800 dark:text-gray-300 hover:bg-black/5 dark:hover:bg-white/5 transition-all" aria-label="Toggle Theme">
-                <i class="ph-bold ph-sun hidden dark:block text-base"></i>
-                <i class="ph-bold ph-moon block dark:hidden text-base"></i>
+                <i class="theme-icon-dark ph-bold ph-sun text-base"></i>
+                <i class="theme-icon-light ph-bold ph-moon text-base"></i>
             </button>
             
             <a href="https://github.com/johnwatso/SwiftMiner/releases/latest" class="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-br from-brand-purple to-brand-violet rounded-full text-white text-xs font-bold hover:shadow-[0_8px_20px_rgba(147,51,234,0.3)] hover:-translate-y-0.5 transition-all flex-shrink-0 border border-white/10">
@@ -371,19 +474,18 @@
     <main class="snap-scroller z-10 relative">
 
         <!-- Hero Section -->
-        <section class="hero-section md:snap-start md:snap-always min-h-[100dvh] flex items-center relative py-24 lg:py-0 overflow-hidden">
+        <section class="hero-section min-h-[100dvh] flex items-center relative py-24 lg:py-0 overflow-hidden">
             <div class="hero-shell mx-auto px-4 sm:px-6 lg:px-8 w-full">
                 <div class="flex flex-col items-center">
                     
                     <!-- Hero Text -->
                     <div class="hero-copy text-center reveal">
                         <h1 class="text-5xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight mb-6 leading-[1.05] text-slate-900 dark:text-white drop-shadow-2xl">
-                            <span class="hero-brand-title">SwiftMiner</span>
-                            <span class="hero-title-line">Twitch Drops On <span class="text-gradient">Autopilot.</span></span>
+                            <span class="hero-title-line">Automatically earn <span class="text-gradient">Twitch Drops</span> on macOS.</span>
                         </h1>
                         
-                        <p class="text-lg sm:text-xl text-slate-600 dark:text-gray-400 mb-10 max-w-2xl mx-auto leading-relaxed font-light">
-                            Automated Twitch Drops farming for macOS. Claim rewards for yourself, your friends, or your alt profiles without opening a browser.
+                        <p class="text-lg sm:text-xl text-slate-600 dark:text-gray-400 mb-10 max-w-4xl mx-auto leading-relaxed font-light">
+                            SwiftMiner monitors campaigns, switches to eligible streams, tracks progress, and claims rewards automatically — all from a native macOS app.
                         </p>
                         
                         <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -395,13 +497,21 @@
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
                                     <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/>
                                 </svg>
-                                View Source
+                                View on GitHub
                             </a>
                         </div>
                         
                         <div class="mt-4 flex items-center justify-center gap-1.5 text-xs text-slate-500 dark:text-gray-500 font-medium tracking-wide">
                             <i class="ph-bold ph-download-simple text-brand-cyan"></i>
                             <span><span class="text-slate-800 dark:text-gray-300 font-semibold">8.3k+</span> downloads and counting</span>
+                        </div>
+
+                        <div class="trust-strip">
+                            <span class="trust-badge"><i class="ph-bold ph-desktop text-brand-cyan"></i>Native macOS App</span>
+                            <span class="trust-badge"><i class="ph-bold ph-seal-check text-brand-purple"></i>Signed &amp; Notarized</span>
+                            <span class="trust-badge"><i class="ph-bold ph-github-logo text-brand-cyan"></i>Open Source</span>
+                            <span class="trust-badge"><i class="ph-bold ph-database text-brand-purple"></i>Local Data Storage</span>
+                            <span class="trust-badge"><i class="ph-bold ph-users-three text-brand-cyan"></i>Multi-Account Support</span>
                         </div>
                     </div>
 
@@ -416,7 +526,7 @@
         </section>
 
         <!-- Bento Features Section -->
-        <section id="features" class="md:snap-start md:snap-always min-h-[100dvh] flex items-center py-24 relative">
+        <section id="features" class="min-h-[100dvh] flex items-center py-24 relative">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
                 
                 <div class="text-center mb-16 reveal">
@@ -511,157 +621,125 @@
             </div>
         </section>
 
-        <!-- Fixed Sticky Tabs Sidebar (Only active/visible on Desktop when scanning showcase views) -->
-        <div id="sticky-tabs-container" class="fixed inset-0 h-screen pointer-events-none z-20 opacity-0 transition-all duration-300 hidden lg:flex items-center">
-            <div class="showcase-shell mx-auto px-4 sm:px-6 lg:px-8 w-full">
-                <div class="showcase-grid">
-                    <!-- Left Column: Tabs List -->
-                    <div class="showcase-copy flex flex-col pointer-events-auto">
-                        <h2 class="text-4xl md:text-5xl font-bold mb-4 leading-tight text-slate-900 dark:text-white drop-shadow-lg tracking-tight">A dashboard built <br/><span class="text-brand-purple">for drops automation.</span></h2>
-                        <p class="text-slate-600 dark:text-gray-400 mb-8 font-light leading-relaxed">
-                            Navigate through the native macOS interface. Toggle between views to see how SwiftMiner handles drops, accounts, and background tasks.
-                        </p>
-                        
-                        <div class="showcase-tabs flex flex-col">
-                            <!-- Tab 1: Overview -->
-                            <button onclick="switchShowcaseTab('overview')" id="tab-overview" class="showcase-tab w-full text-left glass-panel rounded-2xl p-4 border border-brand-purple/30 bg-white/5 dark:bg-white/5 transition-all flex flex-col gap-1 active-tab">
-                                <div class="flex items-center gap-3">
-                                    <div class="showcase-icon-box w-8 h-8 rounded-lg flex items-center justify-center bg-brand-purple/20 text-brand-purple border border-brand-purple/20 transition-all animate-pulse">
-                                        <i class="ph-bold ph-layout text-base"></i>
-                                    </div>
-                                    <span class="font-bold text-sm text-slate-900 dark:text-white">Overview Dashboard</span>
-                                </div>
-                                <p class="showcase-tab-desc text-slate-500 dark:text-gray-400 text-xs mt-1.5 leading-relaxed block">
-                                    Monitor active farming status, claim histories, and connected accounts from a single unified view. Built natively for macOS to operate with zero browser overhead.
-                                </p>
-                            </button>
+        <!-- Screenshots Section -->
+        <section id="view-overview" class="content-section">
+            <div class="absolute right-0 top-1/3 w-[800px] h-[800px] bg-brand-purple/10 rounded-full blur-[100px] pointer-events-none"></div>
+            <div class="section-shell relative z-10">
+                <div class="text-center mb-16 reveal">
+                    <h2 class="text-4xl md:text-5xl font-bold mb-4 leading-tight text-slate-900 dark:text-white drop-shadow-lg tracking-tight">A native dashboard <br/><span class="text-brand-purple">for Twitch Drops.</span></h2>
+                    <p class="text-slate-600 dark:text-gray-400 text-lg max-w-3xl mx-auto font-light leading-relaxed">
+                        Manage accounts, campaign priorities, progress, and logs without keeping browser tabs open.
+                    </p>
+                </div>
 
-                            <!-- Tab 2: Miners -->
-                            <button onclick="switchShowcaseTab('miners')" id="tab-miners" class="showcase-tab w-full text-left glass-panel rounded-2xl p-4 border border-black/10 dark:border-white/10 transition-all flex flex-col gap-1 bg-transparent">
-                                <div class="flex items-center gap-3">
-                                    <div class="showcase-icon-box w-8 h-8 rounded-lg flex items-center justify-center bg-brand-cyan/10 text-brand-cyan border border-brand-cyan/20 transition-all">
-                                        <i class="ph-bold ph-users text-base"></i>
-                                    </div>
-                                    <span class="font-bold text-sm text-slate-900 dark:text-white">Miners & Squad</span>
-                                </div>
-                                <p class="showcase-tab-desc text-slate-500 dark:text-gray-400 text-xs mt-1.5 leading-relaxed hidden">
-                                    Add and manage profiles for your friends, family, or alts. Authenticate securely in the background, and configure individual game priorities.
-                                </p>
-                            </button>
-
-                            <!-- Tab 3: Drops -->
-                            <button onclick="switchShowcaseTab('drops')" id="tab-drops" class="showcase-tab w-full text-left glass-panel rounded-2xl p-4 border border-black/10 dark:border-white/10 transition-all flex flex-col gap-1 bg-transparent">
-                                <div class="flex items-center gap-3">
-                                    <div class="showcase-icon-box w-8 h-8 rounded-lg flex items-center justify-center bg-brand-cyan/10 text-brand-cyan border border-brand-cyan/20 transition-all">
-                                        <i class="ph-bold ph-game-controller text-base"></i>
-                                    </div>
-                                    <span class="font-bold text-sm text-slate-900 dark:text-white">Drops Campaigns</span>
-                                </div>
-                                <p class="showcase-tab-desc text-slate-500 dark:text-gray-400 text-xs mt-1.5 leading-relaxed hidden">
-                                    Track campaign completion, active drop progress, and claim histories. Automatically selects eligible streams and claims rewards instantly.
-                                </p>
-                            </button>
-
-                            <!-- Tab 4: Logs -->
-                            <button onclick="switchShowcaseTab('activity-log')" id="tab-activity-log" class="showcase-tab w-full text-left glass-panel rounded-2xl p-4 border border-black/10 dark:border-white/10 transition-all flex flex-col gap-1 bg-transparent">
-                                <div class="flex items-center gap-3">
-                                    <div class="showcase-icon-box w-8 h-8 rounded-lg flex items-center justify-center bg-brand-cyan/10 text-brand-cyan border border-brand-cyan/20 transition-all">
-                                        <i class="ph-bold ph-article text-base"></i>
-                                    </div>
-                                    <span class="font-bold text-sm text-slate-900 dark:text-white">Activity Logs</span>
-                                </div>
-                                <p class="showcase-tab-desc text-slate-500 dark:text-gray-400 text-xs mt-1.5 leading-relaxed hidden">
-                                    Review detailed operational logs including stream changes, authentication state updates, and reward claims. Stored locally in a secure SQLite database.
-                                </p>
-                            </button>
+                <div class="screenshot-showcase">
+                    <article class="screenshot-card reveal">
+                        <div class="screenshot-copy">
+                            <div class="w-12 h-12 rounded-full bg-brand-purple/20 flex items-center justify-center text-brand-purple mb-5 border border-brand-purple/30 shadow-lg">
+                                <i class="ph-bold ph-layout text-2xl"></i>
+                            </div>
+                            <h3 class="text-2xl md:text-3xl font-bold mb-3 text-slate-900 dark:text-white">Everything in one view</h3>
+                            <p class="text-slate-600 dark:text-gray-400 leading-relaxed">See active miners, stream status, upcoming rewards, and priority games from a single macOS dashboard.</p>
                         </div>
-                    </div>
-                    <div></div>
+                        <div class="screenshot-frame">
+                            <img data-screenshot="overview" src="./assets/landing/overview-dark.png" width="3358" height="1760" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/1200x630/090514/00e5ff?text=Overview+Screen'" alt="Overview Screen" class="w-full transition-all duration-300 opacity-100">
+                        </div>
+                    </article>
+
+                    <article class="screenshot-card reveal">
+                        <div class="screenshot-copy">
+                            <div class="w-12 h-12 rounded-full bg-brand-cyan/20 flex items-center justify-center text-brand-cyan mb-5 border border-brand-cyan/30 shadow-lg">
+                                <i class="ph-bold ph-users text-2xl"></i>
+                            </div>
+                            <h3 class="text-2xl md:text-3xl font-bold mb-3 text-slate-900 dark:text-white">Multi-account control</h3>
+                            <p class="text-slate-600 dark:text-gray-400 leading-relaxed">Add your Twitch account, alt profiles, or friends and keep each miner configured with its own priorities.</p>
+                        </div>
+                        <div class="screenshot-frame">
+                            <img data-screenshot="miners" src="./assets/landing/miners-dark.png" width="3358" height="1760" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/1200x630/090514/00e5ff?text=Miners+Screen'" alt="Miners Screen" class="w-full transition-all duration-300 opacity-100">
+                        </div>
+                    </article>
+
+                    <article class="screenshot-card reveal">
+                        <div class="screenshot-copy">
+                            <div class="w-12 h-12 rounded-full bg-brand-magenta/20 flex items-center justify-center text-brand-magenta mb-5 border border-brand-magenta/30 shadow-lg">
+                                <i class="ph-bold ph-game-controller text-2xl"></i>
+                            </div>
+                            <h3 class="text-2xl md:text-3xl font-bold mb-3 text-slate-900 dark:text-white">Campaigns stay organized</h3>
+                            <p class="text-slate-600 dark:text-gray-400 leading-relaxed">Track active, completed, and upcoming drops while SwiftMiner chooses eligible streams in the background.</p>
+                        </div>
+                        <div class="screenshot-frame">
+                            <img data-screenshot="drops" src="./assets/landing/drops-dark.png" width="3358" height="1760" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/1200x630/090514/00e5ff?text=Drops+Screen'" alt="Drops Screen" class="w-full transition-all duration-300 opacity-100">
+                        </div>
+                    </article>
+
+                    <article class="screenshot-card reveal">
+                        <div class="screenshot-copy">
+                            <div class="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-brand-cyan mb-5 border border-brand-cyan/20 shadow-lg">
+                                <i class="ph-bold ph-article text-2xl"></i>
+                            </div>
+                            <h3 class="text-2xl md:text-3xl font-bold mb-3 text-slate-900 dark:text-white">Activity you can audit</h3>
+                            <p class="text-slate-600 dark:text-gray-400 leading-relaxed">Review stream changes, claim attempts, scan results, and account events from a readable local activity log.</p>
+                        </div>
+                        <div class="screenshot-frame">
+                            <img data-screenshot="activity-log" src="./assets/landing/activity-log-dark.png" width="3358" height="1760" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/1200x630/090514/00e5ff?text=Activity+Logs+Screen'" alt="Activity Logs Screen" class="w-full transition-all duration-300 opacity-100">
+                        </div>
+                    </article>
                 </div>
             </div>
-        </div>
+        </section>
 
-        <!-- Section 1: Overview Screenshot -->
-        <section id="view-overview" class="md:snap-start md:snap-always min-h-[100dvh] lg:h-screen flex items-center justify-center relative py-24 lg:py-0 overflow-hidden">
-            <!-- Background accent -->
-            <div class="absolute right-0 top-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-brand-purple/10 rounded-full blur-[100px] pointer-events-none"></div>
-
-            <div class="showcase-shell mx-auto px-4 sm:px-6 lg:px-8 w-full relative z-10">
-                <div class="showcase-grid lg:grid">
-                    <!-- Mobile-only Left Column: Hidden on desktop -->
-                    <div class="block lg:hidden w-full mb-12">
-                        <h2 class="text-4xl md:text-5xl font-bold mb-4 leading-tight text-slate-900 dark:text-white drop-shadow-lg tracking-tight">A dashboard built <br/><span class="text-brand-purple">for drops automation.</span></h2>
-                        <p class="text-slate-600 dark:text-gray-400 mb-8 font-light leading-relaxed">
-                            Navigate through the native macOS interface. Toggle between views to see how SwiftMiner handles drops, accounts, and background tasks.
-                        </p>
+        <!-- How It Works Section -->
+        <section id="how-it-works" class="content-section">
+            <div class="section-shell relative z-10">
+                <div class="text-center mb-12 reveal">
+                    <h2 class="text-4xl md:text-5xl font-bold mb-4 text-slate-900 dark:text-white drop-shadow-lg tracking-tight">How it <span class="text-brand-cyan">works.</span></h2>
+                    <p class="text-slate-600 dark:text-gray-400 text-lg max-w-2xl mx-auto font-light">Set your preferences once, then let SwiftMiner handle the repetitive work.</p>
+                </div>
+                <div class="step-grid">
+                    <div class="glass-panel card-glow-purple rounded-3xl utility-card reveal">
+                        <span class="text-brand-purple font-bold text-sm">01</span>
+                        <h3 class="text-xl font-bold mt-4 mb-3 text-slate-900 dark:text-white">Add your Twitch account</h3>
+                        <p class="text-sm text-slate-500 dark:text-gray-400 leading-relaxed">Authenticate securely and keep account data on your Mac.</p>
                     </div>
-                    
-                    <!-- Desktop Placeholder -->
-                    <div class="hidden lg:block"></div>
-                    
-                    <!-- Screenshot Column -->
-                    <div class="showcase-shot w-full flex items-center justify-center">
-                        <div class="screenshot-frame w-full">
-                            <img data-screenshot="overview" src="./assets/landing/overview-dark.png" width="3358" height="1760" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/800x550/090514/00e5ff?text=Overview+Screen'" alt="Overview Screen" class="w-full transition-all duration-300 opacity-100">
-                        </div>
+                    <div class="glass-panel card-glow-cyan rounded-3xl utility-card reveal" style="transition-delay: 80ms;">
+                        <span class="text-brand-cyan font-bold text-sm">02</span>
+                        <h3 class="text-xl font-bold mt-4 mb-3 text-slate-900 dark:text-white">Pick preferred games</h3>
+                        <p class="text-sm text-slate-500 dark:text-gray-400 leading-relaxed">Prioritize the campaigns you care about most.</p>
+                    </div>
+                    <div class="glass-panel card-glow-magenta rounded-3xl utility-card reveal" style="transition-delay: 160ms;">
+                        <span class="text-brand-magenta font-bold text-sm">03</span>
+                        <h3 class="text-xl font-bold mt-4 mb-3 text-slate-900 dark:text-white">SwiftMiner watches streams</h3>
+                        <p class="text-sm text-slate-500 dark:text-gray-400 leading-relaxed">Eligible streams are selected and monitored automatically.</p>
+                    </div>
+                    <div class="glass-panel card-glow-white rounded-3xl utility-card reveal" style="transition-delay: 240ms;">
+                        <span class="text-slate-400 font-bold text-sm">04</span>
+                        <h3 class="text-xl font-bold mt-4 mb-3 text-slate-900 dark:text-white">Rewards are claimed</h3>
+                        <p class="text-sm text-slate-500 dark:text-gray-400 leading-relaxed">Claimable rewards are handled as soon as they are ready.</p>
                     </div>
                 </div>
             </div>
         </section>
 
-        <!-- Section 2: Miners Screenshot -->
-        <section id="view-miners" class="md:snap-start md:snap-always min-h-[100dvh] lg:h-screen flex items-center justify-center relative py-24 lg:py-0 overflow-hidden">
-            <div class="showcase-shell mx-auto px-4 sm:px-6 lg:px-8 w-full relative z-10">
-                <div class="showcase-grid lg:grid">
-                    <!-- Desktop Placeholder -->
-                    <div class="hidden lg:block"></div>
-                    
-                    <!-- Screenshot Column -->
-                    <div class="showcase-shot w-full flex items-center justify-center">
-                        <div class="screenshot-frame w-full">
-                            <img data-screenshot="miners" src="./assets/landing/miners-dark.png" width="3358" height="1760" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/800x550/090514/00e5ff?text=Miners+Screen'" alt="Miners Screen" class="w-full transition-all duration-300 opacity-100">
-                        </div>
+        <!-- Privacy Section -->
+        <section id="privacy" class="content-section">
+            <div class="section-shell relative z-10">
+                <div class="privacy-layout">
+                    <div class="reveal">
+                        <h2 class="text-4xl md:text-5xl font-bold mb-4 text-slate-900 dark:text-white drop-shadow-lg tracking-tight">Privacy <span class="text-brand-purple">first.</span></h2>
+                        <p class="text-slate-600 dark:text-gray-400 text-lg font-light leading-relaxed">SwiftMiner is designed around local control. No cloud account, hosted dashboard, or third-party sync service is required.</p>
                     </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- Section 3: Drops Screenshot -->
-        <section id="view-drops" class="md:snap-start md:snap-always min-h-[100dvh] lg:h-screen flex items-center justify-center relative py-24 lg:py-0 overflow-hidden">
-            <div class="showcase-shell mx-auto px-4 sm:px-6 lg:px-8 w-full relative z-10">
-                <div class="showcase-grid lg:grid">
-                    <!-- Desktop Placeholder -->
-                    <div class="hidden lg:block"></div>
-                    
-                    <!-- Screenshot Column -->
-                    <div class="showcase-shot w-full flex items-center justify-center">
-                        <div class="screenshot-frame w-full">
-                            <img data-screenshot="drops" src="./assets/landing/drops-dark.png" width="3358" height="1760" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/800x550/090514/00e5ff?text=Drops+Screen'" alt="Drops Screen" class="w-full transition-all duration-300 opacity-100">
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- Section 4: Activity Log Screenshot -->
-        <section id="view-activity-log" class="md:snap-start md:snap-always min-h-[100dvh] lg:h-screen flex items-center justify-center relative py-24 lg:py-0 overflow-hidden">
-            <div class="showcase-shell mx-auto px-4 sm:px-6 lg:px-8 w-full relative z-10">
-                <div class="showcase-grid lg:grid">
-                    <!-- Desktop Placeholder -->
-                    <div class="hidden lg:block"></div>
-                    
-                    <!-- Screenshot Column -->
-                    <div class="showcase-shot w-full flex items-center justify-center">
-                        <div class="screenshot-frame w-full">
-                            <img data-screenshot="activity-log" src="./assets/landing/activity-log-dark.png" width="3358" height="1760" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/800x550/090514/00e5ff?text=Activity+Logs+Screen'" alt="Activity Logs Screen" class="w-full transition-all duration-300 opacity-100">
-                        </div>
+                    <div class="privacy-grid">
+                        <div class="glass-panel rounded-3xl utility-card reveal"><h3 class="font-bold text-xl mb-2 text-slate-900 dark:text-white">macOS Keychain</h3><p class="text-sm text-slate-500 dark:text-gray-400 leading-relaxed">Credentials are stored securely using the system Keychain.</p></div>
+                        <div class="glass-panel rounded-3xl utility-card reveal" style="transition-delay: 80ms;"><h3 class="font-bold text-xl mb-2 text-slate-900 dark:text-white">No cloud account</h3><p class="text-sm text-slate-500 dark:text-gray-400 leading-relaxed">Use SwiftMiner without signing into a separate hosted service.</p></div>
+                        <div class="glass-panel rounded-3xl utility-card reveal" style="transition-delay: 160ms;"><h3 class="font-bold text-xl mb-2 text-slate-900 dark:text-white">Local SQLite storage</h3><p class="text-sm text-slate-500 dark:text-gray-400 leading-relaxed">Logs and app state live in a local database on your Mac.</p></div>
+                        <div class="glass-panel rounded-3xl utility-card reveal" style="transition-delay: 240ms;"><h3 class="font-bold text-xl mb-2 text-slate-900 dark:text-white">Runs fully on your Mac</h3><p class="text-sm text-slate-500 dark:text-gray-400 leading-relaxed">Monitoring, progress tracking, and claiming happen locally.</p></div>
                     </div>
                 </div>
             </div>
         </section>
 
         <!-- Performance & Supported Hardware Section -->
-        <section id="performance" class="md:snap-start md:snap-always min-h-[100dvh] flex items-center py-24 relative overflow-hidden">
+        <section id="performance" class="min-h-[100dvh] flex items-center py-24 relative overflow-hidden">
             <!-- Background accent -->
             <div class="absolute left-0 top-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-brand-cyan/5 rounded-full blur-[120px] pointer-events-none"></div>
 
@@ -748,7 +826,7 @@
         </section>
 
         <!-- Download & Footer Section -->
-        <section class="md:snap-start md:snap-always min-h-[100dvh] flex flex-col relative justify-between pt-24">
+        <section class="min-h-[100dvh] flex flex-col relative justify-between pt-24">
             
             <div class="flex-1 flex flex-col justify-center max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 w-full text-center">
                 <div class="glass-panel rounded-[2.5rem] p-10 md:p-16 border border-black/10 dark:border-white/10 shadow-2xl relative overflow-hidden group reveal">
@@ -792,50 +870,6 @@
 
     <!-- Interactions Script -->
     <script>
-        // Scroll-bound Tab Switching Logic
-        window.switchShowcaseTab = function(tabName) {
-            const targetEl = document.getElementById(`view-${tabName}`);
-            if (targetEl) {
-                targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
-        };
-
-        // Activate Tab Style Helper
-        window.activateTabHighlight = function(tabName) {
-            const tabs = ['overview', 'miners', 'drops', 'activity-log'];
-            tabs.forEach(t => {
-                const tabBtn = document.getElementById(`tab-${t}`);
-                if (!tabBtn) return;
-                
-                const desc = tabBtn.querySelector('.showcase-tab-desc');
-                const iconBox = tabBtn.querySelector('.showcase-icon-box');
-                
-                if (t === tabName) {
-                    tabBtn.classList.add('active-tab', 'border-brand-purple/30', 'bg-white/5', 'dark:bg-white/5');
-                    tabBtn.classList.remove('border-black/10', 'dark:border-white/10', 'bg-transparent');
-                    if (desc) {
-                        desc.classList.remove('hidden');
-                        desc.classList.add('block');
-                    }
-                    if (iconBox) {
-                        iconBox.classList.add('bg-brand-purple/20', 'text-brand-purple', 'border-brand-purple/20', 'animate-pulse');
-                        iconBox.classList.remove('bg-brand-cyan/10', 'text-brand-cyan', 'border-brand-cyan/20');
-                    }
-                } else {
-                    tabBtn.classList.remove('active-tab', 'border-brand-purple/30', 'bg-white/5', 'dark:bg-white/5');
-                    tabBtn.classList.add('border-black/10', 'dark:border-white/10', 'bg-transparent');
-                    if (desc) {
-                        desc.classList.remove('block');
-                        desc.classList.add('hidden');
-                    }
-                    if (iconBox) {
-                        iconBox.classList.remove('bg-brand-purple/20', 'text-brand-purple', 'border-brand-purple/20', 'animate-pulse');
-                        iconBox.classList.add('bg-brand-cyan/10', 'text-brand-cyan', 'border-brand-cyan/20');
-                    }
-                }
-            });
-        };
-
         document.addEventListener('DOMContentLoaded', () => {
             const scrollContainer = document.querySelector('.snap-scroller');
             const siteNav = document.getElementById('site-nav');
@@ -860,6 +894,58 @@
                 scrollContainer.addEventListener('scroll', updateSiteNavVisibility, { passive: true });
             }
 
+            const pageSections = scrollContainer ? Array.from(scrollContainer.querySelectorAll(':scope > section')) : [];
+            const screenshotCards = scrollContainer ? Array.from(scrollContainer.querySelectorAll('.screenshot-card')) : [];
+
+            function updateScrollFocus() {
+                if (!scrollContainer || pageSections.length === 0) return;
+                let currentSection = pageSections[0];
+                let strongestSectionScore = -1;
+
+                function visibleScore(element) {
+                    const containerRect = scrollContainer.getBoundingClientRect();
+                    const elementRect = element.getBoundingClientRect();
+                    return Math.max(0, Math.min(elementRect.bottom, containerRect.bottom) - Math.max(elementRect.top, containerRect.top));
+                }
+
+                pageSections.forEach(section => {
+                    const score = visibleScore(section);
+                    if (score > strongestSectionScore) {
+                        strongestSectionScore = score;
+                        currentSection = section;
+                    }
+                });
+
+                pageSections.forEach(section => {
+                    section.classList.toggle('is-current-section', section === currentSection);
+                });
+
+                if (screenshotCards.length > 0) {
+                    let currentCard = screenshotCards[0];
+                    let strongestCardScore = -1;
+
+                    screenshotCards.forEach(card => {
+                        const score = visibleScore(card);
+                        if (score > strongestCardScore) {
+                            strongestCardScore = score;
+                            currentCard = card;
+                        }
+                    });
+
+                    screenshotCards.forEach(card => {
+                        card.classList.toggle('is-current-card', card === currentCard);
+                    });
+                }
+
+                document.body.classList.add('sections-ready');
+            }
+
+            updateScrollFocus();
+            if (scrollContainer) {
+                scrollContainer.addEventListener('scroll', updateScrollFocus, { passive: true });
+            }
+            window.addEventListener('resize', updateScrollFocus);
+
             // Reveal on Scroll Initialization
             const observerOptions = {
                 root: scrollContainer,
@@ -880,42 +966,7 @@
 
             document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
 
-            // IntersectionObserver for Scroll-Bound Showcase Tabs
-            const showcaseObserverOptions = {
-                root: scrollContainer,
-                threshold: 0.5
-            };
-
-            const activeStates = {};
-            const showcaseObserver = new IntersectionObserver((entries) => {
-                entries.forEach(entry => {
-                    const tabName = entry.target.id.replace('view-', '');
-                    activeStates[tabName] = entry.isIntersecting;
-                    
-                    if (entry.isIntersecting) {
-                        window.activateTabHighlight(tabName);
-                    }
-                });
-
-                // Determine if we are within any showcase sections
-                const anyActive = Object.values(activeStates).some(state => state === true);
-                const container = document.getElementById('sticky-tabs-container');
-                if (container) {
-                    if (anyActive) {
-                        container.classList.add('opacity-100', 'pointer-events-auto');
-                        container.classList.remove('opacity-0', 'pointer-events-none');
-                    } else {
-                        container.classList.remove('opacity-100', 'pointer-events-auto');
-                        container.classList.add('opacity-0', 'pointer-events-none');
-                    }
-                }
-            }, showcaseObserverOptions);
-
-            const showcaseTabs = ['overview', 'miners', 'drops', 'activity-log'];
-            showcaseTabs.forEach(t => {
-                const target = document.getElementById(`view-${t}`);
-                if (target) showcaseObserver.observe(target);
-            });
+            const performanceSection = document.getElementById('performance');
 
             // CPU Counter Countdown Animation on Scroll
             const cpuCounterEl = document.getElementById('cpu-counter');
@@ -978,7 +1029,6 @@
                     threshold: 0.1
                 });
 
-                const performanceSection = document.getElementById('performance');
                 if (performanceSection) performanceObserver.observe(performanceSection);
             }
 
@@ -986,18 +1036,19 @@
             const themeToggleBtn = document.getElementById('theme-toggle');
             
             function applyTheme(isLight, savePreference = true) {
-                if (isLight) {
-                    document.documentElement.classList.add('light');
-                    document.documentElement.classList.remove('dark');
-                    if (savePreference) {
-                        localStorage.setItem('theme', 'light');
-                    }
-                } else {
-                    document.documentElement.classList.add('dark');
-                    document.documentElement.classList.remove('light');
-                    if (savePreference) {
-                        localStorage.setItem('theme', 'dark');
-                    }
+                const theme = isLight ? 'light' : 'dark';
+                [document.documentElement, document.body].forEach(element => {
+                    if (!element) return;
+                    element.classList.toggle('light', isLight);
+                    element.classList.toggle('dark', !isLight);
+                    element.dataset.theme = theme;
+                });
+                if (themeToggleBtn) {
+                    themeToggleBtn.setAttribute('aria-label', `Switch to ${isLight ? 'dark' : 'light'} mode`);
+                    themeToggleBtn.setAttribute('aria-pressed', String(isLight));
+                }
+                if (savePreference) {
+                    localStorage.setItem('theme', theme);
                 }
                 
                 // Swap screenshots based on mode
