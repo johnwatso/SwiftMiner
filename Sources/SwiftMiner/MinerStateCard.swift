@@ -19,6 +19,8 @@ struct MinerStateCard: View {
 
             if case .mining(let progress) = state {
                 miningProgressSection(progress)
+            } else if case .overriding(_, .some(let progress)) = state {
+                miningProgressSection(progress)
             } else if case .blocked(let reasons) = state, reasons.contains(.accountNotLinked) {
                 let gameId = resolved?.resolved?.gameId ?? "all"
                 actionSection(
@@ -251,6 +253,23 @@ struct MinerStateCard: View {
                 icon: "calendar.badge.checkmark",
                 color: .green
             )
+
+        case .overriding(let login, let progress):
+            if let progress {
+                return StateConfig(
+                    headline: "Watching \(progress.gameName)",
+                    subtitle: "Stream override · @\(login)",
+                    icon: "person.fill.viewfinder",
+                    color: .indigo
+                )
+            }
+
+            return StateConfig(
+                headline: "Watching @\(login)",
+                subtitle: "Stream override active — until they go offline.",
+                icon: "person.fill.viewfinder",
+                color: .indigo
+            )
         }
     }
 
@@ -279,8 +298,11 @@ struct MinerActivityCard: View {
     var onOverrideStream: (() -> Void)? = nil
     var onClearStreamOverride: (() -> Void)? = nil
 
+    @Environment(NavigationModel.self) private var navigation
     @ObservedObject private var settings = Settings.shared
     @State private var activityRefreshPulse = Date()
+    @State private var streamOverrideEditor: MinerStreamOverridePresentation?
+    @State private var nicknameEditor: MinerNicknameEditorPresentation?
 
     private var snapshot: MinerActivitySnapshot {
         _ = activityRefreshPulse
@@ -362,6 +384,9 @@ struct MinerActivityCard: View {
         .onTapGesture {
             onSelect?()
         }
+        .contextMenu {
+            minerContextMenu
+        }
         .task(id: miner.id) {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 15 * 1_000_000_000)
@@ -370,6 +395,12 @@ struct MinerActivityCard: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(miner.displayName), now mining \(snapshot.now.title)")
+        .sheet(item: $streamOverrideEditor) { presentation in
+            MinerStreamOverrideSheet(miner: presentation.miner, navigation: navigation)
+        }
+        .sheet(item: $nicknameEditor) { presentation in
+            MinerNicknameEditorSheet(miner: presentation.miner, navigation: navigation)
+        }
     }
 
     private var header: some View {
@@ -379,41 +410,63 @@ struct MinerActivityCard: View {
             Text(miner.displayName)
                 .font(.title3.weight(.semibold))
                 .lineLimit(1)
-                .contextMenu {
-                    minerContextMenu
-                }
 
             Spacer(minLength: 8)
-        }
-        .contextMenu {
-            minerContextMenu
         }
     }
 
     @ViewBuilder
     private var minerContextMenu: some View {
-        if let onOverrideStream {
-            Button(action: onOverrideStream) {
-                Label("Override Stream...", systemImage: "dot.radiowaves.left.and.right")
+        Button(action: handleOverrideStream) {
+            Label("Override Stream...", systemImage: "person.fill.viewfinder")
+        }
+
+        if miner.streamOverrideLogin != nil {
+            Button(action: handleClearStreamOverride) {
+                Label("Stop Stream Override", systemImage: "xmark.circle")
             }
         }
 
-        if miner.streamOverrideLogin != nil, let onClearStreamOverride {
-            Button(action: onClearStreamOverride) {
-                Label("Clear Stream Override", systemImage: "xmark.circle")
-            }
+        Button(action: handleEditNickname) {
+            Label(miner.nickname == nil ? "Add Nickname" : "Edit Nickname", systemImage: "pencil")
         }
 
-        if let onEditNickname {
-            Button(action: onEditNickname) {
-                Label(miner.nickname == nil ? "Add Nickname" : "Edit Nickname", systemImage: "pencil")
-            }
-        }
-
-        if miner.nickname != nil, let onClearNickname {
-            Button(action: onClearNickname) {
+        if miner.nickname != nil {
+            Button(action: handleClearNickname) {
                 Label("Clear Nickname", systemImage: "xmark.circle")
             }
+        }
+    }
+
+    private func handleOverrideStream() {
+        if let onOverrideStream {
+            onOverrideStream()
+        } else {
+            streamOverrideEditor = MinerStreamOverridePresentation(miner: miner)
+        }
+    }
+
+    private func handleClearStreamOverride() {
+        if let onClearStreamOverride {
+            onClearStreamOverride()
+        } else {
+            Task { await navigation.minerManager.clearStreamOverride(minerId: miner.id) }
+        }
+    }
+
+    private func handleEditNickname() {
+        if let onEditNickname {
+            onEditNickname()
+        } else {
+            nicknameEditor = MinerNicknameEditorPresentation(miner: miner)
+        }
+    }
+
+    private func handleClearNickname() {
+        if let onClearNickname {
+            onClearNickname()
+        } else {
+            Task { await navigation.minerManager.updateMinerNickname(minerId: miner.id, nickname: nil) }
         }
     }
 
@@ -432,13 +485,6 @@ struct MinerActivityCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            if let overrideLogin = miner.streamOverrideLogin {
-                Label("@\(overrideLogin)", systemImage: "dot.radiowaves.left.and.right")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-
             if let progress = snapshot.now.progressFraction {
                 AnimatedLinearProgressView(value: progress, tint: effectiveAccent(snapshot.now.accent))
                     .padding(.top, isExpanded ? 0 : 2)
@@ -451,7 +497,55 @@ struct MinerActivityCard: View {
                     .lineLimit(isExpanded ? 1 : 2)
                     .fixedSize(horizontal: false, vertical: true)
             }
+
+            if let anchor = liveActivityAnchor {
+                liveActivityTimer(anchor: anchor)
+            }
         }
+    }
+
+    /// When the worker is actively doing something, the timestamp the live timer counts from.
+    /// `statusChangedAt` only moves on a real status transition, so it tracks the current
+    /// watch/scan session. Returns nil when the miner is idle, blocked, paused, or unresponsive.
+    private var liveActivityAnchor: Date? {
+        guard miner.isRunning, !miner.needsAuth, !miner.isStalled, miner.isHealthy else { return nil }
+        switch miner.status {
+        case .watching, .waitingForStream, .fetchingCampaigns:
+            return miner.statusChangedAt
+        default:
+            return nil
+        }
+    }
+
+    @ViewBuilder
+    private func liveActivityTimer(anchor: Date) -> some View {
+        TimelineView(.periodic(from: anchor, by: 1)) { context in
+            let elapsed = max(0, context.date.timeIntervalSince(anchor))
+            HStack(spacing: 5) {
+                PulsingActivityDot(color: effectiveAccent(snapshot.now.accent))
+
+                Image(systemName: "timer")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+
+                Text(Self.formatElapsed(elapsed))
+                    .font(.caption.weight(.medium).monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.top, 2)
+            .accessibilityLabel("Active for \(Self.formatElapsed(elapsed))")
+        }
+    }
+
+    private static func formatElapsed(_ interval: TimeInterval) -> String {
+        let total = Int(interval)
+        let hours = total / 3600
+        let minutes = (total % 3600) / 60
+        let seconds = total % 60
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+        }
+        return String(format: "%02d:%02d", minutes, seconds)
     }
 
     private func nextActivity(_ item: MinerActivityItem) -> some View {
@@ -711,6 +805,38 @@ struct MinerActivitySnapshot {
                 subtitle: "Worker is running, but it has not reported recent liveness yet.",
                 symbol: "clock.badge.exclamationmark",
                 accent: .yellow
+            )
+        }
+
+        // Stream override pins this miner to one streamer until they go offline.
+        if let overrideLogin = miner.streamOverrideLogin, miner.isRunning {
+            if let campaign, hasUnclaimedDrop(in: campaign) {
+                let progress = activeDropProgress(for: campaign, miner: miner)
+                let detail = progress.map { item in
+                    item.remainingMinutes > 0
+                        ? "\(item.dropName) · \(item.remainingMinutes) min remaining"
+                        : "\(item.dropName) · claiming reward"
+                } ?? "Watching this streamer for drops"
+
+                return MinerActivityItem(
+                    id: "override-\(miner.id)",
+                    title: campaign.game.name,
+                    subtitle: "Stream override · @\(overrideLogin)",
+                    detail: detail,
+                    symbol: "person.fill.viewfinder",
+                    accent: .indigo,
+                    progressFraction: progress?.fraction,
+                    campaignId: campaign.id
+                )
+            }
+
+            return MinerActivityItem(
+                id: "override-\(miner.id)",
+                title: "@\(overrideLogin)",
+                subtitle: "Stream override active",
+                detail: "Watching until the stream goes offline.",
+                symbol: "person.fill.viewfinder",
+                accent: .indigo
             )
         }
 
@@ -1262,6 +1388,9 @@ struct MinerActivitySnapshot {
         if now.id.hasPrefix("waiting-drops-") || now.id.hasPrefix("ignored-link-") {
             return "Up to Date"
         }
+        if now.id.hasPrefix("override-") {
+            return "Watching \(now.title)"
+        }
 
         switch miner.status {
         case .watching:
@@ -1299,6 +1428,9 @@ struct MinerActivitySnapshot {
         }
         if now.id.hasPrefix("ignored-link-") {
             return "calendar.badge.checkmark"
+        }
+        if now.id.hasPrefix("override-") {
+            return now.symbol
         }
         if now.requiresAccountLink || miner.needsAuth {
             return "exclamationmark.triangle.fill"
@@ -1341,6 +1473,9 @@ struct MinerActivitySnapshot {
         if now.id.hasPrefix("ignored-link-") {
             return .green
         }
+        if now.id.hasPrefix("override-") {
+            return now.accent
+        }
         switch miner.status {
         case .watching:
             return .green
@@ -1376,4 +1511,20 @@ struct MinerActivityItem: Identifiable {
     var progressFraction: Double? = nil
     var campaignId: String? = nil
     var requiresAccountLink: Bool = false
+}
+
+/// A small dot that gently pulses to signal the miner is alive and working.
+private struct PulsingActivityDot: View {
+    let color: Color
+    @State private var pulsing = false
+
+    var body: some View {
+        Circle()
+            .fill(color)
+            .frame(width: 7, height: 7)
+            .opacity(pulsing ? 0.3 : 1.0)
+            .scaleEffect(pulsing ? 0.82 : 1.0)
+            .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: pulsing)
+            .onAppear { pulsing = true }
+    }
 }
