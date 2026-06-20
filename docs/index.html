@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -472,15 +472,18 @@
         }
     </style>
     <script>
-        // Apply theme immediately to prevent layout flashing
+        // Apply the system theme immediately to prevent layout flashing.
         (function() {
-            const savedTheme = localStorage.getItem('theme');
             const systemPrefersLight = window.matchMedia('(prefers-color-scheme: light)').matches;
-            const isLight = savedTheme === 'light' || (!savedTheme && systemPrefersLight);
             const root = document.documentElement;
-            root.classList.toggle('light', isLight);
-            root.classList.toggle('dark', !isLight);
-            root.dataset.theme = isLight ? 'light' : 'dark';
+            root.classList.toggle('light', systemPrefersLight);
+            root.classList.toggle('dark', !systemPrefersLight);
+            root.dataset.theme = systemPrefersLight ? 'light' : 'dark';
+            try {
+                localStorage.removeItem('theme');
+            } catch (e) {
+                // Ignore storage access failures; the system theme remains authoritative.
+            }
         })();
 
         if ('scrollRestoration' in history) {
@@ -1027,8 +1030,9 @@
 
             // Theme Toggle Logic
             const themeToggleBtn = document.getElementById('theme-toggle');
+            let particlesReady = false;
             
-            function applyTheme(isLight, savePreference = true) {
+            function applyTheme(isLight) {
                 const theme = isLight ? 'light' : 'dark';
                 [document.documentElement, document.body].forEach(element => {
                     if (!element) return;
@@ -1040,9 +1044,6 @@
                     themeToggleBtn.setAttribute('aria-label', `Switch to ${isLight ? 'dark' : 'light'} mode`);
                     themeToggleBtn.setAttribute('aria-pressed', String(isLight));
                 }
-                if (savePreference) {
-                    localStorage.setItem('theme', theme);
-                }
                 
                 // Swap screenshots based on mode
                 document.querySelectorAll('img[data-screenshot]').forEach(img => {
@@ -1051,28 +1052,24 @@
                 });
 
                 // Re-initialize particles to update their colors
-                if (typeof initParticles === 'function') {
+                if (particlesReady && typeof initParticles === 'function') {
                     initParticles();
                 }
             }
 
             // Sync toggle state and apply initial theme images on load
-            const savedTheme = localStorage.getItem('theme');
-            const systemPrefersLight = window.matchMedia('(prefers-color-scheme: light)').matches;
-            const initialIsLight = savedTheme === 'light' || (!savedTheme && systemPrefersLight);
-            applyTheme(initialIsLight, false);
+            const systemThemeQuery = window.matchMedia('(prefers-color-scheme: light)');
+            applyTheme(systemThemeQuery.matches);
 
-            // Listen to OS theme changes
-            window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', (e) => {
-                // When system theme changes, automatically follow it and clear any manual override
-                localStorage.removeItem('theme');
-                applyTheme(e.matches, false);
+            // Follow OS theme changes.
+            systemThemeQuery.addEventListener('change', (e) => {
+                applyTheme(e.matches);
             });
 
             if (themeToggleBtn) {
                 themeToggleBtn.addEventListener('click', () => {
                     const isLight = !document.documentElement.classList.contains('light');
-                    applyTheme(isLight, true);
+                    applyTheme(isLight);
                 });
             }
 
@@ -1153,6 +1150,7 @@
                 }
             }
 
+            particlesReady = true;
             initParticles(); // paints a static frame when reduced-motion is set
             startParticles(); // no-op under reduced motion
 
