@@ -504,17 +504,14 @@ struct MinerActivityCard: View {
         }
     }
 
-    /// When the worker is actively doing something, the timestamp the live timer counts from.
-    /// `statusChangedAt` only moves on a real status transition, so it tracks the current
-    /// watch/scan session. Returns nil when the miner is idle, blocked, paused, or unresponsive.
+    /// When the miner is actively watching a stream, the timestamp the live timer counts from.
+    /// `statusChangedAt` only moves on a real status transition, so it tracks the current watch
+    /// session. Returns nil unless the miner is genuinely watching — searching for a stream,
+    /// fetching campaigns, idle, blocked, paused, or unresponsive all hide the timer.
     private var liveActivityAnchor: Date? {
         guard miner.isRunning, !miner.needsAuth, !miner.isStalled, miner.isHealthy else { return nil }
-        switch miner.status {
-        case .watching, .waitingForStream, .fetchingCampaigns:
-            return miner.statusChangedAt
-        default:
-            return nil
-        }
+        guard miner.status == .watching else { return nil }
+        return miner.statusChangedAt
     }
 
     @ViewBuilder
