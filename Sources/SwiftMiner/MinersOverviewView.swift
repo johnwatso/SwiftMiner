@@ -1510,12 +1510,27 @@ private struct MinerStreamOverrideSheet: View {
                     .foregroundStyle(.secondary)
             }
 
-            TextField("Streamer login", text: $streamLogin)
-                .textFieldStyle(.roundedBorder)
-                .focused($isStreamFocused)
-                .onSubmit {
-                    saveAndDismiss()
+            VStack(alignment: .leading, spacing: 6) {
+                TextField("Username or twitch.tv link", text: $streamLogin)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($isStreamFocused)
+                    .onSubmit {
+                        saveAndDismiss()
+                    }
+
+                if let normalizedLogin {
+                    Text("Will watch twitch.tv/\(normalizedLogin) until they go offline.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                } else {
+                    Text("Paste a stream URL or type a username — e.g. @flats.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
+            }
 
             HStack(spacing: 10) {
                 if miner.streamOverrideLogin != nil {

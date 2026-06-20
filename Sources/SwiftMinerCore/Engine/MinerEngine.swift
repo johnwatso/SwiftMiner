@@ -2039,12 +2039,7 @@ public actor MinerEngine {
     }
 
     private static func normalizedStreamOverrideLogin(_ login: String?) -> String? {
-        guard let login else { return nil }
-        let cleaned = login
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "@"))
-            .lowercased()
-        return cleaned.isEmpty ? nil : cleaned
+        MinerManager.ManagedMiner.normalizedStreamOverrideLogin(login)
     }
 
     /// Placeholder campaign used to drive a "watch only" override session when the streamer
