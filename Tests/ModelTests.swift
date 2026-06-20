@@ -315,6 +315,124 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(best?.channel.id, "main")
     }
 
+    func testSameGameVerificationIncludesFallbackCampaignForPrioritisedGame() {
+        let game = Game(id: "g007", name: "007 First Light")
+        let now = Date()
+        let selected = Campaign(
+            id: "creators",
+            name: "007 First Light Creators",
+            game: game,
+            status: .active,
+            startDate: now.addingTimeInterval(-3600),
+            endDate: now.addingTimeInterval(3600),
+            drops: [Drop(id: "d1", name: "Creator Drop", requiredMinutes: 60)],
+            isAccountConnected: false
+        )
+        let liveOnStreams = Campaign(
+            id: "launch",
+            name: "007: First Light Launch",
+            game: game,
+            status: .active,
+            startDate: now.addingTimeInterval(-3600),
+            endDate: now.addingTimeInterval(3600),
+            drops: [Drop(id: "d2", name: "Launch Drop", requiredMinutes: 60)],
+            isAccountConnected: false
+        )
+
+        let candidates = MinerEngine.sameGameVerificationCandidates(
+            primaryCandidates: [selected],
+            allCampaigns: [selected, liveOnStreams],
+            priorityGames: ["007 First Light"],
+            excludedGames: [],
+            strategy: .prioritiseSelected,
+            includesBadgeAndEmoteCampaigns: false
+        )
+
+        XCTAssertEqual(candidates.map(\.id), ["creators", "launch"])
+    }
+
+    func testSameGameVerificationExcludesSubscriptionOnlyFallbackCampaign() {
+        let game = Game(id: "g007", name: "007 First Light")
+        let now = Date()
+        let selected = Campaign(
+            id: "creators",
+            name: "007 First Light Creators",
+            game: game,
+            status: .active,
+            startDate: now.addingTimeInterval(-3600),
+            endDate: now.addingTimeInterval(3600),
+            drops: [Drop(id: "d1", name: "Creator Drop", requiredMinutes: 60)],
+            isAccountConnected: false
+        )
+        let subscriptionBadge = Campaign(
+            id: "launch-sub",
+            name: "007: First Light Launch",
+            game: game,
+            status: .active,
+            startDate: now.addingTimeInterval(-3600),
+            endDate: now.addingTimeInterval(3600),
+            drops: [
+                Drop(
+                    id: "d2",
+                    name: "007 Gun Barrel Badge",
+                    requiredMinutes: 0,
+                    requiredSubs: 1
+                )
+            ],
+            isAccountConnected: false
+        )
+
+        let candidates = MinerEngine.sameGameVerificationCandidates(
+            primaryCandidates: [selected],
+            allCampaigns: [selected, subscriptionBadge],
+            priorityGames: ["007 First Light"],
+            excludedGames: [],
+            strategy: .prioritiseSelected,
+            includesBadgeAndEmoteCampaigns: true
+        )
+
+        XCTAssertEqual(candidates.map(\.id), ["creators"])
+        XCTAssertEqual(subscriptionBadge.subscriptionRequiredDrops.map(\.name), ["007 Gun Barrel Badge"])
+        XCTAssertFalse(subscriptionBadge.canAttemptMining)
+    }
+
+    func testSameGameCampaignsIncludesSubscriptionOnlyCampaignForDiagnostics() {
+        let game = Game(id: "g007", name: "007 First Light")
+        let otherGame = Game(id: "other", name: "Other Game")
+        let now = Date()
+        let selected = Campaign(
+            id: "creators",
+            name: "007 First Light Creators",
+            game: game,
+            status: .active,
+            startDate: now.addingTimeInterval(-3600),
+            endDate: now.addingTimeInterval(3600),
+            drops: [Drop(id: "d1", name: "Creator Drop", requiredMinutes: 60)]
+        )
+        let subscriptionBadge = Campaign(
+            id: "launch-sub",
+            name: "007: First Light Launch",
+            game: game,
+            status: .active,
+            startDate: now.addingTimeInterval(-3600),
+            endDate: now.addingTimeInterval(3600),
+            drops: [Drop(id: "d2", name: "007 Gun Barrel Badge", requiredMinutes: 0, requiredSubs: 1)]
+        )
+        let unrelated = Campaign(
+            id: "other",
+            name: "Other Campaign",
+            game: otherGame,
+            status: .active,
+            startDate: now.addingTimeInterval(-3600),
+            endDate: now.addingTimeInterval(3600),
+            drops: [Drop(id: "d3", name: "Other Drop", requiredMinutes: 60)]
+        )
+
+        let sameGame = MinerEngine.sameGameCampaigns(matching: selected, in: [selected, subscriptionBadge, unrelated])
+
+        XCTAssertEqual(sameGame.map(\.id), ["creators", "launch-sub"])
+    }
+
     func testChannelSelectionContinuesWhenDirectoryEmptyButCampaignIsRestricted() {
         // Regression: an ACL-restricted campaign (e.g. an Overwatch OWCS drop) whose approved
         // channels don't surface in the public game directory must still reach the ACL probe,
@@ -841,6 +959,9 @@ final class ModelTests: XCTestCase {
             ]
         )
         XCTAssertFalse(campaign.hasObtainableRewards)
+        XCTAssertTrue(campaign.hasSubscriptionRequiredRewards)
+        XCTAssertTrue(campaign.hasOnlySubscriptionRequiredRewards)
+        XCTAssertEqual(campaign.subscriptionRequiredRewardNames, ["d1"])
     }
 
     func testHasObtainableRewards_OnlySubscriptionWithProgress_ReturnsTrue() {
@@ -852,5 +973,22 @@ final class ModelTests: XCTestCase {
             ]
         )
         XCTAssertTrue(campaign.hasObtainableRewards)
+        XCTAssertTrue(campaign.hasSubscriptionRequiredRewards)
+        XCTAssertTrue(campaign.hasOnlySubscriptionRequiredRewards)
+    }
+
+    func testSubscriptionRequiredRewardsAreNotOnlySubGatedWhenWatchDropRemains() {
+        let campaign = makeCampaignViewData(
+            dropsClaimed: 0,
+            totalDrops: 2,
+            drops: [
+                makeDropViewData(id: "sub", currentMinutes: 0, requiredMinutes: 0, progress: 0.0, isClaimed: false, isSubscriptionRequired: true),
+                makeDropViewData(id: "watch", currentMinutes: 0, requiredMinutes: 60, progress: 0.0, isClaimed: false)
+            ]
+        )
+
+        XCTAssertTrue(campaign.hasSubscriptionRequiredRewards)
+        XCTAssertFalse(campaign.hasOnlySubscriptionRequiredRewards)
+        XCTAssertEqual(campaign.subscriptionRequiredRewardNames, ["sub"])
     }
 }

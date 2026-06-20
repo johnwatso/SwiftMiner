@@ -945,6 +945,15 @@ private struct GameCampaignDeckCard: View {
         }.count
     }
 
+    private var hasSubscriptionRequiredRewards: Bool {
+        group.campaigns.contains { $0.campaign.hasSubscriptionRequiredRewards }
+    }
+
+    private var hasOnlySubscriptionRequiredRewards: Bool {
+        let activeCampaigns = group.campaigns.filter { !$0.campaign.isExpired() && !$0.campaign.isCompleted }
+        return !activeCampaigns.isEmpty && activeCampaigns.allSatisfy { $0.campaign.hasOnlySubscriptionRequiredRewards }
+    }
+
     private func preferredAccountState(_ lhs: AccountState, _ rhs: AccountState) -> AccountState {
         let statusOrder: [AccountMiningStatus: Int] = [
             .needsAuth: 0,
@@ -1028,6 +1037,9 @@ private struct GameCampaignDeckCard: View {
             let title = claimedCount == 1 ? "1 Miner Completed" : "\(claimedCount) Miners Completed"
             return CardStatusSummary(title: title, icon: "checkmark.circle.fill")
         }
+        if hasOnlySubscriptionRequiredRewards {
+            return CardStatusSummary(title: "Needs Sub", icon: "creditcard.fill")
+        }
         if group.aggregateState == .actionRequired {
             return CardStatusSummary(title: "Needs Setup", icon: "exclamationmark.triangle.fill")
         }
@@ -1043,6 +1055,9 @@ private struct GameCampaignDeckCard: View {
     }
 
     private var aggregateStatusColor: Color {
+        if hasOnlySubscriptionRequiredRewards {
+            return .pink
+        }
         switch group.aggregateState {
         case .inProgress:
             return .green
@@ -1128,6 +1143,14 @@ private struct GameCampaignDeckCard: View {
                                 Image(systemName: "person.2.fill")
                                 Text("\(count) eligible")
                             }
+                        }
+
+                        if hasSubscriptionRequiredRewards {
+                            HStack(spacing: 4) {
+                                Image(systemName: "creditcard.fill")
+                                Text("needs paid sub")
+                            }
+                            .foregroundStyle(.pink)
                         }
                     }
                     .font(.caption2)
@@ -1336,6 +1359,23 @@ private struct BeautifulRewardCard: View {
                 }
                 .frame(width: 76, height: 76, alignment: .topTrailing)
                 .padding(4)
+            } else if drop.isSubscriptionRequired {
+                ZStack {
+                    Circle()
+                        .fill(.ultraThinMaterial)
+                        .frame(width: 18, height: 18)
+                        .shadow(color: .black.opacity(0.12), radius: 2)
+
+                    Circle()
+                        .fill(Color.pink)
+                        .frame(width: 13, height: 13)
+
+                    Image(systemName: "creditcard.fill")
+                        .font(.system(size: 6.5, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+                .frame(width: 76, height: 76, alignment: .topTrailing)
+                .padding(4)
             } else if drop.isClaimable {
                 ZStack {
                     Circle()
@@ -1356,12 +1396,12 @@ private struct BeautifulRewardCard: View {
             }
 
             // Duration Overlay Badge (Bottom Right)
-            Text("\(drop.requiredMinutes)m")
+            Text(drop.isSubscriptionRequired && !drop.isClaimed ? "Sub" : "\(drop.requiredMinutes)m")
                 .font(.system(size: 8, weight: .bold, design: .rounded))
                 .foregroundStyle(.white)
                 .padding(.horizontal, 4.5)
                 .padding(.vertical, 2.5)
-                .background(.black.opacity(0.68), in: RoundedRectangle(cornerRadius: 4.5, style: .continuous))
+                .background((drop.isSubscriptionRequired && !drop.isClaimed ? Color.pink : Color.black).opacity(drop.isSubscriptionRequired && !drop.isClaimed ? 0.84 : 0.68), in: RoundedRectangle(cornerRadius: 4.5, style: .continuous))
                 .frame(width: 76, height: 76, alignment: .bottomTrailing)
                 .padding(4)
         }
@@ -1378,6 +1418,7 @@ private struct BeautifulRewardCard: View {
     private var statusTitle: String {
         if drop.isClaimed { return "Claimed" }
         if drop.isClaimable { return "Ready to Claim" }
+        if drop.isSubscriptionRequired { return "Needs Paid Sub" }
         if drop.progress > 0 { return "Mining (\(Int(drop.progress * 100))%)" }
         return "Locked"
     }
@@ -1461,6 +1502,7 @@ private struct BeautifulRewardHoverCard: View {
     private var statusText: String {
         if drop.isClaimed { return "Claimed" }
         if drop.isClaimable { return "Ready to Claim" }
+        if drop.isSubscriptionRequired { return "Needs Paid Sub" }
         if drop.progress > 0 { return "Mining (\(Int(drop.progress * 100))%)" }
         return "Locked"
     }
@@ -1468,6 +1510,7 @@ private struct BeautifulRewardHoverCard: View {
     private var statusColor: Color {
         if drop.isClaimed { return .green }
         if drop.isClaimable { return .orange }
+        if drop.isSubscriptionRequired { return .pink }
         if drop.progress > 0 { return .blue }
         return .secondary
     }

@@ -655,7 +655,8 @@ public actor AggregatedCampaignDataService {
             progress: max(existing.progress, incoming.progress),
             isClaimed: existing.isClaimed || incoming.isClaimed,
             isClaimable: existing.isClaimable || incoming.isClaimable,
-            isEarnable: existing.isEarnable || incoming.isEarnable
+            isEarnable: existing.isEarnable || incoming.isEarnable,
+            isSubscriptionRequired: existing.isSubscriptionRequired || incoming.isSubscriptionRequired
         )
     }
 

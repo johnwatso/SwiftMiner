@@ -328,6 +328,25 @@ public extension CampaignViewData {
         return hasMinedObtainable
     }
 
+    /// True when at least one unclaimed reward requires a paid Twitch subscription.
+    public var hasSubscriptionRequiredRewards: Bool {
+        drops.contains { $0.isSubscriptionRequired && !$0.isClaimed }
+    }
+
+    /// True when every remaining unclaimed reward is sub-gated, so watching cannot
+    /// make progress until the Twitch subscription requirement is satisfied.
+    public var hasOnlySubscriptionRequiredRewards: Bool {
+        let unclaimed = drops.filter { !$0.isClaimed }
+        return !unclaimed.isEmpty && unclaimed.allSatisfy(\.isSubscriptionRequired)
+    }
+
+    public var subscriptionRequiredRewardNames: [String] {
+        drops
+            .filter { $0.isSubscriptionRequired && !$0.isClaimed }
+            .map(\.name)
+            .filter { !$0.isEmpty }
+    }
+
     /// Overview must only surface campaigns with real progress or completed rewards.
     var isDisplayableInOverview: Bool {
         hasValidProgress || isCompleted
