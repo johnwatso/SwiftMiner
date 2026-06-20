@@ -49,6 +49,25 @@ final class ModelTests: XCTestCase {
         XCTAssertFalse(decoded.isOperator)
     }
 
+    func testGamePreferenceDecodesMinimalPayload() throws {
+        let json = """
+        {
+            "gameId": "g1",
+            "gameName": "Overwatch 2",
+            "state": "preferred"
+        }
+        """.data(using: .utf8)!
+
+        let decoded = try JSONDecoder().decode(GamePreference.self, from: json)
+
+        XCTAssertEqual(decoded.gameName, "Overwatch 2")
+    }
+
+    func testManagedMinerNormalizesStreamOverrideLogin() {
+        XCTAssertEqual(MinerManager.ManagedMiner.normalizedStreamOverrideLogin("  @Flats "), "flats")
+        XCTAssertNil(MinerManager.ManagedMiner.normalizedStreamOverrideLogin("   "))
+    }
+
     // MARK: - Drop
 
     func testDropNotClaimedByDefault() {

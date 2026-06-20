@@ -30,6 +30,7 @@ public final class MinerManager {
         public var needsAuth: Bool
         public var currentCampaign: String?
         public var currentCampaignId: String?
+        public var streamOverrideLogin: String?
         public var allCampaigns: [Campaign] = []
         public var dropsClaimed: Int
         public var isRunning: Bool
@@ -118,6 +119,7 @@ public final class MinerManager {
             needsAuth: Bool = false,
             currentCampaign: String? = nil,
             currentCampaignId: String? = nil,
+            streamOverrideLogin: String? = nil,
             allCampaigns: [Campaign] = [],
             dropsClaimed: Int = 0,
             isRunning: Bool = false,
@@ -141,6 +143,7 @@ public final class MinerManager {
             self.needsAuth = needsAuth
             self.currentCampaign = currentCampaign
             self.currentCampaignId = currentCampaignId
+            self.streamOverrideLogin = Self.normalizedStreamOverrideLogin(streamOverrideLogin)
             self.allCampaigns = allCampaigns
             self.dropsClaimed = dropsClaimed
             self.isRunning = isRunning
@@ -157,6 +160,15 @@ public final class MinerManager {
 
         public var displayName: String {
             nickname ?? username
+        }
+
+        public static func normalizedStreamOverrideLogin(_ login: String?) -> String? {
+            guard let login else { return nil }
+            let cleaned = login
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .trimmingCharacters(in: CharacterSet(charactersIn: "@"))
+                .lowercased()
+            return cleaned.isEmpty ? nil : cleaned
         }
     }    
     public enum MinerStatus: String, Sendable, Equatable {
@@ -621,6 +633,20 @@ public final class MinerManager {
         onMinersChanged?()
     }
 
+    public func setStreamOverride(minerId: String, login: String?) async {
+        guard let index = miners.firstIndex(where: { $0.id == minerId }) else { return }
+        let normalized = ManagedMiner.normalizedStreamOverrideLogin(login)
+        miners[index].streamOverrideLogin = normalized
+        if let engine = engines[minerId] {
+            await engine.setStreamOverride(login: normalized)
+        }
+        onMinersChanged?()
+    }
+
+    public func clearStreamOverride(minerId: String) async {
+        await setStreamOverride(minerId: minerId, login: nil)
+    }
+
     public func updateMinerOperatorStatus(minerId: String, isOperator: Bool) async {
         guard let index = miners.firstIndex(where: { $0.id == minerId }) else { return }
         
@@ -721,6 +747,7 @@ public final class MinerManager {
             prioritiseFollowedStreamers: self.prioritiseFollowedStreamers,
             ignoredAccountLinkWarningGames: ignoredGames
         )
+        await engine.setStreamOverride(login: miner.streamOverrideLogin)
         await engine.updateMiningStrategy(strategy)
         await engine.setDebugBypassLinkRequirement(debugBypassLinkRequirement)
 
@@ -1044,6 +1071,15 @@ public final class MinerManager {
                 excluding: minerId,
                 viableChannelCount: viableChannelCount
             )
+        }
+
+        await engine.setStreamOverrideChangeHandler { [weak self] login in
+            Task { @MainActor [weak self] in
+                guard let self,
+                      let index = self.miners.firstIndex(where: { $0.id == minerId }) else { return }
+                self.miners[index].streamOverrideLogin = ManagedMiner.normalizedStreamOverrideLogin(login)
+                self.onMinersChanged?()
+            }
         }
 
         await engine.setStatusChangeHandler { [weak self] status in

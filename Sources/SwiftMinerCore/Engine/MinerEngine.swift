@@ -114,6 +114,7 @@ public actor MinerEngine {
     private var warnedUnlinkedPriorityGames: Set<String> = []
     private var avoidDuplicateStreams: Bool = false
     private var prioritiseFollowedStreamers: Bool = false
+    private var streamOverrideLogin: String?
     private var channelAssignmentAvoidanceProvider: (@Sendable (_ campaignId: String, _ viableChannelCount: Int) async -> Set<String>)?
     /// Debug-only: when true, accepts any time-active campaign and picks any live channel
     /// without requiring account linkage or GQL drop verification. Exercises the watch
@@ -136,6 +137,7 @@ public actor MinerEngine {
     public var onLogMessage: (@Sendable (String) -> Void)?
     public var onOperationalEvent: (@Sendable (OperationalEvent) -> Void)?
     public var onLinkWarning: (@Sendable (String) -> Void)?
+    public var onStreamOverrideChange: (@Sendable (String?) -> Void)?
     
     // MARK: - Callback Setters
 
@@ -157,6 +159,10 @@ public actor MinerEngine {
 
     public func setLinkWarningHandler(_ handler: (@Sendable (String) -> Void)?) {
         self.onLinkWarning = handler
+    }
+
+    public func setStreamOverrideChangeHandler(_ handler: (@Sendable (String?) -> Void)?) {
+        self.onStreamOverrideChange = handler
     }
 
     /// Update mining preferences (priority/excluded games)
@@ -206,6 +212,16 @@ public actor MinerEngine {
     /// Update followed/subscribed streamer channel ranking without restarting the engine.
     public func updateFollowedStreamerPriority(enabled: Bool) {
         self.prioritiseFollowedStreamers = enabled
+        shouldRescanCampaigns = true
+    }
+
+    public func setStreamOverride(login: String?) {
+        let normalized = Self.normalizedStreamOverrideLogin(login)
+        guard normalized != streamOverrideLogin else { return }
+        streamOverrideLogin = normalized
+        onStreamOverrideChange?(normalized)
+        log(normalized.map { "Stream override set to @\($0)" } ?? "Stream override cleared")
+        shouldSwitchChannel = true
         shouldRescanCampaigns = true
     }
 
@@ -827,27 +843,41 @@ public actor MinerEngine {
                 var selectedCampaign: Campaign?
                 var selectedChannel: Channel?
 
-                // Group candidates by game so a single live-channel fetch and GQL probe per
-                // channel can be matched against every candidate for that game. Preserves the
-                // order established by `candidateCampaigns` so priority games are tried first.
-                var gameOrder: [String] = []
-                var candidatesByGame: [String: [Campaign]] = [:]
-                for candidate in candidates {
-                    let key = normalizedGameKey(candidate.gameName)
-                    if candidatesByGame[key] == nil { gameOrder.append(key) }
-                    candidatesByGame[key, default: []].append(candidate)
-                }
-
-                for gameKey in gameOrder {
-                    guard let gameCandidates = candidatesByGame[gameKey], !gameCandidates.isEmpty else { continue }
-                    let gameName = gameCandidates[0].gameName
-                    log("Checking game: \(gameName) (\(gameCandidates.count) candidate campaign(s))")
-                    if let (campaign, channel) = await selectBestChannel(forGameCandidates: gameCandidates) {
+                if streamOverrideLogin != nil {
+                    switch await selectStreamOverrideChannel(for: candidates) {
+                    case .selected(let campaign, let channel):
                         selectedCampaign = campaign
                         selectedChannel = channel
+                    case .waiting:
+                        log("Stream override is active; waiting for the override stream to become eligible.")
+                    case .cleared:
                         break
                     }
-                    log("No eligible channels available for \(gameName); trying next game.")
+                }
+
+                if selectedCampaign == nil, selectedChannel == nil, streamOverrideLogin == nil {
+                    // Group candidates by game so a single live-channel fetch and GQL probe per
+                    // channel can be matched against every candidate for that game. Preserves the
+                    // order established by `candidateCampaigns` so priority games are tried first.
+                    var gameOrder: [String] = []
+                    var candidatesByGame: [String: [Campaign]] = [:]
+                    for candidate in candidates {
+                        let key = normalizedGameKey(candidate.gameName)
+                        if candidatesByGame[key] == nil { gameOrder.append(key) }
+                        candidatesByGame[key, default: []].append(candidate)
+                    }
+
+                    for gameKey in gameOrder {
+                        guard let gameCandidates = candidatesByGame[gameKey], !gameCandidates.isEmpty else { continue }
+                        let gameName = gameCandidates[0].gameName
+                        log("Checking game: \(gameName) (\(gameCandidates.count) candidate campaign(s))")
+                        if let (campaign, channel) = await selectBestChannel(forGameCandidates: gameCandidates) {
+                            selectedCampaign = campaign
+                            selectedChannel = channel
+                            break
+                        }
+                        log("No eligible channels available for \(gameName); trying next game.")
+                    }
                 }
 
                 guard let campaign = selectedCampaign, let channel = selectedChannel else {
@@ -903,10 +933,28 @@ public actor MinerEngine {
                 // Wait for watch session while periodically checking progress
                 var lastGqlPoll = Date()
                 var lastCampaignReevaluation = Date()
+                var lastOverrideLiveCheck = Date.distantPast
                 var emptyCurrentDropPolls = 0
                 while await watchSessionManager.isWatching && !shouldSwitchChannel {
                     // Check every 30 seconds for interrupts or polls
                     try? await Task.sleep(nanoseconds: 30 * 1_000_000_000)
+
+                    if let overrideLogin = streamOverrideLogin,
+                       Date().timeIntervalSince(lastOverrideLiveCheck) >= 60 {
+                        lastOverrideLiveCheck = Date()
+                        do {
+                            if try await apiClient.fetchBroadcastId(channelLogin: overrideLogin) == nil {
+                                log("Stream override @\(overrideLogin) went offline. Clearing override and resuming normal mining.")
+                                clearStreamOverrideAfterOffline()
+                                lastSwitchReason = .channelWentOffline
+                                lastSwitchAt = Date()
+                                shouldSwitchChannel = true
+                                break
+                            }
+                        } catch {
+                            log("Could not verify stream override live state for @\(overrideLogin): \(error.localizedDescription)")
+                        }
+                    }
 
                     // TDM PARITY: GQL Fallback Poll
                     // If it's been >60s since last PubSub/Poll and we haven't hit 100%
@@ -1020,7 +1068,8 @@ public actor MinerEngine {
                     // Periodic campaign re-evaluation: detect if a better campaign becomes available
                     // mid-session (e.g. a priority campaign goes live after we started watching).
                     let campaignReevalInterval: TimeInterval = 300 // Align with outer campaign loop (5 min)
-                    if Date().timeIntervalSince(lastCampaignReevaluation) >= campaignReevalInterval {
+                    if streamOverrideLogin == nil,
+                       Date().timeIntervalSince(lastCampaignReevaluation) >= campaignReevalInterval {
                         lastCampaignReevaluation = Date()
                         if let fetched = try? await dropsService.fetchCampaigns() {
                             onOperationalEvent?(.successfulPoll)
@@ -1461,7 +1510,7 @@ public actor MinerEngine {
             liveChannels = fetched
         } catch {
             log("[ChannelSelect]   Failed to fetch live channels for '\(gameName)': \(error.localizedDescription)")
-            // Fallback: if any candidate has approved channels, use the first
+            // Fallback: if any candidate has approved channels, use the first.
             for candidate in candidates {
                 if let fallback = candidate.channels.first {
                     currentChannelName = fallback.displayName
@@ -1906,6 +1955,75 @@ public actor MinerEngine {
 
     private static func normalizedChannelIdentity(_ value: String) -> String {
         value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private enum StreamOverrideSelection {
+        case selected(Campaign, Channel)
+        case waiting
+        case cleared
+    }
+
+    private func selectStreamOverrideChannel(for candidates: [Campaign]) async -> StreamOverrideSelection {
+        guard let login = streamOverrideLogin else { return .cleared }
+        log("[ChannelSelect] Stream override: checking @\(login)")
+
+        do {
+            guard try await apiClient.fetchBroadcastId(channelLogin: login) != nil else {
+                log("[ChannelSelect] Stream override @\(login) is offline. Clearing override.")
+                clearStreamOverrideAfterOffline()
+                return .cleared
+            }
+
+            let channel = await resolveChannelIdIfNeeded(Channel(id: login, login: login, displayName: login))
+            let activeCampaignIds = try await apiClient.fetchAvailableDrops(channelId: channel.id)
+            let matches = candidates.filter { activeCampaignIds.contains($0.id) }
+
+            guard let campaign = Self.bestVerifiedCampaignMatch(
+                candidates: candidates,
+                matches: matches.map { (campaign: $0, channel: channel) }
+            )?.campaign else {
+                log("[ChannelSelect] Stream override @\(login) is live, but none of this miner's eligible campaigns are active there.")
+                return .waiting
+            }
+
+            let overrideChannel = Channel(
+                id: channel.id,
+                login: channel.login,
+                displayName: channel.displayName,
+                description: channel.description,
+                profileImageUrl: channel.profileImageUrl,
+                isLive: true,
+                viewerCount: channel.viewerCount,
+                gameId: channel.gameId,
+                gameName: campaign.gameName,
+                tags: channel.tags,
+                hasDropsEnabled: true,
+                broadcasterType: channel.broadcasterType,
+                aclBased: channel.aclBased
+            )
+
+            log("[ChannelSelect] Stream override selected \(campaign.name) on \(overrideChannel.displayName)")
+            currentChannelName = overrideChannel.displayName
+            currentChannelId = overrideChannel.id
+            return .selected(campaign, overrideChannel)
+        } catch {
+            log("[ChannelSelect] Stream override @\(login) check failed: \(error.localizedDescription)")
+            return .waiting
+        }
+    }
+
+    private static func normalizedStreamOverrideLogin(_ login: String?) -> String? {
+        guard let login else { return nil }
+        let cleaned = login
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "@"))
+            .lowercased()
+        return cleaned.isEmpty ? nil : cleaned
+    }
+
+    private func clearStreamOverrideAfterOffline() {
+        streamOverrideLogin = nil
+        onStreamOverrideChange?(nil)
     }
     
     private func handleError(_ error: TwitchMinerError) {
