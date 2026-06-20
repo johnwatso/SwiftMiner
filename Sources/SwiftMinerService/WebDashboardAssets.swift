@@ -68,6 +68,87 @@ enum WebDashboardAssets {
           background: rgba(34, 30, 54, 0.56);
           outline: none;
         }
+        .loading-card {
+          position: relative; overflow: hidden; padding: 22px; min-height: 280px;
+          display: flex; flex-direction: column; gap: 18px;
+        }
+        .loading-card::before {
+          content: ""; position: absolute; inset: -40% -20% auto -20%; height: 220px;
+          background: radial-gradient(circle at 50% 50%, rgba(86,188,255,0.22), rgba(145,70,255,0.12) 45%, transparent 70%);
+          filter: blur(18px); opacity: 0.9; animation: loading-drift 4.8s ease-in-out infinite alternate;
+        }
+        .loading-hero { position: relative; z-index: 1; display: flex; align-items: center; gap: 14px; }
+        .loading-mark {
+          width: 52px; height: 52px; flex: none; border-radius: 16px; display: grid; place-items: center;
+          background: radial-gradient(circle at 35% 30%, #fff, #a78ff2 34%, #6c52d9 70%);
+          box-shadow: 0 14px 30px rgba(124,92,230,0.38), inset 0 1px 0 rgba(255,255,255,0.55);
+          animation: loading-float 1.9s ease-in-out infinite;
+        }
+        .loading-mark::after {
+          content: ""; width: 22px; height: 22px; border-radius: 7px;
+          background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(86,188,255,0.45));
+          clip-path: polygon(50% 0, 100% 34%, 78% 100%, 22% 100%, 0 34%);
+          box-shadow: 0 0 18px rgba(255,255,255,0.48);
+        }
+        .loading-copy { min-width: 0; }
+        .loading-title { margin: 0 0 5px; font-size: 19px; font-weight: 750; letter-spacing: -0.02em; }
+        .loading-status { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.4; }
+        .loading-dots::after {
+          content: ""; animation: loading-dots 1.2s steps(4, end) infinite;
+        }
+        .loading-skeleton { position: relative; z-index: 1; display: grid; gap: 10px; }
+        .loading-row {
+          height: 64px; border-radius: 14px; border: 1px solid var(--glass-stroke);
+          background:
+            linear-gradient(90deg, transparent, rgba(255,255,255,0.09), transparent),
+            linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.035));
+          background-size: 220px 100%, 100% 100%;
+          background-position: -220px 0, 0 0;
+          animation: loading-shimmer 1.8s ease-in-out infinite;
+        }
+        .loading-row:nth-child(2) { height: 86px; animation-delay: 0.14s; }
+        .loading-row:nth-child(3) { height: 46px; animation-delay: 0.28s; opacity: 0.78; }
+        .loading-meter {
+          position: relative; z-index: 1; height: 8px; border-radius: 999px; overflow: hidden;
+          background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.08);
+        }
+        .loading-meter i {
+          display: block; width: 46%; height: 100%; border-radius: inherit;
+          background: linear-gradient(90deg, var(--blue-a), #a78ff2, var(--green));
+          box-shadow: 0 0 18px rgba(86,188,255,0.45);
+          animation: loading-meter 2.4s ease-in-out infinite;
+        }
+        @keyframes loading-drift {
+          from { transform: translate3d(-18px, -8px, 0) scale(0.96); }
+          to { transform: translate3d(18px, 10px, 0) scale(1.04); }
+        }
+        @keyframes loading-float {
+          0%, 100% { transform: translateY(0) rotate(-2deg); }
+          50% { transform: translateY(-5px) rotate(2deg); }
+        }
+        @keyframes loading-shimmer {
+          to { background-position: calc(100% + 220px) 0, 0 0; }
+        }
+        @keyframes loading-meter {
+          0% { transform: translateX(-100%); }
+          55% { transform: translateX(75%); }
+          100% { transform: translateX(230%); }
+        }
+        @keyframes loading-dots {
+          0% { content: ""; }
+          25% { content: "."; }
+          50% { content: ".."; }
+          75%, 100% { content: "..."; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .loading-card::before,
+          .loading-mark,
+          .loading-row,
+          .loading-meter i,
+          .loading-dots::after {
+            animation: none;
+          }
+        }
         /* Entrance animation only on first paint — refreshes must not flicker. */
         body.loaded .card { animation: none; }
         @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
@@ -398,7 +479,23 @@ enum WebDashboardAssets {
           <span class="spacer"></span>
           <button class="ghost" id="signout">Sign out</button>
         </header>
-        <div id="app"><div class="card muted">Loading…</div></div>
+        <div id="app">
+          <div class="card loading-card" role="status" aria-live="polite">
+            <div class="loading-hero">
+              <div class="loading-mark" aria-hidden="true"></div>
+              <div class="loading-copy">
+                <h2 class="loading-title">Warming up SwiftMiner</h2>
+                <p class="loading-status"><span id="loading-copy">Checking miner link</span><span class="loading-dots" aria-hidden="true"></span></p>
+              </div>
+            </div>
+            <div class="loading-meter" aria-hidden="true"><i></i></div>
+            <div class="loading-skeleton" aria-hidden="true">
+              <div class="loading-row"></div>
+              <div class="loading-row"></div>
+              <div class="loading-row"></div>
+            </div>
+          </div>
+        </div>
       </div>
       <script src="/app/app.js?v=\(assetVersion)"></script>
     </body>
@@ -418,6 +515,25 @@ enum WebDashboardAssets {
     let includeGlobalPriorities = true;
     let OPERATOR_MINERS = [];
     let OPERATOR_STATE = { selectedMinerId: null, query: '', filter: 'all' };
+
+    function startLoadingCopy() {
+      const target = $('loading-copy');
+      if (!target) return;
+      const lines = [
+        'Checking miner link',
+        'Syncing campaign state',
+        'Reading drop progress',
+        'Finding the next best stream',
+        'Polishing the control room'
+      ];
+      let idx = 0;
+      window.setInterval(() => {
+        const live = $('loading-copy');
+        if (!live) return;
+        idx = (idx + 1) % lines.length;
+        live.textContent = lines[idx];
+      }, 1800);
+    }
 
     async function api(path, opts = {}) {
       const timeoutMs = opts.timeoutMs || 15000;
@@ -1360,6 +1476,7 @@ enum WebDashboardAssets {
     const hdr = $('hdrlogo');
     if (hdr) hideOnError(hdr);
     $('signout').addEventListener('click', doLogout);
+    startLoadingCopy();
     load();
     // Keep progress fresh without being chatty.
     setInterval(() => load(true), 60000);
@@ -1372,13 +1489,18 @@ enum WebDashboardAssets {
       if (!canvas) return;
       const ctx = canvas.getContext('2d');
       
-      let width = canvas.width = window.innerWidth;
-      let height = canvas.height = window.innerHeight;
-      
-      window.addEventListener('resize', () => {
-        width = canvas.width = window.innerWidth;
-        height = canvas.height = window.innerHeight;
-      });
+      const viewport = () => window.visualViewport || window;
+      const resizeCanvas = () => {
+        const vv = viewport();
+        width = canvas.width = Math.ceil(vv.width || window.innerWidth);
+        height = canvas.height = Math.ceil(vv.height || window.innerHeight);
+      };
+      let width = 0;
+      let height = 0;
+      resizeCanvas();
+
+      window.addEventListener('resize', resizeCanvas);
+      window.visualViewport?.addEventListener('resize', resizeCanvas);
 
       const saluteLayer = document.querySelector('.salute-layer');
       const saluteEnabled = document.body?.dataset.saluteEasterEgg === 'true';
@@ -1616,8 +1738,14 @@ enum WebDashboardAssets {
             --blue-a: #56bcff; --blue-c: #1669dd;
           }
           * { box-sizing: border-box; }
+          html {
+            min-height: 100%;
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+          }
           body {
-            margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 1.5rem;
+            margin: 0; min-height: 100vh; min-height: 100svh; min-height: 100dvh;
+            display: grid; place-items: center;
+            padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
             font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif;
             color: var(--text);
             background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
@@ -1712,6 +1840,15 @@ enum WebDashboardAssets {
           .local input:focus { border-color: var(--blue-a); box-shadow: 0 0 0 3px rgba(86,188,255,0.18); }
           .hint { margin: 0; font-size: 13px; line-height: 1.5; color: var(--muted); }
           .foot { margin-top: 22px; font-size: 11px; color: var(--muted); opacity: 0.8; }
+          @media (max-height: 620px) {
+            body { align-content: center; }
+            .card { padding: 24px; border-radius: 24px; }
+            .logo-img { width: 64px; height: 64px; }
+            .logo { width: 52px; height: 52px; }
+            h1 { font-size: 26px; }
+            .sub { margin-bottom: 18px; }
+            .foot { margin-top: 16px; }
+          }
         </style></head>
         <body data-salute-easter-egg="\(saluteEasterEgg ? "true" : "false")">
           <canvas id="nebula-canvas"></canvas>
@@ -1762,8 +1899,14 @@ enum WebDashboardAssets {
             --glass-top: rgba(255,255,255,0.08); --glass-bottom: rgba(255,255,255,0.03);
             --glass-stroke: rgba(255,255,255,0.10);
           }
+          html {
+            min-height: 100%;
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+          }
           body {
-            margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 1.5rem;
+            margin: 0; min-height: 100vh; min-height: 100svh; min-height: 100dvh;
+            display: grid; place-items: center;
+            padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
             font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif;
             color: var(--text);
             background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);

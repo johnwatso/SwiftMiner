@@ -170,6 +170,13 @@ final class WebDashboardSecurityTests: XCTestCase {
         XCTAssertTrue(csp.contains("script-src 'self'"))
     }
 
+    func testDashboardHasAnimatedLoadingState() {
+        XCTAssertTrue(WebDashboardAssets.appHTML.contains("Warming up SwiftMiner"))
+        XCTAssertTrue(WebDashboardAssets.appHTML.contains("loading-skeleton"))
+        XCTAssertTrue(WebDashboardAssets.appHTML.contains("prefers-reduced-motion"))
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("startLoadingCopy()"))
+    }
+
     func testLocalLoginPageShowsOnlyUsernamePasswordForm() async throws {
         let mgr = try await openTempManager()
         defer { Task { await mgr.close() } }
@@ -247,6 +254,14 @@ final class WebDashboardSecurityTests: XCTestCase {
         XCTAssertTrue(html.contains("Sign in with Discord"))
         XCTAssertFalse(html.contains("name=\"username\""))
         XCTAssertFalse(html.contains("Sign in locally"))
+    }
+
+    func testLoginPageUsesDynamicMobileViewport() {
+        let html = WebDashboardAssets.loginPage(discordSSOURL: "https://swiftbot.example.com/sso", twitch: true, local: false)
+
+        XCTAssertTrue(html.contains("min-height: 100dvh"))
+        XCTAssertTrue(html.contains("env(safe-area-inset-bottom)"))
+        XCTAssertTrue(WebDashboardAssets.loginJS.contains("window.visualViewport"))
     }
 
     func testLocalProviderLoginIsRejected() async throws {

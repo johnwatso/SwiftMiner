@@ -43,6 +43,12 @@
   <main>
     <h1>SwiftMiner Release Notes</h1>
     <p class="meta">Recent Sparkle update history</p>
+    <h2>🌐 Version 1.29.5</h2>
+    <ul>
+      <li>Fixes the web sign-in page on mobile browsers so the animated background and login card fill the visible browser viewport, including Safari's dynamic toolbar area.</li>
+      <li>Replaces the plain web dashboard loading placeholder with an animated SwiftMiner loading state, rotating status text, a moving meter, and skeleton cards for slower dashboard starts.</li>
+      <li>Respects reduced-motion preferences for the new loading animation.</li>
+    </ul>
     <h2>🌐 Version 1.29.4</h2>
     <ul>
       <li>Changes OAuth token exchange and user fetch failure status codes from 502 to 400. This prevents reverse proxies (like Cloudflare or Nginx) from intercepting the failure and replacing it with a generic "Bad Gateway" page, ensuring the user can see the actual error page.</li>
