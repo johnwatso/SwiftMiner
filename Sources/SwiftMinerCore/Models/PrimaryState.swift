@@ -14,9 +14,13 @@ public enum PrimaryState: Equatable, Sendable {
     
     /// Actively mining progress for a specific campaign/drop.
     case mining(progress: MiningProgress)
-    
+
     /// All eligible campaigns have been fully earned and claimed.
     case completed
+
+    /// Pinned to a specific streamer via a manual stream override; watches them until they go
+    /// offline. Carries drop progress when an eligible campaign happens to be active there.
+    case overriding(login: String, progress: MiningProgress?)
 }
 
 // MARK: - BlockReason

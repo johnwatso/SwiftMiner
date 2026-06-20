@@ -256,14 +256,14 @@ struct MinersOverviewView: View {
         Button {
             presentStreamOverrideEditor(for: miner)
         } label: {
-            Label("Override Stream...", systemImage: "dot.radiowaves.left.and.right")
+            Label("Override Stream...", systemImage: "person.fill.viewfinder")
         }
 
         if miner.streamOverrideLogin != nil {
             Button {
                 clearStreamOverride(for: miner)
             } label: {
-                Label("Clear Stream Override", systemImage: "xmark.circle")
+                Label("Stop Stream Override", systemImage: "xmark.circle")
             }
         }
 
@@ -1217,7 +1217,7 @@ private struct LinkNotice: Identifiable, Equatable {
     let message: String
 }
 
-private struct MinerNicknameEditorPresentation: Identifiable {
+struct MinerNicknameEditorPresentation: Identifiable {
     let miner: MinerManager.ManagedMiner
 
     var id: String {
@@ -1225,7 +1225,7 @@ private struct MinerNicknameEditorPresentation: Identifiable {
     }
 }
 
-private struct MinerStreamOverridePresentation: Identifiable {
+struct MinerStreamOverridePresentation: Identifiable {
     let miner: MinerManager.ManagedMiner
 
     var id: String {
@@ -1291,12 +1291,12 @@ private struct MinerSourceListRow: View {
                     .lineLimit(1)
                     .contextMenu {
                         Button(action: onOverrideStream) {
-                            Label("Override Stream...", systemImage: "dot.radiowaves.left.and.right")
+                            Label("Override Stream...", systemImage: "person.fill.viewfinder")
                         }
 
                         if miner.streamOverrideLogin != nil {
                             Button(action: onClearStreamOverride) {
-                                Label("Clear Stream Override", systemImage: "xmark.circle")
+                                Label("Stop Stream Override", systemImage: "xmark.circle")
                             }
                         }
 
@@ -1316,18 +1316,6 @@ private struct MinerSourceListRow: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
-
-                    if let overrideLogin = miner.streamOverrideLogin {
-                        HStack(spacing: 4) {
-                            Image(systemName: "dot.radiowaves.left.and.right")
-                                .font(.system(size: 9, weight: .semibold))
-
-                            Text("@\(overrideLogin)")
-                                .lineLimit(1)
-                        }
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                    }
 
                     HStack(spacing: 4) {
                         Image(systemName: hasMinerPriorityOverride ? "person.crop.square.badge.checkmark" : "target")
@@ -1375,6 +1363,9 @@ private struct MinerSourceListRow: View {
     }
 
     private var activityLabel: String {
+        if snapshot.now.id.hasPrefix("override-") {
+            return "Watching \(snapshot.now.title)"
+        }
         if snapshot.now.campaignId != nil {
             return "Watching \(snapshot.now.title)"
         }
@@ -1399,7 +1390,7 @@ private struct MinerSourceListRow: View {
     }
 }
 
-private struct MinerNicknameEditorSheet: View {
+struct MinerNicknameEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
     let miner: MinerManager.ManagedMiner
     let navigation: NavigationModel
@@ -1482,7 +1473,7 @@ private struct MinerNicknameEditorSheet: View {
     }
 }
 
-private struct MinerStreamOverrideSheet: View {
+struct MinerStreamOverrideSheet: View {
     @Environment(\.dismiss) private var dismiss
     let miner: MinerManager.ManagedMiner
     let navigation: NavigationModel

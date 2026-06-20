@@ -1,5 +1,9 @@
 <p align="center">
-  <img src="assets/readme/TM Icon.png" width="120" alt="SwiftMiner icon">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/readme/app-icon-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="assets/readme/app-icon-light.png">
+    <img src="assets/readme/app-icon-light.png" width="120" alt="SwiftMiner icon">
+  </picture>
 </p>
 
 <h1 align="center">SwiftMiner — Native macOS Twitch Drops Automation</h1>
@@ -72,11 +76,46 @@ SwiftMiner provides a single interface to manage multiple accounts, with release
 
 ## Preview
 
+### Overview
+
 <p align="center">
-  <img src="Documentation/Images/1_Overview UI Example.png" alt="SwiftMiner overview screen">
-  <img src="Documentation/Images/2_Miners UI Example.png" alt="SwiftMiner miners screen">
-  <img src="Documentation/Images/3_Drops UI Example.png" alt="SwiftMiner drops screen">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/readme/overview-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="assets/readme/overview-light.png">
+    <img src="assets/readme/overview-light.png" alt="SwiftMiner Overview">
+  </picture>
 </p>
+
+### Miners
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/readme/miners-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="assets/readme/miners-light.png">
+    <img src="assets/readme/miners-light.png" alt="SwiftMiner Miners">
+  </picture>
+</p>
+
+### Drops
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/readme/drops-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="assets/readme/drops-light.png">
+    <img src="assets/readme/drops-light.png" alt="SwiftMiner Drops">
+  </picture>
+</p>
+
+### Activity Log
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/readme/activity-log-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="assets/readme/activity-log-light.png">
+    <img src="assets/readme/activity-log-light.png" alt="SwiftMiner Activity Log">
+  </picture>
+</p>
+
 
 ## How It Works
 

@@ -19,6 +19,12 @@ public enum PrimaryStateResolver {
             return .blocked(reasons: [.accountNotLinked])
         }
 
+        // A manual stream override pins this running miner to one streamer regardless of game or
+        // campaign, so it takes precedence over normal game-state resolution.
+        if let overrideLogin = miner.streamOverrideLogin, miner.isRunning {
+            return .overriding(login: overrideLogin, progress: overrideProgress(for: miner))
+        }
+
         // Empty prioritised list → idle/ready with no warnings
         if miner.priorityGames.isEmpty {
             return .ready
@@ -88,6 +94,29 @@ public enum PrimaryStateResolver {
             }
             return .blocked(reasons: [.noEligibleCampaign])
         }
+    }
+
+    /// Drop progress for an override session that happens to be mining an eligible campaign.
+    /// Returns nil for a pure "watch only" override (no mineable drop on the channel).
+    @MainActor
+    private static func overrideProgress(for miner: MinerManager.ManagedMiner) -> MiningProgress? {
+        guard let campaignId = miner.currentCampaignId,
+              let campaign = miner.allCampaigns.first(where: { $0.id == campaignId }),
+              let activeDrop = campaign.drops.first(where: { !$0.isClaimed }) else {
+            return nil
+        }
+        let dropState = miner.stateStore?.dropStates.first { $0.dropId == activeDrop.id }
+        let currentMinutes = max(dropState?.progressMinutes ?? 0, activeDrop.progress?.currentMinutes ?? 0)
+        let requiredMinutes = max(dropState?.requiredMinutes ?? 0, activeDrop.progress?.requiredMinutes ?? activeDrop.requiredMinutes)
+        guard requiredMinutes > 0, currentMinutes < requiredMinutes else { return nil }
+        let fraction = Double(currentMinutes) / Double(requiredMinutes)
+        return MiningProgress(
+            gameName: campaign.game.name,
+            campaignName: campaign.name,
+            dropName: activeDrop.progress?.dropName.isEmpty == false ? activeDrop.progress?.dropName ?? activeDrop.name : activeDrop.name,
+            progressFraction: min(1.0, max(0.0, fraction)),
+            minutesRemaining: max(0, requiredMinutes - currentMinutes)
+        )
     }
 
     /// Legacy fallback: resolves from raw miner fields when no game-state list is available.
