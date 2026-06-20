@@ -57,10 +57,7 @@
     }
     </script>
 
-    <!-- Google Fonts - Outfit & Inter -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <!-- System font stack: renders San Francisco on Apple devices, matching the app. No web-font download. -->
 
     <!-- Tailwind CSS (precompiled static stylesheet; run the build in tailwind.config.js to rebuild) -->
     <link rel="stylesheet" href="./assets/css/tailwind.css">
@@ -74,7 +71,7 @@
             background-size: 400% 400%;
             animation: gradient-pan 20s ease infinite alternate;
             color: rgba(255, 255, 255, 0.94);
-            font-family: 'Inter', -apple-system, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             overflow: hidden; /* Main wrapper handles scrolling */
             transition: background 0.5s ease, color 0.5s ease;
         }
@@ -91,7 +88,8 @@
         }
 
         h1, h2, h3, .font-display {
-            font-family: 'Outfit', -apple-system, sans-serif !important;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+            letter-spacing: -0.02em;
         }
 
         .glass-panel {
@@ -534,9 +532,9 @@
                     <!-- Hero Text -->
                     <div class="hero-copy text-center reveal">
                         <div class="flex items-center justify-center gap-3 mb-6">
-                            <img src="./assets/landing/web-logo-dark.png" width="152" height="152" decoding="async" alt="" class="brand-logo-dark" style="width:56px;height:56px;">
-                            <img src="./assets/landing/web-logo-light.png" width="152" height="152" decoding="async" alt="" class="brand-logo-light" style="width:56px;height:56px;">
-                            <span class="font-display font-bold text-2xl sm:text-3xl tracking-tight uppercase text-slate-900 dark:text-white">SwiftMiner</span>
+                            <img src="./assets/landing/web-logo-dark.png" width="152" height="152" decoding="async" alt="" class="brand-logo-dark" style="width:60px;height:60px;">
+                            <img src="./assets/landing/web-logo-light.png" width="152" height="152" decoding="async" alt="" class="brand-logo-light" style="width:60px;height:60px;">
+                            <span class="font-display font-bold text-4xl tracking-tight text-slate-900 dark:text-white">SwiftMiner</span>
                         </div>
                         <h1 class="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight mb-6 leading-[1.05] text-slate-900 dark:text-white drop-shadow-2xl">
                             <span class="hero-title-line">Collect every <span class="text-gradient">Twitch Drop</span> on macOS, automatically.</span>
@@ -817,19 +815,19 @@
                 <!-- Two-Column Grid for Performance & Architecture -->
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto text-left">
                     
-                    <!-- Card 1: Ultra-Low CPU Overhead -->
+                    <!-- Card 1: Native and lightweight -->
                     <div class="glass-panel card-glow-cyan group rounded-3xl p-8 flex flex-col justify-between relative overflow-hidden reveal">
                         <div class="relative z-10 flex flex-col h-full justify-between gap-4">
                             <div>
                                 <div class="w-12 h-12 rounded-full bg-brand-cyan/20 flex items-center justify-center text-brand-cyan mb-6 border border-brand-cyan/30 shadow-lg">
                                     <i class="ph-bold ph-lightning text-2xl animate-pulse"></i>
                                 </div>
-                                <h3 class="text-2xl font-bold mb-3 text-slate-900 dark:text-white">~<span id="cpu-counter">0.1</span>% CPU Usage</h3>
+                                <h3 class="text-2xl font-bold mb-3 text-slate-900 dark:text-white">Light on your Mac</h3>
                                 <p class="text-slate-500 dark:text-gray-400 text-sm leading-relaxed">
-                                    Built natively in Swift — not a web page or an Electron wrapper — so it runs with almost no resource impact. It won't drain your battery or slow down your games.
+                                    Built natively in Swift — not a web page or an Electron wrapper — so it stays lean and runs quietly in the background while you work or play.
                                 </p>
                             </div>
-                            <span class="text-[10px] text-brand-cyan font-bold uppercase tracking-wider">Ultra-Low Resource Impact</span>
+                            <span class="text-[10px] text-brand-cyan font-bold uppercase tracking-wider">Native Swift App</span>
                         </div>
                     </div>
 
@@ -1026,71 +1024,6 @@
 
             document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
 
-            const performanceSection = document.getElementById('performance');
-
-            // CPU Counter Countdown Animation on Scroll
-            const cpuCounterEl = document.getElementById('cpu-counter');
-            if (cpuCounterEl) {
-                cpuCounterEl.textContent = "100";
-                
-                let hasAnimated = false;
-                let animationFrameId = null;
-                let startTimeoutId = null;
-
-                function animateCpuCountdown() {
-                    const start = 100.0;
-                    const end = 0.1;
-                    const duration = 1600; // 1.6s duration
-                    let startTime = null;
-
-                    function step(timestamp) {
-                        if (!startTime) startTime = timestamp;
-                        const progress = Math.min((timestamp - startTime) / duration, 1);
-                        const easeProgress = 1 - Math.pow(1 - progress, 3); // Cubic ease out
-                        const currentValue = start - (start - end) * easeProgress;
-                        
-                        if (progress < 1) {
-                            cpuCounterEl.textContent = currentValue.toFixed(1);
-                            animationFrameId = requestAnimationFrame(step);
-                        } else {
-                            cpuCounterEl.textContent = "0.1";
-                        }
-                    }
-
-                    if (animationFrameId) cancelAnimationFrame(animationFrameId);
-                    animationFrameId = requestAnimationFrame(step);
-                }
-                
-                const performanceObserver = new IntersectionObserver((entries) => {
-                    entries.forEach(entry => {
-                        if (entry.isIntersecting) {
-                            if (!hasAnimated) {
-                                hasAnimated = true;
-                                if (startTimeoutId) clearTimeout(startTimeoutId);
-                                startTimeoutId = setTimeout(() => {
-                                    animateCpuCountdown();
-                                }, 500);
-                            }
-                        } else {
-                            hasAnimated = false;
-                            if (startTimeoutId) {
-                                clearTimeout(startTimeoutId);
-                                startTimeoutId = null;
-                            }
-                            if (animationFrameId) {
-                                cancelAnimationFrame(animationFrameId);
-                                animationFrameId = null;
-                            }
-                            cpuCounterEl.textContent = "100";
-                        }
-                });
-            }, {
-                    root: scrollContainer,
-                    threshold: 0.1
-                });
-
-                if (performanceSection) performanceObserver.observe(performanceSection);
-            }
 
             // Theme Toggle Logic
             const themeToggleBtn = document.getElementById('theme-toggle');
