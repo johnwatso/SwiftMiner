@@ -115,6 +115,9 @@ public actor MinerEngine {
     private var avoidDuplicateStreams: Bool = false
     private var prioritiseFollowedStreamers: Bool = false
     private var streamOverrideLogin: String?
+    /// True while watching the override streamer even though none of this miner's eligible
+    /// drop campaigns are active on their channel (pure "watch them anyway" session).
+    private var streamOverrideWatchOnly: Bool = false
     private var channelAssignmentAvoidanceProvider: (@Sendable (_ campaignId: String, _ viableChannelCount: Int) async -> Set<String>)?
     /// Debug-only: when true, accepts any time-active campaign and picks any live channel
     /// without requiring account linkage or GQL drop verification. Exercises the watch
@@ -219,6 +222,7 @@ public actor MinerEngine {
         let normalized = Self.normalizedStreamOverrideLogin(login)
         guard normalized != streamOverrideLogin else { return }
         streamOverrideLogin = normalized
+        streamOverrideWatchOnly = false
         onStreamOverrideChange?(normalized)
         log(normalized.map { "Stream override set to @\($0)" } ?? "Stream override cleared")
         shouldSwitchChannel = true
@@ -818,7 +822,9 @@ public actor MinerEngine {
                 }
 
                 // 3. Find the best account-eligible campaign that also has a live channel.
-                guard !candidates.isEmpty else {
+                // An active stream override can still watch its streamer with no eligible
+                // campaign, so only short-circuit on empty candidates when no override is set.
+                if candidates.isEmpty, streamOverrideLogin == nil {
                     log("No account-eligible campaigns matching strategy '\(miningStrategy.displayName)'")
                     await cleanupActiveWatchSession(clearTarget: true)
                     let emptyState = resolveEmptyCandidateState(
@@ -849,7 +855,7 @@ public actor MinerEngine {
                         selectedCampaign = campaign
                         selectedChannel = channel
                     case .waiting:
-                        log("Stream override is active; waiting for the override stream to become eligible.")
+                        log("Stream override is active; could not verify the override stream right now — will retry shortly.")
                     case .cleared:
                         break
                     }
@@ -933,7 +939,7 @@ public actor MinerEngine {
                 // Wait for watch session while periodically checking progress
                 var lastGqlPoll = Date()
                 var lastCampaignReevaluation = Date()
-                var lastOverrideLiveCheck = Date.distantPast
+                var lastOverrideLiveCheck = Date()
                 var emptyCurrentDropPolls = 0
                 while await watchSessionManager.isWatching && !shouldSwitchChannel {
                     // Check every 30 seconds for interrupts or polls
@@ -950,6 +956,16 @@ public actor MinerEngine {
                                 lastSwitchAt = Date()
                                 shouldSwitchChannel = true
                                 break
+                            } else if streamOverrideWatchOnly {
+                                // Watching with no mineable drop — re-check whether an eligible
+                                // campaign has since gone live on this channel so we can upgrade
+                                // from watch-only to actually mining a drop.
+                                let activeCampaignIds = (try? await apiClient.fetchAvailableDrops(channelId: channel.id)) ?? []
+                                if candidates.contains(where: { activeCampaignIds.contains($0.id) }) {
+                                    log("Stream override @\(overrideLogin) now has a mineable drop — switching to mine it.")
+                                    shouldSwitchChannel = true
+                                    break
+                                }
                             }
                         } catch {
                             log("Could not verify stream override live state for @\(overrideLogin): \(error.localizedDescription)")
@@ -957,8 +973,10 @@ public actor MinerEngine {
                     }
 
                     // TDM PARITY: GQL Fallback Poll
-                    // If it's been >60s since last PubSub/Poll and we haven't hit 100%
-                    if Date().timeIntervalSince(lastGqlPoll) >= 60 {
+                    // If it's been >60s since last PubSub/Poll and we haven't hit 100%.
+                    // Skipped for a watch-only override session — there is no drop to track.
+                    if !streamOverrideWatchOnly,
+                       Date().timeIntervalSince(lastGqlPoll) >= 60 {
                         lastGqlPoll = Date()
                         do {
                             if let current = try await apiClient.fetchCurrentDrop(channelId: channel.id) {
@@ -1026,7 +1044,9 @@ public actor MinerEngine {
                     let elapsed = Date().timeIntervalSince(lastProgressUpdateAt)
                     extraMinutesWatched = Int(elapsed / 60)
 
-                    if extraMinutesWatched >= Self.maxExtraMinutes {
+                    // While a stream override is active we deliberately stay on the chosen
+                    // streamer until they go offline, so progress stalls must not switch channels.
+                    if streamOverrideLogin == nil, extraMinutesWatched >= Self.maxExtraMinutes {
                         log("Progress stalled for \(extraMinutesWatched) mins. Refreshing inventory to check for external claims...")
                         
                         // ENHANCEMENT: Force inventory refresh before switching channels
@@ -1097,7 +1117,7 @@ public actor MinerEngine {
                     // Check if we should claim any drops. If claiming or inventory sync
                     // removes the current campaign from the mineable set, rescan now.
                     _ = await claimReadyDrops()
-                    if let currentCampaignId = session?.currentCampaignId {
+                    if streamOverrideLogin == nil, let currentCampaignId = session?.currentCampaignId {
                         let currentStillMineable = candidateCampaigns(
                             from: allCampaigns,
                             priorityGames: priorityGames,
@@ -1978,13 +1998,15 @@ public actor MinerEngine {
             let activeCampaignIds = try await apiClient.fetchAvailableDrops(channelId: channel.id)
             let matches = candidates.filter { activeCampaignIds.contains($0.id) }
 
-            guard let campaign = Self.bestVerifiedCampaignMatch(
+            // Prefer a drop campaign this miner can actually mine on the override channel.
+            // If none is active, watch the streamer anyway (no drop progress) until they go offline.
+            let matchedCampaign = Self.bestVerifiedCampaignMatch(
                 candidates: candidates,
                 matches: matches.map { (campaign: $0, channel: channel) }
-            )?.campaign else {
-                log("[ChannelSelect] Stream override @\(login) is live, but none of this miner's eligible campaigns are active there.")
-                return .waiting
-            }
+            )?.campaign
+
+            let campaign = matchedCampaign ?? Self.watchOnlyOverrideCampaign(login: login)
+            streamOverrideWatchOnly = (matchedCampaign == nil)
 
             let overrideChannel = Channel(
                 id: channel.id,
@@ -1995,14 +2017,18 @@ public actor MinerEngine {
                 isLive: true,
                 viewerCount: channel.viewerCount,
                 gameId: channel.gameId,
-                gameName: campaign.gameName,
+                gameName: matchedCampaign?.gameName ?? channel.gameName,
                 tags: channel.tags,
-                hasDropsEnabled: true,
+                hasDropsEnabled: matchedCampaign != nil,
                 broadcasterType: channel.broadcasterType,
                 aclBased: channel.aclBased
             )
 
-            log("[ChannelSelect] Stream override selected \(campaign.name) on \(overrideChannel.displayName)")
+            if streamOverrideWatchOnly {
+                log("[ChannelSelect] Stream override @\(login) is live with no mineable drop — watching anyway until they go offline.")
+            } else {
+                log("[ChannelSelect] Stream override selected \(campaign.name) on \(overrideChannel.displayName)")
+            }
             currentChannelName = overrideChannel.displayName
             currentChannelId = overrideChannel.id
             return .selected(campaign, overrideChannel)
@@ -2021,8 +2047,26 @@ public actor MinerEngine {
         return cleaned.isEmpty ? nil : cleaned
     }
 
+    /// Placeholder campaign used to drive a "watch only" override session when the streamer
+    /// has no drop this miner can earn. Carries no game/drops, so the watch loop sends view
+    /// heartbeats without trying to track or switch on drop progress.
+    private static func watchOnlyOverrideCampaign(login: String) -> Campaign {
+        Campaign(
+            id: "stream-override:\(login)",
+            name: "Watching @\(login)",
+            game: Game(id: "", name: ""),
+            status: .active,
+            startDate: Date().addingTimeInterval(-3600),
+            endDate: Date().addingTimeInterval(60 * 60 * 24 * 365),
+            drops: [],
+            channels: [],
+            isAccountConnected: true
+        )
+    }
+
     private func clearStreamOverrideAfterOffline() {
         streamOverrideLogin = nil
+        streamOverrideWatchOnly = false
         onStreamOverrideChange?(nil)
     }
     
@@ -2150,7 +2194,8 @@ public actor MinerEngine {
     public func getStallState() async -> StallState {
         let elapsed = Date().timeIntervalSince(lastProgressUpdateAt)
         let minutes = Int(elapsed / 60)
-        let isStalled = minutes >= Self.maxExtraMinutes
+        // An active override intentionally stays put, so a lack of drop progress is not a stall.
+        let isStalled = streamOverrideLogin == nil && minutes >= Self.maxExtraMinutes
         
         // Determine recovery action based on current state
         let recoveryAction: MinerManager.StallRecoveryAction?
