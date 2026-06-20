@@ -891,11 +891,24 @@ public actor MinerEngine {
                     await cleanupActiveWatchSession(clearTarget: true)
                     onStatusChange?(.waitingForStream)
                     shouldRescanCampaigns = false
+
+                    // Restricted (ACL) campaigns — e.g. esports drops — often have approved
+                    // channels that aren't surfaced by the public directory and can go live for
+                    // short windows. Re-probe them on a short interval so we don't lose up to a
+                    // full campaignCheckInterval before noticing one came online.
+                    let restrictedWaitCandidates = candidates.filter { $0.hasChannelRestrictions }
                     let tickNs: UInt64 = 10 * 1_000_000_000
                     let ticks = Int(campaignCheckInterval / tickNs)
-                    for _ in 0..<ticks {
+                    let aclProbeEveryTicks = 6 // ~60s
+                    for tick in 0..<ticks {
                         if shouldRescanCampaigns { break }
                         try await Task.sleep(nanoseconds: tickNs)
+                        if !restrictedWaitCandidates.isEmpty,
+                           (tick + 1) % aclProbeEveryTicks == 0,
+                           await anyApprovedChannelLive(in: restrictedWaitCandidates) {
+                            log("An approved channel for a restricted campaign just went live — re-checking immediately.")
+                            break
+                        }
                     }
                     shouldRescanCampaigns = false
                     continue
@@ -1566,12 +1579,11 @@ public actor MinerEngine {
 
         let relationshipRanks = await followedStreamerRanks(for: liveChannels)
 
+        // Note: every channel here belongs to the same game (this function is called per game),
+        // so there is no cross-game priority to break ties on — rank purely by followed-streamer
+        // relationship, ACL specificity, then viewer count. Game priority is already applied by
+        // the caller, which iterates games in priority order.
         let sortedChannels = liveChannels.sorted { a, b in
-            let aPriorityIndex = priorityGames.firstIndex(of: a.gameName ?? "")
-            let bPriorityIndex = priorityGames.firstIndex(of: b.gameName ?? "")
-            if aPriorityIndex != bPriorityIndex {
-                return (aPriorityIndex ?? Int.max) < (bPriorityIndex ?? Int.max)
-            }
             let aRelationshipRank = streamerRelationshipRank(for: a, ranks: relationshipRanks)
             let bRelationshipRank = streamerRelationshipRank(for: b, ranks: relationshipRanks)
             if aRelationshipRank != bRelationshipRank { return aRelationshipRank > bRelationshipRank }
@@ -1924,41 +1936,69 @@ public actor MinerEngine {
         }
     }
 
+    /// Lightweight liveness probe used while waiting for a stream. Returns true as soon as any
+    /// approved channel for the given ACL-restricted campaigns is live, so the engine can wake
+    /// from the idle wait and re-run channel selection without burning a full campaign interval.
+    private func anyApprovedChannelLive(in candidates: [Campaign]) async -> Bool {
+        for candidate in candidates where candidate.hasChannelRestrictions {
+            if !(await liveACLChannels(for: candidate).isEmpty) {
+                return true
+            }
+        }
+        return false
+    }
+
     private func liveACLChannels(for campaign: Campaign, limit: Int = 30) async -> [Channel] {
         guard campaign.hasChannelRestrictions else { return [] }
 
-        var liveChannels: [Channel] = []
-        for channel in campaign.channels.prefix(limit) {
-            let login = channel.login.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !login.isEmpty else { continue }
+        // Probe approved channels concurrently — for restricted campaigns this can be up to
+        // `limit` independent live-state checks, and doing them serially adds seconds of latency
+        // to channel selection. Each result carries its source index so we can restore the
+        // campaign's original channel ordering after the parallel fan-out.
+        let candidates = Array(campaign.channels.prefix(limit).enumerated())
+        let resolvedByIndex = await withTaskGroup(of: (Int, Channel)?.self) { group -> [Int: Channel] in
+            for (index, channel) in candidates {
+                let login = channel.login.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !login.isEmpty else { continue }
 
-            do {
-                guard try await apiClient.fetchBroadcastId(channelLogin: login) != nil else {
-                    continue
+                group.addTask {
+                    do {
+                        guard try await self.apiClient.fetchBroadcastId(channelLogin: login) != nil else {
+                            return nil
+                        }
+                        let resolved = await self.resolveChannelIdIfNeeded(channel)
+                        return (index, Channel(
+                            id: resolved.id,
+                            login: resolved.login,
+                            displayName: resolved.displayName,
+                            description: channel.description,
+                            profileImageUrl: channel.profileImageUrl,
+                            isLive: true,
+                            viewerCount: channel.viewerCount,
+                            gameId: channel.gameId,
+                            gameName: channel.gameName,
+                            tags: channel.tags,
+                            hasDropsEnabled: true,
+                            broadcasterType: channel.broadcasterType,
+                            aclBased: true
+                        ))
+                    } catch {
+                        await self.log("[ChannelSelect]   Could not check live state for approved channel \(channel.displayName): \(error.localizedDescription)")
+                        return nil
+                    }
                 }
-
-                let resolved = await resolveChannelIdIfNeeded(channel)
-                liveChannels.append(Channel(
-                    id: resolved.id,
-                    login: resolved.login,
-                    displayName: resolved.displayName,
-                    description: channel.description,
-                    profileImageUrl: channel.profileImageUrl,
-                    isLive: true,
-                    viewerCount: channel.viewerCount,
-                    gameId: channel.gameId,
-                    gameName: channel.gameName,
-                    tags: channel.tags,
-                    hasDropsEnabled: true,
-                    broadcasterType: channel.broadcasterType,
-                    aclBased: true
-                ))
-            } catch {
-                log("[ChannelSelect]   Could not check live state for approved channel \(channel.displayName): \(error.localizedDescription)")
             }
+
+            var collected: [Int: Channel] = [:]
+            for await result in group {
+                if let (index, channel) = result {
+                    collected[index] = channel
+                }
+            }
+            return collected
         }
 
-        return liveChannels
+        return candidates.compactMap { resolvedByIndex[$0.offset] }
     }
 
     internal static func verificationCandidates(from sortedChannels: [Channel], campaign: Campaign) -> [Channel] {
