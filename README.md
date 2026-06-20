@@ -12,6 +12,7 @@
   <img src="https://img.shields.io/badge/platform-macOS%2026+-blue" alt="Platform badge">
   <img src="https://img.shields.io/badge/swift-6.0-orange" alt="Swift badge">
   <img src="https://img.shields.io/badge/architecture-Universal%20(Apple%20Silicon%20%2B%20Intel)-black" alt="Architecture badge">
+  <a href="https://github.com/johnwatso/SwiftMiner/releases"><img src="https://img.shields.io/github/downloads/johnwatso/SwiftMiner/total?label=downloads" alt="GitHub release downloads badge"></a>
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="License badge">
   <img src="https://img.shields.io/badge/status-active%20development-orange" alt="Status badge">
 </p>
