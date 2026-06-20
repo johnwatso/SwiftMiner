@@ -294,7 +294,7 @@ public actor MinerEngine {
 
     // MARK: - Initialization
 
-    public init(clientId: String, tokenStore: any TokenStore = KeychainTokenStore()) {
+    public init(clientId: String, tokenStore: any TokenStore = TokenStoreFactory.makeDefault()) {
         self.clientId = clientId
         self.authService = TwitchAuthService(clientId: clientId, tokenStore: tokenStore)
         self.apiClient = TwitchAPIClient(authService: authService, clientId: clientId)
@@ -1542,11 +1542,17 @@ public actor MinerEngine {
         }
 
         log("[ChannelSelect]   Found \(liveChannels.count) live candidate channel(s)")
-        guard !liveChannels.isEmpty else { return nil }
+        // Even when the public game directory returns nothing, an ACL-restricted campaign may
+        // have approved channels that are live but not surfaced by the directory query (common
+        // for esports/official broadcasts). Only bail early when there is no directory result
+        // AND nothing to probe directly; otherwise fall through to the ACL probe below.
+        guard Self.shouldContinueChannelSelection(liveChannelCount: liveChannels.count, candidates: candidates) else {
+            return nil
+        }
 
         // Debug bypass: skip GQL verification and grab the top live channel paired with a
         // random candidate. Purely for exercising the watch pipeline in testing.
-        if debugBypassLinkRequirement {
+        if debugBypassLinkRequirement, !liveChannels.isEmpty {
             let bestLive = liveChannels
                 .sorted { ($0.viewerCount ?? 0) > ($1.viewerCount ?? 0) }
                 .first!
@@ -1685,6 +1691,16 @@ public actor MinerEngine {
         }
 
         return nil
+    }
+
+    /// Decides whether channel selection should proceed past the directory lookup.
+    ///
+    /// We continue when the directory surfaced at least one live channel, OR when any candidate
+    /// is ACL-restricted — restricted campaigns get their approved channels probed directly, and
+    /// those channels are frequently absent from the public game directory (e.g. esports/official
+    /// broadcasts). Returning `false` here means there is genuinely nothing left to try.
+    internal static func shouldContinueChannelSelection(liveChannelCount: Int, candidates: [Campaign]) -> Bool {
+        liveChannelCount > 0 || candidates.contains { $0.hasChannelRestrictions }
     }
 
     internal static func bestVerifiedCampaignMatch(

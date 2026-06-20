@@ -517,7 +517,7 @@ private struct AccountSettingsView: View {
         Task {
             do {
                 let token = try TDMCookieParser.parseToken(from: url)
-                let authService = TwitchAuthService(clientId: ClientConfiguration.clientId, tokenStore: KeychainTokenStore())
+                let authService = TwitchAuthService(clientId: ClientConfiguration.clientId, tokenStore: TokenStoreFactory.makeDefault())
                 let account = try await authService.importTDMSession(token: token)
 
                 let minerId = try navigation.minerManager.addAccount(account)

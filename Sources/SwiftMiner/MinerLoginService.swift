@@ -67,7 +67,7 @@ public final class MinerLoginService {
 
         Task {
             do {
-                let authService = TwitchAuthService(clientId: clientId, tokenStore: KeychainTokenStore())
+                let authService = TwitchAuthService(clientId: clientId, tokenStore: TokenStoreFactory.makeDefault())
                 let response = try await authService.initiateDeviceFlow()
 
                 // Auto-open browser for user convenience

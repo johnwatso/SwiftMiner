@@ -314,7 +314,72 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(best?.campaign.id, "general-finals")
         XCTAssertEqual(best?.channel.id, "main")
     }
-    
+
+    func testChannelSelectionContinuesWhenDirectoryEmptyButCampaignIsRestricted() {
+        // Regression: an ACL-restricted campaign (e.g. an Overwatch OWCS drop) whose approved
+        // channels don't surface in the public game directory must still reach the ACL probe,
+        // even when the directory returns zero live channels.
+        let game = Game(id: "g1", name: "Overwatch")
+        let now = Date()
+        let restricted = Campaign(
+            id: "rot-s3-launch",
+            name: "RoT S3 Launch",
+            game: game,
+            status: .active,
+            startDate: now.addingTimeInterval(-3600),
+            endDate: now.addingTimeInterval(3600),
+            drops: [Drop(id: "d1", name: "Drop", requiredMinutes: 60)],
+            channels: [Channel(id: "owcs", login: "playoverwatch", displayName: "PlayOverwatch")],
+            isAccountConnected: true
+        )
+
+        XCTAssertTrue(restricted.hasChannelRestrictions)
+        XCTAssertTrue(
+            MinerEngine.shouldContinueChannelSelection(liveChannelCount: 0, candidates: [restricted])
+        )
+    }
+
+    func testChannelSelectionStopsWhenDirectoryEmptyAndNoRestrictedCampaign() {
+        // A game-wide campaign with no live directory channels has nothing left to probe.
+        let game = Game(id: "g1", name: "Rainbow Six Siege")
+        let now = Date()
+        let general = Campaign(
+            id: "r6s-s1-2026-4",
+            name: "R6S S1 2026 4",
+            game: game,
+            status: .active,
+            startDate: now.addingTimeInterval(-3600),
+            endDate: now.addingTimeInterval(3600),
+            drops: [Drop(id: "d1", name: "Drop", requiredMinutes: 60)],
+            isAccountConnected: true
+        )
+
+        XCTAssertFalse(general.hasChannelRestrictions)
+        XCTAssertFalse(
+            MinerEngine.shouldContinueChannelSelection(liveChannelCount: 0, candidates: [general])
+        )
+    }
+
+    func testChannelSelectionContinuesWhenDirectoryHasLiveChannels() {
+        // With live directory channels present, selection always proceeds regardless of ACLs.
+        let game = Game(id: "g1", name: "Rainbow Six Siege")
+        let now = Date()
+        let general = Campaign(
+            id: "r6s-s1-2026-4",
+            name: "R6S S1 2026 4",
+            game: game,
+            status: .active,
+            startDate: now.addingTimeInterval(-3600),
+            endDate: now.addingTimeInterval(3600),
+            drops: [Drop(id: "d1", name: "Drop", requiredMinutes: 60)],
+            isAccountConnected: true
+        )
+
+        XCTAssertTrue(
+            MinerEngine.shouldContinueChannelSelection(liveChannelCount: 3, candidates: [general])
+        )
+    }
+
     // MARK: - Progress
 
     func testProgressPartial() {
