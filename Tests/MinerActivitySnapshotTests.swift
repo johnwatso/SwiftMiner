@@ -216,6 +216,88 @@ final class MinerActivitySnapshotTests: XCTestCase {
         XCTAssertNotEqual(snapshot.now.campaignId, "claimed")
     }
 
+    func testWaitingForStreamSurfacesSubscriptionRequiredPriorityCampaign() {
+        let creators = makeCampaign(
+            id: "creators",
+            gameId: "g007",
+            gameName: "007 First Light",
+            isAccountConnected: false,
+            drops: [Drop(id: "creator-drop", name: "Creator Drop", requiredMinutes: 60)]
+        )
+        let launchBadge = makeCampaign(
+            id: "launch-sub",
+            gameId: "g007",
+            gameName: "007 First Light",
+            isAccountConnected: false,
+            drops: [
+                Drop(
+                    id: "badge",
+                    name: "007 Gun Barrel Badge",
+                    requiredMinutes: 0,
+                    requiredSubs: 1
+                )
+            ]
+        )
+        let miner = makeMiner(
+            status: .waitingForStream,
+            campaigns: [creators, launchBadge],
+            priorityGames: ["007 First Light"]
+        )
+
+        let snapshot = MinerActivitySnapshot.resolve(
+            for: miner,
+            priorityGames: ["007 First Light"],
+            excludedGames: [],
+            strategy: .prioritiseSelected,
+            includesBadgeAndEmoteCampaigns: false
+        )
+
+        XCTAssertEqual(snapshot.statusText, "Subscription Required")
+        XCTAssertEqual(snapshot.now.title, "Subscription Required")
+        XCTAssertEqual(snapshot.now.subtitle, "007 First Light")
+        XCTAssertEqual(snapshot.now.detail, "007 Gun Barrel Badge needs a paid Twitch sub.")
+    }
+
+    func testSubscriptionRequiredCurrentStateSuppressesSameGameUpNext() {
+        let creators = makeCampaign(
+            id: "creators",
+            gameId: "g007",
+            gameName: "007 First Light",
+            isAccountConnected: false,
+            drops: [Drop(id: "creator-drop", name: "Creator Drop", requiredMinutes: 60)]
+        )
+        let launchBadge = makeCampaign(
+            id: "launch-sub",
+            gameId: "g007",
+            gameName: "007 First Light",
+            isAccountConnected: false,
+            drops: [
+                Drop(
+                    id: "badge",
+                    name: "007 Gun Barrel Badge",
+                    requiredMinutes: 0,
+                    requiredSubs: 1
+                )
+            ]
+        )
+        let miner = makeMiner(
+            status: .waitingForStream,
+            campaigns: [creators, launchBadge],
+            priorityGames: ["007 First Light"]
+        )
+
+        let snapshot = MinerActivitySnapshot.resolve(
+            for: miner,
+            priorityGames: ["007 First Light"],
+            excludedGames: [],
+            strategy: .prioritiseSelected,
+            includesBadgeAndEmoteCampaigns: false
+        )
+
+        XCTAssertEqual(snapshot.statusText, "Subscription Required")
+        XCTAssertNil(snapshot.upNext)
+    }
+
     func testStalledMinerSurfacesOperationalStateInsteadOfNoCampaigns() {
         let miner = makeMiner(
             status: .idleNoEligibleCampaigns,

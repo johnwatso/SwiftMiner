@@ -254,9 +254,9 @@ struct DropRowView: View {
                     .tint(progressTint)
 
                 HStack(spacing: 8) {
-                    Text("\(drop.currentMinutes) / \(drop.requiredMinutes) min")
+                    Text(drop.isSubscriptionRequired && !drop.isClaimed ? "Paid Twitch sub required" : "\(drop.currentMinutes) / \(drop.requiredMinutes) min")
                         .font(.system(.caption, design: .rounded).weight(.bold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(drop.isSubscriptionRequired && !drop.isClaimed ? .pink : .secondary)
 
                     if let description = drop.description, !description.isEmpty {
                         Text("•")
@@ -398,6 +398,7 @@ private struct DropStateBadge: View {
     private var title: String {
         if drop.isClaimed { return "Claimed" }
         if drop.isClaimable { return "Claimable" }
+        if drop.isSubscriptionRequired { return "Needs Sub" }
         if drop.isEarnable { return "Earnable" }
         return "Locked"
     }
@@ -405,6 +406,7 @@ private struct DropStateBadge: View {
     private var icon: String {
         if drop.isClaimed { return "checkmark.circle.fill" }
         if drop.isClaimable { return "sparkles" }
+        if drop.isSubscriptionRequired { return "creditcard.fill" }
         if drop.isEarnable { return "circle.fill" }
         return "lock.fill"
     }
@@ -412,6 +414,7 @@ private struct DropStateBadge: View {
     private var color: Color {
         if drop.isClaimed { return .green }
         if drop.isClaimable { return .orange }
+        if drop.isSubscriptionRequired { return .pink }
         if drop.isEarnable { return .blue }
         return .secondary.opacity(0.8)
     }
@@ -419,6 +422,7 @@ private struct DropStateBadge: View {
     private var backgroundColor: Color {
         if drop.isClaimed { return .green.opacity(0.12) }
         if drop.isClaimable { return .orange.opacity(0.12) }
+        if drop.isSubscriptionRequired { return .pink.opacity(0.12) }
         if drop.isEarnable { return .blue.opacity(0.12) }
         return .white.opacity(0.05)
     }

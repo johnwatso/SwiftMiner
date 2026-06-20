@@ -722,6 +722,7 @@ struct MinerActivitySnapshot {
         let next = likelyNextItem(
             for: miner,
             excludingCampaignId: currentCampaign?.id ?? miner.currentCampaignId,
+            excludingSameGameAsCampaignId: now.id.hasPrefix("subscription-") ? now.campaignId : nil,
             priorityGames: activePriorityGames,
             excludedGames: excludedGames,
             strategy: strategy,
@@ -942,6 +943,18 @@ struct MinerActivitySnapshot {
                 accent: .green
             )
         case .waitingForStream:
+            if let subscriptionCampaign = subscriptionRequiredPriorityCampaign(
+                for: miner,
+                priorityGames: priorityGames,
+                excludedGames: excludedGames,
+                strategy: strategy
+            ) {
+                return subscriptionRequiredItem(
+                    for: miner,
+                    campaign: subscriptionCampaign,
+                    isWaitingForStream: true
+                )
+            }
             return waitingItem(
                 id: "stream-\(miner.id)",
                 title: "Looking for Streams",
@@ -1048,6 +1061,16 @@ struct MinerActivitySnapshot {
                 requiresAccountLink: true
             )
         case .noLiveStreams:
+            if let campaign = resolved.campaignId.flatMap({ id in
+                miner.allCampaigns.first { $0.id == id }
+            }),
+               let subscriptionCampaign = subscriptionRequiredCampaign(matchingGameOf: campaign, in: miner.allCampaigns) {
+                return subscriptionRequiredItem(
+                    for: miner,
+                    campaign: subscriptionCampaign,
+                    isWaitingForStream: true
+                )
+            }
             return MinerActivityItem(
                 id: "blocked-stream-\(miner.id)-\(resolved.gameId)",
                 title: "Looking for Streams",
@@ -1107,9 +1130,38 @@ struct MinerActivitySnapshot {
         )
     }
 
+    private static func subscriptionRequiredItem(
+        for miner: MinerManager.ManagedMiner,
+        campaign: Campaign,
+        isWaitingForStream: Bool
+    ) -> MinerActivityItem {
+        let dropNames = campaign.subscriptionRequiredDrops.map(\.name).filter { !$0.isEmpty }
+        let dropSummary = dropNames.prefix(2).joined(separator: ", ")
+        let extra = dropNames.count > 2 ? ", and more" : ""
+        let detail: String
+        if dropSummary.isEmpty {
+            detail = isWaitingForStream
+                ? "Live drops for this game need a paid Twitch sub."
+                : "This campaign needs a paid Twitch sub."
+        } else {
+            detail = "\(dropSummary)\(extra) needs a paid Twitch sub."
+        }
+
+        return MinerActivityItem(
+            id: "subscription-\(miner.id)-\(campaign.id)",
+            title: "Subscription Required",
+            subtitle: campaign.game.name,
+            detail: detail,
+            symbol: "creditcard",
+            accent: .pink,
+            campaignId: campaign.id
+        )
+    }
+
     private static func likelyNextItem(
         for miner: MinerManager.ManagedMiner,
         excludingCampaignId activeCampaignId: String?,
+        excludingSameGameAsCampaignId suppressedGameCampaignId: String? = nil,
         priorityGames: [String],
         excludedGames: [String],
         strategy: MiningStrategy,
@@ -1119,9 +1171,16 @@ struct MinerActivitySnapshot {
         let priorityKeys = priorityGames.map(normalizedGameKey).filter { !$0.isEmpty }
         let prioritySet = Set(priorityKeys)
         let excludedSet = Set(excludedGames.map(normalizedGameKey).filter { !$0.isEmpty })
+        let suppressedGameCampaign = suppressedGameCampaignId.flatMap { id in
+            miner.allCampaigns.first { $0.id == id }
+        }
 
         let candidates = miner.allCampaigns.filter { campaign in
             guard campaign.id != activeCampaignId else { return false }
+            if let suppressedGameCampaign,
+               campaignMatchesSameGame(campaign, suppressedGameCampaign) {
+                return false
+            }
             guard !isSpecialEventsCampaign(campaign) else { return false }
             guard !campaign.drops.isEmpty else { return false }
             guard campaign.isTimeActive, campaign.status != .disabled else { return false }
@@ -1191,6 +1250,53 @@ struct MinerActivitySnapshot {
             accent: .secondary,
             campaignId: campaign.id
         )
+    }
+
+    private static func subscriptionRequiredPriorityCampaign(
+        for miner: MinerManager.ManagedMiner,
+        priorityGames: [String],
+        excludedGames: [String],
+        strategy: MiningStrategy
+    ) -> Campaign? {
+        let priorityKeys = priorityGames.map(normalizedGameKey).filter { !$0.isEmpty }
+        let prioritySet = Set(priorityKeys)
+        let excludedSet = Set(excludedGames.map(normalizedGameKey).filter { !$0.isEmpty })
+
+        let candidates = miner.allCampaigns.filter { campaign in
+            guard isSubscriptionRequiredOnly(campaign) else { return false }
+            guard !isSpecialEventsCampaign(campaign) else { return false }
+            guard campaign.isTimeActive, campaign.status != .disabled else { return false }
+
+            let gameName = normalizedGameKey(campaign.game.name)
+            let gameId = normalizedGameKey(campaign.game.id)
+            guard !excludedSet.contains(gameName), !excludedSet.contains(gameId) else { return false }
+            if !prioritySet.isEmpty {
+                guard prioritySet.contains(gameName) || prioritySet.contains(gameId) else { return false }
+            }
+            guard strategy != .onlyPriority || prioritySet.contains(gameName) || prioritySet.contains(gameId) else { return false }
+            return true
+        }
+
+        return sortedCandidates(candidates, priorityKeys: priorityKeys, strategy: strategy).first
+    }
+
+    private static func subscriptionRequiredCampaign(matchingGameOf campaign: Campaign, in campaigns: [Campaign]) -> Campaign? {
+        let gameName = normalizedGameKey(campaign.game.name)
+        let gameId = normalizedGameKey(campaign.game.id)
+
+        return campaigns.first { candidate in
+            isSubscriptionRequiredOnly(candidate) &&
+                (normalizedGameKey(candidate.game.name) == gameName || normalizedGameKey(candidate.game.id) == gameId)
+        }
+    }
+
+    private static func isSubscriptionRequiredOnly(_ campaign: Campaign) -> Bool {
+        !campaign.subscriptionRequiredDrops.isEmpty && campaign.eligibleDrops.isEmpty
+    }
+
+    private static func campaignMatchesSameGame(_ campaign: Campaign, _ other: Campaign) -> Bool {
+        normalizedGameKey(campaign.game.name) == normalizedGameKey(other.game.name) ||
+            normalizedGameKey(campaign.game.id) == normalizedGameKey(other.game.id)
     }
 
     private static func blockedPriorityItems(
@@ -1385,6 +1491,9 @@ struct MinerActivitySnapshot {
         if now.id.hasPrefix("waiting-drops-") || now.id.hasPrefix("ignored-link-") {
             return "Up to Date"
         }
+        if now.id.hasPrefix("subscription-") {
+            return "Subscription Required"
+        }
         if now.id.hasPrefix("override-") {
             return "Watching \(now.title)"
         }
@@ -1425,6 +1534,9 @@ struct MinerActivitySnapshot {
         }
         if now.id.hasPrefix("ignored-link-") {
             return "calendar.badge.checkmark"
+        }
+        if now.id.hasPrefix("subscription-") {
+            return now.symbol
         }
         if now.id.hasPrefix("override-") {
             return now.symbol
@@ -1469,6 +1581,9 @@ struct MinerActivitySnapshot {
         }
         if now.id.hasPrefix("ignored-link-") {
             return .green
+        }
+        if now.id.hasPrefix("subscription-") {
+            return now.accent
         }
         if now.id.hasPrefix("override-") {
             return now.accent

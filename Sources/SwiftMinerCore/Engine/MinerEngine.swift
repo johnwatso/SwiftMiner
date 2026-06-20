@@ -875,9 +875,26 @@ public actor MinerEngine {
 
                     for gameKey in gameOrder {
                         guard let gameCandidates = candidatesByGame[gameKey], !gameCandidates.isEmpty else { continue }
+                        let verificationCandidates = Self.sameGameVerificationCandidates(
+                            primaryCandidates: gameCandidates,
+                            allCampaigns: allEnriched,
+                            priorityGames: priorityGames,
+                            excludedGames: excludedGames,
+                            strategy: miningStrategy,
+                            includesBadgeAndEmoteCampaigns: enableBadgesEmotes
+                        )
                         let gameName = gameCandidates[0].gameName
-                        log("Checking game: \(gameName) (\(gameCandidates.count) candidate campaign(s))")
-                        if let (campaign, channel) = await selectBestChannel(forGameCandidates: gameCandidates) {
+                        if verificationCandidates.count > gameCandidates.count {
+                            let added = verificationCandidates.count - gameCandidates.count
+                            log("Checking game: \(gameName) (\(gameCandidates.count) candidate campaign(s), \(added) same-game fallback campaign(s))")
+                        } else {
+                            log("Checking game: \(gameName) (\(gameCandidates.count) candidate campaign(s))")
+                        }
+                        let sameGameCampaigns = Self.sameGameCampaigns(matching: gameCandidates[0], in: allEnriched)
+                        if let (campaign, channel) = await selectBestChannel(
+                            forGameCandidates: verificationCandidates,
+                            knownSameGameCampaigns: sameGameCampaigns
+                        ) {
                             selectedCampaign = campaign
                             selectedChannel = channel
                             break
@@ -1334,7 +1351,6 @@ public actor MinerEngine {
     private func warnForSubscriptionRequiredCampaigns(in campaigns: [Campaign]) async {
         let subscriptionCampaigns = campaigns.filter { campaign in
             campaign.isTimeActive
-                && campaign.isAccountConnected
                 && campaign.subscriptionRequiredDrops.contains(where: { !$0.isClaimed })
         }
 
@@ -1376,7 +1392,11 @@ public actor MinerEngine {
             }
 
             guard campaign.canAttemptMining else {
-                filteredOutReasons["no_eligible_drops", default: 0] += 1
+                if !campaign.subscriptionRequiredDrops.isEmpty && campaign.eligibleDrops.isEmpty {
+                    filteredOutReasons["subscription_required", default: 0] += 1
+                } else {
+                    filteredOutReasons["no_eligible_drops", default: 0] += 1
+                }
                 return false
             }
 
@@ -1512,6 +1532,60 @@ public actor MinerEngine {
         }.map(\.element)
     }
 
+    internal static func sameGameVerificationCandidates(
+        primaryCandidates: [Campaign],
+        allCampaigns: [Campaign],
+        priorityGames: [String],
+        excludedGames: [String],
+        strategy: MiningStrategy,
+        includesBadgeAndEmoteCampaigns: Bool
+    ) -> [Campaign] {
+        guard let primary = primaryCandidates.first else { return [] }
+
+        let gameKey = normalizedGameSelectionKey(primary.gameName)
+        let gameId = normalizedGameSelectionKey(primary.game.id)
+        let prioritySet = Set(priorityGames.map { normalizedGameSelectionKey($0) }.filter { !$0.isEmpty })
+        let excludedSet = Set(excludedGames.map { normalizedGameSelectionKey($0) }.filter { !$0.isEmpty })
+        let selectedGameIsPrioritised = prioritySet.contains(gameKey) || prioritySet.contains(gameId)
+
+        var seen = Set(primaryCandidates.map(\.id))
+        var expanded = primaryCandidates
+
+        for campaign in allCampaigns {
+            guard !seen.contains(campaign.id) else { continue }
+
+            let candidateGameKey = normalizedGameSelectionKey(campaign.gameName)
+            let candidateGameId = normalizedGameSelectionKey(campaign.game.id)
+            guard candidateGameKey == gameKey || candidateGameId == gameId else { continue }
+            guard campaign.isTimeActive && campaign.status != .disabled else { continue }
+            guard campaign.canAttemptMining else { continue }
+            guard campaign.miningStatus == .available || campaign.miningStatus == .inProgress || campaign.miningStatus == .claimable else { continue }
+
+            if excludedSet.contains(candidateGameKey) || excludedSet.contains(candidateGameId) { continue }
+            if strategy == .onlyPriority && !selectedGameIsPrioritised { continue }
+            if !includesBadgeAndEmoteCampaigns && campaign.hasOnlyBadgesOrEmotes { continue }
+
+            // Preserve the original leakage guard: unlinked campaigns are only attemptable when
+            // this miner explicitly prioritises the game.
+            if !campaign.isAccountConnected && !selectedGameIsPrioritised { continue }
+
+            seen.insert(campaign.id)
+            expanded.append(campaign)
+        }
+
+        return expanded
+    }
+
+    internal static func sameGameCampaigns(matching primary: Campaign, in allCampaigns: [Campaign]) -> [Campaign] {
+        let gameKey = normalizedGameSelectionKey(primary.gameName)
+        let gameId = normalizedGameSelectionKey(primary.game.id)
+
+        return allCampaigns.filter { campaign in
+            normalizedGameSelectionKey(campaign.gameName) == gameKey
+                || normalizedGameSelectionKey(campaign.game.id) == gameId
+        }
+    }
+
     private func priorityIndex(for campaign: Campaign, priorityKeys: [String]) -> Int {
         let gameName = normalizedGameKey(campaign.gameName)
         let gameId = normalizedGameKey(campaign.game.id)
@@ -1519,6 +1593,10 @@ public actor MinerEngine {
     }
 
     private func normalizedGameKey(_ value: String) -> String {
+        Self.normalizedGameSelectionKey(value)
+    }
+
+    private static func normalizedGameSelectionKey(_ value: String) -> String {
         value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
     
@@ -1528,7 +1606,10 @@ public actor MinerEngine {
     /// candidate for the game. This pivots to whichever candidate a channel is actively
     /// running, so the miner isn't stuck when the "active" campaign on live streams is a
     /// lower-priority (but still eligible) candidate.
-    private func selectBestChannel(forGameCandidates candidates: [Campaign]) async -> (Campaign, Channel)? {
+    private func selectBestChannel(
+        forGameCandidates candidates: [Campaign],
+        knownSameGameCampaigns: [Campaign] = []
+    ) async -> (Campaign, Channel)? {
         guard let primary = candidates.first else { return nil }
         let gameName = primary.gameName
         log("[ChannelSelect] Game: \(gameName) — candidates: \(candidates.map(\.name).joined(separator: ", "))")
@@ -1593,10 +1674,21 @@ public actor MinerEngine {
 
         // Pre-compute which candidates each channel could serve (by ACL).
         let candidateIds = Set(candidates.map(\.id))
+        let subscriptionBlockedCampaigns = Dictionary(
+            uniqueKeysWithValues: knownSameGameCampaigns.compactMap { campaign -> (String, Campaign)? in
+                guard !candidateIds.contains(campaign.id),
+                      !campaign.subscriptionRequiredDrops.isEmpty,
+                      campaign.eligibleDrops.isEmpty else {
+                    return nil
+                }
+                return (campaign.id, campaign)
+            }
+        )
 
         var anyVerificationSucceeded = false
         var fallbackPair: (Campaign, Channel)? = nil
         var verifiedMatches: [(campaign: Campaign, channel: Channel)] = []
+        var liveSubscriptionBlockedCampaignIds: Set<String> = []
 
         for ch in sortedChannels.prefix(50) {
             let eligibleForChannel = candidates.filter { candidate in
@@ -1643,7 +1735,14 @@ public actor MinerEngine {
 
                 let activeKnown = activeCampaignIds.filter { candidateIds.contains($0) }
                 if activeKnown.isEmpty {
-                    log("[ChannelSelect]     None of our candidates active here. Channel drops: \(activeCampaignIds.joined(separator: ", "))")
+                    let subscriptionBlocked = activeCampaignIds.compactMap { subscriptionBlockedCampaigns[$0] }
+                    if subscriptionBlocked.isEmpty {
+                        log("[ChannelSelect]     None of our candidates active here. Channel drops: \(activeCampaignIds.joined(separator: ", "))")
+                    } else {
+                        subscriptionBlocked.forEach { liveSubscriptionBlockedCampaignIds.insert($0.id) }
+                        let names = subscriptionBlocked.map(\.name).joined(separator: ", ")
+                        log("[ChannelSelect]     Live drop is subscription-required, not watch-mineable: \(names)")
+                    }
                 } else {
                     log("[ChannelSelect]     ACL blocked match on \(channel.displayName) (active ids: \(activeKnown.joined(separator: ", ")))")
                 }
@@ -1700,6 +1799,14 @@ public actor MinerEngine {
             currentChannelName = fallback.1.displayName
             currentChannelId = fallback.1.id
             return fallback
+        }
+
+        if !liveSubscriptionBlockedCampaignIds.isEmpty {
+            let names = liveSubscriptionBlockedCampaignIds
+                .compactMap { subscriptionBlockedCampaigns[$0]?.name }
+                .sorted()
+                .joined(separator: ", ")
+            log("[ChannelSelect]   Live \(gameName) channels are running subscription-required campaign(s), not watch-mineable drops: \(names)")
         }
 
         return nil
