@@ -35,8 +35,9 @@ playground.xcworkspace
 
 # Swift / Xcode package metadata
 /.swiftpm/
-/Package.resolved
 .build/
+# NOTE: /Package.resolved is intentionally tracked (not ignored) so GitHub's
+# dependency graph can read the project's dependencies. See Package.swift.
 
 # CocoaPods
 #
