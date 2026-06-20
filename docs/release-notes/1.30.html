@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>SwiftMiner 1.30 Release Notes</title>
+  <title>chore: bump SwiftMiner to 1.30 - Release Notes</title>
   <style>
     :root { color-scheme: light dark; }
     body {
@@ -24,7 +24,6 @@
     h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
     .meta { margin: 0 0 24px; color: #52606d; font-size: 14px; }
     p { margin: 0 0 16px; }
-    li { margin: 0 0 8px; }
     a { color: #0a67a3; text-decoration: none; }
     a:hover { text-decoration: underline; }
     @media (prefers-color-scheme: dark) {
@@ -40,22 +39,14 @@
 </head>
 <body>
   <main>
-    <h1>SwiftMiner 1.30</h1>
+    <h1>chore: bump SwiftMiner to 1.30</h1>
     <p class="meta">Version 1.30</p>
-    <p>Improves Twitch Drops mining decisions and makes subscription-gated campaigns visible instead of confusing.</p>
-    <ul>
-      <li>Detects when live Twitch channels for a game are advertising a subscription-required campaign instead of the watch-minable campaign SwiftMiner is trying to mine.</li>
-      <li>Prevents miners from treating paid-sub rewards, such as the 007 Gun Barrel badge, as watch-mineable streams.</li>
-      <li>Adds clearer channel-selection logs when a live stream is running a same-game subscription-required campaign.</li>
-      <li>Shows <strong>Subscription Required</strong> on the Overview miner card when the blocking reward needs a paid Twitch subscription.</li>
-      <li>Stops the Overview card from showing a same-game watch campaign under Up Next while the currently visible live campaign is subscription-gated.</li>
-      <li>Shows pink <strong>Needs Sub</strong> status in the Drops Active list for subscription-required rewards.</li>
-      <li>Marks subscription-gated reward thumbnails with a credit-card badge and <strong>Sub</strong> label.</li>
-      <li>Updates campaign detail rows so subscription-required drops say <strong>Needs Sub</strong> and <strong>Paid Twitch sub required</strong> instead of appearing as a generic locked reward.</li>
-      <li>Preserves subscription-required reward state when SwiftMiner merges campaign data across multiple miner accounts.</li>
-      <li>Adds regression coverage for same-game campaign verification, subscription-only campaign diagnostics, Overview subscription state, Up Next suppression, and subscription-required Drops view data.</li>
-    </ul>
-    <p>Bumps marketing version to <code>1.30</code> and build version (<code>CURRENT_PROJECT_VERSION</code>) to <code>2026062110</code>.</p>
+    <p>chore: bump SwiftMiner to 1.30</p>
+<p>Update MARKETING_VERSION to 1.30 and CURRENT_PROJECT_VERSION to 2026062110 in project.yml and the generated Xcode project.</p>
+<p>Add detailed 1.30 release notes covering subscription-required drop detection, Overview Subscription Required state, Drops Active Needs Sub labels, same-game Up Next suppression, and regression coverage.</p>
+<p>Regenerate SwiftMiner.xcodeproj with XcodeGen. Leave ShipHook-owned appcast files untouched.</p>
+<p>Verified with xcodebuild -project SwiftMiner.xcodeproj -scheme SwiftMiner -configuration Debug build and confirmed built Info.plist reports CFBundleShortVersionString=1.30, CFBundleVersion=2026062110, SUFeedURL, and SUPublicEDKey.</p>
+    <p><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/58ab21b4266e6926b2e3e23bfd101597cfd6971f">58ab21b</a></p>
   </main>
 </body>
 </html>
