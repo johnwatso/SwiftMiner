@@ -6,7 +6,10 @@
     <meta name="description" content="SwiftMiner is a native macOS app for automating Twitch Drops across multiple accounts.">
     <meta property="og:title" content="SwiftMiner">
     <meta property="og:description" content="Native macOS Twitch Drops automation with multi-account support, Sparkle updates, and a polished SwiftUI experience.">
-    <meta property="og:image" content="./assets/landing/overview.png">
+    <meta property="og:image" content="./assets/landing/og-image.jpg">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="629">
+    <meta property="og:image:type" content="image/jpeg">
     <meta property="og:type" content="website">
     <title>SwiftMiner - Native macOS Twitch Drops Automation</title>
     
@@ -15,44 +18,17 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
 
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- Phosphor Icons for secondary icons -->
-    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <!-- Tailwind CSS (precompiled static stylesheet; run the build in tailwind.config.js to rebuild) -->
+    <link rel="stylesheet" href="./assets/css/tailwind.css">
 
-    <!-- Tailwind Config -->
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        brand: {
-                            dark: '#090514',
-                            purple: '#9333ea',
-                            violet: '#7c3aed',
-                            cyan: '#00e5ff',
-                            magenta: '#ff007f',
-                            accent: '#00e5ff',
-                            border: 'rgba(255, 255, 255, 0.08)'
-                        }
-                    },
-                    fontFamily: {
-                        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],
-                        display: ['Outfit', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],
-                    }
-                }
-            }
-        }
-    </script>
+    <!-- Phosphor Icons for secondary icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
 
     <style>
         body {
             background: linear-gradient(135deg, #090514, #120e2e, #090616);
             background-size: 400% 400%;
             animation: gradient-pan 20s ease infinite alternate;
-            background-attachment: fixed;
             color: rgba(255, 255, 255, 0.94);
             font-family: 'Inter', -apple-system, sans-serif;
             overflow: hidden; /* Main wrapper handles scrolling */
@@ -78,8 +54,10 @@
             background: rgba(25, 20, 40, 0.45);
             border: 1px solid rgba(255, 255, 255, 0.08);
             box-shadow: 0 24px 64px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.05);
-            backdrop-filter: blur(28px) saturate(1.6);
-            -webkit-backdrop-filter: blur(28px) saturate(1.6);
+            /* Lower blur radius (was 28px) — backdrop-filter is recomputed every frame as
+               content scrolls behind each panel, so the radius dominates scroll cost. */
+            backdrop-filter: blur(16px) saturate(1.3);
+            -webkit-backdrop-filter: blur(16px) saturate(1.3);
             transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, color 0.3s ease;
         }
 
@@ -197,12 +175,21 @@
             background: rgba(0, 0, 0, 0.15); 
         }
 
+        @media (min-width: 768px) {
+            .snap-scroller {
+                scroll-snap-type: none !important;
+            }
+
+            .snap-scroller > section {
+                scroll-snap-stop: normal !important;
+            }
+        }
+
         /* Reveal Animations */
         .reveal {
             opacity: 0;
             transform: translateY(16px) scale(0.985);
             transition: none; /* Reset instantly when out of view */
-            will-change: transform, opacity;
         }
         .reveal.active {
             opacity: 1;
@@ -210,9 +197,121 @@
             transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1), transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
-        /* 3D Tilt for Hero Image */
-        .perspective-container {
-            perspective: 1000px;
+        .hero-copy {
+            max-width: 1200px;
+        }
+
+        .hero-section {
+            align-items: flex-start;
+            padding-top: clamp(5.5rem, 10vh, 7.5rem) !important;
+            padding-bottom: 0 !important;
+        }
+
+        .site-nav {
+            opacity: 0;
+            pointer-events: none;
+            transform: translate(-50%, -120%);
+        }
+
+        .site-nav.nav-visible {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translate(-50%, 0);
+        }
+
+        .hero-title-line {
+            display: block;
+            white-space: nowrap;
+        }
+
+        .hero-brand-title {
+            display: block;
+        }
+
+        .hero-shell {
+            max-width: min(92vw, 1680px);
+        }
+
+        .hero-screenshot {
+            margin-top: clamp(2rem, 4vw, 3.5rem);
+            width: min(100%, 1580px);
+        }
+
+        .screenshot-frame {
+            border-radius: 18px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            box-shadow: 0 26px 80px rgba(0, 0, 0, 0.28);
+            overflow: hidden;
+        }
+
+        html.light .screenshot-frame {
+            border-color: rgba(15, 23, 42, 0.1);
+            box-shadow: 0 26px 80px rgba(15, 23, 42, 0.12);
+        }
+
+        .showcase-shell {
+            max-width: min(92vw, 1760px);
+        }
+
+        .showcase-grid {
+            display: block;
+        }
+
+        .showcase-copy {
+            max-width: 380px;
+        }
+
+        .showcase-copy > p {
+            margin-bottom: 1.5rem;
+        }
+
+        .showcase-tabs {
+            gap: 0.625rem;
+        }
+
+        .showcase-tab {
+            padding: 0.875rem 1rem;
+            border-radius: 1rem;
+        }
+
+        .showcase-shot {
+            transform: none;
+        }
+
+        @media (min-width: 1024px) {
+            .showcase-grid {
+                display: grid;
+                grid-template-columns: minmax(320px, 380px) minmax(0, 1fr);
+                gap: clamp(1.75rem, 2.5vw, 3rem);
+                align-items: start;
+            }
+
+            .showcase-shot {
+                transform: none;
+            }
+
+            #sticky-tabs-container .showcase-copy {
+                min-height: min(62vh, 660px);
+                transform: none;
+            }
+        }
+
+        @media (max-width: 639px) {
+            .hero-title-line {
+                white-space: normal;
+            }
+        }
+
+        /* Respect users who prefer reduced motion: kill the always-on background
+           gradient pan, reveal transitions, and pulse animations. */
+        @media (prefers-reduced-motion: reduce) {
+            body { animation: none !important; }
+            .reveal, .reveal.active {
+                opacity: 1 !important;
+                transform: none !important;
+                transition: none !important;
+            }
+            .animate-pulse { animation: none !important; }
         }
     </style>
     <script>
@@ -229,6 +328,10 @@
                 document.documentElement.classList.remove('light');
             }
         })();
+
+        if ('scrollRestoration' in history) {
+            history.scrollRestoration = 'manual';
+        }
     </script>
 </head>
 <body class="antialiased selection:bg-brand-cyan selection:text-brand-dark relative">
@@ -237,15 +340,16 @@
     <canvas id="particles" class="fixed inset-0 w-full h-full z-0 pointer-events-none opacity-60"></canvas>
 
     <!-- Floating Pill Navigation (Bevel.health Style) -->
-    <nav class="fixed top-6 left-1/2 -translate-x-1/2 z-50 w-[90%] md:w-auto md:min-w-[550px] lg:min-w-[700px] h-14 bg-white/70 dark:bg-[#090514]/70 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-full flex items-center justify-between px-6 shadow-[0_20px_50px_rgba(0,0,0,0.05)] dark:shadow-[0_20px_50px_rgba(0,0,0,0.5),_inset_0_1px_0_rgba(255,255,255,0.05)] transition-all duration-300">
+    <nav id="site-nav" class="site-nav fixed top-6 left-1/2 z-50 w-[90%] md:w-auto md:min-w-[550px] lg:min-w-[700px] h-14 bg-white/70 dark:bg-[#090514]/70 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-full flex items-center justify-between px-6 shadow-[0_20px_50px_rgba(0,0,0,0.05)] dark:shadow-[0_20px_50px_rgba(0,0,0,0.5),_inset_0_1px_0_rgba(255,255,255,0.05)] transition-all duration-300">
         <a href="#" class="flex items-center gap-2 group flex-shrink-0">
-            <img src="./assets/landing/swiftminer-icon.png" onerror="this.src='https://placehold.co/128x128/9333ea/ffffff?text=SM'" alt="SwiftMiner Logo" class="w-7 h-7 rounded-lg shadow-md border border-black/5 dark:border-white/10 group-hover:scale-105 transition-transform">
+            <img src="./assets/landing/swiftminer-icon.webp" width="256" height="256" decoding="async" onerror="this.src='https://placehold.co/128x128/9333ea/ffffff?text=SM'" alt="SwiftMiner Logo" class="w-7 h-7 rounded-lg shadow-md border border-black/5 dark:border-white/10 group-hover:scale-105 transition-transform">
             <span class="font-bold text-xs tracking-tight text-slate-900 dark:text-white uppercase font-display">SwiftMiner</span>
         </a>
         
         <div class="hidden md:flex items-center gap-6 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-gray-400">
             <a href="#features" class="hover:text-slate-900 dark:hover:text-white transition-colors">Features</a>
-            <a href="#screenshots" class="hover:text-slate-900 dark:hover:text-white transition-colors">Screenshots</a>
+            <a href="#view-overview" class="hover:text-slate-900 dark:hover:text-white transition-colors">Screenshots</a>
+            <a href="#performance" class="hover:text-slate-900 dark:hover:text-white transition-colors">Performance</a>
             <a href="https://github.com/johnwatso/SwiftMiner" class="hover:text-slate-900 dark:hover:text-white transition-colors">GitHub</a>
         </div>
         
@@ -264,31 +368,25 @@
     </nav>
 
     <!-- Main Content (Scroll Snapping Container) -->
-    <!-- Note: md:snap-y applied so mobile users don't get trapped by tall sections -->
-    <main class="snap-scroller md:snap-y md:snap-mandatory z-10 relative">
+    <main class="snap-scroller z-10 relative">
 
         <!-- Hero Section -->
-        <section class="md:snap-start md:snap-always min-h-[100dvh] flex items-center relative py-12 lg:py-0">
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
-                <div class="flex flex-col lg:flex-row items-center gap-16">
+        <section class="hero-section md:snap-start md:snap-always min-h-[100dvh] flex items-center relative py-24 lg:py-0 overflow-hidden">
+            <div class="hero-shell mx-auto px-4 sm:px-6 lg:px-8 w-full">
+                <div class="flex flex-col items-center">
                     
                     <!-- Hero Text -->
-                    <div class="flex-1 text-center lg:text-left reveal">
-                        <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-black/5 dark:border-white/10 bg-black/5 dark:bg-white/5 backdrop-blur-sm text-xs font-semibold text-brand-cyan mb-6 shadow-xl">
-                            <span class="w-2 h-2 rounded-full bg-brand-cyan animate-pulse"></span>
-                            Native macOS App
-                        </div>
-                        
+                    <div class="hero-copy text-center reveal">
                         <h1 class="text-5xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight mb-6 leading-[1.05] text-slate-900 dark:text-white drop-shadow-2xl">
-                            Twitch Drops. <br/>
-                            <span class="text-gradient">On Autopilot.</span>
+                            <span class="hero-brand-title">SwiftMiner</span>
+                            <span class="hero-title-line">Twitch Drops On <span class="text-gradient">Autopilot.</span></span>
                         </h1>
                         
-                        <p class="text-lg sm:text-xl text-slate-600 dark:text-gray-400 mb-10 max-w-2xl mx-auto lg:mx-0 leading-relaxed font-light">
+                        <p class="text-lg sm:text-xl text-slate-600 dark:text-gray-400 mb-10 max-w-2xl mx-auto leading-relaxed font-light">
                             Automated Twitch Drops farming for macOS. Claim rewards for yourself, your friends, or your alt profiles without opening a browser.
                         </p>
                         
-                        <div class="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4">
+                        <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
                             <a href="https://github.com/johnwatso/SwiftMiner/releases/latest" class="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-br from-brand-purple to-brand-violet rounded-xl text-white font-bold text-lg hover:shadow-[0_8px_30px_rgba(147,51,234,0.4)] hover:-translate-y-1 transition-all">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" fill="currentColor" class="w-5 h-5"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></svg>
                                 Download for macOS
@@ -301,19 +399,16 @@
                             </a>
                         </div>
                         
-                        <div class="mt-4 flex items-center justify-center lg:justify-start gap-1.5 text-xs text-slate-500 dark:text-gray-500 font-medium tracking-wide">
-                            <i class="ph-bold ph-users-three text-brand-cyan"></i>
-                            <span>Join <span class="text-slate-800 dark:text-gray-300 font-semibold">8.3k+</span> users running SwiftMiner</span>
+                        <div class="mt-4 flex items-center justify-center gap-1.5 text-xs text-slate-500 dark:text-gray-500 font-medium tracking-wide">
+                            <i class="ph-bold ph-download-simple text-brand-cyan"></i>
+                            <span><span class="text-slate-800 dark:text-gray-300 font-semibold">8.3k+</span> downloads and counting</span>
                         </div>
                     </div>
 
                     <!-- Hero Image -->
-                    <div class="flex-1 perspective-container w-full reveal" style="transition-delay: 200ms;">
-                        <div class="relative tilt-element group">
-                            <!-- Glow behind image -->
-                            <div class="absolute -inset-4 bg-gradient-to-tr from-brand-purple/30 via-brand-cyan/20 to-transparent rounded-[2rem] blur-2xl opacity-60 group-hover:opacity-100 transition-opacity duration-700"></div>
-                            
-                            <img src="./assets/landing/overview-dark.png" data-screenshot="overview" onerror="this.src='https://placehold.co/800x550/090514/00e5ff?text=Overview+Screen'" alt="App UI" class="w-full rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] relative z-10">
+                    <div class="hero-screenshot reveal" style="transition-delay: 200ms;">
+                        <div class="screenshot-frame">
+                            <img src="./assets/landing/overview-dark.png" data-screenshot="overview" width="3358" height="1760" fetchpriority="high" decoding="async" onerror="this.src='https://placehold.co/800x550/090514/00e5ff?text=Overview+Screen'" alt="App UI" class="w-full">
                         </div>
                     </div>
                 </div>
@@ -416,45 +511,238 @@
             </div>
         </section>
 
-        <!-- Showcase / Screenshots Section -->
-        <section id="screenshots" class="md:snap-start md:snap-always min-h-[100dvh] flex items-center py-24 relative overflow-hidden">
+        <!-- Fixed Sticky Tabs Sidebar (Only active/visible on Desktop when scanning showcase views) -->
+        <div id="sticky-tabs-container" class="fixed inset-0 h-screen pointer-events-none z-20 opacity-0 transition-all duration-300 hidden lg:flex items-center">
+            <div class="showcase-shell mx-auto px-4 sm:px-6 lg:px-8 w-full">
+                <div class="showcase-grid">
+                    <!-- Left Column: Tabs List -->
+                    <div class="showcase-copy flex flex-col pointer-events-auto">
+                        <h2 class="text-4xl md:text-5xl font-bold mb-4 leading-tight text-slate-900 dark:text-white drop-shadow-lg tracking-tight">A dashboard built <br/><span class="text-brand-purple">for drops automation.</span></h2>
+                        <p class="text-slate-600 dark:text-gray-400 mb-8 font-light leading-relaxed">
+                            Navigate through the native macOS interface. Toggle between views to see how SwiftMiner handles drops, accounts, and background tasks.
+                        </p>
+                        
+                        <div class="showcase-tabs flex flex-col">
+                            <!-- Tab 1: Overview -->
+                            <button onclick="switchShowcaseTab('overview')" id="tab-overview" class="showcase-tab w-full text-left glass-panel rounded-2xl p-4 border border-brand-purple/30 bg-white/5 dark:bg-white/5 transition-all flex flex-col gap-1 active-tab">
+                                <div class="flex items-center gap-3">
+                                    <div class="showcase-icon-box w-8 h-8 rounded-lg flex items-center justify-center bg-brand-purple/20 text-brand-purple border border-brand-purple/20 transition-all animate-pulse">
+                                        <i class="ph-bold ph-layout text-base"></i>
+                                    </div>
+                                    <span class="font-bold text-sm text-slate-900 dark:text-white">Overview Dashboard</span>
+                                </div>
+                                <p class="showcase-tab-desc text-slate-500 dark:text-gray-400 text-xs mt-1.5 leading-relaxed block">
+                                    Monitor active farming status, claim histories, and connected accounts from a single unified view. Built natively for macOS to operate with zero browser overhead.
+                                </p>
+                            </button>
+
+                            <!-- Tab 2: Miners -->
+                            <button onclick="switchShowcaseTab('miners')" id="tab-miners" class="showcase-tab w-full text-left glass-panel rounded-2xl p-4 border border-black/10 dark:border-white/10 transition-all flex flex-col gap-1 bg-transparent">
+                                <div class="flex items-center gap-3">
+                                    <div class="showcase-icon-box w-8 h-8 rounded-lg flex items-center justify-center bg-brand-cyan/10 text-brand-cyan border border-brand-cyan/20 transition-all">
+                                        <i class="ph-bold ph-users text-base"></i>
+                                    </div>
+                                    <span class="font-bold text-sm text-slate-900 dark:text-white">Miners & Squad</span>
+                                </div>
+                                <p class="showcase-tab-desc text-slate-500 dark:text-gray-400 text-xs mt-1.5 leading-relaxed hidden">
+                                    Add and manage profiles for your friends, family, or alts. Authenticate securely in the background, and configure individual game priorities.
+                                </p>
+                            </button>
+
+                            <!-- Tab 3: Drops -->
+                            <button onclick="switchShowcaseTab('drops')" id="tab-drops" class="showcase-tab w-full text-left glass-panel rounded-2xl p-4 border border-black/10 dark:border-white/10 transition-all flex flex-col gap-1 bg-transparent">
+                                <div class="flex items-center gap-3">
+                                    <div class="showcase-icon-box w-8 h-8 rounded-lg flex items-center justify-center bg-brand-cyan/10 text-brand-cyan border border-brand-cyan/20 transition-all">
+                                        <i class="ph-bold ph-game-controller text-base"></i>
+                                    </div>
+                                    <span class="font-bold text-sm text-slate-900 dark:text-white">Drops Campaigns</span>
+                                </div>
+                                <p class="showcase-tab-desc text-slate-500 dark:text-gray-400 text-xs mt-1.5 leading-relaxed hidden">
+                                    Track campaign completion, active drop progress, and claim histories. Automatically selects eligible streams and claims rewards instantly.
+                                </p>
+                            </button>
+
+                            <!-- Tab 4: Logs -->
+                            <button onclick="switchShowcaseTab('activity-log')" id="tab-activity-log" class="showcase-tab w-full text-left glass-panel rounded-2xl p-4 border border-black/10 dark:border-white/10 transition-all flex flex-col gap-1 bg-transparent">
+                                <div class="flex items-center gap-3">
+                                    <div class="showcase-icon-box w-8 h-8 rounded-lg flex items-center justify-center bg-brand-cyan/10 text-brand-cyan border border-brand-cyan/20 transition-all">
+                                        <i class="ph-bold ph-article text-base"></i>
+                                    </div>
+                                    <span class="font-bold text-sm text-slate-900 dark:text-white">Activity Logs</span>
+                                </div>
+                                <p class="showcase-tab-desc text-slate-500 dark:text-gray-400 text-xs mt-1.5 leading-relaxed hidden">
+                                    Review detailed operational logs including stream changes, authentication state updates, and reward claims. Stored locally in a secure SQLite database.
+                                </p>
+                            </button>
+                        </div>
+                    </div>
+                    <div></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 1: Overview Screenshot -->
+        <section id="view-overview" class="md:snap-start md:snap-always min-h-[100dvh] lg:h-screen flex items-center justify-center relative py-24 lg:py-0 overflow-hidden">
             <!-- Background accent -->
             <div class="absolute right-0 top-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-brand-purple/10 rounded-full blur-[100px] pointer-events-none"></div>
 
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full relative z-10">
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-                    
-                    <div class="order-2 lg:order-1 relative group reveal w-full" style="transition-delay: 200ms;">
-                        <div class="absolute -inset-2 bg-gradient-to-r from-brand-purple/20 to-brand-cyan/20 rounded-3xl blur-xl opacity-50 group-hover:opacity-100 transition-opacity"></div>
-                        <img src="./assets/landing/drops-dark.png" data-screenshot="drops" onerror="this.src='https://placehold.co/600x450/090514/9333ea?text=Drops+Screen'" alt="Miners Interface" class="relative w-full rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
-                        <img src="./assets/landing/miners-dark.png" data-screenshot="miners" onerror="this.src='https://placehold.co/400x300/090514/00e5ff?text=Miners'" alt="Drops Overlay" class="absolute -bottom-8 -right-8 w-2/3 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.6)] group-hover:-translate-y-2 group-hover:translate-x-2 transition-transform duration-500 hidden sm:block">
-                    </div>
-
-                    <div class="order-1 lg:order-2 reveal">
-                        <h2 class="text-4xl md:text-5xl font-bold mb-6 leading-tight text-slate-900 dark:text-white drop-shadow-lg tracking-tight">A dashboard built <br/><span class="text-brand-purple">for drops automation.</span></h2>
-                        <p class="text-xl text-slate-600 dark:text-gray-400 mb-8 font-light leading-relaxed">
-                            See who is farming what, check progress on active campaigns, and claim ready rewards in one window. Because it's a native macOS app, it uses virtually zero CPU or memory.
+            <div class="showcase-shell mx-auto px-4 sm:px-6 lg:px-8 w-full relative z-10">
+                <div class="showcase-grid lg:grid">
+                    <!-- Mobile-only Left Column: Hidden on desktop -->
+                    <div class="block lg:hidden w-full mb-12">
+                        <h2 class="text-4xl md:text-5xl font-bold mb-4 leading-tight text-slate-900 dark:text-white drop-shadow-lg tracking-tight">A dashboard built <br/><span class="text-brand-purple">for drops automation.</span></h2>
+                        <p class="text-slate-600 dark:text-gray-400 mb-8 font-light leading-relaxed">
+                            Navigate through the native macOS interface. Toggle between views to see how SwiftMiner handles drops, accounts, and background tasks.
                         </p>
-                        
-                        <div class="grid grid-cols-2 gap-4">
-                            <div class="glass-panel rounded-xl p-4 border border-white/5">
-                                <div class="flex items-center gap-1.5 mb-1 text-brand-cyan">
-                                    <i class="ph-bold ph-lightning text-lg"></i>
-                                    <span class="block font-bold text-xl ml-1 text-brand-cyan leading-none">~0.1% CPU</span>
-                                </div>
-                                <span class="text-[10px] text-slate-500 dark:text-gray-400 font-bold uppercase tracking-wider">Ultra-Low Resource Impact</span>
-                            </div>
-                            <div class="glass-panel rounded-xl p-4 border border-white/5">
-                                <div class="flex items-center gap-1.5 mb-1 text-brand-purple">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" fill="currentColor" class="w-4 h-4 flex-shrink-0"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></svg>
-                                    <span class="text-xs text-slate-400 dark:text-gray-500 font-bold font-sans">+</span>
-                                    <i class="ph-bold ph-cpu text-base"></i>
-                                    <span class="block font-bold text-xl ml-1 text-brand-purple leading-none">Universal</span>
-                                </div>
-                                <span class="text-[10px] text-slate-500 dark:text-gray-400 font-bold uppercase tracking-wider">Apple Silicon & Intel</span>
-                            </div>
+                    </div>
+                    
+                    <!-- Desktop Placeholder -->
+                    <div class="hidden lg:block"></div>
+                    
+                    <!-- Screenshot Column -->
+                    <div class="showcase-shot w-full flex items-center justify-center">
+                        <div class="screenshot-frame w-full">
+                            <img data-screenshot="overview" src="./assets/landing/overview-dark.png" width="3358" height="1760" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/800x550/090514/00e5ff?text=Overview+Screen'" alt="Overview Screen" class="w-full transition-all duration-300 opacity-100">
                         </div>
                     </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 2: Miners Screenshot -->
+        <section id="view-miners" class="md:snap-start md:snap-always min-h-[100dvh] lg:h-screen flex items-center justify-center relative py-24 lg:py-0 overflow-hidden">
+            <div class="showcase-shell mx-auto px-4 sm:px-6 lg:px-8 w-full relative z-10">
+                <div class="showcase-grid lg:grid">
+                    <!-- Desktop Placeholder -->
+                    <div class="hidden lg:block"></div>
+                    
+                    <!-- Screenshot Column -->
+                    <div class="showcase-shot w-full flex items-center justify-center">
+                        <div class="screenshot-frame w-full">
+                            <img data-screenshot="miners" src="./assets/landing/miners-dark.png" width="3358" height="1760" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/800x550/090514/00e5ff?text=Miners+Screen'" alt="Miners Screen" class="w-full transition-all duration-300 opacity-100">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 3: Drops Screenshot -->
+        <section id="view-drops" class="md:snap-start md:snap-always min-h-[100dvh] lg:h-screen flex items-center justify-center relative py-24 lg:py-0 overflow-hidden">
+            <div class="showcase-shell mx-auto px-4 sm:px-6 lg:px-8 w-full relative z-10">
+                <div class="showcase-grid lg:grid">
+                    <!-- Desktop Placeholder -->
+                    <div class="hidden lg:block"></div>
+                    
+                    <!-- Screenshot Column -->
+                    <div class="showcase-shot w-full flex items-center justify-center">
+                        <div class="screenshot-frame w-full">
+                            <img data-screenshot="drops" src="./assets/landing/drops-dark.png" width="3358" height="1760" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/800x550/090514/00e5ff?text=Drops+Screen'" alt="Drops Screen" class="w-full transition-all duration-300 opacity-100">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 4: Activity Log Screenshot -->
+        <section id="view-activity-log" class="md:snap-start md:snap-always min-h-[100dvh] lg:h-screen flex items-center justify-center relative py-24 lg:py-0 overflow-hidden">
+            <div class="showcase-shell mx-auto px-4 sm:px-6 lg:px-8 w-full relative z-10">
+                <div class="showcase-grid lg:grid">
+                    <!-- Desktop Placeholder -->
+                    <div class="hidden lg:block"></div>
+                    
+                    <!-- Screenshot Column -->
+                    <div class="showcase-shot w-full flex items-center justify-center">
+                        <div class="screenshot-frame w-full">
+                            <img data-screenshot="activity-log" src="./assets/landing/activity-log-dark.png" width="3358" height="1760" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/800x550/090514/00e5ff?text=Activity+Logs+Screen'" alt="Activity Logs Screen" class="w-full transition-all duration-300 opacity-100">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Performance & Supported Hardware Section -->
+        <section id="performance" class="md:snap-start md:snap-always min-h-[100dvh] flex items-center py-24 relative overflow-hidden">
+            <!-- Background accent -->
+            <div class="absolute left-0 top-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-brand-cyan/5 rounded-full blur-[120px] pointer-events-none"></div>
+
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full relative z-10">
+                <div class="text-center mb-16 reveal">
+                    <h2 class="text-4xl md:text-5xl font-bold mb-4 text-slate-900 dark:text-white drop-shadow-lg tracking-tight">
+                        Engineered for macOS. <br/>
+                        <span class="text-brand-purple">Built for efficiency.</span>
+                    </h2>
+                    <p class="text-slate-600 dark:text-gray-400 text-lg max-w-2xl mx-auto font-light">
+                        SwiftMiner is a native app utilizing the latest system technologies to minimize power and memory usage. Run it in the background all day without affecting your workflow.
+                    </p>
+                </div>
+
+                <!-- Two-Column Grid for Performance & Architecture -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto text-left">
+                    
+                    <!-- Card 1: Ultra-Low CPU Overhead -->
+                    <div class="glass-panel card-glow-cyan group rounded-3xl p-8 flex flex-col justify-between relative overflow-hidden reveal">
+                        <div class="relative z-10 flex flex-col h-full justify-between gap-4">
+                            <div>
+                                <div class="w-12 h-12 rounded-full bg-brand-cyan/20 flex items-center justify-center text-brand-cyan mb-6 border border-brand-cyan/30 shadow-lg">
+                                    <i class="ph-bold ph-lightning text-2xl animate-pulse"></i>
+                                </div>
+                                <h3 class="text-2xl font-bold mb-3 text-slate-900 dark:text-white">~<span id="cpu-counter">0.1</span>% CPU Usage</h3>
+                                <p class="text-slate-500 dark:text-gray-400 text-sm leading-relaxed">
+                                    Unlike web-based or Electron apps, SwiftMiner is built natively in Swift. It operates with ultra-low resource impact, meaning it won't drain your MacBook battery or slow down your games.
+                                </p>
+                            </div>
+                            <span class="text-[10px] text-brand-cyan font-bold uppercase tracking-wider">Ultra-Low Resource Impact</span>
+                        </div>
+                    </div>
+
+                    <!-- Card 2: Universal Architecture -->
+                    <div class="glass-panel card-glow-purple group rounded-3xl p-8 flex flex-col justify-between relative overflow-hidden reveal" style="transition-delay: 100ms;">
+                        <div class="relative z-10 flex flex-col h-full justify-between gap-4">
+                            <div>
+                                <div class="w-12 h-12 rounded-full bg-brand-purple/20 flex items-center justify-center text-brand-purple mb-6 border border-brand-purple/30 shadow-lg">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" fill="currentColor" class="w-6 h-6"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></svg>
+                                </div>
+                                <h3 class="text-2xl font-bold mb-3 text-slate-900 dark:text-white">Universal Support</h3>
+                                <p class="text-slate-500 dark:text-gray-400 text-sm leading-relaxed">
+                                    Built for macOS 26.0 or later, with native architecture slices for both Apple Silicon (M1/M2/M3/M4) and Intel Core processors. Full speed, no emulation needed.
+                                </p>
+                            </div>
+                            <span class="text-[10px] text-brand-purple font-bold uppercase tracking-wider">Apple Silicon & Intel</span>
+                        </div>
+                    </div>
+
+                    <!-- Card 3: 100% Swift & SwiftUI -->
+                    <div class="glass-panel card-glow-magenta group rounded-3xl p-8 flex flex-col justify-between relative overflow-hidden reveal" style="transition-delay: 200ms;">
+                        <div class="relative z-10 flex flex-col h-full justify-between gap-4">
+                            <div>
+                                <div class="w-12 h-12 rounded-full bg-brand-magenta/20 flex items-center justify-center text-brand-magenta mb-6 border border-brand-magenta/30 shadow-lg">
+                                    <i class="ph-bold ph-code text-2xl"></i>
+                                </div>
+                                <h3 class="text-2xl font-bold mb-3 text-slate-900 dark:text-white">100% Swift & SwiftUI</h3>
+                                <p class="text-slate-500 dark:text-gray-400 text-sm leading-relaxed">
+                                    Built entirely using Apple's modern programming language and UI framework. No heavy Electron wrappers, no slow web views, and no garbage collection lag—just pure, compiled machine code.
+                                </p>
+                            </div>
+                            <span class="text-[10px] text-brand-magenta font-bold uppercase tracking-wider">Pure Native Code</span>
+                        </div>
+                    </div>
+
+                    <!-- Card 4: Secure & Private -->
+                    <div class="glass-panel card-glow-white group rounded-3xl p-8 flex flex-col justify-between relative overflow-hidden reveal" style="transition-delay: 300ms;">
+                        <div class="relative z-10 flex flex-col h-full justify-between gap-4">
+                            <div>
+                                <div class="w-12 h-12 rounded-full bg-white/10 dark:bg-white/10 bg-slate-800/10 flex items-center justify-center text-slate-700 dark:text-white mb-6 border border-black/10 dark:border-white/20 shadow-lg">
+                                    <i class="ph-bold ph-shield-check text-2xl"></i>
+                                </div>
+                                <h3 class="text-2xl font-bold mb-3 text-slate-900 dark:text-white">Privacy & Security First</h3>
+                                <p class="text-slate-500 dark:text-gray-400 text-sm leading-relaxed">
+                                    Your data belongs to you. SwiftMiner does not collect or upload Twitch accounts, credentials, or session cookies. Authentication and drops claiming are run entirely locally on your Mac.
+                                </p>
+                            </div>
+                            <span class="text-[10px] text-slate-400 dark:text-gray-500 font-bold uppercase tracking-wider">100% Local Execution</span>
+                        </div>
+                    </div>
+
                 </div>
             </div>
         </section>
@@ -468,9 +756,10 @@
                     <div class="absolute top-0 left-1/2 -translate-x-1/2 w-[500px] h-[300px] bg-brand-purple/20 blur-[80px] rounded-full pointer-events-none group-hover:bg-brand-purple/35 transition-colors duration-700"></div>
                     
                     <div class="relative z-10 flex flex-col items-center">
-                        <img src="./assets/landing/swiftminer-icon.png" 
-                             onerror="this.src='https://placehold.co/128x128/9333ea/ffffff?text=SM'" 
-                             class="w-24 h-24 rounded-[20px] shadow-[0_10px_30px_rgba(147,51,234,0.3)] mb-8 border border-black/10 dark:border-white/20" alt="SwiftMiner Icon">
+                        <img src="./assets/landing/app-icon-light.png"
+                             width="1024" height="1024" loading="lazy" decoding="async"
+                             onerror="this.src='https://placehold.co/128x128/9333ea/ffffff?text=SM'"
+                             class="w-24 h-24 rounded-[20px] shadow-[0_10px_30px_rgba(147,51,234,0.3)] mb-8" alt="SwiftMiner Icon">
                         
                         <h2 class="text-4xl md:text-6xl font-bold mb-6 text-slate-900 dark:text-white drop-shadow-lg tracking-tight">Ready for the <span class="text-brand-purple">next campaign.</span></h2>
                         <p class="text-lg text-slate-600 dark:text-gray-400 mb-10 max-w-xl mx-auto leading-relaxed">
@@ -481,7 +770,7 @@
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" fill="currentColor" class="w-6 h-6"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></svg>
                             Get SwiftMiner
                         </a>
-                        <p class="mt-6 text-sm text-slate-500 dark:text-gray-500">Join 8.3k+ users. Requires macOS 26.0 or later. Auto-updates via Sparkle.</p>
+                        <p class="mt-6 text-sm text-slate-500 dark:text-gray-500">8.3k+ downloads. Requires macOS 26.0 or later. Auto-updates via Sparkle.</p>
                     </div>
                 </div>
             </div>
@@ -503,48 +792,194 @@
 
     <!-- Interactions Script -->
     <script>
+        // Scroll-bound Tab Switching Logic
+        window.switchShowcaseTab = function(tabName) {
+            const targetEl = document.getElementById(`view-${tabName}`);
+            if (targetEl) {
+                targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        };
+
+        // Activate Tab Style Helper
+        window.activateTabHighlight = function(tabName) {
+            const tabs = ['overview', 'miners', 'drops', 'activity-log'];
+            tabs.forEach(t => {
+                const tabBtn = document.getElementById(`tab-${t}`);
+                if (!tabBtn) return;
+                
+                const desc = tabBtn.querySelector('.showcase-tab-desc');
+                const iconBox = tabBtn.querySelector('.showcase-icon-box');
+                
+                if (t === tabName) {
+                    tabBtn.classList.add('active-tab', 'border-brand-purple/30', 'bg-white/5', 'dark:bg-white/5');
+                    tabBtn.classList.remove('border-black/10', 'dark:border-white/10', 'bg-transparent');
+                    if (desc) {
+                        desc.classList.remove('hidden');
+                        desc.classList.add('block');
+                    }
+                    if (iconBox) {
+                        iconBox.classList.add('bg-brand-purple/20', 'text-brand-purple', 'border-brand-purple/20', 'animate-pulse');
+                        iconBox.classList.remove('bg-brand-cyan/10', 'text-brand-cyan', 'border-brand-cyan/20');
+                    }
+                } else {
+                    tabBtn.classList.remove('active-tab', 'border-brand-purple/30', 'bg-white/5', 'dark:bg-white/5');
+                    tabBtn.classList.add('border-black/10', 'dark:border-white/10', 'bg-transparent');
+                    if (desc) {
+                        desc.classList.remove('block');
+                        desc.classList.add('hidden');
+                    }
+                    if (iconBox) {
+                        iconBox.classList.remove('bg-brand-purple/20', 'text-brand-purple', 'border-brand-purple/20', 'animate-pulse');
+                        iconBox.classList.add('bg-brand-cyan/10', 'text-brand-cyan', 'border-brand-cyan/20');
+                    }
+                }
+            });
+        };
+
         document.addEventListener('DOMContentLoaded', () => {
+            const scrollContainer = document.querySelector('.snap-scroller');
+            const siteNav = document.getElementById('site-nav');
+
+            function resetScrollForFreshLoad() {
+                if (!scrollContainer || window.location.hash) return;
+                scrollContainer.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+                updateSiteNavVisibility();
+            }
+
+            function updateSiteNavVisibility() {
+                if (!siteNav || !scrollContainer) return;
+                siteNav.classList.toggle('nav-visible', scrollContainer.scrollTop > 80);
+            }
+
+            resetScrollForFreshLoad();
+            requestAnimationFrame(resetScrollForFreshLoad);
+            window.addEventListener('pageshow', resetScrollForFreshLoad);
+
+            updateSiteNavVisibility();
+            if (scrollContainer) {
+                scrollContainer.addEventListener('scroll', updateSiteNavVisibility, { passive: true });
+            }
+
             // Reveal on Scroll Initialization
             const observerOptions = {
-                root: document.querySelector('.snap-scroller'),
+                root: scrollContainer,
                 threshold: 0.08,
                 rootMargin: "0px 0px -30px 0px"
             };
 
+            // Reveal once, then stop observing — avoids re-running transitions and
+            // style recalcs on every scroll pass (a source of scroll jank).
             const observer = new IntersectionObserver((entries) => {
                 entries.forEach(entry => {
                     if (entry.isIntersecting) {
                         entry.target.classList.add('active');
-                    } else {
-                        entry.target.classList.remove('active');
+                        observer.unobserve(entry.target);
                     }
                 });
             }, observerOptions);
 
             document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
 
-            // Hero 3D Tilt Effect
-            const tiltElement = document.querySelector('.tilt-element');
-            const container = document.querySelector('.perspective-container');
-            
-            if (tiltElement && container) {
-                container.addEventListener('mousemove', (e) => {
-                    const rect = container.getBoundingClientRect();
-                    const x = e.clientX - rect.left;
-                    const y = e.clientY - rect.top;
+            // IntersectionObserver for Scroll-Bound Showcase Tabs
+            const showcaseObserverOptions = {
+                root: scrollContainer,
+                threshold: 0.5
+            };
+
+            const activeStates = {};
+            const showcaseObserver = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    const tabName = entry.target.id.replace('view-', '');
+                    activeStates[tabName] = entry.isIntersecting;
                     
-                    const centerX = rect.width / 2;
-                    const centerY = rect.height / 2;
-                    
-                    const rotateX = ((y - centerY) / centerY) * -8; // Max 8 deg tilt
-                    const rotateY = ((x - centerX) / centerX) * 8;
-                    
-                    tiltElement.style.transform = `rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale3d(1.02, 1.02, 1.02)`;
+                    if (entry.isIntersecting) {
+                        window.activateTabHighlight(tabName);
+                    }
                 });
+
+                // Determine if we are within any showcase sections
+                const anyActive = Object.values(activeStates).some(state => state === true);
+                const container = document.getElementById('sticky-tabs-container');
+                if (container) {
+                    if (anyActive) {
+                        container.classList.add('opacity-100', 'pointer-events-auto');
+                        container.classList.remove('opacity-0', 'pointer-events-none');
+                    } else {
+                        container.classList.remove('opacity-100', 'pointer-events-auto');
+                        container.classList.add('opacity-0', 'pointer-events-none');
+                    }
+                }
+            }, showcaseObserverOptions);
+
+            const showcaseTabs = ['overview', 'miners', 'drops', 'activity-log'];
+            showcaseTabs.forEach(t => {
+                const target = document.getElementById(`view-${t}`);
+                if (target) showcaseObserver.observe(target);
+            });
+
+            // CPU Counter Countdown Animation on Scroll
+            const cpuCounterEl = document.getElementById('cpu-counter');
+            if (cpuCounterEl) {
+                cpuCounterEl.textContent = "100";
                 
-                container.addEventListener('mouseleave', () => {
-                    tiltElement.style.transform = 'rotateX(0) rotateY(0) scale3d(1, 1, 1)';
+                let hasAnimated = false;
+                let animationFrameId = null;
+                let startTimeoutId = null;
+
+                function animateCpuCountdown() {
+                    const start = 100.0;
+                    const end = 0.1;
+                    const duration = 1600; // 1.6s duration
+                    let startTime = null;
+
+                    function step(timestamp) {
+                        if (!startTime) startTime = timestamp;
+                        const progress = Math.min((timestamp - startTime) / duration, 1);
+                        const easeProgress = 1 - Math.pow(1 - progress, 3); // Cubic ease out
+                        const currentValue = start - (start - end) * easeProgress;
+                        
+                        if (progress < 1) {
+                            cpuCounterEl.textContent = currentValue.toFixed(1);
+                            animationFrameId = requestAnimationFrame(step);
+                        } else {
+                            cpuCounterEl.textContent = "0.1";
+                        }
+                    }
+
+                    if (animationFrameId) cancelAnimationFrame(animationFrameId);
+                    animationFrameId = requestAnimationFrame(step);
+                }
+                
+                const performanceObserver = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting) {
+                            if (!hasAnimated) {
+                                hasAnimated = true;
+                                if (startTimeoutId) clearTimeout(startTimeoutId);
+                                startTimeoutId = setTimeout(() => {
+                                    animateCpuCountdown();
+                                }, 500);
+                            }
+                        } else {
+                            hasAnimated = false;
+                            if (startTimeoutId) {
+                                clearTimeout(startTimeoutId);
+                                startTimeoutId = null;
+                            }
+                            if (animationFrameId) {
+                                cancelAnimationFrame(animationFrameId);
+                                animationFrameId = null;
+                            }
+                            cpuCounterEl.textContent = "100";
+                        }
                 });
+            }, {
+                    root: scrollContainer,
+                    threshold: 0.1
+                });
+
+                const performanceSection = document.getElementById('performance');
+                if (performanceSection) performanceObserver.observe(performanceSection);
             }
 
             // Theme Toggle Logic
@@ -601,12 +1036,14 @@
             const canvas = document.getElementById('particles');
             const ctx = canvas.getContext('2d');
             let width, height, particles;
+            let particleRafId = null;
+            const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
             function initParticles() {
                 width = canvas.width = window.innerWidth;
                 height = canvas.height = window.innerHeight;
                 particles = [];
-                const particleCount = Math.min(Math.floor(width / 20), 80); // Scale based on screen size
+                const particleCount = Math.min(Math.floor(width / 32), 50); // Scale based on screen size
                 const isLight = document.documentElement.classList.contains('light');
 
                 for(let i = 0; i < particleCount; i++) {
@@ -626,11 +1063,23 @@
                         color: color
                     });
                 }
+
+                // In reduced-motion mode the loop never runs, so paint one static frame
+                // (also keeps colors correct after a theme toggle).
+                if (reduceMotion) {
+                    ctx.clearRect(0, 0, width, height);
+                    particles.forEach(p => {
+                        ctx.beginPath();
+                        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                        ctx.fillStyle = p.color;
+                        ctx.fill();
+                    });
+                }
             }
 
             function animateParticles() {
                 ctx.clearRect(0, 0, width, height);
-                
+
                 particles.forEach(p => {
                     p.x += p.vx;
                     p.y += p.vy;
@@ -643,15 +1092,37 @@
                     ctx.fillStyle = p.color;
                     ctx.fill();
                 });
-                
-                requestAnimationFrame(animateParticles);
+
+                particleRafId = requestAnimationFrame(animateParticles);
             }
 
-            initParticles();
-            animateParticles();
+            function startParticles() {
+                // Don't run the loop if the user prefers reduced motion or the tab is hidden.
+                if (reduceMotion || document.hidden || particleRafId !== null) return;
+                particleRafId = requestAnimationFrame(animateParticles);
+            }
 
+            function stopParticles() {
+                if (particleRafId !== null) {
+                    cancelAnimationFrame(particleRafId);
+                    particleRafId = null;
+                }
+            }
+
+            initParticles(); // paints a static frame when reduced-motion is set
+            startParticles(); // no-op under reduced motion
+
+            // Pause the animation loop whenever the tab is backgrounded.
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden) stopParticles();
+                else startParticles();
+            });
+
+            // Debounce resize so repeated events (e.g. mobile URL-bar show/hide) don't thrash.
+            let resizeTimer = null;
             window.addEventListener('resize', () => {
-                initParticles();
+                clearTimeout(resizeTimer);
+                resizeTimer = setTimeout(initParticles, 200);
             });
         });
     </script>
