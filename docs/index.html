@@ -340,6 +340,15 @@
             display: block;
         }
 
+        /* Brand lockup logo swaps with the theme (default page theme is dark). */
+        .brand-logo-light,
+        html.light .brand-logo-dark {
+            display: none;
+        }
+        html.light .brand-logo-light {
+            display: block;
+        }
+
         .content-section {
             position: relative;
             min-height: 100dvh;
@@ -524,18 +533,23 @@
                     
                     <!-- Hero Text -->
                     <div class="hero-copy text-center reveal">
-                        <h1 class="text-5xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight mb-6 leading-[1.05] text-slate-900 dark:text-white drop-shadow-2xl">
-                            <span class="hero-title-line">Automatically earn <span class="text-gradient">Twitch Drops</span> on macOS.</span>
+                        <div class="flex items-center justify-center gap-3 mb-6">
+                            <img src="./assets/landing/web-logo-dark.png" width="152" height="152" decoding="async" alt="" class="brand-logo-dark" style="width:56px;height:56px;">
+                            <img src="./assets/landing/web-logo-light.png" width="152" height="152" decoding="async" alt="" class="brand-logo-light" style="width:56px;height:56px;">
+                            <span class="font-display font-bold text-2xl sm:text-3xl tracking-tight uppercase text-slate-900 dark:text-white">SwiftMiner</span>
+                        </div>
+                        <h1 class="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight mb-6 leading-[1.05] text-slate-900 dark:text-white drop-shadow-2xl">
+                            <span class="hero-title-line">Collect every <span class="text-gradient">Twitch Drop</span> on macOS, automatically.</span>
                         </h1>
                         
                         <p class="text-lg sm:text-xl text-slate-600 dark:text-gray-400 mb-10 max-w-4xl mx-auto leading-relaxed font-light">
-                            SwiftMiner monitors campaigns, switches to eligible streams, tracks progress, and claims rewards automatically — all from a native macOS app.
+                            Set it once, and SwiftMiner does the watching for you — finding eligible streams, tracking every campaign, and claiming rewards across all your accounts. No browser tab required.
                         </p>
                         
                         <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
                             <a href="https://github.com/johnwatso/SwiftMiner/releases/latest" class="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-br from-brand-purple to-brand-violet rounded-xl text-white font-bold text-lg hover:shadow-[0_8px_30px_rgba(147,51,234,0.4)] hover:-translate-y-1 transition-all">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" fill="currentColor" class="w-5 h-5"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></svg>
-                                Download for macOS
+                                Download for Mac
                             </a>
                             <a href="https://github.com/johnwatso/SwiftMiner" class="w-full sm:w-auto px-8 py-4 glass-panel rounded-xl text-slate-900 dark:text-white font-bold text-lg hover:bg-black/5 dark:hover:bg-white/10 hover:-translate-y-1 transition-all flex items-center justify-center gap-2">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
@@ -544,17 +558,19 @@
                                 View on GitHub
                             </a>
                         </div>
+
+                        <p class="mt-4 text-sm text-slate-600 dark:text-gray-400 font-medium">Free and open source. Signed and notarized by Apple. No account required.</p>
                         
                         <div class="mt-4 flex items-center justify-center gap-1.5 text-xs text-slate-500 dark:text-gray-500 font-medium tracking-wide">
                             <i class="ph-bold ph-download-simple text-brand-cyan"></i>
-                            <span><span id="dl-count-hero" class="text-slate-800 dark:text-gray-300 font-semibold">8.3k+</span> downloads and counting</span>
+                            <span><span id="dl-count-hero" class="text-slate-800 dark:text-gray-300 font-semibold">8,300+</span> downloads and counting</span>
                         </div>
 
                         <div class="trust-strip">
+                            <span class="trust-badge"><i class="ph-bold ph-github-logo text-brand-cyan"></i>Free &amp; Open Source</span>
+                            <span class="trust-badge"><i class="ph-bold ph-seal-check text-brand-purple"></i>Signed &amp; Notarized by Apple</span>
                             <span class="trust-badge"><i class="ph-bold ph-desktop text-brand-cyan"></i>Native macOS App</span>
-                            <span class="trust-badge"><i class="ph-bold ph-seal-check text-brand-purple"></i>Signed &amp; Notarized</span>
-                            <span class="trust-badge"><i class="ph-bold ph-github-logo text-brand-cyan"></i>Open Source</span>
-                            <span class="trust-badge"><i class="ph-bold ph-database text-brand-purple"></i>Local Data Storage</span>
+                            <span class="trust-badge"><i class="ph-bold ph-database text-brand-purple"></i>Runs 100% on your Mac</span>
                             <span class="trust-badge"><i class="ph-bold ph-users-three text-brand-cyan"></i>Multi-Account Support</span>
                         </div>
                     </div>
@@ -575,7 +591,7 @@
                 
                 <div class="text-center mb-16 reveal">
                     <h2 class="text-3xl md:text-5xl font-bold mb-4 text-slate-900 dark:text-white drop-shadow-lg tracking-tight">Everything important, <br/><span class="text-brand-cyan">visible at a glance.</span></h2>
-                    <p class="text-slate-600 dark:text-gray-400 text-lg max-w-2xl mx-auto">SwiftMiner watches campaigns, tracks progress, selects streams, and claims completed Drops for everyone in your squad from one native interface.</p>
+                    <p class="text-slate-600 dark:text-gray-400 text-lg max-w-2xl mx-auto">One native app handles the watching, tracking, and claiming — for your account and everyone in your squad.</p>
                 </div>
  
                 <!-- Bento Grid -->
@@ -603,20 +619,20 @@
                                 </div>
                                 <h3 class="text-xl font-bold mb-2 text-slate-900 dark:text-white">Automatic Claiming</h3>
                             </div>
-                            <p class="text-slate-500 dark:text-gray-400 text-xs leading-relaxed">Track in-progress, claimable, and completed Drops, and automatically claim rewards as soon as they are ready.</p>
+                            <p class="text-slate-500 dark:text-gray-400 text-xs leading-relaxed">Rewards are claimed the moment they unlock — you never have to remember to check.</p>
                         </div>
                     </div>
  
-                    <!-- Card 3: Local WebUI -->
+                    <!-- Card 3: Check in from anywhere -->
                     <div class="glass-panel card-glow-magenta group rounded-3xl p-8 flex flex-col justify-between relative overflow-hidden reveal" style="transition-delay: 200ms;">
                         <div class="relative z-10 flex flex-col h-full justify-between">
                             <div>
                                 <div class="w-12 h-12 rounded-full bg-brand-magenta/20 flex items-center justify-center text-brand-magenta mb-4 border border-brand-magenta/30">
                                     <i class="ph-fill ph-devices text-2xl"></i>
                                 </div>
-                                <h3 class="text-xl font-bold mb-2 text-slate-900 dark:text-white">Local WebUI</h3>
+                                <h3 class="text-xl font-bold mb-2 text-slate-900 dark:text-white">Check in from anywhere</h3>
                             </div>
-                            <p class="text-slate-500 dark:text-gray-400 text-xs leading-relaxed">Monitor progress and manage miners remotely from your phone or any device on your local network using the built-in local web server.</p>
+                            <p class="text-slate-500 dark:text-gray-400 text-xs leading-relaxed">Check progress and control your miners from your phone or any device on your network.</p>
                         </div>
                     </div>
 
@@ -631,20 +647,20 @@
                                 </div>
                                 <h3 class="text-xl font-bold mb-2 text-slate-900 dark:text-white">Discord Integration</h3>
                             </div>
-                            <p class="text-slate-500 dark:text-gray-400 text-xs leading-relaxed">Keep track of drop progress and miner states on the go with the SwiftBot Discord integration.</p>
+                            <p class="text-slate-500 dark:text-gray-400 text-xs leading-relaxed">See drop progress and status right in Discord, wherever you are — powered by the SwiftBot integration.</p>
                         </div>
                     </div>
 
-                    <!-- Card 5: Sparkle Updates -->
+                    <!-- Card 5: Automatic updates -->
                     <div class="glass-panel card-glow-white group rounded-3xl p-8 flex flex-col justify-between relative overflow-hidden reveal" style="transition-delay: 200ms;">
                         <div class="relative z-10 flex flex-col h-full justify-between">
                             <div>
                                 <div class="w-12 h-12 rounded-full bg-white/10 dark:bg-white/10 bg-slate-800/10 flex items-center justify-center text-slate-700 dark:text-white mb-4 border border-black/10 dark:border-white/20">
                                     <i class="ph-fill ph-arrows-clockwise text-2xl"></i>
                                 </div>
-                                <h3 class="text-xl font-bold mb-2 text-slate-900 dark:text-white">Sparkle Updates</h3>
+                                <h3 class="text-xl font-bold mb-2 text-slate-900 dark:text-white">Automatic updates</h3>
                             </div>
-                            <p class="text-slate-500 dark:text-gray-400 text-xs leading-relaxed">Stay up to date automatically with new features and Twitch API compatibility patches. Updates install without hassle.</p>
+                            <p class="text-slate-500 dark:text-gray-400 text-xs leading-relaxed">New features and Twitch compatibility fixes install themselves — powered by Sparkle, with no manual downloads.</p>
                         </div>
                     </div>
 
@@ -657,7 +673,7 @@
                                 </div>
                                 <h3 class="text-xl font-bold mb-2 text-slate-900 dark:text-white">Signed & Notarized</h3>
                             </div>
-                            <p class="text-slate-500 dark:text-gray-400 text-xs leading-relaxed">Fully signed by Apple Developer ID and notarized. Runs safely on macOS without gatekeeper warning blockades.</p>
+                            <p class="text-slate-500 dark:text-gray-400 text-xs leading-relaxed">Signed with an Apple Developer ID and notarized — it opens cleanly, with no security warnings to click through.</p>
                         </div>
                     </div>
 
@@ -721,7 +737,7 @@
                             <div class="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-brand-cyan mb-5 border border-brand-cyan/20 shadow-lg">
                                 <i class="ph-bold ph-article text-2xl"></i>
                             </div>
-                            <h3 class="text-2xl md:text-3xl font-bold mb-3 text-slate-900 dark:text-white">Activity you can audit</h3>
+                            <h3 class="text-2xl md:text-3xl font-bold mb-3 text-slate-900 dark:text-white">See everything it does</h3>
                             <p class="text-slate-600 dark:text-gray-400 leading-relaxed">Review stream changes, claim attempts, scan results, and account events from a readable local activity log.</p>
                         </div>
                         <div class="screenshot-frame">
@@ -775,7 +791,7 @@
                     <div class="privacy-grid">
                         <div class="glass-panel rounded-3xl utility-card reveal"><h3 class="font-bold text-xl mb-2 text-slate-900 dark:text-white">macOS Keychain</h3><p class="text-sm text-slate-500 dark:text-gray-400 leading-relaxed">Credentials are stored securely using the system Keychain.</p></div>
                         <div class="glass-panel rounded-3xl utility-card reveal" style="transition-delay: 80ms;"><h3 class="font-bold text-xl mb-2 text-slate-900 dark:text-white">No cloud account</h3><p class="text-sm text-slate-500 dark:text-gray-400 leading-relaxed">Use SwiftMiner without signing into a separate hosted service.</p></div>
-                        <div class="glass-panel rounded-3xl utility-card reveal" style="transition-delay: 160ms;"><h3 class="font-bold text-xl mb-2 text-slate-900 dark:text-white">Local SQLite storage</h3><p class="text-sm text-slate-500 dark:text-gray-400 leading-relaxed">Logs and app state live in a local database on your Mac.</p></div>
+                        <div class="glass-panel rounded-3xl utility-card reveal" style="transition-delay: 160ms;"><h3 class="font-bold text-xl mb-2 text-slate-900 dark:text-white">Stored locally</h3><p class="text-sm text-slate-500 dark:text-gray-400 leading-relaxed">Logs and app state live in a local database on your Mac.</p></div>
                         <div class="glass-panel rounded-3xl utility-card reveal" style="transition-delay: 240ms;"><h3 class="font-bold text-xl mb-2 text-slate-900 dark:text-white">Runs fully on your Mac</h3><p class="text-sm text-slate-500 dark:text-gray-400 leading-relaxed">Monitoring, progress tracking, and claiming happen locally.</p></div>
                     </div>
                 </div>
@@ -794,7 +810,7 @@
                         <span class="text-brand-purple">Built for efficiency.</span>
                     </h2>
                     <p class="text-slate-600 dark:text-gray-400 text-lg max-w-2xl mx-auto font-light">
-                        SwiftMiner is a native app utilizing the latest system technologies to minimize power and memory usage. Run it in the background all day without affecting your workflow.
+                        A native Mac app that sips power and memory — leave it running all day, through work or games, and you won't notice it.
                     </p>
                 </div>
 
@@ -810,7 +826,7 @@
                                 </div>
                                 <h3 class="text-2xl font-bold mb-3 text-slate-900 dark:text-white">~<span id="cpu-counter">0.1</span>% CPU Usage</h3>
                                 <p class="text-slate-500 dark:text-gray-400 text-sm leading-relaxed">
-                                    Unlike web-based or Electron apps, SwiftMiner is built natively in Swift. It operates with ultra-low resource impact, meaning it won't drain your MacBook battery or slow down your games.
+                                    Built natively in Swift — not a web page or an Electron wrapper — so it runs with almost no resource impact. It won't drain your battery or slow down your games.
                                 </p>
                             </div>
                             <span class="text-[10px] text-brand-cyan font-bold uppercase tracking-wider">Ultra-Low Resource Impact</span>
@@ -824,7 +840,7 @@
                                 <div class="w-12 h-12 rounded-full bg-brand-purple/20 flex items-center justify-center text-brand-purple mb-6 border border-brand-purple/30 shadow-lg">
                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" fill="currentColor" class="w-6 h-6"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></svg>
                                 </div>
-                                <h3 class="text-2xl font-bold mb-3 text-slate-900 dark:text-white">Universal Support</h3>
+                                <h3 class="text-2xl font-bold mb-3 text-slate-900 dark:text-white">Runs on every modern Mac</h3>
                                 <p class="text-slate-500 dark:text-gray-400 text-sm leading-relaxed">
                                     Built for macOS 26.0 or later, with native architecture slices for both Apple Silicon (M1/M2/M3/M4) and Intel Core processors. Full speed, no emulation needed.
                                 </p>
@@ -833,35 +849,35 @@
                         </div>
                     </div>
 
-                    <!-- Card 3: 100% Swift & SwiftUI -->
+                    <!-- Card 3: Truly native -->
                     <div class="glass-panel card-glow-magenta group rounded-3xl p-8 flex flex-col justify-between relative overflow-hidden reveal" style="transition-delay: 200ms;">
                         <div class="relative z-10 flex flex-col h-full justify-between gap-4">
                             <div>
                                 <div class="w-12 h-12 rounded-full bg-brand-magenta/20 flex items-center justify-center text-brand-magenta mb-6 border border-brand-magenta/30 shadow-lg">
                                     <i class="ph-bold ph-code text-2xl"></i>
                                 </div>
-                                <h3 class="text-2xl font-bold mb-3 text-slate-900 dark:text-white">100% Swift & SwiftUI</h3>
+                                <h3 class="text-2xl font-bold mb-3 text-slate-900 dark:text-white">Truly native</h3>
                                 <p class="text-slate-500 dark:text-gray-400 text-sm leading-relaxed">
-                                    Built entirely using Apple's modern programming language and UI framework. No heavy Electron wrappers, no slow web views, and no garbage collection lag—just pure, compiled machine code.
+                                    Built entirely in Apple's native frameworks — no Electron, no web views. It feels instant and stays light.
                                 </p>
                             </div>
-                            <span class="text-[10px] text-brand-magenta font-bold uppercase tracking-wider">Pure Native Code</span>
+                            <span class="text-[10px] text-brand-magenta font-bold uppercase tracking-wider">Swift &amp; SwiftUI</span>
                         </div>
                     </div>
 
-                    <!-- Card 4: Secure & Private -->
+                    <!-- Card 4: No telemetry -->
                     <div class="glass-panel card-glow-white group rounded-3xl p-8 flex flex-col justify-between relative overflow-hidden reveal" style="transition-delay: 300ms;">
                         <div class="relative z-10 flex flex-col h-full justify-between gap-4">
                             <div>
                                 <div class="w-12 h-12 rounded-full bg-white/10 dark:bg-white/10 bg-slate-800/10 flex items-center justify-center text-slate-700 dark:text-white mb-6 border border-black/10 dark:border-white/20 shadow-lg">
                                     <i class="ph-bold ph-shield-check text-2xl"></i>
                                 </div>
-                                <h3 class="text-2xl font-bold mb-3 text-slate-900 dark:text-white">Privacy & Security First</h3>
+                                <h3 class="text-2xl font-bold mb-3 text-slate-900 dark:text-white">No telemetry</h3>
                                 <p class="text-slate-500 dark:text-gray-400 text-sm leading-relaxed">
-                                    Your data belongs to you. SwiftMiner does not collect or upload Twitch accounts, credentials, or session cookies. Authentication and drops claiming are run entirely locally on your Mac.
+                                    SwiftMiner sends no analytics, tracking, or usage data anywhere — and because it's fully open source, anyone can audit exactly what it does.
                                 </p>
                             </div>
-                            <span class="text-[10px] text-slate-400 dark:text-gray-500 font-bold uppercase tracking-wider">100% Local Execution</span>
+                            <span class="text-[10px] text-slate-400 dark:text-gray-500 font-bold uppercase tracking-wider">Open Source · Auditable</span>
                         </div>
                     </div>
 
@@ -885,14 +901,14 @@
                         
                         <h2 class="text-4xl md:text-6xl font-bold mb-6 text-slate-900 dark:text-white drop-shadow-lg tracking-tight">Ready for the <span class="text-brand-purple">next campaign.</span></h2>
                         <p class="text-lg text-slate-600 dark:text-gray-400 mb-10 max-w-xl mx-auto leading-relaxed">
-                            Download the latest signed release from GitHub. SwiftMiner is independent software and is not affiliated with Twitch.
+                            Free, open source, and ready in about a minute. Download the latest signed release and start collecting Drops.
                         </p>
                         
                         <a href="https://github.com/johnwatso/SwiftMiner/releases/latest" class="flex items-center gap-3 px-10 py-5 bg-gradient-to-br from-brand-purple to-brand-violet rounded-2xl text-white font-bold text-xl hover:shadow-[0_12px_40px_rgba(147,51,234,0.4)] hover:-translate-y-1 transition-all">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" fill="currentColor" class="w-6 h-6"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></svg>
                             Get SwiftMiner
                         </a>
-                        <p class="mt-6 text-sm text-slate-500 dark:text-gray-500"><span id="dl-count-card">8.3k+</span> downloads. Requires macOS 26.0 or later. Auto-updates via Sparkle.</p>
+                        <p class="mt-6 text-sm text-slate-500 dark:text-gray-500">Free · <span id="dl-count-card">8,300+</span> downloads · Requires macOS 26.0 or later · Auto-updates.</p>
                     </div>
                 </div>
             </div>
@@ -1231,8 +1247,8 @@
 
             function format(n) {
                 if (n >= 1000) {
-                    // Floor to one decimal so the trailing "+" stays truthful.
-                    return (Math.floor(n / 100) / 10) + 'k+';
+                    // Round down to the nearest 100 so the trailing "+" stays truthful.
+                    return (Math.floor(n / 100) * 100).toLocaleString('en-US') + '+';
                 }
                 return String(n);
             }

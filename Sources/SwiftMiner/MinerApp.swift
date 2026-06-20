@@ -18,6 +18,7 @@ struct MinerApp: App {
     @State private var navigation: NavigationModel
     @State private var notificationDelegate = AppNotificationDelegate()
     @State private var didApplyLaunchWindowPreference = false
+    @State private var showLegacyBackupPrompt = false
     @Environment(\.openWindow) private var openWindow
 
     init() {
@@ -36,6 +37,14 @@ struct MinerApp: App {
                 .environment(navigation)
                 .environmentObject(updater)
                 .task {
+                    // Migrate any legacy hardware-UUID account file into the real Keychain
+                    // BEFORE accounts are loaded below. No-op on DEBUG and after the first run.
+                    await LegacyAccountMigrator.migrateIfNeeded()
+                    if settings.shouldPromptForLegacyBackupDeletion {
+                        settings.markLegacyBackupPromptShown()
+                        showLegacyBackupPrompt = true
+                    }
+
                     // Await navigation setup first — loads accounts from keychain
                     // and optionally auto-starts miners before AppModel reads miner state.
                     await navigation.setup()
@@ -89,6 +98,22 @@ struct MinerApp: App {
                 }
                 .onOpenURL { url in
                     handleDeepLink(url)
+                }
+                .alert("Accounts moved to Keychain", isPresented: $showLegacyBackupPrompt) {
+                    Button("Delete Backup", role: .destructive) {
+                        do {
+                            try settings.deleteLegacyBackup()
+                        } catch {
+                            navigation.logEvent(
+                                message: "Couldn't delete the old account backup: \(error.localizedDescription)",
+                                level: .warning,
+                                rawMessage: "[migration] delete legacy backup failed: \(error.localizedDescription)"
+                            )
+                        }
+                    }
+                    Button("Keep", role: .cancel) {}
+                } message: {
+                    Text("Your accounts are now stored securely in the macOS Keychain. The old encrypted backup file is no longer needed — delete it now, or keep it and we'll ask again next week.")
                 }
         }
         .windowStyle(.titleBar)

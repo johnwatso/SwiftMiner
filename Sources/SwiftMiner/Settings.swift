@@ -1154,7 +1154,36 @@ public final class Settings: ObservableObject {
             userInfo: [NSLocalizedDescriptionKey: "Could not \(operation) the local dashboard password in Keychain: \(message)"]
         )
     }
-    
+
+    // MARK: - Legacy Keychain backup cleanup
+
+    private static let legacyBackupPromptLastShownKey = "legacyBackupPromptLastShown"
+    private static let legacyBackupPromptInterval: TimeInterval = 7 * 24 * 60 * 60
+
+    /// Whether the one-time migration of accounts into the real Keychain has completed.
+    public var legacyAccountsMigrated: Bool {
+        Self.appStorageStore.object(forKey: LegacyAccountMigrator.migratedAtKey) != nil
+    }
+
+    /// Whether to offer deleting the leftover `accounts.enc` backup at launch: migration is done,
+    /// a backup file still exists, and we haven't asked within the last week.
+    public var shouldPromptForLegacyBackupDeletion: Bool {
+        guard legacyAccountsMigrated, LegacyAccountMigrator.legacyBackupExists else { return false }
+        guard let last = Self.appStorageStore.object(forKey: Self.legacyBackupPromptLastShownKey) as? Date else { return true }
+        return Date().timeIntervalSince(last) > Self.legacyBackupPromptInterval
+    }
+
+    /// Record that the backup-deletion prompt was shown now (suppresses it for ~a week).
+    public func markLegacyBackupPromptShown() {
+        Self.appStorageStore.set(Date(), forKey: Self.legacyBackupPromptLastShownKey)
+    }
+
+    /// Delete the leftover legacy backup file and clear the prompt schedule.
+    public func deleteLegacyBackup() throws {
+        try LegacyAccountMigrator.deleteLegacyBackup()
+        Self.appStorageStore.removeObject(forKey: Self.legacyBackupPromptLastShownKey)
+    }
+
     // MARK: - Reset
     
     /// Resolved Twitch Client ID: env var → stored setting → built-in Twitch web client ID.

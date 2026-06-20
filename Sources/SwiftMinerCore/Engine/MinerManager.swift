@@ -367,7 +367,7 @@ public final class MinerManager {
     public init(
         clientId: String, 
         campaignStore: CampaignStore = CampaignStore(),
-        tokenStore: any TokenStore = KeychainTokenStore()
+        tokenStore: any TokenStore = TokenStoreFactory.makeDefault()
     ) {
         self.clientId = clientId
         self.campaignStore = campaignStore
