@@ -46,6 +46,20 @@
   <main>
     <h1>SwiftMiner Release Notes</h1>
     <p class="meta">Recent Sparkle update history</p>
+    <h2>🎯 Version 1.30</h2>
+    <ul>
+      <li>Detects when live Twitch channels for a game are advertising a subscription-required campaign instead of the watch-minable campaign SwiftMiner is trying to mine.</li>
+      <li>Prevents miners from treating paid-sub rewards, such as the 007 Gun Barrel badge, as watch-mineable streams.</li>
+      <li>Adds clearer channel-selection logs when a live stream is running a same-game subscription-required campaign.</li>
+      <li>Shows <strong>Subscription Required</strong> on the Overview miner card when the blocking reward needs a paid Twitch subscription.</li>
+      <li>Stops the Overview card from showing a same-game watch campaign under Up Next while the currently visible live campaign is subscription-gated.</li>
+      <li>Shows pink <strong>Needs Sub</strong> status in the Drops Active list for subscription-required rewards.</li>
+      <li>Marks subscription-gated reward thumbnails with a credit-card badge and <strong>Sub</strong> label.</li>
+      <li>Updates campaign detail rows so subscription-required drops say <strong>Needs Sub</strong> and <strong>Paid Twitch sub required</strong> instead of appearing as a generic locked reward.</li>
+      <li>Preserves subscription-required reward state when SwiftMiner merges campaign data across multiple miner accounts.</li>
+      <li>Adds regression coverage for same-game campaign verification, subscription-only campaign diagnostics, Overview subscription state, Up Next suppression, and subscription-required Drops view data.</li>
+      <li>Updates SwiftMiner to version 1.30 build 2026062110 while leaving ShipHook-owned appcasts untouched.</li>
+    </ul>
     <h2>🌐 Version 1.29.5</h2>
     <ul>
       <li>Adds an Override Stream action to miner cards so a miner can be pinned to a specific Twitch streamer.</li>
@@ -211,6 +225,10 @@
       <li>Automatically refreshes expired Twitch tokens where possible and gives clearer re-auth guidance when a session needs attention.</li>
       <li>Polishes onboarding, account details, notification handling, and the Set Steam ID flow.</li>
     </ul>
+    <p><a href="./1.30.html">Version 1.30 release page</a></p>
+    <p><a href="./1.29.5.html">Version 1.29.5 release page</a></p>
+    <p><a href="./1.29.4.html">Version 1.29.4 release page</a></p>
+    <p><a href="./1.29.3.html">Version 1.29.3 release page</a></p>
     <p><a href="./1.29.2.html">Version 1.29.2 release page</a></p>
     <p><a href="./1.28.html">Version 1.28 release page</a></p>
     <p><a href="./1.27.html">Version 1.27 release page</a></p>
