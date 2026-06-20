@@ -1138,6 +1138,10 @@ public final class MinerManager {
                 // Update current campaign info
                 if let currentId, let current = all.first(where: { $0.id == currentId }) {
                     self.updateMinerStatus(minerId: minerId, currentCampaign: current.name, currentCampaignId: .some(currentId), allCampaigns: all)
+                } else if let override = self.getMiner(id: minerId)?.streamOverrideLogin {
+                    // Override watching a streamer with no mineable drop — surface the streamer,
+                    // not an unrelated campaign name.
+                    self.updateMinerStatus(minerId: minerId, currentCampaign: "Watching @\(override)", currentCampaignId: .some(currentId), allCampaigns: all)
                 } else if let first = campaigns.first {
                     self.updateMinerStatus(minerId: minerId, currentCampaign: first.name, currentCampaignId: .some(currentId), allCampaigns: all)
                 } else {
