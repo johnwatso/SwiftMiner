@@ -318,8 +318,8 @@ struct MinerActivityCard: View {
         )
     }
 
-    private var showsLinkAccountButton: Bool {
-        snapshot.now.requiresAccountLink || snapshot.upNext?.requiresAccountLink == true
+    private func showsLinkAccountButton(_ snap: MinerActivitySnapshot) -> Bool {
+        snap.now.requiresAccountLink || snap.upNext?.requiresAccountLink == true
     }
 
     private var isExpanded: Bool {
@@ -333,15 +333,19 @@ struct MinerActivityCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: isExpanded ? 14 : 12) {
-            header
+        // Resolve the activity snapshot once per render. `MinerActivitySnapshot.resolve`
+        // is expensive and was previously recomputed on every access (~10+ times per
+        // render, multiplied by every miner card on screen).
+        let snap = snapshot
+        return VStack(alignment: .leading, spacing: isExpanded ? 14 : 12) {
+            header(snap: snap)
 
             VStack(alignment: .leading, spacing: isExpanded ? 7 : 10) {
                 ActivityLabel("Current Status", color: .secondary)
-                currentActivity
+                currentActivity(snap: snap)
             }
 
-            if showsLinkAccountButton {
+            if showsLinkAccountButton(snap) {
                 Button {
                     onLinkAccount?()
                 } label: {
@@ -357,7 +361,7 @@ struct MinerActivityCard: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 ActivityLabel("Up Next", color: .secondary)
-                if let next = snapshot.upNext {
+                if let next = snap.upNext {
                     nextActivity(next)
                 } else {
                     emptyNextActivity
@@ -365,11 +369,11 @@ struct MinerActivityCard: View {
             }
             .opacity(0.82)
 
-            if prominence == .expanded, !snapshot.blockedPriority.isEmpty {
+            if prominence == .expanded, !snap.blockedPriority.isEmpty {
                 Divider()
                     .opacity(0.6)
 
-                blockedPriorityList
+                blockedPriorityList(snap: snap)
             }
         }
         .padding(isExpanded ? 18 : 16)
@@ -394,7 +398,7 @@ struct MinerActivityCard: View {
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(miner.displayName), now mining \(snapshot.now.title)")
+        .accessibilityLabel("\(miner.displayName), now mining \(snap.now.title)")
         .sheet(item: $streamOverrideEditor) { presentation in
             MinerStreamOverrideSheet(miner: presentation.miner, navigation: navigation)
         }
@@ -403,9 +407,9 @@ struct MinerActivityCard: View {
         }
     }
 
-    private var header: some View {
+    private func header(snap: MinerActivitySnapshot) -> some View {
         HStack(alignment: .center, spacing: 8) {
-            AnimatedStatusIcon(symbol: snapshot.now.symbol, color: snapshot.now.accent, size: 17, weight: .medium)
+            AnimatedStatusIcon(symbol: snap.now.symbol, color: snap.now.accent, size: 17, weight: .medium)
 
             Text(miner.displayName)
                 .font(.title3.weight(.semibold))
@@ -470,14 +474,14 @@ struct MinerActivityCard: View {
         }
     }
 
-    private var currentActivity: some View {
+    private func currentActivity(snap: MinerActivitySnapshot) -> some View {
         VStack(alignment: .leading, spacing: isExpanded ? 4 : 6) {
-            Text(snapshot.now.title)
+            Text(snap.now.title)
                 .font(.title3.weight(.semibold))
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
 
-            if let subtitle = snapshot.now.subtitle {
+            if let subtitle = snap.now.subtitle {
                 Text(subtitle)
                     .font(isExpanded ? .callout : .subheadline)
                     .foregroundStyle(.secondary)
@@ -485,12 +489,12 @@ struct MinerActivityCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            if let progress = snapshot.now.progressFraction {
-                AnimatedLinearProgressView(value: progress, tint: effectiveAccent(snapshot.now.accent))
+            if let progress = snap.now.progressFraction {
+                AnimatedLinearProgressView(value: progress, tint: effectiveAccent(snap.now.accent))
                     .padding(.top, isExpanded ? 0 : 2)
             }
 
-            if let detail = snapshot.now.detail {
+            if let detail = snap.now.detail {
                 Text(detail)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -499,7 +503,7 @@ struct MinerActivityCard: View {
             }
 
             if let anchor = liveActivityAnchor {
-                liveActivityTimer(anchor: anchor)
+                liveActivityTimer(anchor: anchor, accent: snap.now.accent)
             }
         }
     }
@@ -515,11 +519,11 @@ struct MinerActivityCard: View {
     }
 
     @ViewBuilder
-    private func liveActivityTimer(anchor: Date) -> some View {
+    private func liveActivityTimer(anchor: Date, accent: Color) -> some View {
         TimelineView(.periodic(from: anchor, by: 1)) { context in
             let elapsed = max(0, context.date.timeIntervalSince(anchor))
             HStack(spacing: 5) {
-                PulsingActivityDot(color: effectiveAccent(snapshot.now.accent))
+                PulsingActivityDot(color: effectiveAccent(accent))
 
                 Image(systemName: "timer")
                     .font(.caption2.weight(.semibold))
@@ -590,11 +594,11 @@ struct MinerActivityCard: View {
         }
     }
 
-    private var blockedPriorityList: some View {
+    private func blockedPriorityList(snap: MinerActivitySnapshot) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             ActivityLabel("Needs Linking", color: .orange)
 
-            ForEach(snapshot.blockedPriority) { item in
+            ForEach(snap.blockedPriority) { item in
                 HStack(alignment: .top, spacing: 10) {
                     Image(systemName: item.symbol)
                         .font(.caption.weight(.semibold))

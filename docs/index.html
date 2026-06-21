@@ -424,6 +424,38 @@
             transform: translateY(-0.02rem);
         }
 
+        .privacy-icon {
+            display: inline-flex;
+            width: 2.75rem;
+            height: 2.75rem;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1rem;
+            border-radius: 999px;
+            border: 1px solid rgba(147, 51, 234, 0.24);
+            background: rgba(147, 51, 234, 0.12);
+            color: #9333ea;
+            font-size: 1.35rem;
+        }
+
+        .privacy-icon.cyan {
+            border-color: rgba(0, 229, 255, 0.24);
+            background: rgba(0, 229, 255, 0.12);
+            color: #00b8d4;
+        }
+
+        .privacy-icon.magenta {
+            border-color: rgba(255, 0, 127, 0.24);
+            background: rgba(255, 0, 127, 0.12);
+            color: #ff007f;
+        }
+
+        .privacy-icon.neutral {
+            border-color: rgba(100, 116, 139, 0.18);
+            background: rgba(100, 116, 139, 0.08);
+            color: #64748b;
+        }
+
         .content-section {
             position: relative;
             min-height: 100dvh;
@@ -500,6 +532,46 @@
             align-items: center;
         }
 
+        .privacy-lock {
+            position: relative;
+            width: 4.5rem;
+            height: 4.5rem;
+            margin-bottom: 1.25rem;
+            color: #9333ea;
+        }
+
+        .privacy-lock svg {
+            width: 100%;
+            height: 100%;
+            overflow: visible;
+            filter: drop-shadow(0 18px 28px rgba(147, 51, 234, 0.2));
+        }
+
+        .privacy-lock-shackle {
+            transform-box: view-box;
+            transform-origin: 48px 43px;
+            transform: translateY(-10px) rotate(-18deg);
+            transition: transform 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.18s;
+        }
+
+        .privacy-lock.is-locked .privacy-lock-shackle {
+            transform: translateY(0) rotate(0deg);
+        }
+
+        .privacy-lock-body {
+            fill: rgba(147, 51, 234, 0.12);
+            stroke: rgba(147, 51, 234, 0.32);
+        }
+
+        .privacy-lock-keyhole {
+            fill: currentColor;
+        }
+
+        html.dark .privacy-lock-body {
+            fill: rgba(147, 51, 234, 0.18);
+            stroke: rgba(255, 255, 255, 0.18);
+        }
+
         @media (min-width: 1024px) {
             .screenshot-card {
                 grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
@@ -543,6 +615,10 @@
             .reveal, .reveal.active {
                 opacity: 1 !important;
                 transform: none !important;
+                transition: none !important;
+            }
+            .privacy-lock-shackle {
+                transform: translateY(0) rotate(0deg) !important;
                 transition: none !important;
             }
             .animate-pulse { animation: none !important; }
@@ -877,14 +953,40 @@
             <div class="section-shell relative z-10">
                 <div class="privacy-layout">
                     <div class="reveal">
+                        <div class="privacy-lock" aria-hidden="true">
+                            <svg viewBox="0 0 96 96" fill="none">
+                                <g class="privacy-lock-shackle">
+                                    <path d="M30 43V32C30 22.1 38.1 14 48 14C57.9 14 66 22.1 66 32V43" stroke="currentColor" stroke-width="8" stroke-linecap="round"/>
+                                </g>
+                                <rect class="privacy-lock-body" x="20" y="40" width="56" height="42" rx="15" stroke-width="3"/>
+                                <circle class="privacy-lock-keyhole" cx="48" cy="58" r="5"/>
+                                <path class="privacy-lock-keyhole" d="M45.5 62.5H50.5L52 72H44L45.5 62.5Z"/>
+                            </svg>
+                        </div>
                         <h2 class="text-4xl md:text-5xl font-bold mb-4 text-slate-900 dark:text-white drop-shadow-lg tracking-tight">Privacy <span class="text-brand-purple">first.</span></h2>
                         <p class="text-slate-600 dark:text-gray-400 text-lg font-light leading-relaxed">SwiftMiner is designed around local control. No cloud account, hosted dashboard, or third-party sync service is required.</p>
                     </div>
                     <div class="privacy-grid">
-                        <div class="glass-panel rounded-3xl utility-card reveal"><h3 class="font-bold text-xl mb-2 text-slate-900 dark:text-white">macOS Keychain</h3><p class="text-sm text-slate-500 dark:text-gray-400 leading-relaxed">Credentials are stored securely using the system Keychain.</p></div>
-                        <div class="glass-panel rounded-3xl utility-card reveal" style="transition-delay: 80ms;"><h3 class="font-bold text-xl mb-2 text-slate-900 dark:text-white">No cloud account</h3><p class="text-sm text-slate-500 dark:text-gray-400 leading-relaxed">Use SwiftMiner without signing into a separate hosted service.</p></div>
-                        <div class="glass-panel rounded-3xl utility-card reveal" style="transition-delay: 160ms;"><h3 class="font-bold text-xl mb-2 text-slate-900 dark:text-white">Stored locally</h3><p class="text-sm text-slate-500 dark:text-gray-400 leading-relaxed">Logs and app state live in a local database on your Mac.</p></div>
-                        <div class="glass-panel rounded-3xl utility-card reveal" style="transition-delay: 240ms;"><h3 class="font-bold text-xl mb-2 text-slate-900 dark:text-white">Runs fully on your Mac</h3><p class="text-sm text-slate-500 dark:text-gray-400 leading-relaxed">Monitoring, progress tracking, and claiming happen locally.</p></div>
+                        <div class="glass-panel rounded-3xl utility-card reveal">
+                            <div class="privacy-icon"><i class="ph-bold ph-key"></i></div>
+                            <h3 class="font-bold text-xl mb-2 text-slate-900 dark:text-white">macOS Keychain</h3>
+                            <p class="text-sm text-slate-500 dark:text-gray-400 leading-relaxed">Credentials are stored securely using the system Keychain.</p>
+                        </div>
+                        <div class="glass-panel rounded-3xl utility-card reveal" style="transition-delay: 80ms;">
+                            <div class="privacy-icon cyan"><i class="ph-bold ph-cloud-slash"></i></div>
+                            <h3 class="font-bold text-xl mb-2 text-slate-900 dark:text-white">No cloud account</h3>
+                            <p class="text-sm text-slate-500 dark:text-gray-400 leading-relaxed">Use SwiftMiner without signing into a separate hosted service.</p>
+                        </div>
+                        <div class="glass-panel rounded-3xl utility-card reveal" style="transition-delay: 160ms;">
+                            <div class="privacy-icon magenta"><i class="ph-bold ph-database"></i></div>
+                            <h3 class="font-bold text-xl mb-2 text-slate-900 dark:text-white">Stored locally</h3>
+                            <p class="text-sm text-slate-500 dark:text-gray-400 leading-relaxed">Logs and app state live in a local database on your Mac.</p>
+                        </div>
+                        <div class="glass-panel rounded-3xl utility-card reveal" style="transition-delay: 240ms;">
+                            <div class="privacy-icon neutral"><i class="ph-bold ph-desktop"></i></div>
+                            <h3 class="font-bold text-xl mb-2 text-slate-900 dark:text-white">Runs fully on your Mac</h3>
+                            <p class="text-sm text-slate-500 dark:text-gray-400 leading-relaxed">Monitoring, progress tracking, and claiming happen locally.</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1119,6 +1221,21 @@
 
             document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
 
+            const privacySection = document.getElementById('privacy');
+            const privacyLock = document.querySelector('.privacy-lock');
+            if (privacySection && privacyLock) {
+                const lockObserver = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => {
+                        if (!entry.isIntersecting) return;
+                        requestAnimationFrame(() => privacyLock.classList.add('is-locked'));
+                        lockObserver.unobserve(entry.target);
+                    });
+                }, {
+                    root: scrollContainer,
+                    threshold: 0.35
+                });
+                lockObserver.observe(privacySection);
+            }
 
             // Theme Toggle Logic
             const themeToggleBtn = document.getElementById('theme-toggle');

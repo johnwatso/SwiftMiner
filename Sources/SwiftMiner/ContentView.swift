@@ -394,11 +394,16 @@ struct OverviewView: View {
     // MARK: - Campaign Feed
 
     private var campaignFeedSection: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            if !displayedPrioritisedFeedItems.isEmpty {
+        // Build the (expensive) prioritised feed once per render. Previously this
+        // chain was re-derived 3-4× per render — for `.isEmpty`, the `items:`
+        // argument, and the `.onChange(of: …count)` keypath, which SwiftUI
+        // re-evaluates on every render.
+        let items = displayedPrioritisedFeedItems
+        return VStack(alignment: .leading, spacing: 24) {
+            if !items.isEmpty {
                 campaignRailSection(
                     title: "Prioritised",
-                    items: displayedPrioritisedFeedItems,
+                    items: items,
                     prominence: .standard,
                     showsEditButton: true,
                     onMoveItem: movePrioritisedItem
@@ -409,9 +414,9 @@ struct OverviewView: View {
             }
         }
         .onAppear {
-            DragToReorderTip.prioritisedCount = displayedPrioritisedFeedItems.count
+            DragToReorderTip.prioritisedCount = items.count
         }
-        .onChange(of: displayedPrioritisedFeedItems.count) { _, newValue in
+        .onChange(of: items.count) { _, newValue in
             DragToReorderTip.prioritisedCount = newValue
         }
         .padding(.vertical, 2)
