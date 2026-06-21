@@ -129,6 +129,10 @@ struct MinerApp: App {
                     openWindow(id: AppWindowID.releaseNotes)
                 }
                 .disabled(updater.releaseNotesURL == nil)
+
+                Button("SwiftMiner Website") {
+                    NSWorkspace.shared.open(URL(string: "https://swiftminer.app")!)
+                }
             }
             CommandGroup(after: .appSettings) {
                 Button("Refresh Progress") {

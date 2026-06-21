@@ -13,6 +13,10 @@
 </p>
 
 <p align="center">
+  <strong><a href="https://swiftminer.app">swiftminer.app</a></strong>
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/platform-macOS%2026+-blue" alt="Platform badge">
   <img src="https://img.shields.io/badge/swift-6.0-orange" alt="Swift badge">
   <img src="https://img.shields.io/badge/architecture-Universal%20(Apple%20Silicon%20%2B%20Intel)-black" alt="Architecture badge">
@@ -130,7 +134,7 @@ The app sits on top of these engines and presents their state in a single interf
 
 ## Install
 
-Download the latest release from [GitHub Releases](https://github.com/johnwatso/SwiftMiner/releases).
+Download the latest release from the official website [swiftminer.app](https://swiftminer.app) or from [GitHub Releases](https://github.com/johnwatso/SwiftMiner/releases).
 
 1. Download the latest `.zip`
 2. Move `SwiftMiner.app` to `/Applications`
