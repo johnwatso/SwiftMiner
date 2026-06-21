@@ -393,30 +393,6 @@
             display: block;
         }
 
-        .integration-mini {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.45rem;
-            margin: 0.25rem 0 0.85rem;
-            border-radius: 999px;
-            border: 1px solid rgba(88, 101, 242, 0.22);
-            background: rgba(88, 101, 242, 0.1);
-            padding: 0.38rem 0.55rem;
-        }
-
-        .integration-mini-logo {
-            width: 28px;
-            height: 28px;
-            border-radius: 8px;
-            box-shadow: 0 8px 18px rgba(0, 0, 0, 0.16);
-        }
-
-        .integration-mini-heart {
-            color: #ff6f91;
-            font-size: 0.82rem;
-            line-height: 1;
-        }
-
         .integration-logo-light,
         html.light .integration-logo-dark {
             display: none;
@@ -424,6 +400,28 @@
 
         html.light .integration-logo-light {
             display: block;
+        }
+
+        .swiftbot-feature-icon {
+            position: relative;
+            display: flex;
+            width: 3rem;
+            height: 3rem;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1rem;
+            border-radius: 999px;
+            border: 1px solid rgba(88, 101, 242, 0.32);
+            background: linear-gradient(135deg, rgba(147, 51, 234, 0.72), rgba(88, 101, 242, 0.58) 48%, rgba(0, 229, 255, 0.58));
+            box-shadow: 0 12px 28px rgba(88, 101, 242, 0.2);
+            overflow: hidden;
+        }
+
+        .swiftbot-feature-icon img {
+            width: 3.18rem;
+            max-width: none;
+            height: auto;
+            transform: translateY(-0.02rem);
         }
 
         .content-section {
@@ -726,25 +724,22 @@
                         </div>
                     </div>
 
-                    <!-- Card 4: Discord Integration -->
+                    <!-- Card 4: SwiftBot Integration -->
                     <div class="glass-panel card-glow-discord group rounded-3xl p-8 flex flex-col justify-between relative overflow-hidden reveal" style="transition-delay: 100ms;">
                         <div class="relative z-10 flex flex-col h-full justify-between">
                             <div>
-                                <div class="w-12 h-12 rounded-full bg-[#5865F2]/20 flex items-center justify-center text-[#5865F2] mb-4 border border-[#5865F2]/30">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 127.14 96.36" fill="currentColor" class="w-6 h-6">
+                                <div class="swiftbot-feature-icon">
+                                    <img src="./assets/landing/swiftbot-icon-dark.png" alt="" class="integration-logo-dark">
+                                    <img src="./assets/landing/swiftbot-icon-light.png" alt="" class="integration-logo-light">
+                                    <span class="swiftbot-feature-badge" aria-hidden="true">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 127.14 96.36" fill="currentColor">
                                          <path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,46,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.31,60,73.31,53s5-12.74,11.43-12.74S96.33,46,96.22,53,91.08,65.69,84.69,65.69Z"/>
-                                    </svg>
+                                        </svg>
+                                    </span>
                                 </div>
                                 <h3 class="text-xl font-bold mb-2 text-slate-900 dark:text-white">SwiftBot Integration</h3>
-                                <div class="integration-mini" aria-label="SwiftMiner integrates with SwiftBot">
-                                    <img src="./assets/landing/web-logo-dark.png" alt="" class="integration-mini-logo integration-logo-dark">
-                                    <img src="./assets/landing/web-logo-light.png" alt="" class="integration-mini-logo integration-logo-light">
-                                    <span class="integration-mini-heart" aria-hidden="true">♥</span>
-                                    <img src="./assets/landing/swiftbot-icon-dark.png" alt="" class="integration-mini-logo integration-logo-dark">
-                                    <img src="./assets/landing/swiftbot-icon-light.png" alt="" class="integration-mini-logo integration-logo-light">
-                                </div>
                             </div>
-                            <p class="text-slate-500 dark:text-gray-400 text-xs leading-relaxed">SwiftBot talks to Discord so friends can set up, reconnect, and check their miners without you doing every background task by hand.</p>
+                            <p class="text-slate-500 dark:text-gray-400 text-xs leading-relaxed">Let friends set up, reconnect, and check their miners through Discord while SwiftMiner handles the Drops in the background.</p>
                         </div>
                     </div>
 
