@@ -3,14 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>chore: bump SwiftMiner to 1.30 - Release Notes</title>
+  <title>SwiftMiner 1.30 - Release Notes</title>
   <style>
     :root { color-scheme: light dark; }
     body {
       margin: 0;
       padding: 32px 20px 48px;
       font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #f4f6f8;
+      background:
+        radial-gradient(circle at top left, rgba(17, 124, 182, 0.18), transparent 32rem),
+        linear-gradient(135deg, #f7fbff 0%, #f4f7fb 46%, #f7f2ff 100%);
       color: #0f1720;
     }
     main {
@@ -20,35 +22,112 @@
       border-radius: 22px;
       background: rgba(255, 255, 255, 0.86);
       box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
+      border: 1px solid rgba(82, 96, 109, 0.12);
     }
     h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
-    .meta { margin: 0 0 24px; color: #52606d; font-size: 14px; }
+    .meta { margin: 0 0 10px; color: #52606d; font-size: 14px; }
+    .intro { margin: 0 0 24px; color: #384454; }
     p { margin: 0 0 16px; }
+    section {
+      margin: 18px 0 0;
+      padding: 18px 18px 14px;
+      border: 1px solid rgba(82, 96, 109, 0.18);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.42);
+      border-left: 5px solid var(--accent, #0a67a3);
+    }
+    section.green  { --accent: #1c8c73; }
+    section.indigo { --accent: #5f5ac8; }
+    section.violet { --accent: #7b4bd9; }
+    section.amber  { --accent: #b9760a; }
+    section.teal   { --accent: #0a8aa3; }
+    section.rose   { --accent: #c0497b; }
+    h2 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 4px;
+      color: var(--accent, #0a67a3);
+      font-size: 18px;
+    }
+    .badge {
+      display: inline-grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--accent, #0a67a3) 15%, transparent);
+      font-size: 16px;
+    }
+    .summary { margin: 0 0 12px; color: #52606d; font-size: 14px; }
+    ul { margin: 0; padding-left: 22px; }
+    li { margin: 0 0 8px; }
+    li:last-child { margin-bottom: 0; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.92em; background: color-mix(in srgb, #0a67a3 10%, transparent); padding: 1px 5px; border-radius: 5px; }
+    .commit { margin: 22px 0 0; color: #52606d; font-size: 14px; }
     a { color: #0a67a3; text-decoration: none; }
     a:hover { text-decoration: underline; }
     @media (prefers-color-scheme: dark) {
-      body { background: #0b1015; color: #edf2f7; }
+      body {
+        background:
+          radial-gradient(circle at top left, rgba(89, 185, 255, 0.16), transparent 32rem),
+          linear-gradient(135deg, #081019 0%, #101520 52%, #171427 100%);
+        color: #edf2f7;
+      }
       main {
         background: rgba(15, 23, 32, 0.88);
         box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+        border-color: rgba(159, 176, 194, 0.14);
       }
       .meta { color: #9fb0c2; }
+      .intro { color: #c8d3df; }
+      section {
+        border-color: rgba(159, 176, 194, 0.18);
+        background: rgba(255, 255, 255, 0.04);
+      }
+      .summary { color: #9fb0c2; }
+      .commit { color: #9fb0c2; }
+      code { background: color-mix(in srgb, #73c3ff 16%, transparent); }
       a { color: #73c3ff; }
     }
   </style>
 </head>
 <body>
   <main>
-    <h1>chore: bump SwiftMiner to 1.30</h1>
-    <p class="meta">Version 1.30</p>
-    <p>chore: bump SwiftMiner to 1.30</p>
-<p>Update MARKETING_VERSION to 1.30 and CURRENT_PROJECT_VERSION to 2026062209 in project.yml and the generated Xcode project.</p>
-<p>Add detailed 1.30 release notes covering subscription-required drop detection, Overview Subscription Required state, Drops Active Needs Sub labels, same-game Up Next suppression, and regression coverage.</p>
-<p>Add a SwiftMiner Help item to the Help menu so the hosted help guide opens directly at https://swiftminer.app/help/.</p>
-<p>Keep live unlinked campaigns visible in Drops Active so same-game subscription-required rewards no longer hide eligible campaigns such as 007 First Light; subscription-gated reward thumbnails remain marked with the credit-card badge.</p>
-<p>Regenerate SwiftMiner.xcodeproj with XcodeGen. Leave ShipHook-owned appcast files untouched.</p>
-<p>Verified with xcodebuild -project SwiftMiner.xcodeproj -scheme SwiftMiner -configuration Debug build and confirmed built Info.plist reports CFBundleShortVersionString=1.30, CFBundleVersion=2026062209, SUFeedURL, and SUPublicEDKey.</p>
-    <p><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/58ab21b4266e6926b2e3e23bfd101597cfd6971f">58ab21b</a></p>
+    <h1>SwiftMiner 1.30</h1>
+    <p class="meta">Version 1.30 · Build 2026062209</p>
+    <p class="intro">Teaches SwiftMiner about subscription-required drops, surfaces them clearly across the app, and adds an in-app link to the help guide.</p>
+
+    <section class="violet">
+      <h2><span class="badge" aria-hidden="true">🎟️</span> Subscription-Required Drops</h2>
+      <p class="summary">Clearer handling of drops that need a paid Twitch subscription.</p>
+      <ul>
+        <li>Detects subscription-required drop campaigns and adds a dedicated Subscription Required state to the Overview.</li>
+        <li>Marks Drops Active campaigns with a <strong>Needs Sub</strong> label, and tags subscription-gated reward thumbnails with the credit-card badge.</li>
+        <li>Suppresses same-game Up Next entries that would otherwise duplicate an active subscription-required campaign.</li>
+        <li>Keeps live unlinked campaigns visible in Drops Active, so same-game subscription-required rewards no longer hide otherwise-eligible campaigns.</li>
+        <li>Adds regression coverage for the new subscription-required detection and display states.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2><span class="badge" aria-hidden="true">🆘</span> Help &amp; Menus</h2>
+      <p class="summary">The help guide is one click away.</p>
+      <ul>
+        <li>Adds a SwiftMiner Help item to the Help menu that opens the hosted guide at <a href="https://swiftminer.app/help/">swiftminer.app/help</a>.</li>
+      </ul>
+    </section>
+
+    <section class="green">
+      <h2><span class="badge" aria-hidden="true">🧰</span> Under the Hood</h2>
+      <ul>
+        <li>Bumps the marketing version to <code>1.30</code> and build to <code>2026062209</code>.</li>
+        <li>Regenerates the Xcode project with XcodeGen and leaves ShipHook-owned appcast files untouched.</li>
+        <li>Verified the built app reports the expected version, build, update feed URL, and update signing key.</li>
+      </ul>
+    </section>
+
+    <p class="commit"><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/58ab21b4266e6926b2e3e23bfd101597cfd6971f">58ab21b</a></p>
   </main>
 </body>
 </html>
