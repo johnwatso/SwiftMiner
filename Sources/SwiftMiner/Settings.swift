@@ -605,14 +605,32 @@ public final class Settings: ObservableObject {
 
     // MARK: - Game Preferences
 
+    /// Memoized decode of `gamePreferencesData`. Decoding + normalization is
+    /// expensive and `gamePreferences` is read many times per SwiftUI render
+    /// (directly, and via `excludedGames`/`gameNames(for:)`), so we cache the
+    /// result and only re-decode when the backing JSON string actually changes.
+    /// Plain (non-`@Published`) storage on this `@MainActor` class: mutating it
+    /// from the getter is safe and never triggers a view-update cycle.
+    private var cachedGamePreferences: [GamePreference] = []
+    private var cachedGamePreferencesKey: String?
+
     /// Decoded game preferences from JSON storage
     public var gamePreferences: [GamePreference] {
         get {
-            guard let data = gamePreferencesData.data(using: .utf8),
-                  let prefs = try? JSONDecoder().decode([GamePreference].self, from: data) else {
-                return []
+            let raw = gamePreferencesData
+            if cachedGamePreferencesKey == raw {
+                return cachedGamePreferences
             }
-            return normalizedPreferences(prefs)
+            let decoded: [GamePreference]
+            if let data = raw.data(using: .utf8),
+               let prefs = try? JSONDecoder().decode([GamePreference].self, from: data) {
+                decoded = normalizedPreferences(prefs)
+            } else {
+                decoded = []
+            }
+            cachedGamePreferencesKey = raw
+            cachedGamePreferences = decoded
+            return decoded
         }
         set {
             let normalized = normalizedPreferences(newValue)
@@ -620,6 +638,9 @@ public final class Settings: ObservableObject {
                let string = String(data: data, encoding: .utf8) {
                 guard gamePreferencesData != string else { return }
                 gamePreferencesData = string
+                // Keep the cache hot for the value we just persisted.
+                cachedGamePreferencesKey = string
+                cachedGamePreferences = normalized
             }
         }
     }
@@ -1048,7 +1069,9 @@ public final class Settings: ObservableObject {
     }
 
     private func gameNames(for state: PreferenceState) -> [String] {
-        normalizedPreferences(gamePreferences)
+        // `gamePreferences` is already normalized (and memoized); no need to
+        // re-run the dedupe/trim pass on every access.
+        gamePreferences
             .filter { $0.state == state }
             .map(\.gameName)
     }

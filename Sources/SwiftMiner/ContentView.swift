@@ -84,10 +84,12 @@ struct OverviewView: View {
     @State private var isMinerStatusLegendPresented = false
 
     private var campaigns: [CampaignViewData] {
-        overviewCampaigns
+        // Resolve the exclusion list once, not once per campaign inside the filter.
+        let excluded = settings.excludedGames
+        return overviewCampaigns
             .filter { campaign in
-                !settings.excludedGames.contains(where: { 
-                    $0.localizedCaseInsensitiveCompare(campaign.gameName) == .orderedSame 
+                !excluded.contains(where: {
+                    $0.localizedCaseInsensitiveCompare(campaign.gameName) == .orderedSame
                 })
             }
     }
@@ -2436,9 +2438,12 @@ private struct SteamSecondaryGlassButtonStyle: ButtonStyle {
 
 private struct CampaignCardMotionOverlay: View {
     let tint: Color
+    // Pause the 24fps timeline whenever the app isn't the active app, so a
+    // window left visible in the background stops driving the compositor.
+    @Environment(\.controlActiveState) private var controlActiveState
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 24, paused: false)) { context in
+        TimelineView(.animation(minimumInterval: 1 / 24, paused: controlActiveState == .inactive)) { context in
             let t = context.date.timeIntervalSinceReferenceDate
             let x = 0.2 + 0.6 * ((sin(t * 0.45) + 1) / 2)
             let y = 0.28 + 0.28 * ((cos(t * 0.32) + 1) / 2)
@@ -2464,11 +2469,14 @@ private struct CampaignCardMotionOverlay: View {
 
 private struct CampaignStandbyMotionOverlay: View {
     let tint: Color
+    // Pause the 24fps timeline whenever the app isn't the active app, so a
+    // window left visible in the background stops driving the compositor.
+    @Environment(\.controlActiveState) private var controlActiveState
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 24, paused: false)) { context in
+        TimelineView(.animation(minimumInterval: 1 / 24, paused: controlActiveState == .inactive)) { context in
             let t = context.date.timeIntervalSinceReferenceDate
-            
+
             // Hue cycling (full cycle every 30s)
             let hueBase = (t * 0.033).truncatingRemainder(dividingBy: 1.0)
             

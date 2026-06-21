@@ -776,7 +776,7 @@ public actor TwitchAPIClient {
                 "broadcast_id": broadcastId,
                 "channel_id": channelId,
                 "channel": channelLogin,
-                "client_time": ISO8601DateFormatter().string(from: Date()),
+                "client_time": iso8601Internet.string(from: Date()),
                 "game": gameName,
                 "game_id": gameId,
                 "hidden": false,
@@ -1292,22 +1292,32 @@ public actor TwitchAPIClient {
 
     // MARK: - Parsing Helpers
 
+    // Pre-configured ISO8601 formatters. Creating an ISO8601DateFormatter is very
+    // expensive (it builds an ICU formatter and copies the locale/calendar), and
+    // `parseDate` is called for every date on every campaign/drop on each refresh —
+    // previously allocating up to three formatters per call. These are stored on
+    // the actor (so access is serialized) and configured once.
+    private let iso8601Fractional: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+    private let iso8601Internet: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+    private let iso8601Basic = ISO8601DateFormatter()
+
     /// Parse an ISO8601 date string, handling both plain and fractional-second formats.
     /// Twitch returns dates in multiple formats: with/without fractional seconds, with Z or +/-HH:MM timezone.
     private func parseDate(_ str: String) -> Date? {
         // Try fractional seconds format first (most common for Twitch API)
-        let frac = ISO8601DateFormatter()
-        frac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let d = frac.date(from: str) { return d }
-        
+        if let d = iso8601Fractional.date(from: str) { return d }
         // Try standard internet date format (no fractional seconds)
-        let plain = ISO8601DateFormatter()
-        plain.formatOptions = [.withInternetDateTime]
-        if let d = plain.date(from: str) { return d }
-        
+        if let d = iso8601Internet.date(from: str) { return d }
         // Fallback to basic formatter
-        let basic = ISO8601DateFormatter()
-        return basic.date(from: str)
+        return iso8601Basic.date(from: str)
     }
 
     private func parseCampaigns(from drops: [[String: Any]]) -> [Campaign] {
