@@ -10,7 +10,8 @@ The following versions of SwiftMiner are currently being supported with security
 | 1.0 – 1.29 | :warning:          | Legacy hardware-UUID encrypted file — **upgrade advised** |
 | < 1.0     | :x:                | Unsupported                                              |
 
-> :warning: **Versions prior to 1.30** store OAuth tokens in a locally encrypted file keyed to your hardware UUID rather than in the macOS Keychain. These releases still function, but no longer receive security updates and lack the OS-managed key protection of 1.30+. Upgrading to **1.30 or newer** performs a one-time, automatic migration of your accounts into the Keychain (see [Storage Migration](#storage-migration)). We strongly recommend running the latest release.
+> [!WARNING]
+> **Versions prior to 1.30** store OAuth tokens in a locally encrypted file keyed to your hardware UUID rather than in the macOS Keychain. These releases still function, but no longer receive security updates and lack the OS-managed key protection of 1.30+. Upgrading to **1.30 or newer** performs a one-time, automatic migration of your accounts into the Keychain (see [Storage Migration](#storage-migration)). We strongly recommend running the latest release.
 
 ### Security Guarantees
 - **No Password Storage:** SwiftMiner uses the official **Twitch OAuth Device Flow**. Your Twitch password is never entered, handled, or stored by the application.
