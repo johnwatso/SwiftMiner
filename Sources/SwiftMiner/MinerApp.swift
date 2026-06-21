@@ -141,6 +141,9 @@ struct MinerApp: App {
                 .keyboardShortcut("r", modifiers: [.command])
             }
             CommandGroup(after: .help) {
+                Button("SwiftMiner Help") {
+                    NSWorkspace.shared.open(URL(string: "https://swiftminer.app/help/")!)
+                }
                 Button("Export Diagnostic Logs…") {
                     LogExporter.presentSavePanel(navigation: navigation)
                 }

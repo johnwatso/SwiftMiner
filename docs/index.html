@@ -367,6 +367,39 @@
             display: block;
         }
 
+        .integration-mini {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            margin: 0.25rem 0 0.85rem;
+            border-radius: 999px;
+            border: 1px solid rgba(88, 101, 242, 0.22);
+            background: rgba(88, 101, 242, 0.1);
+            padding: 0.38rem 0.55rem;
+        }
+
+        .integration-mini-logo {
+            width: 28px;
+            height: 28px;
+            border-radius: 8px;
+            box-shadow: 0 8px 18px rgba(0, 0, 0, 0.16);
+        }
+
+        .integration-mini-heart {
+            color: #ff6f91;
+            font-size: 0.82rem;
+            line-height: 1;
+        }
+
+        .integration-logo-light,
+        html.light .integration-logo-dark {
+            display: none;
+        }
+
+        html.light .integration-logo-light {
+            display: block;
+        }
+
         .content-section {
             position: relative;
             min-height: 100dvh;
@@ -527,7 +560,7 @@
             <a href="#features" class="hover:text-slate-900 dark:hover:text-white transition-colors">Features</a>
             <a href="#view-overview" class="hover:text-slate-900 dark:hover:text-white transition-colors">Screenshots</a>
             <a href="#performance" class="hover:text-slate-900 dark:hover:text-white transition-colors">Performance</a>
-            <a href="./help/" class="hover:text-slate-900 dark:hover:text-white transition-colors">Help</a>
+            <a href="https://swiftminer.app/help/" class="hover:text-slate-900 dark:hover:text-white transition-colors">Help</a>
             <a href="https://github.com/johnwatso/SwiftMiner" class="hover:text-slate-900 dark:hover:text-white transition-colors">GitHub</a>
         </div>
         
@@ -579,7 +612,7 @@
                                 </svg>
                                 View on GitHub
                             </a>
-                            <a href="./help/" class="w-full sm:w-auto px-8 py-4 glass-panel rounded-xl text-slate-900 dark:text-white font-bold text-lg hover:bg-black/5 dark:hover:bg-white/10 hover:-translate-y-1 transition-all flex items-center justify-center gap-2">
+                            <a href="https://swiftminer.app/help/" class="w-full sm:w-auto px-8 py-4 glass-panel rounded-xl text-slate-900 dark:text-white font-bold text-lg hover:bg-black/5 dark:hover:bg-white/10 hover:-translate-y-1 transition-all flex items-center justify-center gap-2">
                                 <i class="ph-bold ph-question text-xl"></i>
                                 Help
                             </a>
@@ -677,8 +710,15 @@
                                     </svg>
                                 </div>
                                 <h3 class="text-xl font-bold mb-2 text-slate-900 dark:text-white">Discord Integration</h3>
+                                <div class="integration-mini" aria-label="SwiftMiner integrates with SwiftBot">
+                                    <img src="./assets/landing/web-logo-dark.png" alt="" class="integration-mini-logo integration-logo-dark">
+                                    <img src="./assets/landing/web-logo-light.png" alt="" class="integration-mini-logo integration-logo-light">
+                                    <span class="integration-mini-heart" aria-hidden="true">♥</span>
+                                    <img src="./assets/landing/swiftbot-icon-dark.png" alt="" class="integration-mini-logo integration-logo-dark">
+                                    <img src="./assets/landing/swiftbot-icon-light.png" alt="" class="integration-mini-logo integration-logo-light">
+                                </div>
                             </div>
-                            <p class="text-slate-500 dark:text-gray-400 text-xs leading-relaxed">See drop progress and status right in Discord, wherever you are — powered by the SwiftBot integration.</p>
+                            <p class="text-slate-500 dark:text-gray-400 text-xs leading-relaxed">Built for friend groups: SwiftMiner mines the Drops, while SwiftBot lets everyone set up, reconnect, and check status from Discord.</p>
                         </div>
                     </div>
 
@@ -950,7 +990,7 @@
                     <span class="text-sm text-slate-500 dark:text-gray-500">SwiftMiner is open source. Not affiliated with Twitch.</span>
                     <div class="flex flex-wrap items-center justify-center gap-6 text-sm font-semibold text-slate-500 dark:text-gray-400">
                         <a href="https://github.com/johnwatso/SwiftMiner" class="hover:text-slate-900 dark:hover:text-white transition-colors">Source Code</a>
-                        <a href="./help/" class="hover:text-slate-900 dark:hover:text-white transition-colors">Help</a>
+                        <a href="https://swiftminer.app/help/" class="hover:text-slate-900 dark:hover:text-white transition-colors">Help</a>
                         <a href="./release-notes/" class="hover:text-slate-900 dark:hover:text-white transition-colors">Release Notes</a>
                         <a href="./appcast.xml" class="hover:text-slate-900 dark:hover:text-white transition-colors">Appcast</a>
                     </div>
