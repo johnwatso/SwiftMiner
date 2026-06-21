@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>SwiftMiner Help - Support and Troubleshooting</title>
-    <meta name="description" content="SwiftMiner help documentation for setup, mining Twitch Drops, accounts, notifications, menu bar mode, troubleshooting, and Discord integration.">
+    <meta name="description" content="SwiftMiner help documentation for setup, mining Twitch Drops, accounts, notifications, menu bar mode, troubleshooting, SwiftBot, and Discord integration.">
     <link rel="canonical" href="https://swiftminer.app/help/">
     <meta name="robots" content="index, follow">
     <meta name="theme-color" content="#f5f5f7">
@@ -205,7 +205,8 @@
             background: #ffffff;
         }
 
-        .tile i {
+        .tile i,
+        .tile .discord-mark {
             width: 42px;
             height: 42px;
             display: inline-flex;
@@ -215,6 +216,26 @@
             background: var(--blue-soft);
             color: var(--blue);
             font-size: 1.35rem;
+        }
+
+        .discord-mark {
+            flex-shrink: 0;
+        }
+
+        .discord-mark svg {
+            width: 1.35rem;
+            height: 1.35rem;
+        }
+
+        .eyebrow .discord-mark {
+            width: 1.1rem;
+            height: 1.1rem;
+            color: #5865f2;
+        }
+
+        .eyebrow .discord-mark svg {
+            width: 1.1rem;
+            height: 1.1rem;
         }
 
         .tile h2,
@@ -330,6 +351,71 @@
             margin-bottom: 0.2rem;
         }
 
+        .swiftbot-grid {
+            display: grid;
+            grid-template-columns: 1.2fr 1fr;
+            gap: 1rem;
+            align-items: stretch;
+        }
+
+        .swiftbot-panel {
+            border-radius: 16px;
+            background: rgba(88, 101, 242, 0.08);
+            border: 1px solid rgba(88, 101, 242, 0.16);
+            padding: 1rem;
+        }
+
+        .swiftbot-panel h3:first-child {
+            margin-top: 0;
+        }
+
+        .integration-lockup {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: clamp(0.75rem, 2.5vw, 1.25rem);
+            margin: 0 0 1.4rem;
+            border-radius: 18px;
+            border: 1px solid rgba(88, 101, 242, 0.16);
+            background: linear-gradient(135deg, rgba(88, 101, 242, 0.08), rgba(0, 113, 227, 0.06));
+            padding: 1rem;
+        }
+
+        .integration-app {
+            display: inline-flex;
+            min-width: 0;
+            align-items: center;
+            gap: 0.7rem;
+            font-weight: 800;
+            color: var(--ink);
+        }
+
+        .integration-logo {
+            width: 54px;
+            height: 54px;
+            border-radius: 14px;
+            box-shadow: 0 12px 28px rgba(29, 29, 31, 0.13);
+        }
+
+        .integration-logo-dark {
+            display: none;
+        }
+
+        .integration-heart {
+            display: inline-flex;
+            width: 38px;
+            height: 38px;
+            flex: 0 0 auto;
+            align-items: center;
+            justify-content: center;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.78);
+            border: 1px solid rgba(88, 101, 242, 0.14);
+            color: #e25588;
+            box-shadow: 0 10px 24px rgba(226, 85, 136, 0.12);
+            font-size: 1rem;
+        }
+
         .callout {
             margin: 2rem 0 0;
             padding: 1.15rem;
@@ -390,7 +476,8 @@
         @media (max-width: 820px) {
             .quick-grid,
             .topic-grid,
-            .definition-grid {
+            .definition-grid,
+            .swiftbot-grid {
                 grid-template-columns: 1fr;
             }
 
@@ -406,6 +493,64 @@
             .footer .shell {
                 align-items: flex-start;
                 flex-direction: column;
+            }
+        }
+
+        @media (max-width: 560px) {
+            .integration-lockup {
+                flex-direction: column;
+            }
+
+            .integration-heart {
+                transform: rotate(90deg);
+            }
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                color-scheme: dark;
+                --page: #0b1020;
+                --surface: rgba(19, 25, 43, 0.86);
+                --surface-solid: #12192a;
+                --ink: rgba(255, 255, 255, 0.94);
+                --muted: rgba(226, 232, 240, 0.68);
+                --line: rgba(255, 255, 255, 0.12);
+                --blue-soft: rgba(88, 101, 242, 0.18);
+                --green-soft: rgba(83, 209, 140, 0.14);
+                --orange-soft: rgba(255, 180, 80, 0.14);
+            }
+
+            body {
+                background: radial-gradient(circle at 20% 0%, rgba(88, 101, 242, 0.16), transparent 34%), var(--page);
+            }
+
+            .nav {
+                background: rgba(11, 16, 32, 0.78);
+            }
+
+            .tile:hover,
+            .article-link:hover {
+                background: rgba(255, 255, 255, 0.08);
+            }
+
+            .article-link,
+            .definition,
+            .pill,
+            .integration-heart {
+                background: rgba(255, 255, 255, 0.07);
+            }
+
+            code,
+            kbd {
+                background: rgba(255, 255, 255, 0.1);
+            }
+
+            .integration-logo-light {
+                display: none;
+            }
+
+            .integration-logo-dark {
+                display: block;
             }
         }
     </style>
@@ -453,11 +598,15 @@
                     <p>Resolve auth, progress, notification, and account linking issues.</p>
                 </div>
             </a>
-            <a class="tile searchable" href="discord/" data-search="discord swiftbot slash commands dm setup reconnect privacy notifications">
-                <i class="ph-bold ph-discord-logo"></i>
+            <a class="tile searchable" href="#swiftbot" data-search="discord swiftbot slash commands dm setup reconnect privacy notifications remote status alerts bot">
+                <span class="discord-mark" aria-hidden="true">
+                    <svg viewBox="0 0 127.14 96.36" fill="currentColor">
+                        <path d="M107.7 8.07A105.15 105.15 0 0 0 81.47 0a72.06 72.06 0 0 0-3.36 6.83 97.68 97.68 0 0 0-29.11 0A72.37 72.37 0 0 0 45.64 0a105.89 105.89 0 0 0-26.25 8.09C2.79 32.65-1.71 56.6.54 80.21a105.73 105.73 0 0 0 32.17 16.15 77.7 77.7 0 0 0 6.89-11.11 68.42 68.42 0 0 1-10.85-5.18c.91-.66 1.8-1.34 2.66-2a75.57 75.57 0 0 0 64.32 0c.87.71 1.76 1.39 2.66 2a68.68 68.68 0 0 1-10.87 5.19 77 77 0 0 0 6.89 11.1 105.25 105.25 0 0 0 32.19-16.14c2.64-27.38-4.51-51.11-18.9-72.15ZM42.45 65.69C36.18 65.69 31 60 31 53s5-12.74 11.43-12.74S54 46 53.89 53s-5.05 12.69-11.44 12.69Zm42.24 0C78.41 65.69 73.31 60 73.31 53s5-12.74 11.43-12.74S96.33 46 96.22 53s-5.14 12.69-11.53 12.69Z"/>
+                    </svg>
+                </span>
                 <div>
                     <h2>Discord & SwiftBot</h2>
-                    <p>Use SwiftBot commands and understand Discord notifications.</p>
+                    <p>Learn what SwiftBot is, when to use it, and how Discord notifications work.</p>
                 </div>
             </a>
         </section>
@@ -550,6 +699,48 @@
             <p>When Discord integration is enabled, configure SwiftBot connection and notification preferences. See <a class="nav-link" href="discord/">Discord Help</a> for setup details.</p>
             <h3>Advanced</h3>
             <p>Adjust log level, show the live log console, show activity log icons, and choose whether SwiftMiner prefers Steam artwork.</p>
+        </section>
+
+        <section id="swiftbot" class="kb-section searchable" data-search="swiftbot discord bot companion slash commands dm notifications remote status setup twitch account swiftbot.dev">
+            <div class="integration-lockup" aria-label="SwiftMiner integrates with SwiftBot">
+                <div class="integration-app">
+                    <img src="../assets/landing/web-logo-light.png" alt="" class="integration-logo integration-logo-light">
+                    <img src="../assets/landing/web-logo-dark.png" alt="" class="integration-logo integration-logo-dark">
+                    <span>SwiftMiner</span>
+                </div>
+                <span class="integration-heart" aria-hidden="true">♥</span>
+                <div class="integration-app">
+                    <img src="../assets/landing/swiftbot-icon-light.png" alt="" class="integration-logo integration-logo-light">
+                    <img src="../assets/landing/swiftbot-icon-dark.png" alt="" class="integration-logo integration-logo-dark">
+                    <span>SwiftBot</span>
+                </div>
+            </div>
+            <div class="eyebrow">
+                <span class="discord-mark" aria-hidden="true">
+                    <svg viewBox="0 0 127.14 96.36" fill="currentColor">
+                        <path d="M107.7 8.07A105.15 105.15 0 0 0 81.47 0a72.06 72.06 0 0 0-3.36 6.83 97.68 97.68 0 0 0-29.11 0A72.37 72.37 0 0 0 45.64 0a105.89 105.89 0 0 0-26.25 8.09C2.79 32.65-1.71 56.6.54 80.21a105.73 105.73 0 0 0 32.17 16.15 77.7 77.7 0 0 0 6.89-11.11 68.42 68.42 0 0 1-10.85-5.18c.91-.66 1.8-1.34 2.66-2a75.57 75.57 0 0 0 64.32 0c.87.71 1.76 1.39 2.66 2a68.68 68.68 0 0 1-10.87 5.19 77 77 0 0 0 6.89 11.1 105.25 105.25 0 0 0 32.19-16.14c2.64-27.38-4.51-51.11-18.9-72.15ZM42.45 65.69C36.18 65.69 31 60 31 53s5-12.74 11.43-12.74S54 46 53.89 53s-5.05 12.69-11.44 12.69Zm42.24 0C78.41 65.69 73.31 60 73.31 53s5-12.74 11.43-12.74S96.33 46 96.22 53s-5.14 12.69-11.53 12.69Z"/>
+                    </svg>
+                </span>
+                SwiftBot for Discord
+            </div>
+            <h2>What is SwiftBot?</h2>
+            <div class="swiftbot-grid">
+                <div>
+                    <p>SwiftMiner started because I wanted a reliable way to mine Drops for the friends I actually play games with. It grew from a personal setup into a small platform for keeping everyone's Twitch Drops moving without needing a pile of browser tabs or manual check-ins.</p>
+                    <p>SwiftBot is the Discord companion built around that same idea. Our Discord server is just a group of friends, so SwiftBot is designed to let people set up or reconnect their own miners, check status, and get important Drop updates in the place we already hang out.</p>
+                    <p>The integration means I no longer have to do all the background admin work for everyone by hand. Friends can use Discord slash commands and guided messages, while SwiftMiner keeps doing the actual mining work on the Mac.</p>
+                    <p>Learn more at <a class="nav-link" href="https://swiftbot.dev">swiftbot.dev</a>, or open the <a class="nav-link" href="discord/">Discord setup guide</a> for SwiftMiner-specific steps.</p>
+                </div>
+                <div class="swiftbot-panel">
+                    <h3>Why use it?</h3>
+                    <ul>
+                        <li>Get notified when Drops are claimed or campaigns finish.</li>
+                        <li>Check miner status with Discord slash commands.</li>
+                        <li>Reconnect or set up accounts through a guided Discord flow.</li>
+                        <li>Let friends manage their own setup without handing every small task back to you.</li>
+                    </ul>
+                </div>
+            </div>
         </section>
 
         <section id="menu-bar-mode" class="kb-section searchable" data-search="menu bar dock app presence closed background start stop quit recent drops">
