@@ -4,18 +4,35 @@
 
 The following versions of SwiftMiner are currently being supported with security updates.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 1.x     | :white_check_mark: |
-| < 1.0   | :x:                |
+| Version   | Supported          | Token Storage                                            |
+| --------- | ------------------ | -------------------------------------------------------- |
+| ≥ 1.30    | :white_check_mark: | Native macOS Keychain                                    |
+| 1.0 – 1.29 | :warning:          | Legacy hardware-UUID encrypted file — **upgrade advised** |
+| < 1.0     | :x:                | Unsupported                                              |
+
+> :warning: **Versions prior to 1.30** store OAuth tokens in a locally encrypted file keyed to your hardware UUID rather than in the macOS Keychain. These releases still function, but no longer receive security updates and lack the OS-managed key protection of 1.30+. Upgrading to **1.30 or newer** performs a one-time, automatic migration of your accounts into the Keychain (see [Storage Migration](#storage-migration)). We strongly recommend running the latest release.
 
 ### Security Guarantees
 - **No Password Storage:** SwiftMiner uses the official **Twitch OAuth Device Flow**. Your Twitch password is never entered, handled, or stored by the application.
-- **Local Encrypted Storage:** OAuth tokens are stored in a locally encrypted file (`accounts.enc`) within your Application Support directory. 
-- **Hardware-Locked Encryption:** Data is encrypted using **AES-256-GCM**. The encryption key is derived using HKDF from your machine's unique Hardware UUID, ensuring the data cannot be decrypted if moved to another device.
+- **Keychain Token Storage:** OAuth tokens are stored in the native **macOS Keychain** via Keychain Services (`SecItem`). Each account is held as its own generic-password item under the `com.swiftminer.accounts` service, keyed by its stable Twitch user ID. The OS manages the encryption keys, so SwiftMiner never handles raw key material.
+- **Device-Only Access:** Keychain items are written with `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`, so tokens are never synced to iCloud Keychain and never leave the device — they are not included in encrypted backups that could be restored elsewhere.
 - **Direct Connection:** All mining activity and API calls are made directly to Twitch from your local machine. No account data, tokens, or watch history are proxied through or stored on external servers.
 
+### Storage Migration
+- **One-Time Import:** Older releases stored tokens in a hardware-UUID–derived, AES-256-GCM encrypted file (`accounts.enc`) in your Application Support directory. On first launch of a Keychain-enabled release, accounts are migrated into the Keychain automatically. The migration is idempotent, non-clobbering (it only imports when the Keychain is empty), and verified before being marked complete.
+- **Legacy Backup:** The original `accounts.enc` file is left untouched on disk as a backup after migration. SwiftMiner periodically offers to delete it, or you may remove it manually.
+
+### Web Dashboard
+SwiftMiner includes an optional self-service web dashboard that is **disabled by default**. When it is not configured, none of the following applies and no web credentials exist.
+
+- **Local Sign-In Credentials:** When the operator enables local username/password sign-in, the password is stored two ways for two distinct purposes:
+  - A **salted, iterated hash** (PBKDF2-style chain of HMAC-SHA256, 210,000 iterations, encoded as `iterations:salt:hash`) is what actually authenticates web sign-ins. It is verified in constant time and is the only form consulted during login.
+  - The **plaintext password** is held in the macOS Keychain (`com.swiftminer.app.web-dashboard.local-password` service, `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`) solely so the Settings UI can show the operator their current password. It is never used to authenticate.
+- **Local-Only by Design:** Local username/password sign-in is only honoured for local/LAN requests — it is rejected when the request arrives over the public domain, so the operator password never works across the internet.
+- **OAuth Identities:** Other sign-in methods (Twitch OAuth, and Discord brokered through SwiftBot SSO) carry no passwords. SwiftMiner stores no Discord credentials of its own.
+- **Session Security:** Web sessions are opaque, server-side, and carried in an `HttpOnly; Secure; SameSite=Lax` cookie. Identity is derived only from the session — never from a forgeable URL parameter — and state-changing requests require a constant-time-checked CSRF header. A signed-in user can only address their own mined account.
+
 ### Security Scope & Limitations
-- **At-Rest Protection:** The current hardware-based encryption is designed to prevent your data from being decrypted if it is copied to or accessed from another device (e.g., via a stolen hard drive or cloud backup).
-- **System-Level Access:** The Hardware UUID used for key derivation is accessible to other software running on your Mac. While this provides robust protection against offline theft, it does not offer the same level of process-isolation as the Apple Secure Enclave.
-- **Future Improvements:** A migration to native macOS Keychain Services (`SecItem`) is planned for a future release to leverage OS-level key management and improved security isolation.
+- **At-Rest Protection:** Keychain items inherit macOS's at-rest encryption, which is tied to your login credentials and device hardware. Tokens cannot be read from a copied disk image or backup without unlocking that device.
+- **Process Access:** Tokens are readable by SwiftMiner and by other software running under your user account that can query the login Keychain. This is the standard macOS Keychain trust model and does not provide the per-process isolation of the Apple Secure Enclave.
+- **Development Builds:** DEBUG builds intentionally do **not** touch the real login Keychain. They continue to use the legacy hardware-UUID encrypted file so local development never writes to your production Keychain. The data-protection Keychain (`kSecUseDataProtectionKeychain`) is not used because it requires a `keychain-access-groups` entitlement that is unavailable in unsigned local and test builds.
