@@ -66,7 +66,7 @@ Task {
     await apiRoutes.configure(router)
     if let webRoutes {
         await webRoutes.configure(router)
-        print("[SwiftMinerService] Web dashboard enabled at \(webConfig!.normalisedBase)")
+        print("[SwiftMinerService] Web dashboard enabled at \(webConfig!.normalisedBase ?? "local-only")")
     }
     do {
         try await server.start()

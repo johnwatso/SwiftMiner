@@ -96,6 +96,7 @@ public actor MinerEngine {
     private var lastProgressUpdateAt: Date = Date()
     /// Maximum extra minutes allowed before assuming mining is stalled (matches TDM)
     private static let maxExtraMinutes = 15
+    private static let failoverCooldown: TimeInterval = 10 * 60
 
     /// Cache of all campaigns fetched during the last check
     public private(set) var allCampaigns: [Campaign] = []
@@ -112,6 +113,9 @@ public actor MinerEngine {
     private var showClaimNotifications: Bool = false
     private var ignoredAccountLinkWarningGames: Set<String> = []
     private var warnedUnlinkedPriorityGames: Set<String> = []
+    private var failoverStreamers: [GameFailoverStreamer] = []
+    private var failoverCooldowns: [String: Date] = [:]
+    private var pendingFailoverTarget: PendingFailoverTarget?
     private var avoidDuplicateStreams: Bool = false
     private var prioritiseFollowedStreamers: Bool = false
     private var streamOverrideLogin: String?
@@ -123,6 +127,11 @@ public actor MinerEngine {
     /// without requiring account linkage or GQL drop verification. Exercises the watch
     /// pipeline for testing; drops won't credit for unlinked accounts.
     private var debugBypassLinkRequirement: Bool = false
+
+    private struct PendingFailoverTarget: Sendable {
+        let campaignId: String
+        let streamerLogin: String
+    }
 
     /// Returns this engine's DropsService so callers on other actors can create an AccountStateStore.
     func getDropsService() -> DropsService { dropsService }
@@ -176,6 +185,7 @@ public actor MinerEngine {
         showClaimNotifications: Bool = false,
         avoidDuplicateStreams: Bool = false,
         prioritiseFollowedStreamers: Bool = false,
+        failoverStreamers: [GameFailoverStreamer] = [],
         ignoredAccountLinkWarningGames: [String] = []
     ) {
         self.priorityGames = priorityGames
@@ -184,6 +194,7 @@ public actor MinerEngine {
         self.showClaimNotifications = showClaimNotifications
         self.avoidDuplicateStreams = avoidDuplicateStreams
         self.prioritiseFollowedStreamers = prioritiseFollowedStreamers
+        self.failoverStreamers = failoverStreamers
         self.ignoredAccountLinkWarningGames = Set(ignoredAccountLinkWarningGames)
         
         // Configure notification service if enabled
@@ -215,6 +226,12 @@ public actor MinerEngine {
     /// Update followed/subscribed streamer channel ranking without restarting the engine.
     public func updateFollowedStreamerPriority(enabled: Bool) {
         self.prioritiseFollowedStreamers = enabled
+        shouldRescanCampaigns = true
+    }
+
+    public func updateFailoverStreamers(_ streamers: [GameFailoverStreamer]) {
+        self.failoverStreamers = streamers
+        failoverCooldowns = failoverCooldowns.filter { $0.value > Date() }
         shouldRescanCampaigns = true
     }
 
@@ -861,6 +878,22 @@ public actor MinerEngine {
                     }
                 }
 
+                if selectedCampaign == nil,
+                   selectedChannel == nil,
+                   streamOverrideLogin == nil,
+                   let pending = pendingFailoverTarget {
+                    pendingFailoverTarget = nil
+                    if let campaign = candidates.first(where: { $0.id == pending.campaignId }),
+                       let channel = await verifiedFailoverChannel(
+                           for: campaign,
+                           streamerLogin: pending.streamerLogin,
+                           context: "pending failover"
+                       ) {
+                        selectedCampaign = campaign
+                        selectedChannel = channel
+                    }
+                }
+
                 if selectedCampaign == nil, selectedChannel == nil, streamOverrideLogin == nil {
                     // Group candidates by game so a single live-channel fetch and GQL probe per
                     // channel can be matched against every candidate for that game. Preserves the
@@ -1102,6 +1135,15 @@ public actor MinerEngine {
                                 extraMinutesWatched = 0 // Reset stall counter
                                 lastProgressUpdateAt = Date()
                                 // Don't switch channel - continue mining remaining drops in campaign
+                            } else if let failoverChannel = await selectFailoverChannel(for: campaign, currentChannel: channel) {
+                                log("Progress genuinely stalled. Switching to failover streamer @\(failoverChannel.login) for \(campaign.gameName).")
+                                pendingFailoverTarget = PendingFailoverTarget(
+                                    campaignId: campaign.id,
+                                    streamerLogin: failoverChannel.login
+                                )
+                                lastSwitchReason = .stallDetected(minutes: extraMinutesWatched)
+                                lastSwitchAt = Date()
+                                shouldSwitchChannel = true
                             } else {
                                 log("Progress genuinely stalled (no external claims detected). Switching channel.")
                                 lastSwitchReason = .stallDetected(minutes: extraMinutesWatched)
@@ -2138,6 +2180,93 @@ public actor MinerEngine {
 
     private static func normalizedChannelIdentity(_ value: String) -> String {
         value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private func selectFailoverChannel(for campaign: Campaign, currentChannel: Channel) async -> Channel? {
+        guard let rule = failoverRule(for: campaign) else { return nil }
+        let login = rule.streamerLogin
+        let key = failoverCooldownKey(campaignId: campaign.id, streamerLogin: login)
+        let now = Date()
+
+        failoverCooldowns = failoverCooldowns.filter { $0.value > now }
+        if let cooldownUntil = failoverCooldowns[key], cooldownUntil > now {
+            let remaining = max(1, Int(cooldownUntil.timeIntervalSince(now) / 60))
+            log("[ChannelSelect] Failover @\(login) for \(campaign.gameName) is cooling down for \(remaining)m after a stalled attempt.")
+            return nil
+        }
+
+        let currentKeys = [
+            currentChannel.id,
+            currentChannel.login,
+            currentChannel.displayName
+        ].map(Self.normalizedChannelIdentity)
+        if currentKeys.contains(Self.normalizedChannelIdentity(login)) {
+            failoverCooldowns[key] = now.addingTimeInterval(Self.failoverCooldown)
+            log("[ChannelSelect] Failover @\(login) also stalled for \(campaign.gameName); cooling it down.")
+            return nil
+        }
+
+        return await verifiedFailoverChannel(for: campaign, streamerLogin: login, context: "stall failover")
+    }
+
+    private func failoverRule(for campaign: Campaign) -> GameFailoverStreamer? {
+        let gameId = normalizedGameKey(campaign.game.id)
+        let gameName = normalizedGameKey(campaign.gameName)
+
+        return failoverStreamers.first { rule in
+            guard rule.enabled, !rule.streamerLogin.isEmpty else { return false }
+            let ruleGameId = normalizedGameKey(rule.gameId)
+            let ruleGameName = normalizedGameKey(rule.gameName)
+            return (!ruleGameId.isEmpty && ruleGameId == gameId)
+                || (!ruleGameName.isEmpty && ruleGameName == gameName)
+        }
+    }
+
+    private func verifiedFailoverChannel(
+        for campaign: Campaign,
+        streamerLogin: String,
+        context: String
+    ) async -> Channel? {
+        let login = GameFailoverStreamer.normalizedStreamerLogin(streamerLogin) ?? streamerLogin
+        guard !login.isEmpty else { return nil }
+
+        log("[ChannelSelect] Checking \(context) @\(login) for \(campaign.name)")
+        do {
+            guard try await apiClient.fetchBroadcastId(channelLogin: login) != nil else {
+                log("[ChannelSelect] Failover @\(login) is offline.")
+                return nil
+            }
+
+            let resolved = await resolveChannelIdIfNeeded(Channel(id: login, login: login, displayName: login))
+            let activeCampaignIds = try await apiClient.fetchAvailableDrops(channelId: resolved.id)
+            guard activeCampaignIds.contains(campaign.id) else {
+                log("[ChannelSelect] Failover @\(login) is live but not running \(campaign.name).")
+                return nil
+            }
+
+            return Channel(
+                id: resolved.id,
+                login: resolved.login,
+                displayName: resolved.displayName,
+                description: resolved.description,
+                profileImageUrl: resolved.profileImageUrl,
+                isLive: true,
+                viewerCount: resolved.viewerCount,
+                gameId: campaign.game.id,
+                gameName: campaign.gameName,
+                tags: resolved.tags,
+                hasDropsEnabled: true,
+                broadcasterType: resolved.broadcasterType,
+                aclBased: resolved.aclBased
+            )
+        } catch {
+            log("[ChannelSelect] Failover @\(login) check failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    private func failoverCooldownKey(campaignId: String, streamerLogin: String) -> String {
+        "\(campaignId):\(Self.normalizedChannelIdentity(streamerLogin))"
     }
 
     private enum StreamOverrideSelection {

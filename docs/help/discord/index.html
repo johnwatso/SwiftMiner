@@ -1,0 +1,499 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SwiftMiner Discord Help - SwiftBot Setup and Notifications</title>
+    <meta name="description" content="Help for SwiftMiner's SwiftBot Discord integration, including setup, slash commands, Twitch reconnecting, notifications, troubleshooting, and privacy.">
+    <link rel="canonical" href="https://swiftminer.app/help/discord/">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#f5f5f7">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="stylesheet" href="../../assets/css/tailwind.css">
+    <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
+    <style>
+        :root {
+            color-scheme: light;
+            --page: #f5f5f7;
+            --surface: rgba(255, 255, 255, 0.84);
+            --surface-solid: #ffffff;
+            --ink: #1d1d1f;
+            --muted: #6e6e73;
+            --line: rgba(29, 29, 31, 0.12);
+            --blue: #0071e3;
+            --blue-soft: #e8f2ff;
+            --indigo-soft: #eef0ff;
+            --green-soft: #eaf7ee;
+            --red-soft: #fff0f0;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background: var(--page);
+            color: var(--ink);
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            line-height: 1.55;
+        }
+
+        .shell {
+            width: min(1040px, calc(100% - 32px));
+            margin: 0 auto;
+        }
+
+        .nav {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            border-bottom: 1px solid var(--line);
+            background: rgba(245, 245, 247, 0.76);
+            backdrop-filter: saturate(180%) blur(22px);
+            -webkit-backdrop-filter: saturate(180%) blur(22px);
+        }
+
+        .nav-inner {
+            height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+
+        .brand,
+        .nav-link,
+        .card-link {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .brand {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.6rem;
+            font-weight: 700;
+        }
+
+        .brand img {
+            width: 28px;
+            height: 28px;
+            border-radius: 7px;
+        }
+
+        .nav-actions {
+            display: flex;
+            align-items: center;
+            gap: 1.1rem;
+            color: var(--muted);
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+        .nav-link:hover {
+            color: var(--blue);
+        }
+
+        .hero {
+            padding: clamp(3.25rem, 7vw, 5.5rem) 0 2rem;
+            text-align: center;
+        }
+
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            margin-bottom: 1rem;
+            color: #5865f2;
+            font-size: 0.86rem;
+            font-weight: 700;
+        }
+
+        h1,
+        h2,
+        h3 {
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+            letter-spacing: 0;
+        }
+
+        h1 {
+            margin: 0 auto 1rem;
+            max-width: 820px;
+            font-size: clamp(2.4rem, 6vw, 4.7rem);
+            line-height: 1.03;
+            font-weight: 800;
+        }
+
+        .intro {
+            margin: 0 auto;
+            max-width: 700px;
+            color: var(--muted);
+            font-size: clamp(1.04rem, 2vw, 1.28rem);
+        }
+
+        .summary-grid,
+        .message-grid,
+        .privacy-grid {
+            display: grid;
+            gap: 1rem;
+        }
+
+        .summary-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            margin-top: 2rem;
+        }
+
+        .message-grid,
+        .privacy-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .card,
+        .article,
+        .callout {
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            background: var(--surface);
+            box-shadow: 0 18px 55px rgba(0, 0, 0, 0.045);
+        }
+
+        .card {
+            padding: 1.15rem;
+            text-align: left;
+        }
+
+        .card i {
+            width: 42px;
+            height: 42px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 12px;
+            background: var(--indigo-soft);
+            color: #5865f2;
+            font-size: 1.35rem;
+        }
+
+        .card h2,
+        .card h3 {
+            margin: 1rem 0 0.3rem;
+            font-size: 1.2rem;
+            line-height: 1.2;
+        }
+
+        .card p,
+        .article p,
+        .article li,
+        .callout p {
+            color: var(--muted);
+        }
+
+        .article {
+            margin-top: 1rem;
+            padding: clamp(1.35rem, 3vw, 2.1rem);
+        }
+
+        .article h2 {
+            margin: 0 0 1rem;
+            font-size: clamp(1.5rem, 2.4vw, 2rem);
+        }
+
+        .article h3 {
+            margin: 1.45rem 0 0.45rem;
+            font-size: 1.08rem;
+        }
+
+        .article p {
+            margin: 0.4rem 0 0.9rem;
+        }
+
+        .article ul,
+        .article ol {
+            margin: 0.65rem 0 0;
+            padding-left: 1.25rem;
+        }
+
+        .article ul {
+            list-style: disc;
+        }
+
+        .article ol {
+            list-style: decimal;
+        }
+
+        .article li + li {
+            margin-top: 0.35rem;
+        }
+
+        .section-title {
+            margin: 3rem 0 1rem;
+            font-size: clamp(1.75rem, 3vw, 2.35rem);
+            line-height: 1.1;
+        }
+
+        .definition {
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.74);
+            padding: 1rem;
+        }
+
+        .definition strong {
+            display: block;
+            margin-bottom: 0.2rem;
+        }
+
+        .callout {
+            margin: 1.5rem 0 0;
+            padding: 1.15rem;
+            background: var(--blue-soft);
+            border-color: rgba(0, 113, 227, 0.18);
+        }
+
+        .do-dont {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .do-dont .yes {
+            background: var(--green-soft);
+        }
+
+        .do-dont .no {
+            background: var(--red-soft);
+        }
+
+        .command {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.74);
+            padding: 0.95rem 1rem;
+        }
+
+        .command + .command {
+            margin-top: 0.65rem;
+        }
+
+        code {
+            border-radius: 6px;
+            background: rgba(29, 29, 31, 0.07);
+            padding: 0.12rem 0.35rem;
+            font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+            font-size: 0.92em;
+        }
+
+        .footer {
+            margin-top: 4rem;
+            padding: 2rem 0 3rem;
+            border-top: 1px solid var(--line);
+            color: var(--muted);
+            font-size: 0.92rem;
+        }
+
+        .footer .shell {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+
+        @media (max-width: 820px) {
+            .summary-grid,
+            .message-grid,
+            .privacy-grid,
+            .do-dont {
+                grid-template-columns: 1fr;
+            }
+
+            .nav-actions {
+                gap: 0.75rem;
+                font-size: 0.82rem;
+            }
+
+            .nav-actions .optional {
+                display: none;
+            }
+
+            .footer .shell {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav" aria-label="Main">
+        <div class="shell nav-inner">
+            <a class="brand" href="../">
+                <img src="../../assets/landing/swiftminer-icon.webp" alt="">
+                <span>SwiftMiner Support</span>
+            </a>
+            <div class="nav-actions">
+                <a class="nav-link" href="../">Help Home</a>
+                <a class="nav-link optional" href="../../">Overview</a>
+                <a class="nav-link" href="https://github.com/johnwatso/SwiftMiner/issues">Contact</a>
+            </div>
+        </div>
+    </nav>
+
+    <header class="hero">
+        <div class="shell">
+            <div class="eyebrow"><i class="ph-bold ph-discord-logo"></i> SwiftBot for Discord</div>
+            <h1>Set up SwiftBot and understand your Drops notifications.</h1>
+            <p class="intro">SwiftBot helps connect your Twitch account, sends important Drop notifications, and lets you check miner status with Discord slash commands.</p>
+            <section class="summary-grid" aria-label="SwiftBot summary">
+                <div class="card">
+                    <i class="ph-bold ph-user-circle-plus"></i>
+                    <h2>Connect Twitch</h2>
+                    <p>Use <code>/miner action:setup</code> to start or refresh the Twitch device-code login flow.</p>
+                </div>
+                <div class="card">
+                    <i class="ph-bold ph-bell-ringing"></i>
+                    <h2>Get Key Alerts</h2>
+                    <p>Receive DMs for claimed Drops, complete campaigns, expired sessions, and required account links.</p>
+                </div>
+                <div class="card">
+                    <i class="ph-bold ph-shield-check"></i>
+                    <h2>Keep Control</h2>
+                    <p>SwiftBot does not access your Discord account, read your DMs, post as you, or store Twitch passwords.</p>
+                </div>
+            </section>
+        </div>
+    </header>
+
+    <main class="shell">
+        <section class="article">
+            <h2>What SwiftBot Can Do</h2>
+            <div class="do-dont">
+                <div class="definition yes">
+                    <strong>SwiftBot can</strong>
+                    <ul>
+                        <li>Help connect or reconnect your Twitch account.</li>
+                        <li>Notify you when Drops are claimed.</li>
+                        <li>Show your current miner status.</li>
+                        <li>Tell you when Twitch authentication expires.</li>
+                    </ul>
+                </div>
+                <div class="definition no">
+                    <strong>SwiftBot cannot</strong>
+                    <ul>
+                        <li>Post messages as you.</li>
+                        <li>Access your Discord account.</li>
+                        <li>Read your DMs.</li>
+                        <li>Access or store your Twitch password.</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <h2 class="section-title">Get Started</h2>
+        <section class="article">
+            <h2>Connect Discord</h2>
+            <p>Your Discord account becomes connected to SwiftMiner after you use a <code>/miner</code> command yourself, such as <code>/miner action:setup</code> or <code>/miner action:status</code>.</p>
+            <p>After the first command, SwiftBot sends a welcome DM explaining the available actions.</p>
+            <h3>Connect Twitch</h3>
+            <ol>
+                <li>Send <code>/miner action:setup</code>.</li>
+                <li>SwiftBot sends you an activation code.</li>
+                <li>Open <strong>twitch.tv/activate</strong>.</li>
+                <li>Sign in to Twitch.</li>
+                <li>Enter the activation code.</li>
+                <li>Wait for the confirmation message.</li>
+            </ol>
+            <p>Once setup is complete, SwiftMiner automatically watches for eligible Drops.</p>
+            <div class="callout">
+                <strong>Reconnect later with the same command</strong>
+                <p>If Twitch expires your session, send <code>/miner action:setup</code> again and complete the activation flow. It usually takes less than a minute.</p>
+            </div>
+        </section>
+
+        <section class="article">
+            <h2>Slash Commands</h2>
+            <p>You can DM SwiftBot directly or use commands in supported servers.</p>
+            <div class="command"><strong><code>/miner</code></strong><span>View your current status and active Drops.</span></div>
+            <div class="command"><strong><code>/miner action:setup</code></strong><span>Connect or reconnect your Twitch account.</span></div>
+            <div class="command"><strong><code>/miner action:status</code></strong><span>Show a quick summary of current mining activity.</span></div>
+        </section>
+
+        <section class="article">
+            <h2>Messages You Might See</h2>
+            <p>SwiftBot only sends DMs for important Drops events. You should not receive heartbeat spam, stream activity spam, messages every few minutes, or unrelated Discord notifications.</p>
+            <div class="message-grid">
+                <div class="definition"><strong>Drop claimed</strong><span>A Twitch Drop was successfully claimed for you.</span></div>
+                <div class="definition"><strong>Campaign complete</strong><span>All available Drops for a campaign have been earned.</span></div>
+                <div class="definition"><strong>Twitch connection expired</strong><span>Your Twitch session needs reconnecting before Drops can continue.</span></div>
+                <div class="definition"><strong>Link Twitch for a game</strong><span>A publisher account still needs linking before Drops can be claimed.</span></div>
+                <div class="definition"><strong>Welcome back</strong><span>SwiftMiner briefly lost connection but recovered successfully.</span></div>
+            </div>
+        </section>
+
+        <h2 class="section-title">Troubleshooting</h2>
+        <section class="article">
+            <h2>Fix Common Issues</h2>
+            <h3>My Twitch connection keeps expiring</h3>
+            <ol>
+                <li>Run <code>/miner action:setup</code> again.</li>
+                <li>Make sure your Twitch password has not changed recently.</li>
+                <li>Check that Twitch has not revoked app access.</li>
+            </ol>
+            <p>If the issue continues, contact the person managing SwiftMiner in your server.</p>
+            <h3>I am not receiving DMs</h3>
+            <ul>
+                <li>Confirm Twitch setup is complete.</li>
+                <li>Check whether active Twitch Drops campaigns exist right now.</li>
+                <li>Make sure SwiftMiner is currently online.</li>
+            </ul>
+            <p>Not every game has Drops active all the time.</p>
+            <h3>A game still says linking is required</h3>
+            <p>Some publishers require an additional account connection outside Twitch. Examples include EA, Ubisoft, Riot, and other publisher accounts.</p>
+            <ol>
+                <li>Open the game's Twitch Drops page.</li>
+                <li>Look for <strong>Link Account</strong> or <strong>Connect</strong>.</li>
+                <li>Complete the publisher account connection.</li>
+            </ol>
+            <h3>My activation code expired</h3>
+            <p>Activation codes are only valid for a few minutes. Run <code>/miner action:setup</code> again to generate a new code.</p>
+            <h3>I want to stop receiving DMs</h3>
+            <p>Contact the person managing SwiftMiner in your server and ask them to remove your access. Self-service unlinking is not available yet.</p>
+        </section>
+
+        <section class="article">
+            <h2>Privacy</h2>
+            <div class="privacy-grid">
+                <div class="definition">
+                    <strong>SwiftBot stores</strong>
+                    <ul>
+                        <li>Your Discord user ID.</li>
+                        <li>Your Twitch username after setup.</li>
+                        <li>Your setup completion status.</li>
+                    </ul>
+                </div>
+                <div class="definition">
+                    <strong>SwiftBot does not store</strong>
+                    <ul>
+                        <li>Your Twitch password.</li>
+                        <li>Your Twitch login credentials.</li>
+                        <li>Your Twitch viewing history.</li>
+                        <li>Your Twitch inventory.</li>
+                    </ul>
+                </div>
+            </div>
+            <p>Twitch sign-in happens directly through Twitch. SwiftMiner handles Drop monitoring and claiming, while SwiftBot only sends updates and setup messages.</p>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="shell">
+            <span>SwiftMiner Discord Help</span>
+            <span><a class="nav-link" href="../">Help Home</a> · <a class="nav-link" href="https://github.com/johnwatso/SwiftMiner">GitHub</a></span>
+        </div>
+    </footer>
+</body>
+</html>

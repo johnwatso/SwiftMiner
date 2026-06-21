@@ -325,10 +325,10 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
             return .recent
         }
 
-        // 3. Active check — account must be connected AND campaign not ended
-        // Only show in Active if: connected + (available/inProgress/claimable) + timeActive
-        if isAccountConnected && isTimeActive && 
-           (s == .available || s == .inProgress || s == .claimable) {
+        // 3. Active check — unprioritised, unlinked public campaigns should not
+        // clutter Drops. Prioritised campaigns are handled above; connected
+        // campaigns remain active here.
+        if isAccountConnected && isTimeActive && (s == .available || s == .inProgress || s == .claimable) {
             return .active
         }
 

@@ -73,6 +73,15 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(MinerManager.ManagedMiner.normalizedStreamOverrideLogin("https://m.twitch.tv/flats?tt_content=foo"), "flats")
     }
 
+    func testGameFailoverStreamerNormalizesLogin() {
+        XCTAssertEqual(GameFailoverStreamer.normalizedStreamerLogin("  @Ronin "), "ronin")
+        XCTAssertEqual(GameFailoverStreamer.normalizedStreamerLogin("https://www.twitch.tv/Ronin?foo=bar"), "ronin")
+        XCTAssertNil(GameFailoverStreamer.normalizedStreamerLogin("   "))
+
+        let failover = GameFailoverStreamer(gameId: "g1", gameName: "THE FINALS", streamerLogin: "@Ronin")
+        XCTAssertEqual(failover.streamerLogin, "ronin")
+    }
+
     // MARK: - Drop
 
     func testDropNotClaimedByDefault() {

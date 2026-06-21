@@ -324,7 +324,7 @@ struct DropsListView: View {
         )
 
         let feedCampaigns = customizedCampaigns
-            .filter { !isExcludedCampaign($0) && $0.relevance != .irrelevant }
+            .filter { shouldIncludeInDropsFeed($0, now: now) }
             .sorted {
                 campaignSort(lhs: $0, rhs: $1, activityByCampaignId: activityByCampaignId)
             }
@@ -359,6 +359,46 @@ struct DropsListView: View {
             topClaimedGame: topClaimedGame(in: feedCampaigns, activityByCampaignId: activityByCampaignId),
             mostActiveMiner: mostActiveMiner(in: feedCampaigns)
         )
+    }
+
+    private func shouldIncludeInDropsFeed(_ campaign: CampaignViewData, now: Date) -> Bool {
+        guard !isExcludedCampaign(campaign) else { return false }
+        if campaign.relevance != .irrelevant {
+            return true
+        }
+
+        return isPrioritisedCampaign(campaign)
+            && campaign.startDate <= now
+            && campaign.endDate > now
+            && !campaign.isCompleted
+            && (campaign.hasObtainableRewards || campaign.hasSubscriptionRequiredRewards)
+    }
+
+    private func isPrioritisedCampaign(_ campaign: CampaignViewData) -> Bool {
+        let gameId = campaign.gameId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let gameName = campaign.gameName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let comparableName = comparableGameName(gameName)
+
+        if settings.gamePreferences.contains(where: { preference in
+            guard preference.state == .preferred else { return false }
+            let idMatches = !gameId.isEmpty && preference.gameId == gameId
+            let nameMatches = comparableGameName(preference.gameName) == comparableName
+            return idMatches || nameMatches
+        }) {
+            return true
+        }
+
+        let priorityNames = settings.priorityGames + miners.flatMap(\.priorityGames)
+        return priorityNames.contains { comparableGameName($0) == comparableName }
+    }
+
+    private func comparableGameName(_ value: String) -> String {
+        value
+            .lowercased()
+            .unicodeScalars
+            .filter { CharacterSet.alphanumerics.contains($0) }
+            .map(String.init)
+            .joined()
     }
 
     private func activitySnapshots(

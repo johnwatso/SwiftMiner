@@ -81,6 +81,9 @@ struct GamePreferenceManagementView: View {
             .listStyle(.inset)
         }
         .frame(width: 480, height: 500)
+        .onChange(of: settings.gameFailoverStreamersData) { _, _ in
+            minerManager.updateFailoverStreamers(settings.gameFailoverStreamers)
+        }
     }
 }
 
@@ -89,60 +92,111 @@ private struct PreferenceRow: View {
     @ObservedObject var settings: Settings
     @AppStorage("preferSteamArtwork", store: Settings.appStorageStore) private var preferSteamArtwork: Bool = true
     @State private var resolvedArtworkURL: URL?
+    @State private var failoverLogin: String = ""
 
     var body: some View {
-        HStack(spacing: 12) {
-            AsyncImage(url: resolvedArtworkURL) { image in
-                image.resizable().aspectRatio(contentMode: .fill)
-            } placeholder: {
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .fill(.quaternary)
-            }
-            .frame(width: 24, height: 32)
-            .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-            .task(id: artworkRefreshID) {
-                if let customArtworkURL = preference.customArtworkURL {
-                    resolvedArtworkURL = customArtworkURL
-                } else if preferSteamArtwork,
-                   SteamArtworkService.supportsSteamArtwork(
-                       forGameName: preference.gameName,
-                       gameId: preference.gameId
-                   ) {
-                    // Prefer Steam portrait; leave nil (shows placeholder) if lookup fails — never falls back to Twitch URL
-                    resolvedArtworkURL = await SteamArtworkService.shared.portraitURL(for: preference.gameName)
-                } else {
-                    resolvedArtworkURL = preference.boxArtURL
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
+                AsyncImage(url: resolvedArtworkURL) { image in
+                    image.resizable().aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(.quaternary)
                 }
+                .frame(width: 24, height: 32)
+                .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                .task(id: artworkRefreshID) {
+                    if let customArtworkURL = preference.customArtworkURL {
+                        resolvedArtworkURL = customArtworkURL
+                    } else if preferSteamArtwork,
+                       SteamArtworkService.supportsSteamArtwork(
+                           forGameName: preference.gameName,
+                           gameId: preference.gameId
+                       ) {
+                        // Prefer Steam portrait; leave nil (shows placeholder) if lookup fails — never falls back to Twitch URL
+                        resolvedArtworkURL = await SteamArtworkService.shared.portraitURL(for: preference.gameName)
+                    } else {
+                        resolvedArtworkURL = preference.boxArtURL
+                    }
+                }
+
+                Text(preference.gameName)
+                    .font(.body)
+
+                Spacer()
+
+                Picker("", selection: Binding(
+                    get: { preference.state },
+                    set: { settings.setPreferenceState($0, for: preference) }
+                )) {
+                    Text("Prioritise").tag(PreferenceState.preferred)
+                    Text("Exclude").tag(PreferenceState.excluded)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 140)
+
+                Button {
+                    settings.removeGamePreference(preference)
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Remove rule")
             }
 
-            Text(preference.gameName)
-                .font(.body)
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.trianglehead.2.clockwise")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 24)
 
-            Spacer()
+                TextField("Failover streamer", text: $failoverLogin)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 180)
+                    .onSubmit(commitFailover)
 
-            Picker("", selection: Binding(
-                get: { preference.state },
-                set: { settings.setPreferenceState($0, for: preference) }
-            )) {
-                Text("Prioritise").tag(PreferenceState.preferred)
-                Text("Exclude").tag(PreferenceState.excluded)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(width: 140)
+                Button(action: commitFailover) {
+                    Image(systemName: "checkmark.circle")
+                }
+                .buttonStyle(.plain)
+                .help("Save failover streamer")
 
-            Button {
-                settings.removeGamePreference(preference)
-            } label: {
-                Image(systemName: "xmark.circle.fill")
+                Button(action: clearFailover) {
+                    Image(systemName: "xmark.circle")
+                }
+                .buttonStyle(.plain)
+                .disabled(failoverLogin.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .help("Clear failover streamer")
+
+                Text("Used after stalled progress")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            .buttonStyle(.plain)
+            .padding(.leading, 36)
         }
         .padding(.vertical, 2)
+        .onAppear(perform: syncFailover)
+        .onChange(of: settings.gameFailoverStreamersData) { _, _ in
+            syncFailover()
+        }
     }
 
     private var artworkRefreshID: String {
         "\(preferSteamArtwork)-\(preference.customArtworkURL?.absoluteString ?? "")"
+    }
+
+    private func syncFailover() {
+        failoverLogin = settings.failoverStreamer(for: preference).map { "@\($0.streamerLogin)" } ?? ""
+    }
+
+    private func commitFailover() {
+        settings.setFailoverStreamer(failoverLogin, for: preference)
+        syncFailover()
+    }
+
+    private func clearFailover() {
+        settings.clearFailoverStreamer(for: preference)
+        syncFailover()
     }
 }

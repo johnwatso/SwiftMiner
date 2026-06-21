@@ -577,6 +577,10 @@ public final class Settings: ObservableObject {
     @AppStorage("gamePreferencesData", store: Settings.appStorageStore)
     public var gamePreferencesData: String = "[]"
 
+    /// JSON-encoded array of game-scoped failover streamer rules.
+    @AppStorage("gameFailoverStreamersData", store: Settings.appStorageStore)
+    public var gameFailoverStreamersData: String = "[]"
+
     /// Legacy storage (kept for migration only)
     @AppStorage("priorityGamesString", store: Settings.appStorageStore)
     private var priorityGamesString: String = ""
@@ -616,6 +620,24 @@ public final class Settings: ObservableObject {
                let string = String(data: data, encoding: .utf8) {
                 guard gamePreferencesData != string else { return }
                 gamePreferencesData = string
+            }
+        }
+    }
+
+    public var gameFailoverStreamers: [GameFailoverStreamer] {
+        get {
+            guard let data = gameFailoverStreamersData.data(using: .utf8),
+                  let rules = try? JSONDecoder().decode([GameFailoverStreamer].self, from: data) else {
+                return []
+            }
+            return normalizedFailoverStreamers(rules)
+        }
+        set {
+            let normalized = normalizedFailoverStreamers(newValue)
+            if let data = try? JSONEncoder().encode(normalized),
+               let string = String(data: data, encoding: .utf8) {
+                guard gameFailoverStreamersData != string else { return }
+                gameFailoverStreamersData = string
             }
         }
     }
@@ -805,7 +827,40 @@ public final class Settings: ObservableObject {
         let removed = prefs.filter { preferenceMatches($0, gameId: preference.gameId, gameName: preference.gameName) }
         prefs.removeAll { preferenceMatches($0, gameId: preference.gameId, gameName: preference.gameName) }
         gamePreferences = prefs
+        clearFailoverStreamer(for: preference)
         removeCachedArtworkFiles(for: removed)
+    }
+
+    public func failoverStreamer(for preference: GamePreference) -> GameFailoverStreamer? {
+        gameFailoverStreamers.first { failoverMatches($0, gameId: preference.gameId, gameName: preference.gameName) }
+    }
+
+    public func setFailoverStreamer(_ login: String, for preference: GamePreference) {
+        guard let normalizedLogin = GameFailoverStreamer.normalizedStreamerLogin(login) else {
+            clearFailoverStreamer(for: preference)
+            return
+        }
+
+        var rules = gameFailoverStreamers
+        let updated = GameFailoverStreamer(
+            gameId: preference.gameId,
+            gameName: preference.gameName,
+            streamerLogin: normalizedLogin,
+            enabled: true
+        )
+
+        if let index = rules.firstIndex(where: { failoverMatches($0, gameId: preference.gameId, gameName: preference.gameName) }) {
+            rules[index] = updated
+        } else {
+            rules.append(updated)
+        }
+        gameFailoverStreamers = rules
+    }
+
+    public func clearFailoverStreamer(for preference: GamePreference) {
+        var rules = gameFailoverStreamers
+        rules.removeAll { failoverMatches($0, gameId: preference.gameId, gameName: preference.gameName) }
+        gameFailoverStreamers = rules
     }
 
     /// Set a stored preference to a specific state.
@@ -1021,6 +1076,29 @@ public final class Settings: ObservableObject {
         return deduped.reversed()
     }
 
+    private func normalizedFailoverStreamers(_ streamers: [GameFailoverStreamer]) -> [GameFailoverStreamer] {
+        var seen = Set<String>()
+        var deduped: [GameFailoverStreamer] = []
+
+        for streamer in streamers.reversed() {
+            let trimmedName = streamer.gameName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedName.isEmpty,
+                  let login = GameFailoverStreamer.normalizedStreamerLogin(streamer.streamerLogin) else { continue }
+
+            let normalized = GameFailoverStreamer(
+                gameId: streamer.gameId,
+                gameName: trimmedName,
+                streamerLogin: login,
+                enabled: streamer.enabled
+            )
+
+            guard seen.insert(failoverKey(for: normalized)).inserted else { continue }
+            deduped.append(normalized)
+        }
+
+        return deduped.reversed()
+    }
+
     private static func normalizedPriorityGameNames(_ games: [String]) -> [String] {
         var seen = Set<String>()
         var result: [String] = []
@@ -1044,8 +1122,23 @@ public final class Settings: ObservableObject {
             .localizedCaseInsensitiveCompare(gameName.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame
     }
 
+    private func failoverMatches(_ failover: GameFailoverStreamer, gameId: String, gameName: String) -> Bool {
+        let storedId = failover.gameId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let incomingId = gameId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !storedId.isEmpty && !incomingId.isEmpty && storedId == incomingId {
+            return true
+        }
+
+        return failover.gameName.trimmingCharacters(in: .whitespacesAndNewlines)
+            .localizedCaseInsensitiveCompare(gameName.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame
+    }
+
     private func preferenceKey(for preference: GamePreference) -> String {
         preferenceKey(gameId: preference.gameId, gameName: preference.gameName)
+    }
+
+    private func failoverKey(for failover: GameFailoverStreamer) -> String {
+        preferenceKey(gameId: failover.gameId, gameName: failover.gameName)
     }
 
     private func preferenceKey(gameId: String, gameName: String) -> String {
@@ -1278,6 +1371,7 @@ public final class Settings: ObservableObject {
         quietHoursStartMinute = 22 * 60
         quietHoursEndMinute = 7 * 60
         gamePreferencesData = "[]"
+        gameFailoverStreamersData = "[]"
         accountPriorityGamesData = "{}"
         accountIncludesGlobalPriorityGamesData = "{}"
         selectedDropsFiltersData = "[\"active\"]"

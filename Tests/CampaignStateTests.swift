@@ -87,6 +87,30 @@ final class CampaignStateTests: XCTestCase {
         XCTAssertEqual(campaign.relevance, CampaignRelevance.active)
     }
 
+    func testRelevance_Irrelevant_WhenLiveButGameAccountNotConnectedAndNotPrioritised() {
+        let campaign = Campaign(
+            id: "c1", name: "C1", game: game, status: .active,
+            startDate: now.addingTimeInterval(-3600), endDate: now.addingTimeInterval(3600),
+            drops: [Drop(id: "d1", name: "D1", requiredMinutes: 60)],
+            isAccountConnected: false
+        )
+
+        XCTAssertEqual(campaign.relevance, CampaignRelevance.irrelevant)
+    }
+
+    func testRelevance_Irrelevant_WhenOnlyRemainingRewardRequiresSubscriptionAndNotPrioritised() {
+        let campaign = Campaign(
+            id: "c-sub", name: "Sub Campaign", game: game, status: .active,
+            startDate: now.addingTimeInterval(-3600), endDate: now.addingTimeInterval(3600),
+            drops: [Drop(id: "d-sub", name: "Paid Reward", requiredMinutes: 0, requiredSubs: 1)],
+            isAccountConnected: false
+        )
+
+        XCTAssertEqual(campaign.relevance, CampaignRelevance.irrelevant)
+        XCTAssertEqual(campaign.subscriptionRequiredDrops.map(\.name), ["Paid Reward"])
+        XCTAssertFalse(campaign.canAttemptMining)
+    }
+
     func testRelevance_Closed_WhenIsClosed() {
         let drop = Drop(id: "d1", name: "D1", requiredMinutes: 60, isClaimed: false)
         let campaign = Campaign(

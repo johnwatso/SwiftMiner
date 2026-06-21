@@ -531,7 +531,8 @@ private struct AccountSettingsView: View {
                     showClaimNotifications: settings.showClaimNotifications && settings.allowsOperatorNotifications(),
                     avoidDuplicateStreams: settings.avoidDuplicateStreams,
                     antiStallRecoveryEnabled: settings.antiStallRecoveryEnabled,
-                    prioritiseFollowedStreamers: settings.prioritiseFollowedStreamers
+                    prioritiseFollowedStreamers: settings.prioritiseFollowedStreamers,
+                    failoverStreamers: settings.gameFailoverStreamers
                 )
                 alertMessage = "Successfully imported account: \(account.username)"
                 showAlert = true
