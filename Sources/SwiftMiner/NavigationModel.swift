@@ -282,7 +282,7 @@ public final class NavigationModel {
             await webRoutes.configure(router)
             webPrefixes = WebDashboardConfig.publicPrefixes
             webExact = WebDashboardConfig.publicExactPaths
-            logEvent(message: "Web dashboard enabled at \(webConfig.normalisedBase)", level: .info)
+            logEvent(message: "Web dashboard enabled at \(webConfig.normalisedBase ?? "local-only")", level: .info)
         }
 
         let server = HTTPAPIServer(
@@ -692,7 +692,8 @@ public final class NavigationModel {
                     showClaimNotifications: settings.showClaimNotifications && settings.allowsOperatorNotifications(),
                     avoidDuplicateStreams: settings.avoidDuplicateStreams,
                     antiStallRecoveryEnabled: settings.antiStallRecoveryEnabled,
-                    prioritiseFollowedStreamers: settings.prioritiseFollowedStreamers
+                    prioritiseFollowedStreamers: settings.prioritiseFollowedStreamers,
+                    failoverStreamers: settings.gameFailoverStreamers
                 )
                 return MinerControlResponse(
                     ok: true,
@@ -763,7 +764,8 @@ public final class NavigationModel {
                     showClaimNotifications: settings.showClaimNotifications && settings.allowsOperatorNotifications(),
                     avoidDuplicateStreams: settings.avoidDuplicateStreams,
                     antiStallRecoveryEnabled: settings.antiStallRecoveryEnabled,
-                    prioritiseFollowedStreamers: settings.prioritiseFollowedStreamers
+                    prioritiseFollowedStreamers: settings.prioritiseFollowedStreamers,
+                    failoverStreamers: settings.gameFailoverStreamers
                 )
                 return MinerControlResponse(
                     ok: true,
@@ -1081,6 +1083,7 @@ public final class NavigationModel {
             avoidDuplicateStreams: settings.avoidDuplicateStreams,
             antiStallRecoveryEnabled: settings.antiStallRecoveryEnabled,
             prioritiseFollowedStreamers: settings.prioritiseFollowedStreamers,
+            failoverStreamers: settings.gameFailoverStreamers,
             ignoredWarnings: settings.activeIgnoredWarnings,
             priorityGamesForMiner: { miner in
                 settings.priorityGames(forAccountId: miner.accountId)
@@ -1372,7 +1375,8 @@ public final class NavigationModel {
                 showClaimNotifications: settings.showClaimNotifications,
                 avoidDuplicateStreams: settings.avoidDuplicateStreams,
                 antiStallRecoveryEnabled: settings.antiStallRecoveryEnabled,
-                prioritiseFollowedStreamers: settings.prioritiseFollowedStreamers
+                prioritiseFollowedStreamers: settings.prioritiseFollowedStreamers,
+                failoverStreamers: settings.gameFailoverStreamers
             )
         }
         await minerManager.forceRefreshAllMiners()

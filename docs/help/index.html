@@ -1,0 +1,648 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SwiftMiner Help - Support and Troubleshooting</title>
+    <meta name="description" content="SwiftMiner help documentation for setup, mining Twitch Drops, accounts, notifications, menu bar mode, troubleshooting, and Discord integration.">
+    <link rel="canonical" href="https://swiftminer.app/help/">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#f5f5f7">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="stylesheet" href="../assets/css/tailwind.css">
+    <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
+    <style>
+        :root {
+            color-scheme: light;
+            --page: #f5f5f7;
+            --surface: rgba(255, 255, 255, 0.82);
+            --surface-solid: #ffffff;
+            --ink: #1d1d1f;
+            --muted: #6e6e73;
+            --line: rgba(29, 29, 31, 0.12);
+            --blue: #0071e3;
+            --blue-soft: #e8f2ff;
+            --green-soft: #eaf7ee;
+            --orange-soft: #fff4e4;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background: var(--page);
+            color: var(--ink);
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            line-height: 1.5;
+        }
+
+        .shell {
+            width: min(1120px, calc(100% - 32px));
+            margin: 0 auto;
+        }
+
+        .nav {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            border-bottom: 1px solid var(--line);
+            background: rgba(245, 245, 247, 0.76);
+            backdrop-filter: saturate(180%) blur(22px);
+            -webkit-backdrop-filter: saturate(180%) blur(22px);
+        }
+
+        .nav-inner {
+            height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+
+        .brand,
+        .nav-link,
+        .tile,
+        .article-link {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .brand {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.6rem;
+            font-weight: 700;
+            letter-spacing: 0;
+        }
+
+        .brand img {
+            width: 28px;
+            height: 28px;
+            border-radius: 7px;
+        }
+
+        .nav-actions {
+            display: flex;
+            align-items: center;
+            gap: 1.1rem;
+            color: var(--muted);
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+        .nav-link:hover {
+            color: var(--blue);
+        }
+
+        .hero {
+            padding: clamp(3.5rem, 8vw, 6rem) 0 clamp(2.25rem, 5vw, 4rem);
+            text-align: center;
+        }
+
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            margin-bottom: 1rem;
+            color: var(--blue);
+            font-size: 0.86rem;
+            font-weight: 700;
+        }
+
+        h1,
+        h2,
+        h3 {
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+            letter-spacing: 0;
+        }
+
+        h1 {
+            margin: 0 auto 1rem;
+            max-width: 820px;
+            font-size: clamp(2.65rem, 7vw, 5.2rem);
+            line-height: 1.02;
+            font-weight: 800;
+        }
+
+        .intro {
+            margin: 0 auto;
+            max-width: 720px;
+            color: var(--muted);
+            font-size: clamp(1.05rem, 2vw, 1.35rem);
+        }
+
+        .search-wrap {
+            margin: 2rem auto 0;
+            max-width: 720px;
+            position: relative;
+        }
+
+        .search-wrap i {
+            position: absolute;
+            top: 50%;
+            left: 1.1rem;
+            transform: translateY(-50%);
+            color: var(--muted);
+        }
+
+        .search {
+            width: 100%;
+            height: 58px;
+            padding: 0 1.2rem 0 3rem;
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            background: var(--surface-solid);
+            color: var(--ink);
+            font: inherit;
+            font-size: 1.05rem;
+            outline: none;
+            box-shadow: 0 18px 45px rgba(0, 0, 0, 0.06);
+        }
+
+        .search:focus {
+            border-color: rgba(0, 113, 227, 0.55);
+            box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.12), 0 18px 45px rgba(0, 0, 0, 0.06);
+        }
+
+        .quick-grid,
+        .topic-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 1rem;
+        }
+
+        .quick-grid {
+            margin-top: 1.5rem;
+        }
+
+        .tile,
+        .article-card,
+        .callout,
+        .kb-section {
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            background: var(--surface);
+            box-shadow: 0 18px 55px rgba(0, 0, 0, 0.045);
+        }
+
+        .tile {
+            display: flex;
+            min-height: 150px;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 1.15rem;
+            transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+        }
+
+        .tile:hover,
+        .article-link:hover {
+            transform: translateY(-2px);
+            border-color: rgba(0, 113, 227, 0.35);
+            background: #ffffff;
+        }
+
+        .tile i {
+            width: 42px;
+            height: 42px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 12px;
+            background: var(--blue-soft);
+            color: var(--blue);
+            font-size: 1.35rem;
+        }
+
+        .tile h2,
+        .tile h3 {
+            margin: 1rem 0 0.3rem;
+            font-size: 1.25rem;
+            line-height: 1.2;
+        }
+
+        .tile p,
+        .article-card p,
+        .callout p,
+        .kb-section p,
+        .kb-section li {
+            color: var(--muted);
+        }
+
+        .section-title {
+            margin: 3.5rem 0 1rem;
+            font-size: clamp(1.8rem, 3vw, 2.4rem);
+            line-height: 1.1;
+        }
+
+        .article-card {
+            padding: clamp(1.2rem, 2.4vw, 1.8rem);
+        }
+
+        .article-card h2 {
+            margin: 0 0 0.35rem;
+            font-size: 1.55rem;
+        }
+
+        .article-list {
+            display: grid;
+            gap: 0.75rem;
+            margin-top: 1.25rem;
+        }
+
+        .article-link {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.72);
+            padding: 0.95rem 1rem;
+            transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+        }
+
+        .article-link strong {
+            display: block;
+            margin-bottom: 0.12rem;
+        }
+
+        .article-link span {
+            color: var(--muted);
+            font-size: 0.92rem;
+        }
+
+        .kb-section {
+            margin-top: 1rem;
+            padding: clamp(1.35rem, 3vw, 2.1rem);
+        }
+
+        .kb-section h2 {
+            margin: 0 0 1rem;
+            font-size: clamp(1.5rem, 2.4vw, 2rem);
+        }
+
+        .kb-section h3 {
+            margin: 1.45rem 0 0.45rem;
+            font-size: 1.08rem;
+        }
+
+        .kb-section p {
+            margin: 0.4rem 0 0.9rem;
+        }
+
+        .kb-section ul,
+        .kb-section ol {
+            margin: 0.65rem 0 0;
+            padding-left: 1.25rem;
+        }
+
+        .kb-section ul {
+            list-style: disc;
+        }
+
+        .kb-section ol {
+            list-style: decimal;
+        }
+
+        .kb-section li + li {
+            margin-top: 0.35rem;
+        }
+
+        .definition-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.75rem;
+            margin-top: 1rem;
+        }
+
+        .definition {
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.7);
+            padding: 1rem;
+        }
+
+        .definition strong {
+            display: block;
+            margin-bottom: 0.2rem;
+        }
+
+        .callout {
+            margin: 2rem 0 0;
+            padding: 1.15rem;
+            background: var(--blue-soft);
+            border-color: rgba(0, 113, 227, 0.18);
+        }
+
+        .callout.warning {
+            background: var(--orange-soft);
+            border-color: rgba(209, 122, 0, 0.2);
+        }
+
+        .pill-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.55rem;
+            margin-top: 1rem;
+        }
+
+        .pill {
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.72);
+            border: 1px solid var(--line);
+            padding: 0.45rem 0.7rem;
+            color: #424245;
+            font-size: 0.88rem;
+            font-weight: 650;
+        }
+
+        .footer {
+            margin-top: 4rem;
+            padding: 2rem 0 3rem;
+            border-top: 1px solid var(--line);
+            color: var(--muted);
+            font-size: 0.92rem;
+        }
+
+        .footer .shell {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+
+        .hidden-by-search {
+            display: none;
+        }
+
+        code,
+        kbd {
+            border-radius: 6px;
+            background: rgba(29, 29, 31, 0.07);
+            padding: 0.12rem 0.35rem;
+            font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+            font-size: 0.92em;
+        }
+
+        @media (max-width: 820px) {
+            .quick-grid,
+            .topic-grid,
+            .definition-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .nav-actions {
+                gap: 0.75rem;
+                font-size: 0.82rem;
+            }
+
+            .nav-actions .optional {
+                display: none;
+            }
+
+            .footer .shell {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav" aria-label="Main">
+        <div class="shell nav-inner">
+            <a class="brand" href="../">
+                <img src="../assets/landing/swiftminer-icon.webp" alt="">
+                <span>SwiftMiner Support</span>
+            </a>
+            <div class="nav-actions">
+                <a class="nav-link optional" href="../">Overview</a>
+                <a class="nav-link" href="discord/">Discord Help</a>
+                <a class="nav-link" href="https://github.com/johnwatso/SwiftMiner/issues">Contact</a>
+            </div>
+        </div>
+    </nav>
+
+    <header class="hero">
+        <div class="shell">
+            <div class="eyebrow"><i class="ph-bold ph-lifebuoy"></i> SwiftMiner Help</div>
+            <h1>How can we help?</h1>
+            <p class="intro">Find setup steps, account guidance, mining behavior, update settings, and troubleshooting notes for SwiftMiner on macOS.</p>
+            <div class="search-wrap">
+                <i class="ph-bold ph-magnifying-glass"></i>
+                <input id="help-search" class="search" type="search" placeholder="Search help topics" aria-label="Search help topics">
+            </div>
+        </div>
+    </header>
+
+    <main class="shell">
+        <section class="quick-grid" aria-label="Popular help topics">
+            <a class="tile searchable" href="#getting-started" data-search="install download add account twitch activation getting started setup">
+                <i class="ph-bold ph-rocket-launch"></i>
+                <div>
+                    <h2>Get Started</h2>
+                    <p>Install SwiftMiner, add Twitch accounts, and begin mining Drops.</p>
+                </div>
+            </a>
+            <a class="tile searchable" href="#troubleshooting" data-search="needs auth stuck drops progressing notifications logs issue support troubleshooting">
+                <i class="ph-bold ph-wrench"></i>
+                <div>
+                    <h2>Fix a Problem</h2>
+                    <p>Resolve auth, progress, notification, and account linking issues.</p>
+                </div>
+            </a>
+            <a class="tile searchable" href="discord/" data-search="discord swiftbot slash commands dm setup reconnect privacy notifications">
+                <i class="ph-bold ph-discord-logo"></i>
+                <div>
+                    <h2>Discord & SwiftBot</h2>
+                    <p>Use SwiftBot commands and understand Discord notifications.</p>
+                </div>
+            </a>
+        </section>
+
+        <h2 class="section-title">Browse Help</h2>
+        <section class="topic-grid" aria-label="Help categories">
+            <article class="article-card searchable" data-search="overview miners drops activity log navigation sections dashboard">
+                <h2>Use SwiftMiner</h2>
+                <p>Learn what each section of the app shows and when to use it.</p>
+                <div class="article-list">
+                    <a class="article-link" href="#main-window"><span><strong>Main window</strong>Overview, Miners, Drops, Activity Log, and Discord.</span><i class="ph-bold ph-caret-right"></i></a>
+                    <a class="article-link" href="#menu-bar-mode"><span><strong>Menu bar mode</strong>Run quietly while keeping miners accessible.</span><i class="ph-bold ph-caret-right"></i></a>
+                </div>
+            </article>
+            <article class="article-card searchable" data-search="settings general accounts mining auto claim channel points sync miner state updates beta advanced">
+                <h2>Settings</h2>
+                <p>Configure accounts, mining behavior, updates, notifications, and logs.</p>
+                <div class="article-list">
+                    <a class="article-link" href="#settings"><span><strong>Settings guide</strong>General, Accounts, Mining, Integrations, and Advanced.</span><i class="ph-bold ph-caret-right"></i></a>
+                    <a class="article-link" href="#notifications"><span><strong>Notifications</strong>macOS alerts and Discord notification behavior.</span><i class="ph-bold ph-caret-right"></i></a>
+                </div>
+            </article>
+            <article class="article-card searchable" data-search="best practices publisher accounts twitch drops duplicate streams activity log menu bar">
+                <h2>Best Practices</h2>
+                <p>Keep Drops reliable and avoid common Twitch session conflicts.</p>
+                <div class="article-list">
+                    <a class="article-link" href="#best-practices"><span><strong>Recommended setup</strong>Update often, link publishers early, and avoid duplicate streams.</span><i class="ph-bold ph-caret-right"></i></a>
+                    <a class="article-link" href="#important-notes"><span><strong>Important notes</strong>What SwiftMiner can and cannot control.</span><i class="ph-bold ph-caret-right"></i></a>
+                </div>
+            </article>
+        </section>
+
+        <section id="getting-started" class="kb-section searchable" data-search="installation download github releases applications open macos warning add first account twitch activate code">
+            <h2>Getting Started</h2>
+            <h3>Install SwiftMiner</h3>
+            <ol>
+                <li>Download the latest release from <a class="nav-link" href="https://github.com/johnwatso/SwiftMiner/releases">GitHub Releases</a>.</li>
+                <li>Move <code>SwiftMiner.app</code> to <code>/Applications</code>.</li>
+                <li>Open SwiftMiner.</li>
+            </ol>
+            <div class="callout">
+                <strong>First launch note</strong>
+                <p>macOS may warn you about an app downloaded from the internet. This is expected for downloaded apps. Choose <strong>Open</strong> to continue.</p>
+            </div>
+            <h3>Add your first Twitch account</h3>
+            <ol>
+                <li>Choose <strong>Add Account</strong> in SwiftMiner.</li>
+                <li>SwiftMiner shows a Twitch device-code login flow.</li>
+                <li>Open <strong>twitch.tv/activate</strong> in your browser.</li>
+                <li>Sign in to Twitch and enter the code shown in SwiftMiner.</li>
+                <li>Wait for confirmation. The miner starts automatically.</li>
+            </ol>
+            <p>You can add multiple accounts. Each account runs independently.</p>
+        </section>
+
+        <section id="main-window" class="kb-section searchable" data-search="main window overview miners drops activity log discord dashboard campaign progress health start stop">
+            <h2>Main Window</h2>
+            <p>SwiftMiner uses a sidebar to move between the app's main work areas.</p>
+            <div class="definition-grid">
+                <div class="definition"><strong>Overview</strong><span>Active campaigns, progress summaries, and what is currently being mined.</span></div>
+                <div class="definition"><strong>Miners</strong><span>Status for each account, current stream, health, and start or stop controls.</span></div>
+                <div class="definition"><strong>Drops</strong><span>In-progress, claimable, completed, and upcoming Drops across accounts.</span></div>
+                <div class="definition"><strong>Activity Log</strong><span>A timestamped feed of claims, errors, stream switches, and other events.</span></div>
+                <div class="definition"><strong>Discord</strong><span>SwiftBot integration settings when Discord features are enabled.</span></div>
+            </div>
+            <h3>Overview</h3>
+            <p>The Overview tab is your dashboard. It shows active campaigns, time remaining, running miners, current streams, and quick campaign actions.</p>
+            <h3>Miners</h3>
+            <p>Each account appears as its own miner with status, current stream, Drop progress, and health. A badge on the Miners sidebar item shows how many miners need attention.</p>
+            <h3>Drops</h3>
+            <p>The Drops tab groups rewards by progress state, so you can quickly see what is active, ready to claim, complete, or upcoming.</p>
+            <h3>Activity Log</h3>
+            <p>Use the Activity Log to understand why a miner switched streams, when Drops were claimed, or why something stopped. You can filter the log and export it for troubleshooting.</p>
+        </section>
+
+        <section id="settings" class="kb-section searchable" data-search="settings command comma general accounts mining integrations advanced app presence updates auto claim channel points sync anti stall logs steam artwork">
+            <h2>Settings</h2>
+            <p>Open Settings with <kbd>⌘,</kbd> or from the app menu.</p>
+            <h3>General</h3>
+            <p>Choose whether SwiftMiner appears in the Dock, menu bar, or both. You can also run miners after closing the window, launch at login, start minimized, and configure Stable or Beta Sparkle updates.</p>
+            <div class="callout warning">
+                <strong>App Management permission</strong>
+                <p>On first update, macOS may ask for App Management permission. Allow it if you want Sparkle to install updates automatically.</p>
+            </div>
+            <h3>Accounts</h3>
+            <p>Add Twitch accounts, remove accounts you no longer want to mine, or reconnect accounts after Twitch sessions expire.</p>
+            <h3>Mining</h3>
+            <p>Configure auto-claiming, channel point bonuses, synced miner state, auto-start on launch, duplicate stream avoidance, followed streamer priority, badge and emote campaigns, and anti-stall recovery.</p>
+            <h3>Integrations</h3>
+            <p>When Discord integration is enabled, configure SwiftBot connection and notification preferences. See <a class="nav-link" href="discord/">Discord Help</a> for setup details.</p>
+            <h3>Advanced</h3>
+            <p>Adjust log level, show the live log console, show activity log icons, and choose whether SwiftMiner prefers Steam artwork.</p>
+        </section>
+
+        <section id="menu-bar-mode" class="kb-section searchable" data-search="menu bar dock app presence closed background start stop quit recent drops">
+            <h2>Menu Bar Mode</h2>
+            <p>If App Presence is set to <strong>Menu Bar Only</strong> or <strong>Dock + Menu Bar</strong>, SwiftMiner remains accessible from the macOS menu bar even when the main window is closed.</p>
+            <div class="pill-row">
+                <span class="pill">View running miners</span>
+                <span class="pill">Check recent claims</span>
+                <span class="pill">Open the main window</span>
+                <span class="pill">Start or stop all miners</span>
+                <span class="pill">Quit SwiftMiner</span>
+            </div>
+            <h3>Menu commands</h3>
+            <p>Use the app menu to check for updates, view what's new, refresh progress with <kbd>⌘R</kbd>, export diagnostic logs, or raise an issue on GitHub.</p>
+        </section>
+
+        <section id="notifications" class="kb-section searchable" data-search="notifications macos system settings focus do not disturb drop claimed campaign complete miner error twitch auth expires discord">
+            <h2>Notifications</h2>
+            <p>SwiftMiner can send macOS notifications when a Drop is claimed, a campaign completes, a miner encounters an error, or Twitch authentication expires.</p>
+            <p>If you do not receive alerts, check <strong>System Settings > Notifications > SwiftMiner</strong> and make sure Focus or Do Not Disturb is not blocking alerts.</p>
+        </section>
+
+        <section id="troubleshooting" class="kb-section searchable" data-search="troubleshooting needs auth reconnect stuck anti stall drops not progressing publisher account link notifications logs support github issue">
+            <h2>Troubleshooting</h2>
+            <h3>A miner shows Needs Auth</h3>
+            <ol>
+                <li>Open <strong>Settings > Accounts</strong>.</li>
+                <li>Choose <strong>Reconnect</strong> on the affected account.</li>
+                <li>Follow the Twitch activation steps again.</li>
+            </ol>
+            <h3>A miner appears stuck</h3>
+            <p>Make sure Anti-stall recovery is enabled. Also confirm there are active Twitch Drops campaigns, the account is eligible, and the game does not require an external account link.</p>
+            <h3>Drops are not progressing</h3>
+            <ul>
+                <li>Only one stream session per Twitch account counts toward Drops. Watching Twitch elsewhere can take priority over SwiftMiner.</li>
+                <li>Some campaigns require a publisher account link before Drops can be claimed.</li>
+                <li>Not all games have active Drops at all times.</li>
+            </ul>
+            <h3>Export logs for support</h3>
+            <ol>
+                <li>Choose <strong>Help > Export Diagnostic Logs...</strong>.</li>
+                <li>Save the file.</li>
+                <li>Attach it when raising a GitHub issue or contacting support.</li>
+            </ol>
+            <p>Diagnostic logs are automatically redacted to remove sensitive tokens and identifiers.</p>
+        </section>
+
+        <section id="best-practices" class="kb-section searchable" data-search="best practices update twitch systems duplicate stream publisher accounts activity log menu bar personal use resources bandwidth">
+            <h2>Best Practices</h2>
+            <ul>
+                <li><strong>Keep SwiftMiner updated.</strong> Twitch can change its systems without warning. Automatic updates help fixes arrive quickly.</li>
+                <li><strong>Avoid duplicate viewing sessions.</strong> If SwiftMiner is mining for an account, avoid watching Twitch with that same account in a browser or mobile app.</li>
+                <li><strong>Link publisher accounts early.</strong> Campaigns from EA, Ubisoft, Riot, and other publishers may require account linking before Drops can be claimed.</li>
+                <li><strong>Check the Activity Log.</strong> It usually explains stream switches, claims, stops, and errors.</li>
+                <li><strong>Use menu bar mode.</strong> For always-on mining, Menu Bar Only keeps the Dock clean while miners continue running.</li>
+            </ul>
+        </section>
+
+        <section id="important-notes" class="kb-section searchable" data-search="important notes personal use accounts resources bandwidth twitch changes performance">
+            <h2>Important Notes</h2>
+            <ul>
+                <li>SwiftMiner is intended for personal use on your own machines and accounts.</li>
+                <li>Each account runs independently. More accounts use more system resources and bandwidth.</li>
+                <li>Twitch may change how Drops or automation behave at any time.</li>
+                <li>Performance depends on network quality, system resources, and the number of active accounts.</li>
+            </ul>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="shell">
+            <span>SwiftMiner Help</span>
+            <span><a class="nav-link" href="../release-notes/">Release Notes</a> · <a class="nav-link" href="https://github.com/johnwatso/SwiftMiner">GitHub</a></span>
+        </div>
+    </footer>
+
+    <script>
+        const search = document.getElementById('help-search');
+        const searchableItems = Array.from(document.querySelectorAll('.searchable'));
+
+        search.addEventListener('input', () => {
+            const query = search.value.trim().toLowerCase();
+
+            searchableItems.forEach((item) => {
+                if (!query) {
+                    item.classList.remove('hidden-by-search');
+                    return;
+                }
+
+                const text = `${item.textContent} ${item.dataset.search || ''}`.toLowerCase();
+                item.classList.toggle('hidden-by-search', !text.includes(query));
+            });
+        });
+    </script>
+</body>
+</html>

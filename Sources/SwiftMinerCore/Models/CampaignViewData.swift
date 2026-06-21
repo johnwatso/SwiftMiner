@@ -428,9 +428,9 @@ public extension CampaignViewData {
             return .ready
         }
 
-        let needsSetup = (!isAccountConnected || accountStates.contains {
+        let needsSetup = accountStates.contains {
             $0.miningStatus == .blocked || $0.miningStatus == .needsAuth
-        }) && hasObtainableRewards
+        } && hasObtainableRewards
         if needsSetup {
             return .actionRequired
         }

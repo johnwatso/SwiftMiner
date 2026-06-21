@@ -436,7 +436,8 @@ struct AuthRequiredSheet: View {
                 showClaimNotifications: settings.showClaimNotifications && settings.allowsOperatorNotifications(),
                 avoidDuplicateStreams: settings.avoidDuplicateStreams,
                 antiStallRecoveryEnabled: settings.antiStallRecoveryEnabled,
-                prioritiseFollowedStreamers: settings.prioritiseFollowedStreamers
+                prioritiseFollowedStreamers: settings.prioritiseFollowedStreamers,
+                failoverStreamers: settings.gameFailoverStreamers
             )
         }
 

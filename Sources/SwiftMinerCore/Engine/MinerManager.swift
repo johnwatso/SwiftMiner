@@ -303,6 +303,7 @@ public final class MinerManager {
     public var avoidDuplicateStreams: Bool = true
     public var prioritiseFollowedStreamers: Bool = false
     public var antiStallRecoveryEnabled: Bool = true
+    public var failoverStreamers: [GameFailoverStreamer] = []
     /// Debug-only: broadcast to every engine to bypass link/eligibility gates. Stored here
     /// so engines attached later (e.g. newly added accounts) pick up the current value.
     public var debugBypassLinkRequirement: Bool = false
@@ -327,6 +328,7 @@ public final class MinerManager {
     private var currentExcludedGames: [String] = []
     private var currentStrategy: MiningStrategy = .mineAll
     private var currentEnableBadgesEmotes: Bool = false
+    private var currentFailoverStreamers: [GameFailoverStreamer] = []
     
     /// Client ID for Twitch API (mutable so it can be updated before first account is added)
     private var clientId: String
@@ -500,6 +502,7 @@ public final class MinerManager {
         avoidDuplicateStreams: Bool = true,
         antiStallRecoveryEnabled: Bool = true,
         prioritiseFollowedStreamers: Bool = false,
+        failoverStreamers: [GameFailoverStreamer] = [],
         ignoredWarnings: [String] = [],
         priorityGamesForMiner: ((ManagedMiner) -> [String])? = nil
     ) async {
@@ -511,6 +514,8 @@ public final class MinerManager {
         self.avoidDuplicateStreams = avoidDuplicateStreams
         self.antiStallRecoveryEnabled = antiStallRecoveryEnabled
         self.prioritiseFollowedStreamers = prioritiseFollowedStreamers
+        self.failoverStreamers = failoverStreamers
+        self.currentFailoverStreamers = failoverStreamers
         startAntiStallMonitorIfNeeded()
         await setup()
         if autoStart && !miners.isEmpty {
@@ -524,7 +529,8 @@ public final class MinerManager {
                     enableBadgesEmotes: enableBadgesEmotes,
                     avoidDuplicateStreams: avoidDuplicateStreams,
                     antiStallRecoveryEnabled: antiStallRecoveryEnabled,
-                    prioritiseFollowedStreamers: prioritiseFollowedStreamers
+                    prioritiseFollowedStreamers: prioritiseFollowedStreamers,
+                    failoverStreamers: failoverStreamers
                 )
             }
         }
@@ -724,7 +730,7 @@ public final class MinerManager {
     // MARK: - Control Operations
 
     /// Start a specific miner
-    public func startMiner(minerId: String, priorityGames: [String], excludedGames: [String], strategy: MiningStrategy, enableBadgesEmotes: Bool = false, showClaimNotifications: Bool = false, avoidDuplicateStreams: Bool = true, antiStallRecoveryEnabled: Bool = true, prioritiseFollowedStreamers: Bool = false) async throws {
+    public func startMiner(minerId: String, priorityGames: [String], excludedGames: [String], strategy: MiningStrategy, enableBadgesEmotes: Bool = false, showClaimNotifications: Bool = false, avoidDuplicateStreams: Bool = true, antiStallRecoveryEnabled: Bool = true, prioritiseFollowedStreamers: Bool = false, failoverStreamers: [GameFailoverStreamer] = []) async throws {
         guard let engine = engines[minerId],
               let miner = getMiner(id: minerId) else {
             throw TwitchMinerError.sessionNotStarted
@@ -747,6 +753,8 @@ public final class MinerManager {
         self.avoidDuplicateStreams = avoidDuplicateStreams
         self.antiStallRecoveryEnabled = antiStallRecoveryEnabled
         self.prioritiseFollowedStreamers = prioritiseFollowedStreamers
+        self.failoverStreamers = failoverStreamers
+        self.currentFailoverStreamers = failoverStreamers
         startAntiStallMonitorIfNeeded()
         let workerTaskID = UUID().uuidString
         await supervisor.recordWorkerStart(minerId: minerId, taskID: workerTaskID)
@@ -761,6 +769,7 @@ public final class MinerManager {
             showClaimNotifications: self.showClaimNotifications,
             avoidDuplicateStreams: self.avoidDuplicateStreams,
             prioritiseFollowedStreamers: self.prioritiseFollowedStreamers,
+            failoverStreamers: self.failoverStreamers,
             ignoredAccountLinkWarningGames: ignoredGames
         )
         await engine.setStreamOverride(login: miner.streamOverrideLogin)
@@ -800,7 +809,7 @@ public final class MinerManager {
     }
     
     /// Start all miners with staggered delays to avoid API rate limiting
-    public func startAll(priorityGames: [String], excludedGames: [String], strategy: MiningStrategy, enableBadgesEmotes: Bool = false, showClaimNotifications: Bool = false, avoidDuplicateStreams: Bool = true, antiStallRecoveryEnabled: Bool = true, prioritiseFollowedStreamers: Bool = false) async {
+    public func startAll(priorityGames: [String], excludedGames: [String], strategy: MiningStrategy, enableBadgesEmotes: Bool = false, showClaimNotifications: Bool = false, avoidDuplicateStreams: Bool = true, antiStallRecoveryEnabled: Bool = true, prioritiseFollowedStreamers: Bool = false, failoverStreamers: [GameFailoverStreamer] = []) async {
         self.currentPriorityGames = priorityGames
         self.currentExcludedGames = excludedGames
         self.currentStrategy = strategy
@@ -809,6 +818,8 @@ public final class MinerManager {
         self.avoidDuplicateStreams = avoidDuplicateStreams
         self.antiStallRecoveryEnabled = antiStallRecoveryEnabled
         self.prioritiseFollowedStreamers = prioritiseFollowedStreamers
+        self.failoverStreamers = failoverStreamers
+        self.currentFailoverStreamers = failoverStreamers
         startAntiStallMonitorIfNeeded()
         let notRunningMiners = miners.filter { !$0.isRunning }
         let totalToStart = notRunningMiners.count
@@ -829,7 +840,8 @@ public final class MinerManager {
                 showClaimNotifications: showClaimNotifications,
                 avoidDuplicateStreams: avoidDuplicateStreams,
                 antiStallRecoveryEnabled: antiStallRecoveryEnabled,
-                prioritiseFollowedStreamers: prioritiseFollowedStreamers
+                prioritiseFollowedStreamers: prioritiseFollowedStreamers,
+                failoverStreamers: failoverStreamers
             )
         }
     }
@@ -1360,6 +1372,16 @@ public final class MinerManager {
         onMinersChanged?()
     }
 
+    public func updateFailoverStreamers(_ streamers: [GameFailoverStreamer]) {
+        failoverStreamers = streamers
+        currentFailoverStreamers = streamers
+        for engine in engines.values {
+            Task {
+                await engine.updateFailoverStreamers(streamers)
+            }
+        }
+    }
+
     /// Add an account that was just activated through the bot-driven device flow.
     /// Skips re-saving (the auth service already saved to the token store) but registers
     /// the miner with the manager and starts mining for it.
@@ -1477,7 +1499,8 @@ public final class MinerManager {
                     showClaimNotifications: showClaimNotifications,
                     avoidDuplicateStreams: avoidDuplicateStreams,
                     antiStallRecoveryEnabled: antiStallRecoveryEnabled,
-                    prioritiseFollowedStreamers: prioritiseFollowedStreamers
+                    prioritiseFollowedStreamers: prioritiseFollowedStreamers,
+                    failoverStreamers: currentFailoverStreamers
                 )
             case .authRefresh:
                 onLogMessage?(action.minerId, "[Supervisor] recovery stage 3 | refreshing auth/session state")

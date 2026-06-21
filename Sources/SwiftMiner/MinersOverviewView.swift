@@ -223,7 +223,8 @@ struct MinersOverviewView: View {
                 strategy: .mineAll,
                 avoidDuplicateStreams: Settings.shared.avoidDuplicateStreams,
                 antiStallRecoveryEnabled: Settings.shared.antiStallRecoveryEnabled,
-                prioritiseFollowedStreamers: Settings.shared.prioritiseFollowedStreamers
+                prioritiseFollowedStreamers: Settings.shared.prioritiseFollowedStreamers,
+                failoverStreamers: Settings.shared.gameFailoverStreamers
             )
         }
     }

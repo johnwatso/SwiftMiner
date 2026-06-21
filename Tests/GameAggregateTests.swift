@@ -412,7 +412,15 @@ final class GameAggregateTests: XCTestCase {
             progress: 0,
             isAccountConnected: false,
             startDate: now.addingTimeInterval(-600),
-            endDate: now.addingTimeInterval(3600)
+            endDate: now.addingTimeInterval(3600),
+            accountStates: [
+                AccountState(
+                    accountId: "a-blocked",
+                    username: "blocked",
+                    initials: "B",
+                    miningStatus: .needsAuth
+                )
+            ]
         )
         let inProgress = makeCampaignViewData(
             id: "c-progress",
@@ -475,6 +483,50 @@ final class GameAggregateTests: XCTestCase {
         XCTAssertEqual(grouped.map(\.aggregateState), [.inProgress, .ready, .completed])
     }
 
+    func testBuildDrops_GroupsSameGameMineableAndSubscriptionRequiredCampaignsAsActive() {
+        let now = Date()
+        let mineable = makeCampaignViewData(
+            id: "c-007-creators",
+            gameId: "g-007",
+            gameName: "007 First Light",
+            progress: 0,
+            isAccountConnected: false,
+            startDate: now.addingTimeInterval(-600),
+            endDate: now.addingTimeInterval(3600),
+            drops: [makeDrop(id: "d-watch", progress: 0, isClaimed: false, isClaimable: false)],
+            dropsClaimed: 0,
+            totalDrops: 1
+        )
+        let subscriptionRequired = makeCampaignViewData(
+            id: "c-007-launch",
+            gameId: "g-007",
+            gameName: "007 First Light",
+            progress: 0,
+            isAccountConnected: false,
+            startDate: now.addingTimeInterval(-600),
+            endDate: now.addingTimeInterval(3600),
+            drops: [
+                makeDrop(
+                    id: "d-sub",
+                    progress: 0,
+                    isClaimed: false,
+                    isClaimable: false,
+                    isSubscriptionRequired: true
+                )
+            ],
+            dropsClaimed: 0,
+            totalDrops: 1
+        )
+
+        let grouped = GameAggregateBuilder.buildDrops(from: [subscriptionRequired, mineable], now: now)
+
+        XCTAssertEqual(grouped.count, 1)
+        XCTAssertEqual(grouped.first?.gameName, "007 First Light")
+        XCTAssertEqual(grouped.first?.aggregateState, .ready)
+        XCTAssertEqual(grouped.first?.campaigns.map(\.campaign.id), ["c-007-creators", "c-007-launch"])
+        XCTAssertTrue(grouped.first?.campaigns.last?.campaign.drops.first?.isSubscriptionRequired == true)
+    }
+
     func testBuildDrops_ExpiredAndUnavailableEdgeCases() {
         let now = Date()
         let expiredUnclaimed = makeCampaignViewData(
@@ -521,7 +573,8 @@ final class GameAggregateTests: XCTestCase {
         endDate: Date,
         drops: [DropViewData] = [DropViewData(id: "d-default", name: "Drop", description: nil, imageURL: nil, rewardType: .inGame, requiredMinutes: 60, currentMinutes: 0, progress: 0, isClaimed: false, isClaimable: false, isEarnable: true)],
         dropsClaimed: Int = 0,
-        totalDrops: Int = 1
+        totalDrops: Int = 1,
+        accountStates: [AccountState] = []
     ) -> CampaignViewData {
         CampaignViewData(
             id: id,
@@ -540,7 +593,7 @@ final class GameAggregateTests: XCTestCase {
             startDate: startDate,
             endDate: endDate,
             drops: drops,
-            accountStates: []
+            accountStates: accountStates
         )
     }
 
@@ -548,7 +601,8 @@ final class GameAggregateTests: XCTestCase {
         id: String,
         progress: Double,
         isClaimed: Bool,
-        isClaimable: Bool
+        isClaimable: Bool,
+        isSubscriptionRequired: Bool = false
     ) -> DropViewData {
         DropViewData(
             id: id,
@@ -561,7 +615,8 @@ final class GameAggregateTests: XCTestCase {
             progress: progress,
             isClaimed: isClaimed,
             isClaimable: isClaimable,
-            isEarnable: !isClaimed && !isClaimable
+            isEarnable: !isClaimed && !isClaimable && !isSubscriptionRequired,
+            isSubscriptionRequired: isSubscriptionRequired
         )
     }
 }

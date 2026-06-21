@@ -63,4 +63,20 @@ final class AccountPriorityGamesTests: XCTestCase {
         XCTAssertEqual(cleared, ["Global Game"])
         XCTAssertTrue(settings.personalPriorityGames(forAccountId: account).isEmpty)
     }
+
+    func testGameFailoverStreamerPersistsByGame() {
+        let game = Game(id: "g-finals", name: "THE FINALS")
+        settings.addGamePreference(game, state: .preferred)
+
+        let preference = try! XCTUnwrap(settings.gamePreferences.first)
+        settings.setFailoverStreamer("https://www.twitch.tv/Ronin", for: preference)
+
+        let failover = settings.failoverStreamer(for: preference)
+        XCTAssertEqual(failover?.gameId, "g-finals")
+        XCTAssertEqual(failover?.gameName, "THE FINALS")
+        XCTAssertEqual(failover?.streamerLogin, "ronin")
+
+        settings.clearFailoverStreamer(for: preference)
+        XCTAssertNil(settings.failoverStreamer(for: preference))
+    }
 }

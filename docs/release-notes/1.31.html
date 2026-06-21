@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SwiftMiner 1.31 - Draft Release Notes</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      margin: 0;
+      padding: 32px 20px 48px;
+      font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f4f6f8;
+      color: #0f1720;
+    }
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 28px;
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.86);
+      box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
+    }
+    h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
+    .meta { margin: 0 0 24px; color: #52606d; font-size: 14px; }
+    h2 { margin: 28px 0 10px; font-size: 20px; }
+    ul { margin: 0 0 20px; padding-left: 22px; }
+    li { margin: 0 0 8px; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #0b1015; color: #edf2f7; }
+      main {
+        background: rgba(15, 23, 32, 0.88);
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+      }
+      .meta { color: #9fb0c2; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>SwiftMiner 1.31</h1>
+    <p class="meta">Draft release notes for work in progress</p>
+
+    <h2>In Progress</h2>
+    <ul>
+      <li>Keeps prioritised games such as 007 First Light visible in Drops Active even when Twitch reports the active campaign as unlinked.</li>
+      <li>Preserves subscription-required reward treatment for same-game campaigns, including the credit-card badge and <strong>Sub</strong> label on paid-sub reward thumbnails.</li>
+      <li>Restores the Drops Active filter guard so unlinked, non-prioritised public campaigns do not clutter the active campaign list.</li>
+      <li>Adds a SwiftMiner Website item to the app menu so swiftminer.app is easy to open from About SwiftMiner.</li>
+      <li>Adds regression coverage for live unlinked campaign relevance, same-game subscription-required campaigns, and grouped Drops state.</li>
+    </ul>
+  </main>
+</body>
+</html>

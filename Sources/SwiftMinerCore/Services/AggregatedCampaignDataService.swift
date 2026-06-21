@@ -731,7 +731,8 @@ public actor AggregatedCampaignDataService {
             return .prioritised
         }
 
-        // 1. Active check — must be connected AND in an active-earnable state
+        // 1. Active check — merged public campaigns still need at least one
+        // connected account unless a source campaign was explicitly prioritised.
         if anyConnected && (miningStatus == .available ||
             miningStatus == .inProgress ||
             miningStatus == .claimable) {

@@ -98,6 +98,7 @@ public final class AppModel {
             // Sync notification preference
             await manager.updateNotificationPreference(enabled: Settings.shared.showClaimNotifications && Settings.shared.allowsOperatorNotifications())
             await manager.updateAntiStallRecovery(enabled: Settings.shared.antiStallRecoveryEnabled)
+            manager.updateFailoverStreamers(Settings.shared.gameFailoverStreamers)
 
             // Keep app-level state (auth + badge) in sync whenever miners or
             // account-link warning preferences change.
@@ -117,7 +118,8 @@ public final class AppModel {
             excludedGames: Settings.shared.excludedGames,
             showClaimNotifications: Settings.shared.showClaimNotifications && Settings.shared.allowsOperatorNotifications(),
             avoidDuplicateStreams: Settings.shared.avoidDuplicateStreams,
-            prioritiseFollowedStreamers: Settings.shared.prioritiseFollowedStreamers
+            prioritiseFollowedStreamers: Settings.shared.prioritiseFollowedStreamers,
+            failoverStreamers: Settings.shared.gameFailoverStreamers
         )
 
         await engine.setStatusChangeHandler { [weak self] status in
@@ -185,7 +187,8 @@ public final class AppModel {
                 showClaimNotifications: settings.showClaimNotifications,
                 avoidDuplicateStreams: settings.avoidDuplicateStreams,
                 antiStallRecoveryEnabled: settings.antiStallRecoveryEnabled,
-                prioritiseFollowedStreamers: settings.prioritiseFollowedStreamers
+                prioritiseFollowedStreamers: settings.prioritiseFollowedStreamers,
+                failoverStreamers: settings.gameFailoverStreamers
             )
             return
         }
