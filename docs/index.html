@@ -3,14 +3,15 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>SwiftMiner - Native macOS Twitch Drops Automation</title>
-    <meta name="description" content="Never miss a Twitch Drop again. SwiftMiner is a native macOS app that monitors campaigns, switches to eligible streams, tracks progress, and claims rewards across multiple accounts.">
+    <title>SwiftMiner - Twitch Drops Miner and Claimer for macOS</title>
+    <meta name="description" content="SwiftMiner is a native Twitch Drops miner and claimer for macOS that auto claims rewards, switches to eligible streams, and tracks progress across multiple accounts.">
     <link rel="canonical" href="https://swiftminer.app/">
     <meta name="robots" content="index, follow, max-image-preview:large">
     <meta name="theme-color" content="#090514" media="(prefers-color-scheme: dark)">
     <meta name="theme-color" content="#f8fafc" media="(prefers-color-scheme: light)">
 
     <!-- Icons -->
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
@@ -21,8 +22,8 @@
     <meta property="og:site_name" content="SwiftMiner">
     <meta property="og:locale" content="en_US">
     <meta property="og:url" content="https://swiftminer.app/">
-    <meta property="og:title" content="SwiftMiner - Native macOS Twitch Drops Automation">
-    <meta property="og:description" content="Never miss a Twitch Drop again with native macOS automation, multi-account support, and automatic reward claiming.">
+    <meta property="og:title" content="SwiftMiner - Twitch Drops Miner and Claimer for macOS">
+    <meta property="og:description" content="A native Twitch Drops miner and claimer for macOS with multi-account support, stream selection, progress tracking, and automatic reward claiming.">
     <meta property="og:image" content="https://swiftminer.app/assets/landing/og-image.jpg">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="629">
@@ -31,29 +32,45 @@
 
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="SwiftMiner - Native macOS Twitch Drops Automation">
-    <meta name="twitter:description" content="Never miss a Twitch Drop again with native macOS automation, multi-account support, and automatic reward claiming.">
+    <meta name="twitter:title" content="SwiftMiner - Twitch Drops Miner and Claimer for macOS">
+    <meta name="twitter:description" content="A native Twitch Drops miner and claimer for macOS with multi-account support, stream selection, progress tracking, and automatic reward claiming.">
     <meta name="twitter:image" content="https://swiftminer.app/assets/landing/og-image.jpg">
     <meta name="twitter:image:alt" content="SwiftMiner running on macOS, showing its Twitch Drops dashboard.">
 
-    <!-- Structured data: SoftwareApplication -->
+    <!-- Structured data -->
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
-      "@type": "SoftwareApplication",
-      "name": "SwiftMiner",
-      "operatingSystem": "macOS 26.0 or later",
-      "applicationCategory": "UtilitiesApplication",
-      "url": "https://swiftminer.app/",
-      "downloadUrl": "https://swiftminer.app/",
-      "description": "Never miss a Twitch Drop again. SwiftMiner is a native macOS app that monitors campaigns, switches to eligible streams, tracks progress, and claims rewards across multiple accounts.",
-      "image": "https://swiftminer.app/assets/landing/og-image.jpg",
-      "softwareHelp": "https://swiftminer.app/help/",
-      "offers": {
-        "@type": "Offer",
-        "price": "0",
-        "priceCurrency": "USD"
-      }
+      "@graph": [
+        {
+          "@type": "WebSite",
+          "@id": "https://swiftminer.app/#website",
+          "name": "SwiftMiner",
+          "alternateName": ["SwiftMiner for macOS", "Twitch Drops miner for Mac", "Twitch Drops claimer for Mac"],
+          "url": "https://swiftminer.app/"
+        },
+        {
+          "@type": "SoftwareApplication",
+          "@id": "https://swiftminer.app/#app",
+          "name": "SwiftMiner",
+          "operatingSystem": "macOS 26.0 or later",
+          "applicationCategory": "UtilitiesApplication",
+          "applicationSubCategory": "Twitch Drops miner and claimer",
+          "softwareVersion": "1.30",
+          "url": "https://swiftminer.app/",
+          "downloadUrl": "https://swiftminer.app/download/",
+          "description": "SwiftMiner is a native Twitch Drops miner and claimer for macOS that auto claims rewards, switches to eligible streams, and tracks progress across multiple accounts.",
+          "image": "https://swiftminer.app/assets/landing/og-image.jpg",
+          "screenshot": "https://swiftminer.app/assets/landing/overview-dark.png",
+          "softwareHelp": "https://swiftminer.app/help/",
+          "sameAs": "https://github.com/johnwatso/SwiftMiner",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          }
+        }
+      ]
     }
     </script>
 
@@ -714,7 +731,7 @@
                 <i class="theme-icon-light ph-bold ph-moon text-base"></i>
             </button>
             
-            <a href="https://github.com/johnwatso/SwiftMiner/releases/latest" class="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-br from-brand-purple to-brand-violet rounded-full text-white text-xs font-bold hover:shadow-[0_8px_20px_rgba(147,51,234,0.3)] hover:-translate-y-0.5 transition-all flex-shrink-0 border border-white/10">
+            <a href="/download/" class="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-br from-brand-purple to-brand-violet rounded-full text-white text-xs font-bold hover:shadow-[0_8px_20px_rgba(147,51,234,0.3)] hover:-translate-y-0.5 transition-all flex-shrink-0 border border-white/10">
                 <i class="ph-bold ph-download-simple"></i>
                 Download
             </a>
@@ -740,12 +757,16 @@
                             <span class="hero-title-line">Never miss a <span class="text-gradient">Twitch Drop</span> again.</span>
                         </h1>
                         
-                        <p class="text-lg sm:text-xl text-slate-600 dark:text-gray-400 mb-10 max-w-4xl mx-auto leading-relaxed font-light">
+                        <p class="text-lg sm:text-xl text-slate-600 dark:text-gray-400 mb-4 max-w-4xl mx-auto leading-relaxed font-light">
                             Set it once, and SwiftMiner does the watching for you — finding eligible streams, tracking every campaign, and claiming rewards across all your accounts. No missed drops, no browser tab required.
+                        </p>
+
+                        <p class="text-sm sm:text-base text-slate-500 dark:text-gray-500 mb-10 max-w-3xl mx-auto leading-relaxed">
+                            A native Twitch Drops miner and claimer for Mac, built for long-running background sessions instead of browser tabs or Docker containers.
                         </p>
                         
                         <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
-                            <a href="https://github.com/johnwatso/SwiftMiner/releases/latest" class="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-br from-brand-purple to-brand-violet rounded-xl text-white font-bold text-lg hover:shadow-[0_8px_30px_rgba(147,51,234,0.4)] hover:-translate-y-1 transition-all">
+                            <a href="/download/" class="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-br from-brand-purple to-brand-violet rounded-xl text-white font-bold text-lg hover:shadow-[0_8px_30px_rgba(147,51,234,0.4)] hover:-translate-y-1 transition-all">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" fill="currentColor" class="w-5 h-5"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></svg>
                                 Download for Mac
                             </a>
@@ -761,11 +782,6 @@
                             Free and open source. Signed and notarized by Apple. No account required. <a href="https://swiftminer.app/help/" class="font-semibold text-brand-purple hover:text-brand-magenta transition-colors">Need help?</a>
                         </p>
                         
-                        <div class="mt-4 flex items-center justify-center gap-1.5 text-xs text-slate-500 dark:text-gray-500 font-medium tracking-wide">
-                            <i class="ph-bold ph-download-simple text-brand-cyan"></i>
-                            <span><span id="dl-count-hero" class="text-slate-800 dark:text-gray-300 font-semibold">8,300+</span> downloads and counting</span>
-                        </div>
-
                         <div class="trust-strip">
                             <span class="trust-badge">
                                 <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" class="text-brand-cyan">
@@ -822,9 +838,9 @@
                                 <div class="w-12 h-12 rounded-full bg-brand-cyan/20 flex items-center justify-center text-brand-cyan mb-4 border border-brand-cyan/30">
                                     <i class="ph-fill ph-magic-wand text-2xl"></i>
                                 </div>
-                                <h3 class="text-xl font-bold mb-2 text-slate-900 dark:text-white">Automatic Claiming</h3>
+                                <h3 class="text-xl font-bold mb-2 text-slate-900 dark:text-white">Auto Claim Twitch Drops</h3>
                             </div>
-                            <p class="text-slate-500 dark:text-gray-400 text-xs leading-relaxed">Rewards are claimed the moment they unlock — you never have to remember to check.</p>
+                            <p class="text-slate-500 dark:text-gray-400 text-xs leading-relaxed">SwiftMiner acts as a Twitch Drops claimer, claiming rewards the moment they unlock so you do not have to keep checking.</p>
                         </div>
                     </div>
  
@@ -933,8 +949,8 @@
                             <div class="w-12 h-12 rounded-full bg-brand-magenta/20 flex items-center justify-center text-brand-magenta mb-5 border border-brand-magenta/30 shadow-lg">
                                 <i class="ph-bold ph-game-controller text-2xl"></i>
                             </div>
-                            <h3 class="text-2xl md:text-3xl font-bold mb-3 text-slate-900 dark:text-white">Campaigns stay organized</h3>
-                            <p class="text-slate-600 dark:text-gray-400 leading-relaxed">Track active, completed, and upcoming drops while SwiftMiner chooses eligible streams in the background.</p>
+                            <h3 class="text-2xl md:text-3xl font-bold mb-3 text-slate-900 dark:text-white">Drops progress tracking</h3>
+                            <p class="text-slate-600 dark:text-gray-400 leading-relaxed">Track active, completed, and upcoming drops while SwiftMiner chooses eligible streams and keeps progress moving in the background.</p>
                         </div>
                         <div class="screenshot-frame">
                             <img data-screenshot="drops" src="./assets/landing/drops-dark.png" width="3358" height="1760" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/1200x630/090514/00e5ff?text=Drops+Screen'" alt="Drops Screen" class="w-full transition-all duration-300 opacity-100">
@@ -1157,11 +1173,11 @@
                             Free, open source, and ready in about a minute. Download the latest signed release and start collecting Drops.
                         </p>
                         
-                        <a href="https://github.com/johnwatso/SwiftMiner/releases/latest" class="flex items-center gap-3 px-10 py-5 bg-gradient-to-br from-brand-purple to-brand-violet rounded-2xl text-white font-bold text-xl hover:shadow-[0_12px_40px_rgba(147,51,234,0.4)] hover:-translate-y-1 transition-all">
+                        <a href="/download/" class="flex items-center gap-3 px-10 py-5 bg-gradient-to-br from-brand-purple to-brand-violet rounded-2xl text-white font-bold text-xl hover:shadow-[0_12px_40px_rgba(147,51,234,0.4)] hover:-translate-y-1 transition-all">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" fill="currentColor" class="w-6 h-6"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></svg>
                             Get SwiftMiner
                         </a>
-                        <p class="mt-6 text-sm text-slate-500 dark:text-gray-500">Free · <span id="dl-count-card">8,300+</span> downloads · Requires macOS 26.0 or later · Auto-updates.</p>
+                        <p class="mt-6 text-sm text-slate-500 dark:text-gray-500">Free · Requires macOS 26.0 or later · Auto-updates.</p>
                     </div>
                 </div>
             </div>
@@ -1439,62 +1455,5 @@
         });
     </script>
 
-    <!-- Live download count from GitHub Releases (falls back to the static value on failure) -->
-    <script>
-        (function () {
-            var REPO = 'johnwatso/SwiftMiner';
-            var CACHE_KEY = 'sm_dl_count';
-            var TTL = 6 * 60 * 60 * 1000; // 6 hours
-
-            function format(n) {
-                if (n >= 1000) {
-                    // Round down to the nearest 100 so the trailing "+" stays truthful.
-                    return (Math.floor(n / 100) * 100).toLocaleString('en-US') + '+';
-                }
-                return String(n);
-            }
-
-            function apply(n) {
-                var text = format(n);
-                ['dl-count-hero', 'dl-count-card'].forEach(function (id) {
-                    var el = document.getElementById(id);
-                    if (el) el.textContent = text;
-                });
-            }
-
-            try {
-                var cached = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
-                if (cached && (Date.now() - cached.t) < TTL) {
-                    apply(cached.n);
-                    return;
-                }
-            } catch (e) { /* ignore */ }
-
-            // Walk every page of releases (100 at a time) so the count covers all
-            // releases, including any published in the future, with no page ceiling.
-            function fetchPage(page, releases) {
-                return fetch('https://api.github.com/repos/' + REPO + '/releases?per_page=100&page=' + page)
-                    .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
-                    .then(function (batch) {
-                        releases = releases.concat(batch);
-                        return batch.length === 100 ? fetchPage(page + 1, releases) : releases;
-                    });
-            }
-
-            fetchPage(1, [])
-                .then(function (releases) {
-                    var total = releases.reduce(function (sum, rel) {
-                        return sum + (rel.assets || []).reduce(function (a, asset) {
-                            return a + (asset.download_count || 0);
-                        }, 0);
-                    }, 0);
-                    if (total > 0) {
-                        apply(total);
-                        try { localStorage.setItem(CACHE_KEY, JSON.stringify({ n: total, t: Date.now() })); } catch (e) { /* ignore */ }
-                    }
-                })
-                .catch(function () { /* keep the static fallback already in the markup */ });
-        })();
-    </script>
 </body>
 </html>

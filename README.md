@@ -6,10 +6,10 @@
   </picture>
 </p>
 
-<h1 align="center">SwiftMiner — Native macOS Twitch Drops Automation</h1>
+<h1 align="center">SwiftMiner — Twitch Drops Miner and Claimer for macOS</h1>
 
 <p align="center">
-  Automated Twitch Drops farming for macOS. Secure, native, and multi-account ready.
+  A native Twitch Drops miner and claimer for macOS. Secure, lightweight, and multi-account ready.
 </p>
 
 <p align="center">
@@ -20,7 +20,6 @@
   <img src="https://img.shields.io/badge/platform-macOS%2026+-blue" alt="Platform badge">
   <img src="https://img.shields.io/badge/swift-6.0-orange" alt="Swift badge">
   <img src="https://img.shields.io/badge/architecture-Universal%20(Apple%20Silicon%20%2B%20Intel)-black" alt="Architecture badge">
-  <a href="https://github.com/johnwatso/SwiftMiner/releases"><img src="https://img.shields.io/github/downloads/johnwatso/SwiftMiner/total?label=downloads" alt="GitHub release downloads badge"></a>
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="License badge">
   <img src="https://img.shields.io/badge/status-active%20development-orange" alt="Status badge">
 </p>
@@ -32,7 +31,7 @@
 - Notarized by Apple for trusted macOS installs
 - Built-in update management with Sparkle
 
-**SwiftMiner** is a high-performance, native macOS application designed to automate **Twitch Drops farming** across multiple accounts simultaneously. Built with Swift 6 and SwiftUI, it provides a lightweight, background-ready solution for claiming Twitch rewards without the need for browser automation or heavy external dependencies.
+**SwiftMiner** is a high-performance, native **Twitch Drops miner and claimer for macOS** designed to automate Drops farming across multiple accounts simultaneously. Built with Swift 6 and SwiftUI, it provides a lightweight, background-ready solution for progress tracking, eligible stream selection, and automatic reward claiming without the need for browser automation or heavy external dependencies.
 
 It is written in Swift using SwiftUI and standard macOS frameworks. Each account runs in its own isolated miner, and the app provides a single interface to monitor progress, claim state, and activity.
 
