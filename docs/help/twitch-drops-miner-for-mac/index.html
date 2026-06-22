@@ -3,8 +3,8 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Twitch Drops Miner for Mac - SwiftMiner Help</title>
-    <meta name="description" content="Use SwiftMiner as a native Twitch Drops miner for Mac to watch eligible streams, track campaign progress, and claim rewards from macOS.">
+    <title>Twitch Drops Miner for Mac - Auto Claim Drops with SwiftMiner</title>
+    <meta name="description" content="Use SwiftMiner as a free Twitch Drops miner for Mac. Watch eligible streams, track campaign progress, auto claim rewards, and run with no Docker required.">
     <link rel="canonical" href="https://swiftminer.app/help/twitch-drops-miner-for-mac/">
     <meta name="robots" content="index, follow, max-image-preview:large">
     <meta name="theme-color" content="#f5f5f7">
@@ -12,20 +12,47 @@
     <meta property="og:site_name" content="SwiftMiner">
     <meta property="og:url" content="https://swiftminer.app/help/twitch-drops-miner-for-mac/">
     <meta property="og:title" content="Twitch Drops Miner for Mac">
-    <meta property="og:description" content="Learn how SwiftMiner mines Twitch Drops natively on macOS without browser tabs or containers.">
+    <meta property="og:description" content="Learn how SwiftMiner mines Twitch Drops natively on macOS, auto claims rewards, and runs without browser tabs or Docker.">
     <meta property="og:image" content="https://swiftminer.app/assets/landing/og-image.jpg">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Twitch Drops Miner for Mac">
-    <meta name="twitter:description" content="Learn how SwiftMiner mines Twitch Drops natively on macOS without browser tabs or containers.">
+    <meta name="twitter:description" content="Learn how SwiftMiner mines Twitch Drops natively on macOS, auto claims rewards, and runs without browser tabs or Docker.">
     <meta name="twitter:image" content="https://swiftminer.app/assets/landing/og-image.jpg">
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
-      "@type": "BreadcrumbList",
-      "itemListElement": [
-        {"@type": "ListItem", "position": 1, "name": "SwiftMiner", "item": "https://swiftminer.app/"},
-        {"@type": "ListItem", "position": 2, "name": "Help", "item": "https://swiftminer.app/help/"},
-        {"@type": "ListItem", "position": 3, "name": "Twitch Drops Miner for Mac", "item": "https://swiftminer.app/help/twitch-drops-miner-for-mac/"}
+      "@graph": [
+        {
+          "@type": "BreadcrumbList",
+          "@id": "https://swiftminer.app/help/twitch-drops-miner-for-mac/#breadcrumbs",
+          "itemListElement": [
+            {"@type": "ListItem", "position": 1, "name": "SwiftMiner", "item": "https://swiftminer.app/"},
+            {"@type": "ListItem", "position": 2, "name": "Help", "item": "https://swiftminer.app/help/"},
+            {"@type": "ListItem", "position": 3, "name": "Twitch Drops Miner for Mac", "item": "https://swiftminer.app/help/twitch-drops-miner-for-mac/"}
+          ]
+        },
+        {
+          "@type": "Article",
+          "@id": "https://swiftminer.app/help/twitch-drops-miner-for-mac/#article",
+          "headline": "Twitch Drops Miner for Mac",
+          "description": "Use SwiftMiner as a free Twitch Drops miner for Mac. Watch eligible streams, track campaign progress, auto claim rewards, and run with no Docker required.",
+          "image": "https://swiftminer.app/assets/landing/og-image.jpg",
+          "datePublished": "2026-06-22",
+          "dateModified": "2026-06-23",
+          "author": {
+            "@type": "Organization",
+            "name": "SwiftMiner"
+          },
+          "publisher": {
+            "@type": "Organization",
+            "name": "SwiftMiner",
+            "logo": {
+              "@type": "ImageObject",
+              "url": "https://swiftminer.app/icon-512.png"
+            }
+          },
+          "mainEntityOfPage": "https://swiftminer.app/help/twitch-drops-miner-for-mac/"
+        }
       ]
     }
     </script>
@@ -65,7 +92,7 @@
 
         <header class="article-header">
             <h1>Twitch Drops Miner for Mac</h1>
-            <p class="article-intro">SwiftMiner runs Twitch Drops mining as a native macOS app, so your Mac can find eligible streams, track progress, and claim rewards without leaving browser tabs open.</p>
+            <p class="article-intro">SwiftMiner runs Twitch Drops mining as a native macOS app, so your Mac can find eligible streams, track campaign progress, and auto claim rewards without leaving browser tabs open.</p>
             <div class="search-wrap" style="margin-top: 1.5rem; max-width: 100%;">
                 <i class="ph-bold ph-magnifying-glass" style="position: absolute; top: 50%; left: 1.1rem; transform: translateY(-50%); color: var(--muted);"></i>
                 <input id="help-search" class="search" type="search" placeholder="Search help topics" aria-label="Search help topics" style="width: 100%; height: 48px; padding: 0 1.2rem 0 3rem; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-solid); color: var(--ink); font: inherit; outline: none; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);">
@@ -74,13 +101,59 @@
 
         <div class="kb-grid">
             <main class="kb-content">
-                <p>SwiftMiner is built for people who want Twitch Drops to keep progressing while they use their Mac normally. Instead of relying on a browser window, a container, or a remote service, SwiftMiner keeps each miner session running locally on macOS.</p>
+                <p>SwiftMiner is built for people who want Twitch Drops to keep progressing while they use their Mac normally. Instead of relying on a browser window, a Docker container, or a remote service, SwiftMiner keeps each miner session running locally on macOS.</p>
+
+                <div class="callout info">
+                    <strong>Short version</strong>
+                    <p>SwiftMiner is a free Twitch Drops miner for Mac that watches eligible streams, tracks progress, supports multiple accounts, and claims rewards automatically when Twitch marks them ready.</p>
+                </div>
 
                 <h2 id="what-it-does">What a Twitch Drops miner does</h2>
                 <p>A Twitch Drops miner watches eligible streams for campaigns you care about, tracks reward progress, and claims completed rewards when Twitch makes them available. SwiftMiner also checks campaign eligibility, switches away from unusable streams, and keeps an activity log so you can see what happened.</p>
+                <ul>
+                    <li>Finds streams that count toward active Twitch Drops campaigns.</li>
+                    <li>Tracks campaign progress, reward status, and upcoming drops.</li>
+                    <li>Claims rewards automatically when they unlock.</li>
+                    <li>Keeps separate miner sessions for multiple Twitch accounts.</li>
+                </ul>
 
                 <h2 id="why-native-macos">Why use a native Mac app?</h2>
                 <p>A native app can keep mining quietly in the background, integrate with macOS notifications, store Twitch tokens in Keychain, and present account status without managing browser tabs. SwiftMiner is also signed and notarized, so it follows the normal macOS app trust path.</p>
+
+                <div class="kb-table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Approach</th>
+                                <th>Best for</th>
+                                <th>Tradeoff</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>SwiftMiner native Mac app</td>
+                                <td>Running Twitch Drops mining on a Mac with a signed app, Keychain storage, notifications, and a visual dashboard.</td>
+                                <td>Requires a Mac running the supported macOS version.</td>
+                            </tr>
+                            <tr>
+                                <td>Browser tabs</td>
+                                <td>Manual viewing when you only need a single short campaign.</td>
+                                <td>Easy to close accidentally, harder to monitor, and inconvenient for multiple accounts.</td>
+                            </tr>
+                            <tr>
+                                <td>Docker-based miner</td>
+                                <td>Headless servers, Linux hosts, NAS setups, or users who prefer container workflows.</td>
+                                <td>More setup on Mac: images, compose files, ports, volumes, and container troubleshooting.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h2 id="auto-claim">Auto claim Twitch Drops</h2>
+                <p>SwiftMiner can claim rewards automatically after watch progress reaches 100%. It refreshes Twitch campaign and inventory data, submits the claim, and records the result in the Activity Log. See <a href="../auto-claim-twitch-drops-on-macos/">Auto Claim Twitch Drops on macOS</a> for the full claim flow and reliability tips.</p>
+
+                <h2 id="without-docker">No Docker required</h2>
+                <p>If you are on a Mac, SwiftMiner avoids the usual container setup: no Docker image pulls, no compose file, no mapped ports, and no container filesystem to inspect. The <a href="../twitch-drops-miner-without-docker/">No Docker Required</a> guide explains when a native app is a better fit and when Docker can still make sense.</p>
 
                 <h2 id="start-mining">Start mining Twitch Drops on Mac</h2>
                 <ol class="steps-list">
@@ -92,6 +165,9 @@
 
                 <h2 id="when-to-check">When to check the app</h2>
                 <p>Most sessions can run unattended, but check SwiftMiner when an account shows <strong>Needs Auth</strong>, when a game requires a publisher account link, or when you want to prioritize a specific campaign. The <a href="../troubleshooting/">troubleshooting guide</a> covers the common recovery paths.</p>
+
+                <h2 id="related-guides">Related Twitch Drops guides</h2>
+                <p>For deeper setup and troubleshooting, continue with <a href="../multi-account-twitch-drops/">multi-account Twitch Drops</a>, <a href="../working-twitch-drops-miner/">how to choose a working Twitch Drops miner</a>, or <a href="../twitch-drops-not-progressing/">what to check when Twitch Drops are not progressing</a>.</p>
             </main>
 
             <aside class="kb-sidebar" aria-label="Sidebar">
@@ -100,8 +176,11 @@
                     <ul class="toc-list">
                         <li><a href="#what-it-does" class="toc-link">What it does</a></li>
                         <li><a href="#why-native-macos" class="toc-link">Native Mac benefits</a></li>
+                        <li><a href="#auto-claim" class="toc-link">Auto claim</a></li>
+                        <li><a href="#without-docker" class="toc-link">No Docker required</a></li>
                         <li><a href="#start-mining" class="toc-link">Start mining</a></li>
                         <li><a href="#when-to-check" class="toc-link">When to check</a></li>
+                        <li><a href="#related-guides" class="toc-link">Related guides</a></li>
                     </ul>
                 </div>
                 <div class="sidebar-section">
@@ -109,8 +188,8 @@
                     <ul class="related-links">
                         <li><a href="../getting-started/"><i class="ph-bold ph-rocket-launch"></i> Getting Started</a></li>
                         <li><a href="../auto-claim-twitch-drops-on-macos/"><i class="ph-bold ph-gift"></i> Auto-Claim Drops</a></li>
+                        <li><a href="../twitch-drops-miner-without-docker/"><i class="ph-bold ph-cube"></i> No Docker Required</a></li>
                         <li><a href="../multi-account-twitch-drops/"><i class="ph-bold ph-users-three"></i> Multi-Account Drops</a></li>
-                        <li><a href="../security-privacy/"><i class="ph-bold ph-shield-check"></i> Security & Privacy</a></li>
                     </ul>
                 </div>
             </aside>
@@ -119,7 +198,7 @@
 
     <footer class="footer">
         <div class="shell">
-            <span>SwiftMiner Help · Published June 22, 2026</span>
+            <span>SwiftMiner Help · Updated June 23, 2026</span>
             <span><a class="nav-link" href="../../release-notes/">Release Notes</a> · <a class="nav-link" href="https://github.com/johnwatso/SwiftMiner">GitHub</a></span>
         </div>
     </footer>
