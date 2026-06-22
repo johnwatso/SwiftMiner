@@ -442,45 +442,6 @@ tr:last-child td {
     text-decoration: underline;
 }
 
-/* Feedback Widget */
-.feedback-widget {
-    border-top: 1px solid var(--line);
-    padding: 2.5rem 0 1rem;
-    margin-top: 4rem;
-    text-align: center;
-}
-
-.feedback-widget p {
-    font-size: 0.95rem;
-    font-weight: 600;
-    margin: 0 0 1rem;
-}
-
-.feedback-btn-group {
-    display: flex;
-    justify-content: center;
-    gap: 0.75rem;
-}
-
-.feedback-btn {
-    padding: 0.5rem 1.2rem;
-    font-family: inherit;
-    font-size: 0.9rem;
-    font-weight: 600;
-    border-radius: 999px;
-    border: 1px solid var(--line);
-    background: var(--surface-solid);
-    color: var(--ink);
-    cursor: pointer;
-    transition: all 0.18s ease;
-}
-
-.feedback-btn:hover {
-    background: var(--blue-soft);
-    border-color: rgba(0, 113, 227, 0.25);
-    color: var(--blue);
-}
-
 /* Search Dropdown styling */
 .search-wrap {
     position: relative;
