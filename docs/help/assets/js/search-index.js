@@ -264,6 +264,29 @@ const searchIndex = [
     category: "Reverse Proxy",
     keywords: "caddy caddyfile config reverse_proxy SSL automatic ssl domain",
     snippet: "Set up a simple Caddyfile block for automatic SSL and reverse proxy routing."
+  },
+
+  // Under the Hood
+  {
+    title: "Under the Hood: Technical Architecture",
+    url: "under-the-hood/",
+    category: "Architecture",
+    keywords: "under the hood technical architecture swift concurrency actor tasks async await web server websocket pubsub sqlite network framework framework keychain",
+    snippet: "Deep dive into SwiftMiner's underlying architecture, concurrency design, SQLite local caching, and custom web daemon."
+  },
+  {
+    title: "Swift Concurrency Model",
+    url: "under-the-hood/#concurrency",
+    category: "Architecture",
+    keywords: "swift concurrency actor tasks async await mainactor main actor non-blocking ui structured concurrency",
+    snippet: "Learn how SwiftMiner uses thread-safe actors and background tasks to handle accounts concurrently."
+  },
+  {
+    title: "Embedded Web Server Engine",
+    url: "under-the-hood/#web-server",
+    category: "Architecture",
+    keywords: "embedded web server network framework tcp socket port daemon lightweight daemon vapor nodejs",
+    snippet: "Technical details on how SwiftMiner runs a zero-dependency local web server utilizing Apple's Network.framework."
   }
 ];
 

@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Under the Hood - SwiftMiner Help</title>
+    <meta name="description" content="Technical details, architecture design, and engineering patterns behind SwiftMiner, including Swift concurrency, SQLite storage, and WebSocket pubsub.">
+    <link rel="canonical" href="https://swiftminer.app/help/under-the-hood/">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#f5f5f7">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="stylesheet" href="../../assets/css/tailwind.css">
+    <link rel="stylesheet" href="../assets/css/kbase.css">
+    <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
+    <script src="../assets/js/search-index.js" defer></script>
+    <script src="../assets/js/search.js" defer></script>
+    <script src="../assets/js/kbase.js" defer></script>
+</head>
+<body>
+    <nav class="nav" aria-label="Main">
+        <div class="shell nav-inner">
+            <a class="brand" href="../">
+                <img src="../../assets/landing/swiftminer-icon.webp" alt="">
+                <span>SwiftMiner Help</span>
+            </a>
+            <div class="nav-actions">
+                <a class="nav-link" href="../">Help Home</a>
+                <a class="nav-link optional" href="../../">Overview</a>
+                <a class="nav-link" href="https://github.com/johnwatso/SwiftMiner/issues">Raise an Issue</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="shell">
+        <div class="breadcrumbs" aria-label="Breadcrumbs">
+            <a href="../">Help Home</a>
+            <span class="sep">/</span>
+            <span class="current">Under the Hood</span>
+        </div>
+
+        <header class="article-header">
+            <h1>Under the Hood</h1>
+            <p class="article-intro">A technical look at SwiftMiner's internal architecture. Explore how we utilize native Swift concurrency, local SQLite engines, secure macOS keychains, and socket networking to build a high-performance desktop application.</p>
+            <div class="search-wrap" style="margin-top: 1.5rem; max-width: 100%;">
+                <i class="ph-bold ph-magnifying-glass" style="position: absolute; top: 50%; left: 1.1rem; transform: translateY(-50%); color: var(--muted);"></i>
+                <input id="help-search" class="search" type="search" placeholder="Search help topics" aria-label="Search help topics" style="width: 100%; height: 48px; padding: 0 1.2rem 0 3rem; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-solid); color: var(--ink); font: inherit; outline: none; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);">
+            </div>
+        </header>
+
+        <div class="kb-grid">
+            <main class="kb-content">
+                <p>SwiftMiner is engineered from the ground up as a native macOS application. Instead of relying on bloated browser frameworks or resource-intensive electron wrappers, it is built directly on Apple's developer frameworks to run in the background with negligible memory and CPU footprints.</p>
+
+                <h2 id="architecture">System Architecture</h2>
+                <p>The application is split into three main modules to maintain strict separation of concerns:</p>
+                <ul>
+                    <li><strong>App UI (SwiftUI):</strong> Responsible for the native macOS layouts, including the multi-miner overview cards, real-time log consoles, and account settings panels.</li>
+                    <li><strong>SwiftMinerCore:</strong> The core daemon engine that manages token lifecycle operations, active drop tracking, automatic claiming intervals, and database synchronization.</li>
+                    <li><strong>SwiftMinerService:</strong> Houses the embedded HTTP web dashboard daemon that parses incoming local LAN connections and enforces Twitch OAuth token validations.</li>
+                </ul>
+
+                <h2 id="concurrency">Swift Concurrency Model</h2>
+                <p>SwiftMiner relies heavily on modern Swift Concurrency (<code>async/await</code>, Actors, and Structured Concurrency) to orchestrate dozens of background activities simultaneously without freezing the user interface.</p>
+                <ul>
+                    <li>
+                        <strong>Actors for Thread Safety:</strong>
+                        To prevent data races, core subsystems like <code>MinerEngine</code>, <code>KeychainTokenStore</code>, and <code>HTTPAPIServer</code> are defined as Swift <strong>actors</strong>. This guarantees that all access to their internal state is isolated and processed sequentially across threads.
+                    </li>
+                    <li>
+                        <strong>Structured Concurrency:</strong>
+                        The <code>MinerManager</code> supervises individual account miners using structured tasks. Each miner operates on its own task loop, executing polling cycles, stream switching, and claiming operations independently. If an account is removed or paused, its specific task tree is canceled cleanly.
+                    </li>
+                    <li>
+                        <strong>Non-blocking UI:</strong>
+                        State changes (such as progress bars updating or new logs arriving) are funneled from background threads back to the Main Actor (UI thread) using reactive publishers. This ensures the SwiftUI layout re-renders smoothly.
+                    </li>
+                </ul>
+
+                <h2 id="networking">API Clients & WebSockets</h2>
+                <p>SwiftMiner connects directly to Twitch servers using optimized network clients with zero intermediary relays.</p>
+                <ul>
+                    <li>
+                        <strong>REST & GraphQL client:</strong>
+                        The core <code>TwitchAPIClient</code> interfaces with Twitch Helix API endpoints and GQL endpoints. Request batches are managed via <code>URLSession</code> utilizing HTTP/2 connection pooling to keep network overhead low.
+                    </li>
+                    <li>
+                        <strong>WebSocket PubSub:</strong>
+                        To avoid aggressive API rate limits and retrieve progress changes instantly, <code>PubSubClient</code> establishes a persistent connection to Twitch's WebSocket-based PubSub system. This allows the app to listen for real-time claim triggers and progression events the moment they are recorded.
+                    </li>
+                    <li>
+                        <strong>User-Agent Matching:</strong>
+                        To prevent API requests from being flagged or rejected by Twitch, the client requests generate custom headers matching typical desktop Safari/Chrome browsers.
+                    </li>
+                </ul>
+
+                <h2 id="persistence">SQLite Caching</h2>
+                <p>To avoid hammering Twitch's servers on startup and keep history local, SwiftMiner integrates a local database layer.</p>
+                <ul>
+                    <li>
+                        <strong>Engine Details:</strong>
+                        SwiftMiner uses a local, lightweight SQLite instance managed via the <code>SQLiteManager</code>. It maintains tables for campaign details, active channels, claim records, and session data for the Web Dashboard.
+                    </li>
+                    <li>
+                        <strong>Automatic Purging:</strong>
+                        Old campaign listings, telemetry data, and expired local Web Dashboard sessions are regularly purged automatically to prevent database bloat.
+                    </li>
+                </ul>
+
+                <h2 id="security">macOS System Integration</h2>
+                <p>SwiftMiner relies on Apple's security APIs to secure your Twitch account details.</p>
+                <ul>
+                    <li>
+                        <strong>Keychain Services:</strong>
+                        Your Twitch OAuth tokens and client credentials are never saved in plain text database tables. They are written to the macOS System Keychain using Apple's <code>Keychain Services</code> API, providing hardware-backed security.
+                    </li>
+                    <li>
+                        <strong>No Cloud Relays:</strong>
+                        Unlike cloud-based services, SwiftMiner runs entirely on your Mac. Your private Twitch credentials never leave your machine and are only sent directly to Twitch APIs.
+                    </li>
+                </ul>
+
+                <h2 id="web-server">Custom Web Daemon</h2>
+                <p>The Web Dashboard server is a masterpiece of zero-dependency native engineering.</p>
+                <ul>
+                    <li>
+                        <strong>Network.framework:</strong>
+                        Instead of pulling in massive server-side frameworks (like Vapor, Kitura, or Node.js), SwiftMiner implements <code>HTTPAPIServer</code> directly on top of Apple's low-level <code>Network.framework</code>. It acts as a lightweight TCP socket listener.
+                    </li>
+                    <li>
+                        <strong>Performance:</strong>
+                        The server runs directly in the background with a memory overhead of less than 5 MB. It parses standard HTTP/1.1 headers, decodes query parameters, and routes them to handler closures asynchronously.
+                    </li>
+                </ul>
+
+            </main>
+
+            <aside class="kb-sidebar" aria-label="Sidebar">
+                <div class="sidebar-section">
+                    <h2 class="sidebar-title">On this page</h2>
+                    <ul class="toc-list">
+                        <li><a href="#architecture" class="toc-link">System Architecture</a></li>
+                        <li><a href="#concurrency" class="toc-link">Swift Concurrency</a></li>
+                        <li><a href="#networking" class="toc-link">API & WebSockets</a></li>
+                        <li><a href="#persistence" class="toc-link">SQLite Caching</a></li>
+                        <li><a href="#security" class="toc-link">System Security</a></li>
+                        <li><a href="#web-server" class="toc-link">Web Server</a></li>
+                    </ul>
+                </div>
+
+                <div class="sidebar-section">
+                    <h2 class="sidebar-title">Related Articles</h2>
+                    <ul class="related-links">
+                        <li><a href="../security-privacy/"><i class="ph-bold ph-shield-check"></i> Security & Privacy</a></li>
+                        <li><a href="../web-dashboard/"><i class="ph-bold ph-browser"></i> Web Dashboard</a></li>
+                        <li><a href="../getting-started/"><i class="ph-bold ph-rocket-launch"></i> Getting Started</a></li>
+                        <li><a href="../settings/"><i class="ph-bold ph-gear"></i> Settings Guide</a></li>
+                    </ul>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="shell">
+            <span>SwiftMiner Help · Published June 22, 2026</span>
+            <span><a class="nav-link" href="../../release-notes/">Release Notes</a> · <a class="nav-link" href="https://github.com/johnwatso/SwiftMiner">GitHub</a></span>
+        </div>
+    </footer>
+</body>
+</html>
