@@ -42,6 +42,20 @@ const searchIndex = [
     keywords: "multi account twitch drops multiple accounts miners separate sessions priorities mac",
     snippet: "Set up and manage multiple Twitch Drops miners from one Mac."
   },
+  {
+    title: "Working Twitch Drops Miner for Mac",
+    url: "working-twitch-drops-miner/",
+    category: "Getting Started",
+    keywords: "working twitch drops miner still works maintained current mac automatic claiming channel switching",
+    snippet: "What to look for in a maintained Twitch Drops miner and how SwiftMiner handles current Drops campaigns."
+  },
+  {
+    title: "Twitch Drops Miner Without Docker",
+    url: "twitch-drops-miner-without-docker/",
+    category: "Getting Started",
+    keywords: "twitch drops miner without docker native mac app no container no compose no server setup",
+    snippet: "Use SwiftMiner as a native Mac Twitch Drops miner instead of managing Docker containers."
+  },
 
   // Main Window
   {
@@ -223,6 +237,13 @@ const searchIndex = [
     category: "Troubleshooting",
     keywords: "drops not progressing duplicate viewing streams publisher account link ea riot ubisoft connection browser",
     snippet: "Avoid viewing session conflicts and configure required game publisher account links."
+  },
+  {
+    title: "Twitch Drops Not Progressing on Mac",
+    url: "twitch-drops-not-progressing/",
+    category: "Troubleshooting",
+    keywords: "twitch drops not progressing stuck progress not updating stopped mac swiftminer duplicate viewing account link needs auth",
+    snippet: "Focused recovery checklist for stuck Twitch Drops progress in SwiftMiner."
   },
   {
     title: "Export Diagnostic Logs",
