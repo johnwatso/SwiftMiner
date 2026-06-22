@@ -118,6 +118,8 @@
             backdrop-filter: blur(16px) saturate(1.3);
             -webkit-backdrop-filter: blur(16px) saturate(1.3);
             transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, color 0.3s ease;
+            transform: translate3d(0, 0, 0);
+            backface-visibility: hidden;
         }
 
         html.light .glass-panel {
@@ -214,6 +216,8 @@
             overflow-x: hidden;
             scroll-behavior: smooth;
             transition: background 0.3s ease;
+            -webkit-overflow-scrolling: touch;
+            transform: translate3d(0, 0, 0);
         }
         
         .snap-scroller::-webkit-scrollbar {
@@ -247,12 +251,13 @@
         /* Reveal Animations */
         .reveal {
             opacity: 0;
-            transform: translateY(16px) scale(0.985);
+            transform: translateY(16px);
             transition: none; /* Reset instantly when out of view */
+            will-change: transform, opacity;
         }
         .reveal.active {
             opacity: 1;
-            transform: translateY(0) scale(1);
+            transform: translateY(0);
             transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1), transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
@@ -264,6 +269,9 @@
             align-items: flex-start;
             padding-top: clamp(5.5rem, 10vh, 7.5rem) !important;
             padding-bottom: clamp(5rem, 9vw, 8rem) !important;
+            transform: translate3d(0, 0, 0);
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
         }
 
         .hero-title-line {
@@ -288,6 +296,9 @@
             border: 1px solid rgba(255, 255, 255, 0.12);
             box-shadow: 0 30px 90px rgba(0, 0, 0, 0.42), 0 0 90px rgba(147, 51, 234, 0.14);
             overflow: hidden;
+            transform: translate3d(0, 0, 0);
+            backface-visibility: hidden;
+            will-change: transform;
         }
 
         html.light .screenshot-frame {
@@ -439,29 +450,30 @@
             align-items: center;
             padding: clamp(7rem, 10vw, 9rem) 0;
             overflow: hidden;
+            transform: translate3d(0, 0, 0);
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
         }
 
         @media (min-width: 768px) {
             body.sections-ready .snap-scroller > section {
-                opacity: 0.06;
-                filter: saturate(0.75);
-                transition: opacity 0.35s ease, filter 0.35s ease;
+                opacity: 0.25;
+                transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1);
             }
 
             body.sections-ready .snap-scroller > section.is-current-section {
                 opacity: 1;
-                filter: saturate(1);
             }
 
-            body.sections-ready .screenshot-card.reveal.active {
-                opacity: 0.12;
-                filter: saturate(0.75);
-                transition: opacity 0.35s ease, filter 0.35s ease, transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+            body.sections-ready .screenshot-card.reveal.active .screenshot-frame {
+                opacity: 0.35;
+                transform: scale(0.96) translate3d(0, 0, 0);
+                transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
             }
 
-            body.sections-ready .screenshot-card.reveal.active.is-current-card {
+            body.sections-ready .screenshot-card.reveal.active.is-current-card .screenshot-frame {
                 opacity: 1;
-                filter: saturate(1);
+                transform: scale(1.0) translate3d(0, 0, 0);
             }
         }
 
@@ -723,7 +735,7 @@
                     <!-- Hero Image -->
                     <div class="hero-screenshot reveal" style="transition-delay: 200ms;">
                         <div class="screenshot-frame">
-                            <img src="./assets/landing/overview-dark.png" data-screenshot="overview" width="3358" height="1760" fetchpriority="high" decoding="async" onerror="this.src='https://placehold.co/800x550/090514/00e5ff?text=Overview+Screen'" alt="SwiftMiner overview dashboard showing active Twitch Drops campaigns on macOS" class="w-full">
+                            <img src="./assets/landing/overview-dark.webp" data-screenshot="overview" width="3358" height="1760" fetchpriority="high" decoding="async" onerror="this.src='https://placehold.co/800x550/090514/00e5ff?text=Overview+Screen'" alt="SwiftMiner overview dashboard showing active Twitch Drops campaigns on macOS" class="w-full">
                         </div>
                     </div>
                 </div>
@@ -832,7 +844,7 @@
 
         <!-- Feature Detail Section -->
         <section id="view-overview" class="content-section">
-            <div class="absolute right-0 top-1/3 w-[800px] h-[800px] bg-brand-purple/10 rounded-full blur-[100px] pointer-events-none"></div>
+            <div class="absolute right-0 top-1/3 w-[800px] h-[800px] rounded-full pointer-events-none" style="background: radial-gradient(circle, rgba(147, 51, 234, 0.15) 0%, rgba(147, 51, 234, 0) 70%);"></div>
             <div class="section-shell relative z-10">
                 <div class="text-center mb-16 reveal">
                     <h2 class="text-4xl md:text-5xl font-bold mb-4 leading-tight text-slate-900 dark:text-white drop-shadow-lg tracking-tight">A native dashboard <br/><span class="text-brand-purple">for Twitch Drops.</span></h2>
@@ -851,7 +863,7 @@
                             <p class="text-slate-600 dark:text-gray-400 leading-relaxed">See active miners, stream status, upcoming rewards, and priority games from a single macOS dashboard.</p>
                         </div>
                         <div class="screenshot-frame">
-                            <img data-screenshot="overview" src="./assets/landing/overview-dark.png" width="3358" height="1760" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/1200x630/090514/00e5ff?text=Overview+Screen'" alt="Overview Screen" class="w-full transition-all duration-300 opacity-100">
+                            <img data-screenshot="overview" src="./assets/landing/overview-dark.webp" width="3358" height="1760" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/1200x630/090514/00e5ff?text=Overview+Screen'" alt="Overview Screen" class="w-full transition-all duration-300 opacity-100">
                         </div>
                     </article>
 
@@ -864,7 +876,7 @@
                             <p class="text-slate-600 dark:text-gray-400 leading-relaxed">Add your Twitch account, alt profiles, or friends and keep each miner configured with its own priorities.</p>
                         </div>
                         <div class="screenshot-frame">
-                            <img data-screenshot="miners" src="./assets/landing/miners-dark.png" width="3358" height="1760" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/1200x630/090514/00e5ff?text=Miners+Screen'" alt="Miners Screen" class="w-full transition-all duration-300 opacity-100">
+                            <img data-screenshot="miners" src="./assets/landing/miners-dark.webp" width="3358" height="1760" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/1200x630/090514/00e5ff?text=Miners+Screen'" alt="Miners Screen" class="w-full transition-all duration-300 opacity-100">
                         </div>
                     </article>
 
@@ -877,7 +889,7 @@
                             <p class="text-slate-600 dark:text-gray-400 leading-relaxed">Track active, completed, and upcoming drops while SwiftMiner chooses eligible streams and keeps progress moving in the background.</p>
                         </div>
                         <div class="screenshot-frame">
-                            <img data-screenshot="drops" src="./assets/landing/drops-dark.png" width="3358" height="1760" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/1200x630/090514/00e5ff?text=Drops+Screen'" alt="Drops Screen" class="w-full transition-all duration-300 opacity-100">
+                            <img data-screenshot="drops" src="./assets/landing/drops-dark.webp" width="3358" height="1760" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/1200x630/090514/00e5ff?text=Drops+Screen'" alt="Drops Screen" class="w-full transition-all duration-300 opacity-100">
                         </div>
                     </article>
 
@@ -890,7 +902,7 @@
                             <p class="text-slate-600 dark:text-gray-400 leading-relaxed">Review stream changes, claim attempts, scan results, and account events from a readable local activity log.</p>
                         </div>
                         <div class="screenshot-frame">
-                            <img data-screenshot="activity-log" src="./assets/landing/activity-log-dark.png" width="3358" height="1760" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/1200x630/090514/00e5ff?text=Activity+Logs+Screen'" alt="Activity Logs Screen" class="w-full transition-all duration-300 opacity-100">
+                            <img data-screenshot="activity-log" src="./assets/landing/activity-log-dark.webp" width="3358" height="1760" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/1200x630/090514/00e5ff?text=Activity+Logs+Screen'" alt="Activity Logs Screen" class="w-full transition-all duration-300 opacity-100">
                         </div>
                     </article>
                 </div>
@@ -992,7 +1004,7 @@
         <!-- Performance & Supported Hardware Section -->
         <section id="performance" class="min-h-[100dvh] flex items-center py-24 relative overflow-hidden">
             <!-- Background accent -->
-            <div class="absolute left-0 top-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-brand-cyan/5 rounded-full blur-[120px] pointer-events-none"></div>
+            <div class="absolute left-0 top-1/2 -translate-y-1/2 w-[800px] h-[800px] rounded-full pointer-events-none" style="background: radial-gradient(circle, rgba(0, 229, 255, 0.08) 0%, rgba(0, 229, 255, 0) 70%);"></div>
 
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full relative z-10">
                 <div class="text-center mb-16 reveal">
@@ -1084,10 +1096,10 @@
             <div class="flex-1 flex flex-col justify-center max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 w-full text-center">
                 <div class="glass-panel rounded-[2.5rem] p-10 md:p-16 border border-black/10 dark:border-white/10 shadow-2xl relative overflow-hidden group reveal">
                     <!-- Glow effect inside card -->
-                    <div class="absolute top-0 left-1/2 -translate-x-1/2 w-[500px] h-[300px] bg-brand-purple/20 blur-[80px] rounded-full pointer-events-none group-hover:bg-brand-purple/35 transition-colors duration-700"></div>
+                    <div class="absolute top-0 left-1/2 -translate-x-1/2 w-[500px] h-[300px] rounded-full pointer-events-none opacity-60 group-hover:opacity-100 transition-opacity duration-700" style="background: radial-gradient(circle, rgba(147, 51, 234, 0.25) 0%, rgba(147, 51, 234, 0) 70%);"></div>
                     
                     <div class="relative z-10 flex flex-col items-center">
-                        <img src="./assets/landing/app-icon-light.png"
+                        <img src="./assets/landing/app-icon-light.webp"
                              width="1024" height="1024" loading="lazy" decoding="async"
                              onerror="this.src='https://placehold.co/128x128/9333ea/ffffff?text=SM'"
                              class="w-24 h-24 rounded-[20px] shadow-[0_10px_30px_rgba(147,51,234,0.3)] mb-8" alt="SwiftMiner Icon">
@@ -1139,54 +1151,48 @@
             const pageSections = scrollContainer ? Array.from(scrollContainer.querySelectorAll(':scope > section')) : [];
             const screenshotCards = scrollContainer ? Array.from(scrollContainer.querySelectorAll('.screenshot-card')) : [];
 
-            function updateScrollFocus() {
-                if (!scrollContainer || pageSections.length === 0) return;
-                let currentSection = pageSections[0];
-                let strongestSectionScore = -1;
-
-                function visibleScore(element) {
-                    const containerRect = scrollContainer.getBoundingClientRect();
-                    const elementRect = element.getBoundingClientRect();
-                    return Math.max(0, Math.min(elementRect.bottom, containerRect.bottom) - Math.max(elementRect.top, containerRect.top));
-                }
-
-                pageSections.forEach(section => {
-                    const score = visibleScore(section);
-                    if (score > strongestSectionScore) {
-                        strongestSectionScore = score;
-                        currentSection = section;
-                    }
-                });
-
-                pageSections.forEach(section => {
-                    section.classList.toggle('is-current-section', section === currentSection);
-                });
-
-                if (screenshotCards.length > 0) {
-                    let currentCard = screenshotCards[0];
-                    let strongestCardScore = -1;
-
-                    screenshotCards.forEach(card => {
-                        const score = visibleScore(card);
-                        if (score > strongestCardScore) {
-                            strongestCardScore = score;
-                            currentCard = card;
+            // High-performance scroll tracking via IntersectionObserver
+            // replacing the laggy scroll event listener and visibleScore getBoundingClientRect calls.
+            if (scrollContainer && pageSections.length > 0) {
+                const sectionObserver = new IntersectionObserver((entries) => {
+                    let activeSection = null;
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting) {
+                            activeSection = entry.target;
                         }
                     });
+                    if (activeSection) {
+                        pageSections.forEach(section => {
+                            section.classList.toggle('is-current-section', section === activeSection);
+                        });
+                    }
+                }, {
+                    root: scrollContainer,
+                    rootMargin: "-50% 0px -50% 0px",
+                    threshold: 0
+                });
+                pageSections.forEach(section => sectionObserver.observe(section));
+            }
 
-                    screenshotCards.forEach(card => {
-                        card.classList.toggle('is-current-card', card === currentCard);
+            if (scrollContainer && screenshotCards.length > 0) {
+                const cardObserver = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting) {
+                            screenshotCards.forEach(card => {
+                                card.classList.toggle('is-current-card', card === entry.target);
+                            });
+                        }
                     });
-                }
-
-                document.body.classList.add('sections-ready');
+                }, {
+                    root: scrollContainer,
+                    rootMargin: "-45% 0px -45% 0px",
+                    threshold: 0
+                });
+                screenshotCards.forEach(card => cardObserver.observe(card));
             }
 
-            updateScrollFocus();
-            if (scrollContainer) {
-                scrollContainer.addEventListener('scroll', updateScrollFocus, { passive: true });
-            }
-            window.addEventListener('resize', updateScrollFocus);
+            // Immediately mark sections-ready so CSS states initialize cleanly
+            document.body.classList.add('sections-ready');
 
             // Reveal on Scroll Initialization
             const observerOptions = {
@@ -1239,7 +1245,7 @@
                 // Swap screenshots based on mode
                 document.querySelectorAll('img[data-screenshot]').forEach(img => {
                     const type = img.getAttribute('data-screenshot');
-                    img.src = `./assets/landing/${type}-${isLight ? 'light' : 'dark'}.png`;
+                    img.src = `./assets/landing/${type}-${isLight ? 'light' : 'dark'}.webp`;
                 });
 
                 // Re-initialize particles to update their colors
@@ -1257,6 +1263,7 @@
                 applyTheme(e.matches);
             });
 
+            const themeToggleBtn = document.getElementById('theme-toggle');
             if (themeToggleBtn) {
                 themeToggleBtn.addEventListener('click', () => {
                     const isLight = !document.documentElement.classList.contains('light');
