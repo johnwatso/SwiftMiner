@@ -8,7 +8,7 @@ CONFIGURATION="${SWIFTMINER_CONFIGURATION:-Release}"
 DESTINATION="${SWIFTMINER_DESTINATION:-platform=macOS}"
 
 # Sync to origin/main before building — handles diverged state on persistent runners.
-git -C "$ROOT_DIR" fetch origin
+git -C "$ROOT_DIR" fetch --no-tags origin
 git -C "$ROOT_DIR" checkout main
 git -C "$ROOT_DIR" reset --hard origin/main
 git -C "$ROOT_DIR" clean -fdx

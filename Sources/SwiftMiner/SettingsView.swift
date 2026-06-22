@@ -19,6 +19,12 @@ struct SettingsView: View {
                 }
                 .tag(SettingsTab.general)
 
+            AppearanceSettingsView(settings: settings)
+                .tabItem {
+                    SettingsTabItem(tab: .appearance)
+                }
+                .tag(SettingsTab.appearance)
+
             AccountSettingsView(navigation: navigation)
                 .tabItem {
                     SettingsTabItem(tab: .accounts)
@@ -31,13 +37,11 @@ struct SettingsView: View {
                 }
                 .tag(SettingsTab.mining)
 
-            if settings.swiftBotEnabled {
-                IntegrationsSettingsView(settings: settings)
-                    .tabItem {
-                        SettingsTabItem(tab: .integrations)
-                    }
-                    .tag(SettingsTab.integrations)
-            }
+            IntegrationsSettingsView(settings: settings)
+                .tabItem {
+                    SettingsTabItem(tab: .integrations)
+                }
+                .tag(SettingsTab.integrations)
 
             WebDashboardSettingsView(settings: settings)
                 .tabItem {
@@ -58,7 +62,7 @@ struct SettingsView: View {
                 .tag(SettingsTab.updates)
         }
         .padding(.top, -2)
-        .frame(width: 520)
+        .frame(width: 640)
         .onAppear(perform: consumePairingRequestIfNeeded)
         .onChange(of: navigation.pendingSwiftBotPairingRequest) { _, _ in
             consumePairingRequestIfNeeded()
@@ -73,6 +77,7 @@ struct SettingsView: View {
 
 private enum SettingsTab: String, CaseIterable, Hashable, Identifiable {
     case general
+    case appearance
     case accounts
     case mining
     case integrations
@@ -85,6 +90,7 @@ private enum SettingsTab: String, CaseIterable, Hashable, Identifiable {
     var title: String {
         switch self {
         case .general: return "General"
+        case .appearance: return "Appearance"
         case .accounts: return "Accounts"
         case .mining: return "Mining"
         case .integrations: return "Integrations"
@@ -97,6 +103,7 @@ private enum SettingsTab: String, CaseIterable, Hashable, Identifiable {
     var systemImage: String {
         switch self {
         case .general: return "gearshape"
+        case .appearance: return "paintbrush"
         case .accounts: return "person.2"
         case .mining: return "cpu"
         case .integrations: return "app.connected.to.app.below.fill"
@@ -170,42 +177,6 @@ private struct GeneralSettingsView: View {
             }
 
             Section {
-                Toggle("Use Steam artwork for game images", isOn: $settings.preferSteamArtwork)
-                    .minerTip(SteamArtworkTip())
-
-                SettingsSecondaryText("Fetches portrait artwork from Steam CDN. Falls back to Twitch artwork when a game is not found on Steam.")
-            } header: {
-                Text("Artwork")
-            }
-
-            Section {
-                Toggle("Show in-app tips", isOn: $settings.tipsEnabled)
-                SettingsSecondaryText("Show occasional TipKit hints that explain features like prioritising games or filtering drops.")
-            } header: {
-                Text("Tips")
-            }
-
-            Section {
-                Toggle("Show icons in Activity Log", isOn: $settings.showActivityLogIcons)
-                SettingsSecondaryText("Display a category icon next to each row in the Activity Log instead of a plain dot.")
-
-                Toggle("Animate new rows", isOn: $settings.animateActivityLogRows)
-                SettingsSecondaryText("Slide and fade new entries in as they appear.")
-            } header: {
-                Text("Activity Log")
-            }
-
-            Section {
-                Toggle("Animated status icons", isOn: $settings.animatedStatusIcons)
-                SettingsSecondaryText("Animate status badges with Apple-style transitions and drawing effects. Continuous animation only runs for actively changing states.")
-
-                Toggle("Coloured status icons", isOn: $settings.coloredStatusIcons)
-                SettingsSecondaryText("Apply distinct colours to multi-layer icons such as the clock warning badge. Turn off for a monochrome, system-tinted look.")
-            } header: {
-                Text("Status Animations")
-            }
-
-            Section {
                 Toggle("Show notifications when drops are claimed", isOn: $settings.showClaimNotifications)
                     .onChange(of: settings.showClaimNotifications) { _, newValue in
                         Task { await navigation.minerManager.updateNotificationPreference(enabled: newValue && settings.allowsOperatorNotifications()) }
@@ -234,14 +205,6 @@ private struct GeneralSettingsView: View {
                 Text("Notifications")
             }
 
-            Section {
-                Toggle("Enable Discord Integration", isOn: $settings.swiftBotEnabled)
-                SettingsSecondaryText("Enables the local Discord/SwiftBot bridge. When on, an Integrations tab appears here for endpoint and webhook configuration.")
-            } header: {
-                Text("Integrations")
-            }
-
-
         }
         .formStyle(.grouped)
         .padding(.horizontal, 24)
@@ -256,8 +219,6 @@ private struct GeneralSettingsView: View {
             loginItemSettings.setEnabled(isEnabled)
         }
     }
-
-
 
     private var quietStartBinding: Binding<Int> {
         Binding {
@@ -278,6 +239,59 @@ private struct GeneralSettingsView: View {
     private func hourLabel(_ hour: Int) -> String {
         let date = Calendar.current.date(from: DateComponents(hour: hour, minute: 0)) ?? Date()
         return date.formatted(date: .omitted, time: .shortened)
+    }
+}
+
+// MARK: - Appearance Settings
+
+private struct AppearanceSettingsView: View {
+    @ObservedObject var settings: Settings
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Use Steam artwork for game images", isOn: $settings.preferSteamArtwork)
+                    .minerTip(SteamArtworkTip())
+                SettingsSecondaryText("Falls back to Twitch artwork when a game is not found on Steam.")
+            } header: {
+                Text("Artwork")
+            }
+
+            Section {
+                Toggle("Show in-app tips", isOn: $settings.tipsEnabled)
+                SettingsSecondaryText("Show occasional hints for features like game rules and filtering drops.")
+            } header: {
+                Text("Tips")
+            }
+
+            Section {
+                Toggle("Show icons in Activity Log", isOn: $settings.showActivityLogIcons)
+                SettingsSecondaryText("Display category icons next to Activity Log rows.")
+            } header: {
+                Text("Activity Log")
+            }
+
+            Section {
+                Toggle("Use simpler visual effects", isOn: simplerVisualEffectsBinding)
+                SettingsSecondaryText("Turns off row animations and animated or multi-colour status badges.")
+            } header: {
+                Text("Motion & Status")
+            }
+        }
+        .formStyle(.grouped)
+        .padding(.horizontal, 24)
+        .padding(.bottom, 20)
+        .padding(.top, 10)
+    }
+
+    private var simplerVisualEffectsBinding: Binding<Bool> {
+        Binding {
+            !settings.animateActivityLogRows || !settings.animatedStatusIcons || !settings.coloredStatusIcons
+        } set: { useSimplerEffects in
+            settings.animateActivityLogRows = !useSimplerEffects
+            settings.animatedStatusIcons = !useSimplerEffects
+            settings.coloredStatusIcons = !useSimplerEffects
+        }
     }
 }
 
@@ -430,10 +444,6 @@ private struct UpdatesSettingsView: View {
 private struct AccountSettingsView: View {
     let navigation: NavigationModel
 
-    @State private var showImporter = false
-    @State private var showAlert = false
-    @State private var alertMessage = ""
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
@@ -463,39 +473,18 @@ private struct AccountSettingsView: View {
                 }
 
                 settingsSection("Management") {
-                    HStack(spacing: 10) {
-                    Button("Import from TDM\u{2026}") {
-                        showImporter = true
-                    }
-                    
-                    Button("Add Account\u{2026}") {
+                    Button {
                         navigation.showAddAccountSheet = true
+                    } label: {
+                        Label("Add Account\u{2026}", systemImage: "person.crop.circle.badge.plus")
+                            .frame(maxWidth: .infinity)
                     }
-
-                        Spacer(minLength: 0)
-                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
                 }
             }
         }
         .contentMargins(24, for: .scrollContent)
-        .fileImporter(
-            isPresented: $showImporter,
-            allowedContentTypes: [.data],
-            allowsMultipleSelection: false
-        ) { result in
-            switch result {
-            case .success(let urls):
-                guard let url = urls.first else { return }
-                importCookies(from: url)
-            case .failure(let error):
-                print("[AccountSettings] File selection failed: \(error.localizedDescription)")
-            }
-        }
-        .alert("Import Result", isPresented: $showAlert) {
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text(alertMessage)
-        }
     }
 
     private func settingsSection<Content: View>(
@@ -510,38 +499,6 @@ private struct AccountSettingsView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func importCookies(from url: URL) {
-        guard url.startAccessingSecurityScopedResource() else { return }
-        defer { url.stopAccessingSecurityScopedResource() }
-
-        Task {
-            do {
-                let token = try TDMCookieParser.parseToken(from: url)
-                let authService = TwitchAuthService(clientId: ClientConfiguration.clientId, tokenStore: TokenStoreFactory.makeDefault())
-                let account = try await authService.importTDMSession(token: token)
-
-                let minerId = try navigation.minerManager.addAccount(account)
-                let settings = Settings.shared
-                try? await navigation.minerManager.startMiner(
-                    minerId: minerId,
-                    priorityGames: settings.priorityGames(forAccountId: account.id),
-                    excludedGames: settings.excludedGames,
-                    strategy: settings.miningStrategy,
-                    enableBadgesEmotes: settings.enableBadgesEmotes,
-                    showClaimNotifications: settings.showClaimNotifications && settings.allowsOperatorNotifications(),
-                    avoidDuplicateStreams: settings.avoidDuplicateStreams,
-                    antiStallRecoveryEnabled: settings.antiStallRecoveryEnabled,
-                    prioritiseFollowedStreamers: settings.prioritiseFollowedStreamers,
-                    failoverStreamers: settings.gameFailoverStreamers
-                )
-                alertMessage = "Successfully imported account: \(account.username)"
-                showAlert = true
-            } catch {
-                alertMessage = "Import failed: \(error.localizedDescription)"
-                showAlert = true
-            }
-        }
-    }
 }
 
 private struct AccountSettingsAccountRow: View {
@@ -1343,27 +1300,52 @@ private struct IntegrationsSettingsView: View {
     @State private var debugTargetSelection: String?
     @State private var debugDiscordUsers: [SwiftBotDiscordUser] = []
     @State private var isLoadingDebugUsers = false
+    @State private var showCustomNotificationSettings = false
+    @State private var forceCustomNotificationPreset = false
 
     private let defaultSwiftBotEndpoint = "http://localhost:38888"
 
     var body: some View {
         Form {
-            statusCard
+            integrationEnableSection
 
-            importantSection
+            if settings.swiftBotEnabled {
+                statusCard
 
-            activitySection
+                notificationPresetSection
 
-            onboardingInfoSection
+                if showCustomNotificationSettings || dmNotificationPreset == .custom {
+                    importantSection
+
+                    activitySection
+                }
+
+                onboardingInfoSection
 
 #if DEBUG
-            dmDebugSection
+                dmDebugSection
 #endif
+            } else {
+                Section {
+                    SettingsSecondaryText("Enable the Discord integration to pair with SwiftBot and send account recovery, drop claim, and campaign update DMs.")
+                } header: {
+                    Text("Discord")
+                }
+            }
         }
         .formStyle(.grouped)
         .padding(.horizontal, 24)
         .padding(.bottom, 20)
         .padding(.top, 10)
+    }
+
+    private var integrationEnableSection: some View {
+        Section {
+            Toggle("Enable Discord Integration", isOn: $settings.swiftBotEnabled)
+            SettingsSecondaryText("Connects SwiftMiner to SwiftBot for Discord account linking, recovery messages, and miner updates.")
+        } header: {
+            Text("Discord Integration")
+        }
     }
 
     // MARK: - Status Card
@@ -1598,6 +1580,117 @@ private struct IntegrationsSettingsView: View {
             return "No valid localhost endpoint is configured."
         case .unpaired:
             return "SwiftBot is reachable but not paired — paste the pairing bundle into SwiftBot."
+        }
+    }
+
+    // MARK: - Notification Presets
+
+    private enum DMNotificationPreset: String, CaseIterable, Identifiable {
+        case essential
+        case balanced
+        case everything
+        case custom
+
+        var id: String { rawValue }
+
+        var label: String {
+            switch self {
+            case .essential: return "Essential"
+            case .balanced: return "Balanced"
+            case .everything: return "Everything"
+            case .custom: return "Custom"
+            }
+        }
+
+        var detail: String {
+            switch self {
+            case .essential:
+                return "Only account recovery, linking, and action-required DMs."
+            case .balanced:
+                return "Essential DMs, plus campaign completion and reconnection updates."
+            case .everything:
+                return "All available Discord DMs, including new campaign announcements."
+            case .custom:
+                return "Choose exactly which Discord DMs SwiftMiner sends."
+            }
+        }
+    }
+
+    private var notificationPresetSection: some View {
+        Section {
+            Picker("Discord notifications", selection: dmNotificationPresetBinding) {
+                ForEach(DMNotificationPreset.allCases) { preset in
+                    Text(preset.label).tag(preset)
+                }
+            }
+            SettingsSecondaryText(dmNotificationPreset.detail)
+        } header: {
+            Text("Notifications")
+        }
+    }
+
+    private var dmNotificationPresetBinding: Binding<DMNotificationPreset> {
+        Binding {
+            dmNotificationPreset
+        } set: { preset in
+            if preset == .custom {
+                forceCustomNotificationPreset = true
+                showCustomNotificationSettings = true
+            } else {
+                forceCustomNotificationPreset = false
+                showCustomNotificationSettings = false
+                applyNotificationPreset(preset)
+            }
+        }
+    }
+
+    private var dmNotificationPreset: DMNotificationPreset {
+        if forceCustomNotificationPreset {
+            return .custom
+        }
+
+        let importantOn = settings.dmConnectionExpiredEnabled
+            && settings.dmLinkRequiredEnabled
+            && settings.dmAccountActionRequiredEnabled
+        let importantOnly = importantOn
+            && !settings.dmCampaignCompletedEnabled
+            && !settings.dmCampaignDetectedEnabled
+            && !settings.dmWelcomeBackEnabled
+        let balanced = importantOn
+            && settings.dmCampaignCompletedEnabled
+            && !settings.dmCampaignDetectedEnabled
+            && settings.dmWelcomeBackEnabled
+        let everything = importantOn
+            && settings.dmCampaignCompletedEnabled
+            && settings.dmCampaignDetectedEnabled
+            && settings.dmWelcomeBackEnabled
+
+        if everything { return .everything }
+        if balanced { return .balanced }
+        if importantOnly { return .essential }
+        return .custom
+    }
+
+    private func applyNotificationPreset(_ preset: DMNotificationPreset) {
+        settings.dmConnectionExpiredEnabled = true
+        settings.dmLinkRequiredEnabled = true
+        settings.dmAccountActionRequiredEnabled = true
+
+        switch preset {
+        case .essential:
+            settings.dmCampaignCompletedEnabled = false
+            settings.dmCampaignDetectedEnabled = false
+            settings.dmWelcomeBackEnabled = false
+        case .balanced:
+            settings.dmCampaignCompletedEnabled = true
+            settings.dmCampaignDetectedEnabled = false
+            settings.dmWelcomeBackEnabled = true
+        case .everything:
+            settings.dmCampaignCompletedEnabled = true
+            settings.dmCampaignDetectedEnabled = true
+            settings.dmWelcomeBackEnabled = true
+        case .custom:
+            break
         }
     }
 

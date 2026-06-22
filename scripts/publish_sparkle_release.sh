@@ -173,7 +173,7 @@ publish_appcast_commit_if_possible() {
   fi
 
   git -C "$ROOT_DIR" commit -m "chore(shiphook): update ${channel_prefix}appcast for SwiftMiner ${VERSION} [shiphook skip]"
-  git -C "$ROOT_DIR" fetch origin "$current_branch"
+  git -C "$ROOT_DIR" fetch --no-tags origin "$current_branch"
 
   if git -C "$ROOT_DIR" rev-parse --verify "origin/$current_branch" >/dev/null 2>&1 &&
      ! git -C "$ROOT_DIR" merge-base --is-ancestor "origin/$current_branch" HEAD; then
