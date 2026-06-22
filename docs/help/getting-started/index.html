@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Get Started with SwiftMiner - SwiftMiner Help</title>
+    <meta name="description" content="Step-by-step instructions to download, install, and open SwiftMiner on macOS, and link your first Twitch account.">
+    <link rel="canonical" href="https://swiftminer.app/help/getting-started/">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#f5f5f7">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="stylesheet" href="../../assets/css/tailwind.css">
+    <link rel="stylesheet" href="../assets/css/kbase.css">
+    <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
+    <script src="../assets/js/search-index.js" defer></script>
+    <script src="../assets/js/search.js" defer></script>
+    <script src="../assets/js/kbase.js" defer></script>
+</head>
+<body>
+    <nav class="nav" aria-label="Main">
+        <div class="shell nav-inner">
+            <a class="brand" href="../">
+                <img src="../../assets/landing/swiftminer-icon.webp" alt="">
+                <span>SwiftMiner Help</span>
+            </a>
+            <div class="nav-actions">
+                <a class="nav-link" href="../">Help Home</a>
+                <a class="nav-link optional" href="../../">Overview</a>
+                <a class="nav-link" href="https://github.com/johnwatso/SwiftMiner/issues">Raise an Issue</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="shell">
+        <div class="breadcrumbs" aria-label="Breadcrumbs">
+            <a href="../">Help Home</a>
+            <span class="sep">/</span>
+            <span class="current">Getting Started</span>
+        </div>
+
+        <header class="article-header">
+            <h1>Get Started with SwiftMiner</h1>
+            <p class="article-intro">Learn how to download and install SwiftMiner on your Mac, authorize your Twitch account, and begin farming Twitch Drops automatically.</p>
+            <div class="search-wrap" style="margin-top: 1.5rem; max-width: 100%;">
+                <i class="ph-bold ph-magnifying-glass" style="position: absolute; top: 50%; left: 1.1rem; transform: translateY(-50%); color: var(--muted);"></i>
+                <input id="help-search" class="search" type="search" placeholder="Search help topics" aria-label="Search help topics" style="width: 100%; height: 48px; padding: 0 1.2rem 0 3rem; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-solid); color: var(--ink); font: inherit; outline: none; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);">
+            </div>
+        </header>
+
+        <div class="kb-grid">
+            <main class="kb-content">
+                <p>SwiftMiner is a native macOS application that automates the process of watching Twitch streams and claiming Drops. By running completely on your own machine, it provides a lightweight, secure, and personal way to ensure you never miss Twitch Drops rewards without keeping dozens of browser tabs open.</p>
+
+                <h2 id="install-swiftminer">Install SwiftMiner</h2>
+                <p>SwiftMiner is built exclusively for macOS. Follow these steps to install the app on your Mac:</p>
+                
+                <ol class="steps-list">
+                    <li>
+                        <strong>Download the app:</strong>
+                        <p>Get the latest release from the official <a href="https://github.com/johnwatso/SwiftMiner/releases" target="_blank" rel="noopener noreferrer">SwiftMiner GitHub Releases</a> page. Always ensure you download the <code>.zip</code> or <code>.dmg</code> archive from the official repository.</p>
+                    </li>
+                    <li>
+                        <strong>Install SwiftMiner:</strong>
+                        <p>Locate the downloaded archive in your <code>Downloads</code> folder. Unzip it (if it's a <code>.zip</code>) and drag <code>SwiftMiner.app</code> into your <code>/Applications</code> folder. Running the app directly from your Applications folder ensures it has the correct permissions to run updates and save settings.</p>
+                    </li>
+                    <li>
+                        <strong>Open the app:</strong>
+                        <p>Double-click <code>SwiftMiner.app</code> in your Applications folder to launch it.</p>
+                    </li>
+                </ol>
+
+                <div class="callout warning">
+                    <strong>macOS Gatekeeper Warning</strong>
+                    <p>On your first launch, macOS may show a warning dialog saying that SwiftMiner is an app downloaded from the internet. This is standard macOS behavior for apps not distributed via the App Store. Click <strong>Open</strong> to proceed and launch the application.</p>
+                </div>
+
+                <h2 id="add-your-first-twitch-account">Add your first Twitch account</h2>
+                <p>SwiftMiner needs to connect to your Twitch account to monitor active campaigns, track drop progress, and claim completed rewards on your behalf.</p>
+
+                <ol class="steps-list">
+                    <li>
+                        <strong>Start the linking process:</strong>
+                        <p>Click the <strong>Add Account</strong> button located in the sidebar or in the settings panel (accessible via <kbd>⌘,</kbd>).</p>
+                    </li>
+                    <li>
+                        <strong>Generate login code:</strong>
+                        <p>SwiftMiner will display a Twitch Device Activation flow, showing an 8-character activation code.</p>
+                    </li>
+                    <li>
+                        <strong>Authorize on Twitch:</strong>
+                        <p>Open your web browser and navigate to <a href="https://twitch.tv/activate" target="_blank" rel="noopener noreferrer">twitch.tv/activate</a>. Make sure you are signed in to the Twitch account you wish to link. Enter the 8-character code displayed in SwiftMiner, and click <strong>Authorize</strong>.</p>
+                    </li>
+                    <li>
+                        <strong>Wait for confirmation:</strong>
+                        <p>SwiftMiner will automatically detect the authorization. Once complete, your miner will initialize and start scanning for active Drops campaigns in the background.</p>
+                    </li>
+                </ol>
+
+                <div class="callout info">
+                    <strong>Multi-Account Support</strong>
+                    <p>You can repeat this process to add multiple Twitch accounts. Each miner runs completely independently, maintaining its own viewing session, claim log, and stream switching logic.</p>
+                </div>
+
+                <div class="feedback-widget">
+                    <p>Was this article helpful?</p>
+                    <div class="feedback-btn-group">
+                        <button class="feedback-btn">Yes</button>
+                        <button class="feedback-btn">No</button>
+                    </div>
+                </div>
+            </main>
+
+            <aside class="kb-sidebar" aria-label="Sidebar">
+                <div class="sidebar-section">
+                    <h2 class="sidebar-title">On this page</h2>
+                    <ul class="toc-list">
+                        <li><a href="#install-swiftminer" class="toc-link">Install SwiftMiner</a></li>
+                        <li><a href="#add-your-first-twitch-account" class="toc-link">Add Twitch account</a></li>
+                    </ul>
+                </div>
+
+                <div class="sidebar-section">
+                    <h2 class="sidebar-title">Related Articles</h2>
+                    <ul class="related-links">
+                        <li><a href="../main-window/"><i class="ph-bold ph-book-open"></i> Main Window Guide</a></li>
+                        <li><a href="../settings/"><i class="ph-bold ph-gear"></i> Settings Guide</a></li>
+                        <li><a href="../security-privacy/"><i class="ph-bold ph-shield-check"></i> Security & Privacy</a></li>
+                        <li><a href="../best-practices/"><i class="ph-bold ph-check-square"></i> Best Practices</a></li>
+                    </ul>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="shell">
+            <span>SwiftMiner Help · Published June 22, 2026</span>
+            <span><a class="nav-link" href="../../release-notes/">Release Notes</a> · <a class="nav-link" href="https://github.com/johnwatso/SwiftMiner">GitHub</a></span>
+        </div>
+    </footer>
+</body>
+</html>

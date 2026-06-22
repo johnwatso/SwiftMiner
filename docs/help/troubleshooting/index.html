@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Troubleshooting & FAQs - SwiftMiner Help</title>
+    <meta name="description" content="Find solutions for common SwiftMiner problems, including Twitch authorization issues, stuck miners, and missing Drop rewards.">
+    <link rel="canonical" href="https://swiftminer.app/help/troubleshooting/">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#f5f5f7">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="stylesheet" href="../../assets/css/tailwind.css">
+    <link rel="stylesheet" href="../assets/css/kbase.css">
+    <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
+    <script src="../assets/js/search-index.js" defer></script>
+    <script src="../assets/js/search.js" defer></script>
+    <script src="../assets/js/kbase.js" defer></script>
+</head>
+<body>
+    <nav class="nav" aria-label="Main">
+        <div class="shell nav-inner">
+            <a class="brand" href="../">
+                <img src="../../assets/landing/swiftminer-icon.webp" alt="">
+                <span>SwiftMiner Help</span>
+            </a>
+            <div class="nav-actions">
+                <a class="nav-link" href="../">Help Home</a>
+                <a class="nav-link optional" href="../../">Overview</a>
+                <a class="nav-link" href="https://github.com/johnwatso/SwiftMiner/issues">Raise an Issue</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="shell">
+        <div class="breadcrumbs" aria-label="Breadcrumbs">
+            <a href="../">Help Home</a>
+            <span class="sep">/</span>
+            <span class="current">Troubleshooting</span>
+        </div>
+
+        <header class="article-header">
+            <h1>Troubleshooting & FAQs</h1>
+            <p class="article-intro">Resolve issues quickly. Follow step-by-step guides to fix authorization issues, stuck miners, claiming errors, and learn how to export diagnostic logs for support.</p>
+            <div class="search-wrap" style="margin-top: 1.5rem; max-width: 100%;">
+                <i class="ph-bold ph-magnifying-glass" style="position: absolute; top: 50%; left: 1.1rem; transform: translateY(-50%); color: var(--muted);"></i>
+                <input id="help-search" class="search" type="search" placeholder="Search help topics" aria-label="Search help topics" style="width: 100%; height: 48px; padding: 0 1.2rem 0 3rem; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-solid); color: var(--ink); font: inherit; outline: none; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);">
+            </div>
+        </header>
+
+        <div class="kb-grid">
+            <main class="kb-content">
+                <p>SwiftMiner is designed to recover from connection problems and API shifts automatically. If a miner stops or rewards do not appear in your Twitch inventory, use these steps to identify and resolve the issue.</p>
+
+                <h2 id="needs-auth">Fix "Needs Auth" Error</h2>
+                <p>Twitch authentication sessions are stored as secure tokens in your macOS Keychain. These sessions expire periodically for security, especially after password changes, security updates, or if you revoke app permissions on Twitch.</p>
+                <p>When a session expires, SwiftMiner reports a <code>Needs Auth</code> status on that account, and a red indicator appears in the sidebar.</p>
+                
+                <ol class="steps-list">
+                    <li>Open SwiftMiner Settings (<kbd>⌘,</kbd>) and navigate to the <strong>Accounts</strong> tab.</li>
+                    <li>Locate the account displaying the warning, and click its <strong>Reconnect</strong> button.</li>
+                    <li>SwiftMiner will display the Twitch device-code activation dialog.</li>
+                    <li>Open <a href="https://twitch.tv/activate" target="_blank" rel="noopener noreferrer">twitch.tv/activate</a> in your browser, enter the activation code, and approve.</li>
+                    <li>SwiftMiner will detect the connection and resume mining automatically.</li>
+                </ol>
+
+                <h2 id="miner-stuck">Resolve Stuck Miners</h2>
+                <p>If a miner reports it is running but no progress is accumulating, or if it appears stalled on a single stream:</p>
+                <ol class="steps-list">
+                    <li>
+                        <strong>Verify Anti-stall Recovery:</strong>
+                        <p>Ensure that <strong>Anti-stall recovery</strong> is enabled in Settings > Mining. When enabled, SwiftMiner will automatically restart the miner session or switch channels if watch progress is stagnant for more than 5 minutes.</p>
+                    </li>
+                    <li>
+                        <strong>Check Campaign Schedules:</strong>
+                        <p>Verify that there is an active Drops campaign for the game being watched. Go to the <strong>Drops</strong> tab and check the active lists. If a campaign has ended, the miner will stop accumulating watch time.</p>
+                    </li>
+                    <li>
+                        <strong>Manually Restart the Miner:</strong>
+                        <p>Go to the <strong>Miners</strong> tab, click <strong>Stop</strong> on the affected account, wait 5 seconds, and click <strong>Start</strong>. This forces the engine to query Twitch for new streams and rebuild the watch session.</p>
+                    </li>
+                </ol>
+
+                <h2 id="drops-not-progressing">Drops Not Progressing</h2>
+                <p>If you see a miner watching a stream but the progress percentage on Twitch or in SwiftMiner does not increase, the most common causes are stream viewing conflicts or missing account links.</p>
+
+                <h3>1. Duplicate viewing sessions</h3>
+                <p>Twitch only allows one active watch stream per account to count toward Drops progress. If you watch Twitch in a browser tab, on your phone, or on a TV utilizing the same Twitch account, Twitch will prioritize that browser/app session and pause SwiftMiner's progress.
+                    <br><strong>Solution:</strong> Avoid watching Twitch streams using the same accounts that SwiftMiner is currently farming on.
+                </p>
+
+                <h3>2. Missing publisher account links</h3>
+                <p>Many game developers (e.g. Electronic Arts, Ubisoft, Riot Games, Bungie) require you to link your Twitch account to their specific game developer account before watch time can count toward in-game rewards.
+                    <br><strong>Solution:</strong> Go to the campaign page in your Twitch Drops Inventory, look for a <strong>Link Account</strong> or <strong>Connect</strong> button next to the game description, and complete the connection flow. Once linked, resume mining in SwiftMiner.
+                </p>
+
+                <h2 id="export-logs">Export Diagnostic Logs</h2>
+                <p>If you encounter an issue that you cannot resolve, you can export a log report to attach to a GitHub issue. SwiftMiner logs contain API logs, switches, and system errors.</p>
+                <ol class="steps-list">
+                    <li>Go to the macOS menu bar and choose <strong>Help > Export Diagnostic Logs...</strong>.</li>
+                    <li>Select a location on your Mac to save the file (e.g., your Desktop) and click <strong>Save</strong>.</li>
+                    <li>Open a GitHub Issue, and attach the saved log file.</li>
+                </ol>
+
+                <div class="callout info">
+                    <strong>Automatic Log Redaction</strong>
+                    <p>SwiftMiner automatically redacts your log files before saving. All Twitch OAuth tokens, cookies, passwords, and private user identifiers are replaced with placeholder tags to protect your account security.</p>
+                </div>
+
+                <div class="feedback-widget">
+                    <p>Was this article helpful?</p>
+                    <div class="feedback-btn-group">
+                        <button class="feedback-btn">Yes</button>
+                        <button class="feedback-btn">No</button>
+                    </div>
+                </div>
+            </main>
+
+            <aside class="kb-sidebar" aria-label="Sidebar">
+                <div class="sidebar-section">
+                    <h2 class="sidebar-title">On this page</h2>
+                    <ul class="toc-list">
+                        <li><a href="#needs-auth" class="toc-link">Fix "Needs Auth"</a></li>
+                        <li><a href="#miner-stuck" class="toc-link">Resolve Stuck Miners</a></li>
+                        <li><a href="#drops-not-progressing" class="toc-link">Drops Not Progressing</a></li>
+                        <li><a href="#export-logs" class="toc-link">Export Diagnostic Logs</a></li>
+                    </ul>
+                </div>
+
+                <div class="sidebar-section">
+                    <h2 class="sidebar-title">Related Articles</h2>
+                    <ul class="related-links">
+                        <li><a href="../getting-started/"><i class="ph-bold ph-rocket-launch"></i> Getting Started</a></li>
+                        <li><a href="../main-window/"><i class="ph-bold ph-book-open"></i> Main Window Guide</a></li>
+                        <li><a href="../best-practices/"><i class="ph-bold ph-check-square"></i> Best Practices</a></li>
+                        <li><a href="../security-privacy/"><i class="ph-bold ph-shield-check"></i> Security & Privacy</a></li>
+                    </ul>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="shell">
+            <span>SwiftMiner Help · Published June 22, 2026</span>
+            <span><a class="nav-link" href="../../release-notes/">Release Notes</a> · <a class="nav-link" href="https://github.com/johnwatso/SwiftMiner">GitHub</a></span>
+        </div>
+    </footer>
+</body>
+</html>

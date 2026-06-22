@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Security & Privacy - SwiftMiner Help</title>
+    <meta name="description" content="Learn about SwiftMiner's privacy-first security model, macOS Keychain token storage, and direct network paths.">
+    <link rel="canonical" href="https://swiftminer.app/help/security-privacy/">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#f5f5f7">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="stylesheet" href="../../assets/css/tailwind.css">
+    <link rel="stylesheet" href="../assets/css/kbase.css">
+    <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
+    <script src="../assets/js/search-index.js" defer></script>
+    <script src="../assets/js/search.js" defer></script>
+    <script src="../assets/js/kbase.js" defer></script>
+</head>
+<body>
+    <nav class="nav" aria-label="Main">
+        <div class="shell nav-inner">
+            <a class="brand" href="../">
+                <img src="../../assets/landing/swiftminer-icon.webp" alt="">
+                <span>SwiftMiner Help</span>
+            </a>
+            <div class="nav-actions">
+                <a class="nav-link" href="../">Help Home</a>
+                <a class="nav-link optional" href="../../">Overview</a>
+                <a class="nav-link" href="https://github.com/johnwatso/SwiftMiner/issues">Raise an Issue</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="shell">
+        <div class="breadcrumbs" aria-label="Breadcrumbs">
+            <a href="../">Help Home</a>
+            <span class="sep">/</span>
+            <span class="current">Security & Privacy</span>
+        </div>
+
+        <header class="article-header">
+            <h1>Security & Privacy</h1>
+            <p class="article-intro">Privacy First. Learn how SwiftMiner secures your Twitch authentication tokens using your Mac's Keychain and operates entirely locally on your machine without tracking.</p>
+            <div class="search-wrap" style="margin-top: 1.5rem; max-width: 100%;">
+                <i class="ph-bold ph-magnifying-glass" style="position: absolute; top: 50%; left: 1.1rem; transform: translateY(-50%); color: var(--muted);"></i>
+                <input id="help-search" class="search" type="search" placeholder="Search help topics" aria-label="Search help topics" style="width: 100%; height: 48px; padding: 0 1.2rem 0 3rem; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-solid); color: var(--ink); font: inherit; outline: none; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);">
+            </div>
+        </header>
+
+        <div class="kb-grid">
+            <main class="kb-content">
+                <p>SwiftMiner is designed around security and privacy. Because you are connecting your personal Twitch accounts, the app uses native macOS security systems to protect your data and does not track your online activities.</p>
+
+                <h2 id="keychain-storage">Keychain Token Storage</h2>
+                <p>SwiftMiner does not store your Twitch passwords. When you authorize the app using the device activation code, Twitch returns a secure <strong>OAuth Access Token</strong> and <strong>Refresh Token</strong>.</p>
+                <p>To protect these tokens, SwiftMiner integrates directly with the native macOS <strong>Keychain Services API</strong>:</p>
+                <ul>
+                    <li>Tokens are encrypted and stored inside your system’s secure Keychain, managed by macOS.</li>
+                    <li>They are locked and encrypted at rest using your Mac's user login credentials.</li>
+                    <li>No other third-party applications can access these keys, and they are never stored in plain-text configuration files on your disk.</li>
+                </ul>
+
+                <h2 id="network-paths">Direct Network Connections</h2>
+                <p>SwiftMiner is a local utility. Unlike web-based automated miners that route your traffic or account sessions through their own servers, SwiftMiner runs entirely on your Mac:</p>
+                <ul>
+                    <li><strong>Direct-to-Twitch:</strong> Every query, watcher status, and claim request is sent directly from your Mac to official Twitch endpoints (<code>api.twitch.tv</code> and <code>gql.twitch.tv</code>). There are no intermediate proxy servers.</li>
+                    <li><strong>Telemetry & Tracking:</strong> SwiftMiner does not collect telemetry, crash reports, viewing histories, or user statistics. There are no tracking scripts or analytics cookies in the app or on the website.</li>
+                    <li><strong>Discord Webhooks / SwiftBot:</strong> If you choose to enable the optional Discord integration, SwiftMiner communicates only with the SwiftBot relay server (on <code>swiftbot.dev</code>) to forward drop notifications and support slash commands. If disabled, no Discord network traffic is generated.</li>
+                </ul>
+
+                <h2 id="open-source">Open Source & Auditability</h2>
+                <p>Because SwiftMiner is a completely open-source project hosted on GitHub, the entire codebase is audit-friendly:</p>
+                <ul>
+                    <li>You can review the Swift code that handles Keychain storage, network requests, and API communication.</li>
+                    <li>You can compile the application yourself from the source code in Xcode to guarantee that your running binary matches the repository code.</li>
+                    <li>For advanced security compliance details, see the <a href="https://github.com/johnwatso/SwiftMiner/blob/main/SECURITY.md" target="_blank" rel="noopener noreferrer">Security Policy</a> on the GitHub repository.</li>
+                </ul>
+
+                <div class="feedback-widget">
+                    <p>Was this article helpful?</p>
+                    <div class="feedback-btn-group">
+                        <button class="feedback-btn">Yes</button>
+                        <button class="feedback-btn">No</button>
+                    </div>
+                </div>
+            </main>
+
+            <aside class="kb-sidebar" aria-label="Sidebar">
+                <div class="sidebar-section">
+                    <h2 class="sidebar-title">On this page</h2>
+                    <ul class="toc-list">
+                        <li><a href="#keychain-storage" class="toc-link">Keychain Storage</a></li>
+                        <li><a href="#network-paths" class="toc-link">Direct Connections</a></li>
+                        <li><a href="#open-source" class="toc-link">Open Source Audit</a></li>
+                    </ul>
+                </div>
+
+                <div class="sidebar-section">
+                    <h2 class="sidebar-title">Related Articles</h2>
+                    <ul class="related-links">
+                        <li><a href="../getting-started/"><i class="ph-bold ph-rocket-launch"></i> Getting Started</a></li>
+                        <li><a href="../web-dashboard/"><i class="ph-bold ph-globe"></i> Web Dashboard</a></li>
+                        <li><a href="../troubleshooting/"><i class="ph-bold ph-wrench"></i> Troubleshooting Guide</a></li>
+                        <li><a href="../best-practices/"><i class="ph-bold ph-check-square"></i> Best Practices</a></li>
+                    </ul>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="shell">
+            <span>SwiftMiner Help · Published June 22, 2026</span>
+            <span><a class="nav-link" href="../../release-notes/">Release Notes</a> · <a class="nav-link" href="https://github.com/johnwatso/SwiftMiner">GitHub</a></span>
+        </div>
+    </footer>
+</body>
+</html>

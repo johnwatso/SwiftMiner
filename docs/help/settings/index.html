@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Settings Guide - SwiftMiner Help</title>
+    <meta name="description" content="Reference guide for configuring SwiftMiner settings, including app presence, mining behaviors, integrations, and advanced preferences.">
+    <link rel="canonical" href="https://swiftminer.app/help/settings/">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#f5f5f7">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="stylesheet" href="../../assets/css/tailwind.css">
+    <link rel="stylesheet" href="../assets/css/kbase.css">
+    <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
+    <script src="../assets/js/search-index.js" defer></script>
+    <script src="../assets/js/search.js" defer></script>
+    <script src="../assets/js/kbase.js" defer></script>
+</head>
+<body>
+    <nav class="nav" aria-label="Main">
+        <div class="shell nav-inner">
+            <a class="brand" href="../">
+                <img src="../../assets/landing/swiftminer-icon.webp" alt="">
+                <span>SwiftMiner Help</span>
+            </a>
+            <div class="nav-actions">
+                <a class="nav-link" href="../">Help Home</a>
+                <a class="nav-link optional" href="../../">Overview</a>
+                <a class="nav-link" href="https://github.com/johnwatso/SwiftMiner/issues">Raise an Issue</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="shell">
+        <div class="breadcrumbs" aria-label="Breadcrumbs">
+            <a href="../">Help Home</a>
+            <span class="sep">/</span>
+            <span class="current">Settings Guide</span>
+        </div>
+
+        <header class="article-header">
+            <h1>SwiftMiner Settings Guide</h1>
+            <p class="article-intro">Customize your SwiftMiner setup. This guide explains every option inside the Settings panel (<kbd>⌘,</kbd>), from app visibility to background automation and log levels.</p>
+            <div class="search-wrap" style="margin-top: 1.5rem; max-width: 100%;">
+                <i class="ph-bold ph-magnifying-glass" style="position: absolute; top: 50%; left: 1.1rem; transform: translateY(-50%); color: var(--muted);"></i>
+                <input id="help-search" class="search" type="search" placeholder="Search help topics" aria-label="Search help topics" style="width: 100%; height: 48px; padding: 0 1.2rem 0 3rem; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-solid); color: var(--ink); font: inherit; outline: none; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);">
+            </div>
+        </header>
+
+        <div class="kb-grid">
+            <main class="kb-content">
+                <p>Open settings in SwiftMiner by choosing <strong>SwiftMiner > Settings...</strong> in the macOS menu bar, or by pressing the <kbd>⌘,</kbd> shortcut on your keyboard. Settings are grouped into tabs representing different components of the application.</p>
+
+                <h2 id="general">General Settings</h2>
+                <p>Manage application visibility, startup behavior, and visual log properties.</p>
+
+                <div class="kb-table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 30%;">Setting</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>App Presence</strong></td>
+                                <td>Choose where SwiftMiner appears:
+                                    <ul>
+                                        <li><code>Dock Only</code>: App runs in a standard window with a Dock icon.</li>
+                                        <li><code>Menu Bar Only</code>: App runs as a status item in the menu bar. Closing the window keeps it running in the background.</li>
+                                        <li><code>Dock + Menu Bar</code>: Displays in both locations.</li>
+                                    </ul>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><strong>Run in background when closed</strong></td>
+                                <td>Keep miners running even if you close the main window. Highly recommended for uninterrupted farming.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Start at login</strong></td>
+                                <td>Launches SwiftMiner automatically when you log in to your Mac.
+                                    <br><small style="color: var(--muted)">Note: You may need to approve SwiftMiner in macOS System Settings > Login Items.</small>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><strong>Start minimized</strong></td>
+                                <td>Hide the main window on login launch so it runs quietly in the background. (Only applies to automatic login launches).</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Use Steam artwork</strong></td>
+                                <td>Prefer fetching portrait game artwork from the Steam store CDN. Falls back to Twitch artwork when not found.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Show in-app tips</strong></td>
+                                <td>Toggles TipKit hints that explain secondary features or filters throughout the app interface.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h2 id="accounts">Accounts Settings</h2>
+                <p>Manage your linked Twitch profiles. You can add new accounts, remove inactive connections, or re-authenticate expired sessions.</p>
+                <ul>
+                    <li><strong>Add Account:</strong> Generates a new Twitch device login flow. You can link multiple accounts to farm Drops simultaneously.</li>
+                    <li><strong>Reconnect:</strong> If a session expires (showing <code>Needs Auth</code>), click Reconnect to refresh credentials without removing the account history.</li>
+                    <li><strong>Remove Account:</strong> Deletes saved credentials for that profile from your macOS Keychain and removes it from SwiftMiner.</li>
+                </ul>
+
+                <h2 id="mining">Mining Settings</h2>
+                <p>Configure automated behaviors, claim triggers, and recovery logic.</p>
+
+                <div class="kb-table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 30%;">Setting</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Auto-claim drops</strong></td>
+                                <td>Automatically submits claim requests to Twitch as soon as you accumulate enough watch time for a reward.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Auto-claim channel points</strong></td>
+                                <td>Automatically claims green bonus channel points on watched channels when they pop up.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Sync miner state</strong></td>
+                                <td>Links the run states of all miners. Starting or stopping one miner will start or stop them all.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Auto-start on launch</strong></td>
+                                <td>Miners automatically resume watch sessions when the app opens, provided they are authenticated.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Avoid duplicate streams</strong></td>
+                                <td>When farming the same game on multiple accounts, SwiftMiner tries to distribute miners to different broadcasters to reduce stream overlaps.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Prioritise followed streamers</strong></td>
+                                <td>Prefer channels that you follow or subscribe to when choosing a broadcaster for a campaign.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Enable badges & emotes</strong></td>
+                                <td>Includes campaigns that only reward Twitch profile badges or channel emotes (instead of in-game items).</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Anti-stall recovery</strong></td>
+                                <td>Monitors drop progress. If watch time has not progressed for several minutes on an active stream, SwiftMiner automatically refreshes the stream or switches channels to resume earning.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h2 id="advanced">Advanced & Logs Config</h2>
+                <p>Configure internal developer settings, UI layouts, and logging levels.</p>
+                <ul>
+                    <li><strong>Log level:</strong> Set the granularity of events stored in the logs: <code>Debug</code>, <code>Info</code>, <code>Warning</code>, or <code>Error</code>.</li>
+                    <li><strong>Show log console:</strong> Toggles a panel in the main window containing real-time diagnostic output.</li>
+                    <li><strong>Show activity log icons:</strong> Display a descriptive icon next to each row in the Activity Log instead of a standard bullet dot.</li>
+                    <li><strong>Animate new rows:</strong> Slide and fade new entries in as they appear in the Activity Log.</li>
+                    <li><strong>Animated status icons:</strong> Animate status badges with Apple-style transitions and drawing effects. (Continuous animation only runs for actively changing states).</li>
+                </ul>
+
+                <h2 id="updates">Updates Settings</h2>
+                <p>SwiftMiner leverages the Sparkle framework to deliver secure, automated updates.</p>
+                <ul>
+                    <li><strong>Check for updates:</strong> Manually trigger a check against the update server.</li>
+                    <li><strong>Update Channel:</strong> Choose between <code>Stable</code> (fully tested releases) or <code>Beta</code> (early-access features).</li>
+                    <li><strong>Automatically check for updates:</strong> Allow Sparkle to query for updates in the background.</li>
+                    <li><strong>Automatically download updates:</strong> Downloads new versions silently so they are ready to install the next time you restart the app.</li>
+                </ul>
+
+                <div class="feedback-widget">
+                    <p>Was this article helpful?</p>
+                    <div class="feedback-btn-group">
+                        <button class="feedback-btn">Yes</button>
+                        <button class="feedback-btn">No</button>
+                    </div>
+                </div>
+            </main>
+
+            <aside class="kb-sidebar" aria-label="Sidebar">
+                <div class="sidebar-section">
+                    <h2 class="sidebar-title">On this page</h2>
+                    <ul class="toc-list">
+                        <li><a href="#general" class="toc-link">General Settings</a></li>
+                        <li><a href="#accounts" class="toc-link">Accounts Settings</a></li>
+                        <li><a href="#mining" class="toc-link">Mining Settings</a></li>
+                        <li><a href="#advanced" class="toc-link">Advanced & Logs</a></li>
+                        <li><a href="#updates" class="toc-link">Updates Settings</a></li>
+                    </ul>
+                </div>
+
+                <div class="sidebar-section">
+                    <h2 class="sidebar-title">Related Articles</h2>
+                    <ul class="related-links">
+                        <li><a href="../getting-started/"><i class="ph-bold ph-rocket-launch"></i> Getting Started</a></li>
+                        <li><a href="../main-window/"><i class="ph-bold ph-book-open"></i> Main Window Guide</a></li>
+                        <li><a href="../web-dashboard/"><i class="ph-bold ph-globe"></i> Web Dashboard</a></li>
+                        <li><a href="../menu-bar/"><i class="ph-bold ph-monitor"></i> Menu Bar Mode</a></li>
+                    </ul>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="shell">
+            <span>SwiftMiner Help · Published June 22, 2026</span>
+            <span><a class="nav-link" href="../../release-notes/">Release Notes</a> · <a class="nav-link" href="https://github.com/johnwatso/SwiftMiner">GitHub</a></span>
+        </div>
+    </footer>
+</body>
+</html>
