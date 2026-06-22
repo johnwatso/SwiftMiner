@@ -112,6 +112,16 @@
                     <li>Share this URL with your friends. When they visit it, they will see a Twitch sign-in prompt. After signing in, they will only be able to view and manage their own Twitch miners.</li>
                 </ol>
 
+                <h2 id="reverse-proxy">Running behind a Reverse Proxy</h2>
+                <p>If you prefer not to use the automated SwiftBot tunnel and want to host the Web Dashboard using your own domain via a self-managed reverse proxy (like Nginx, Caddy, Apache, or Cloudflare Tunnels), you can easily do so. Since SwiftMiner runs a standard HTTP server on your local network port, it is fully compatible with standard proxy routing.</p>
+                
+                <h3>Configuration Recommendations:</h3>
+                <ul>
+                    <li><strong>Set your Base URL:</strong> In the Web settings tab, you must set the <strong>Base URL</strong> to your public domain (e.g. <code>https://dashboard.example.com</code>). This ensures Twitch OAuth redirection validation and secure session cookie scopes align correctly.</li>
+                    <li><strong>Forward standard headers:</strong> Configure your reverse proxy to forward standard HTTP headers, specifically the <code>Host</code> and <code>Cookie</code> headers, so SwiftMiner can validate user sessions.</li>
+                    <li><strong>No WebSockets needed:</strong> The dashboard utilizes standard HTTP request polling and API routes, so you do not need to configure connection hijacking or WebSocket upgrades in your proxy configurations.</li>
+                </ul>
+
             </main>
 
             <aside class="kb-sidebar" aria-label="Sidebar">
@@ -122,6 +132,7 @@
                         <li><a href="#enable" class="toc-link">Enable Dashboard</a></li>
                         <li><a href="#local-access" class="toc-link">Local Network Access</a></li>
                         <li><a href="#internet-access" class="toc-link">Internet & Twitch OAuth</a></li>
+                        <li><a href="#reverse-proxy" class="toc-link">Reverse Proxy Hosting</a></li>
                     </ul>
                 </div>
 
