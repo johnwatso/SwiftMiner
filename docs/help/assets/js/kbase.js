@@ -30,19 +30,5 @@ document.addEventListener('DOMContentLoaded', () => {
     headings.forEach(heading => observer.observe(heading));
   }
 
-  // 2. Feedback Widget Submission Handler
-  const feedbackWidget = document.querySelector('.feedback-widget');
-  if (feedbackWidget) {
-    const buttons = feedbackWidget.querySelectorAll('.feedback-btn');
-    buttons.forEach(btn => {
-      btn.addEventListener('click', () => {
-        feedbackWidget.innerHTML = `
-          <p style="color: var(--blue); font-weight: 600; margin: 0; padding: 0.5rem 0;">
-            <i class="ph-bold ph-check-circle" style="vertical-align: middle; margin-right: 0.25rem;"></i>
-            Thank you for your feedback!
-          </p>
-        `;
-      });
-    });
-  }
+
 });
