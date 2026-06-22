@@ -29,7 +29,7 @@ let runsHistory = [
   {
     id: "run-9842",
     taskName: "Fix database connection leak",
-    model: "Claude 3.5 Sonnet",
+    model: "Balanced Agent",
     dateTime: "2026-06-19 14:15:32",
     tokens: 42500,
     cost: 0.128,
@@ -177,7 +177,7 @@ function initCharts() {
   costChart = new Chart(costCtx, {
     type: 'doughnut',
     data: {
-      labels: ['Claude 3.5 Sonnet', 'GPT-4o Mini', 'o1 Pro'],
+      labels: ['Balanced Agent', 'GPT-4o Mini', 'o1 Pro'],
       datasets: [{
         data: [78.4, 21.6, 42.8],
         backgroundColor: ['#9333ea', '#3b82f6', '#10b981'],
@@ -810,7 +810,7 @@ function startSandboxSimulation() {
       const savedRun = {
         id: newRunId,
         taskName: template.title,
-        model: model === 'gpt-4o-mini' ? 'GPT-4o Mini' : model === 'o1-pro' ? 'o1 Pro' : 'Claude 3.5 Sonnet',
+        model: model === 'gpt-4o-mini' ? 'GPT-4o Mini' : model === 'o1-pro' ? 'o1 Pro' : 'Balanced Agent',
         dateTime: new Date().toISOString().replace('T', ' ').substring(0, 19),
         tokens: totalTokens,
         cost: calculatedCost,

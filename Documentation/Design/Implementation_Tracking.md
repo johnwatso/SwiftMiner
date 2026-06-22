@@ -8,7 +8,7 @@
 
 ## Implementation Phase Map
 
-### Phase 1: Backend Foundation — @claude + @kimi
+### Phase 1: Backend Foundation — Backend/API + @kimi
 
 | Design Section | Expected Code Changes | Status | Notes |
 |----------------|----------------------|--------|-------|
@@ -22,7 +22,7 @@
 | 2.1 HTTP Server | `Sources/SwiftMinerService/HTTPAPIServer.swift` (new) | ✅ Complete | `Network.framework` based; routes, request parsing, JSON responses |
 | 5. Readiness — WAL mode | `SQLiteManager` — enable WAL if not already | ⏳ Not started | Concurrent reads |
 
-### Phase 2: Event/Webhook Layer — @codex + @claude
+### Phase 2: Event/Webhook Layer — @codex + Backend/API
 
 | Design Section | Expected Code Changes | Status | Notes |
 |----------------|----------------------|--------|-------|
@@ -64,11 +64,11 @@
 
 | Blocker | Blocks | Owner | Status |
 |---------|--------|-------|--------|
-| Schema migration (001) | `registerUser` audit, projection tables | @claude | ✅ Resolved |
-| `OperatorIdentity` type | All audit writes, API auth | @claude | ✅ Resolved |
+| Schema migration (001) | `registerUser` audit, projection tables | Backend/API | ✅ Resolved |
+| `OperatorIdentity` type | All audit writes, API auth | Backend/API | ✅ Resolved |
 | HTTP API server | SwiftBot client integration testing | @kimi | ✅ Resolved |
 | Projection service | Event emitter (needs state to diff), API endpoint | @kimi | ✅ Resolved |
-| Webhook URL settings | Webhook delivery service | @claude or admin config | ✅ Exists in Settings.swift |
+| Webhook URL settings | Webhook delivery service | Backend/API or admin config | ✅ Exists in Settings.swift |
 | Migration 3 (`user_campaign_decisions`) | Durable campaign actions | @gemini | ✅ Resolved |
 | SwiftBot build | End-to-end functional testing | @gemini | 🔄 SwiftLint sandbox env issue; Swift code compiles |
 
@@ -79,9 +79,9 @@
 | Version | Date | Change | Author |
 |---------|------|--------|--------|
 | v0.1 | 2026-04-24 | Initial skeleton | @kimi |
-| v0.2 | 2026-04-24 | API + events + webhooks integrated | @claude, @codex, @kimi |
+| v0.2 | 2026-04-24 | API + events + webhooks integrated | Backend/API, @codex, @kimi |
 | v0.3 | 2026-04-24 | Phase 2 complete, cross-check open | @kimi |
-| v0.4 | 2026-04-24 | Projection refinement | @claude, @codex, @kimi |
+| v0.4 | 2026-04-24 | Projection refinement | Backend/API, @codex, @kimi |
 | **v1.0-locked** | 2026-04-24 | Design locked | @kimi |
 
 ---
