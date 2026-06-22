@@ -13,6 +13,10 @@
 </p>
 
 <p align="center">
+  Wildly over-engineered for collecting pixels, so you can leave it running and think about literally anything else.
+</p>
+
+<p align="center">
   <strong><a href="https://swiftminer.app">swiftminer.app</a></strong>
 </p>
 

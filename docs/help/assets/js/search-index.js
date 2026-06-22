@@ -25,8 +25,8 @@ const searchIndex = [
     title: "Twitch Drops Miner for Mac",
     url: "twitch-drops-miner-for-mac/",
     category: "Getting Started",
-    keywords: "twitch drops miner mac macos native app auto claim watch eligible streams browser tabs",
-    snippet: "Use SwiftMiner as a native Mac app for Twitch Drops mining, tracking, and claiming."
+    keywords: "twitch drops miner mac macos native app auto claim watch eligible streams browser tabs without docker multi account",
+    snippet: "Use SwiftMiner as a free native Mac app for Twitch Drops mining, tracking, auto-claiming, with no Docker required."
   },
   {
     title: "Auto Claim Twitch Drops on macOS",
@@ -50,11 +50,11 @@ const searchIndex = [
     snippet: "What to look for in a maintained Twitch Drops miner and how SwiftMiner handles current Drops campaigns."
   },
   {
-    title: "Twitch Drops Miner Without Docker",
+    title: "No Docker Required for Twitch Drops Mining",
     url: "twitch-drops-miner-without-docker/",
     category: "Getting Started",
     keywords: "twitch drops miner without docker native mac app no container no compose no server setup",
-    snippet: "Use SwiftMiner as a native Mac Twitch Drops miner instead of managing Docker containers."
+    snippet: "Use SwiftMiner as a native Mac Twitch Drops miner with no container setup required."
   },
 
   // Main Window
