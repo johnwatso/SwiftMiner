@@ -13,7 +13,7 @@ public actor AggregatedCampaignDataService {
     // MARK: - Types
     
     /// Pre-computed mining state for a single account on a campaign.
-    /// Codex reads this directly — no inference required.
+    /// The UI reads this directly — no inference required.
     public enum AccountMiningState: String, Codable, Sendable {
         case mining   // actively watching a channel for this campaign right now
         case claimed  // all drops claimed (benefit IDs confirmed in inventory)
@@ -40,7 +40,7 @@ public actor AggregatedCampaignDataService {
         /// Per-account progress information
         public let accountProgress: [String: AccountProgress]
 
-        /// Ordered list of per-account state indicators for Codex avatar row.
+        /// Ordered list of per-account state indicators for avatar row.
         /// Pre-computed — initials, state, and username are all final.
         public let accountStates: [AccountState]
 
@@ -411,7 +411,7 @@ public actor AggregatedCampaignDataService {
             ))
         }
 
-        // Sort: mining first, then claimed, then idle — consistent ordering for Codex
+        // Sort: mining first, then claimed, then idle — consistent ordering for display
         accountStates.sort {
             let order: [AccountMiningState: Int] = [.mining: 0, .claimed: 1, .idle: 2]
             return (order[$0.state] ?? 3) < (order[$1.state] ?? 3)

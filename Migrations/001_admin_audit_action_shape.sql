@@ -1,5 +1,4 @@
 -- Migration 001: Action-Shaped Audit Model + Index Additions
--- Author: kimi
 -- Context: Unblocks registerUser auditing, audit viewer, outbox monitor, user list
 -- Phase: Phase 1 (schema lock)
 -- SQLite compatible (recreate pattern for column changes)
