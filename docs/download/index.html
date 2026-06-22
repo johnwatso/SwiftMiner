@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, follow">
+    <title>Downloading SwiftMiner</title>
+    <meta name="description" content="Download the latest SwiftMiner release for macOS.">
+    <link rel="canonical" href="https://swiftminer.app/download/">
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <style>
+        :root { color-scheme: light dark; }
+        body {
+            min-height: 100vh;
+            margin: 0;
+            display: grid;
+            place-items: center;
+            font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: #090514;
+            color: #f8fafc;
+        }
+        main {
+            width: min(90vw, 520px);
+            text-align: center;
+        }
+        img {
+            width: 72px;
+            height: 72px;
+            border-radius: 16px;
+            margin-bottom: 20px;
+        }
+        h1 {
+            margin: 0 0 8px;
+            font-size: clamp(2rem, 8vw, 3rem);
+            line-height: 1.05;
+        }
+        p {
+            margin: 0 0 24px;
+            color: #cbd5e1;
+        }
+        a {
+            color: #67e8f9;
+            font-weight: 700;
+        }
+        .button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 48px;
+            padding: 0 22px;
+            border-radius: 12px;
+            background: #9333ea;
+            color: white;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <img src="/icon-192.png" width="192" height="192" alt="">
+        <h1>Downloading SwiftMiner</h1>
+        <p id="status">Finding the latest signed release...</p>
+        <a id="fallback" class="button" href="https://github.com/johnwatso/SwiftMiner/releases/latest">Open latest release</a>
+    </main>
+    <script>
+        (function () {
+            var fallback = 'https://github.com/johnwatso/SwiftMiner/releases/latest';
+            var status = document.getElementById('status');
+
+            fetch('https://api.github.com/repos/johnwatso/SwiftMiner/releases/latest', {
+                headers: { 'Accept': 'application/vnd.github+json' }
+            })
+                .then(function (response) {
+                    return response.ok ? response.json() : Promise.reject();
+                })
+                .then(function (release) {
+                    var assets = release.assets || [];
+                    var zip = assets.find(function (asset) {
+                        return /^SwiftMiner-.*\.zip$/.test(asset.name || '');
+                    }) || assets.find(function (asset) {
+                        return /\.zip$/.test(asset.name || '');
+                    });
+
+                    if (!zip || !zip.browser_download_url) {
+                        throw new Error('No ZIP asset found.');
+                    }
+
+                    status.textContent = 'Starting your download...';
+                    window.location.replace(zip.browser_download_url);
+                })
+                .catch(function () {
+                    status.innerHTML = 'Could not start the download automatically. Use the button below to open the latest release.';
+                    document.getElementById('fallback').href = fallback;
+                });
+        })();
+    </script>
+</body>
+</html>
