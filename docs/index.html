@@ -456,6 +456,13 @@
             color: #64748b;
         }
 
+        .swift-language-mark {
+            width: 1.8rem;
+            height: 1.8rem;
+            display: block;
+            transform: translateY(0.03rem);
+        }
+
         .content-section {
             position: relative;
             min-height: 100dvh;
@@ -1069,11 +1076,11 @@
                         <div class="relative z-10 flex flex-col h-full justify-between gap-4">
                             <div>
                                 <div class="w-12 h-12 rounded-full bg-brand-cyan/20 flex items-center justify-center text-brand-cyan mb-6 border border-brand-cyan/30 shadow-lg">
-                                    <i class="ph-bold ph-lightning text-2xl animate-pulse"></i>
+                                    <i class="ph-bold ph-gauge text-2xl"></i>
                                 </div>
                                 <h3 class="text-2xl font-bold mb-3 text-slate-900 dark:text-white">Light on your Mac</h3>
                                 <p class="text-slate-500 dark:text-gray-400 text-sm leading-relaxed">
-                                    Built natively in Swift — not a web page or an Electron wrapper — so it stays lean and runs quietly in the background while you work or play.
+                                    Designed for low CPU, memory, and power use, so you can leave miners running quietly in the background while you work, play, or step away.
                                 </p>
                             </div>
                             <span class="text-[10px] text-brand-cyan font-bold uppercase tracking-wider">Native Swift App</span>
@@ -1101,11 +1108,13 @@
                         <div class="relative z-10 flex flex-col h-full justify-between gap-4">
                             <div>
                                 <div class="w-12 h-12 rounded-full bg-brand-magenta/20 flex items-center justify-center text-brand-magenta mb-6 border border-brand-magenta/30 shadow-lg">
-                                    <img src="./assets/landing/swiftminer-icon.webp" alt="SwiftMiner Icon" class="w-7 h-7 rounded-lg">
+                                    <svg class="swift-language-mark" viewBox="0 0 552 498" fill="currentColor" aria-hidden="true">
+                                        <path d="M314 356.5L46 67.5L274 243L115.5 49L384.5 266.5L407 166L349 1L465.5 105L511.5 230.5L502 347.5L551.5 414.5V496L511.5 457L449.5 437L296 496L100.5 437L2 322.5L208.5 389.5L314 356.5Z"/>
+                                    </svg>
                                 </div>
                                 <h3 class="text-2xl font-bold mb-3 text-slate-900 dark:text-white">Truly native</h3>
                                 <p class="text-slate-500 dark:text-gray-400 text-sm leading-relaxed">
-                                    Built entirely in Apple's native frameworks — no Electron, no web views. It feels instant and stays light.
+                                    Written in Swift and SwiftUI with Apple's native frameworks — no Electron shell, no bundled web app. It feels instant and stays light.
                                 </p>
                             </div>
                             <span class="text-[10px] text-brand-magenta font-bold uppercase tracking-wider">Swift &amp; SwiftUI</span>

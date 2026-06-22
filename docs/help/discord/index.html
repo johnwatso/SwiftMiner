@@ -21,18 +21,58 @@
         .do-dont {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 1.25rem;
-            margin: 1.5rem 0;
+            gap: 1.5rem;
+            margin: 2rem 0;
         }
-        .do-dont .yes {
-            background: var(--green-soft);
-            border-color: rgba(34, 197, 94, 0.16);
-            border-left: 4px solid #22c55e;
+        .do-dont-card {
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            background: var(--surface);
+            padding: 1.5rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.015);
         }
-        .do-dont .no {
-            background: var(--red-soft);
-            border-color: rgba(239, 68, 68, 0.16);
-            border-left: 4px solid #ef4444;
+        .do-dont-card h3 {
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin-bottom: 1.2rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 0;
+        }
+        .do-dont-card.yes h3 {
+            color: #22c55e;
+        }
+        .do-dont-card.no h3 {
+            color: #ef4444;
+        }
+        .do-dont-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .do-dont-list li {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.65rem;
+            font-size: 0.95rem;
+            line-height: 1.45;
+            color: var(--muted);
+            margin-bottom: 0.85rem;
+        }
+        .do-dont-list li:last-child {
+            margin-bottom: 0;
+        }
+        .do-dont-list i {
+            font-size: 1.1rem;
+            margin-top: 0.15rem;
+            flex-shrink: 0;
+        }
+        .do-dont-list .yes-icon {
+            color: #22c55e;
+        }
+        .do-dont-list .no-icon {
+            color: #ef4444;
         }
         .command-row {
             display: flex;
@@ -121,22 +161,23 @@
                 <p>SwiftBot is designed strictly as a helper utility. It has limited permissions to protect your privacy.</p>
                 
                 <div class="do-dont">
-                    <div class="callout yes">
-                        <strong>SwiftBot can:</strong>
-                        <ul>
-                            <li>Send setup codes to link Twitch profiles.</li>
-                            <li>Notify you when Drops are claimed.</li>
-                            <li>Report current watch time and campaign info.</li>
-                            <li>Alert you when Twitch sessions expire.</li>
+                    <div class="do-dont-card yes">
+                        <h3><i class="ph-bold ph-check-circle"></i> SwiftBot can:</h3>
+                        <ul class="do-dont-list">
+                            <li><i class="ph-bold ph-check yes-icon"></i> <span>Send setup codes to link Twitch profiles.</span></li>
+                            <li><i class="ph-bold ph-check yes-icon"></i> <span>Notify you when Drops are claimed.</span></li>
+                            <li><i class="ph-bold ph-check yes-icon"></i> <span>Report current watch time and campaign info.</span></li>
+                            <li><i class="ph-bold ph-check yes-icon"></i> <span>Alert you when Twitch sessions expire.</span></li>
+                            <li><i class="ph-bold ph-check yes-icon"></i> <span>Securely expose the Web Dashboard online via Cloudflare Tunnels (or other relays) so friends can self-serve.</span></li>
                         </ul>
                     </div>
-                    <div class="callout no">
-                        <strong>SwiftBot cannot:</strong>
-                        <ul>
-                            <li>Post public messages on your behalf.</li>
-                            <li>Access your Discord passwords.</li>
-                            <li>Read your server DMs or chat histories.</li>
-                            <li>Access or store your Twitch passwords.</li>
+                    <div class="do-dont-card no">
+                        <h3><i class="ph-bold ph-x-circle"></i> SwiftBot cannot:</h3>
+                        <ul class="do-dont-list">
+                            <li><i class="ph-bold ph-x no-icon"></i> <span>Post public messages on your behalf.</span></li>
+                            <li><i class="ph-bold ph-x no-icon"></i> <span>Access your Discord passwords.</span></li>
+                            <li><i class="ph-bold ph-x no-icon"></i> <span>Read your server DMs or chat histories.</span></li>
+                            <li><i class="ph-bold ph-x no-icon"></i> <span>Access or store your Twitch passwords.</span></li>
                         </ul>
                     </div>
                 </div>

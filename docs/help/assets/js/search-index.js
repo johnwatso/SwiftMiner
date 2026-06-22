@@ -241,5 +241,29 @@ const searchIndex = [
     category: "Security & Privacy",
     keywords: "network path connect direct twitch api server discord webhooks third party no tracking",
     snippet: "SwiftMiner operates locally on your machine with direct network requests to Twitch. No third-party relays."
+  },
+
+  // Reverse Proxy
+  {
+    title: "Reverse Proxy Setup Guide",
+    url: "reverse-proxy/",
+    category: "Reverse Proxy",
+    keywords: "reverse proxy nginx caddy ssl tls certificates configuration dashboard baseurl port https host headers certs",
+    snippet: "Configure a reverse proxy like Nginx or Caddy to safely manage SSL certificates and domain mapping for the Web Dashboard."
+  },
+  {
+    title: "Nginx Proxy Configuration",
+    url: "reverse-proxy/#nginx-config",
+    category: "Reverse Proxy",
+    keywords: "nginx config proxy ssl certificates servername location proxy_pass headers",
+    snippet: "Use a standard Nginx virtual host configuration to expose the Web Dashboard over HTTPS."
+  },
+  {
+    title: "Caddy Proxy Configuration",
+    url: "reverse-proxy/#caddy-config",
+    category: "Reverse Proxy",
+    keywords: "caddy caddyfile config reverse_proxy SSL automatic ssl domain",
+    snippet: "Set up a simple Caddyfile block for automatic SSL and reverse proxy routing."
   }
 ];
+

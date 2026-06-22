@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Reverse Proxy Setup - SwiftMiner Help</title>
+    <meta name="description" content="Configure a reverse proxy like Nginx or Caddy to safely manage SSL certificates and domain mapping for the SwiftMiner Web Dashboard.">
+    <link rel="canonical" href="https://swiftminer.app/help/reverse-proxy/">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#f5f5f7">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="stylesheet" href="../../assets/css/tailwind.css">
+    <link rel="stylesheet" href="../assets/css/kbase.css">
+    <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
+    <script src="../assets/js/search-index.js" defer></script>
+    <script src="../assets/js/search.js" defer></script>
+    <script src="../assets/js/kbase.js" defer></script>
+</head>
+<body>
+    <nav class="nav" aria-label="Main">
+        <div class="shell nav-inner">
+            <a class="brand" href="../">
+                <img src="../../assets/landing/swiftminer-icon.webp" alt="">
+                <span>SwiftMiner Help</span>
+            </a>
+            <div class="nav-actions">
+                <a class="nav-link" href="../">Help Home</a>
+                <a class="nav-link optional" href="../../">Overview</a>
+                <a class="nav-link" href="https://github.com/johnwatso/SwiftMiner/issues">Raise an Issue</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="shell">
+        <div class="breadcrumbs" aria-label="Breadcrumbs">
+            <a href="../">Help Home</a>
+            <span class="sep">/</span>
+            <span class="current">Reverse Proxy Setup</span>
+        </div>
+
+        <header class="article-header">
+            <h1>Reverse Proxy Setup</h1>
+            <p class="article-intro">Expose your Web Dashboard securely over HTTPS using your own domain and reverse proxy. Keep your credentials safe and let public clients access the dashboard without managing complex certificate configurations inside SwiftMiner.</p>
+            <div class="search-wrap" style="margin-top: 1.5rem; max-width: 100%;">
+                <i class="ph-bold ph-magnifying-glass" style="position: absolute; top: 50%; left: 1.1rem; transform: translateY(-50%); color: var(--muted);"></i>
+                <input id="help-search" class="search" type="search" placeholder="Search help topics" aria-label="Search help topics" style="width: 100%; height: 48px; padding: 0 1.2rem 0 3rem; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-solid); color: var(--ink); font: inherit; outline: none; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);">
+            </div>
+        </header>
+
+        <div class="kb-grid">
+            <main class="kb-content">
+                <p>If you prefer not to use the automated SwiftBot tunnels and want to host your Web Dashboard on your own domain (e.g., <code>https://dashboard.example.com</code>), you can run SwiftMiner behind a self-managed reverse proxy. Since SwiftMiner runs a standard HTTP/1.1 server, it is fully compatible with standard proxy routing.</p>
+
+                <h2 id="why-proxy">Why use a Reverse Proxy?</h2>
+                <p>Exposing a local web server to the public internet requires robust encryption (HTTPS) to ensure that login credentials and session tokens cannot be sniffed by attackers. Using a reverse proxy like <strong>Nginx</strong>, <strong>Caddy</strong>, or <strong>Cloudflare Tunnels</strong> is highly recommended because:</p>
+                <ul>
+                    <li><strong>SSL/TLS Termination:</strong> The proxy server handles the complex cryptography and secures the connection to the client. The proxy communicates locally with SwiftMiner over a secure localhost loopback or internal LAN.</li>
+                    <li><strong>Automatic Certificates:</strong> Modern proxies like Caddy or Nginx (with Certbot) automatically request, configure, and renew free SSL certificates from Let's Encrypt or ZeroSSL.</li>
+                    <li><strong>Lean SwiftMiner Application:</strong> SwiftMiner is kept lightweight by not embedding a complex certificate manager, dynamic DNS parser, or dynamic ACME protocol client.</li>
+                </ul>
+
+                <h2 id="requirements">SwiftMiner Configuration</h2>
+                <p>Before configuring your reverse proxy, make sure the following settings are updated in SwiftMiner:</p>
+                
+                <ol class="steps-list">
+                    <li>
+                        <strong>Set your Base URL:</strong>
+                        <p>In SwiftMiner settings under the <strong>Web</strong> tab, set the <strong>Base URL</strong> to your public domain (e.g., <code>https://dashboard.example.com</code>). This is critical for two reasons:</p>
+                        <ul>
+                            <li><strong>Twitch OAuth redirection:</strong> The login flow uses the Base URL to construct correct redirect validation callbacks.</li>
+                            <li><strong>Secure Cookies:</strong> When SwiftMiner sees that the Base URL begins with <code>https</code>, it automatically configures session cookies with the <code>Secure</code> attribute, ensuring they are only transmitted over encrypted connections.</li>
+                        </ul>
+                    </li>
+                    <li>
+                        <strong>Set the Local Port:</strong>
+                        <p>Configure the local access port (default: <code>8080</code>) and make sure it is running. Your reverse proxy will route incoming traffic to this port.</p>
+                    </li>
+                </ol>
+
+                <h2 id="nginx-config">Nginx Configuration</h2>
+                <p>Below is a standard Nginx virtual host configuration. It forwards incoming HTTPS requests to SwiftMiner running on port <code>8080</code>, passes appropriate client headers, and sets up body-size limits.</p>
+
+<pre><code class="language-nginx">server {
+    listen 443 ssl http2;
+    server_name dashboard.example.com;
+
+    # SSL Certificates (managed via Certbot / Let's Encrypt)
+    ssl_certificate /etc/letsencrypt/live/dashboard.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/dashboard.example.com/privkey.pem;
+    
+    # Secure SSL Protocols and Ciphers
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers on;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        
+        # Forward standard headers
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Disable buffering for instantaneous log streams
+        proxy_buffering off;
+        
+        # Set client header and body timeout limits
+        client_max_body_size 10m;
+        proxy_read_timeout 60s;
+        proxy_connect_timeout 60s;
+    }
+}</code></pre>
+
+                <h2 id="caddy-config">Caddy Configuration</h2>
+                <p>Caddy is an exceptionally easy reverse proxy that handles SSL certificate generation and renewal automatically. Your configuration in a <code>Caddyfile</code> can be as simple as a single block:</p>
+
+<pre><code class="language-caddy">dashboard.example.com {
+    # Forward all traffic to SwiftMiner's local port
+    reverse_proxy 127.0.0.1:8080 {
+        # Disable buffering for real-time dashboard log updates
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+    }
+    
+    # Configure logging (optional)
+    log {
+        output file /var/log/caddy/swiftminer_access.log
+    }
+}</code></pre>
+
+                <h2 id="verification">Verification & Troubleshooting</h2>
+                <p>Once your reverse proxy is active, check the following to verify your setup is safe and working:</p>
+                <ul>
+                    <li><strong>HTTPS padlock:</strong> Visit your public domain in a browser and verify the lock icon appears in the address bar.</li>
+                    <li><strong>Verify Cookie security:</strong> Open your browser's Developer Tools, go to the <strong>Application</strong> (or <strong>Storage</strong>) tab, select <strong>Cookies</strong>, and look for the SwiftMiner session cookie (<code>swiftminer_session</code>). Confirm that the <code>HttpOnly</code>, <code>SameSite=Lax</code>, and <code>Secure</code> flags are all enabled.</li>
+                    <li><strong>Check Redirect URLs:</strong> If Twitch login fails, verify that your exact public callback URL (e.g. <code>https://dashboard.example.com/auth/callback</code>) is registered in your Twitch Developer Console application.</li>
+                </ul>
+
+                <div class="callout info">
+                    <strong>Local Firewalls</strong>
+                    <p>For maximum security, make sure your Mac's firewall blocks external incoming connections directly to port <code>8080</code> from outside your network. The reverse proxy should be the only application exposing and forwarding access to that port.</p>
+                </div>
+
+            </main>
+
+            <aside class="kb-sidebar" aria-label="Sidebar">
+                <div class="sidebar-section">
+                    <h2 class="sidebar-title">On this page</h2>
+                    <ul class="toc-list">
+                        <li><a href="#why-proxy" class="toc-link">Why use a Proxy</a></li>
+                        <li><a href="#requirements" class="toc-link">SwiftMiner Config</a></li>
+                        <li><a href="#nginx-config" class="toc-link">Nginx Config</a></li>
+                        <li><a href="#caddy-config" class="toc-link">Caddy Config</a></li>
+                        <li><a href="#verification" class="toc-link">Verification</a></li>
+                    </ul>
+                </div>
+
+                <div class="sidebar-section">
+                    <h2 class="sidebar-title">Related Articles</h2>
+                    <ul class="related-links">
+                        <li><a href="../web-dashboard/"><i class="ph-bold ph-browser"></i> Web Dashboard</a></li>
+                        <li><a href="../getting-started/"><i class="ph-bold ph-rocket-launch"></i> Getting Started</a></li>
+                        <li><a href="../settings/"><i class="ph-bold ph-gear"></i> Settings Guide</a></li>
+                        <li><a href="../security-privacy/"><i class="ph-bold ph-shield-check"></i> Security & Privacy</a></li>
+                    </ul>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="shell">
+            <span>SwiftMiner Help · Published June 22, 2026</span>
+            <span><a class="nav-link" href="../../release-notes/">Release Notes</a> · <a class="nav-link" href="https://github.com/johnwatso/SwiftMiner">GitHub</a></span>
+        </div>
+    </footer>
+</body>
+</html>
