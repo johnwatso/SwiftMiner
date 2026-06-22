@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Using the Main Window - SwiftMiner Help</title>
+    <meta name="description" content="Learn how to navigate and use the different views in SwiftMiner: Overview, Miners, Drops, and the Activity Log.">
+    <link rel="canonical" href="https://swiftminer.app/help/main-window/">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#f5f5f7">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="stylesheet" href="../../assets/css/tailwind.css">
+    <link rel="stylesheet" href="../assets/css/kbase.css">
+    <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
+    <script src="../assets/js/search-index.js" defer></script>
+    <script src="../assets/js/search.js" defer></script>
+    <script src="../assets/js/kbase.js" defer></script>
+</head>
+<body>
+    <nav class="nav" aria-label="Main">
+        <div class="shell nav-inner">
+            <a class="brand" href="../">
+                <img src="../../assets/landing/swiftminer-icon.webp" alt="">
+                <span>SwiftMiner Help</span>
+            </a>
+            <div class="nav-actions">
+                <a class="nav-link" href="../">Help Home</a>
+                <a class="nav-link optional" href="../../">Overview</a>
+                <a class="nav-link" href="https://github.com/johnwatso/SwiftMiner/issues">Raise an Issue</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="shell">
+        <div class="breadcrumbs" aria-label="Breadcrumbs">
+            <a href="../">Help Home</a>
+            <span class="sep">/</span>
+            <span class="current">Main Window</span>
+        </div>
+
+        <header class="article-header">
+            <h1>Using the Main Window</h1>
+            <p class="article-intro">Get to know the SwiftMiner workspace. Explore the sidebar navigation, monitor active campaigns, track drop progress, and inspect the real-time activity log.</p>
+            <div class="search-wrap" style="margin-top: 1.5rem; max-width: 100%;">
+                <i class="ph-bold ph-magnifying-glass" style="position: absolute; top: 50%; left: 1.1rem; transform: translateY(-50%); color: var(--muted);"></i>
+                <input id="help-search" class="search" type="search" placeholder="Search help topics" aria-label="Search help topics" style="width: 100%; height: 48px; padding: 0 1.2rem 0 3rem; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-solid); color: var(--ink); font: inherit; outline: none; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);">
+            </div>
+        </header>
+
+        <div class="kb-grid">
+            <main class="kb-content">
+                <p>SwiftMiner organizes its features into a native macOS sidebar layout. You can switch between views instantly to manage your accounts, verify claim statuses, or troubleshoot connectivity issues.</p>
+
+                <h2 id="overview">Overview Dashboard</h2>
+                <p>The <strong>Overview</strong> tab is your dashboard. It aggregates data from all connected miners and active campaigns into a single, clean overview. This is where you can quickly see what is currently being mined and how much time remains for your active Twitch rewards.</p>
+                
+                <div class="screenshot-wrap">
+                    <picture>
+                        <source srcset="../../assets/landing/overview-dark.webp" media="(prefers-color-scheme: dark)">
+                        <img src="../../assets/landing/overview-light.webp" alt="SwiftMiner Overview Dashboard">
+                    </picture>
+                    <div class="screenshot-caption">The Overview tab displays active Twitch Drops campaigns and running miner sessions at a glance.</div>
+                </div>
+
+                <p>In the Overview tab, you will find:</p>
+                <ul>
+                    <li><strong>Active Campaigns:</strong> Visual cards representing the games you are currently farming. They show progress bars, estimated time to completion, and campaign end dates.</li>
+                    <li><strong>Miners Summary:</strong> A quick listing of your Twitch accounts, showing which streamer each account is currently watching.</li>
+                </ul>
+
+                <h2 id="miners">Miners Section</h2>
+                <p>The <strong>Miners</strong> tab lists every connected account in detail. Here, you can control individual mining sessions, check the stream health, and see details about the current broadcaster.</p>
+
+                <div class="screenshot-wrap">
+                    <picture>
+                        <source srcset="../../assets/landing/miners-dark.webp" media="(prefers-color-scheme: dark)">
+                        <img src="../../assets/landing/miners-light.webp" alt="SwiftMiner Miners List">
+                    </picture>
+                    <div class="screenshot-caption">Detailed miner controls and status reporting for each linked Twitch account.</div>
+                </div>
+
+                <p>Key information shown in the Miners tab:</p>
+                <ul>
+                    <li><strong>Status Indicator:</strong> Displays if the miner is <code>Running</code>, <code>Stopped</code>, or requires attention (e.g. <code>Needs Auth</code>). If a miner requires action, a status badge will also appear on the sidebar navigation.</li>
+                    <li><strong>Broadcaster Details:</strong> The channel username, stream title, and current game being watched.</li>
+                    <li><strong>Individual Controls:</strong> Buttons to start or stop specific miners. If you want to control all miners simultaneously, you can enable <em>Sync Miner State</em> in settings.</li>
+                </ul>
+
+                <h2 id="drops">Drops Section</h2>
+                <p>The <strong>Drops</strong> tab is a unified inventory showing all rewards associated with the campaigns SwiftMiner has processed or is currently processing.</p>
+
+                <div class="screenshot-wrap">
+                    <picture>
+                        <source srcset="../../assets/landing/drops-dark.webp" media="(prefers-color-scheme: dark)">
+                        <img src="../../assets/landing/drops-light.webp" alt="SwiftMiner Drops List">
+                    </picture>
+                    <div class="screenshot-caption">Monitor claim statuses and upcoming rewards in the Drops tab.</div>
+                </div>
+
+                <p>Drops are divided into clean, filterable categories:</p>
+                <ul>
+                    <li><strong>In Progress:</strong> Rewards currently accumulating watch time.</li>
+                    <li><strong>Claimable:</strong> Completed drops waiting to be claimed. If <em>Auto-claim drops</em> is disabled in settings, you can claim them manually here with a single click.</li>
+                    <li><strong>Completed:</strong> A historical record of rewards successfully added to your Twitch inventories.</li>
+                    <li><strong>Upcoming:</strong> Drops campaigns scheduled to begin in the future.</li>
+                </ul>
+
+                <h2 id="activity-log">Activity Log</h2>
+                <p>The <strong>Activity Log</strong> is a real-time console log translated into human-readable events. It tracks everything SwiftMiner does under the hood, making it the most important tool for understanding how the app is operating.</p>
+
+                <div class="screenshot-wrap">
+                    <picture>
+                        <source srcset="../../assets/landing/activity-log-dark.webp" media="(prefers-color-scheme: dark)">
+                        <img src="../../assets/landing/activity-log-light.webp" alt="SwiftMiner Activity Log">
+                    </picture>
+                    <div class="screenshot-caption">Inspect real-time logs, filter by category, or export diagnostic reports for troubleshooting.</div>
+                </div>
+
+                <p>Use the Activity Log to:</p>
+                <ul>
+                    <li>Verify when a miner automatically switches streams (e.g. if a streamer goes offline).</li>
+                    <li>See exact timestamps for completed claims and channel point bonuses.</li>
+                    <li>Check for warning conditions like Twitch API stalls or session expiries.</li>
+                    <li>Filter events by account or category (Claims, Switches, Errors, etc.), or export a redacted log file for debugging.</li>
+                </ul>
+
+                <div class="feedback-widget">
+                    <p>Was this article helpful?</p>
+                    <div class="feedback-btn-group">
+                        <button class="feedback-btn">Yes</button>
+                        <button class="feedback-btn">No</button>
+                    </div>
+                </div>
+            </main>
+
+            <aside class="kb-sidebar" aria-label="Sidebar">
+                <div class="sidebar-section">
+                    <h2 class="sidebar-title">On this page</h2>
+                    <ul class="toc-list">
+                        <li><a href="#overview" class="toc-link">Overview Dashboard</a></li>
+                        <li><a href="#miners" class="toc-link">Miners Section</a></li>
+                        <li><a href="#drops" class="toc-link">Drops Section</a></li>
+                        <li><a href="#activity-log" class="toc-link">Activity Log</a></li>
+                    </ul>
+                </div>
+
+                <div class="sidebar-section">
+                    <h2 class="sidebar-title">Related Articles</h2>
+                    <ul class="related-links">
+                        <li><a href="../getting-started/"><i class="ph-bold ph-rocket-launch"></i> Getting Started</a></li>
+                        <li><a href="../settings/"><i class="ph-bold ph-gear"></i> Settings Guide</a></li>
+                        <li><a href="../menu-bar/"><i class="ph-bold ph-monitor"></i> Menu Bar Mode</a></li>
+                        <li><a href="../troubleshooting/"><i class="ph-bold ph-wrench"></i> Troubleshooting Guide</a></li>
+                    </ul>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="shell">
+            <span>SwiftMiner Help · Published June 22, 2026</span>
+            <span><a class="nav-link" href="../../release-notes/">Release Notes</a> · <a class="nav-link" href="https://github.com/johnwatso/SwiftMiner">GitHub</a></span>
+        </div>
+    </footer>
+</body>
+</html>

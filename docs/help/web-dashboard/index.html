@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Web Dashboard Guide - SwiftMiner Help</title>
+    <meta name="description" content="Learn how to enable, configure, and use the SwiftMiner Web Dashboard for local browser control or remote internet access.">
+    <link rel="canonical" href="https://swiftminer.app/help/web-dashboard/">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#f5f5f7">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="stylesheet" href="../../assets/css/tailwind.css">
+    <link rel="stylesheet" href="../assets/css/kbase.css">
+    <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
+    <script src="../assets/js/search-index.js" defer></script>
+    <script src="../assets/js/search.js" defer></script>
+    <script src="../assets/js/kbase.js" defer></script>
+</head>
+<body>
+    <nav class="nav" aria-label="Main">
+        <div class="shell nav-inner">
+            <a class="brand" href="../">
+                <img src="../../assets/landing/swiftminer-icon.webp" alt="">
+                <span>SwiftMiner Help</span>
+            </a>
+            <div class="nav-actions">
+                <a class="nav-link" href="../">Help Home</a>
+                <a class="nav-link optional" href="../../">Overview</a>
+                <a class="nav-link" href="https://github.com/johnwatso/SwiftMiner/issues">Raise an Issue</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="shell">
+        <div class="breadcrumbs" aria-label="Breadcrumbs">
+            <a href="../">Help Home</a>
+            <span class="sep">/</span>
+            <span class="current">Web Dashboard</span>
+        </div>
+
+        <header class="article-header">
+            <h1>Web Dashboard Setup</h1>
+            <p class="article-intro">Monitor and control SwiftMiner from any browser. Configure local network access, or set up secure internet tunnels with Twitch OAuth so your friends can log in and manage their own miners.</p>
+            <div class="search-wrap" style="margin-top: 1.5rem; max-width: 100%;">
+                <i class="ph-bold ph-magnifying-glass" style="position: absolute; top: 50%; left: 1.1rem; transform: translateY(-50%); color: var(--muted);"></i>
+                <input id="help-search" class="search" type="search" placeholder="Search help topics" aria-label="Search help topics" style="width: 100%; height: 48px; padding: 0 1.2rem 0 3rem; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-solid); color: var(--ink); font: inherit; outline: none; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);">
+            </div>
+        </header>
+
+        <div class="kb-grid">
+            <main class="kb-content">
+                <p>The <strong>Web Dashboard</strong> is a browser-based companion built directly into SwiftMiner. It provides a clean web interface containing overview stats, miner toggles, drop inventories, and log details. It is perfect if you run SwiftMiner on a headless Mac mini or want to let friends manage their own Twitch connections remotely.</p>
+
+                <h2 id="about">What is the Web Dashboard?</h2>
+                <p>By default, SwiftMiner is controlled via the macOS app window. When you enable the Web Dashboard, SwiftMiner spins up a lightweight, embedded web server on your Mac. You can interact with the app locally through a username and password, or externally via secure authentication protocols.</p>
+                
+                <h2 id="enable">Enable the Dashboard</h2>
+                <p>Follow these steps to turn on the embedded web server:</p>
+                <ol class="steps-list">
+                    <li>Open SwiftMiner Settings (<kbd>⌘,</kbd>) and click the <strong>Web</strong> tab.</li>
+                    <li>Toggle <strong>Enable Web Dashboard</strong> to ON.</li>
+                    <li>Restart SwiftMiner to apply the changes.</li>
+                </ol>
+
+                <h2 id="local-access">Local Network Access</h2>
+                <p>To access the dashboard from the same Mac or other devices on your home Wi-Fi network:</p>
+                <ol class="steps-list">
+                    <li>Click <strong>Local Access Setup</strong> in the Web settings tab.</li>
+                    <li>Set a <strong>Username</strong> and a strong <strong>Password</strong> to secure the local page.</li>
+                    <li>Choose a port number (default is <code>8080</code>). If port <code>8080</code> is already in use by another app, you can customize it to any value (e.g. <code>8082</code>).</li>
+                    <li>Click <strong>Save</strong>. You can now access the dashboard by navigating to <code>http://localhost:8080</code> (or <code>http://[Your-Macs-IP]:8080</code> from another device on your network) in your browser.</li>
+                </ol>
+
+                <h2 id="internet-access">Internet Access & Twitch OAuth</h2>
+                <p>If you are mining for multiple people or running the SwiftBot Discord integration, you can expose the Web Dashboard over the internet using a secure connection. This lets your friends log in using their own Twitch accounts, enter device activation codes, and check their miners without needing direct access to your Mac.</p>
+
+                <div class="callout warning">
+                    <strong>Eligibility Requirements</strong>
+                    <p>Internet Access is only offered when the Discord/SwiftBot integration is enabled or you have configured more than one miner. This ensures that exposing the server is reserved for setups that require self-service capabilities.</p>
+                </div>
+
+                <h3>Step 1: Set up a Twitch Developer App</h3>
+                <p>To verify external logins, you must register a Twitch Developer Application to generate Twitch sign-in credentials:</p>
+                <ol class="steps-list">
+                    <li>Go to the <a href="https://dev.twitch.tv/console" target="_blank" rel="noopener noreferrer">Twitch Developer Console</a> and sign in.</li>
+                    <li>Click <strong>Register Your Application</strong>.</li>
+                    <li>Set the following values:
+                        <ul>
+                            <li><strong>Name:</strong> <code>SwiftMiner [Your Server Name]</code></li>
+                            <li><strong>OAuth Redirect URLs:</strong> Add the redirect URL shown in SwiftMiner's Web settings page. It will look like <code>https://[your-tunnel-subdomain].swiftbot.dev/auth/callback</code> or similar.</li>
+                            <li><strong>Category:</strong> <code>Application Integration</code></li>
+                        </ul>
+                    </li>
+                    <li>Click <strong>Create</strong>. Copy the generated <strong>Client ID</strong> and click <strong>New Secret</strong> to generate a <strong>Client Secret</strong>.</li>
+                </ol>
+
+                <h3>Step 2: Input credentials in SwiftMiner</h3>
+                <ol class="steps-list">
+                    <li>In the Web settings tab, choose <strong>Twitch OAuth Setup</strong>.</li>
+                    <li>Paste your copied <strong>Twitch Client ID</strong> and <strong>Twitch Client Secret</strong>.</li>
+                    <li>Click <strong>Save</strong>.</li>
+                </ol>
+
+                <h3>Step 3: Register the secure tunnel</h3>
+                <p>Exposing a local web server usually requires complex router port-forwarding and dynamic DNS configuration. SwiftMiner simplifies this by integrating a secure tunnel client:</p>
+                <ol class="steps-list">
+                    <li>In the Web settings tab under <em>Internet Access</em>, click <strong>Register Tunnel</strong>.</li>
+                    <li>SwiftMiner communicates with the SwiftBot relay server to provision a unique, secure subdomain on <code>*.swiftbot.dev</code>.</li>
+                    <li>Once registered, SwiftMiner will establish an encrypted connection. The status will report <code>Connected</code>, showing the public URL.</li>
+                    <li>Share this URL with your friends. When they visit it, they will see a Twitch sign-in prompt. After signing in, they will only be able to view and manage their own Twitch miners.</li>
+                </ol>
+
+                <div class="feedback-widget">
+                    <p>Was this article helpful?</p>
+                    <div class="feedback-btn-group">
+                        <button class="feedback-btn">Yes</button>
+                        <button class="feedback-btn">No</button>
+                    </div>
+                </div>
+            </main>
+
+            <aside class="kb-sidebar" aria-label="Sidebar">
+                <div class="sidebar-section">
+                    <h2 class="sidebar-title">On this page</h2>
+                    <ul class="toc-list">
+                        <li><a href="#about" class="toc-link">What is Web Dashboard</a></li>
+                        <li><a href="#enable" class="toc-link">Enable Dashboard</a></li>
+                        <li><a href="#local-access" class="toc-link">Local Network Access</a></li>
+                        <li><a href="#internet-access" class="toc-link">Internet & Twitch OAuth</a></li>
+                    </ul>
+                </div>
+
+                <div class="sidebar-section">
+                    <h2 class="sidebar-title">Related Articles</h2>
+                    <ul class="related-links">
+                        <li><a href="../getting-started/"><i class="ph-bold ph-rocket-launch"></i> Getting Started</a></li>
+                        <li><a href="../settings/"><i class="ph-bold ph-gear"></i> Settings Guide</a></li>
+                        <li><a href="../discord/"><i class="ph-bold ph-hash"></i> Discord Integration</a></li>
+                        <li><a href="../security-privacy/"><i class="ph-bold ph-shield-check"></i> Security & Privacy</a></li>
+                    </ul>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="shell">
+            <span>SwiftMiner Help · Published June 22, 2026</span>
+            <span><a class="nav-link" href="../../release-notes/">Release Notes</a> · <a class="nav-link" href="https://github.com/johnwatso/SwiftMiner">GitHub</a></span>
+        </div>
+    </footer>
+</body>
+</html>
