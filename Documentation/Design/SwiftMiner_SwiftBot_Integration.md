@@ -1,7 +1,7 @@
 # SwiftMiner ↔ SwiftBot Integration Design
 
 **Version:** 1.0-locked  
-**Owner:** @kimi (synthesis), with contributions from @claude (API), @codex (events/webhooks), @gemini (Discord UX)  
+**Owner:** @kimi (synthesis), with contributions from Backend/API, @codex (events/webhooks), @gemini (Discord UX)  
 **Status:** Phase 3b — COMPLETE. Design locked pending @John approval.  
 
 ---
@@ -74,7 +74,7 @@
 
 > All agents draft into the sections below. Do not add new top-level sections without @kimi review.
 
-### 2.1 API Contract — @claude
+### 2.1 API Contract — Backend/API
 > Endpoint list, request/response schemas, auth model. Status: ✅ Drafted
 
 **Auth model:** All Bot-tier endpoints require `Authorization: Bot {key}`. Base path: `/api/v1`.  
@@ -368,7 +368,7 @@ Retry policy:
 - APIs answer current truth.
 - SwiftBot should react to an event by fetching the latest relevant API state before rendering a rich message if freshness matters.**
 
-### 2.4 Activation Lifecycle State Machine — @claude (covering) + @kimi
+### 2.4 Activation Lifecycle State Machine — Backend/API + @kimi
 > Discord-side UX + backend persistence mapping. Status: ✅ Drafted
 
 **State diagram:**
@@ -406,7 +406,7 @@ stateDiagram-v2
 
 **Persistence rules per state:** See section 3.1.
 
-### 2.5 Campaign Issue Lifecycle — @claude (covering) + @kimi
+### 2.5 Campaign Issue Lifecycle — Backend/API + @kimi
 > Issue detection → notification → resolution. Status: ✅ Drafted
 
 **State diagram:**
@@ -451,7 +451,7 @@ stateDiagram-v2
 
 **Persistence rules per state:** See section 3.2.
 
-### 2.7 Discord User Projection — @claude
+### 2.7 Discord User Projection — Backend/API
 > Derived state for Discord. Not a direct reflection of internal miner state. Enforces 1 Discord = 1 Twitch.
 
 **Endpoint:**
@@ -516,7 +516,7 @@ stateDiagram-v2
 
 ---
 
-### 2.6 Identity Mapping — @claude + @codex
+### 2.6 Identity Mapping — Backend/API + @codex
 > SwiftMiner is the single source of truth for all identity mapping.
 
 ```
@@ -673,13 +673,13 @@ Before the SwiftMiner HTTP API can be exposed beyond localhost:
 
 | Section | Owner | Status |
 |---------|-------|--------|
-| 2.1 API Contract | @claude | ✅ Drafted |
+| 2.1 API Contract | Backend/API | ✅ Drafted |
 | 2.2 Event Schema | @codex | ✅ Drafted |
 | 2.3 Webhook Contract | @codex | ✅ Drafted |
-| 2.4 Activation Lifecycle | @claude (covered for @gemini) | ✅ Drafted |
-| 2.5 Campaign Issue Lifecycle | @claude (covered for @gemini) | ✅ Drafted |
-| 2.6 Identity Mapping | @claude + @codex | ✅ Drafted |
-| 2.7 Discord User Projection | @claude | ✅ Drafted |
+| 2.4 Activation Lifecycle | Backend/API | ✅ Drafted |
+| 2.5 Campaign Issue Lifecycle | Backend/API | ✅ Drafted |
+| 2.6 Identity Mapping | Backend/API + @codex | ✅ Drafted |
+| 2.7 Discord User Projection | Backend/API | ✅ Drafted |
 | 2.2 Event Schema (updated) | @codex | ✅ Updated — projection-level events |
 | 2.8 SwiftBot Rendering Rules | @gemini | ✅ Drafted |
 | 3.x Persistence Rules | @kimi | ✅ Drafted |

@@ -72,19 +72,19 @@
 
 | # | Item | Owner | Status |
 |---|------|-------|--------|
-| 1 | `operatorId` hardcoded as `"local_admin"` in UI sheets | @claude | ✅ Done |
-| 2 | No `OperatorIdentity` type in service layer | @claude | ✅ Done |
-| 3 | `registerUser` unaudited + no outbox event | @claude | ✅ Done |
-| 4 | `RestSwiftBotConnectionService` has no auth headers / API key / JWT | @claude | Phase 3 design |
-| 5 | `admin_audit_log.operator_id` is plain TEXT with no FK / operator table | @claude | Phase 1 (deferred to string value) |
+| 1 | `operatorId` hardcoded as `"local_admin"` in UI sheets | Backend/API | ✅ Done |
+| 2 | No `OperatorIdentity` type in service layer | Backend/API | ✅ Done |
+| 3 | `registerUser` unaudited + no outbox event | Backend/API | ✅ Done |
+| 4 | `RestSwiftBotConnectionService` has no auth headers / API key / JWT | Backend/API | Phase 3 design |
+| 5 | `admin_audit_log.operator_id` is plain TEXT with no FK / operator table | Backend/API | Phase 1 (deferred to string value) |
 
 ### 🟡 Soft Blockers (should resolve before Phase 3, but not fatal)
 
 | # | Item | Owner | Status |
 |---|------|-------|--------|
-| 6 | TOCTOU reassignment path has zero test coverage | @claude | Phase 2 |
-| 7 | Idempotency on `assignAccount` is untested | @claude | Phase 2 |
-| 8 | Concurrent `miner_users` creation race (UNIQUE constraint is only guard) | @claude | Phase 2 |
+| 6 | TOCTOU reassignment path has zero test coverage | Backend/API | Phase 2 |
+| 7 | Idempotency on `assignAccount` is untested | Backend/API | Phase 2 |
+| 8 | Concurrent `miner_users` creation race (UNIQUE constraint is only guard) | Backend/API | Phase 2 |
 | 9 | Admin panel hidden when `swiftBotEnabled == false` (unlinked accounts accumulate silently) | UX decision | Pending @John |
 
 ### 🟢 Non-Blockers (nice-to-have)
@@ -113,12 +113,12 @@ The `admin_audit_log.operator_id` column accepts any TEXT value. There is no FK 
 
 | Area | Current Tests | Needed | Owner |
 |------|---------------|--------|-------|
-| `assignAccount` happy path | ? | Confirm exists | @claude |
-| `assignAccount` idempotency | None | Same-pair double call → single audit row | @claude |
-| `assignAccount` TOCTOU reassignment | None | Owner changes between UI read and transaction | @claude |
-| `registerUser` audit write | None | Verify row + outbox event | @claude |
-| `getUnownedAccounts` | ? | Confirm exists | @claude |
-| Outbox event emission | ? | Confirm `user.linked` payload shape | @claude |
+| `assignAccount` happy path | ? | Confirm exists | Backend/API |
+| `assignAccount` idempotency | None | Same-pair double call → single audit row | Backend/API |
+| `assignAccount` TOCTOU reassignment | None | Owner changes between UI read and transaction | Backend/API |
+| `registerUser` audit write | None | Verify row + outbox event | Backend/API |
+| `getUnownedAccounts` | ? | Confirm exists | Backend/API |
+| Outbox event emission | ? | Confirm `user.linked` payload shape | Backend/API |
 
 ---
 
@@ -134,7 +134,7 @@ The `admin_audit_log.operator_id` column accepts any TEXT value. There is no FK 
 
 ## 7. Sign-Off
 
-- [x] @claude — schema contract approved (Phase 1 complete, build green)
+- [x] Backend/API — schema contract approved (Phase 1 complete, build green)
 - [ ] @codex — audit viewer query shape approved
 - [ ] @gemini — user list index dependency satisfied
 - [ ] @John — Phase 1 implementation approved
