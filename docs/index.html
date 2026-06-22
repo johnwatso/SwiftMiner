@@ -532,44 +532,81 @@
             align-items: center;
         }
 
-        .privacy-lock {
-            position: relative;
-            width: 4.5rem;
-            height: 4.5rem;
-            margin-bottom: 1.25rem;
-            color: #9333ea;
+        .privacy-title-row {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
         }
 
-        .privacy-lock svg {
-            width: 100%;
-            height: 100%;
+        .privacy-title-row h2 {
+            margin-bottom: 0;
+        }
+
+        .privacy-lock {
+            width: 3.5rem;
+            height: 3.5rem;
+            flex: 0 0 auto;
+            filter: drop-shadow(0 14px 24px rgba(147, 51, 234, 0.22));
+            transform-origin: center center;
             overflow: visible;
-            filter: drop-shadow(0 18px 28px rgba(147, 51, 234, 0.2));
+        }
+
+        .privacy-lock.is-locked {
+            animation: lock-snap 0.72s cubic-bezier(0.25, 1, 0.5, 1) 0.18s forwards;
         }
 
         .privacy-lock-shackle {
-            transform-box: view-box;
-            transform-origin: 48px 43px;
-            transform: translateY(-10px) rotate(-18deg);
-            transition: transform 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.18s;
+            transform-origin: 16px 22px;
+            transform: translate(0, -4px) rotate(-24deg);
+            transition: transform 0.72s cubic-bezier(0.16, 1, 0.3, 1) 0.18s;
         }
 
         .privacy-lock.is-locked .privacy-lock-shackle {
-            transform: translateY(0) rotate(0deg);
+            transform: translate(0, 0) rotate(0deg);
         }
 
         .privacy-lock-body {
-            fill: rgba(147, 51, 234, 0.12);
-            stroke: rgba(147, 51, 234, 0.32);
+            transition: fill 0.3s ease, stroke 0.3s ease;
+        }
+
+        .privacy-lock.is-locked .privacy-lock-body {
+            fill: rgba(168, 85, 247, 0.36);
+            stroke: rgba(168, 85, 247, 0.85);
         }
 
         .privacy-lock-keyhole {
-            fill: currentColor;
+            transition: fill 0.3s ease;
         }
 
-        html.dark .privacy-lock-body {
-            fill: rgba(147, 51, 234, 0.18);
-            stroke: rgba(255, 255, 255, 0.18);
+        @keyframes lock-snap {
+            0% {
+                transform: scale(1);
+                filter: drop-shadow(0 14px 24px rgba(147, 51, 234, 0.22));
+            }
+            75% {
+                transform: scale(1);
+                filter: drop-shadow(0 14px 24px rgba(147, 51, 234, 0.22));
+            }
+            85% {
+                transform: scale(0.9);
+                filter: drop-shadow(0 4px 10px rgba(147, 51, 234, 0.4));
+            }
+            92% {
+                transform: scale(1.08);
+                filter: drop-shadow(0 0 24px rgba(147, 51, 234, 0.75));
+            }
+            100% {
+                transform: scale(1);
+                filter: drop-shadow(0 14px 24px rgba(147, 51, 234, 0.22));
+            }
+        }
+
+        @media (max-width: 520px) {
+            .privacy-title-row {
+                align-items: flex-start;
+                flex-direction: column-reverse;
+            }
         }
 
         @media (min-width: 1024px) {
@@ -618,7 +655,7 @@
                 transition: none !important;
             }
             .privacy-lock-shackle {
-                transform: translateY(0) rotate(0deg) !important;
+                transform: translate(0, 0) rotate(0deg) !important;
                 transition: none !important;
             }
             .animate-pulse { animation: none !important; }
@@ -953,17 +990,33 @@
             <div class="section-shell relative z-10">
                 <div class="privacy-layout">
                     <div class="reveal">
-                        <div class="privacy-lock" aria-hidden="true">
-                            <svg viewBox="0 0 96 96" fill="none">
-                                <g class="privacy-lock-shackle">
-                                    <path d="M30 43V32C30 22.1 38.1 14 48 14C57.9 14 66 22.1 66 32V43" stroke="currentColor" stroke-width="8" stroke-linecap="round"/>
-                                </g>
-                                <rect class="privacy-lock-body" x="20" y="40" width="56" height="42" rx="15" stroke-width="3"/>
-                                <circle class="privacy-lock-keyhole" cx="48" cy="58" r="5"/>
-                                <path class="privacy-lock-keyhole" d="M45.5 62.5H50.5L52 72H44L45.5 62.5Z"/>
+                        <div class="privacy-title-row">
+                            <h2 class="text-4xl md:text-5xl font-bold text-slate-900 dark:text-white drop-shadow-lg tracking-tight">Privacy <span class="text-brand-purple">first.</span></h2>
+                            <svg class="privacy-lock" viewBox="0 0 48 48" aria-hidden="true">
+                                <defs>
+                                    <linearGradient id="shackle-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" stop-color="#c084fc" />
+                                        <stop offset="50%" stop-color="#9333ea" />
+                                        <stop offset="100%" stop-color="#6366f1" />
+                                    </linearGradient>
+                                    <linearGradient id="body-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+                                        <stop offset="0%" stop-color="#ede9fe" />
+                                        <stop offset="100%" stop-color="#ddd6fe" />
+                                    </linearGradient>
+                                    <linearGradient id="body-border-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" stop-color="rgba(168, 85, 247, 0.6)" />
+                                        <stop offset="100%" stop-color="rgba(99, 102, 241, 0.2)" />
+                                    </linearGradient>
+                                    <linearGradient id="keyhole-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+                                        <stop offset="0%" stop-color="#a855f7" />
+                                        <stop offset="100%" stop-color="#6366f1" />
+                                    </linearGradient>
+                                </defs>
+                                <path class="privacy-lock-shackle" d="M 16 18 L 16 15 A 8 8 0 0 1 32 15 L 32 18" fill="none" stroke="url(#shackle-grad)" stroke-width="4" stroke-linecap="round" />
+                                <rect class="privacy-lock-body" x="9" y="18" width="30" height="22" rx="6" ry="6" fill="url(#body-grad)" stroke="url(#body-border-grad)" stroke-width="1.5" />
+                                <path class="privacy-lock-keyhole" d="M24 25 C22.5 25 21.2 26.3 21.2 28 C21.2 29.2 21.9 30.2 22.8 30.6 L22 35 C22 35.6 22.4 36 23 36 L25 36 C25.6 36 26 35.6 26 35 L25.2 30.6 C26.1 30.2 26.8 29.2 26.8 28 C26.8 26.3 25.5 25 24 25 Z" fill="url(#keyhole-grad)" />
                             </svg>
                         </div>
-                        <h2 class="text-4xl md:text-5xl font-bold mb-4 text-slate-900 dark:text-white drop-shadow-lg tracking-tight">Privacy <span class="text-brand-purple">first.</span></h2>
                         <p class="text-slate-600 dark:text-gray-400 text-lg font-light leading-relaxed">SwiftMiner is designed around local control. No cloud account, hosted dashboard, or third-party sync service is required.</p>
                     </div>
                     <div class="privacy-grid">
@@ -1221,20 +1274,22 @@
 
             document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
 
-            const privacySection = document.getElementById('privacy');
             const privacyLock = document.querySelector('.privacy-lock');
-            if (privacySection && privacyLock) {
+            if (privacyLock) {
                 const lockObserver = new IntersectionObserver((entries) => {
                     entries.forEach(entry => {
-                        if (!entry.isIntersecting) return;
-                        requestAnimationFrame(() => privacyLock.classList.add('is-locked'));
-                        lockObserver.unobserve(entry.target);
+                        if (entry.isIntersecting) {
+                            privacyLock.classList.add('is-locked');
+                        } else {
+                            privacyLock.classList.remove('is-locked');
+                        }
                     });
                 }, {
                     root: scrollContainer,
-                    threshold: 0.35
+                    threshold: 0.1,
+                    rootMargin: "0px 0px -40px 0px"
                 });
-                lockObserver.observe(privacySection);
+                lockObserver.observe(privacyLock);
             }
 
             // Theme Toggle Logic

@@ -96,25 +96,14 @@
   <main>
     <h1>SwiftMiner 1.30</h1>
     <p class="meta">Version 1.30 · Build 2026062209</p>
-    <p class="intro">Teaches SwiftMiner about subscription-required drops, surfaces them clearly across the app, and adds an in-app link to the help guide.</p>
+    <p class="intro">Introduces subscription-required drop detection, with a dedicated Subscription Required state in the Overview.</p>
 
     <section class="violet">
       <h2><span class="badge" aria-hidden="true">🎟️</span> Subscription-Required Drops</h2>
-      <p class="summary">Clearer handling of drops that need a paid Twitch subscription.</p>
+      <p class="summary">SwiftMiner now recognises drops that need a paid Twitch subscription.</p>
       <ul>
         <li>Detects subscription-required drop campaigns and adds a dedicated Subscription Required state to the Overview.</li>
-        <li>Marks Drops Active campaigns with a <strong>Needs Sub</strong> label, and tags subscription-gated reward thumbnails with the credit-card badge.</li>
-        <li>Suppresses same-game Up Next entries that would otherwise duplicate an active subscription-required campaign.</li>
-        <li>Keeps live unlinked campaigns visible in Drops Active, so same-game subscription-required rewards no longer hide otherwise-eligible campaigns.</li>
-        <li>Adds regression coverage for the new subscription-required detection and display states.</li>
-      </ul>
-    </section>
-
-    <section>
-      <h2><span class="badge" aria-hidden="true">🆘</span> Help &amp; Menus</h2>
-      <p class="summary">The help guide is one click away.</p>
-      <ul>
-        <li>Adds a SwiftMiner Help item to the Help menu that opens the hosted guide at <a href="https://swiftminer.app/help/">swiftminer.app/help</a>.</li>
+        <li>Adds regression coverage for the new subscription-required detection and Overview state.</li>
       </ul>
     </section>
 
