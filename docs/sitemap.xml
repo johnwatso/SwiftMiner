@@ -4,6 +4,9 @@
   <url><loc>https://swiftminer.app/download/</loc><lastmod>2026-06-22</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
   <url><loc>https://swiftminer.app/help/</loc><lastmod>2026-06-22</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
   <url><loc>https://swiftminer.app/help/getting-started/</loc><lastmod>2026-06-22</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://swiftminer.app/help/twitch-drops-miner-for-mac/</loc><lastmod>2026-06-22</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://swiftminer.app/help/auto-claim-twitch-drops-on-macos/</loc><lastmod>2026-06-22</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://swiftminer.app/help/multi-account-twitch-drops/</loc><lastmod>2026-06-22</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>https://swiftminer.app/help/main-window/</loc><lastmod>2026-06-22</lastmod><changefreq>monthly</changefreq><priority>0.6</priority></url>
   <url><loc>https://swiftminer.app/help/settings/</loc><lastmod>2026-06-22</lastmod><changefreq>monthly</changefreq><priority>0.6</priority></url>
   <url><loc>https://swiftminer.app/help/menu-bar/</loc><lastmod>2026-06-22</lastmod><changefreq>monthly</changefreq><priority>0.6</priority></url>
@@ -40,5 +43,4 @@
   <url><loc>https://swiftminer.app/release-notes/1.29.4.html</loc><lastmod>2026-06-22</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>
   <url><loc>https://swiftminer.app/release-notes/1.29.5.html</loc><lastmod>2026-06-22</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>
   <url><loc>https://swiftminer.app/release-notes/1.30.html</loc><lastmod>2026-06-22</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>
-  <url><loc>https://swiftminer.app/release-notes/1.31.html</loc><lastmod>2026-06-22</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>
 </urlset>

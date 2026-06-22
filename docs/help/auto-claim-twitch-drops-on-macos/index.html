@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Auto Claim Twitch Drops on macOS - SwiftMiner Help</title>
+    <meta name="description" content="Learn how SwiftMiner automatically claims Twitch Drops on macOS, why rewards may need setup, and how to keep auto-claiming reliable.">
+    <link rel="canonical" href="https://swiftminer.app/help/auto-claim-twitch-drops-on-macos/">
+    <meta name="robots" content="index, follow, max-image-preview:large">
+    <meta name="theme-color" content="#f5f5f7">
+    <meta property="og:type" content="article">
+    <meta property="og:site_name" content="SwiftMiner">
+    <meta property="og:url" content="https://swiftminer.app/help/auto-claim-twitch-drops-on-macos/">
+    <meta property="og:title" content="Auto Claim Twitch Drops on macOS">
+    <meta property="og:description" content="Use SwiftMiner to claim completed Twitch Drops automatically from your Mac.">
+    <meta property="og:image" content="https://swiftminer.app/assets/landing/og-image.jpg">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Auto Claim Twitch Drops on macOS">
+    <meta name="twitter:description" content="Use SwiftMiner to claim completed Twitch Drops automatically from your Mac.">
+    <meta name="twitter:image" content="https://swiftminer.app/assets/landing/og-image.jpg">
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {"@type": "ListItem", "position": 1, "name": "SwiftMiner", "item": "https://swiftminer.app/"},
+        {"@type": "ListItem", "position": 2, "name": "Help", "item": "https://swiftminer.app/help/"},
+        {"@type": "ListItem", "position": 3, "name": "Auto Claim Twitch Drops on macOS", "item": "https://swiftminer.app/help/auto-claim-twitch-drops-on-macos/"}
+      ]
+    }
+    </script>
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <link rel="stylesheet" href="../../assets/css/tailwind.css">
+    <link rel="stylesheet" href="../assets/css/kbase.css">
+    <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
+    <script src="../assets/js/search-index.js" defer></script>
+    <script src="../assets/js/search.js" defer></script>
+    <script src="../assets/js/kbase.js" defer></script>
+</head>
+<body>
+    <nav class="nav" aria-label="Main">
+        <div class="shell nav-inner">
+            <a class="brand" href="../">
+                <img src="../../assets/landing/swiftminer-icon.webp" alt="">
+                <span>SwiftMiner Help</span>
+            </a>
+            <div class="nav-actions">
+                <a class="nav-link" href="../">Help Home</a>
+                <a class="nav-link optional" href="../../">Overview</a>
+                <a class="nav-link" href="https://github.com/johnwatso/SwiftMiner/issues">Raise an Issue</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="shell">
+        <div class="breadcrumbs" aria-label="Breadcrumbs">
+            <a href="../">Help Home</a>
+            <span class="sep">/</span>
+            <span class="current">Auto Claim Twitch Drops</span>
+        </div>
+
+        <header class="article-header">
+            <h1>Auto Claim Twitch Drops on macOS</h1>
+            <p class="article-intro">SwiftMiner can claim completed Twitch Drops automatically, keeping reward collection moving even when you are away from your Mac.</p>
+            <div class="search-wrap" style="margin-top: 1.5rem; max-width: 100%;">
+                <i class="ph-bold ph-magnifying-glass" style="position: absolute; top: 50%; left: 1.1rem; transform: translateY(-50%); color: var(--muted);"></i>
+                <input id="help-search" class="search" type="search" placeholder="Search help topics" aria-label="Search help topics" style="width: 100%; height: 48px; padding: 0 1.2rem 0 3rem; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-solid); color: var(--ink); font: inherit; outline: none; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);">
+            </div>
+        </header>
+
+        <div class="kb-grid">
+            <main class="kb-content">
+                <p>Automatic claiming is one of SwiftMiner's core jobs. The app watches progress, refreshes campaign state, and claims rewards when Twitch marks them as ready. Completed claims appear in the Drops view and Activity Log.</p>
+
+                <h2 id="enable-auto-claim">Enable automatic claiming</h2>
+                <p>Auto-claiming is managed from SwiftMiner's mining settings. Open Settings, choose the Mining section, and make sure automatic reward claiming is enabled for the accounts you want SwiftMiner to manage.</p>
+
+                <h2 id="claim-flow">How the claim flow works</h2>
+                <ol class="steps-list">
+                    <li><strong>Progress reaches 100%:</strong><p>Twitch marks the reward as ready to claim after the required watch time completes.</p></li>
+                    <li><strong>SwiftMiner refreshes inventory:</strong><p>The miner checks Twitch inventory and campaign data so it can find claimable rewards accurately.</p></li>
+                    <li><strong>The reward is claimed:</strong><p>SwiftMiner submits the claim and records the result in the Activity Log.</p></li>
+                    <li><strong>Next reward starts:</strong><p>If the campaign has more rewards, SwiftMiner continues tracking the next drop.</p></li>
+                </ol>
+
+                <h2 id="why-claiming-pauses">Why auto-claiming may pause</h2>
+                <p>Claiming can pause when a Twitch session expires, a game requires a publisher account link, a reward requires a paid subscription, or Twitch temporarily returns incomplete campaign data. The <a href="../troubleshooting/">troubleshooting guide</a> explains how to recover from these states.</p>
+
+                <h2 id="make-it-reliable">Keep auto-claiming reliable</h2>
+                <p>For the best results, keep SwiftMiner updated, avoid watching Twitch with the same account elsewhere, and check account-link warnings for games that require external publisher setup. The <a href="../best-practices/">best practices guide</a> covers the habits that keep long-running sessions healthy.</p>
+            </main>
+
+            <aside class="kb-sidebar" aria-label="Sidebar">
+                <div class="sidebar-section">
+                    <h2 class="sidebar-title">On this page</h2>
+                    <ul class="toc-list">
+                        <li><a href="#enable-auto-claim" class="toc-link">Enable auto-claim</a></li>
+                        <li><a href="#claim-flow" class="toc-link">Claim flow</a></li>
+                        <li><a href="#why-claiming-pauses" class="toc-link">Why claiming pauses</a></li>
+                        <li><a href="#make-it-reliable" class="toc-link">Reliability tips</a></li>
+                    </ul>
+                </div>
+                <div class="sidebar-section">
+                    <h2 class="sidebar-title">Related Articles</h2>
+                    <ul class="related-links">
+                        <li><a href="../settings/"><i class="ph-bold ph-gear"></i> Settings Guide</a></li>
+                        <li><a href="../main-window/"><i class="ph-bold ph-book-open"></i> Main Window Guide</a></li>
+                        <li><a href="../troubleshooting/"><i class="ph-bold ph-wrench"></i> Troubleshooting</a></li>
+                        <li><a href="../twitch-drops-miner-for-mac/"><i class="ph-bold ph-desktop"></i> Miner for Mac</a></li>
+                    </ul>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="shell">
+            <span>SwiftMiner Help · Published June 22, 2026</span>
+            <span><a class="nav-link" href="../../release-notes/">Release Notes</a> · <a class="nav-link" href="https://github.com/johnwatso/SwiftMiner">GitHub</a></span>
+        </div>
+    </footer>
+</body>
+</html>
