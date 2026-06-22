@@ -266,29 +266,6 @@
             padding-bottom: clamp(5rem, 9vw, 8rem) !important;
         }
 
-        .site-nav {
-            opacity: 0;
-            pointer-events: none;
-            transform: translate(-50%, -120%);
-        }
-
-        .site-nav.nav-visible {
-            opacity: 1;
-            pointer-events: auto;
-            transform: translate(-50%, 0);
-        }
-
-        .site-nav-brand {
-            min-width: 128px;
-            padding-right: 0.75rem;
-        }
-
-        .site-nav-links {
-            flex: 1 1 auto;
-            justify-content: center;
-            min-width: 0;
-        }
-
         .hero-title-line {
             display: block;
         }
@@ -374,31 +351,6 @@
                 padding: 0.58rem 0.78rem;
                 font-size: 0.74rem;
             }
-        }
-
-        @media (max-width: 920px) {
-            .site-nav-brand {
-                min-width: auto;
-                padding-right: 0.25rem;
-            }
-
-            .site-nav-brand span {
-                display: none;
-            }
-
-            .site-nav-links {
-                gap: 1rem;
-            }
-        }
-
-        #theme-toggle .theme-icon-light,
-        html.light #theme-toggle .theme-icon-dark {
-            display: none;
-        }
-
-        html.light #theme-toggle .theme-icon-light,
-        #theme-toggle .theme-icon-dark {
-            display: block;
         }
 
         /* Brand lockup logo swaps with the theme (default page theme is dark). */
@@ -709,34 +661,6 @@
 
     <!-- Background Particle Canvas -->
     <canvas id="particles" class="fixed inset-0 w-full h-full z-0 pointer-events-none opacity-60"></canvas>
-
-    <!-- Floating Pill Navigation (Bevel.health Style) -->
-    <nav id="site-nav" class="site-nav fixed top-6 left-1/2 z-50 w-[90%] md:w-auto md:min-w-[550px] lg:min-w-[760px] h-14 bg-white/70 dark:bg-[#090514]/70 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-full flex items-center justify-between px-6 shadow-[0_20px_50px_rgba(0,0,0,0.05)] dark:shadow-[0_20px_50px_rgba(0,0,0,0.5),_inset_0_1px_0_rgba(255,255,255,0.05)] transition-all duration-300">
-        <a href="#" class="site-nav-brand flex items-center gap-2 group flex-shrink-0">
-            <img src="./assets/landing/swiftminer-icon.webp" width="256" height="256" decoding="async" onerror="this.src='https://placehold.co/128x128/9333ea/ffffff?text=SM'" alt="SwiftMiner Logo" class="w-7 h-7 rounded-lg shadow-md border border-black/5 dark:border-white/10 group-hover:scale-105 transition-transform">
-            <span class="font-bold text-xs tracking-tight text-slate-900 dark:text-white uppercase font-display">SwiftMiner</span>
-        </a>
-        
-        <div class="site-nav-links hidden md:flex items-center gap-6 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-gray-400">
-            <a href="#features" class="hover:text-slate-900 dark:hover:text-white transition-colors">Features</a>
-            <a href="#performance" class="hover:text-slate-900 dark:hover:text-white transition-colors">Performance</a>
-            <a href="https://swiftminer.app/help/" class="hover:text-slate-900 dark:hover:text-white transition-colors">Help</a>
-            <a href="https://github.com/johnwatso/SwiftMiner" class="hover:text-slate-900 dark:hover:text-white transition-colors">GitHub</a>
-        </div>
-        
-        <div class="flex items-center gap-3">
-            <!-- Theme Toggle Button -->
-            <button id="theme-toggle" class="w-9 h-9 rounded-full flex items-center justify-center border border-black/10 dark:border-white/10 text-slate-800 dark:text-gray-300 hover:bg-black/5 dark:hover:bg-white/5 transition-all" aria-label="Toggle Theme">
-                <i class="theme-icon-dark ph-bold ph-sun text-base"></i>
-                <i class="theme-icon-light ph-bold ph-moon text-base"></i>
-            </button>
-            
-            <a href="https://github.com/johnwatso/SwiftMiner/releases/download/v1.30/SwiftMiner-1.30.zip" data-latest-download class="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-br from-brand-purple to-brand-violet rounded-full text-white text-xs font-bold hover:shadow-[0_8px_20px_rgba(147,51,234,0.3)] hover:-translate-y-0.5 transition-all flex-shrink-0 border border-white/10">
-                <i class="ph-bold ph-download-simple"></i>
-                Download
-            </a>
-        </div>
-    </nav>
 
     <!-- Main Content (Scroll Snapping Container) -->
     <main class="snap-scroller z-10 relative">
@@ -1134,19 +1058,19 @@
                         </div>
                     </div>
 
-                    <!-- Card 4: No telemetry -->
+                    <!-- Card 4: Open source -->
                     <div class="glass-panel card-glow-white group rounded-3xl p-8 flex flex-col justify-between relative overflow-hidden reveal" style="transition-delay: 300ms;">
                         <div class="relative z-10 flex flex-col h-full justify-between gap-4">
                             <div>
                                 <div class="w-12 h-12 rounded-full bg-white/10 dark:bg-white/10 bg-slate-800/10 flex items-center justify-center text-slate-700 dark:text-white mb-6 border border-black/10 dark:border-white/20 shadow-lg">
                                     <i class="ph-bold ph-shield-check text-2xl"></i>
                                 </div>
-                                <h3 class="text-2xl font-bold mb-3 text-slate-900 dark:text-white">No telemetry</h3>
+                                <h3 class="text-2xl font-bold mb-3 text-slate-900 dark:text-white">100% Open Source</h3>
                                 <p class="text-slate-500 dark:text-gray-400 text-sm leading-relaxed">
-                                    SwiftMiner sends no analytics, tracking, or usage data anywhere — and because it's fully open source, anyone can audit exactly what it does.
+                                    Every part of SwiftMiner is public and auditable, from the native Mac app to the update flow. You can inspect the code, build it yourself, or follow along on GitHub.
                                 </p>
                             </div>
-                            <span class="text-[10px] text-slate-400 dark:text-gray-500 font-bold uppercase tracking-wider">Open Source · Auditable</span>
+                            <span class="text-[10px] text-slate-400 dark:text-gray-500 font-bold uppercase tracking-wider">MIT Licensed · Auditable</span>
                         </div>
                     </div>
 
@@ -1168,9 +1092,9 @@
                              onerror="this.src='https://placehold.co/128x128/9333ea/ffffff?text=SM'"
                              class="w-24 h-24 rounded-[20px] shadow-[0_10px_30px_rgba(147,51,234,0.3)] mb-8" alt="SwiftMiner Icon">
                         
-                        <h2 class="text-4xl md:text-6xl font-bold mb-6 text-slate-900 dark:text-white drop-shadow-lg tracking-tight">Ready for the <span class="text-brand-purple">next campaign.</span></h2>
+                        <h2 class="text-4xl md:text-6xl font-bold mb-6 text-slate-900 dark:text-white drop-shadow-lg tracking-tight">Ready for the <span class="text-brand-purple">next drop.</span></h2>
                         <p class="text-lg text-slate-600 dark:text-gray-400 mb-10 max-w-xl mx-auto leading-relaxed">
-                            Free, open source, and ready in about a minute. Download the latest signed release and start collecting Drops.
+                            Free, open source, and ready in about a minute. Download the latest signed release and let SwiftMiner handle the watch progress.
                         </p>
                         
                         <a href="https://github.com/johnwatso/SwiftMiner/releases/download/v1.30/SwiftMiner-1.30.zip" data-latest-download class="flex items-center gap-3 px-10 py-5 bg-gradient-to-br from-brand-purple to-brand-violet rounded-2xl text-white font-bold text-xl hover:shadow-[0_12px_40px_rgba(147,51,234,0.4)] hover:-translate-y-1 transition-all">
@@ -1202,27 +1126,15 @@
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const scrollContainer = document.querySelector('.snap-scroller');
-            const siteNav = document.getElementById('site-nav');
 
             function resetScrollForFreshLoad() {
                 if (!scrollContainer || window.location.hash) return;
                 scrollContainer.scrollTo({ top: 0, left: 0, behavior: 'auto' });
-                updateSiteNavVisibility();
-            }
-
-            function updateSiteNavVisibility() {
-                if (!siteNav || !scrollContainer) return;
-                siteNav.classList.toggle('nav-visible', scrollContainer.scrollTop > 80);
             }
 
             resetScrollForFreshLoad();
             requestAnimationFrame(resetScrollForFreshLoad);
             window.addEventListener('pageshow', resetScrollForFreshLoad);
-
-            updateSiteNavVisibility();
-            if (scrollContainer) {
-                scrollContainer.addEventListener('scroll', updateSiteNavVisibility, { passive: true });
-            }
 
             const pageSections = scrollContainer ? Array.from(scrollContainer.querySelectorAll(':scope > section')) : [];
             const screenshotCards = scrollContainer ? Array.from(scrollContainer.querySelectorAll('.screenshot-card')) : [];
@@ -1314,8 +1226,6 @@
                 lockObserver.observe(privacyLock);
             }
 
-            // Theme Toggle Logic
-            const themeToggleBtn = document.getElementById('theme-toggle');
             let particlesReady = false;
             
             function applyTheme(isLight) {
@@ -1326,11 +1236,6 @@
                     element.classList.toggle('dark', !isLight);
                     element.dataset.theme = theme;
                 });
-                if (themeToggleBtn) {
-                    themeToggleBtn.setAttribute('aria-label', `Switch to ${isLight ? 'dark' : 'light'} mode`);
-                    themeToggleBtn.setAttribute('aria-pressed', String(isLight));
-                }
-                
                 // Swap screenshots based on mode
                 document.querySelectorAll('img[data-screenshot]').forEach(img => {
                     const type = img.getAttribute('data-screenshot');
