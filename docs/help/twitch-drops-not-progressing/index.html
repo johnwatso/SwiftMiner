@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Twitch Drops Not Progressing on Mac - SwiftMiner Help</title>
+    <meta name="description" content="Fix Twitch Drops not progressing in SwiftMiner by checking duplicate viewing sessions, account links, authentication, campaign eligibility, and stuck miners.">
+    <link rel="canonical" href="https://swiftminer.app/help/twitch-drops-not-progressing/">
+    <meta name="robots" content="index, follow, max-image-preview:large">
+    <meta name="theme-color" content="#f5f5f7">
+    <meta property="og:type" content="article">
+    <meta property="og:site_name" content="SwiftMiner">
+    <meta property="og:url" content="https://swiftminer.app/help/twitch-drops-not-progressing/">
+    <meta property="og:title" content="Twitch Drops Not Progressing on Mac">
+    <meta property="og:description" content="A recovery checklist for stuck Twitch Drops progress in SwiftMiner.">
+    <meta property="og:image" content="https://swiftminer.app/assets/landing/og-image.jpg">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Twitch Drops Not Progressing on Mac">
+    <meta name="twitter:description" content="A recovery checklist for stuck Twitch Drops progress in SwiftMiner.">
+    <meta name="twitter:image" content="https://swiftminer.app/assets/landing/og-image.jpg">
+    <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"SwiftMiner","item":"https://swiftminer.app/"},{"@type":"ListItem","position":2,"name":"Help","item":"https://swiftminer.app/help/"},{"@type":"ListItem","position":3,"name":"Twitch Drops Not Progressing","item":"https://swiftminer.app/help/twitch-drops-not-progressing/"}]}
+    </script>
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <link rel="stylesheet" href="../../assets/css/tailwind.css">
+    <link rel="stylesheet" href="../assets/css/kbase.css">
+    <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
+    <script src="../assets/js/search-index.js" defer></script>
+    <script src="../assets/js/search.js" defer></script>
+    <script src="../assets/js/kbase.js" defer></script>
+</head>
+<body>
+    <nav class="nav" aria-label="Main"><div class="shell nav-inner"><a class="brand" href="../"><img src="../../assets/landing/swiftminer-icon.webp" alt=""><span>SwiftMiner Help</span></a><div class="nav-actions"><a class="nav-link" href="../">Help Home</a><a class="nav-link optional" href="../../">Overview</a><a class="nav-link" href="https://github.com/johnwatso/SwiftMiner/issues">Raise an Issue</a></div></div></nav>
+    <div class="shell">
+        <div class="breadcrumbs" aria-label="Breadcrumbs"><a href="../">Help Home</a><span class="sep">/</span><span class="current">Twitch Drops Not Progressing</span></div>
+        <header class="article-header">
+            <h1>Twitch Drops Not Progressing on Mac</h1>
+            <p class="article-intro">If Twitch Drops progress stops in SwiftMiner, the cause is usually a duplicate viewing session, missing publisher account link, expired Twitch authorization, or an ineligible stream.</p>
+            <div class="search-wrap" style="margin-top: 1.5rem; max-width: 100%;"><i class="ph-bold ph-magnifying-glass" style="position: absolute; top: 50%; left: 1.1rem; transform: translateY(-50%); color: var(--muted);"></i><input id="help-search" class="search" type="search" placeholder="Search help topics" aria-label="Search help topics" style="width: 100%; height: 48px; padding: 0 1.2rem 0 3rem; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-solid); color: var(--ink); font: inherit; outline: none; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);"></div>
+        </header>
+        <div class="kb-grid">
+            <main class="kb-content">
+                <h2 id="duplicate-viewing">1. Stop duplicate viewing sessions</h2>
+                <p>Twitch may only count one active watch session per account. Close Twitch on browsers, phones, TVs, or other devices using the same account that SwiftMiner is mining with.</p>
+                <h2 id="publisher-links">2. Check publisher account links</h2>
+                <p>Some campaigns require linking Twitch to a game publisher account before progress counts. Open the campaign in Twitch Drops Inventory and complete any <strong>Link Account</strong> or <strong>Connect</strong> step.</p>
+                <h2 id="auth">3. Reconnect expired Twitch sessions</h2>
+                <p>If SwiftMiner shows <strong>Needs Auth</strong>, open Settings > Accounts and reconnect the affected account using the Twitch device activation flow.</p>
+                <h2 id="eligible-stream">4. Confirm the stream is eligible</h2>
+                <p>Not every stream in a game category advertises the same active Drops campaign. SwiftMiner tries to choose eligible streams automatically, but campaign data can lag or change while streams are live.</p>
+                <h2 id="restart">5. Restart the miner</h2>
+                <p>Open the Miners view, stop the affected miner, wait a few seconds, and start it again. If this keeps happening, export diagnostic logs from the Help menu and attach them to a GitHub issue.</p>
+            </main>
+            <aside class="kb-sidebar" aria-label="Sidebar">
+                <div class="sidebar-section"><h2 class="sidebar-title">On this page</h2><ul class="toc-list"><li><a href="#duplicate-viewing" class="toc-link">Duplicate viewing</a></li><li><a href="#publisher-links" class="toc-link">Publisher links</a></li><li><a href="#auth" class="toc-link">Reconnect auth</a></li><li><a href="#eligible-stream" class="toc-link">Eligible stream</a></li><li><a href="#restart" class="toc-link">Restart miner</a></li></ul></div>
+                <div class="sidebar-section"><h2 class="sidebar-title">Related Articles</h2><ul class="related-links"><li><a href="../troubleshooting/"><i class="ph-bold ph-wrench"></i> Troubleshooting</a></li><li><a href="../main-window/"><i class="ph-bold ph-book-open"></i> Main Window Guide</a></li><li><a href="../best-practices/"><i class="ph-bold ph-check-square"></i> Best Practices</a></li><li><a href="../working-twitch-drops-miner/"><i class="ph-bold ph-seal-check"></i> Working Miner</a></li></ul></div>
+            </aside>
+        </div>
+    </div>
+    <footer class="footer"><div class="shell"><span>SwiftMiner Help · Published June 22, 2026</span><span><a class="nav-link" href="../../release-notes/">Release Notes</a> · <a class="nav-link" href="https://github.com/johnwatso/SwiftMiner">GitHub</a></span></div></footer>
+</body>
+</html>
