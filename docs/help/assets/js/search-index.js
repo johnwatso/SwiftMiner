@@ -21,6 +21,27 @@ const searchIndex = [
     keywords: "add account link twitch device code activate twitch.tv/activate signin",
     snippet: "Learn how to use the Twitch device-code login flow to authorize SwiftMiner."
   },
+  {
+    title: "Twitch Drops Miner for Mac",
+    url: "twitch-drops-miner-for-mac/",
+    category: "Getting Started",
+    keywords: "twitch drops miner mac macos native app auto claim watch eligible streams browser tabs",
+    snippet: "Use SwiftMiner as a native Mac app for Twitch Drops mining, tracking, and claiming."
+  },
+  {
+    title: "Auto Claim Twitch Drops on macOS",
+    url: "auto-claim-twitch-drops-on-macos/",
+    category: "Getting Started",
+    keywords: "auto claim twitch drops macos automatic claiming rewards inventory completed drops",
+    snippet: "Learn how SwiftMiner automatically claims completed Twitch Drops from macOS."
+  },
+  {
+    title: "Multi-Account Twitch Drops on Mac",
+    url: "multi-account-twitch-drops/",
+    category: "Getting Started",
+    keywords: "multi account twitch drops multiple accounts miners separate sessions priorities mac",
+    snippet: "Set up and manage multiple Twitch Drops miners from one Mac."
+  },
 
   // Main Window
   {
@@ -289,4 +310,3 @@ const searchIndex = [
     snippet: "Technical details on how SwiftMiner runs a zero-dependency local web server utilizing Apple's Network.framework."
   }
 ];
-
