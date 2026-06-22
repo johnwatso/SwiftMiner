@@ -48,8 +48,11 @@
     <p class="meta">Recent Sparkle update history</p>
     <h2>🚧 Version 1.31 Draft</h2>
     <ul>
-      <li>Keeps prioritised games such as 007 First Light visible in Drops Active even when Twitch reports the active campaign as unlinked.</li>
+      <li>Keeps prioritised games visible in Drops Active even when Twitch reports the active campaign as unlinked.</li>
       <li>Preserves subscription-required reward treatment for same-game campaigns, including the credit-card badge and <strong>Sub</strong> label on paid-sub reward thumbnails.</li>
+      <li>Shows pink <strong>Needs Sub</strong> status in the Drops Active list for subscription-required rewards.</li>
+      <li>Updates campaign detail rows so subscription-required drops say <strong>Needs Sub</strong> and <strong>Paid Twitch sub required</strong> instead of appearing as a generic locked reward.</li>
+      <li>Stops the Overview card from showing a same-game watch campaign under Up Next while the currently visible live campaign is subscription-gated.</li>
       <li>Restores the Drops Active filter guard so unlinked, non-prioritised public campaigns do not clutter the active campaign list.</li>
       <li>Adds a SwiftMiner Website item to the app menu so swiftminer.app is easy to open from About SwiftMiner.</li>
       <li>Adds a SwiftMiner Help item to the Help menu so the hosted help guide is available from inside the app.</li>
@@ -58,17 +61,11 @@
     <h2>🎯 Version 1.30</h2>
     <ul>
       <li>Detects when live Twitch channels for a game are advertising a subscription-required campaign instead of the watch-minable campaign SwiftMiner is trying to mine.</li>
-      <li>Prevents miners from treating paid-sub rewards, such as the 007 Gun Barrel badge, as watch-mineable streams.</li>
+      <li>Prevents miners from treating paid-sub rewards as watch-mineable streams.</li>
       <li>Adds clearer channel-selection logs when a live stream is running a same-game subscription-required campaign.</li>
       <li>Shows <strong>Subscription Required</strong> on the Overview miner card when the blocking reward needs a paid Twitch subscription.</li>
-      <li>Stops the Overview card from showing a same-game watch campaign under Up Next while the currently visible live campaign is subscription-gated.</li>
-      <li>Shows pink <strong>Needs Sub</strong> status in the Drops Active list for subscription-required rewards.</li>
-      <li>Marks subscription-gated reward thumbnails with a credit-card badge and <strong>Sub</strong> label.</li>
-      <li>Keeps live unlinked campaigns visible in Drops Active, so same-game subscription-required rewards no longer hide eligible campaigns such as 007 First Light.</li>
-      <li>Adds a SwiftMiner Help item to the Help menu so the hosted help guide opens directly from inside the app.</li>
-      <li>Updates campaign detail rows so subscription-required drops say <strong>Needs Sub</strong> and <strong>Paid Twitch sub required</strong> instead of appearing as a generic locked reward.</li>
       <li>Preserves subscription-required reward state when SwiftMiner merges campaign data across multiple miner accounts.</li>
-      <li>Adds regression coverage for same-game campaign verification, subscription-only campaign diagnostics, Overview subscription state, Up Next suppression, and subscription-required Drops view data.</li>
+      <li>Adds regression coverage for same-game campaign verification, subscription-only campaign diagnostics, and the Overview subscription state.</li>
       <li>Updates SwiftMiner to version 1.30 build 2026062209 while leaving ShipHook-owned appcasts untouched.</li>
     </ul>
     <h2>🌐 Version 1.29.5</h2>
