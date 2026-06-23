@@ -124,6 +124,34 @@ const searchIndex = [
     snippet: "Configure reward claiming, anti-stall recovery, duplicate stream prevention, and stream selection priority."
   },
   {
+    title: "Game Rules & Failover Streamers",
+    url: "game-rules/",
+    category: "Settings",
+    keywords: "game rules priorities priority prioritise prioritized exclusions exclude failover backup streamer stalled progress mining strategy smart only selected account global ordering",
+    snippet: "Learn how SwiftMiner orders games, applies exclusions, combines account and global priorities, and verifies backup streamers after stalls."
+  },
+  {
+    title: "Configure a Failover Streamer",
+    url: "game-rules/#failover-streamers",
+    category: "Settings",
+    keywords: "failover streamer backup channel twitch login url offline exact campaign stall cooldown ten minutes verify",
+    snippet: "Configure a game-specific backup channel and understand when SwiftMiner will—or will not—switch to it."
+  },
+  {
+    title: "Global and Account-Specific Priorities",
+    url: "game-rules/#account-priorities",
+    category: "Settings",
+    keywords: "global personal per account miner priorities use global priorities order duplicates discord web dashboard",
+    snippet: "Understand how each miner combines its personal game order with the global priority list."
+  },
+  {
+    title: "Excluded Games",
+    url: "game-rules/#excluded-games",
+    category: "Settings",
+    keywords: "exclude excluded games ignore skip all miners precedence priority history cached campaigns",
+    snippet: "Exclude a game from mining across every connected account without deleting campaign history."
+  },
+  {
     title: "Advanced & Logs Config",
     url: "settings/#advanced",
     category: "Settings",

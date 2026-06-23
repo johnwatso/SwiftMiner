@@ -102,36 +102,52 @@
   <main>
     <h1>SwiftMiner 1.31</h1>
     <p class="meta">Draft release notes for work in progress</p>
-    <p class="intro">A work-in-progress update that keeps prioritised drops visible in more situations and noticeably trims SwiftMiner's CPU usage.</p>
+    <p class="intro">A performance-focused update that noticeably lowers CPU usage, adds game-specific failover streamers, and improves how SwiftMiner handles tricky campaign states.</p>
+
+    <section class="amber">
+      <h2><span class="badge" aria-hidden="true">⚡</span> Lower CPU Usage</h2>
+      <p class="summary">Less repeated work while mining, refreshing campaigns, and displaying the Overview.</p>
+      <ul>
+        <li>Stops each miner activity card from repeatedly rebuilding the same status snapshot during a single redraw, substantially reducing Overview work when several accounts are visible.</li>
+        <li>Caches decoded game preferences instead of repeatedly parsing and normalising the saved preference data during SwiftUI updates.</li>
+        <li>Builds prioritised campaign data and exclusion lookups once per redraw instead of recalculating them several times.</li>
+        <li>Reuses Twitch date parsers across campaign refreshes, reducing short CPU spikes and temporary allocations while processing campaign and reward dates.</li>
+        <li>Pauses animated campaign-card backgrounds whenever SwiftMiner is not the active app, avoiding unnecessary background rendering.</li>
+      </ul>
+    </section>
+
+    <section class="teal">
+      <h2><span class="badge" aria-hidden="true">🔄</span> Failover Streamers</h2>
+      <p class="summary">Give important games a trusted fallback when progress stalls.</p>
+      <ul>
+        <li>Adds an optional failover streamer to each configured game rule.</li>
+        <li>When progress genuinely stalls, SwiftMiner can switch to that game's failover streamer after confirming the channel is live and advertising the correct campaign.</li>
+        <li>Adds cooldown handling so a failover streamer that also stalls is not retried repeatedly.</li>
+      </ul>
+    </section>
 
     <section class="green">
       <h2><span class="badge" aria-hidden="true">🎮</span> Drops &amp; Campaigns</h2>
-      <p class="summary">Prioritised and subscription games stay where you expect them.</p>
+      <p class="summary">Clearer handling for prioritised, unlinked, and subscription-required campaigns.</p>
       <ul>
         <li>Keeps prioritised games visible in Drops Active even when Twitch reports the active campaign as unlinked.</li>
-        <li>Preserves subscription-required reward treatment for same-game campaigns, including the credit-card badge and <strong>Sub</strong> label on paid-sub reward thumbnails.</li>
-        <li>Suppresses same-game Up Next entries that would otherwise duplicate an active subscription-required campaign.</li>
-        <li>Restores the Drops Active filter guard so unlinked, non-prioritised public campaigns do not clutter the active campaign list.</li>
+        <li>Preserves subscription-required rewards when same-game campaigns are grouped, including the credit-card badge and <strong>Sub</strong> label.</li>
+        <li>Shows <strong>Needs Sub</strong> and <strong>Paid Twitch sub required</strong> instead of presenting subscription rewards as generic locked rewards.</li>
+        <li>Stops a same-game watch campaign appearing under Up Next when the currently visible live campaign requires a subscription.</li>
+        <li>Hides unrelated public campaigns that are neither linked nor prioritised, keeping Drops Active focused on campaigns that matter to your accounts.</li>
       </ul>
     </section>
 
-    <section class="amber">
-      <h2><span class="badge" aria-hidden="true">⚡</span> Performance</h2>
-      <p class="summary">Lower CPU usage while mining and refreshing.</p>
+    <section class="violet">
+      <h2><span class="badge" aria-hidden="true">⚙️</span> Settings &amp; Polish</h2>
       <ul>
-        <li>Lowers CPU usage by caching decoded game preferences instead of re-parsing the saved data on every screen update.</li>
-        <li>Cuts CPU spikes during campaign refreshes by reusing date formatters when parsing Twitch campaign dates rather than recreating them for every date.</li>
-        <li>Builds the prioritised campaign feed and each miner's activity card once per redraw instead of several times, reducing CPU while the Overview is on screen and during refreshes.</li>
-        <li>Pauses the animated campaign-card backgrounds when SwiftMiner is not the active app, so it no longer spends CPU animating in the background.</li>
-      </ul>
-    </section>
-
-    <section>
-      <h2><span class="badge" aria-hidden="true">✨</span> Polish</h2>
-      <ul>
-        <li>Adds a SwiftMiner Website item to the app menu so swiftminer.app is easy to open from About SwiftMiner.</li>
-        <li>Adds a SwiftMiner Help item to the Help menu that opens the hosted guide at <a href="https://swiftminer.app/help/">swiftminer.app/help</a>.</li>
-        <li>Adds regression coverage for live unlinked campaign relevance, same-game subscription-required campaigns, and grouped Drops state.</li>
+        <li>Moves artwork, tips, Activity Log icons, and visual-effect controls into a dedicated Appearance settings tab.</li>
+        <li>Adds a single <strong>Use simpler visual effects</strong> option for quickly disabling row animations and animated or multi-colour status icons.</li>
+        <li>Keeps Integrations available in Settings even when Discord support is disabled, and moves the Discord enable switch into that tab.</li>
+        <li>Adds Essential, Balanced, Everything, and Custom presets for Discord DM notifications.</li>
+        <li>Simplifies account management around the current Add Account flow.</li>
+        <li>Adds an in-app help link and detailed guide for game priorities, exclusions, account-specific ordering, and failover streamers.</li>
+        <li>Adds a clickable <a href="https://swiftminer.app">swiftminer.app</a> link to About SwiftMiner, plus Website and Help menu items for quick access to the site and hosted guide.</li>
       </ul>
     </section>
   </main>

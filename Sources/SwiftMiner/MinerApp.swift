@@ -119,7 +119,13 @@ struct MinerApp: App {
         .windowStyle(.titleBar)
         .windowToolbarStyle(.unified)
         .commands {
-            CommandGroup(after: .appInfo) {
+            CommandGroup(replacing: .appInfo) {
+                Button("About SwiftMiner") {
+                    showAboutPanel()
+                }
+
+                Divider()
+
                 Button("Check for Updates...") {
                     updater.checkForUpdates()
                 }
@@ -140,7 +146,9 @@ struct MinerApp: App {
                 }
                 .keyboardShortcut("r", modifiers: [.command])
             }
-            CommandGroup(after: .help) {
+            // Replace SwiftUI's automatic Help item, which has no local Help Book
+            // to open, with SwiftMiner's hosted help and support actions.
+            CommandGroup(replacing: .help) {
                 Button("SwiftMiner Help") {
                     NSWorkspace.shared.open(URL(string: "https://swiftminer.app/help/")!)
                 }
@@ -235,6 +243,45 @@ struct MinerApp: App {
         default:
             break
         }
+    }
+
+    @MainActor
+    private func showAboutPanel() {
+        let websiteURL = URL(string: "https://swiftminer.app")!
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.alignment = .center
+        paragraphStyle.lineSpacing = 3
+
+        let credits = NSMutableAttributedString(
+            string: "swiftminer.app",
+            attributes: [
+                .font: NSFont.systemFont(ofSize: 11),
+                .foregroundColor: NSColor.linkColor,
+                .link: websiteURL,
+                .paragraphStyle: paragraphStyle
+            ]
+        )
+        credits.append(NSAttributedString(
+            string: "\nMade in New Zealand ",
+            attributes: [
+                .font: NSFont.systemFont(ofSize: 11),
+                .foregroundColor: NSColor.secondaryLabelColor,
+                .paragraphStyle: paragraphStyle
+            ]
+        ))
+
+        let heartAttachment = NSTextAttachment()
+        let heartConfiguration = NSImage.SymbolConfiguration(pointSize: 11, weight: .medium)
+            .applying(NSImage.SymbolConfiguration(hierarchicalColor: .systemRed))
+        heartAttachment.image = NSImage(
+            systemSymbolName: "heart.fill",
+            accessibilityDescription: "Love"
+        )?.withSymbolConfiguration(heartConfiguration)
+        heartAttachment.bounds = CGRect(x: 0, y: -2, width: 12, height: 12)
+        credits.append(NSAttributedString(attachment: heartAttachment))
+
+        NSApp.orderFrontStandardAboutPanel(options: [.credits: credits])
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     @MainActor

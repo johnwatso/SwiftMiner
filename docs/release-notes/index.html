@@ -49,17 +49,19 @@
     <p class="meta">Recent Sparkle update history</p>
     <h2>🚧 Version 1.31 Draft</h2>
     <ul>
+      <li>Noticeably lowers CPU usage by eliminating repeated miner-card and campaign-feed calculations, caching decoded game preferences, reusing Twitch date parsers, and pausing campaign-card animation while SwiftMiner is inactive.</li>
+      <li>Adds optional game-specific failover streamers that are verified and used after genuine progress stalls, with cooldown handling to avoid repeatedly retrying a stalled fallback.</li>
       <li>Keeps prioritised games visible in Drops Active even when Twitch reports the active campaign as unlinked.</li>
       <li>Preserves subscription-required reward treatment for same-game campaigns, including the credit-card badge and <strong>Sub</strong> label on paid-sub reward thumbnails.</li>
       <li>Shows pink <strong>Needs Sub</strong> status in the Drops Active list for subscription-required rewards.</li>
       <li>Updates campaign detail rows so subscription-required drops say <strong>Needs Sub</strong> and <strong>Paid Twitch sub required</strong> instead of appearing as a generic locked reward.</li>
       <li>Stops the Overview card from showing a same-game watch campaign under Up Next while the currently visible live campaign is subscription-gated.</li>
       <li>Restores the Drops Active filter guard so unlinked, non-prioritised public campaigns do not clutter the active campaign list.</li>
-      <li>Adds a SwiftMiner Website item to the app menu so swiftminer.app is easy to open from About SwiftMiner.</li>
+      <li>Adds a clickable swiftminer.app link to About SwiftMiner and a SwiftMiner Website item to the app menu.</li>
       <li>Adds a SwiftMiner Help item to the Help menu so the hosted help guide is available from inside the app.</li>
-      <li>Simplifies Settings by moving visual preferences into an Appearance tab, moving Discord setup into Integrations, and replacing individual Discord DM switches with notification presets plus a Custom mode.</li>
-      <li>Adds regression coverage for live unlinked campaign relevance, same-game subscription-required campaigns, and grouped Drops state.</li>
-      <li>Matches mobile Safari's safe areas and browser chrome to the landing page theme, removing bright bars and the hard bottom color break.</li>
+      <li>Simplifies Settings with a dedicated Appearance tab, a combined simpler-visual-effects option, an always-visible Integrations tab, and Discord notification presets with a Custom mode.</li>
+      <li>Simplifies account management around the current Add Account flow.</li>
+      <li>Adds an in-app help link and detailed guide for game priorities, exclusions, account-specific ordering, and failover streamers.</li>
       <li>Updates SwiftMiner build metadata to 2026062409 while leaving ShipHook-owned appcasts untouched.</li>
     </ul>
     <h2>🎯 Version 1.30</h2>

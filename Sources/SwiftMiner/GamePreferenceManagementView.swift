@@ -22,6 +22,15 @@ struct GamePreferenceManagementView: View {
             HStack {
                 Text("Game Rules")
                     .font(.headline)
+
+                Link(destination: URL(string: "https://swiftminer.app/help/game-rules/")!) {
+                    Image(systemName: "questionmark.circle")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help("Learn about priorities, exclusions, and failover streamers")
+                .accessibilityLabel("Game Rules Help")
+
                 Spacer()
                 Button("Done") {
                     dismiss()
