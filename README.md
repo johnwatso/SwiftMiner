@@ -65,7 +65,7 @@ SwiftMiner started as a side project to solve a problem I had on macOS.
 
 To mine drops for myself and a few friends, I was running multiple instances of a Twitch drops miner inside a Windows virtual machine. It worked well, but managing several accounts across multiple miner instances wasn’t particularly convenient. Updates needed to be applied to each miner individually, and if something stopped running, it could go unnoticed for a while.
 
-At the same time, I was looking for an excuse to spend more time building with Swift and some of the modern technologies Apple has added over the years, particularly Swift Concurrency. Managing multiple miners, network requests, updates, and account sessions felt like an interesting real-world project to explore those tools.
+Another goal of the project was to take advantage of modern Swift and macOS technologies. Coordinating multiple miners, account sessions, updates, and network requests provided a real-world use case for features such as Swift Concurrency and helped shape much of SwiftMiner’s architecture.
 
 I wanted a solution that ran natively on macOS and made it easier to manage multiple accounts from a single application. I also wanted updates, account management, and miner monitoring to be handled in one place rather than across several separate windows and processes.
 
