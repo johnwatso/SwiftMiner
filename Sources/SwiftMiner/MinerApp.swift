@@ -58,6 +58,7 @@ struct MinerApp: App {
                     }
                     updater.isSafeToInstallNow = { navigation.isSafeToInstallUpdateNow }
                     updater.onAutoInstall = { version, plan in
+                        navigation.recordPendingUpdate(to: version)
                         navigation.logEvent(
                             message: "SwiftMiner \(version) downloaded — \(plan); the app will relaunch itself and resume mining.",
                             level: .info,
@@ -74,7 +75,11 @@ struct MinerApp: App {
                     }
                     navigation.configureOnboardingPresentation()
                     UNUserNotificationCenter.current().delegate = notificationDelegate
+                    UpdateCompletionNotification.registerCategory()
                     await requestNotificationPermission()
+                    if let completedUpdate = navigation.consumeCompletedUpdateNotification() {
+                        await UpdateCompletionNotification.deliver(completedUpdate)
+                    }
                     updater.checkForUpdatesInBackground()
                     presentationController.configure(mode: settings.appPresenceMode)
                     applyLaunchWindowPreferenceIfNeeded()
@@ -95,6 +100,12 @@ struct MinerApp: App {
                     NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
                 ) { _ in
                     appModel.refreshNotificationBadge()
+                }
+                .onReceive(
+                    NotificationCenter.default.publisher(for: .openSwiftMinerReleaseNotes)
+                ) { _ in
+                    presentationController.prepareToOpenWindow()
+                    openWindow(id: AppWindowID.releaseNotes)
                 }
                 .onOpenURL { url in
                     handleDeepLink(url)
@@ -169,6 +180,16 @@ struct MinerApp: App {
             CommandGroup(replacing: .saveItem) {}
             #if DEBUG
             CommandMenu("Developer") {
+                Button("Preview Update Notification") {
+                    Task {
+                        UpdateCompletionNotification.registerCategory()
+                        await requestNotificationPermission()
+                        await UpdateCompletionNotification.deliverPreview()
+                    }
+                }
+
+                Divider()
+
                 if minerManager.miners.isEmpty {
                     Button("No miners added") {
                         // no-op
@@ -528,6 +549,91 @@ private final class AppNotificationDelegate: NSObject, UNUserNotificationCenterD
     ) async -> UNNotificationPresentationOptions {
         [.banner, .list, .sound, .badge]
     }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse
+    ) async {
+        guard response.notification.request.content.categoryIdentifier
+                == UpdateCompletionNotification.categoryIdentifier
+        else { return }
+
+        await MainActor.run {
+            NotificationCenter.default.post(name: .openSwiftMinerReleaseNotes, object: nil)
+        }
+    }
+}
+
+enum UpdateCompletionNotification {
+    static let categoryIdentifier = "app_update_completed"
+    static let viewReleaseNotesActionIdentifier = "view_release_notes"
+
+    static func registerCategory(center: UNUserNotificationCenter = .current()) {
+        let viewReleaseNotes = UNNotificationAction(
+            identifier: viewReleaseNotesActionIdentifier,
+            title: "What’s New",
+            options: [.foreground]
+        )
+        let category = UNNotificationCategory(
+            identifier: categoryIdentifier,
+            actions: [viewReleaseNotes],
+            intentIdentifiers: [],
+            options: []
+        )
+        center.setNotificationCategories([category])
+    }
+
+    static func makeRequest(
+        for update: NavigationModel.CompletedUpdate
+    ) -> UNNotificationRequest {
+        let content = UNMutableNotificationContent()
+        content.title = "SwiftMiner Updated"
+        content.body = "Updated to \(update.currentVersion). Mining resumed automatically."
+        content.categoryIdentifier = categoryIdentifier
+        content.sound = .default
+        content.userInfo = [
+            "previousVersion": update.previousVersion,
+            "currentVersion": update.currentVersion,
+            "currentBuild": update.currentBuild
+        ]
+
+        return UNNotificationRequest(
+            identifier: "swiftminer-update-\(update.currentVersion)-\(update.currentBuild)",
+            content: content,
+            trigger: nil
+        )
+    }
+
+    static func deliver(
+        _ update: NavigationModel.CompletedUpdate,
+        center: UNUserNotificationCenter = .current()
+    ) async {
+        do {
+            try await center.add(makeRequest(for: update))
+        } catch {
+            print("Warning: Failed to send update completion notification: \(error.localizedDescription)")
+        }
+    }
+
+    static func deliverPreview(
+        bundle: Bundle = .main,
+        center: UNUserNotificationCenter = .current()
+    ) async {
+        let currentVersion = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+            ?? "1.31.1"
+        let currentBuild = bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+            ?? "debug"
+        let preview = NavigationModel.CompletedUpdate(
+            previousVersion: "Previous version",
+            currentVersion: currentVersion,
+            currentBuild: currentBuild
+        )
+        await deliver(preview, center: center)
+    }
+}
+
+private extension Notification.Name {
+    static let openSwiftMinerReleaseNotes = Notification.Name("OpenSwiftMinerReleaseNotes")
 }
 
 // MARK: - Menu bar label

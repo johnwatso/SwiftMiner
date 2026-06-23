@@ -5,9 +5,11 @@ import SwiftMinerCore
 /// Persists Activity Log entries that need to survive app restarts.
 actor ActivityLogStore {
     private let manager: SQLiteManager
+    private let maxEntries: Int
 
-    init(manager: SQLiteManager) {
+    init(manager: SQLiteManager, maxEntries: Int = 1000) {
         self.manager = manager
+        self.maxEntries = max(1, maxEntries)
     }
 
     func save(_ entry: EventEntry) async {
@@ -37,27 +39,41 @@ actor ActivityLogStore {
                     sqlite3_bind_null(stmt, 6)
                 }
                 _ = sqlite3_step(stmt)
+
+                // Keep the on-disk timeline bounded to the same size as the UI.
+                let pruneSQL = """
+                DELETE FROM activity_log_entries
+                WHERE id NOT IN (
+                    SELECT id
+                    FROM activity_log_entries
+                    ORDER BY timestamp DESC
+                    LIMIT ?
+                );
+                """
+                var pruneStatement: OpaquePointer?
+                guard sqlite3_prepare_v2(db, pruneSQL, -1, &pruneStatement, nil) == SQLITE_OK else { return }
+                defer { sqlite3_finalize(pruneStatement) }
+                sqlite3_bind_int(pruneStatement, 1, Int32(self.maxEntries))
+                _ = sqlite3_step(pruneStatement)
             }
         } catch {
             // Best effort: logging must never block the UI or web request path.
         }
     }
 
-    func loadPersistentAuditEntries(limit: Int) async -> [EventEntry] {
+    func loadEntries(limit: Int) async -> [EventEntry] {
         do {
             return try await manager.query { db in
                 let sql = """
                 SELECT id, timestamp, message, level, miner_id, raw_message
                 FROM activity_log_entries
-                WHERE raw_message LIKE ?
                 ORDER BY timestamp DESC
                 LIMIT ?;
                 """
                 var stmt: OpaquePointer?
                 guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
                 defer { sqlite3_finalize(stmt) }
-                sqlite3_bind_text(stmt, 1, "%[web-audit]%", -1, SQLITE_TRANSIENT_ACTIVITY_LOG)
-                sqlite3_bind_int(stmt, 2, Int32(max(limit, 0)))
+                sqlite3_bind_int(stmt, 1, Int32(max(limit, 0)))
 
                 var entries: [EventEntry] = []
                 while sqlite3_step(stmt) == SQLITE_ROW {
@@ -87,13 +103,12 @@ actor ActivityLogStore {
         }
     }
 
-    func clearPersistentAuditEntries() async {
+    func clear() async {
         do {
             try await manager.execute { db in
                 var stmt: OpaquePointer?
-                guard sqlite3_prepare_v2(db, "DELETE FROM activity_log_entries WHERE raw_message LIKE ?;", -1, &stmt, nil) == SQLITE_OK else { return }
+                guard sqlite3_prepare_v2(db, "DELETE FROM activity_log_entries;", -1, &stmt, nil) == SQLITE_OK else { return }
                 defer { sqlite3_finalize(stmt) }
-                sqlite3_bind_text(stmt, 1, "%[web-audit]%", -1, SQLITE_TRANSIENT_ACTIVITY_LOG)
                 _ = sqlite3_step(stmt)
             }
         } catch {
