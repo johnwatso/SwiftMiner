@@ -42,13 +42,9 @@ It is written in Swift using SwiftUI and standard macOS frameworks. Each account
 It can be used for a single account or multiple accounts.
 
 ## Acknowledgements
-## Acknowledgements
+Special thanks to [DevilXD](https://github.com/DevilXD) for creating [TwitchDropsMiner](https://github.com/DevilXD/TwitchDropsMiner), which provided the initial inspiration for SwiftMiner.
 
-Special thanks to [DevilXD](https://github.com/DevilXD) for creating [TwitchDropsMiner](https://github.com/DevilXD/TwitchDropsMiner). Without it, SwiftMiner probably wouldn't exist in its current form.
-
-That project established a working model for automating Twitch Drops progression. SwiftMiner implements a similar idea as a native macOS application, with a focus on multi-account management and a consolidated interface.
-
-Special thanks to [Max Hewett](https://github.com/maxhewett) for creating [ShipHook](https://github.com/maxhewett/ShipHook) and for the help and support along the way. ShipHook handles SwiftMiner's build, signing, notarization, Sparkle appcast generation, and release publishing process, making it possible to distribute SwiftMiner as a properly signed and notarized macOS application.
+Special thanks to [Max Hewett](https://github.com/maxhewett) for creating [ShipHook](https://github.com/maxhewett/ShipHook) and for his help throughout the project. ShipHook powers SwiftMiner's build, signing, notarization, update, and release pipeline.
 
 ## Overview
 
