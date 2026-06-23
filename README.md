@@ -61,11 +61,15 @@ Each account progresses independently. The app handles stream selection, progres
 
 ## Why This Exists
 
-I wanted something that runs natively on macOS without relying on browser automation or external tooling.
+SwiftMiner started as a side project to solve a problem I had on macOS.
 
-Existing solutions worked, but they were difficult to manage across multiple accounts. I often needed to run miners for friends who do not have their own systems running 24/7, which made coordination and visibility awkward.
+To mine drops for myself and a few friends, I was running multiple instances of a Twitch drops miner inside a Windows virtual machine. It worked well, but managing several accounts across multiple miner instances wasn’t particularly convenient. Updates needed to be applied to each miner individually, and if something stopped running, it could go unnoticed for a while.
 
-SwiftMiner provides a single interface to manage multiple accounts, with release builds that are signed and notarized for macOS.
+At the same time, I was looking for an excuse to spend more time building with Swift and some of the modern technologies Apple has added over the years, particularly Swift Concurrency. Managing multiple miners, network requests, updates, and account sessions felt like an interesting real-world project to explore those tools.
+
+I wanted a solution that ran natively on macOS and made it easier to manage multiple accounts from a single application. I also wanted updates, account management, and miner monitoring to be handled in one place rather than across several separate windows and processes.
+
+SwiftMiner has been built around those ideas. The goal isn’t to reinvent Twitch drop mining—it’s to make it easier to run and manage on macOS while taking advantage of the platform it runs on.
 
 ## What SwiftMiner Does
 
