@@ -2,13 +2,12 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>Twitch Drops Miner for Mac | Auto Claim Twitch Drops | SwiftMiner</title>
     <meta name="description" content="Free Twitch Drops miner for Mac. SwiftMiner watches eligible streams, tracks campaign progress, and auto claims rewards across multiple accounts.">
     <link rel="canonical" href="https://swiftminer.app/">
     <meta name="robots" content="index, follow, max-image-preview:large">
-    <meta name="theme-color" content="#090514" media="(prefers-color-scheme: dark)">
-    <meta name="theme-color" content="#f8fafc" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#090514">
 
     <!-- Icons -->
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
@@ -84,6 +83,12 @@
     <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
 
     <style>
+        html {
+            min-height: 100%;
+            background: #090514;
+            color-scheme: dark;
+        }
+
         body {
             background: linear-gradient(135deg, #090514, #120e2e, #090616);
             background-size: 400% 400%;
@@ -92,6 +97,11 @@
             font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             overflow: hidden; /* Main wrapper handles scrolling */
             transition: background 0.5s ease, color 0.5s ease;
+        }
+
+        html.light {
+            background: #f8fafc;
+            color-scheme: light;
         }
 
         html.light body {
