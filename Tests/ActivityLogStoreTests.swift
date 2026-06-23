@@ -1,9 +1,10 @@
 import XCTest
+import UserNotifications
 @testable import SwiftMiner
 @testable import SwiftMinerCore
 
 final class ActivityLogStoreTests: XCTestCase {
-    func testPersistentAuditEntriesRoundTripAndIgnoreNonAuditRows() async throws {
+    func testEntriesRoundTripAcrossStoreInstances() async throws {
         let databaseURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftMinerActivityLog-\(UUID().uuidString).sqlite")
         let manager = SQLiteManager(databaseURL: databaseURL)
@@ -33,12 +34,12 @@ final class ActivityLogStoreTests: XCTestCase {
         await store.save(nonAuditEntry)
 
         let reloadedStore = ActivityLogStore(manager: manager)
-        let entries = await reloadedStore.loadPersistentAuditEntries(limit: 10)
+        let entries = await reloadedStore.loadEntries(limit: 10)
 
-        XCTAssertEqual(entries, [auditEntry])
+        XCTAssertEqual(entries, [nonAuditEntry, auditEntry])
     }
 
-    func testClearPersistentAuditEntriesRemovesOnlyAuditRows() async throws {
+    func testClearRemovesAllPersistentEntries() async throws {
         let databaseURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftMinerActivityLog-\(UUID().uuidString).sqlite")
         let manager = SQLiteManager(databaseURL: databaseURL)
@@ -50,9 +51,49 @@ final class ActivityLogStoreTests: XCTestCase {
 
         let store = ActivityLogStore(manager: manager)
         await store.save(EventEntry(message: "Audit", level: .info, rawMessage: "[web-audit] Audit"))
-        await store.clearPersistentAuditEntries()
+        await store.save(EventEntry(message: "Update", level: .info, rawMessage: "[update] Update"))
+        await store.clear()
 
-        let entries = await store.loadPersistentAuditEntries(limit: 10)
+        let entries = await store.loadEntries(limit: 10)
         XCTAssertTrue(entries.isEmpty)
+    }
+
+    func testStorePrunesOldestEntriesToRetentionLimit() async throws {
+        let databaseURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftMinerActivityLog-\(UUID().uuidString).sqlite")
+        let manager = SQLiteManager(databaseURL: databaseURL)
+        try await manager.open()
+        defer {
+            Task { await manager.close() }
+            try? FileManager.default.removeItem(at: databaseURL)
+        }
+
+        let store = ActivityLogStore(manager: manager, maxEntries: 2)
+        let oldest = EventEntry(timestamp: Date(timeIntervalSince1970: 100), message: "Oldest", level: .info)
+        let middle = EventEntry(timestamp: Date(timeIntervalSince1970: 200), message: "Middle", level: .info)
+        let newest = EventEntry(timestamp: Date(timeIntervalSince1970: 300), message: "Newest", level: .info)
+
+        await store.save(oldest)
+        await store.save(middle)
+        await store.save(newest)
+
+        let entries = await store.loadEntries(limit: 10)
+        XCTAssertEqual(entries, [newest, middle])
+    }
+
+    func testUpdateCompletionNotificationUsesIndependentCategory() {
+        let update = NavigationModel.CompletedUpdate(
+            previousVersion: "1.31",
+            currentVersion: "1.31.1",
+            currentBuild: "2026062410"
+        )
+
+        let request = UpdateCompletionNotification.makeRequest(for: update)
+
+        XCTAssertEqual(request.identifier, "swiftminer-update-1.31.1-2026062410")
+        XCTAssertEqual(request.content.title, "SwiftMiner Updated")
+        XCTAssertEqual(request.content.body, "Updated to 1.31.1. Mining resumed automatically.")
+        XCTAssertEqual(request.content.categoryIdentifier, "app_update_completed")
+        XCTAssertNotNil(request.content.sound)
     }
 }

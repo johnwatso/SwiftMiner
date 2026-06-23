@@ -7,6 +7,11 @@ import SwiftMinerService
 @MainActor
 @Observable
 public final class NavigationModel {
+    public struct CompletedUpdate: Equatable, Sendable {
+        public let previousVersion: String
+        public let currentVersion: String
+        public let currentBuild: String
+    }
     
     // MARK: - Navigation State
     public enum SidebarItem: Hashable, Identifiable {
@@ -835,6 +840,11 @@ public final class NavigationModel {
     /// Human-readable event entries.
     public var events: [EventEntry] = []
     private let maxEvents = 1000
+    private var completedUpdateAwaitingNotification: CompletedUpdate?
+    private static let lastLaunchedVersionKey = "SwiftMinerLastLaunchedVersion"
+    private static let lastLaunchedBuildKey = "SwiftMinerLastLaunchedBuild"
+    private static let pendingUpdateFromVersionKey = "SwiftMinerPendingUpdateFromVersion"
+    private static let pendingUpdateToVersionKey = "SwiftMinerPendingUpdateToVersion"
 
     // MARK: - Drop Completion Tracking
 
@@ -912,7 +922,8 @@ public final class NavigationModel {
         // Phase 1: Open DB before any service calls
         do {
             try await sqliteManager.open()
-            await loadPersistentAuditEvents()
+            await loadPersistentEvents()
+            recordInstalledVersionTransition()
         } catch {
             print("[NavigationModel] Failed to open database: \(error)")
         }
@@ -1254,11 +1265,13 @@ public final class NavigationModel {
         if events.count > maxEvents {
             events.removeLast()
         }
-        persistIfAuditEntry(entry)
+        Task { [activityLogStore] in
+            await activityLogStore.save(entry)
+        }
     }
 
-    private func loadPersistentAuditEvents() async {
-        let persisted = await activityLogStore.loadPersistentAuditEntries(limit: maxEvents)
+    private func loadPersistentEvents() async {
+        let persisted = await activityLogStore.loadEntries(limit: maxEvents)
         guard !persisted.isEmpty else { return }
 
         var entriesById = Dictionary(uniqueKeysWithValues: events.map { ($0.id, $0) })
@@ -1272,11 +1285,68 @@ public final class NavigationModel {
             .map(\.self)
     }
 
-    private func persistIfAuditEntry(_ entry: EventEntry) {
-        guard entry.rawMessage?.contains("[web-audit]") == true else { return }
-        Task { [activityLogStore] in
-            await activityLogStore.save(entry)
+    public func recordPendingUpdate(to version: String) {
+        let currentVersion = Self.currentAppVersion
+        UserDefaults.standard.set(currentVersion, forKey: Self.pendingUpdateFromVersionKey)
+        UserDefaults.standard.set(version, forKey: Self.pendingUpdateToVersionKey)
+    }
+
+    private func recordInstalledVersionTransition() {
+        let defaults = UserDefaults.standard
+        let currentVersion = Self.currentAppVersion
+        let currentBuild = Self.currentAppBuild
+        let pendingFrom = defaults.string(forKey: Self.pendingUpdateFromVersionKey)
+        let pendingTo = defaults.string(forKey: Self.pendingUpdateToVersionKey)
+        let lastVersion = defaults.string(forKey: Self.lastLaunchedVersionKey)
+
+        let previousVersion = pendingFrom ?? lastVersion
+        let updateCompleted = previousVersion.map { $0 != currentVersion } == true
+            || (pendingTo == currentVersion && pendingFrom != currentVersion)
+
+        if updateCompleted, let previousVersion {
+            completedUpdateAwaitingNotification = CompletedUpdate(
+                previousVersion: previousVersion,
+                currentVersion: currentVersion,
+                currentBuild: currentBuild
+            )
+            logEvent(
+                message: "SwiftMiner updated from \(previousVersion) to \(currentVersion) (build \(currentBuild))",
+                level: .info,
+                rawMessage: "[update] Installed SwiftMiner \(currentVersion) build \(currentBuild) from \(previousVersion)"
+            )
+        } else if previousVersion == nil {
+            // Establish a durable version baseline for fresh installs and for
+            // users upgrading from versions released before update auditing.
+            logEvent(
+                message: "SwiftMiner \(currentVersion) launched (build \(currentBuild))",
+                level: .info,
+                rawMessage: "[update] Version baseline \(currentVersion) build \(currentBuild)"
+            )
         }
+
+        defaults.set(currentVersion, forKey: Self.lastLaunchedVersionKey)
+        defaults.set(currentBuild, forKey: Self.lastLaunchedBuildKey)
+        if updateCompleted || pendingTo == nil {
+            defaults.removeObject(forKey: Self.pendingUpdateFromVersionKey)
+            defaults.removeObject(forKey: Self.pendingUpdateToVersionKey)
+        }
+    }
+
+    public func consumeCompletedUpdateNotification() -> CompletedUpdate? {
+        defer { completedUpdateAwaitingNotification = nil }
+        return completedUpdateAwaitingNotification
+    }
+
+    private static var currentAppVersion: String {
+        let value = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return value.isEmpty ? "unknown" : value
+    }
+
+    private static var currentAppBuild: String {
+        let value = (Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return value.isEmpty ? "unknown" : value
     }
 
     /// Wires DM dispatch in the connection service into the activity log.
@@ -1350,7 +1420,7 @@ public final class NavigationModel {
     public func clearEvents() {
         events.removeAll()
         Task { [activityLogStore] in
-            await activityLogStore.clearPersistentAuditEntries()
+            await activityLogStore.clear()
         }
     }
 
