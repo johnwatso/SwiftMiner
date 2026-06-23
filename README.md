@@ -9,7 +9,7 @@
 <h1 align="center">SwiftMiner — Twitch Drops Miner and Claimer for macOS</h1>
 
 <p align="center">
-  A native Twitch Drops miner and claimer for macOS. Secure, lightweight, and multi-account ready.
+  A Mac app for mining and claiming Twitch Drops. Secure, lightweight, and multi-account ready.
 </p>
 
 <p align="center">
