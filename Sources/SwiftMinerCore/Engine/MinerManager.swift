@@ -321,6 +321,8 @@ public final class MinerManager {
     /// Background recovery loop for miners that get wedged after network or progress stalls.
     private var antiStallMonitorTask: Task<Void, Never>?
     private let supervisor = MinerSupervisor()
+    private let unattendedHealthStore: UnattendedHealthStore?
+    private var lastObservedProgressMetric: [String: Int] = [:]
     private var initializedCampaignSnapshots: Set<String> = []
 
     /// Last start options, used when anti-stall recovery restarts an individual miner.
@@ -369,11 +371,13 @@ public final class MinerManager {
     public init(
         clientId: String, 
         campaignStore: CampaignStore = CampaignStore(),
-        tokenStore: any TokenStore = TokenStoreFactory.makeDefault()
+        tokenStore: any TokenStore = TokenStoreFactory.makeDefault(),
+        unattendedHealthStore: UnattendedHealthStore? = nil
     ) {
         self.clientId = clientId
         self.campaignStore = campaignStore
         self.tokenStore = tokenStore
+        self.unattendedHealthStore = unattendedHealthStore
         self.dataCoordinator = MiningDataCoordinator(campaignStore: campaignStore)
     }
     
@@ -561,6 +565,7 @@ public final class MinerManager {
             isOperator: account.isOperator
         )
         miners.append(miner)
+        recordHealth(.minerObserved(minerID: minerId, displayName: miner.displayName, at: Date()))
         onMinersChanged?()
         Task { [supervisor] in
             await supervisor.registerMiner(minerId)
@@ -1140,6 +1145,19 @@ public final class MinerManager {
                     needsAuth: clearsNeedsAuth ? false : nil
                 )
                 await self.applySupervisorSnapshot(for: minerId)
+                self.recordCurrentHealthState(minerID: minerId)
+            }
+        }
+
+        await engine.setProgressUpdateHandler { [weak self] progress in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let metric = progress.totalWatchTimeMinutes + progress.claimedDrops
+                if let previousMetric = self.lastObservedProgressMetric[minerId],
+                   metric > previousMetric {
+                    self.recordHealth(.miningProgressObserved(minerID: minerId, at: Date()))
+                }
+                self.lastObservedProgressMetric[minerId] = metric
             }
         }
         
@@ -1198,6 +1216,7 @@ public final class MinerManager {
                     await self.supervisor.recordWorkerStop(minerId: minerId)
                 case .successfulPoll, .inventoryRefresh:
                     await self.supervisor.recordSuccessfulPoll(minerId: minerId)
+                    self.recordHealth(.twitchResponseSucceeded(minerID: minerId, at: Date()))
                 case .campaignRefresh:
                     await self.supervisor.recordCampaignRefresh(minerId: minerId)
                 case .authRefreshed:
@@ -1478,6 +1497,13 @@ public final class MinerManager {
     private func performRecoveryAction(_ action: MinerSupervisor.RecoveryAction) async {
         guard let engine = engines[action.minerId] else { return }
 
+        let healthStage = Self.healthRecoveryStage(action.stage)
+        recordHealth(.recoveryStarted(
+            minerID: action.minerId,
+            stage: healthStage,
+            detail: action.reason,
+            at: Date()
+        ))
         await supervisor.markRecovering(minerId: action.minerId, stage: action.stage)
         await applySupervisorSnapshot(for: action.minerId)
         onLogMessage?(
@@ -1515,6 +1541,14 @@ public final class MinerManager {
 
             await supervisor.noteRecoverySuccess(minerId: action.minerId)
             await applySupervisorSnapshot(for: action.minerId)
+            recordHealth(.recoveryFinished(
+                minerID: action.minerId,
+                stage: healthStage,
+                succeeded: true,
+                detail: "Recovery completed",
+                at: Date()
+            ))
+            recordCurrentHealthState(minerID: action.minerId)
             onLogMessage?(action.minerId, "[Supervisor] recovery success")
         } catch {
             await supervisor.noteRecoveryFailure(minerId: action.minerId, stage: action.stage)
@@ -1529,7 +1563,78 @@ public final class MinerManager {
             } else {
                 onAccountActionRequiredEvent?(action.minerId, action.reason)
             }
+            recordHealth(.recoveryFinished(
+                minerID: action.minerId,
+                stage: healthStage,
+                succeeded: false,
+                detail: error.localizedDescription,
+                at: Date()
+            ))
+            recordCurrentHealthState(minerID: action.minerId)
             onLogMessage?(action.minerId, "[Supervisor] recovery failed | \(error.localizedDescription)")
+        }
+    }
+
+    private func recordCurrentHealthState(minerID: String, at: Date = Date()) {
+        guard let miner = getMiner(id: minerID) else { return }
+        recordHealth(.minerObserved(minerID: miner.id, displayName: miner.displayName, at: at))
+
+        if miner.needsAuth {
+            recordHealth(.incidentObserved(
+                minerID: miner.id,
+                kind: .authenticationExpired,
+                severity: .critical,
+                summary: "Twitch authentication expired",
+                recommendedAction: "Sign in to Twitch again",
+                at: at
+            ))
+        } else if miner.isStalled {
+            recordHealth(.incidentObserved(
+                minerID: miner.id,
+                kind: .progressStalled,
+                severity: .warning,
+                summary: "The miner has stopped reporting healthy activity",
+                recommendedAction: "Review miner diagnostics",
+                at: at
+            ))
+        } else if miner.status == .blockedAccountNotLinked {
+            recordHealth(.incidentObserved(
+                minerID: miner.id,
+                kind: .accountLinkRequired,
+                severity: .warning,
+                summary: "A game account link is required",
+                recommendedAction: "Link the game account from Twitch Drops Inventory",
+                at: at
+            ))
+        } else if miner.status == .error {
+            recordHealth(.incidentObserved(
+                minerID: miner.id,
+                kind: .other,
+                severity: .critical,
+                summary: "The miner needs attention",
+                recommendedAction: "Review the Activity Log",
+                at: at
+            ))
+        } else if miner.isHealthy {
+            recordHealth(.activeIncidentResolved(minerID: miner.id, at: at))
+        }
+    }
+
+    private func recordHealth(_ event: UnattendedHealthEvent) {
+        guard let unattendedHealthStore else { return }
+        Task {
+            try? await unattendedHealthStore.record(event)
+        }
+    }
+
+    private static func healthRecoveryStage(_ stage: MinerSupervisor.RecoveryStage) -> RecoveryRecord.Stage {
+        switch stage {
+        case .refresh:
+            return .campaignRefresh
+        case .restart:
+            return .workerRestart
+        case .authRefresh:
+            return .authenticationRefresh
         }
     }
 
