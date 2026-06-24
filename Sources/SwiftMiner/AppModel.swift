@@ -360,6 +360,7 @@ public final class AppModel {
     }
 
     private func setDockBadgeCount(_ count: Int) {
+        guard !SwiftMinerRuntime.isRunningTests else { return }
 #if canImport(AppKit)
         NSApplication.shared.dockTile.badgeLabel = count > 0 ? "\(count)" : nil
 #endif

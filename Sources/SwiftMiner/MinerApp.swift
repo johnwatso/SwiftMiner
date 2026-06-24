@@ -37,12 +37,14 @@ struct MinerApp: App {
                 .environment(navigation)
                 .environmentObject(updater)
                 .task {
-                    // Migrate any legacy hardware-UUID account file into the real Keychain
-                    // BEFORE accounts are loaded below. No-op on DEBUG and after the first run.
-                    await LegacyAccountMigrator.migrateIfNeeded()
-                    if settings.shouldPromptForLegacyBackupDeletion {
-                        settings.markLegacyBackupPromptShown()
-                        showLegacyBackupPrompt = true
+                    if !SwiftMinerRuntime.isRunningTests {
+                        // Migrate any legacy hardware-UUID account file into the real Keychain
+                        // BEFORE accounts are loaded below. No-op on DEBUG and after the first run.
+                        await LegacyAccountMigrator.migrateIfNeeded()
+                        if settings.shouldPromptForLegacyBackupDeletion {
+                            settings.markLegacyBackupPromptShown()
+                            showLegacyBackupPrompt = true
+                        }
                     }
 
                     // Await navigation setup first — loads accounts from keychain
@@ -74,13 +76,15 @@ struct MinerApp: App {
                         )
                     }
                     navigation.configureOnboardingPresentation()
-                    UNUserNotificationCenter.current().delegate = notificationDelegate
-                    UpdateCompletionNotification.registerCategory()
-                    await requestNotificationPermission()
-                    if let completedUpdate = navigation.consumeCompletedUpdateNotification() {
-                        await UpdateCompletionNotification.deliver(completedUpdate)
+                    if !SwiftMinerRuntime.isRunningTests {
+                        UNUserNotificationCenter.current().delegate = notificationDelegate
+                        UpdateCompletionNotification.registerCategory()
+                        await requestNotificationPermission()
+                        if let completedUpdate = navigation.consumeCompletedUpdateNotification() {
+                            await UpdateCompletionNotification.deliver(completedUpdate)
+                        }
+                        updater.checkForUpdatesInBackground()
                     }
-                    updater.checkForUpdatesInBackground()
                     presentationController.configure(mode: settings.appPresenceMode)
                     applyLaunchWindowPreferenceIfNeeded()
                     try? Tips.configure([

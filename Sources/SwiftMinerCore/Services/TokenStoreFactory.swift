@@ -10,6 +10,9 @@ import Foundation
 /// one-time migration's read source (see `LegacyAccountMigrator`).
 public enum TokenStoreFactory {
     public static func makeDefault() -> any TokenStore {
+        if SwiftMinerRuntime.isRunningTests {
+            return InMemoryTokenStore()
+        }
         #if DEBUG
         return KeychainTokenStore()
         #else
