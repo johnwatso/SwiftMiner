@@ -3,14 +3,24 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Isolate app runtime when running tests - Release Notes</title>
+  <title>SwiftMiner 1.31.1 - Release Notes</title>
+  <meta name="description" content="Release notes for SwiftMiner 1.31.1, including persistent activity history, update auditing, and safer automated testing.">
+  <link rel="canonical" href="https://swiftminer.app/release-notes/1.31.1.html">
+  <meta name="robots" content="index, follow">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
   <style>
     :root { color-scheme: light dark; }
     body {
       margin: 0;
       padding: 32px 20px 48px;
       font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #f4f6f8;
+      background:
+        radial-gradient(circle at top left, rgba(17, 124, 182, 0.18), transparent 32rem),
+        linear-gradient(135deg, #f7fbff 0%, #f4f7fb 46%, #f7f2ff 100%);
       color: #0f1720;
     }
     main {
@@ -20,19 +30,66 @@
       border-radius: 22px;
       background: rgba(255, 255, 255, 0.86);
       box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
+      border: 1px solid rgba(82, 96, 109, 0.12);
     }
     h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
-    .meta { margin: 0 0 24px; color: #52606d; font-size: 14px; }
+    .meta { margin: 0 0 10px; color: #52606d; font-size: 14px; }
+    .intro { margin: 0 0 24px; color: #384454; }
     p { margin: 0 0 16px; }
+    section {
+      margin: 18px 0 0;
+      padding: 18px 18px 14px;
+      border: 1px solid rgba(82, 96, 109, 0.18);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.42);
+      border-left: 5px solid var(--accent, #0a67a3);
+    }
+    section.green  { --accent: #1c8c73; }
+    section.indigo { --accent: #5f5ac8; }
+    section.violet { --accent: #7b4bd9; }
+    section.teal   { --accent: #0a8aa3; }
+    h2 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 4px;
+      color: var(--accent, #0a67a3);
+      font-size: 18px;
+    }
+    .badge {
+      display: inline-grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--accent, #0a67a3) 15%, transparent);
+      font-size: 16px;
+    }
+    .summary { margin: 0 0 12px; color: #52606d; font-size: 14px; }
+    ul { margin: 0; padding-left: 22px; }
+    li { margin: 0 0 8px; }
+    li:last-child { margin-bottom: 0; }
     a { color: #0a67a3; text-decoration: none; }
     a:hover { text-decoration: underline; }
     @media (prefers-color-scheme: dark) {
-      body { background: #0b1015; color: #edf2f7; }
+      body {
+        background:
+          radial-gradient(circle at top left, rgba(89, 185, 255, 0.16), transparent 32rem),
+          linear-gradient(135deg, #081019 0%, #101520 52%, #171427 100%);
+        color: #edf2f7;
+      }
       main {
         background: rgba(15, 23, 32, 0.88);
         box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+        border-color: rgba(159, 176, 194, 0.14);
       }
       .meta { color: #9fb0c2; }
+      .intro { color: #c8d3df; }
+      section {
+        border-color: rgba(159, 176, 194, 0.18);
+        background: rgba(255, 255, 255, 0.04);
+      }
+      .summary { color: #9fb0c2; }
       a { color: #73c3ff; }
     }
   </style>
@@ -40,18 +97,33 @@
 <body>
   <main>
     <h1>SwiftMiner 1.31.1</h1>
-    <p class="meta">Release notes for build 2026062412</p>
+    <p class="meta">Version 1.31.1 · Build 2026062412</p>
     <p class="intro">A focused update that makes the Activity Log a durable history of mining, support, audit, and app-update activity.</p>
 
-    <section>
-      <h2>Persistent Activity Log</h2>
+    <section class="indigo">
+      <h2><span class="badge" aria-hidden="true">📚</span> Persistent Activity Log</h2>
+      <p class="summary">Your operational history now survives app restarts.</p>
       <ul>
         <li>Keeps the newest 1,000 Activity Log entries across app restarts instead of retaining only web audit events.</li>
         <li>Preserves update checks, downloads, automatic installation plans, errors, mining events, Discord activity, and web audit entries in one timeline.</li>
+        <li>Makes Clear Log remove both the visible timeline and its saved history.</li>
+      </ul>
+    </section>
+
+    <section class="green">
+      <h2><span class="badge" aria-hidden="true">✨</span> Update History</h2>
+      <p class="summary">Sparkle updates leave a clear, useful record.</p>
+      <ul>
         <li>Records a successful version transition after Sparkle installs an update and relaunches SwiftMiner.</li>
         <li>Shows a dedicated macOS notification after a successful update, independently of drop notifications and quiet hours, with a shortcut to What's New.</li>
         <li>Creates a version-and-build baseline the first time persistent update auditing runs.</li>
-        <li>Makes Clear Log remove both the visible timeline and its saved history.</li>
+      </ul>
+    </section>
+
+    <section class="teal">
+      <h2><span class="badge" aria-hidden="true">🧪</span> Safer Testing</h2>
+      <p class="summary">Automated tests stay isolated from your real SwiftMiner setup.</p>
+      <ul>
         <li>Isolates automated tests from saved Debug accounts, background services, notifications, updates, and miner auto-start.</li>
       </ul>
     </section>

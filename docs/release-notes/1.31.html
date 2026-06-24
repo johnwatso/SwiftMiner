@@ -3,14 +3,24 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Add game rules help and update 1.31 release notes - Release Notes</title>
+  <title>SwiftMiner 1.31 - Release Notes</title>
+  <meta name="description" content="Release notes for SwiftMiner 1.31, including lower CPU usage, failover streamers, clearer Drops states, streamlined settings, and expanded help.">
+  <link rel="canonical" href="https://swiftminer.app/release-notes/1.31.html">
+  <meta name="robots" content="index, follow">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
   <style>
     :root { color-scheme: light dark; }
     body {
       margin: 0;
       padding: 32px 20px 48px;
       font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #f4f6f8;
+      background:
+        radial-gradient(circle at top left, rgba(17, 124, 182, 0.18), transparent 32rem),
+        linear-gradient(135deg, #f7fbff 0%, #f4f7fb 46%, #f7f2ff 100%);
       color: #0f1720;
     }
     main {
@@ -20,29 +30,140 @@
       border-radius: 22px;
       background: rgba(255, 255, 255, 0.86);
       box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
+      border: 1px solid rgba(82, 96, 109, 0.12);
     }
     h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
-    .meta { margin: 0 0 24px; color: #52606d; font-size: 14px; }
+    .meta { margin: 0 0 10px; color: #52606d; font-size: 14px; }
+    .intro { margin: 0 0 24px; color: #384454; }
     p { margin: 0 0 16px; }
+    section {
+      margin: 18px 0 0;
+      padding: 18px 18px 14px;
+      border: 1px solid rgba(82, 96, 109, 0.18);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.42);
+      border-left: 5px solid var(--accent, #0a67a3);
+    }
+    section.green  { --accent: #1c8c73; }
+    section.indigo { --accent: #5f5ac8; }
+    section.violet { --accent: #7b4bd9; }
+    section.amber  { --accent: #b9760a; }
+    section.teal   { --accent: #0a8aa3; }
+    section.rose   { --accent: #c0497b; }
+    h2 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 4px;
+      color: var(--accent, #0a67a3);
+      font-size: 18px;
+    }
+    .badge {
+      display: inline-grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--accent, #0a67a3) 15%, transparent);
+      font-size: 16px;
+    }
+    .summary { margin: 0 0 12px; color: #52606d; font-size: 14px; }
+    ul { margin: 0; padding-left: 22px; }
+    li { margin: 0 0 8px; }
+    li:last-child { margin-bottom: 0; }
+    .commit { margin: 22px 0 0; color: #52606d; font-size: 14px; }
     a { color: #0a67a3; text-decoration: none; }
     a:hover { text-decoration: underline; }
     @media (prefers-color-scheme: dark) {
-      body { background: #0b1015; color: #edf2f7; }
+      body {
+        background:
+          radial-gradient(circle at top left, rgba(89, 185, 255, 0.16), transparent 32rem),
+          linear-gradient(135deg, #081019 0%, #101520 52%, #171427 100%);
+        color: #edf2f7;
+      }
       main {
         background: rgba(15, 23, 32, 0.88);
         box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+        border-color: rgba(159, 176, 194, 0.14);
       }
       .meta { color: #9fb0c2; }
+      .intro { color: #c8d3df; }
+      section {
+        border-color: rgba(159, 176, 194, 0.18);
+        background: rgba(255, 255, 255, 0.04);
+      }
+      .summary, .commit { color: #9fb0c2; }
       a { color: #73c3ff; }
     }
   </style>
 </head>
 <body>
   <main>
-    <h1>Add game rules help and update 1.31 release notes</h1>
-    <p class="meta">Version 1.31</p>
-    <p>Add game rules help and update 1.31 release notes</p>
-    <p><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/ad9c2c3dc05ae09eda16285ef3cb6db0fda54383">ad9c2c3</a></p>
+    <h1>SwiftMiner 1.31</h1>
+    <p class="meta">Version 1.31 · Build 2026062409</p>
+    <p class="intro">A substantial refinement focused on lower resource use, resilient mining, clearer campaign states, and easier configuration.</p>
+
+    <section class="green">
+      <h2><span class="badge" aria-hidden="true">⚡</span> Performance</h2>
+      <p class="summary">SwiftMiner does less repeated work while sitting quietly in the background.</p>
+      <ul>
+        <li>Noticeably lowers CPU usage by eliminating repeated miner-card and campaign-feed calculations.</li>
+        <li>Caches decoded game preferences and reuses Twitch date parsers.</li>
+        <li>Pauses campaign-card animation while SwiftMiner is inactive.</li>
+      </ul>
+    </section>
+
+    <section class="indigo">
+      <h2><span class="badge" aria-hidden="true">📡</span> Resilient Stream Selection</h2>
+      <p class="summary">Miners recover more gracefully when a preferred stream stops making progress.</p>
+      <ul>
+        <li>Adds optional game-specific failover streamers that are verified before use.</li>
+        <li>Activates failover only after genuine progress stalls and applies cooldowns to avoid repeatedly retrying a bad fallback.</li>
+      </ul>
+    </section>
+
+    <section class="rose">
+      <h2><span class="badge" aria-hidden="true">🎟️</span> Clearer Drops States</h2>
+      <p class="summary">Subscription-gated and unlinked campaigns are represented more accurately.</p>
+      <ul>
+        <li>Keeps prioritised games visible in Drops Active even when Twitch reports the active campaign as unlinked.</li>
+        <li>Preserves paid-sub reward styling with the credit-card badge, <strong>Sub</strong> thumbnail label, and pink <strong>Needs Sub</strong> status.</li>
+        <li>Updates campaign details to say <strong>Needs Sub</strong> and <strong>Paid Twitch sub required</strong> instead of showing a generic locked state.</li>
+        <li>Stops Overview from presenting a same-game watch campaign under Up Next while the visible live campaign is subscription-gated.</li>
+        <li>Filters unlinked, non-prioritised public campaigns out of Drops Active.</li>
+      </ul>
+    </section>
+
+    <section class="violet">
+      <h2><span class="badge" aria-hidden="true">⚙️</span> Simpler Settings</h2>
+      <p class="summary">Configuration is grouped around the decisions people actually make.</p>
+      <ul>
+        <li>Adds a dedicated Appearance tab and a combined simpler-visual-effects option.</li>
+        <li>Keeps Integrations visible and replaces individual Discord DM switches with notification presets plus a Custom mode.</li>
+        <li>Simplifies account management around the current Add Account flow.</li>
+      </ul>
+    </section>
+
+    <section class="teal">
+      <h2><span class="badge" aria-hidden="true">📖</span> Help and Navigation</h2>
+      <p class="summary">Website and help resources are easier to reach from inside the app.</p>
+      <ul>
+        <li>Adds a clickable swiftminer.app link to About SwiftMiner and a SwiftMiner Website menu item.</li>
+        <li>Adds SwiftMiner Help to the Help menu.</li>
+        <li>Adds an in-app help link and detailed guide for priorities, exclusions, account-specific ordering, and failover streamers.</li>
+      </ul>
+    </section>
+
+    <section class="amber">
+      <h2><span class="badge" aria-hidden="true">🧰</span> Release Details</h2>
+      <p class="summary">Version and build metadata for the shipped release.</p>
+      <ul>
+        <li>Released as SwiftMiner <strong>1.31</strong>, build <strong>2026062409</strong>.</li>
+        <li>Preserves the signed Sparkle feed and release archive produced for this version.</li>
+      </ul>
+    </section>
+
+    <p class="commit"><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/ad9c2c3dc05ae09eda16285ef3cb6db0fda54383">ad9c2c3</a></p>
   </main>
 </body>
 </html>
