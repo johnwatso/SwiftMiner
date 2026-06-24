@@ -45,7 +45,7 @@
           "@type": "WebSite",
           "@id": "https://swiftminer.app/#website",
           "name": "SwiftMiner",
-          "alternateName": ["SwiftMiner for macOS", "Twitch Drops miner", "Twitch Drops miner for Mac", "Twitch Drops claimer", "Twitch Drops claimer for Mac", "auto claim Twitch Drops"],
+          "alternateName": ["SwiftMiner for macOS", "Twitch Drops miner for Mac"],
           "url": "https://swiftminer.app/"
         },
         {
@@ -55,8 +55,8 @@
           "operatingSystem": "macOS 26.0 or later",
           "applicationCategory": "UtilitiesApplication",
           "applicationSubCategory": "Twitch Drops miner and claimer",
-          "keywords": "Twitch Drops miner, Twitch Drops miner Mac, Twitch Drops claimer, auto claim Twitch Drops, Twitch Drops tracker, macOS Twitch Drops app",
-          "softwareVersion": "1.30",
+          "keywords": "Twitch Drops miner, auto claim Twitch Drops, macOS",
+          "softwareVersion": "1.32",
           "url": "https://swiftminer.app/",
           "downloadUrl": "https://swiftminer.app/download/",
           "description": "SwiftMiner is a free Twitch Drops miner for Mac that watches eligible streams, tracks campaign progress, and auto claims Twitch Drops rewards across multiple accounts.",
@@ -79,619 +79,9 @@
     <!-- Tailwind CSS (precompiled static stylesheet; run the build in tailwind.config.js to rebuild) -->
     <link rel="stylesheet" href="./assets/css/tailwind.css">
 
-    <!-- Phosphor Icons for secondary icons -->
-    <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
+    <!-- Site styles (custom components, layout, animations) -->
+    <link rel="stylesheet" href="./assets/css/site.css">
 
-    <style>
-        html {
-            min-height: 100%;
-            background: #120d2b;
-            color-scheme: dark;
-        }
-
-        body {
-            background: linear-gradient(135deg, #090514, #120e2e, #090616) #120d2b;
-            background-size: 400% 400%;
-            animation: gradient-pan 20s ease infinite alternate;
-            color: rgba(255, 255, 255, 0.94);
-            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            overflow: hidden; /* Main wrapper handles scrolling */
-            transition: background 0.5s ease, color 0.5s ease;
-        }
-
-        html.light {
-            background: #f8fafc;
-            color-scheme: light;
-        }
-
-        html.light body {
-            background: linear-gradient(135deg, #f8fafc, #e2e8f0, #f1f5f9);
-            color: rgba(15, 23, 42, 0.9);
-        }
-
-        @keyframes gradient-pan {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
-        }
-
-        h1, h2, h3, .font-display {
-            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
-            letter-spacing: -0.02em;
-        }
-
-        .glass-panel {
-            background: rgba(25, 20, 40, 0.45);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            box-shadow: 0 24px 64px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.05);
-            /* Lower blur radius (was 28px) — backdrop-filter is recomputed every frame as
-               content scrolls behind each panel, so the radius dominates scroll cost. */
-            backdrop-filter: blur(16px) saturate(1.3);
-            -webkit-backdrop-filter: blur(16px) saturate(1.3);
-            transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, color 0.3s ease;
-            transform: translate3d(0, 0, 0);
-            backface-visibility: hidden;
-        }
-
-        html.light .glass-panel {
-            background: rgba(255, 255, 255, 0.45);
-            border: 1px solid rgba(0, 0, 0, 0.08);
-            box-shadow: 0 24px 64px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.6);
-        }
-
-        .glass-panel:hover {
-            border-color: rgba(147, 51, 234, 0.25);
-            box-shadow: 0 12px 40px rgba(147, 51, 234, 0.1);
-        }
-
-        html.light .glass-panel:hover {
-            border-color: rgba(147, 51, 234, 0.3);
-            box-shadow: 0 12px 40px rgba(147, 51, 234, 0.08);
-        }
-
-        /* Card glow styles */
-        .card-glow-purple {
-            background: radial-gradient(circle at 90% 90%, rgba(147, 51, 234, 0.15), transparent 60%), rgba(25, 20, 40, 0.45);
-        }
-        .card-glow-purple:hover {
-            background: radial-gradient(circle at 90% 90%, rgba(147, 51, 234, 0.25), transparent 50%), rgba(25, 20, 40, 0.5);
-        }
-        .card-glow-cyan {
-            background: radial-gradient(circle at 90% 90%, rgba(0, 229, 255, 0.12), transparent 60%), rgba(25, 20, 40, 0.45);
-        }
-        .card-glow-cyan:hover {
-            background: radial-gradient(circle at 90% 90%, rgba(0, 229, 255, 0.22), transparent 50%), rgba(25, 20, 40, 0.5);
-        }
-        .card-glow-magenta {
-            background: radial-gradient(circle at 90% 90%, rgba(255, 0, 127, 0.12), transparent 60%), rgba(25, 20, 40, 0.45);
-        }
-        .card-glow-magenta:hover {
-            background: radial-gradient(circle at 90% 90%, rgba(255, 0, 127, 0.22), transparent 50%), rgba(25, 20, 40, 0.5);
-        }
-        .card-glow-white {
-            background: radial-gradient(circle at 90% 90%, rgba(255, 255, 255, 0.08), transparent 60%), rgba(25, 20, 40, 0.45);
-        }
-        .card-glow-white:hover {
-            background: radial-gradient(circle at 90% 90%, rgba(255, 255, 255, 0.15), transparent 50%), rgba(25, 20, 40, 0.5);
-        }
-        .card-glow-discord {
-            background: radial-gradient(circle at 90% 90%, rgba(88, 101, 242, 0.15), transparent 60%), rgba(25, 20, 40, 0.45);
-        }
-        .card-glow-discord:hover {
-            background: radial-gradient(circle at 90% 90%, rgba(88, 101, 242, 0.25), transparent 50%), rgba(25, 20, 40, 0.5);
-        }
-
-        /* Light mode card glow overrides */
-        html.light .card-glow-purple {
-            background: radial-gradient(circle at 90% 90%, rgba(147, 51, 234, 0.08), transparent 60%), rgba(255, 255, 255, 0.45);
-        }
-        html.light .card-glow-purple:hover {
-            background: radial-gradient(circle at 90% 90%, rgba(147, 51, 234, 0.15), transparent 50%), rgba(255, 255, 255, 0.55);
-        }
-        html.light .card-glow-cyan {
-            background: radial-gradient(circle at 90% 90%, rgba(0, 229, 255, 0.06), transparent 60%), rgba(255, 255, 255, 0.45);
-        }
-        html.light .card-glow-cyan:hover {
-            background: radial-gradient(circle at 90% 90%, rgba(0, 229, 255, 0.12), transparent 50%), rgba(255, 255, 255, 0.55);
-        }
-        html.light .card-glow-magenta {
-            background: radial-gradient(circle at 90% 90%, rgba(255, 0, 127, 0.06), transparent 60%), rgba(255, 255, 255, 0.45);
-        }
-        html.light .card-glow-magenta:hover {
-            background: radial-gradient(circle at 90% 90%, rgba(255, 0, 127, 0.12), transparent 50%), rgba(255, 255, 255, 0.55);
-        }
-        html.light .card-glow-white {
-            background: radial-gradient(circle at 90% 90%, rgba(100, 116, 139, 0.05), transparent 60%), rgba(255, 255, 255, 0.45);
-        }
-        html.light .card-glow-white:hover {
-            background: radial-gradient(circle at 90% 90%, rgba(100, 116, 139, 0.1), transparent 50%), rgba(255, 255, 255, 0.55);
-        }
-        html.light .card-glow-discord {
-            background: radial-gradient(circle at 90% 90%, rgba(88, 101, 242, 0.08), transparent 60%), rgba(255, 255, 255, 0.45);
-        }
-        html.light .card-glow-discord:hover {
-            background: radial-gradient(circle at 90% 90%, rgba(88, 101, 242, 0.15), transparent 50%), rgba(255, 255, 255, 0.55);
-        }
-
-        .text-gradient {
-            background: linear-gradient(90deg, #9146ff, #772ce8);
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-        }
-
-        /* Smooth scrollbar for the main snap container */
-        .snap-scroller {
-            height: 100dvh;
-            overflow-y: auto;
-            overflow-x: hidden;
-            scroll-behavior: smooth;
-            transition: background 0.3s ease;
-            -webkit-overflow-scrolling: touch;
-            transform: translate3d(0, 0, 0);
-        }
-        
-        .snap-scroller::-webkit-scrollbar {
-            width: 8px;
-        }
-        .snap-scroller::-webkit-scrollbar-track {
-            background: #090514; 
-            transition: background 0.3s ease;
-        }
-        html.light .snap-scroller::-webkit-scrollbar-track {
-            background: #f1f5f9; 
-        }
-        .snap-scroller::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.15); 
-            border-radius: 4px;
-        }
-        html.light .snap-scroller::-webkit-scrollbar-thumb {
-            background: rgba(0, 0, 0, 0.15); 
-        }
-
-        @media (min-width: 768px) {
-            .snap-scroller {
-                scroll-snap-type: none !important;
-            }
-
-            .snap-scroller > section {
-                scroll-snap-stop: normal !important;
-            }
-        }
-
-        /* Reveal Animations */
-        .reveal {
-            opacity: 0;
-            transform: translateY(16px);
-            transition: none; /* Reset instantly when out of view */
-            will-change: transform, opacity;
-        }
-        .reveal.active {
-            opacity: 1;
-            transform: translateY(0);
-            transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1), transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-
-        .hero-copy {
-            max-width: 1200px;
-        }
-
-        .hero-section {
-            align-items: flex-start;
-            padding-top: clamp(2.5rem, 4vh, 3.5rem) !important;
-            padding-bottom: clamp(4rem, 7vw, 6rem) !important;
-            transform: translate3d(0, 0, 0);
-            -webkit-backface-visibility: hidden;
-            backface-visibility: hidden;
-        }
-
-        .hero-title-line {
-            display: block;
-        }
-
-        .hero-brand-title {
-            display: block;
-        }
-
-        .hero-shell {
-            max-width: min(92vw, 1680px);
-        }
-
-        .hero-screenshot {
-            margin-top: clamp(1rem, 2vw, 1.5rem);
-            width: min(100%, 1580px);
-        }
-
-        @media (min-width: 640px) {
-            .hero-cta {
-                width: 14.25rem;
-            }
-        }
-
-        .screenshot-frame {
-            transform: translate3d(0, 0, 0);
-            backface-visibility: hidden;
-            will-change: transform;
-        }
-
-        .section-shell {
-            width: 100%;
-            max-width: min(92vw, 1480px);
-            margin: 0 auto;
-            padding-left: 1rem;
-            padding-right: 1rem;
-        }
-
-        .trust-strip {
-            margin: 1.4rem auto 0;
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
-            gap: 0.75rem;
-            max-width: 980px;
-        }
-
-        .trust-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            border-radius: 999px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            background: rgba(255, 255, 255, 0.06);
-            padding: 0.625rem 0.9rem;
-            font-size: 0.78rem;
-            font-weight: 700;
-            color: rgba(255, 255, 255, 0.82);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            white-space: nowrap;
-        }
-
-        .trust-badge svg {
-            width: 1em;
-            height: 1em;
-            flex-shrink: 0;
-        }
-
-        html.light .trust-badge {
-            border-color: rgba(15, 23, 42, 0.08);
-            background: rgba(255, 255, 255, 0.58);
-            color: rgba(51, 65, 85, 0.92);
-        }
-
-        .hero-resource-links {
-            margin-top: 0.9rem;
-        }
-
-        @media (min-width: 1180px) {
-            .trust-strip {
-                flex-wrap: nowrap;
-                gap: 0.65rem;
-                max-width: none;
-            }
-
-            .trust-badge {
-                padding: 0.58rem 0.78rem;
-                font-size: 0.74rem;
-            }
-        }
-
-        /* Brand lockup logo swaps with the theme (default page theme is dark). */
-        .brand-logo-light,
-        html.light .brand-logo-dark {
-            display: none;
-        }
-        html.light .brand-logo-light {
-            display: block;
-        }
-
-        .integration-logo-light,
-        html.light .integration-logo-dark {
-            display: none;
-        }
-
-        html.light .integration-logo-light {
-            display: block;
-        }
-
-        .swiftbot-feature-icon {
-            position: relative;
-            display: flex;
-            width: 3rem;
-            height: 3rem;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 1rem;
-            border-radius: 999px;
-            border: 1px solid rgba(88, 101, 242, 0.32);
-            background: linear-gradient(135deg, rgba(147, 51, 234, 0.72), rgba(88, 101, 242, 0.58) 48%, rgba(0, 229, 255, 0.58));
-            box-shadow: 0 12px 28px rgba(88, 101, 242, 0.2);
-            overflow: hidden;
-        }
-
-        .swiftbot-feature-icon img {
-            width: 3.18rem;
-            max-width: none;
-            height: auto;
-            transform: translateY(-0.02rem);
-        }
-
-        .webui-showcase {
-            margin-top: 2rem;
-        }
-
-        .webui-showcase-layout {
-            display: grid;
-            gap: 1.5rem;
-            align-items: center;
-        }
-
-        .webui-showcase-copy {
-            max-width: 34rem;
-        }
-
-        .webui-showcase-image {
-            width: min(100%, 42rem);
-            justify-self: center;
-            filter: drop-shadow(0 24px 42px rgba(0, 0, 0, 0.24));
-        }
-
-        @media (min-width: 900px) {
-            .webui-showcase-layout {
-                grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
-                gap: 2.5rem;
-            }
-        }
-
-        .privacy-icon {
-            display: inline-flex;
-            width: 2.75rem;
-            height: 2.75rem;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 1rem;
-            border-radius: 999px;
-            border: 1px solid rgba(147, 51, 234, 0.24);
-            background: rgba(147, 51, 234, 0.12);
-            color: #9333ea;
-            font-size: 1.35rem;
-        }
-
-        .privacy-icon.cyan {
-            border-color: rgba(0, 229, 255, 0.24);
-            background: rgba(0, 229, 255, 0.12);
-            color: #00b8d4;
-        }
-
-        .privacy-icon.magenta {
-            border-color: rgba(255, 0, 127, 0.24);
-            background: rgba(255, 0, 127, 0.12);
-            color: #ff007f;
-        }
-
-        .privacy-icon.neutral {
-            border-color: rgba(100, 116, 139, 0.18);
-            background: rgba(100, 116, 139, 0.08);
-            color: #64748b;
-        }
-
-        .swift-language-mark {
-            width: 1.8rem;
-            height: 1.8rem;
-            display: block;
-            transform: translateY(0.03rem);
-        }
-
-        .content-section {
-            position: relative;
-            min-height: 100dvh;
-            display: flex;
-            align-items: center;
-            padding: clamp(7rem, 10vw, 9rem) 0;
-            overflow: hidden;
-            transform: translate3d(0, 0, 0);
-            -webkit-backface-visibility: hidden;
-            backface-visibility: hidden;
-        }
-
-        @media (min-width: 768px) {
-            body.sections-ready .snap-scroller > section {
-                opacity: 0.25;
-                transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-            }
-
-            body.sections-ready .snap-scroller > section.is-current-section {
-                opacity: 1;
-            }
-
-            body.sections-ready .screenshot-card.reveal.active .screenshot-frame {
-                opacity: 0.35;
-                transform: scale(0.96) translate3d(0, 0, 0);
-                transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-            }
-
-            body.sections-ready .screenshot-card.reveal.active.is-current-card .screenshot-frame {
-                opacity: 1;
-                transform: scale(1.0) translate3d(0, 0, 0);
-            }
-        }
-
-        .screenshot-showcase {
-            display: grid;
-            gap: 3rem;
-        }
-
-        .screenshot-card {
-            display: grid;
-            gap: clamp(2rem, 4vw, 4rem);
-            align-items: center;
-        }
-
-        .screenshot-copy {
-            max-width: 460px;
-        }
-
-        .step-grid,
-        .privacy-grid {
-            display: grid;
-            grid-template-columns: repeat(1, minmax(0, 1fr));
-            gap: 1.25rem;
-        }
-
-        .feature-grid {
-            grid-auto-rows: minmax(220px, auto);
-        }
-
-        .step-grid > *,
-        .privacy-grid > * {
-            min-width: 0;
-        }
-
-        .step-grid h3,
-        .privacy-grid h3 {
-            line-height: 1.15;
-        }
-
-        .utility-card {
-            padding: clamp(1.4rem, 2vw, 1.9rem);
-        }
-
-        .privacy-layout {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: clamp(2rem, 4vw, 3.5rem);
-            align-items: center;
-        }
-
-        .privacy-title-row {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            margin-bottom: 1rem;
-        }
-
-        .privacy-title-row h2 {
-            margin-bottom: 0;
-        }
-
-        .privacy-lock {
-            width: 3.5rem;
-            height: 3.5rem;
-            flex: 0 0 auto;
-            filter: drop-shadow(0 14px 24px rgba(147, 51, 234, 0.22));
-            transform-origin: center center;
-            overflow: visible;
-        }
-
-        .privacy-lock.is-locked {
-            animation: lock-snap 0.72s cubic-bezier(0.25, 1, 0.5, 1) 0.18s forwards;
-        }
-
-        .privacy-lock-shackle {
-            transform-origin: 16px 22px;
-            transform: translate(0, -4px) rotate(-24deg);
-            transition: transform 0.72s cubic-bezier(0.16, 1, 0.3, 1) 0.18s;
-        }
-
-        .privacy-lock.is-locked .privacy-lock-shackle {
-            transform: translate(0, 0) rotate(0deg);
-        }
-
-        .privacy-lock-body {
-            transition: fill 0.3s ease, stroke 0.3s ease;
-        }
-
-        .privacy-lock.is-locked .privacy-lock-body {
-            fill: rgba(168, 85, 247, 0.36);
-            stroke: rgba(168, 85, 247, 0.85);
-        }
-
-        .privacy-lock-keyhole {
-            transition: fill 0.3s ease;
-        }
-
-        @keyframes lock-snap {
-            0% {
-                transform: scale(1);
-                filter: drop-shadow(0 14px 24px rgba(147, 51, 234, 0.22));
-            }
-            75% {
-                transform: scale(1);
-                filter: drop-shadow(0 14px 24px rgba(147, 51, 234, 0.22));
-            }
-            85% {
-                transform: scale(0.9);
-                filter: drop-shadow(0 4px 10px rgba(147, 51, 234, 0.4));
-            }
-            92% {
-                transform: scale(1.08);
-                filter: drop-shadow(0 0 24px rgba(147, 51, 234, 0.75));
-            }
-            100% {
-                transform: scale(1);
-                filter: drop-shadow(0 14px 24px rgba(147, 51, 234, 0.22));
-            }
-        }
-
-        @media (max-width: 520px) {
-            .privacy-title-row {
-                align-items: flex-start;
-                flex-direction: column-reverse;
-            }
-        }
-
-        @media (min-width: 1024px) {
-            .screenshot-card {
-                grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
-            }
-
-            .screenshot-card:nth-child(even) {
-                grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
-            }
-
-            .screenshot-card:nth-child(even) .screenshot-copy {
-                order: 2;
-            }
-        }
-
-        @media (min-width: 768px) {
-            .step-grid {
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-            }
-
-            .privacy-grid {
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-            }
-        }
-
-        @media (min-width: 1024px) {
-            .privacy-layout {
-                grid-template-columns: minmax(300px, 0.75fr) minmax(0, 1.45fr);
-            }
-        }
-
-        @media (min-width: 1280px) {
-            .step-grid {
-                grid-template-columns: repeat(4, minmax(0, 1fr));
-            }
-        }
-
-        /* Respect users who prefer reduced motion: kill the always-on background
-           gradient pan, reveal transitions, and pulse animations. */
-        @media (prefers-reduced-motion: reduce) {
-            body { animation: none !important; }
-            .reveal, .reveal.active {
-                opacity: 1 !important;
-                transform: none !important;
-                transition: none !important;
-            }
-            .privacy-lock-shackle {
-                transform: translate(0, 0) rotate(0deg) !important;
-                transition: none !important;
-            }
-            .animate-pulse { animation: none !important; }
-        }
-    </style>
     <script>
         // Apply the system theme immediately to prevent layout flashing.
         (function() {
@@ -714,6 +104,31 @@
     </script>
 </head>
 <body class="antialiased selection:bg-brand-cyan selection:text-brand-dark relative">
+
+    <!-- Inline icon sprite: only the icons actually used on this page (replaces the Phosphor web-font CDN). -->
+    <svg width="0" height="0" aria-hidden="true" style="position:absolute" focusable="false">
+      <symbol id="i-arrows-clockwise-fill" viewBox="0 0 256 256"><path d="M224,48V96a8,8,0,0,1-8,8H168a8,8,0,0,1-5.66-13.66L180.65,72a79.48,79.48,0,0,0-54.72-22.09h-.45A79.52,79.52,0,0,0,69.59,72.71,8,8,0,0,1,58.41,61.27,96,96,0,0,1,192,60.7l18.36-18.36A8,8,0,0,1,224,48ZM186.41,183.29A80,80,0,0,1,75.35,184l18.31-18.31A8,8,0,0,0,88,152H40a8,8,0,0,0-8,8v48a8,8,0,0,0,13.66,5.66L64,195.3a95.42,95.42,0,0,0,66,26.76h.53a95.36,95.36,0,0,0,67.07-27.33,8,8,0,0,0-11.18-11.44Z"/></symbol>
+      <symbol id="i-article-bold" viewBox="0 0 256 256"><path d="M216,36H40A20,20,0,0,0,20,56V200a20,20,0,0,0,20,20H216a20,20,0,0,0,20-20V56A20,20,0,0,0,216,36Zm-4,160H44V60H212ZM68,92A12,12,0,0,1,80,80h96a12,12,0,0,1,0,24H80A12,12,0,0,1,68,92Zm0,36a12,12,0,0,1,12-12h96a12,12,0,0,1,0,24H80A12,12,0,0,1,68,128Zm0,36a12,12,0,0,1,12-12h96a12,12,0,0,1,0,24H80A12,12,0,0,1,68,164Z"/></symbol>
+      <symbol id="i-browser-bold" viewBox="0 0 256 256"><path d="M216,36H40A20,20,0,0,0,20,56V200a20,20,0,0,0,20,20H216a20,20,0,0,0,20-20V56A20,20,0,0,0,216,36Zm-4,24V84H44V60ZM44,196V108H212v88Z"/></symbol>
+      <symbol id="i-browser-fill" viewBox="0 0 256 256"><path d="M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40Zm0,16V88H40V56Z"/></symbol>
+      <symbol id="i-database-bold" viewBox="0 0 256 256"><path d="M196,35.52C177.62,25.51,153.48,20,128,20S78.38,25.51,60,35.52C39.37,46.79,28,62.58,28,80v96c0,17.42,11.37,33.21,32,44.48,18.35,10,42.49,15.52,68,15.52s49.62-5.51,68-15.52c20.66-11.27,32-27.06,32-44.48V80C228,62.58,216.63,46.79,196,35.52ZM204,128c0,17-31.21,36-76,36s-76-19-76-36v-8.46a88.9,88.9,0,0,0,8,4.94c18.35,10,42.49,15.52,68,15.52s49.62-5.51,68-15.52a88.9,88.9,0,0,0,8-4.94ZM128,44c44.79,0,76,19,76,36s-31.21,36-76,36S52,97,52,80,83.21,44,128,44Zm0,168c-44.79,0-76-19-76-36v-8.46a88.9,88.9,0,0,0,8,4.94c18.35,10,42.49,15.52,68,15.52s49.62-5.51,68-15.52a88.9,88.9,0,0,0,8-4.94V176C204,193,172.79,212,128,212Z"/></symbol>
+      <symbol id="i-devices-fill" viewBox="0 0 256 256"><path d="M224,72H208V64a24,24,0,0,0-24-24H40A24,24,0,0,0,16,64v96a24,24,0,0,0,24,24H152v8a24,24,0,0,0,24,24h48a24,24,0,0,0,24-24V96A24,24,0,0,0,224,72Zm8,120a8,8,0,0,1-8,8H176a8,8,0,0,1-8-8V96a8,8,0,0,1,8-8h48a8,8,0,0,1,8,8Zm-96,16a8,8,0,0,1-8,8H88a8,8,0,0,1,0-16h40A8,8,0,0,1,136,208Zm80-96a8,8,0,0,1-8,8H192a8,8,0,0,1,0-16h16A8,8,0,0,1,216,112Z"/></symbol>
+      <symbol id="i-game-controller-bold" viewBox="0 0 256 256"><path d="M176,116H152a12,12,0,0,1,0-24h24a12,12,0,0,1,0,24ZM104,92h-4V88a12,12,0,0,0-24,0v4H72a12,12,0,0,0,0,24h4v4a12,12,0,0,0,24,0v-4h4a12,12,0,0,0,0-24ZM244.76,202.94a40,40,0,0,1-61,5.35,7,7,0,0,1-.53-.56L144.67,164H111.33L72.81,207.73c-.17.19-.35.38-.53.56A40,40,0,0,1,4.62,173.05a1.18,1.18,0,0,1,0-.2L21,88.79A63.88,63.88,0,0,1,83.88,36H172a64.08,64.08,0,0,1,62.93,52.48,1.8,1.8,0,0,1,0,.19l16.36,84.17a1.77,1.77,0,0,1,0,.2A39.74,39.74,0,0,1,244.76,202.94ZM172,140a40,40,0,0,0,0-80H83.89A39.9,39.9,0,0,0,44.62,93.06a1.55,1.55,0,0,0,0,.21l-16.34,84a16,16,0,0,0,13,18.44,16.07,16.07,0,0,0,13.86-4.21L96.9,144.07a12,12,0,0,1,9-4.07Zm55.76,37.31-7-35.95a63.84,63.84,0,0,1-44.27,22.46l24.41,27.72a16,16,0,0,0,26.85-14.23Z"/></symbol>
+      <symbol id="i-gauge-bold" viewBox="0 0 256 256"><path d="M209.88,69.83A115.19,115.19,0,0,0,128,36h-.41C63.85,36.22,12,88.76,12,153.13V176a20,20,0,0,0,20,20H224a20,20,0,0,0,20-20V152A115.25,115.25,0,0,0,209.88,69.83ZM220,172H127.32l46.44-65A12,12,0,1,0,154.24,93L97.82,172H36V153.13c0-1.72,0-3.43.14-5.13H56a12,12,0,0,0,0-24H40.62c10.91-33.39,40-58.52,75.38-63.21V80a12,12,0,0,0,24,0V60.8A92,92,0,0,1,215.66,124H200a12,12,0,0,0,0,24h19.9c.06,1.33.1,2.66.1,4Z"/></symbol>
+      <symbol id="i-key-bold" viewBox="0 0 256 256"><path d="M196,76a16,16,0,1,1-16-16A16,16,0,0,1,196,76Zm48,22.74A84.3,84.3,0,0,1,160.11,180H160a83.52,83.52,0,0,1-23.65-3.38l-7.86,7.87A12,12,0,0,1,120,188H108v12a12,12,0,0,1-12,12H84v12a12,12,0,0,1-12,12H40a20,20,0,0,1-20-20V187.31a19.86,19.86,0,0,1,5.86-14.14l53.52-53.52A84,84,0,1,1,244,98.74ZM202.43,53.57A59.48,59.48,0,0,0,158,36c-32,1-58,27.89-58,59.89a59.69,59.69,0,0,0,4.2,22.19,12,12,0,0,1-2.55,13.21L44,189v23H60V200a12,12,0,0,1,12-12H84V176a12,12,0,0,1,12-12h19l9.65-9.65a12,12,0,0,1,13.22-2.55A59.58,59.58,0,0,0,160,156h.08c32,0,58.87-26.07,59.89-58A59.55,59.55,0,0,0,202.43,53.57Z"/></symbol>
+      <symbol id="i-layout-bold" viewBox="0 0 256 256"><path d="M216,36H40A20,20,0,0,0,20,56V200a20,20,0,0,0,20,20H216a20,20,0,0,0,20-20V56A20,20,0,0,0,216,36Zm-4,24V92H44V60ZM44,116H92v80H44Zm72,80V116h96v80Z"/></symbol>
+      <symbol id="i-link-simple-break-bold" viewBox="0 0 256 256"><path d="M218.45,122.43l-30.08,30.06a12,12,0,0,1-17-17l30.08-30.07a36,36,0,0,0-50.93-50.92L120.48,84.59a12,12,0,0,1-17-17l30.07-30.06a60,60,0,0,1,84.87,84.88Zm-82.93,49-30.07,30.08a36,36,0,0,1-50.92-50.93l30.06-30.07a12,12,0,0,0-17-17L37.55,133.58a60,60,0,0,0,84.88,84.87l30.06-30.07a12,12,0,0,0-17-17Z"/></symbol>
+      <symbol id="i-magic-wand-fill" viewBox="0 0 256 256"><path d="M248,152a8,8,0,0,1-8,8H224v16a8,8,0,0,1-16,0V160H192a8,8,0,0,1,0-16h16V128a8,8,0,0,1,16,0v16h16A8,8,0,0,1,248,152ZM56,72H72V88a8,8,0,0,0,16,0V72h16a8,8,0,0,0,0-16H88V40a8,8,0,0,0-16,0V56H56a8,8,0,0,0,0,16ZM184,192h-8v-8a8,8,0,0,0-16,0v8h-8a8,8,0,0,0,0,16h8v8a8,8,0,0,0,16,0v-8h8a8,8,0,0,0,0-16ZM219.31,80,80,219.31a16,16,0,0,1-22.62,0L36.68,198.63a16,16,0,0,1,0-22.63L176,36.69a16,16,0,0,1,22.63,0l20.68,20.68A16,16,0,0,1,219.31,80ZM208,68.69,187.31,48l-32,32L176,100.69Z"/></symbol>
+      <symbol id="i-monitor-bold" viewBox="0 0 256 256"><path d="M208,36H48A28,28,0,0,0,20,64V176a28,28,0,0,0,28,28H208a28,28,0,0,0,28-28V64A28,28,0,0,0,208,36Zm4,140a4,4,0,0,1-4,4H48a4,4,0,0,1-4-4V64a4,4,0,0,1,4-4H208a4,4,0,0,1,4,4Zm-40,52a12,12,0,0,1-12,12H96a12,12,0,0,1,0-24h64A12,12,0,0,1,172,228Z"/></symbol>
+      <symbol id="i-seal-check-bold" viewBox="0 0 256 256"><path d="M228.75,100.05c-3.52-3.67-7.15-7.46-8.34-10.33-1.06-2.56-1.14-7.83-1.21-12.47-.15-10-.34-22.44-9.18-31.27s-21.27-9-31.27-9.18c-4.64-.07-9.91-.15-12.47-1.21-2.87-1.19-6.66-4.82-10.33-8.34C148.87,20.46,140.05,12,128,12s-20.87,8.46-27.95,15.25c-3.67,3.52-7.46,7.15-10.33,8.34-2.56,1.06-7.83,1.14-12.47,1.21C67.25,37,54.81,37.14,46,46S37,67.25,36.8,77.25c-.07,4.64-.15,9.91-1.21,12.47-1.19,2.87-4.82,6.66-8.34,10.33C20.46,107.13,12,116,12,128S20.46,148.87,27.25,156c3.52,3.67,7.15,7.46,8.34,10.33,1.06,2.56,1.14,7.83,1.21,12.47.15,10,.34,22.44,9.18,31.27s21.27,9,31.27,9.18c4.64.07,9.91.15,12.47,1.21,2.87,1.19,6.66,4.82,10.33,8.34C107.13,235.54,116,244,128,244s20.87-8.46,27.95-15.25c3.67-3.52,7.46-7.15,10.33-8.34,2.56-1.06,7.83-1.14,12.47-1.21,10-.15,22.44-.34,31.27-9.18s9-21.27,9.18-31.27c.07-4.64.15-9.91,1.21-12.47,1.19-2.87,4.82-6.66,8.34-10.33C235.54,148.87,244,140.05,244,128S235.54,107.13,228.75,100.05Zm-17.32,39.29c-4.82,5-10.28,10.72-13.19,17.76-2.82,6.8-2.93,14.16-3,21.29-.08,5.36-.19,12.71-2.15,14.66s-9.3,2.07-14.66,2.15c-7.13.11-14.49.22-21.29,3-7,2.91-12.73,8.37-17.76,13.19C135.78,214.84,130.4,220,128,220s-7.78-5.16-11.34-8.57c-5-4.82-10.72-10.28-17.76-13.19-6.8-2.82-14.16-2.93-21.29-3-5.36-.08-12.71-.19-14.66-2.15s-2.07-9.3-2.15-14.66c-.11-7.13-.22-14.49-3-21.29-2.91-7-8.37-12.73-13.19-17.76C41.16,135.78,36,130.4,36,128s5.16-7.78,8.57-11.34c4.82-5,10.28-10.72,13.19-17.76,2.82-6.8,2.93-14.16,3-21.29C60.88,72.25,61,64.9,63,63s9.3-2.07,14.66-2.15c7.13-.11,14.49-.22,21.29-3,7-2.91,12.73-8.37,17.76-13.19C120.22,41.16,125.6,36,128,36s7.78,5.16,11.34,8.57c5,4.82,10.72,10.28,17.76,13.19,6.8,2.82,14.16,2.93,21.29,3,5.36.08,12.71.19,14.66,2.15s2.07,9.3,2.15,14.66c.11,7.13.22,14.49,3,21.29,2.91,7,8.37,12.73,13.19,17.76,3.41,3.56,8.57,8.94,8.57,11.34S214.84,135.78,211.43,139.34ZM176.49,95.51a12,12,0,0,1,0,17l-56,56a12,12,0,0,1-17,0l-24-24a12,12,0,1,1,17-17L112,143l47.51-47.52A12,12,0,0,1,176.49,95.51Z"/></symbol>
+      <symbol id="i-shield-check-bold" viewBox="0 0 256 256"><path d="M208,36H48A20,20,0,0,0,28,56v56c0,54.29,26.32,87.22,48.4,105.29,23.71,19.39,47.44,26,48.44,26.29a12.1,12.1,0,0,0,6.32,0c1-.28,24.73-6.9,48.44-26.29,22.08-18.07,48.4-51,48.4-105.29V56A20,20,0,0,0,208,36Zm-4,76c0,35.71-13.09,64.69-38.91,86.15A126.28,126.28,0,0,1,128,219.38a126.14,126.14,0,0,1-37.09-21.23C65.09,176.69,52,147.71,52,112V60H204ZM79.51,144.49a12,12,0,1,1,17-17L112,143l47.51-47.52a12,12,0,0,1,17,17l-56,56a12,12,0,0,1-17,0Z"/></symbol>
+      <symbol id="i-user-focus-bold" viewBox="0 0 256 256"><path d="M228,40V76a12,12,0,0,1-24,0V52H180a12,12,0,0,1,0-24h36A12,12,0,0,1,228,40ZM216,168a12,12,0,0,0-12,12v24H180a12,12,0,0,0,0,24h36a12,12,0,0,0,12-12V180A12,12,0,0,0,216,168ZM76,204H52V180a12,12,0,0,0-24,0v36a12,12,0,0,0,12,12H76a12,12,0,0,0,0-24ZM40,88A12,12,0,0,0,52,76V52H76a12,12,0,0,0,0-24H40A12,12,0,0,0,28,40V76A12,12,0,0,0,40,88Zm136,92a12,12,0,0,1-9.6-4.79,48,48,0,0,0-76.82,0,12,12,0,0,1-19.18-14.42,72.1,72.1,0,0,1,23.92-20.5,44,44,0,1,1,67.34,0,72.1,72.1,0,0,1,23.92,20.5A12,12,0,0,1,176,180Zm-48-48a20,20,0,1,0-20-20A20,20,0,0,0,128,132Z"/></symbol>
+      <symbol id="i-users-bold" viewBox="0 0 256 256"><path d="M125.18,156.94a64,64,0,1,0-82.36,0,100.23,100.23,0,0,0-39.49,32,12,12,0,0,0,19.35,14.2,76,76,0,0,1,122.64,0,12,12,0,0,0,19.36-14.2A100.33,100.33,0,0,0,125.18,156.94ZM44,108a40,40,0,1,1,40,40A40,40,0,0,1,44,108Zm206.1,97.67a12,12,0,0,1-16.78-2.57A76.31,76.31,0,0,0,172,172a12,12,0,0,1,0-24,40,40,0,1,0-10.3-78.67,12,12,0,1,1-6.16-23.19,64,64,0,0,1,57.64,110.8,100.23,100.23,0,0,1,39.49,32A12,12,0,0,1,250.1,205.67Z"/></symbol>
+      <symbol id="i-users-three-bold" viewBox="0 0 256 256"><path d="M164.38,181.1a52,52,0,1,0-72.76,0,75.89,75.89,0,0,0-30,28.89,12,12,0,0,0,20.78,12,53,53,0,0,1,91.22,0,12,12,0,1,0,20.78-12A75.89,75.89,0,0,0,164.38,181.1ZM100,144a28,28,0,1,1,28,28A28,28,0,0,1,100,144Zm147.21,9.59a12,12,0,0,1-16.81-2.39c-8.33-11.09-19.85-19.59-29.33-21.64a12,12,0,0,1-1.82-22.91,20,20,0,1,0-24.78-28.3,12,12,0,1,1-21-11.6,44,44,0,1,1,73.28,48.35,92.18,92.18,0,0,1,22.85,21.69A12,12,0,0,1,247.21,153.59Zm-192.28-24c-9.48,2.05-21,10.55-29.33,21.65A12,12,0,0,1,6.41,136.79,92.37,92.37,0,0,1,29.26,115.1a44,44,0,1,1,73.28-48.35,12,12,0,1,1-21,11.6,20,20,0,1,0-24.78,28.3,12,12,0,0,1-1.82,22.91Z"/></symbol>
+      <symbol id="i-users-three-fill" viewBox="0 0 256 256"><path d="M64.12,147.8a4,4,0,0,1-4,4.2H16a8,8,0,0,1-7.8-6.17,8.35,8.35,0,0,1,1.62-6.93A67.79,67.79,0,0,1,37,117.51a40,40,0,1,1,66.46-35.8,3.94,3.94,0,0,1-2.27,4.18A64.08,64.08,0,0,0,64,144C64,145.28,64,146.54,64.12,147.8Zm182-8.91A67.76,67.76,0,0,0,219,117.51a40,40,0,1,0-66.46-35.8,3.94,3.94,0,0,0,2.27,4.18A64.08,64.08,0,0,1,192,144c0,1.28,0,2.54-.12,3.8a4,4,0,0,0,4,4.2H240a8,8,0,0,0,7.8-6.17A8.33,8.33,0,0,0,246.17,138.89Zm-89,43.18a48,48,0,1,0-58.37,0A72.13,72.13,0,0,0,65.07,212,8,8,0,0,0,72,224H184a8,8,0,0,0,6.93-12A72.15,72.15,0,0,0,157.19,182.07Z"/></symbol>
+      <symbol id="i-github" viewBox="0 0 24 24"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></symbol>
+      <symbol id="i-apple" viewBox="0 0 384 512"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></symbol>
+    </svg>
 
     <!-- Background Particle Canvas -->
     <canvas id="particles" class="fixed inset-0 w-full h-full z-0 pointer-events-none opacity-60"></canvas>
@@ -746,13 +161,13 @@
                         </p>
                         
                         <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
-                            <a href="https://github.com/johnwatso/SwiftMiner/releases/download/v1.30/SwiftMiner-1.30.zip" data-latest-download class="hero-cta w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-4 bg-gradient-to-br from-brand-purple to-brand-violet rounded-xl text-white font-bold text-lg hover:shadow-[0_8px_30px_rgba(147,51,234,0.4)] hover:-translate-y-1 transition-all">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" fill="currentColor" class="w-5 h-5"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></svg>
+                            <a href="https://github.com/johnwatso/SwiftMiner/releases/download/v1.32/SwiftMiner-1.32.zip" data-latest-download class="hero-cta w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-4 bg-gradient-to-br from-brand-purple to-brand-violet rounded-xl text-white font-bold text-lg hover:shadow-[0_8px_30px_rgba(147,51,234,0.4)] hover:-translate-y-1 transition-all">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" fill="currentColor" class="w-5 h-5"><use href="#i-apple"/></svg>
                                 Download for Mac
                             </a>
                             <a href="https://github.com/johnwatso/SwiftMiner" class="hero-cta w-full sm:w-auto px-5 py-4 glass-panel rounded-xl text-slate-900 dark:text-white font-bold text-lg hover:bg-black/5 dark:hover:bg-white/10 hover:-translate-y-1 transition-all flex items-center justify-center gap-2">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
-                                    <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/>
+                                    <use href="#i-github"/>
                                 </svg>
                                 View on GitHub
                             </a>
@@ -763,26 +178,26 @@
                     <!-- Hero Image -->
                     <div class="hero-screenshot reveal" style="transition-delay: 200ms;">
                         <div class="screenshot-frame">
-                            <img src="./assets/landing/overview-dark.webp" data-screenshot="overview" width="2032" height="1072" fetchpriority="high" decoding="async" onerror="this.src='https://placehold.co/800x550/090514/00e5ff?text=Overview+Screen'" alt="SwiftMiner Twitch Drops miner dashboard showing active campaigns on macOS" class="w-full">
+                            <img src="./assets/landing/overview-dark.webp" data-screenshot="overview" width="2032" height="1072" fetchpriority="high" decoding="async" alt="SwiftMiner Twitch Drops miner dashboard showing active campaigns on macOS" class="w-full">
                         </div>
                     </div>
 
                     <div class="trust-strip reveal" style="transition-delay: 280ms;">
                         <span class="trust-badge">
                             <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" class="text-brand-cyan">
-                                <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/>
+                                <use href="#i-github"/>
                             </svg>
                             Free &amp; Open Source
                         </span>
-                        <span class="trust-badge"><i class="ph-bold ph-seal-check text-brand-purple"></i>Signed &amp; Notarized by Apple</span>
+                        <span class="trust-badge"><svg class="ph-icon text-brand-purple" aria-hidden="true"><use href="#i-seal-check-bold"/></svg>Signed &amp; Notarized by Apple</span>
                         <span class="trust-badge">
                             <svg viewBox="0 0 340 268" fill="none" aria-hidden="true">
                                 <path fill="#2560ff" d="M334,110.1c-8.3-5.6-30.2-8-46.1-3.7-.9-15.8-9-29.2-24-40.8l-5.5-3.7-3.7,5.6c-7.2,11-10.3,25.7-9.2,39,.8,8.2,3.7,17.4,9.2,24.1-20.7,12-39.8,9.3-124.3,9.3H0c-.4,19.1,2.7,55.8,26,85.6,2.6,3.3,5.4,6.5,8.5,9.6,19,19,47.6,32.9,90.5,33,65.4,0,121.4-35.3,155.5-120.8,11.2.2,40.8,2,55.3-26,.4-.5,3.7-7.4,3.7-7.4l-5.5-3.7h0ZM85.2,92.7h-36.7v36.7h36.7v-36.7ZM132.6,92.7h-36.7v36.7h36.7v-36.7ZM179.9,92.7h-36.7v36.7h36.7v-36.7ZM227.3,92.7h-36.7v36.7h36.7v-36.7ZM37.8,92.7H1.1v36.7h36.7v-36.7ZM85.2,46.3h-36.7v36.7h36.7v-36.7ZM132.6,46.3h-36.7v36.7h36.7v-36.7ZM179.9,46.3h-36.7v36.7h36.7v-36.7ZM179.9,0h-36.7v36.7h36.7V0Z"/>
                             </svg>
                             No Docker Required
                         </span>
-                        <span class="trust-badge"><i class="ph-bold ph-database text-brand-purple"></i>Runs 100% on your Mac</span>
-                        <span class="trust-badge"><i class="ph-bold ph-users-three text-brand-cyan"></i>Multi-Account Support</span>
+                        <span class="trust-badge"><svg class="ph-icon text-brand-purple" aria-hidden="true"><use href="#i-database-bold"/></svg>Runs 100% on your Mac</span>
+                        <span class="trust-badge"><svg class="ph-icon text-brand-cyan" aria-hidden="true"><use href="#i-users-three-bold"/></svg>Multi-Account Support</span>
                     </div>
 
                     <p class="hero-resource-links text-xs sm:text-sm text-slate-500 dark:text-gray-500 max-w-3xl mx-auto leading-relaxed text-center reveal" style="transition-delay: 320ms;">
@@ -809,7 +224,7 @@
                         <div class="relative z-10 flex flex-col h-full justify-between">
                             <div>
                                 <div class="w-12 h-12 rounded-full bg-brand-purple/20 flex items-center justify-center text-brand-purple mb-4 border border-brand-purple/30 shadow-lg">
-                                    <i class="ph-fill ph-users-three text-2xl"></i>
+                                    <svg class="ph-icon text-2xl" aria-hidden="true"><use href="#i-users-three-fill"/></svg>
                                 </div>
                                 <h3 class="text-xl font-bold mb-2 text-slate-900 dark:text-white">Friends & Group Setups</h3>
                             </div>
@@ -822,7 +237,7 @@
                         <div class="relative z-10 flex flex-col h-full justify-between">
                             <div>
                                 <div class="w-12 h-12 rounded-full bg-brand-cyan/20 flex items-center justify-center text-brand-cyan mb-4 border border-brand-cyan/30">
-                                    <i class="ph-fill ph-magic-wand text-2xl"></i>
+                                    <svg class="ph-icon text-2xl" aria-hidden="true"><use href="#i-magic-wand-fill"/></svg>
                                 </div>
                                 <h3 class="text-xl font-bold mb-2 text-slate-900 dark:text-white">Auto Claim Twitch Drops</h3>
                             </div>
@@ -835,7 +250,7 @@
                         <div class="relative z-10 flex flex-col h-full justify-between">
                             <div>
                                 <div class="w-12 h-12 rounded-full bg-brand-magenta/20 flex items-center justify-center text-brand-magenta mb-4 border border-brand-magenta/30">
-                                    <i class="ph-fill ph-devices text-2xl"></i>
+                                    <svg class="ph-icon text-2xl" aria-hidden="true"><use href="#i-devices-fill"/></svg>
                                 </div>
                                 <h3 class="text-xl font-bold mb-2 text-slate-900 dark:text-white">Check in from anywhere</h3>
                             </div>
@@ -867,7 +282,7 @@
                         <div class="relative z-10 flex flex-col h-full justify-between">
                             <div>
                                 <div class="w-12 h-12 rounded-full bg-white/10 dark:bg-white/10 bg-slate-800/10 flex items-center justify-center text-slate-700 dark:text-white mb-4 border border-black/10 dark:border-white/20">
-                                    <i class="ph-fill ph-arrows-clockwise text-2xl"></i>
+                                    <svg class="ph-icon text-2xl" aria-hidden="true"><use href="#i-arrows-clockwise-fill"/></svg>
                                 </div>
                                 <h3 class="text-xl font-bold mb-2 text-slate-900 dark:text-white">Automatic updates</h3>
                             </div>
@@ -880,7 +295,7 @@
                         <div class="relative z-10 flex flex-col h-full justify-between">
                             <div>
                                 <div class="w-12 h-12 rounded-full bg-white/10 dark:bg-white/10 bg-slate-800/10 flex items-center justify-center text-slate-700 dark:text-white mb-4 border border-black/10 dark:border-white/20">
-                                    <i class="ph-bold ph-monitor text-2xl"></i>
+                                    <svg class="ph-icon text-2xl" aria-hidden="true"><use href="#i-monitor-bold"/></svg>
                                 </div>
                                 <h3 class="text-xl font-bold mb-2 text-slate-900 dark:text-white">Menu bar mode</h3>
                             </div>
@@ -894,7 +309,7 @@
                     <div class="webui-showcase-layout relative z-10">
                         <div class="webui-showcase-copy">
                             <div class="w-12 h-12 rounded-full bg-brand-magenta/20 flex items-center justify-center text-brand-magenta mb-5 border border-brand-magenta/30">
-                                <i class="ph-fill ph-browser text-2xl"></i>
+                                <svg class="ph-icon text-2xl" aria-hidden="true"><use href="#i-browser-fill"/></svg>
                             </div>
                             <h3 class="text-2xl md:text-3xl font-bold mb-3 text-slate-900 dark:text-white">Web Dashboard</h3>
                             <p class="text-slate-500 dark:text-gray-400 text-sm md:text-base leading-relaxed">Check progress and control miners from your phone, tablet, or any browser on your network without keeping the main Mac app in front.</p>
@@ -920,52 +335,52 @@
                     <article class="screenshot-card reveal">
                         <div class="screenshot-copy">
                             <div class="w-12 h-12 rounded-full bg-brand-purple/20 flex items-center justify-center text-brand-purple mb-5 border border-brand-purple/30 shadow-lg">
-                                <i class="ph-bold ph-layout text-2xl"></i>
+                                <svg class="ph-icon text-2xl" aria-hidden="true"><use href="#i-layout-bold"/></svg>
                             </div>
                             <h3 class="text-2xl md:text-3xl font-bold mb-3 text-slate-900 dark:text-white">Everything in one view</h3>
                             <p class="text-slate-600 dark:text-gray-400 leading-relaxed">See active Twitch Drops miners, stream status, upcoming rewards, and priority games from a single macOS dashboard.</p>
                         </div>
                         <div class="screenshot-frame">
-                            <img data-screenshot="overview" src="./assets/landing/overview-dark.webp" width="2032" height="1072" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/1200x630/090514/00e5ff?text=Overview+Screen'" alt="Overview Screen" class="w-full transition-all duration-300 opacity-100">
+                            <img data-screenshot="overview" src="./assets/landing/overview-dark.webp" width="2032" height="1072" loading="lazy" decoding="async" alt="Overview Screen" class="w-full transition-all duration-300 opacity-100">
                         </div>
                     </article>
 
                     <article class="screenshot-card reveal">
                         <div class="screenshot-copy">
                             <div class="w-12 h-12 rounded-full bg-brand-cyan/20 flex items-center justify-center text-brand-cyan mb-5 border border-brand-cyan/30 shadow-lg">
-                                <i class="ph-bold ph-users text-2xl"></i>
+                                <svg class="ph-icon text-2xl" aria-hidden="true"><use href="#i-users-bold"/></svg>
                             </div>
                             <h3 class="text-2xl md:text-3xl font-bold mb-3 text-slate-900 dark:text-white">Multi-account control</h3>
                             <p class="text-slate-600 dark:text-gray-400 leading-relaxed">Add your Twitch account and friends, then keep each miner configured with its own campaign priorities.</p>
                         </div>
                         <div class="screenshot-frame">
-                            <img data-screenshot="miners" src="./assets/landing/miners-dark.webp" width="3358" height="1760" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/1200x630/090514/00e5ff?text=Miners+Screen'" alt="Miners Screen" class="w-full transition-all duration-300 opacity-100">
+                            <img data-screenshot="miners" src="./assets/landing/miners-dark.webp" width="3358" height="1760" loading="lazy" decoding="async" alt="Miners Screen" class="w-full transition-all duration-300 opacity-100">
                         </div>
                     </article>
 
                     <article class="screenshot-card reveal">
                         <div class="screenshot-copy">
                             <div class="w-12 h-12 rounded-full bg-brand-magenta/20 flex items-center justify-center text-brand-magenta mb-5 border border-brand-magenta/30 shadow-lg">
-                                <i class="ph-bold ph-game-controller text-2xl"></i>
+                                <svg class="ph-icon text-2xl" aria-hidden="true"><use href="#i-game-controller-bold"/></svg>
                             </div>
                             <h3 class="text-2xl md:text-3xl font-bold mb-3 text-slate-900 dark:text-white">Drops progress tracking</h3>
                             <p class="text-slate-600 dark:text-gray-400 leading-relaxed">Track active, completed, and upcoming Twitch Drops while SwiftMiner chooses eligible streams and keeps progress moving in the background.</p>
                         </div>
                         <div class="screenshot-frame">
-                            <img data-screenshot="drops" src="./assets/landing/drops-dark.webp" width="3358" height="1760" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/1200x630/090514/00e5ff?text=Drops+Screen'" alt="Drops Screen" class="w-full transition-all duration-300 opacity-100">
+                            <img data-screenshot="drops" src="./assets/landing/drops-dark.webp" width="3358" height="1760" loading="lazy" decoding="async" alt="Drops Screen" class="w-full transition-all duration-300 opacity-100">
                         </div>
                     </article>
 
                     <article class="screenshot-card reveal">
                         <div class="screenshot-copy">
                             <div class="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-brand-cyan mb-5 border border-brand-cyan/20 shadow-lg">
-                                <i class="ph-bold ph-article text-2xl"></i>
+                                <svg class="ph-icon text-2xl" aria-hidden="true"><use href="#i-article-bold"/></svg>
                             </div>
                             <h3 class="text-2xl md:text-3xl font-bold mb-3 text-slate-900 dark:text-white">See everything it does</h3>
                             <p class="text-slate-600 dark:text-gray-400 leading-relaxed">Review stream changes, claim attempts, scan results, and account events from a readable local activity log.</p>
                         </div>
                         <div class="screenshot-frame">
-                            <img data-screenshot="activity-log" src="./assets/landing/activity-log-dark.webp" width="3358" height="1760" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/1200x630/090514/00e5ff?text=Activity+Logs+Screen'" alt="Activity Logs Screen" class="w-full transition-all duration-300 opacity-100">
+                            <img data-screenshot="activity-log" src="./assets/landing/activity-log-dark.webp" width="3358" height="1760" loading="lazy" decoding="async" alt="Activity Logs Screen" class="w-full transition-all duration-300 opacity-100">
                         </div>
                     </article>
                 </div>
@@ -1040,22 +455,22 @@
                     </div>
                     <div class="privacy-grid">
                         <div class="glass-panel rounded-3xl utility-card reveal">
-                            <div class="privacy-icon"><i class="ph-bold ph-key"></i></div>
+                            <div class="privacy-icon"><svg class="ph-icon" aria-hidden="true"><use href="#i-key-bold"/></svg></div>
                             <h3 class="font-bold text-xl mb-2 text-slate-900 dark:text-white">No password handling</h3>
                             <p class="text-sm text-slate-500 dark:text-gray-400 leading-relaxed">SwiftMiner uses Twitch's device-code sign-in. It never asks for, receives, records, or stores your Twitch password; access tokens are kept in macOS Keychain.</p>
                         </div>
                         <div class="glass-panel rounded-3xl utility-card reveal" style="transition-delay: 80ms;">
-                            <div class="privacy-icon cyan"><i class="ph-bold ph-browser"></i></div>
+                            <div class="privacy-icon cyan"><svg class="ph-icon" aria-hidden="true"><use href="#i-browser-bold"/></svg></div>
                             <h3 class="font-bold text-xl mb-2 text-slate-900 dark:text-white">Protected Web Dashboard</h3>
                             <p class="text-sm text-slate-500 dark:text-gray-400 leading-relaxed">The optional Web Dashboard supports login protection before browser access is allowed.</p>
                         </div>
                         <div class="glass-panel rounded-3xl utility-card reveal" style="transition-delay: 160ms;">
-                            <div class="privacy-icon magenta"><i class="ph-bold ph-link-simple-break"></i></div>
+                            <div class="privacy-icon magenta"><svg class="ph-icon" aria-hidden="true"><use href="#i-link-simple-break-bold"/></svg></div>
                             <h3 class="font-bold text-xl mb-2 text-slate-900 dark:text-white">Remote access is optional</h3>
                             <p class="text-sm text-slate-500 dark:text-gray-400 leading-relaxed">Network and tunnel features are opt-in, so local use stays local unless you enable them.</p>
                         </div>
                         <div class="glass-panel rounded-3xl utility-card reveal" style="transition-delay: 240ms;">
-                            <div class="privacy-icon neutral"><i class="ph-bold ph-user-focus"></i></div>
+                            <div class="privacy-icon neutral"><svg class="ph-icon" aria-hidden="true"><use href="#i-user-focus-bold"/></svg></div>
                             <h3 class="font-bold text-xl mb-2 text-slate-900 dark:text-white">Scoped external logins</h3>
                             <p class="text-sm text-slate-500 dark:text-gray-400 leading-relaxed">When internet access is enabled, Twitch OAuth keeps people limited to their own miners.</p>
                         </div>
@@ -1088,7 +503,7 @@
                         <div class="relative z-10 flex flex-col h-full justify-between gap-4">
                             <div>
                                 <div class="w-12 h-12 rounded-full bg-brand-cyan/20 flex items-center justify-center text-brand-cyan mb-6 border border-brand-cyan/30 shadow-lg">
-                                    <i class="ph-bold ph-gauge text-2xl"></i>
+                                    <svg class="ph-icon text-2xl" aria-hidden="true"><use href="#i-gauge-bold"/></svg>
                                 </div>
                                 <h3 class="text-2xl font-bold mb-3 text-slate-900 dark:text-white">Quiet background work</h3>
                                 <p class="text-slate-500 dark:text-gray-400 text-sm leading-relaxed">
@@ -1104,7 +519,7 @@
                         <div class="relative z-10 flex flex-col h-full justify-between gap-4">
                             <div>
                                 <div class="w-12 h-12 rounded-full bg-brand-purple/20 flex items-center justify-center text-brand-purple mb-6 border border-brand-purple/30 shadow-lg">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" fill="currentColor" class="w-6 h-6"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></svg>
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" fill="currentColor" class="w-6 h-6"><use href="#i-apple"/></svg>
                                 </div>
                                 <h3 class="text-2xl font-bold mb-3 text-slate-900 dark:text-white">Apple Silicon and Intel</h3>
                                 <p class="text-slate-500 dark:text-gray-400 text-sm leading-relaxed">
@@ -1138,7 +553,7 @@
                         <div class="relative z-10 flex flex-col h-full justify-between gap-4">
                             <div>
                                 <div class="w-12 h-12 rounded-full bg-white/10 dark:bg-white/10 bg-slate-800/10 flex items-center justify-center text-slate-700 dark:text-white mb-6 border border-black/10 dark:border-white/20 shadow-lg">
-                                    <i class="ph-bold ph-shield-check text-2xl"></i>
+                                    <svg class="ph-icon text-2xl" aria-hidden="true"><use href="#i-shield-check-bold"/></svg>
                                 </div>
                                 <h3 class="text-2xl font-bold mb-3 text-slate-900 dark:text-white">100% Open Source</h3>
                                 <p class="text-slate-500 dark:text-gray-400 text-sm leading-relaxed">
@@ -1164,7 +579,6 @@
                     <div class="relative z-10 flex flex-col items-center">
                         <img src="./assets/landing/app-icon-light.webp"
                              width="1024" height="1024" loading="lazy" decoding="async"
-                             onerror="this.src='https://placehold.co/128x128/9333ea/ffffff?text=SM'"
                              class="w-24 h-24 rounded-[20px] shadow-[0_10px_30px_rgba(147,51,234,0.3)] mb-8" alt="SwiftMiner Icon">
                         
                         <h2 class="text-4xl md:text-6xl font-bold mb-6 text-slate-900 dark:text-white drop-shadow-lg tracking-tight">Ready for the <span class="text-brand-purple">next drop.</span></h2>
@@ -1172,8 +586,8 @@
                             Free, open source, and ready in about a minute. Download the latest signed release and let SwiftMiner handle the watch progress.
                         </p>
                         
-                        <a href="https://github.com/johnwatso/SwiftMiner/releases/download/v1.30/SwiftMiner-1.30.zip" data-latest-download class="flex items-center gap-3 px-10 py-5 bg-gradient-to-br from-brand-purple to-brand-violet rounded-2xl text-white font-bold text-xl hover:shadow-[0_12px_40px_rgba(147,51,234,0.4)] hover:-translate-y-1 transition-all">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" fill="currentColor" class="w-6 h-6"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></svg>
+                        <a href="https://github.com/johnwatso/SwiftMiner/releases/download/v1.32/SwiftMiner-1.32.zip" data-latest-download class="flex items-center gap-3 px-10 py-5 bg-gradient-to-br from-brand-purple to-brand-violet rounded-2xl text-white font-bold text-xl hover:shadow-[0_12px_40px_rgba(147,51,234,0.4)] hover:-translate-y-1 transition-all">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" fill="currentColor" class="w-6 h-6"><use href="#i-apple"/></svg>
                             Get SwiftMiner
                         </a>
                         <p class="mt-6 text-sm text-slate-500 dark:text-gray-500">Free · Requires macOS 26.0 or later · Auto-updates.</p>
@@ -1197,276 +611,8 @@
 
     </main>
 
-    <!-- Interactions Script -->
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const scrollContainer = document.querySelector('.snap-scroller');
-
-            function resetScrollForFreshLoad() {
-                if (!scrollContainer || window.location.hash) return;
-                scrollContainer.scrollTo({ top: 0, left: 0, behavior: 'auto' });
-            }
-
-            resetScrollForFreshLoad();
-            requestAnimationFrame(resetScrollForFreshLoad);
-            window.addEventListener('pageshow', resetScrollForFreshLoad);
-
-            const pageSections = scrollContainer ? Array.from(scrollContainer.querySelectorAll(':scope > section')) : [];
-            const screenshotCards = scrollContainer ? Array.from(scrollContainer.querySelectorAll('.screenshot-card')) : [];
-
-            // High-performance scroll tracking via IntersectionObserver
-            // replacing the laggy scroll event listener and visibleScore getBoundingClientRect calls.
-            if (scrollContainer && pageSections.length > 0) {
-                const sectionObserver = new IntersectionObserver((entries) => {
-                    let activeSection = null;
-                    entries.forEach(entry => {
-                        if (entry.isIntersecting) {
-                            activeSection = entry.target;
-                        }
-                    });
-                    if (activeSection) {
-                        pageSections.forEach(section => {
-                            section.classList.toggle('is-current-section', section === activeSection);
-                        });
-                    }
-                }, {
-                    root: scrollContainer,
-                    rootMargin: "-50% 0px -50% 0px",
-                    threshold: 0
-                });
-                pageSections.forEach(section => sectionObserver.observe(section));
-            }
-
-            if (scrollContainer && screenshotCards.length > 0) {
-                const cardObserver = new IntersectionObserver((entries) => {
-                    entries.forEach(entry => {
-                        if (entry.isIntersecting) {
-                            screenshotCards.forEach(card => {
-                                card.classList.toggle('is-current-card', card === entry.target);
-                            });
-                        }
-                    });
-                }, {
-                    root: scrollContainer,
-                    rootMargin: "-45% 0px -45% 0px",
-                    threshold: 0
-                });
-                screenshotCards.forEach(card => cardObserver.observe(card));
-            }
-
-            // Immediately mark sections-ready so CSS states initialize cleanly
-            document.body.classList.add('sections-ready');
-
-            // Reveal on Scroll Initialization
-            const observerOptions = {
-                root: scrollContainer,
-                threshold: 0.08,
-                rootMargin: "0px 0px -30px 0px"
-            };
-
-            // Reveal once, then stop observing — avoids re-running transitions and
-            // style recalcs on every scroll pass (a source of scroll jank).
-            const observer = new IntersectionObserver((entries) => {
-                entries.forEach(entry => {
-                    if (entry.isIntersecting) {
-                        entry.target.classList.add('active');
-                        observer.unobserve(entry.target);
-                    }
-                });
-            }, observerOptions);
-
-            document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
-
-            const privacyLock = document.querySelector('.privacy-lock');
-            if (privacyLock) {
-                const lockObserver = new IntersectionObserver((entries) => {
-                    entries.forEach(entry => {
-                        if (entry.isIntersecting) {
-                            privacyLock.classList.add('is-locked');
-                        } else {
-                            privacyLock.classList.remove('is-locked');
-                        }
-                    });
-                }, {
-                    root: scrollContainer,
-                    threshold: 0.1,
-                    rootMargin: "0px 0px -40px 0px"
-                });
-                lockObserver.observe(privacyLock);
-            }
-
-            let particlesReady = false;
-            
-            const screenshotAssetVersion = '20260623';
-
-            function applyTheme(isLight) {
-                const theme = isLight ? 'light' : 'dark';
-                document.querySelector('#theme-color').content = isLight ? '#f8fafc' : '#120d2b';
-                [document.documentElement, document.body].forEach(element => {
-                    if (!element) return;
-                    element.classList.toggle('light', isLight);
-                    element.classList.toggle('dark', !isLight);
-                    element.dataset.theme = theme;
-                });
-                // Swap screenshots based on mode
-                document.querySelectorAll('img[data-screenshot]').forEach(img => {
-                    const type = img.getAttribute('data-screenshot');
-                    img.src = `./assets/landing/${type}-${isLight ? 'light' : 'dark'}.webp?v=${screenshotAssetVersion}`;
-                });
-
-                // Re-initialize particles to update their colors
-                if (particlesReady && typeof initParticles === 'function') {
-                    initParticles();
-                }
-            }
-
-            // Sync toggle state and apply initial theme images on load
-            const systemThemeQuery = window.matchMedia('(prefers-color-scheme: light)');
-            applyTheme(systemThemeQuery.matches);
-
-            // Follow OS theme changes.
-            systemThemeQuery.addEventListener('change', (e) => {
-                applyTheme(e.matches);
-            });
-
-            const themeToggleBtn = document.getElementById('theme-toggle');
-            if (themeToggleBtn) {
-                themeToggleBtn.addEventListener('click', () => {
-                    const isLight = !document.documentElement.classList.contains('light');
-                    applyTheme(isLight);
-                });
-            }
-
-            // Particle Canvas Background
-            const canvas = document.getElementById('particles');
-            const ctx = canvas.getContext('2d');
-            let width, height, particles;
-            let particleRafId = null;
-            const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-            function initParticles() {
-                width = canvas.width = window.innerWidth;
-                height = canvas.height = window.innerHeight;
-                particles = [];
-                const particleCount = Math.min(Math.floor(width / 32), 50); // Scale based on screen size
-                const isLight = document.documentElement.classList.contains('light');
-
-                for(let i = 0; i < particleCount; i++) {
-                    const rand = Math.random();
-                    let color = isLight ? 'rgba(147, 51, 234, 0.15)' : 'rgba(147, 51, 234, 0.4)'; // brand purple
-                    if (rand < 0.33) {
-                        color = isLight ? 'rgba(0, 180, 216, 0.15)' : 'rgba(0, 229, 255, 0.4)'; // cyan
-                    } else if (rand < 0.66) {
-                        color = isLight ? 'rgba(255, 0, 127, 0.12)' : 'rgba(255, 0, 127, 0.4)'; // neon magenta
-                    }
-                    particles.push({
-                        x: Math.random() * width,
-                        y: Math.random() * height,
-                        vx: (Math.random() - 0.5) * 0.4,
-                        vy: (Math.random() - 0.5) * 0.4,
-                        size: Math.random() * 1.5 + 0.5,
-                        color: color
-                    });
-                }
-
-                // In reduced-motion mode the loop never runs, so paint one static frame
-                // (also keeps colors correct after a theme toggle).
-                if (reduceMotion) {
-                    ctx.clearRect(0, 0, width, height);
-                    particles.forEach(p => {
-                        ctx.beginPath();
-                        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-                        ctx.fillStyle = p.color;
-                        ctx.fill();
-                    });
-                }
-            }
-
-            function animateParticles() {
-                ctx.clearRect(0, 0, width, height);
-
-                particles.forEach(p => {
-                    p.x += p.vx;
-                    p.y += p.vy;
-
-                    if(p.x < 0 || p.x > width) p.vx *= -1;
-                    if(p.y < 0 || p.y > height) p.vy *= -1;
-
-                    ctx.beginPath();
-                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-                    ctx.fillStyle = p.color;
-                    ctx.fill();
-                });
-
-                particleRafId = requestAnimationFrame(animateParticles);
-            }
-
-            function startParticles() {
-                // Don't run the loop if the user prefers reduced motion or the tab is hidden.
-                if (reduceMotion || document.hidden || particleRafId !== null) return;
-                particleRafId = requestAnimationFrame(animateParticles);
-            }
-
-            function stopParticles() {
-                if (particleRafId !== null) {
-                    cancelAnimationFrame(particleRafId);
-                    particleRafId = null;
-                }
-            }
-
-            particlesReady = true;
-            initParticles(); // paints a static frame when reduced-motion is set
-            startParticles(); // no-op under reduced motion
-
-            // Pause the animation loop whenever the tab is backgrounded.
-            document.addEventListener('visibilitychange', () => {
-                if (document.hidden) stopParticles();
-                else startParticles();
-            });
-
-            // Debounce resize so repeated events (e.g. mobile URL-bar show/hide) don't thrash.
-            let resizeTimer = null;
-            window.addEventListener('resize', () => {
-                clearTimeout(resizeTimer);
-                resizeTimer = setTimeout(initParticles, 200);
-            });
-        });
-    </script>
-
-    <script>
-        (function () {
-            var links = Array.prototype.slice.call(document.querySelectorAll('[data-latest-download]'));
-            if (!links.length) return;
-
-            function apply(url) {
-                links.forEach(function (link) {
-                    link.href = url;
-                });
-            }
-
-            fetch('https://api.github.com/repos/johnwatso/SwiftMiner/releases/latest', {
-                headers: { 'Accept': 'application/vnd.github+json' }
-            })
-                .then(function (response) {
-                    return response.ok ? response.json() : Promise.reject();
-                })
-                .then(function (release) {
-                    var assets = release.assets || [];
-                    var zip = assets.find(function (asset) {
-                        return /^SwiftMiner-.*\.zip$/.test(asset.name || '');
-                    }) || assets.find(function (asset) {
-                        return /\.zip$/.test(asset.name || '');
-                    });
-
-                    if (zip && zip.browser_download_url) {
-                        apply(zip.browser_download_url);
-                    }
-                })
-                .catch(function () {
-                    // Keep the checked-in ZIP URL if GitHub's API is unavailable.
-                });
-        })();
-    </script>
+    <!-- Interactions, theme, particle canvas, latest-download resolver -->
+    <script src="./assets/js/site.js" defer></script>
 
 </body>
 </html>

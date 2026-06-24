@@ -1,0 +1,620 @@
+html {
+    min-height: 100%;
+    background: #120d2b;
+    color-scheme: dark;
+}
+
+body {
+    background: linear-gradient(135deg, #090514, #120e2e, #090616) #120d2b;
+    background-size: 400% 400%;
+    animation: gradient-pan 20s ease infinite alternate;
+    color: rgba(255, 255, 255, 0.94);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    overflow: hidden; /* Main wrapper handles scrolling */
+    transition: background 0.5s ease, color 0.5s ease;
+}
+
+html.light {
+    background: #f8fafc;
+    color-scheme: light;
+}
+
+html.light body {
+    background: linear-gradient(135deg, #f8fafc, #e2e8f0, #f1f5f9);
+    color: rgba(15, 23, 42, 0.9);
+}
+
+@keyframes gradient-pan {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+h1, h2, h3, .font-display {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+    letter-spacing: -0.02em;
+}
+
+.glass-panel {
+    background: rgba(25, 20, 40, 0.45);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    /* Lower blur radius (was 28px) — backdrop-filter is recomputed every frame as
+       content scrolls behind each panel, so the radius dominates scroll cost. */
+    backdrop-filter: blur(16px) saturate(1.3);
+    -webkit-backdrop-filter: blur(16px) saturate(1.3);
+    transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, color 0.3s ease;
+    transform: translate3d(0, 0, 0);
+    backface-visibility: hidden;
+}
+
+html.light .glass-panel {
+    background: rgba(255, 255, 255, 0.45);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.glass-panel:hover {
+    border-color: rgba(147, 51, 234, 0.25);
+    box-shadow: 0 12px 40px rgba(147, 51, 234, 0.1);
+}
+
+html.light .glass-panel:hover {
+    border-color: rgba(147, 51, 234, 0.3);
+    box-shadow: 0 12px 40px rgba(147, 51, 234, 0.08);
+}
+
+/* Card glow styles */
+.card-glow-purple {
+    background: radial-gradient(circle at 90% 90%, rgba(147, 51, 234, 0.15), transparent 60%), rgba(25, 20, 40, 0.45);
+}
+.card-glow-purple:hover {
+    background: radial-gradient(circle at 90% 90%, rgba(147, 51, 234, 0.25), transparent 50%), rgba(25, 20, 40, 0.5);
+}
+.card-glow-cyan {
+    background: radial-gradient(circle at 90% 90%, rgba(0, 229, 255, 0.12), transparent 60%), rgba(25, 20, 40, 0.45);
+}
+.card-glow-cyan:hover {
+    background: radial-gradient(circle at 90% 90%, rgba(0, 229, 255, 0.22), transparent 50%), rgba(25, 20, 40, 0.5);
+}
+.card-glow-magenta {
+    background: radial-gradient(circle at 90% 90%, rgba(255, 0, 127, 0.12), transparent 60%), rgba(25, 20, 40, 0.45);
+}
+.card-glow-magenta:hover {
+    background: radial-gradient(circle at 90% 90%, rgba(255, 0, 127, 0.22), transparent 50%), rgba(25, 20, 40, 0.5);
+}
+.card-glow-white {
+    background: radial-gradient(circle at 90% 90%, rgba(255, 255, 255, 0.08), transparent 60%), rgba(25, 20, 40, 0.45);
+}
+.card-glow-white:hover {
+    background: radial-gradient(circle at 90% 90%, rgba(255, 255, 255, 0.15), transparent 50%), rgba(25, 20, 40, 0.5);
+}
+.card-glow-discord {
+    background: radial-gradient(circle at 90% 90%, rgba(88, 101, 242, 0.15), transparent 60%), rgba(25, 20, 40, 0.45);
+}
+.card-glow-discord:hover {
+    background: radial-gradient(circle at 90% 90%, rgba(88, 101, 242, 0.25), transparent 50%), rgba(25, 20, 40, 0.5);
+}
+
+/* Light mode card glow overrides */
+html.light .card-glow-purple {
+    background: radial-gradient(circle at 90% 90%, rgba(147, 51, 234, 0.08), transparent 60%), rgba(255, 255, 255, 0.45);
+}
+html.light .card-glow-purple:hover {
+    background: radial-gradient(circle at 90% 90%, rgba(147, 51, 234, 0.15), transparent 50%), rgba(255, 255, 255, 0.55);
+}
+html.light .card-glow-cyan {
+    background: radial-gradient(circle at 90% 90%, rgba(0, 229, 255, 0.06), transparent 60%), rgba(255, 255, 255, 0.45);
+}
+html.light .card-glow-cyan:hover {
+    background: radial-gradient(circle at 90% 90%, rgba(0, 229, 255, 0.12), transparent 50%), rgba(255, 255, 255, 0.55);
+}
+html.light .card-glow-magenta {
+    background: radial-gradient(circle at 90% 90%, rgba(255, 0, 127, 0.06), transparent 60%), rgba(255, 255, 255, 0.45);
+}
+html.light .card-glow-magenta:hover {
+    background: radial-gradient(circle at 90% 90%, rgba(255, 0, 127, 0.12), transparent 50%), rgba(255, 255, 255, 0.55);
+}
+html.light .card-glow-white {
+    background: radial-gradient(circle at 90% 90%, rgba(100, 116, 139, 0.05), transparent 60%), rgba(255, 255, 255, 0.45);
+}
+html.light .card-glow-white:hover {
+    background: radial-gradient(circle at 90% 90%, rgba(100, 116, 139, 0.1), transparent 50%), rgba(255, 255, 255, 0.55);
+}
+html.light .card-glow-discord {
+    background: radial-gradient(circle at 90% 90%, rgba(88, 101, 242, 0.08), transparent 60%), rgba(255, 255, 255, 0.45);
+}
+html.light .card-glow-discord:hover {
+    background: radial-gradient(circle at 90% 90%, rgba(88, 101, 242, 0.15), transparent 50%), rgba(255, 255, 255, 0.55);
+}
+
+.text-gradient {
+    background: linear-gradient(90deg, #9146ff, #772ce8);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+/* Smooth scrollbar for the main snap container */
+.snap-scroller {
+    height: 100dvh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scroll-behavior: smooth;
+    transition: background 0.3s ease;
+    -webkit-overflow-scrolling: touch;
+    transform: translate3d(0, 0, 0);
+}
+
+.snap-scroller::-webkit-scrollbar {
+    width: 8px;
+}
+.snap-scroller::-webkit-scrollbar-track {
+    background: #090514; 
+    transition: background 0.3s ease;
+}
+html.light .snap-scroller::-webkit-scrollbar-track {
+    background: #f1f5f9; 
+}
+.snap-scroller::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15); 
+    border-radius: 4px;
+}
+html.light .snap-scroller::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.15); 
+}
+
+@media (min-width: 768px) {
+    .snap-scroller {
+        scroll-snap-type: none !important;
+    }
+
+    .snap-scroller > section {
+        scroll-snap-stop: normal !important;
+    }
+}
+
+/* Reveal Animations */
+.reveal {
+    opacity: 0;
+    transform: translateY(16px);
+    transition: none; /* Reset instantly when out of view */
+    will-change: transform, opacity;
+}
+.reveal.active {
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1), transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.hero-copy {
+    max-width: 1200px;
+}
+
+.hero-section {
+    align-items: flex-start;
+    padding-top: clamp(2.5rem, 4vh, 3.5rem) !important;
+    padding-bottom: clamp(4rem, 7vw, 6rem) !important;
+    transform: translate3d(0, 0, 0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+}
+
+.hero-title-line {
+    display: block;
+}
+
+.hero-brand-title {
+    display: block;
+}
+
+.hero-shell {
+    max-width: min(92vw, 1680px);
+}
+
+.hero-screenshot {
+    margin-top: clamp(1rem, 2vw, 1.5rem);
+    width: min(100%, 1580px);
+}
+
+@media (min-width: 640px) {
+    .hero-cta {
+        width: 14.25rem;
+    }
+}
+
+.screenshot-frame {
+    transform: translate3d(0, 0, 0);
+    backface-visibility: hidden;
+    will-change: transform;
+}
+
+.section-shell {
+    width: 100%;
+    max-width: min(92vw, 1480px);
+    margin: 0 auto;
+    padding-left: 1rem;
+    padding-right: 1rem;
+}
+
+.trust-strip {
+    margin: 1.4rem auto 0;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.75rem;
+    max-width: 980px;
+}
+
+.trust-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.06);
+    padding: 0.625rem 0.9rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.82);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    white-space: nowrap;
+}
+
+.trust-badge svg {
+    width: 1em;
+    height: 1em;
+    flex-shrink: 0;
+}
+
+html.light .trust-badge {
+    border-color: rgba(15, 23, 42, 0.08);
+    background: rgba(255, 255, 255, 0.58);
+    color: rgba(51, 65, 85, 0.92);
+}
+
+.hero-resource-links {
+    margin-top: 0.9rem;
+}
+
+@media (min-width: 1180px) {
+    .trust-strip {
+        flex-wrap: nowrap;
+        gap: 0.65rem;
+        max-width: none;
+    }
+
+    .trust-badge {
+        padding: 0.58rem 0.78rem;
+        font-size: 0.74rem;
+    }
+}
+
+/* Brand lockup logo swaps with the theme (default page theme is dark). */
+.brand-logo-light,
+html.light .brand-logo-dark {
+    display: none;
+}
+html.light .brand-logo-light {
+    display: block;
+}
+
+.integration-logo-light,
+html.light .integration-logo-dark {
+    display: none;
+}
+
+html.light .integration-logo-light {
+    display: block;
+}
+
+.swiftbot-feature-icon {
+    position: relative;
+    display: flex;
+    width: 3rem;
+    height: 3rem;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 1rem;
+    border-radius: 999px;
+    border: 1px solid rgba(88, 101, 242, 0.32);
+    background: linear-gradient(135deg, rgba(147, 51, 234, 0.72), rgba(88, 101, 242, 0.58) 48%, rgba(0, 229, 255, 0.58));
+    box-shadow: 0 12px 28px rgba(88, 101, 242, 0.2);
+    overflow: hidden;
+}
+
+.swiftbot-feature-icon img {
+    width: 3.18rem;
+    max-width: none;
+    height: auto;
+    transform: translateY(-0.02rem);
+}
+
+.webui-showcase {
+    margin-top: 2rem;
+}
+
+.webui-showcase-layout {
+    display: grid;
+    gap: 1.5rem;
+    align-items: center;
+}
+
+.webui-showcase-copy {
+    max-width: 34rem;
+}
+
+.webui-showcase-image {
+    width: min(100%, 42rem);
+    justify-self: center;
+    filter: drop-shadow(0 24px 42px rgba(0, 0, 0, 0.24));
+}
+
+@media (min-width: 900px) {
+    .webui-showcase-layout {
+        grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+        gap: 2.5rem;
+    }
+}
+
+.privacy-icon {
+    display: inline-flex;
+    width: 2.75rem;
+    height: 2.75rem;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 1rem;
+    border-radius: 999px;
+    border: 1px solid rgba(147, 51, 234, 0.24);
+    background: rgba(147, 51, 234, 0.12);
+    color: #9333ea;
+    font-size: 1.35rem;
+}
+
+.privacy-icon.cyan {
+    border-color: rgba(0, 229, 255, 0.24);
+    background: rgba(0, 229, 255, 0.12);
+    color: #00b8d4;
+}
+
+.privacy-icon.magenta {
+    border-color: rgba(255, 0, 127, 0.24);
+    background: rgba(255, 0, 127, 0.12);
+    color: #ff007f;
+}
+
+.privacy-icon.neutral {
+    border-color: rgba(100, 116, 139, 0.18);
+    background: rgba(100, 116, 139, 0.08);
+    color: #64748b;
+}
+
+.swift-language-mark {
+    width: 1.8rem;
+    height: 1.8rem;
+    display: block;
+    transform: translateY(0.03rem);
+}
+
+.content-section {
+    position: relative;
+    min-height: 100dvh;
+    display: flex;
+    align-items: center;
+    padding: clamp(7rem, 10vw, 9rem) 0;
+    overflow: hidden;
+    transform: translate3d(0, 0, 0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+}
+
+@media (min-width: 768px) {
+    body.sections-ready .snap-scroller > section {
+        opacity: 0.25;
+        transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    body.sections-ready .snap-scroller > section.is-current-section {
+        opacity: 1;
+    }
+
+    body.sections-ready .screenshot-card.reveal.active .screenshot-frame {
+        opacity: 0.35;
+        transform: scale(0.96) translate3d(0, 0, 0);
+        transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    body.sections-ready .screenshot-card.reveal.active.is-current-card .screenshot-frame {
+        opacity: 1;
+        transform: scale(1.0) translate3d(0, 0, 0);
+    }
+}
+
+.screenshot-showcase {
+    display: grid;
+    gap: 3rem;
+}
+
+.screenshot-card {
+    display: grid;
+    gap: clamp(2rem, 4vw, 4rem);
+    align-items: center;
+}
+
+.screenshot-copy {
+    max-width: 460px;
+}
+
+.step-grid,
+.privacy-grid {
+    display: grid;
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+    gap: 1.25rem;
+}
+
+.feature-grid {
+    grid-auto-rows: minmax(220px, auto);
+}
+
+.step-grid > *,
+.privacy-grid > * {
+    min-width: 0;
+}
+
+.step-grid h3,
+.privacy-grid h3 {
+    line-height: 1.15;
+}
+
+.utility-card {
+    padding: clamp(1.4rem, 2vw, 1.9rem);
+}
+
+.privacy-layout {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: clamp(2rem, 4vw, 3.5rem);
+    align-items: center;
+}
+
+.privacy-title-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.privacy-title-row h2 {
+    margin-bottom: 0;
+}
+
+.privacy-lock {
+    width: 3.5rem;
+    height: 3.5rem;
+    flex: 0 0 auto;
+    filter: drop-shadow(0 14px 24px rgba(147, 51, 234, 0.22));
+    transform-origin: center center;
+    overflow: visible;
+}
+
+.privacy-lock.is-locked {
+    animation: lock-snap 0.72s cubic-bezier(0.25, 1, 0.5, 1) 0.18s forwards;
+}
+
+.privacy-lock-shackle {
+    transform-origin: 16px 22px;
+    transform: translate(0, -4px) rotate(-24deg);
+    transition: transform 0.72s cubic-bezier(0.16, 1, 0.3, 1) 0.18s;
+}
+
+.privacy-lock.is-locked .privacy-lock-shackle {
+    transform: translate(0, 0) rotate(0deg);
+}
+
+.privacy-lock-body {
+    transition: fill 0.3s ease, stroke 0.3s ease;
+}
+
+.privacy-lock.is-locked .privacy-lock-body {
+    fill: rgba(168, 85, 247, 0.36);
+    stroke: rgba(168, 85, 247, 0.85);
+}
+
+.privacy-lock-keyhole {
+    transition: fill 0.3s ease;
+}
+
+@keyframes lock-snap {
+    0% {
+        transform: scale(1);
+        filter: drop-shadow(0 14px 24px rgba(147, 51, 234, 0.22));
+    }
+    75% {
+        transform: scale(1);
+        filter: drop-shadow(0 14px 24px rgba(147, 51, 234, 0.22));
+    }
+    85% {
+        transform: scale(0.9);
+        filter: drop-shadow(0 4px 10px rgba(147, 51, 234, 0.4));
+    }
+    92% {
+        transform: scale(1.08);
+        filter: drop-shadow(0 0 24px rgba(147, 51, 234, 0.75));
+    }
+    100% {
+        transform: scale(1);
+        filter: drop-shadow(0 14px 24px rgba(147, 51, 234, 0.22));
+    }
+}
+
+@media (max-width: 520px) {
+    .privacy-title-row {
+        align-items: flex-start;
+        flex-direction: column-reverse;
+    }
+}
+
+@media (min-width: 1024px) {
+    .screenshot-card {
+        grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+    }
+
+    .screenshot-card:nth-child(even) {
+        grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+    }
+
+    .screenshot-card:nth-child(even) .screenshot-copy {
+        order: 2;
+    }
+}
+
+@media (min-width: 768px) {
+    .step-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .privacy-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (min-width: 1024px) {
+    .privacy-layout {
+        grid-template-columns: minmax(300px, 0.75fr) minmax(0, 1.45fr);
+    }
+}
+
+@media (min-width: 1280px) {
+    .step-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
+
+/* Respect users who prefer reduced motion: kill the always-on background
+   gradient pan, reveal transitions, and pulse animations. */
+@media (prefers-reduced-motion: reduce) {
+    body { animation: none !important; }
+    .reveal, .reveal.active {
+        opacity: 1 !important;
+        transform: none !important;
+        transition: none !important;
+    }
+    .privacy-lock-shackle {
+        transform: translate(0, 0) rotate(0deg) !important;
+        transition: none !important;
+    }
+    .animate-pulse { animation: none !important; }
+}
+
+/* Inline SVG icon sprite helper (replaces the Phosphor web-font).
+   width/height track the current font-size so existing text-size
+   utilities (e.g. text-2xl) and the icon containers keep their sizing. */
+.ph-icon {
+    width: 1em;
+    height: 1em;
+    display: inline-block;
+    fill: currentColor;
+    vertical-align: -0.125em;
+    flex-shrink: 0;
+}
