@@ -73,7 +73,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.swiftminer.app
         MACOSX_DEPLOYMENT_TARGET: "26.0"
         MARKETING_VERSION: "1.31.1"
-        CURRENT_PROJECT_VERSION: "2026062411"
+        CURRENT_PROJECT_VERSION: "2026062412"
         INFOPLIST_KEY_CFBundleDisplayName: SwiftMiner
         INFOPLIST_KEY_CFBundleName: SwiftMiner
         CODE_SIGN_STYLE: Automatic
@@ -124,6 +124,9 @@ targets:
     deploymentTarget: "26.0"
     sources:
       - Tests
+      - path: project.yml
+        type: file
+        buildPhase: resources
     dependencies:
       - target: SwiftMinerCore
         link: false

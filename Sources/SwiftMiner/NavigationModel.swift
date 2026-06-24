@@ -880,13 +880,18 @@ public final class NavigationModel {
     public init(clientId: String, minerManager: MinerManager? = nil) {
         self.minerManager = minerManager ?? MinerManager(clientId: clientId)
         
-        let folderURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("SwiftMiner")
+        let folderURL = SwiftMinerRuntime.isRunningTests
+            ? SwiftMinerRuntime.testSupportDirectory
+            : FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("SwiftMiner")
         
         // Create directory synchronously to avoid races in Phase 1
         try? FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
         
-        let dbURL = folderURL.appendingPathComponent("miner.db")
+        let databaseName = SwiftMinerRuntime.isRunningTests
+            ? "miner-\(UUID().uuidString).db"
+            : "miner.db"
+        let dbURL = folderURL.appendingPathComponent(databaseName)
         let manager = SQLiteManager(databaseURL: dbURL)
         self.sqliteManager = manager
         self.activityLogStore = ActivityLogStore(manager: manager)
@@ -930,9 +935,11 @@ public final class NavigationModel {
 
         await wireDMActivityLogging()
 
-        await startSwiftMinerHTTPServerIfNeeded()
+        if !SwiftMinerRuntime.isRunningTests {
+            await startSwiftMinerHTTPServerIfNeeded()
+        }
 
-        if Settings.shared.swiftBotEnabled {
+        if !SwiftMinerRuntime.isRunningTests, Settings.shared.swiftBotEnabled {
             await checkSwiftBotConnection()
             await eventOutboxService.updateConfig(
                 webhookURL: URL(string: Settings.shared.swiftBotWebhookURL),
@@ -941,7 +948,9 @@ public final class NavigationModel {
             await eventOutboxService.start()
             await refreshDiscordDisplayNames()
         }
-        startSwiftBotStateSync()
+        if !SwiftMinerRuntime.isRunningTests {
+            startSwiftBotStateSync()
+        }
 
         // Wire DM event production — lightweight event emission, notification decisions stay in SwiftBot
         let dmEventService = SwiftMinerDMEventService(connectionService: swiftBotConnectionService)
@@ -1086,7 +1095,7 @@ public final class NavigationModel {
         }
 
         await minerManager.setup(
-            autoStart: true,
+            autoStart: !SwiftMinerRuntime.isRunningTests,
             priorityGames: settings.priorityGames,
             excludedGames: settings.excludedGames,
             strategy: settings.miningStrategy,

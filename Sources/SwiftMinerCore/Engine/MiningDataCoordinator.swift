@@ -84,8 +84,11 @@ public final class MiningDataCoordinator {
                 service: dataService
             )
 
-            // Trigger initial aggregation
-            await refreshAll()
+            // Fake accounts created by hosted unit tests must remain inert.
+            if !SwiftMinerRuntime.isRunningTests {
+                // Trigger initial aggregation
+                await refreshAll()
+            }
         }
     }
 

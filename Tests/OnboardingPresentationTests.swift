@@ -93,10 +93,38 @@ final class OnboardingPresentationTests: XCTestCase {
     }
 
     func test_SettingsUseIsolatedDefaultsStoreDuringTests() {
+        XCTAssertTrue(SwiftMinerRuntime.isRunningTests)
         XCTAssertFalse(
             Settings.appStorageStore === UserDefaults.standard,
             "App-hosted tests must not write Settings changes into the production app defaults domain"
         )
+    }
+
+    func test_DefaultTokenStoreStartsEmptyDuringTests() async throws {
+        let store = TokenStoreFactory.makeDefault()
+        let accounts = try await store.loadAllAccounts()
+        XCTAssertTrue(accounts.isEmpty)
+        XCTAssertTrue(store is InMemoryTokenStore)
+    }
+
+    func test_DefaultTokenStoresDoNotShareAccountsDuringTests() async throws {
+        let first = TokenStoreFactory.makeDefault()
+        let second = TokenStoreFactory.makeDefault()
+        let account = Account(
+            id: "isolated",
+            username: "isolated",
+            accessToken: "token",
+            refreshToken: "refresh",
+            tokenExpiry: Date().addingTimeInterval(3600),
+            scopes: []
+        )
+
+        try await first.save(account: account)
+
+        let firstAccounts = try await first.loadAllAccounts()
+        let secondAccounts = try await second.loadAllAccounts()
+        XCTAssertEqual(firstAccounts.count, 1)
+        XCTAssertTrue(secondAccounts.isEmpty)
     }
 
     func test_SyncInProgress_OnboardingHidden() {

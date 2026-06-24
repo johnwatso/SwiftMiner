@@ -595,14 +595,18 @@ public final class MinerManager {
                 miners[idx].stateStore = stateStore
             }
 
-            // Start the state store auto-refresh (Phase 2)
-            // Stagger starts to avoid thundering herd - 3s delay per account index
-            let accountIndex = self.miners.firstIndex(where: { $0.id == minerId }) ?? 0
-            if accountIndex > 0 {
-                let staggerDelay = UInt64(accountIndex * 3 * 1_000_000_000)
-                try? await Task.sleep(nanoseconds: staggerDelay)
+            // Hosted unit tests create fake accounts for state assertions. Do not
+            // turn those fixtures into background Twitch sessions.
+            if !SwiftMinerRuntime.isRunningTests {
+                // Start the state store auto-refresh (Phase 2)
+                // Stagger starts to avoid thundering herd - 3s delay per account index
+                let accountIndex = self.miners.firstIndex(where: { $0.id == minerId }) ?? 0
+                if accountIndex > 0 {
+                    let staggerDelay = UInt64(accountIndex * 3 * 1_000_000_000)
+                    try? await Task.sleep(nanoseconds: staggerDelay)
+                }
+                await stateStore.start()
             }
-            await stateStore.start()
         }
         engineSetupTasks[minerId] = setupTask
         return minerId

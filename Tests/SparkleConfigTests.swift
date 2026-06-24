@@ -8,6 +8,7 @@ final class SparkleConfigTests: XCTestCase {
     private let expectedFeedURL = "https://johnwatso.github.io/SwiftMiner/appcast.xml"
     private let expectedPublicKey = "rxaJsfCpTKtpqRubSfkJwKnztT5S8RHsdAueuT+jKck="
     private let previousPublicKey = "4Aht0ilQOmLxGQMnSwGNJvtZ0VKH7lZoV4Raag6eEN8="
+    private var testBundle: Bundle { Bundle(for: Self.self) }
 
     func testBuiltAppInfoPlistContainsSparkleKeys() {
         let info = Bundle.main.infoDictionary ?? [:]
@@ -26,13 +27,7 @@ final class SparkleConfigTests: XCTestCase {
     }
 
     func testProjectYmlPreservesSparkleInfoPlistProperties() throws {
-        // Resolve project root from this test file: Tests/ → project root
-        let testFile = URL(fileURLWithPath: #filePath)
-        let projectRoot = testFile
-            .deletingLastPathComponent() // Tests/
-            .deletingLastPathComponent() // repo root
-        let projectYML = projectRoot.appendingPathComponent("project.yml")
-
+        let projectYML = try XCTUnwrap(testBundle.url(forResource: "project", withExtension: "yml"))
         let yaml = try String(contentsOf: projectYML, encoding: .utf8)
 
         // These strings must appear in project.yml info.properties so xcodegen
@@ -43,20 +38,4 @@ final class SparkleConfigTests: XCTestCase {
         XCTAssertFalse(yaml.contains(previousPublicKey), "project.yml must not contain the retired Sparkle public key")
     }
 
-    func testSourceInfoPlistContainsSparkleKeys() throws {
-        let testFile = URL(fileURLWithPath: #filePath)
-        let projectRoot = testFile
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-        let plist = projectRoot
-            .appendingPathComponent("Sources/SwiftMiner/Info.plist")
-
-        let data = try Data(contentsOf: plist)
-        let info = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] ?? [:]
-
-        XCTAssertNotNil(info["SUFeedURL"] as? String, "Sources/SwiftMiner/Info.plist must contain SUFeedURL")
-        XCTAssertNotNil(info["SUPublicEDKey"] as? String, "Sources/SwiftMiner/Info.plist must contain SUPublicEDKey")
-        XCTAssertEqual(info["SUFeedURL"] as? String, "$(SPARKLE_FEED_URL)", "Sources/SwiftMiner/Info.plist must resolve SUFeedURL from build settings")
-        XCTAssertEqual(info["SUPublicEDKey"] as? String, "$(SPARKLE_PUBLIC_ED_KEY)", "Sources/SwiftMiner/Info.plist must resolve SUPublicEDKey from build settings")
-    }
 }

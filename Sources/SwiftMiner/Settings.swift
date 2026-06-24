@@ -11,7 +11,7 @@ public final class Settings: ObservableObject {
     // MARK: - Shared Instance
 
     static let appStorageStore: UserDefaults = {
-        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+        if SwiftMinerRuntime.isRunningTests {
             let suiteName = "com.swiftminer.app.tests.\(ProcessInfo.processInfo.globallyUniqueString)"
             guard let defaults = UserDefaults(suiteName: suiteName) else {
                 return .standard
