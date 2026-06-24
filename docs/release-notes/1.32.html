@@ -3,15 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>SwiftMiner 1.32 - Draft Release Notes</title>
-  <meta name="description" content="Release notes for SwiftMiner 1.32, including unattended health monitoring, action-required alerts, and update consent.">
-  <link rel="canonical" href="https://swiftminer.app/release-notes/1.32.html">
-  <meta name="robots" content="noindex, follow">
-  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
-  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
-  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
-  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
-  <link rel="manifest" href="/site.webmanifest">
+  <title>Hide system banner if no miners; update docs - Release Notes</title>
   <style>
     :root { color-scheme: light dark; }
     body {
@@ -26,59 +18,32 @@
       margin: 0 auto;
       padding: 28px;
       border-radius: 22px;
-      background: rgba(255, 255, 255, 0.88);
+      background: rgba(255, 255, 255, 0.86);
       box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
-      border: 1px solid rgba(82, 96, 109, 0.12);
     }
     h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
-    .meta { margin: 0 0 10px; color: #52606d; font-size: 14px; }
-    .intro { margin: 0 0 24px; color: #384454; }
-    section {
-      margin-top: 18px;
-      padding: 18px 18px 14px;
-      border: 1px solid rgba(82, 96, 109, 0.18);
-      border-left: 5px solid #0a8aa3;
-      border-radius: 16px;
-      background: rgba(255, 255, 255, 0.42);
-    }
-    h2 { margin: 0 0 10px; color: #0a8aa3; font-size: 18px; }
-    ul { margin: 0; padding-left: 22px; }
-    li { margin-bottom: 8px; }
-    li:last-child { margin-bottom: 0; }
+    .meta { margin: 0 0 24px; color: #52606d; font-size: 14px; }
+    p { margin: 0 0 16px; }
+    a { color: #0a67a3; text-decoration: none; }
+    a:hover { text-decoration: underline; }
     @media (prefers-color-scheme: dark) {
       body { background: #0b1015; color: #edf2f7; }
-      main { background: rgba(15, 23, 32, 0.90); border-color: rgba(159, 176, 194, 0.14); }
+      main {
+        background: rgba(15, 23, 32, 0.88);
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+      }
       .meta { color: #9fb0c2; }
-      .intro { color: #c8d3df; }
-      section { border-color: rgba(159, 176, 194, 0.18); border-left-color: #55c2d9; background: rgba(255, 255, 255, 0.04); }
-      h2 { color: #55c2d9; }
+      a { color: #73c3ff; }
     }
   </style>
 </head>
 <body>
   <main>
-    <h1>SwiftMiner 1.32</h1>
-    <p class="meta">Draft release notes for build 2026062422</p>
-    <p class="intro">A reliability-focused update that makes unattended mining easier to understand and quicker to act on when intervention is needed.</p>
-
-    <section>
-      <h2>Unattended assurance</h2>
-      <ul>
-        <li>Adds persistent unattended-health snapshots, stable incident identities, and recovery outcome history across app restarts.</li>
-        <li>Extends the Overview health card with operating duration, recent mining progress, Twitch responsiveness, and recovery details.</li>
-        <li>Sends one macOS action-required alert when authentication expires, mining remains stalled, automatic recovery is exhausted, updates fail, or the configured dashboard cannot start.</li>
-        <li>Deduplicates incident alerts so the same unresolved problem does not repeatedly notify the operator.</li>
-      </ul>
-    </section>
-
-    <section>
-      <h2>Updates and testing</h2>
-      <ul>
-        <li>Asks new users whether SwiftMiner should check for updates automatically, with an option in the same prompt to allow unattended downloads and installation.</li>
-        <li>Adds automated network guards so tests fail if app code unexpectedly reaches external services.</li>
-        <li>Keeps the Overview status banner hidden until at least one miner account is configured.</li>
-      </ul>
-    </section>
+    <h1>Hide system banner if no miners; update docs</h1>
+    <p class="meta">Version 1.32</p>
+    <p>Hide system banner if no miners; update docs</p>
+<p>Only render the systemStateBanner when there are miners (wrap in a miners.isEmpty check). Bump Xcode project build number (CURRENT_PROJECT_VERSION -&gt; 2026062422). Regenerate Tailwind CSS asset. Update docs: improve meta description and various copy tweaks, add a latest-release element to the page, and adjust download UI to display the semantic and raw release versions by enhancing docs/assets/js/site.js to pass and populate version info (strips leading &quot;v&quot; for rawVersion).</p>
+    <p><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/244c93c41b6cb82fb6eafae80bd57fb02c30e6e0">244c93c</a></p>
   </main>
 </body>
 </html>
