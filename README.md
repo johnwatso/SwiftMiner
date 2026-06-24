@@ -173,11 +173,20 @@ Building from the current `main` branch includes newer changes that have not bee
 
 ```text
 Sources/
-  SwiftMiner/       macOS app: UI, onboarding, dashboard, menu bar
-  SwiftMinerCore/   mining engine, Twitch services, models, aggregation
-Tests/              unit tests
-Documentation/      architecture and implementation notes
-scripts/            build and release automation
+  SwiftMiner/          macOS app, SwiftUI views, settings, and app resources
+  SwiftMinerCore/      mining engine, Twitch services, models, and persistence
+  SwiftMinerService/   Discord integration and embedded web-dashboard server
+Tests/                 Xcode unit and integration tests
+Tools/
+  SparklePublisher/    release packaging and Sparkle publishing tool
+Website/
+  public/              production website, help pages, release notes, appcasts
+  styles/              website stylesheet source
+Documentation/         architecture, research, testing, and release notes
+SwiftMiner.icon/       source assets for the macOS application icon
+SwiftMiner.xcodeproj/  generated Xcode project
+project.yml            XcodeGen source configuration
+scripts/               build, validation, and release automation
 ```
 
 ## Architecture
