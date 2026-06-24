@@ -235,10 +235,20 @@ document.addEventListener('DOMContentLoaded', () => {
     var links = Array.prototype.slice.call(document.querySelectorAll('[data-latest-download]'));
     if (!links.length) return;
 
-    function apply(url) {
+    function apply(url, version, rawVersion) {
         links.forEach(function (link) {
             link.href = url;
         });
+        if (version) {
+            document.querySelectorAll('[data-latest-version]').forEach(function (el) {
+                el.textContent = version;
+            });
+        }
+        if (rawVersion) {
+            document.querySelectorAll('[data-latest-version-raw]').forEach(function (el) {
+                el.textContent = rawVersion;
+            });
+        }
     }
 
     fetch('https://api.github.com/repos/johnwatso/SwiftMiner/releases/latest', {
@@ -256,7 +266,9 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             if (zip && zip.browser_download_url) {
-                apply(zip.browser_download_url);
+                var version = release.tag_name || '';
+                var rawVersion = version.startsWith('v') ? version.substring(1) : version;
+                apply(zip.browser_download_url, version, rawVersion);
             }
         })
         .catch(function () {

@@ -97,7 +97,9 @@ struct OverviewView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                systemStateBanner
+                if !navigation.minerManager.miners.isEmpty {
+                    systemStateBanner
+                }
                 minerActivitySection
                 campaignFeedSection
             }
