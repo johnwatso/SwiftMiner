@@ -55,6 +55,25 @@ struct MinerApp: App {
 
                     // Await navigation setup first — loads accounts from keychain
                     // and optionally auto-starts miners before AppModel reads miner state.
+                    navigation.onWebDashboardAvailabilityChanged = { isAvailable, detail in
+                        Task { @MainActor in
+                            if isAvailable {
+                                await unattendedHealth.resolveSystemIncident(
+                                    id: "system:web-dashboard",
+                                    kind: .webDashboardUnavailable
+                                )
+                            } else {
+                                await unattendedHealth.recordSystemIncident(
+                                    id: "system:web-dashboard",
+                                    displayName: "Web Dashboard",
+                                    kind: .webDashboardUnavailable,
+                                    severity: .warning,
+                                    summary: "The dashboard could not start\(detail.map { ": \($0)" } ?? "")",
+                                    recommendedAction: "Open SwiftMiner and review the Activity Log"
+                                )
+                            }
+                        }
+                    }
                     await navigation.setup()
                     await appModel.setup()
                     unattendedHealth.startMonitoring()
@@ -64,9 +83,25 @@ struct MinerApp: App {
                             level: .warning,
                             rawMessage: "[update] Update check failed: \(error.localizedDescription)"
                         )
+                        Task { @MainActor in
+                            await unattendedHealth.recordSystemIncident(
+                                id: "system:automatic-updates",
+                                displayName: "Automatic Updates",
+                                kind: .automaticUpdateFailed,
+                                severity: .warning,
+                                summary: "SwiftMiner could not check for updates",
+                                recommendedAction: "Check your connection or download the latest release manually"
+                            )
+                        }
                     }
                     updater.isSafeToInstallNow = { navigation.isSafeToInstallUpdateNow }
                     updater.onAutoInstall = { version, plan in
+                        Task { @MainActor in
+                            await unattendedHealth.resolveSystemIncident(
+                                id: "system:automatic-updates",
+                                kind: .automaticUpdateFailed
+                            )
+                        }
                         navigation.recordPendingUpdate(to: version)
                         navigation.logEvent(
                             message: "SwiftMiner \(version) downloaded — \(plan); the app will relaunch itself and resume mining.",
@@ -75,6 +110,12 @@ struct MinerApp: App {
                         )
                     }
                     updater.onUpToDate = {
+                        Task { @MainActor in
+                            await unattendedHealth.resolveSystemIncident(
+                                id: "system:automatic-updates",
+                                kind: .automaticUpdateFailed
+                            )
+                        }
                         let version = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? ""
                         navigation.logEvent(
                             message: "Already up to date\(version.isEmpty ? "" : " — SwiftMiner \(version)")",

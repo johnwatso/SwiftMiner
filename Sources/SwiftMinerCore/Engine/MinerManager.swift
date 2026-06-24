@@ -1570,7 +1570,18 @@ public final class MinerManager {
                 detail: error.localizedDescription,
                 at: Date()
             ))
-            recordCurrentHealthState(minerID: action.minerId)
+            if action.stage == .authRefresh, !needsAuth {
+                recordHealth(.incidentObserved(
+                    minerID: action.minerId,
+                    kind: .recoveryExhausted,
+                    severity: .critical,
+                    summary: "Automatic recovery could not restore mining",
+                    recommendedAction: "Open SwiftMiner and review the Activity Log",
+                    at: Date()
+                ))
+            } else {
+                recordCurrentHealthState(minerID: action.minerId)
+            }
             onLogMessage?(action.minerId, "[Supervisor] recovery failed | \(error.localizedDescription)")
         }
     }
