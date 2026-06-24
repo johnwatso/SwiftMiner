@@ -96,7 +96,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let particlesReady = false;
     
-    const screenshotAssetVersion = '20260623';
+    const screenshotAssetVersion = '20260625';
 
     function applyTheme(isLight) {
         const theme = isLight ? 'light' : 'dark';
