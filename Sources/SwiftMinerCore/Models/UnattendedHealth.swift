@@ -138,3 +138,31 @@ public enum UnattendedHealthEvent: Sendable, Equatable {
     case activeIncidentResolved(minerID: String, at: Date)
     case notificationSent(minerID: String, kind: HealthIncident.Kind, at: Date)
 }
+
+public struct UnattendedHealthSummary: Sendable, Equatable {
+    public let operatingNormallySince: Date?
+    public let lastMiningProgressAt: Date?
+    public let lastTwitchResponseAt: Date?
+    public let lastRecovery: RecoveryRecord?
+    public let activeIncidents: [HealthIncident]
+
+    public init(snapshots: [UnattendedHealthSnapshot]) {
+        lastMiningProgressAt = snapshots.compactMap(\.lastMiningProgressAt).max()
+        lastTwitchResponseAt = snapshots.compactMap(\.lastTwitchResponseAt).max()
+        lastRecovery = snapshots
+            .compactMap(\.lastRecovery)
+            .max { ($0.finishedAt ?? $0.startedAt) < ($1.finishedAt ?? $1.startedAt) }
+        activeIncidents = snapshots
+            .compactMap(\.activeIncident)
+            .sorted { $0.openedAt < $1.openedAt }
+
+        let healthySinceDates = snapshots.compactMap(\.operatingNormallySince)
+        if activeIncidents.isEmpty,
+           !snapshots.isEmpty,
+           healthySinceDates.count == snapshots.count {
+            operatingNormallySince = healthySinceDates.max()
+        } else {
+            operatingNormallySince = nil
+        }
+    }
+}

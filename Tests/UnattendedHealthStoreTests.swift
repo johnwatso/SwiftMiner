@@ -148,6 +148,48 @@ final class UnattendedHealthStoreTests: XCTestCase {
         XCTAssertEqual(history, [snapshot?.lastRecovery].compactMap { $0 })
     }
 
+    func testSummaryUsesNewestSharedHealthyStartAndLatestFacts() {
+        let base = Date(timeIntervalSince1970: 1_800_000_000)
+        let olderRecovery = RecoveryRecord(
+            stage: .campaignRefresh,
+            startedAt: base,
+            finishedAt: base.addingTimeInterval(5),
+            succeeded: true
+        )
+        let newerRecovery = RecoveryRecord(
+            stage: .workerRestart,
+            startedAt: base.addingTimeInterval(60),
+            finishedAt: base.addingTimeInterval(70),
+            succeeded: true
+        )
+        let summary = UnattendedHealthSummary(snapshots: [
+            UnattendedHealthSnapshot(
+                id: "one",
+                displayName: "One",
+                lastMiningProgressAt: base.addingTimeInterval(30),
+                lastTwitchResponseAt: base.addingTimeInterval(40),
+                lastRecovery: olderRecovery,
+                operatingNormallySince: base.addingTimeInterval(10),
+                updatedAt: base.addingTimeInterval(40)
+            ),
+            UnattendedHealthSnapshot(
+                id: "two",
+                displayName: "Two",
+                lastMiningProgressAt: base.addingTimeInterval(80),
+                lastTwitchResponseAt: base.addingTimeInterval(90),
+                lastRecovery: newerRecovery,
+                operatingNormallySince: base.addingTimeInterval(20),
+                updatedAt: base.addingTimeInterval(90)
+            )
+        ])
+
+        XCTAssertEqual(summary.operatingNormallySince, base.addingTimeInterval(20))
+        XCTAssertEqual(summary.lastMiningProgressAt, base.addingTimeInterval(80))
+        XCTAssertEqual(summary.lastTwitchResponseAt, base.addingTimeInterval(90))
+        XCTAssertEqual(summary.lastRecovery, newerRecovery)
+        XCTAssertTrue(summary.activeIncidents.isEmpty)
+    }
+
     private func temporaryStoreURL() -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftMinerUnattendedHealth-\(UUID().uuidString)", isDirectory: true)
