@@ -335,7 +335,7 @@ struct MinerApp: App {
             ]
         )
         credits.append(NSAttributedString(
-            string: "\nMade in New Zealand ",
+            string: "\nMade in NZ ",
             attributes: [
                 .font: NSFont.systemFont(ofSize: 11),
                 .foregroundColor: NSColor.secondaryLabelColor,
