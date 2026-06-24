@@ -134,17 +134,17 @@ publish_appcast_commit_if_possible() {
     return 0
   fi
 
-  local appcast_path="$ROOT_DIR/docs/appcast.xml"
+  local appcast_path="$ROOT_DIR/Website/public/appcast.xml"
   local release_notes_output=""
 
   if [[ "$CHANNEL" == "beta" ]]; then
-    appcast_path="$ROOT_DIR/docs/beta/appcast.xml"
+    appcast_path="$ROOT_DIR/Website/public/beta/appcast.xml"
     if [[ -n "$RELEASE_NOTES_PATH" ]]; then
-      release_notes_output="$ROOT_DIR/docs/beta/release-notes/${VERSION}.html"
+      release_notes_output="$ROOT_DIR/Website/public/beta/release-notes/${VERSION}.html"
     fi
   else
     if [[ -n "$RELEASE_NOTES_PATH" ]]; then
-      release_notes_output="$ROOT_DIR/docs/release-notes/${VERSION}.html"
+      release_notes_output="$ROOT_DIR/Website/public/release-notes/${VERSION}.html"
     fi
   fi
 

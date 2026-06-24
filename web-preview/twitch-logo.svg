@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="120" height="140">
-  <!-- Same geometry the SwiftUI TwitchGlyphShape draws (even-odd fill). -->
-  <path fill="#9146FF" fill-rule="evenodd"
-    d="M6 0 L1.714 4.286 V19.714 H6.857 V24 L11.143 19.714 H14.571 L22.286 12 V0 Z
-       M20.571 11.143 L17.143 14.571 H13.714 L10.714 17.571 V14.571 H6.857 V1.714 H20.571 Z
-       M11.571 4.714 H13.286 V9.857 H11.571 Z
-       M16.286 4.714 H18 V9.857 H16.286 Z"/>
-</svg>

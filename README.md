@@ -1,8 +1,8 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/readme/app-icon-dark.png">
-    <source media="(prefers-color-scheme: light)" srcset="assets/readme/app-icon-light.png">
-    <img src="assets/readme/app-icon-light.png" width="120" alt="SwiftMiner icon">
+    <source media="(prefers-color-scheme: dark)" srcset="Website/public/assets/landing/app-icon-light.webp">
+    <source media="(prefers-color-scheme: light)" srcset="Website/public/assets/landing/app-icon-light.webp">
+    <img src="Website/public/assets/landing/app-icon-light.webp" width="120" alt="SwiftMiner icon">
   </picture>
 </p>
 
@@ -88,9 +88,9 @@ SwiftMiner has been built around those ideas. The goal isn’t to reinvent Twitc
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/readme/overview-dark.png">
-    <source media="(prefers-color-scheme: light)" srcset="assets/readme/overview-light.png">
-    <img src="assets/readme/overview-light.png" alt="SwiftMiner Overview">
+    <source media="(prefers-color-scheme: dark)" srcset="Website/public/assets/landing/overview-dark.webp">
+    <source media="(prefers-color-scheme: light)" srcset="Website/public/assets/landing/overview-light.webp">
+    <img src="Website/public/assets/landing/overview-light.webp" alt="SwiftMiner Overview">
   </picture>
 </p>
 
@@ -98,9 +98,9 @@ SwiftMiner has been built around those ideas. The goal isn’t to reinvent Twitc
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/readme/miners-dark.png">
-    <source media="(prefers-color-scheme: light)" srcset="assets/readme/miners-light.png">
-    <img src="assets/readme/miners-light.png" alt="SwiftMiner Miners">
+    <source media="(prefers-color-scheme: dark)" srcset="Website/public/assets/landing/miners-dark.webp">
+    <source media="(prefers-color-scheme: light)" srcset="Website/public/assets/landing/miners-light.webp">
+    <img src="Website/public/assets/landing/miners-light.webp" alt="SwiftMiner Miners">
   </picture>
 </p>
 
@@ -108,9 +108,9 @@ SwiftMiner has been built around those ideas. The goal isn’t to reinvent Twitc
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/readme/drops-dark.png">
-    <source media="(prefers-color-scheme: light)" srcset="assets/readme/drops-light.png">
-    <img src="assets/readme/drops-light.png" alt="SwiftMiner Drops">
+    <source media="(prefers-color-scheme: dark)" srcset="Website/public/assets/landing/drops-dark.webp">
+    <source media="(prefers-color-scheme: light)" srcset="Website/public/assets/landing/drops-light.webp">
+    <img src="Website/public/assets/landing/drops-light.webp" alt="SwiftMiner Drops">
   </picture>
 </p>
 
@@ -118,9 +118,9 @@ SwiftMiner has been built around those ideas. The goal isn’t to reinvent Twitc
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/readme/activity-log-dark.png">
-    <source media="(prefers-color-scheme: light)" srcset="assets/readme/activity-log-light.png">
-    <img src="assets/readme/activity-log-light.png" alt="SwiftMiner Activity Log">
+    <source media="(prefers-color-scheme: dark)" srcset="Website/public/assets/landing/activity-log-dark.webp">
+    <source media="(prefers-color-scheme: light)" srcset="Website/public/assets/landing/activity-log-light.webp">
+    <img src="Website/public/assets/landing/activity-log-light.webp" alt="SwiftMiner Activity Log">
   </picture>
 </p>
 

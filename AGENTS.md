@@ -64,15 +64,15 @@ When updating the build number:
 - Generate the new build number from the current local time.
 - Update `CURRENT_PROJECT_VERSION` in `project.yml`.
 - Update matching `CURRENT_PROJECT_VERSION` entries in `SwiftMiner.xcodeproj/project.pbxproj`.
-- **Do not touch `docs/appcast.xml` (or `docs/beta/appcast.xml`).** ShipHook owns these — see warning below.
+- **Do not touch `Website/public/appcast.xml` (or `Website/public/beta/appcast.xml`).** ShipHook owns these — see warning below.
 
 > [!WARNING]
-> **Agents must not update `docs/appcast.xml` / `docs/beta/appcast.xml`.** ShipHook generates and pushes the appcast as part of publishing a release. The appcast advertises updates to every installed copy of the app, and its `sparkle:version` must always match the `CFBundleVersion` of the exact binary at the `<enclosure url>`. If an agent bumps `sparkle:version` on an ordinary dev commit while the enclosure still points at the previously released zip, Sparkle sees a "newer" build, prompts an update, downloads the *same old* binary, and nags users in an endless loop.
+> **Agents must not update `Website/public/appcast.xml` / `Website/public/beta/appcast.xml`.** ShipHook generates and pushes the appcast as part of publishing a release. The appcast advertises updates to every installed copy of the app, and its `sparkle:version` must always match the `CFBundleVersion` of the exact binary at the `<enclosure url>`. If an agent bumps `sparkle:version` on an ordinary dev commit while the enclosure still points at the previously released zip, Sparkle sees a "newer" build, prompts an update, downloads the *same old* binary, and nags users in an endless loop.
 >
 > `CURRENT_PROJECT_VERSION` in `project.yml` / `project.pbxproj` may be bumped freely on dev commits — but leave the appcast to ShipHook. The **only** time the appcast is edited by hand is the deliberate post-release EdDSA re-signing step the user explicitly asks for (see "Appcast EdDSA signing" below), and even then you only insert the `sparkle:edSignature` for the binary ShipHook already published — never the version/build fields.
 - Update release notes for the active marketing version:
-  - `docs/release-notes/<MARKETING_VERSION>.html`
-  - `docs/release-notes/index.html`
+  - `Website/public/release-notes/<MARKETING_VERSION>.html`
+  - `Website/public/release-notes/index.html`
   - Any visible build references should match the generated build number.
 - If the marketing version changes, make sure release-note links and filenames follow the new version.
 
@@ -101,9 +101,9 @@ Before reporting related work complete, verify:
 
 - `SUFeedURL` is present in the built app Info.plist.
 - `SUPublicEDKey` is present in the built app Info.plist.
-- `docs/appcast.xml` uses the active `MARKETING_VERSION` as `sparkle:shortVersionString`.
-- `docs/appcast.xml`'s `sparkle:version` matches the `CFBundleVersion` of the released binary at the `<enclosure url>` — **not** simply the current working-tree `CURRENT_PROJECT_VERSION` (these differ on any commit made after the last release).
-- Release-note links in `docs/appcast.xml` point to existing files.
+- `Website/public/appcast.xml` uses the active `MARKETING_VERSION` as `sparkle:shortVersionString`.
+- `Website/public/appcast.xml`'s `sparkle:version` matches the `CFBundleVersion` of the released binary at the `<enclosure url>` — **not** simply the current working-tree `CURRENT_PROJECT_VERSION` (these differ on any commit made after the last release).
+- Release-note links in `Website/public/appcast.xml` point to existing files.
 
 Before committing changes that touch Sparkle, appcast, release notes, build settings, Info.plist generation, signing/notarization settings, or version metadata, test that Sparkle update configuration still works in the built app. At minimum, build the app and verify the Sparkle Info.plist keys and appcast metadata above before committing.
 
@@ -115,7 +115,7 @@ After every ShipHook release, the appcast must be re-signed locally before insta
 
 1. Download the released zip from the GitHub Release matching the appcast `enclosure url` and `length`.
 2. Run Sparkle's `sign_update <zip>`. The binary is at `~/Library/Developer/Xcode/DerivedData/SwiftMiner-*/SourcePackages/artifacts/sparkle/Sparkle/bin/sign_update` after any build of the SparklePublisher scheme. Approve the keychain access prompt.
-3. Insert the returned `sparkle:edSignature="…"` attribute into the `<enclosure>` in `docs/appcast.xml` (and `docs/beta/appcast.xml` for beta releases).
+3. Insert the returned `sparkle:edSignature="…"` attribute into the `<enclosure>` in `Website/public/appcast.xml` (and `Website/public/beta/appcast.xml` for beta releases).
 4. Verify with `sign_update --verify <zip> "<signature>"` (exit 0 = good).
 5. Commit and push so GitHub Pages serves the signed feed.
 

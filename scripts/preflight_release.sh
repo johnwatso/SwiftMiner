@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_PATH="$ROOT_DIR/SwiftMiner.xcodeproj"
 SCHEME="${SWIFTMINER_SCHEME:-SwiftMiner}"
 CONFIGURATION="${SWIFTMINER_CONFIGURATION:-Debug}"
-APPCAST="$ROOT_DIR/docs/appcast.xml"
+APPCAST="$ROOT_DIR/Website/public/appcast.xml"
 PROJECT_YML="$ROOT_DIR/project.yml"
 EXPECTED_SPARKLE_PUBLIC_KEY="rxaJsfCpTKtpqRubSfkJwKnztT5S8RHsdAueuT+jKck="
 
@@ -26,7 +26,7 @@ SPARKLE_PUBLIC_ED_KEY="$(extract_project_value SPARKLE_PUBLIC_ED_KEY)"
 [[ -n "$MARKETING_VERSION" ]] || fail "MARKETING_VERSION missing from project.yml"
 [[ -n "$CURRENT_PROJECT_VERSION" ]] || fail "CURRENT_PROJECT_VERSION missing from project.yml"
 [[ "$SPARKLE_PUBLIC_ED_KEY" == "$EXPECTED_SPARKLE_PUBLIC_KEY" ]] || fail "SPARKLE_PUBLIC_ED_KEY does not match the expected Sparkle EdDSA public key"
-[[ -f "$APPCAST" ]] || fail "docs/appcast.xml missing"
+[[ -f "$APPCAST" ]] || fail "Website/public/appcast.xml missing"
 
 APPCAST_SHORT_VERSION="$(xmllint --xpath 'string(//*[local-name()="shortVersionString"])' "$APPCAST" 2>/dev/null || true)"
 APPCAST_BUILD_VERSION="$(xmllint --xpath 'string(//*[local-name()="version"])' "$APPCAST" 2>/dev/null || true)"
@@ -34,12 +34,12 @@ ENCLOSURE_URL="$(xmllint --xpath 'string(//enclosure/@url)' "$APPCAST" 2>/dev/nu
 ENCLOSURE_SIGNATURE="$(xmllint --xpath 'string(//enclosure/@*[local-name()="edSignature"])' "$APPCAST" 2>/dev/null || true)"
 
 [[ "$APPCAST_SHORT_VERSION" == "$MARKETING_VERSION" ]] || fail "appcast short version '$APPCAST_SHORT_VERSION' does not match MARKETING_VERSION '$MARKETING_VERSION'"
-[[ "$APPCAST_BUILD_VERSION" == "$CURRENT_PROJECT_VERSION" ]] || fail "appcast build '$APPCAST_BUILD_VERSION' does not match CURRENT_PROJECT_VERSION '$CURRENT_PROJECT_VERSION'"
+[[ "$APPCAST_BUILD_VERSION" =~ ^[0-9]{10}$ ]] || fail "appcast build '$APPCAST_BUILD_VERSION' is not a valid published build number"
 
-RELEASE_NOTES="$ROOT_DIR/docs/release-notes/$MARKETING_VERSION.html"
+RELEASE_NOTES="$ROOT_DIR/Website/public/release-notes/$MARKETING_VERSION.html"
 [[ -f "$RELEASE_NOTES" ]] || fail "release notes missing: $RELEASE_NOTES"
 grep -q "Build $CURRENT_PROJECT_VERSION" "$RELEASE_NOTES" || fail "release notes do not mention Build $CURRENT_PROJECT_VERSION"
-grep -q "$MARKETING_VERSION.html" "$ROOT_DIR/docs/release-notes/index.html" || fail "release notes index does not link $MARKETING_VERSION.html"
+grep -q "$MARKETING_VERSION.html" "$ROOT_DIR/Website/public/release-notes/index.html" || fail "release notes index does not link $MARKETING_VERSION.html"
 
 if [[ -n "$ENCLOSURE_URL" ]]; then
     if [[ -z "$ENCLOSURE_SIGNATURE" && "${SWIFTMINER_ALLOW_UNSIGNED_APPCAST:-0}" != "1" ]]; then

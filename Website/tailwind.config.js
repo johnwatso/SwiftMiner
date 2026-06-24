@@ -1,14 +1,15 @@
 /**
- * Tailwind config for the SwiftMiner landing page (docs/index.html).
+ * Tailwind config for the SwiftMiner website in Website/public.
  * This replaces the former in-browser `cdn.tailwindcss.com` runtime compiler.
  *
- * Rebuild the static stylesheet after editing index.html classes:
- *   cd docs && npx tailwindcss@3 -c tailwind.config.js \
- *     -i assets/css/tailwind.src.css -o assets/css/tailwind.css --minify
+ * Rebuild the static stylesheet from the repository root:
+ *   npx tailwindcss@3 -c Website/tailwind.config.js \
+ *     -i Website/styles/tailwind.src.css \
+ *     -o Website/public/assets/css/tailwind.css --minify
  */
 module.exports = {
   darkMode: 'class',
-  content: ['./index.html', './help/**/*.html'],
+  content: ['./Website/public/index.html', './Website/public/help/**/*.html'],
   theme: {
     extend: {
       colors: {
