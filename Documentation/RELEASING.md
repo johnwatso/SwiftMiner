@@ -36,7 +36,7 @@ export SPARKLE_PRIVATE_KEY_PATH="/path/to/your/private_key.pem"
 
 **Example:**
 ```bash
-./scripts/publish_sparkle_release.sh 1.05 ./DerivedData/Build/Products/Release/SwiftMiner.app docs/release-notes/1.05.html --channel stable
+./scripts/publish_sparkle_release.sh 1.05 ./DerivedData/Build/Products/Release/SwiftMiner.app Website/public/release-notes/1.05.html --channel stable
 ```
 
 ## 3. Manual Appcast Signing (Fallback)
@@ -51,7 +51,7 @@ SIGN_TOOL=$(find ~/Library/Developer/Xcode/DerivedData -name sign_update | head 
 $SIGN_TOOL --ed-key-file /path/to/private_key.pem ./release-artifacts/SwiftMiner-<version>.zip
 ```
 
-Copy the generated `sparkle:edSignature` and update `docs/appcast.xml`.
+Copy the generated `sparkle:edSignature` and update `Website/public/appcast.xml`.
 
 ## 4. Key Rotation (March 2026)
 
@@ -62,10 +62,10 @@ As of March 26, 2026, the Sparkle signing key has been rotated.
 
 ## 5. Deployment
 
-1. **Verify**: Ensure `docs/appcast.xml` contains the new version and a valid `sparkle:edSignature`.
+1. **Verify**: Ensure `Website/public/appcast.xml` contains the new version and a valid `sparkle:edSignature`.
 2. **Commit**:
    ```bash
-   git add project.yml docs/appcast.xml Sources/SwiftMiner/Info.plist
+   git add project.yml Website/public/appcast.xml Sources/SwiftMiner/Info.plist
    git commit -m "Release v1.05"
    ```
 3. **Push**:
