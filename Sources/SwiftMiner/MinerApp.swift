@@ -13,7 +13,7 @@ struct MinerApp: App {
     @StateObject private var updater = AppUpdater()
     @StateObject private var settings = Settings.shared
     @StateObject private var presentationController = AppPresentationController()
-    @State private var minerManager = MinerManager(clientId: ClientConfiguration.clientId)
+    @State private var minerManager: MinerManager
     @State private var appModel: AppModel
     @State private var navigation: NavigationModel
     @State private var notificationDelegate = AppNotificationDelegate()
@@ -23,7 +23,10 @@ struct MinerApp: App {
 
     init() {
         let clientId = ClientConfiguration.clientId
-        let manager = MinerManager(clientId: clientId)
+        let healthStore = SwiftMinerRuntime.isRunningTests
+            ? nil
+            : UnattendedHealthStore(fileURL: UnattendedHealthStore.defaultFileURL())
+        let manager = MinerManager(clientId: clientId, unattendedHealthStore: healthStore)
         self._minerManager = State(initialValue: manager)
         self._appModel = State(initialValue: AppModel(clientId: clientId, minerManager: manager))
         self._navigation = State(initialValue: NavigationModel(clientId: clientId, minerManager: manager))
