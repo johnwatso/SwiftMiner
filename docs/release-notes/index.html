@@ -47,18 +47,23 @@
   <main>
     <h1>SwiftMiner Release Notes</h1>
     <p class="meta">Recent Sparkle update history</p>
-    <h2>🚧 Version 1.31.1 Draft</h2>
+    <h2>🚧 Version 1.32 Draft</h2>
+    <ul>
+      <li>Asks new users whether to check for updates automatically and offers unattended updates in the same Sparkle prompt.</li>
+      <li>Adds persistent unattended-health snapshots, stable incident identities, and recovery outcome history.</li>
+      <li>Shows persisted unattended health details in Overview, including operating duration and recent progress, Twitch, and recovery activity.</li>
+      <li>Sends one macOS action-required alert when authentication expires, mining remains stalled, automatic recovery is exhausted, updates fail, or the configured dashboard cannot start, without repeating the same incident notification.</li>
+      <li>Adds test network guards that catch unexpected external requests.</li>
+      <li>Updates SwiftMiner to version 1.32 build 2026062418 while leaving ShipHook-owned appcasts untouched.</li>
+    </ul>
+    <h2>Version 1.31.1</h2>
     <ul>
       <li>Keeps the newest 1,000 Activity Log entries across app restarts, including mining, update, Discord, system, and web audit activity.</li>
       <li>Logs automatic update download and installation plans before relaunch, then records the successful version transition when SwiftMiner starts again.</li>
       <li>Shows a dedicated update-complete notification with a What's New action, independently of drop notification preferences and quiet hours.</li>
       <li>Makes Clear Log remove both the visible timeline and its persistent history.</li>
       <li>Isolates automated tests from saved Debug accounts and background app services.</li>
-      <li>Asks new users whether to check for updates automatically and offers unattended updates in the same Sparkle prompt.</li>
-      <li>Adds persistent unattended-health snapshots, stable incident identities, and recovery outcome history.</li>
-      <li>Shows persisted unattended health details in Overview, including operating duration and recent progress, Twitch, and recovery activity.</li>
-      <li>Sends one macOS action-required alert when authentication expires, mining remains stalled, automatic recovery is exhausted, updates fail, or the configured dashboard cannot start, without repeating the same incident notification.</li>
-      <li>Updates SwiftMiner to version 1.31.1 build 2026062417 while leaving ShipHook-owned appcasts untouched.</li>
+      <li>Released as build 2026062412.</li>
     </ul>
     <h2>🚧 Version 1.31 Draft</h2>
     <ul>
