@@ -235,10 +235,7 @@ document.addEventListener('DOMContentLoaded', () => {
     var links = Array.prototype.slice.call(document.querySelectorAll('[data-latest-download]'));
     if (!links.length) return;
 
-    function apply(url, version, rawVersion) {
-        links.forEach(function (link) {
-            link.href = url;
-        });
+    function apply(version, rawVersion) {
         if (version) {
             document.querySelectorAll('[data-latest-version]').forEach(function (el) {
                 el.textContent = version;
@@ -268,7 +265,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (zip && zip.browser_download_url) {
                 var version = release.tag_name || '';
                 var rawVersion = version.startsWith('v') ? version.substring(1) : version;
-                apply(zip.browser_download_url, version, rawVersion);
+                apply(version, rawVersion);
             }
         })
         .catch(function () {

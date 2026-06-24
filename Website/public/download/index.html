@@ -2,10 +2,11 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="robots" content="index, follow, max-image-preview:large">
-    <title>Download SwiftMiner for macOS - Twitch Drops Miner for Mac</title>
-    <meta name="description" content="Download the latest signed and notarized SwiftMiner release for macOS, a native Twitch Drops miner and automatic reward claimer for Mac.">
+    <meta id="theme-color" name="theme-color" content="#120d2b">
+    <title>Thanks for Downloading SwiftMiner</title>
+    <meta name="description" content="Thanks for downloading SwiftMiner, the free, native Twitch Drops miner and automatic reward claimer for macOS.">
     <link rel="canonical" href="https://swiftminer.app/download/">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="SwiftMiner">
@@ -41,64 +42,298 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
     <link rel="manifest" href="/site.webmanifest">
     <style>
-        :root { color-scheme: light dark; }
+        :root {
+            color-scheme: light dark;
+            --background: #090514;
+            --panel: rgba(20, 15, 40, 0.78);
+            --panel-border: rgba(255, 255, 255, 0.12);
+            --text: #f8fafc;
+            --muted: #a8a6b8;
+            --subtle: #77738c;
+            --link: #c084fc;
+            --glow: rgba(147, 51, 234, 0.28);
+        }
+        * { box-sizing: border-box; }
         body {
             min-height: 100vh;
+            min-height: 100dvh;
             margin: 0;
-            display: grid;
-            place-items: center;
-            font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            background: #090514;
-            color: #f8fafc;
+            display: flex;
+            flex-direction: column;
+            font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background:
+                radial-gradient(circle at 18% 12%, rgba(34, 211, 238, 0.12), transparent 28rem),
+                radial-gradient(circle at 82% 76%, rgba(147, 51, 234, 0.2), transparent 34rem),
+                var(--background);
+            color: var(--text);
         }
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            opacity: 0.3;
+            background-image: radial-gradient(rgba(255, 255, 255, 0.45) 0.7px, transparent 0.7px);
+            background-size: 28px 28px;
+            mask-image: linear-gradient(to bottom, black, transparent 80%);
+        }
+        nav, main, footer { position: relative; z-index: 1; }
+        nav {
+            width: min(100% - 32px, 1120px);
+            margin: 0 auto;
+            padding: 22px 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .brand {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            color: var(--text);
+            font-size: 18px;
+            font-weight: 750;
+            text-decoration: none;
+        }
+        .brand img {
+            width: 36px;
+            height: 36px;
+            border-radius: 9px;
+        }
+        .nav-link {
+            color: var(--muted);
+            font-size: 14px;
+            font-weight: 650;
+            text-decoration: none;
+        }
+        .nav-link:hover { color: var(--text); }
         main {
-            width: min(90vw, 520px);
+            width: min(100% - 32px, 760px);
+            margin: auto;
+            padding: 54px 0 72px;
             text-align: center;
         }
-        img {
-            width: 72px;
-            height: 72px;
-            border-radius: 16px;
-            margin-bottom: 20px;
+        .card {
+            position: relative;
+            overflow: hidden;
+            padding: clamp(36px, 7vw, 64px);
+            border: 1px solid var(--panel-border);
+            border-radius: 32px;
+            background: var(--panel);
+            box-shadow: 0 28px 80px rgba(0, 0, 0, 0.34);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+        }
+        .card::before {
+            content: "";
+            position: absolute;
+            width: 420px;
+            height: 260px;
+            top: -170px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-radius: 50%;
+            background: radial-gradient(circle, var(--glow), transparent 70%);
+            pointer-events: none;
+        }
+        .app-icon {
+            position: relative;
+            width: 88px;
+            height: 88px;
+            margin-bottom: 24px;
+            border-radius: 20px;
+            box-shadow: 0 14px 38px rgba(147, 51, 234, 0.32);
         }
         h1 {
-            margin: 0 0 8px;
-            font-size: clamp(2rem, 8vw, 3rem);
-            line-height: 1.05;
+            position: relative;
+            margin: 0 0 14px;
+            font-size: clamp(2.25rem, 7vw, 4rem);
+            line-height: 1.02;
+            letter-spacing: -0.045em;
         }
-        p {
-            margin: 0 0 24px;
-            color: #cbd5e1;
+        .intro {
+            max-width: 570px;
+            margin: 0 auto;
+            color: var(--muted);
+            font-size: clamp(1rem, 2.5vw, 1.18rem);
         }
-        a {
-            color: #67e8f9;
+        .status {
+            display: inline-flex;
+            align-items: center;
+            gap: 9px;
+            margin: 26px 0 0;
+            padding: 9px 13px;
+            border: 1px solid var(--panel-border);
+            border-radius: 999px;
+            color: var(--muted);
+            background: rgba(255, 255, 255, 0.045);
+            font-size: 13px;
+            font-weight: 650;
+        }
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #22d3ee;
+            box-shadow: 0 0 14px rgba(34, 211, 238, 0.8);
+        }
+        .steps {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin: 32px 0;
+            padding: 0;
+            list-style: none;
+            text-align: left;
+        }
+        .steps li {
+            padding: 16px;
+            border: 1px solid var(--panel-border);
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.035);
+            color: var(--muted);
+            font-size: 13px;
+        }
+        .steps strong {
+            display: block;
+            margin-bottom: 3px;
+            color: var(--text);
+            font-size: 14px;
+        }
+        .manual {
+            margin: 0;
+            color: var(--subtle);
+            font-size: 14px;
+        }
+        .manual a, .star-copy a {
+            color: var(--link);
             font-weight: 700;
+            text-underline-offset: 3px;
         }
-        .button {
+        .star {
+            margin-top: 28px;
+            padding-top: 28px;
+            border-top: 1px solid var(--panel-border);
+        }
+        .star-copy {
+            margin: 0;
+            color: var(--muted);
+        }
+        .github-button {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            min-height: 48px;
-            padding: 0 22px;
+            gap: 9px;
+            min-height: 46px;
+            margin-top: 16px;
+            padding: 0 18px;
+            border: 1px solid var(--panel-border);
             border-radius: 12px;
-            background: #9333ea;
-            color: white;
+            background: rgba(255, 255, 255, 0.07);
+            color: var(--text);
+            font-weight: 750;
             text-decoration: none;
+            transition: transform 160ms ease, background 160ms ease;
+        }
+        .github-button:hover {
+            transform: translateY(-2px);
+            background: rgba(255, 255, 255, 0.12);
+        }
+        .github-button svg { width: 20px; height: 20px; fill: currentColor; }
+        footer {
+            width: min(100% - 32px, 1120px);
+            margin: 0 auto;
+            padding: 22px 0;
+            color: var(--subtle);
+            font-size: 13px;
+            text-align: center;
+        }
+        @media (prefers-color-scheme: light) {
+            :root {
+                --background: #f8fafc;
+                --panel: rgba(255, 255, 255, 0.82);
+                --panel-border: rgba(15, 23, 42, 0.1);
+                --text: #171126;
+                --muted: #625d70;
+                --subtle: #7b7685;
+                --link: #7e22ce;
+                --glow: rgba(147, 51, 234, 0.2);
+            }
+            body {
+                background:
+                    radial-gradient(circle at 18% 12%, rgba(34, 211, 238, 0.14), transparent 28rem),
+                    radial-gradient(circle at 82% 76%, rgba(147, 51, 234, 0.13), transparent 34rem),
+                    var(--background);
+            }
+            body::before { opacity: 0.16; }
+            .card { box-shadow: 0 28px 80px rgba(44, 32, 68, 0.12); }
+            .status, .steps li, .github-button { background: rgba(255, 255, 255, 0.62); }
+            .github-button:hover { background: white; }
+        }
+        @media (max-width: 620px) {
+            nav { padding-top: max(18px, env(safe-area-inset-top)); }
+            main { padding: 30px 0 52px; }
+            .card { padding: 34px 22px; border-radius: 24px; }
+            .steps { grid-template-columns: 1fr; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .github-button { transition: none; }
         }
     </style>
 </head>
 <body>
+    <nav aria-label="Main navigation">
+        <a class="brand" href="/">
+            <img src="/icon-192.png" width="192" height="192" alt="">
+            <span>SwiftMiner</span>
+        </a>
+        <a class="nav-link" href="/help/getting-started/">Getting Started</a>
+    </nav>
+
     <main>
-        <img src="/icon-192.png" width="192" height="192" alt="">
-        <h1>Download SwiftMiner for macOS</h1>
-        <p id="status">Finding the latest signed and notarized SwiftMiner release for Mac...</p>
-        <a id="fallback" class="button" href="https://github.com/johnwatso/SwiftMiner/releases/latest">Open latest release</a>
-        <p style="margin-top: 24px; font-size: 14px;">SwiftMiner is a free, open-source Twitch Drops miner and automatic reward claimer for macOS. It runs locally on your Mac, tracks eligible campaigns, and claims completed Twitch Drops without requiring browser tabs.</p>
+        <section class="card" aria-labelledby="download-heading">
+            <img class="app-icon" src="/assets/landing/app-icon-light.webp" width="1024" height="1024" alt="SwiftMiner app icon">
+            <h1 id="download-heading">Thanks for downloading SwiftMiner</h1>
+            <p class="intro">Your download should begin automatically. SwiftMiner is signed, notarized, and ready to run on macOS.</p>
+
+            <p class="status" id="status" aria-live="polite">
+                <span class="status-dot" aria-hidden="true"></span>
+                <span>Finding the latest SwiftMiner release…</span>
+            </p>
+
+            <ol class="steps" aria-label="Installation steps">
+                <li><strong>1. Open the ZIP</strong>Find SwiftMiner in your Downloads folder.</li>
+                <li><strong>2. Move the app</strong>Drag SwiftMiner into Applications.</li>
+                <li><strong>3. Connect Twitch</strong>Open SwiftMiner and add your account.</li>
+            </ol>
+
+            <p class="manual">Download not starting? <a id="manual-download" href="https://github.com/johnwatso/SwiftMiner/releases/download/v1.32/SwiftMiner-1.32.zip" target="download-target">Click here to download SwiftMiner manually.</a></p>
+
+            <div class="star">
+                <p class="star-copy">Like SwiftMiner? Help others discover it by starring the project on GitHub.</p>
+                <a class="github-button" href="https://github.com/johnwatso/SwiftMiner" target="_blank" rel="noopener noreferrer">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
+                    Star SwiftMiner on GitHub
+                </a>
+            </div>
+        </section>
     </main>
+
+    <footer>SwiftMiner is free and open source. Not affiliated with Twitch.</footer>
+    <iframe name="download-target" title="SwiftMiner download" hidden></iframe>
+
     <script>
         (function () {
-            var fallback = 'https://github.com/johnwatso/SwiftMiner/releases/latest';
-            var status = document.getElementById('status');
+            var fallback = 'https://github.com/johnwatso/SwiftMiner/releases/download/v1.32/SwiftMiner-1.32.zip';
+            var manualLink = document.getElementById('manual-download');
+            var statusText = document.querySelector('#status span:last-child');
+            var downloadTarget = document.querySelector('iframe[name="download-target"]');
+
+            function startDownload(url) {
+                manualLink.href = url;
+                statusText.textContent = 'Your download is starting automatically.';
+                downloadTarget.src = url;
+            }
 
             fetch('https://api.github.com/repos/johnwatso/SwiftMiner/releases/latest', {
                 headers: { 'Accept': 'application/vnd.github+json' }
@@ -114,16 +349,10 @@
                         return /\.zip$/.test(asset.name || '');
                     });
 
-                    if (!zip || !zip.browser_download_url) {
-                        throw new Error('No ZIP asset found.');
-                    }
-
-                    status.textContent = 'Starting your download...';
-                    window.location.replace(zip.browser_download_url);
+                    startDownload(zip && zip.browser_download_url ? zip.browser_download_url : fallback);
                 })
                 .catch(function () {
-                    status.innerHTML = 'Could not start the download automatically. Use the button below to open the latest release.';
-                    document.getElementById('fallback').href = fallback;
+                    startDownload(fallback);
                 });
         })();
     </script>
