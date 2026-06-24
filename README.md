@@ -161,6 +161,9 @@ The latest GitHub release is the most stable version.
 
 Building from the current `main` branch includes newer changes that have not been released yet. These builds may contain bugs, incomplete features, or breaking changes.
 
+> [!NOTE]
+> SwiftMiner is updated frequently — sometimes multiple times a day when Twitch changes behavior or bugs need a quick fix. We try to avoid shipping more than one release per day, but it can happen. Enabling automatic or unattended updates is the easiest way to stay current.
+
 ## Requirements
 
 - macOS 26+
