@@ -58,7 +58,6 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         SUAutomaticallyUpdate: true
-        SUEnableAutomaticChecks: true
         SUFeedURL: $(SPARKLE_FEED_URL)
         SUPublicEDKey: $(SPARKLE_PUBLIC_ED_KEY)
         CFBundleURLTypes:
@@ -73,7 +72,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.swiftminer.app
         MACOSX_DEPLOYMENT_TARGET: "26.0"
         MARKETING_VERSION: "1.31.1"
-        CURRENT_PROJECT_VERSION: "2026062412"
+        CURRENT_PROJECT_VERSION: "2026062415"
         INFOPLIST_KEY_CFBundleDisplayName: SwiftMiner
         INFOPLIST_KEY_CFBundleName: SwiftMiner
         CODE_SIGN_STYLE: Automatic
@@ -136,6 +135,9 @@ targets:
         SWIFT_VERSION: "6.0"
         SWIFT_STRICT_CONCURRENCY: complete
         GENERATE_INFOPLIST_FILE: YES
+        # Principal class arms the fail-fast network guard (Tests/NetworkGuard.swift)
+        # at bundle startup so it applies to every suite, even ones that forget to mock.
+        INFOPLIST_KEY_NSPrincipalClass: NetworkGuardBootstrap
         TEST_HOST: $(BUILT_PRODUCTS_DIR)/SwiftMiner.app/Contents/MacOS/SwiftMiner
         BUNDLE_LOADER: $(TEST_HOST)
 

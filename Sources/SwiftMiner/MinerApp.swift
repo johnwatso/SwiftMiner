@@ -83,7 +83,6 @@ struct MinerApp: App {
                         if let completedUpdate = navigation.consumeCompletedUpdateNotification() {
                             await UpdateCompletionNotification.deliver(completedUpdate)
                         }
-                        updater.checkForUpdatesInBackground()
                     }
                     presentationController.configure(mode: settings.appPresenceMode)
                     applyLaunchWindowPreferenceIfNeeded()

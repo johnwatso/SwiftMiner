@@ -103,6 +103,20 @@ const searchIndex = [
     snippet: "Configure app presence, update channels, logging, and performance options."
   },
   {
+    title: "Automatic & Unattended Updates",
+    url: "automatic-updates/",
+    category: "Settings",
+    keywords: "automatic unattended updates sparkle background download install app management permission macos update prompt",
+    snippet: "Learn how SwiftMiner checks, downloads, and installs secure updates automatically."
+  },
+  {
+    title: "macOS App Management Permission",
+    url: "automatic-updates/#app-management",
+    category: "Settings",
+    keywords: "app management privacy security permission update replace application authorization sparkle",
+    snippet: "Understand why macOS may request App Management permission for unattended SwiftMiner updates."
+  },
+  {
     title: "General Preferences",
     url: "settings/#general",
     category: "Settings",
