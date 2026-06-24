@@ -11,6 +11,7 @@ struct MinerApp: App {
 
     @NSApplicationDelegateAdaptor(LaunchContextDelegate.self) private var launchContext
     @StateObject private var updater = AppUpdater()
+    @StateObject private var unattendedHealth: UnattendedHealthModel
     @StateObject private var settings = Settings.shared
     @StateObject private var presentationController = AppPresentationController()
     @State private var minerManager: MinerManager
@@ -28,6 +29,7 @@ struct MinerApp: App {
             : UnattendedHealthStore(fileURL: UnattendedHealthStore.defaultFileURL())
         let manager = MinerManager(clientId: clientId, unattendedHealthStore: healthStore)
         self._minerManager = State(initialValue: manager)
+        self._unattendedHealth = StateObject(wrappedValue: UnattendedHealthModel(store: healthStore))
         self._appModel = State(initialValue: AppModel(clientId: clientId, minerManager: manager))
         self._navigation = State(initialValue: NavigationModel(clientId: clientId, minerManager: manager))
     }
@@ -39,6 +41,7 @@ struct MinerApp: App {
                 .environment(appModel)
                 .environment(navigation)
                 .environmentObject(updater)
+                .environmentObject(unattendedHealth)
                 .task {
                     if !SwiftMinerRuntime.isRunningTests {
                         // Migrate any legacy hardware-UUID account file into the real Keychain
@@ -54,6 +57,7 @@ struct MinerApp: App {
                     // and optionally auto-starts miners before AppModel reads miner state.
                     await navigation.setup()
                     await appModel.setup()
+                    unattendedHealth.startMonitoring()
                     updater.onError = { error in
                         navigation.logEvent(
                             message: "Update check failed: \(error.localizedDescription). You can download manually from https://github.com/johnwatso/SwiftMiner/releases",
@@ -100,6 +104,7 @@ struct MinerApp: App {
                 .onReceive(
                     NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)
                 ) { _ in
+                    unattendedHealth.stopMonitoring()
                     Task { await appModel.stop() }
                 }
                 .onReceive(

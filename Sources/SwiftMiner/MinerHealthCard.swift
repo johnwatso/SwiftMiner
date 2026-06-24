@@ -8,6 +8,7 @@ struct MinerHealthCard: View {
     let miners: [MinerManager.ManagedMiner]
     var onSelectMiner: ((String) -> Void)?
     @ObservedObject private var settings = Settings.shared
+    @EnvironmentObject private var unattendedHealth: UnattendedHealthModel
 
     /// Refreshes time-dependent verdicts (e.g. "stuck for X min") every 30 seconds.
     @State private var now = Date()
@@ -107,12 +108,79 @@ struct MinerHealthCard: View {
     // MARK: - Healthy State
 
     private var healthyRow: some View {
-        HStack(spacing: 10) {
-            AnimatedStatusIcon(symbol: "checkmark.circle.fill", color: .green, size: 17, weight: .semibold)
-            Text(miners.count == 1 ? "Miner is running normally" : "All \(miners.count) miners are running normally")
-                .font(.subheadline.weight(.medium))
-            Spacer()
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                AnimatedStatusIcon(symbol: "checkmark.circle.fill", color: .green, size: 17, weight: .semibold)
+                Text(healthyStatusText)
+                    .font(.subheadline.weight(.medium))
+                Spacer()
+            }
+
+            if hasPersistedHealthDetails {
+                Divider()
+                    .opacity(0.55)
+
+                HStack(spacing: 16) {
+                    if let progressAt = unattendedHealth.summary.lastMiningProgressAt {
+                        healthDetail("Progress", date: progressAt, symbol: "chart.line.uptrend.xyaxis")
+                    }
+                    if let responseAt = unattendedHealth.summary.lastTwitchResponseAt {
+                        healthDetail("Twitch", date: responseAt, symbol: "network")
+                    }
+                    if let recovery = unattendedHealth.summary.lastRecovery {
+                        healthDetail(
+                            recovery.succeeded == true ? "Recovery succeeded" : "Last recovery",
+                            date: recovery.finishedAt ?? recovery.startedAt,
+                            symbol: recovery.succeeded == true ? "checkmark.arrow.trianglehead.counterclockwise" : "arrow.trianglehead.2.clockwise"
+                        )
+                    }
+                    Spacer()
+                }
+            }
         }
+    }
+
+    private var healthyStatusText: String {
+        let base = miners.count == 1
+            ? "Miner is running normally"
+            : "All \(miners.count) miners are running normally"
+        guard let since = unattendedHealth.summary.operatingNormallySince else {
+            return base
+        }
+        return "\(base) for \(durationDescription(since: since))"
+    }
+
+    private var hasPersistedHealthDetails: Bool {
+        unattendedHealth.summary.lastMiningProgressAt != nil
+            || unattendedHealth.summary.lastTwitchResponseAt != nil
+            || unattendedHealth.summary.lastRecovery != nil
+    }
+
+    private func healthDetail(_ title: String, date: Date, symbol: String) -> some View {
+        Label {
+            Text("\(title) \(date.formatted(.relative(presentation: .numeric)))")
+        } icon: {
+            Image(systemName: symbol)
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+    }
+
+    private func durationDescription(since date: Date) -> String {
+        let duration = max(0, now.timeIntervalSince(date))
+        if duration < 60 {
+            return "less than a minute"
+        }
+        if duration < 3600 {
+            let minutes = Int(duration / 60)
+            return "\(minutes) min"
+        }
+        if duration < 86_400 {
+            let hours = Int(duration / 3600)
+            return "\(hours) hr"
+        }
+        let days = Int(duration / 86_400)
+        return "\(days) day\(days == 1 ? "" : "s")"
     }
 
     private var standbyRow: some View {
