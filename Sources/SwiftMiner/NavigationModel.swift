@@ -103,6 +103,7 @@ public final class NavigationModel {
     public var registeredUsers: [MinerUser] = []
     public var swiftBotState: SwiftBotConnectionState = .notConfigured
     public var pendingSwiftBotPairingRequest = false
+    public var onWebDashboardAvailabilityChanged: ((Bool, String?) -> Void)?
 
     public func requestDropsFilter(_ intent: DropsFilterIntent) {
         requestedDropsFilter = intent
@@ -131,6 +132,9 @@ public final class NavigationModel {
         let apiKey = Settings.shared.swiftMinerAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard apiKey.count >= 32 else {
             logEvent(message: "API server not started — API key missing", level: .warning)
+            if Settings.shared.webDashboardConfigured {
+                onWebDashboardAvailabilityChanged?(false, "The local API key is missing")
+            }
             return
         }
         let endpoint = Settings.shared.swiftMinerAPIEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -302,9 +306,15 @@ public final class NavigationModel {
             httpAPIServer = server
             logEvent(message: "API server listening on port \(port)", level: .info)
             autoRegisterWebDashboardHostnameIfNeeded()
+            if Settings.shared.webDashboardConfigured {
+                onWebDashboardAvailabilityChanged?(true, nil)
+            }
             print("[NavigationModel] SwiftMiner HTTP server listening on port \(port)")
         } catch {
             logEvent(message: "API server failed on port \(port): \(error.localizedDescription)", level: .error)
+            if Settings.shared.webDashboardConfigured {
+                onWebDashboardAvailabilityChanged?(false, error.localizedDescription)
+            }
             print("[NavigationModel] Failed to start HTTP server on port \(port): \(error)")
         }
     }

@@ -140,6 +140,17 @@ public actor UnattendedHealthStore {
         }
     }
 
+    public func incidentsAwaitingNotification() -> [(incident: HealthIncident, displayName: String)] {
+        state.snapshots.values.compactMap { snapshot in
+            guard let incident = snapshot.activeIncident,
+                  incident.notificationSentAt == nil else {
+                return nil
+            }
+            return (incident, snapshot.displayName)
+        }
+        .sorted { $0.incident.openedAt < $1.incident.openedAt }
+    }
+
     public func incidents(since date: Date? = nil) -> [HealthIncident] {
         state.incidentHistory
             .filter { date == nil || $0.lastObservedAt >= date! }
