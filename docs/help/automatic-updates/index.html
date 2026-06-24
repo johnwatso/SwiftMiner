@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Automatic &amp; Unattended Updates - SwiftMiner Help</title>
+    <meta name="description" content="Learn how SwiftMiner checks for, downloads, and installs secure Sparkle updates automatically, including macOS App Management permission.">
+    <link rel="canonical" href="https://swiftminer.app/help/automatic-updates/">
+    <meta property="og:type" content="article">
+    <meta property="og:site_name" content="SwiftMiner">
+    <meta property="og:url" content="https://swiftminer.app/help/automatic-updates/">
+    <meta property="og:title" content="Automatic &amp; Unattended SwiftMiner Updates">
+    <meta property="og:description" content="Understand SwiftMiner's automatic update prompt, unattended installation, and macOS permissions.">
+    <meta property="og:image" content="https://swiftminer.app/assets/landing/og-image.jpg">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Automatic &amp; Unattended SwiftMiner Updates">
+    <meta name="twitter:description" content="Understand SwiftMiner's automatic update prompt, unattended installation, and macOS permissions.">
+    <meta name="twitter:image" content="https://swiftminer.app/assets/landing/og-image.jpg">
+    <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"SwiftMiner","item":"https://swiftminer.app/"},{"@type":"ListItem","position":2,"name":"Help","item":"https://swiftminer.app/help/"},{"@type":"ListItem","position":3,"name":"Automatic Updates","item":"https://swiftminer.app/help/automatic-updates/"}]}
+    </script>
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#f5f5f7">
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <link rel="stylesheet" href="../../assets/css/tailwind.css">
+    <link rel="stylesheet" href="../assets/css/kbase.css">
+    <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
+    <script src="../assets/js/search-index.js" defer></script>
+    <script src="../assets/js/search.js" defer></script>
+    <script src="../assets/js/kbase.js" defer></script>
+</head>
+<body>
+    <nav class="nav" aria-label="Main">
+        <div class="shell nav-inner">
+            <a class="brand" href="../">
+                <img src="../../assets/landing/swiftminer-icon.webp" alt="">
+                <span>SwiftMiner Help</span>
+            </a>
+            <div class="nav-actions">
+                <a class="nav-link" href="../">Help Home</a>
+                <a class="nav-link optional" href="../../">Overview</a>
+                <a class="nav-link" href="https://github.com/johnwatso/SwiftMiner/issues">Raise an Issue</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="shell">
+        <div class="breadcrumbs" aria-label="Breadcrumbs">
+            <a href="../">Help Home</a>
+            <span class="sep">/</span>
+            <span class="current">Automatic Updates</span>
+        </div>
+
+        <header class="article-header">
+            <h1>Automatic &amp; Unattended Updates</h1>
+            <p class="article-intro">Keep SwiftMiner current without interrupting normal use. Learn what the update prompt means, how unattended updates work, and which macOS permission may be required.</p>
+            <div class="search-wrap" style="margin-top: 1.5rem; max-width: 100%;">
+                <i class="ph-bold ph-magnifying-glass" style="position: absolute; top: 50%; left: 1.1rem; transform: translateY(-50%); color: var(--muted);"></i>
+                <input id="help-search" class="search" type="search" placeholder="Search help topics" aria-label="Search help topics" style="width: 100%; height: 48px; padding: 0 1.2rem 0 3rem; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-solid); color: var(--ink); font: inherit; outline: none; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);">
+            </div>
+        </header>
+
+        <div class="kb-grid">
+            <main class="kb-content">
+                <p>SwiftMiner uses the Sparkle update framework to check its signed update feed, download new versions, and replace the app safely. Automatic updates are recommended for a miner that may run for long periods without being opened directly.</p>
+
+                <h2 id="permission-prompt">The automatic update prompt</h2>
+                <p>During initial setup, SwiftMiner asks whether it may check for updates automatically. The prompt also includes <strong>Automatically download and install updates</strong>, which is selected by default.</p>
+                <ul>
+                    <li><strong>Check Automatically:</strong> Enables scheduled background checks. Leave the automatic download option selected for unattended updates.</li>
+                    <li><strong>Don’t Check:</strong> Disables background checks. You can still choose <strong>Check for Updates…</strong> from the SwiftMiner menu.</li>
+                </ul>
+                <p>Your choice is saved. You can change it later in <strong>SwiftMiner &gt; Settings &gt; Updates</strong>.</p>
+
+                <h2 id="unattended">What unattended updates do</h2>
+                <p>When unattended updates are enabled, SwiftMiner can download an eligible update in the background and install it without requiring the normal update window. SwiftMiner relaunches after installation so mining can resume.</p>
+                <p>The Updates settings also control when a downloaded update is installed:</p>
+                <ul>
+                    <li><strong>Immediately:</strong> Install and relaunch as soon as the download is ready.</li>
+                    <li><strong>When idle:</strong> Prefer a point when no miner is actively earning progress.</li>
+                    <li><strong>Scheduled:</strong> Wait for the selected installation time.</li>
+                </ul>
+                <p>If an update needs user attention or macOS authorization, Sparkle shows a prompt instead of completing it silently.</p>
+
+                <h2 id="app-management">macOS App Management permission</h2>
+                <p>macOS may ask whether SwiftMiner can update or delete other applications. This is the system’s <strong>App Management</strong> permission and allows Sparkle’s updater to replace the installed copy of SwiftMiner.</p>
+                <p>If you want unattended installation, allow this request. You can review or change it later in <strong>System Settings &gt; Privacy &amp; Security &gt; App Management</strong>.</p>
+                <p>If permission is denied, automatic checks and downloads can still occur, but installation may require your approval.</p>
+
+                <h2 id="change-settings">Change update preferences</h2>
+                <ol class="steps-list">
+                    <li>
+                        <strong>Open Updates settings:</strong>
+                        <p>Choose <strong>SwiftMiner &gt; Settings</strong>, then select <strong>Updates</strong>.</p>
+                    </li>
+                    <li>
+                        <strong>Choose background checking:</strong>
+                        <p>Use <strong>Prompt for available updates</strong> to enable or disable automatic checks.</p>
+                    </li>
+                    <li>
+                        <strong>Choose unattended installation:</strong>
+                        <p>Use <strong>Allow unattended updates</strong>, then select your preferred install timing.</p>
+                    </li>
+                </ol>
+
+                <h2 id="security">Update security</h2>
+                <p>SwiftMiner only accepts updates that pass Sparkle’s signature verification. Release downloads are also code-signed and notarized for macOS. If verification fails, Sparkle rejects the update rather than installing it.</p>
+
+                <h2 id="troubleshooting">If an update does not install</h2>
+                <ul>
+                    <li>Open <strong>SwiftMiner &gt; Settings &gt; Updates</strong> and confirm automatic checks and unattended updates are enabled.</li>
+                    <li>Check <strong>System Settings &gt; Privacy &amp; Security &gt; App Management</strong>.</li>
+                    <li>Choose <strong>Check for Updates…</strong> from the SwiftMiner menu to retry interactively.</li>
+                    <li>If necessary, download the latest release manually from <a href="https://github.com/johnwatso/SwiftMiner/releases">GitHub Releases</a>.</li>
+                </ul>
+            </main>
+
+            <aside class="kb-sidebar" aria-label="Sidebar">
+                <div class="sidebar-section">
+                    <h2 class="sidebar-title">On this page</h2>
+                    <ul class="toc-list">
+                        <li><a href="#permission-prompt" class="toc-link">The update prompt</a></li>
+                        <li><a href="#unattended" class="toc-link">Unattended updates</a></li>
+                        <li><a href="#app-management" class="toc-link">App Management</a></li>
+                        <li><a href="#change-settings" class="toc-link">Change preferences</a></li>
+                        <li><a href="#security" class="toc-link">Update security</a></li>
+                        <li><a href="#troubleshooting" class="toc-link">Troubleshooting</a></li>
+                    </ul>
+                </div>
+
+                <div class="sidebar-section">
+                    <h2 class="sidebar-title">Related Articles</h2>
+                    <ul class="related-links">
+                        <li><a href="../settings/"><i class="ph-bold ph-gear"></i> Settings Guide</a></li>
+                        <li><a href="../getting-started/"><i class="ph-bold ph-rocket-launch"></i> Getting Started</a></li>
+                        <li><a href="../security-privacy/"><i class="ph-bold ph-shield-check"></i> Security &amp; Privacy</a></li>
+                        <li><a href="../troubleshooting/"><i class="ph-bold ph-wrench"></i> Troubleshooting</a></li>
+                    </ul>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="shell">
+            <span>SwiftMiner Help · Published June 24, 2026</span>
+            <span><a class="nav-link" href="../../release-notes/">Release Notes</a> · <a class="nav-link" href="https://github.com/johnwatso/SwiftMiner">GitHub</a></span>
+        </div>
+    </footer>
+</body>
+</html>

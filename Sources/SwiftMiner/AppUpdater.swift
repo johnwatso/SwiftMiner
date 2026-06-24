@@ -44,6 +44,8 @@ final class AppUpdater: NSObject, ObservableObject {
 
 #if canImport(Sparkle)
     private var updaterController: SPUStandardUpdaterController?
+    private var automaticChecksObservation: NSKeyValueObservation?
+    private var automaticDownloadsObservation: NSKeyValueObservation?
 #endif
     private let stableFeedURL: String
     private let currentShortVersion: String
@@ -87,18 +89,8 @@ final class AppUpdater: NSObject, ObservableObject {
                 updaterDelegate: self,
                 userDriverDelegate: nil
             )
-            // Hands-free updates by default: check + download silently. One-time
-            // seed so a user who later opts out in the Updates tab stays opted out.
-            let autoDefaultsKey = "SwiftMinerAutoUpdateDefaultApplied"
-            if !UserDefaults.standard.bool(forKey: autoDefaultsKey) {
-                updaterController?.updater.automaticallyChecksForUpdates = true
-                updaterController?.updater.automaticallyDownloadsUpdates = true
-                UserDefaults.standard.set(true, forKey: autoDefaultsKey)
-            }
-            automaticallyChecksForUpdates = updaterController?.updater.automaticallyChecksForUpdates ?? false
-            automaticallyDownloadsUpdates = updaterController?.updater.automaticallyDownloadsUpdates ?? false
+            observeAutomaticUpdatePreferences()
             canCheckForUpdates = true
-            updateAutoCheckLoop()
         } else {
             updaterController = nil
             canCheckForUpdates = false
@@ -142,6 +134,32 @@ final class AppUpdater: NSObject, ObservableObject {
 #endif
         automaticallyDownloadsUpdates = isEnabled
     }
+
+#if canImport(Sparkle)
+    private func observeAutomaticUpdatePreferences() {
+        guard let updater = updaterController?.updater else { return }
+
+        automaticChecksObservation = updater.observe(
+            \.automaticallyChecksForUpdates,
+            options: [.initial, .new]
+        ) { [weak self] updater, _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.automaticallyChecksForUpdates = updater.automaticallyChecksForUpdates
+                self.updateAutoCheckLoop()
+            }
+        }
+
+        automaticDownloadsObservation = updater.observe(
+            \.automaticallyDownloadsUpdates,
+            options: [.initial, .new]
+        ) { [weak self] updater, _ in
+            Task { @MainActor [weak self] in
+                self?.automaticallyDownloadsUpdates = updater.automaticallyDownloadsUpdates
+            }
+        }
+    }
+#endif
 
     private func updateAutoCheckLoop() {
         if automaticallyChecksForUpdates {
@@ -227,6 +245,10 @@ final class AppUpdater: NSObject, ObservableObject {
 
 #if canImport(Sparkle)
 extension AppUpdater: SPUUpdaterDelegate {
+    func updaterShouldPromptForPermissionToCheck(forUpdates updater: SPUUpdater) -> Bool {
+        true
+    }
+
     func feedURLString(for updater: SPUUpdater) -> String? {
         Self.resolvedFeedURL(stableFeedURL: stableFeedURL, channel: selectedChannel)
     }

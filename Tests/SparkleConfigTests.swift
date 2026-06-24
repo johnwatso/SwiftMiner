@@ -24,6 +24,15 @@ final class SparkleConfigTests: XCTestCase {
         XCTAssertEqual(feedURL, expectedFeedURL, "SUFeedURL must keep using the stable SwiftMiner appcast")
         XCTAssertEqual(publicKey, expectedPublicKey, "SUPublicEDKey must match the current Sparkle EdDSA public key")
         XCTAssertNotEqual(publicKey, previousPublicKey, "SUPublicEDKey must not regress to the retired Sparkle public key")
+        XCTAssertNil(
+            info["SUEnableAutomaticChecks"],
+            "SUEnableAutomaticChecks must remain absent so Sparkle can ask for update-check permission"
+        )
+        XCTAssertEqual(
+            info["SUAutomaticallyUpdate"] as? Bool,
+            true,
+            "Sparkle's permission prompt should initially select unattended updates"
+        )
     }
 
     func testProjectYmlPreservesSparkleInfoPlistProperties() throws {
@@ -34,6 +43,8 @@ final class SparkleConfigTests: XCTestCase {
         // rewrites them into Sources/SwiftMiner/Info.plist on every generate.
         XCTAssertTrue(yaml.contains("SUFeedURL"), "project.yml must reference SUFeedURL in info.properties")
         XCTAssertTrue(yaml.contains("SUPublicEDKey"), "project.yml must reference SUPublicEDKey in info.properties")
+        XCTAssertFalse(yaml.contains("SUEnableAutomaticChecks"), "project.yml must allow Sparkle to show its permission prompt")
+        XCTAssertTrue(yaml.contains("SUAutomaticallyUpdate: true"), "project.yml must offer unattended updates in Sparkle's permission prompt")
         XCTAssertTrue(yaml.contains("SPARKLE_PUBLIC_ED_KEY: \"\(expectedPublicKey)\""), "project.yml must preserve the current Sparkle public key")
         XCTAssertFalse(yaml.contains(previousPublicKey), "project.yml must not contain the retired Sparkle public key")
     }
