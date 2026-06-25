@@ -581,16 +581,31 @@
                         </div>
                     </div>
 
-                </div>
+                    <!-- Comparison Bento Card -->
+                    <div class="glass-panel card-glow-purple group rounded-3xl p-8 md:p-10 relative overflow-hidden md:col-span-2 reveal" style="transition-delay: 350ms;">
+                        <div class="relative z-10">
+                            <h3 class="text-2xl font-bold mb-6 text-slate-900 dark:text-white">Why Native Swift beats Docker &amp; Python on macOS</h3>
+                            
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 text-left">
+                                <!-- Docker / Python Column -->
+                                <div class="space-y-2">
+                                    <h4 class="text-sm font-semibold text-slate-400 dark:text-gray-500 uppercase tracking-wider">Docker &amp; Python setups</h4>
+                                    <p class="text-slate-500 dark:text-gray-400 text-sm leading-relaxed">
+                                        Must run a virtualized Linux VM hypervisor in the background, which permanently consumes hundreds of megabytes of RAM and drains laptop battery. Script-based command-line miners rely on heavy Python runtimes or browser engines that spin up multiple resource-hogging threads.
+                                    </p>
+                                </div>
+                                
+                                <!-- Native Swift Column -->
+                                <div class="space-y-2">
+                                    <h4 class="text-sm font-semibold text-brand-purple uppercase tracking-wider">The Native Advantage</h4>
+                                    <p class="text-slate-500 dark:text-gray-400 text-sm leading-relaxed">
+                                        Compiles directly to machine code for both Apple Silicon and Intel Core chips. It interfaces directly with native macOS frameworks, runs with negligible CPU overhead, and is Apple Developer signed for secure, gatekeeper-approved execution.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
 
-                <div class="max-w-4xl mx-auto mt-12 p-8 glass-panel card-glow-purple rounded-3xl border border-black/10 dark:border-white/10 relative overflow-hidden reveal" style="transition-delay: 350ms;">
-                    <h3 class="text-xl font-bold mb-3 text-slate-900 dark:text-white">Why Native Swift beats Docker &amp; Python on macOS</h3>
-                    <p class="text-slate-500 dark:text-gray-400 text-sm leading-relaxed mb-4">
-                        Docker-based miners on Mac must run a virtualized Linux kernel (hypervisor) in the background, which permanently consumes hundreds of megabytes of RAM and drains your laptop battery. Similarly, script-based command-line miners rely on heavy Python runtimes or headless browser engines that spin up multiple resource-hogging background threads.
-                    </p>
-                    <p class="text-slate-500 dark:text-gray-400 text-sm leading-relaxed">
-                        SwiftMiner compiles directly to machine code for both Apple Silicon (M1/M2/M3/M4) and Intel Core chips. It interfaces directly with macOS system frameworks and is digitally signed by Apple, giving you a secure, battery-friendly auto-claimer that runs efficiently for days.
-                    </p>
                 </div>
             </div>
             </div>
