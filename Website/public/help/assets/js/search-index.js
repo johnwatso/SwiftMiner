@@ -25,7 +25,7 @@ const searchIndex = [
     title: "Twitch Drops Miner for Mac",
     url: "twitch-drops-miner-for-mac/",
     category: "Getting Started",
-    keywords: "twitch drops miner mac macos native app auto claim watch eligible streams browser tabs without docker multi account squad mining signed notarized sparkle auto update alternative to python devilxd",
+    keywords: "twitch drops miner mac macos native app auto claim watch eligible streams browser tabs without docker multi account squad mining signed notarized sparkle auto update alternative to python scripts",
     snippet: "Learn why SwiftMiner is the best native macOS alternative to Docker/Python miners—featuring Apple notarization, squad mining, and Sparkle auto-updates."
   },
   {
