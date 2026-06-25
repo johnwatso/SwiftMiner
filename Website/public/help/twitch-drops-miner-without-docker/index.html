@@ -44,18 +44,31 @@
         </header>
         <div class="kb-grid">
             <main class="kb-content">
-                <p>Docker-based Twitch Drops miners can be useful for headless servers, but they are more setup than many Mac users want. SwiftMiner is built for people who want to download an app, connect Twitch, and let the miner run locally on macOS.</p>
-                <h2 id="native-app">Native app instead of container setup</h2>
-                <p>Install SwiftMiner like a normal Mac app. There is no Docker image to pull, no compose file to maintain, and no container filesystem to inspect when something goes wrong.</p>
-                <h2 id="mac-integration">Mac integration</h2>
+                <p>Docker-based Twitch Drops miners can be useful for headless servers, but they require a complex configuration and hypervisor overhead that many Mac users want to avoid. SwiftMiner is built for people who want to download an app, connect Twitch, and let the miner run locally on macOS with zero virtualization waste.</p>
+                
+                <h2 id="native-app">Native App vs. Virtualized Container</h2>
+                <p>Install SwiftMiner like any standard Mac app. There is no Docker image to pull, no compose file to maintain, and no container filesystem to inspect when something goes wrong. More importantly, Docker on macOS must run a Linux VM hypervisor in the background, which consumes substantial CPU, RAM, and laptop battery. SwiftMiner is built natively in Swift/SwiftUI, executing directly on your Apple Silicon or Intel processor with minimal resource footprint.</p>
+                
+                <h2 id="mac-security">Apple Developer Signed & Notarized</h2>
+                <p>Running code in Docker containers or executing third-party scripts can carry security risks. SwiftMiner is fully signed with an Apple Developer certificate and notarized by Apple. This guarantees it runs cleanly on macOS without triggering security blocks, requiring terminal overrides, or bypassing gatekeeper policies.</p>
+
+                <h2 id="squad-mining">Built-in Multi-Account UI</h2>
+                <p>Farming drops across multiple Twitch accounts is simple with SwiftMiner's native multi-account dashboard. Under a Docker setup, you would need to define and run multiple container configurations, map distinct volumes, and manage individual CLI instances. SwiftMiner keeps all your active miners running concurrently under one window.</p>
+
+                <h2 id="auto-updates">Automatic Sparkle Updates</h2>
+                <p>Twitch API changes regularly break third-party miners. While Docker setups require you to manually detect breakage, pull a new image, and recreate your containers, SwiftMiner leverages the Sparkle framework to automatically install compatibility fixes and relaunch in the background.</p>
+
+                <h2 id="mac-integration">Full macOS Integration</h2>
                 <p>SwiftMiner uses macOS Keychain for Twitch tokens, macOS notifications for claim and auth alerts, and Menu Bar Mode for quiet background operation.</p>
+                
                 <h2 id="web-dashboard">Optional web dashboard</h2>
                 <p>If you still want browser access, SwiftMiner includes an optional <a href="../web-dashboard/">Web Dashboard</a>. That gives you a web UI without making Docker the main way you run the miner.</p>
+                
                 <h2 id="when-docker">When Docker might still fit</h2>
                 <p>If you want a VPS, NAS, or fully headless Linux setup, Docker may still be the better fit. SwiftMiner's sweet spot is a Mac that is already on and can run a native signed app.</p>
             </main>
             <aside class="kb-sidebar" aria-label="Sidebar">
-                <div class="sidebar-section"><h2 class="sidebar-title">On this page</h2><ul class="toc-list"><li><a href="#native-app" class="toc-link">Native app</a></li><li><a href="#mac-integration" class="toc-link">Mac integration</a></li><li><a href="#web-dashboard" class="toc-link">Web dashboard</a></li><li><a href="#when-docker" class="toc-link">When Docker fits</a></li></ul></div>
+                <div class="sidebar-section"><h2 class="sidebar-title">On this page</h2><ul class="toc-list"><li><a href="#native-app" class="toc-link">Native App</a></li><li><a href="#mac-security" class="toc-link">Security & Notarization</a></li><li><a href="#squad-mining" class="toc-link">Multi-Account UI</a></li><li><a href="#auto-updates" class="toc-link">Auto-Updates</a></li><li><a href="#mac-integration" class="toc-link">Mac Integration</a></li><li><a href="#web-dashboard" class="toc-link">Web Dashboard</a></li><li><a href="#when-docker" class="toc-link">When Docker Fits</a></li></ul></div>
                 <div class="sidebar-section"><h2 class="sidebar-title">Related Articles</h2><ul class="related-links"><li><a href="../twitch-drops-miner-for-mac/"><i class="ph-bold ph-desktop"></i> Miner for Mac</a></li><li><a href="../menu-bar/"><i class="ph-bold ph-monitor"></i> Menu Bar Mode</a></li><li><a href="../web-dashboard/"><i class="ph-bold ph-globe"></i> Web Dashboard</a></li><li><a href="../security-privacy/"><i class="ph-bold ph-shield-check"></i> Security & Privacy</a></li></ul></div>
             </aside>
         </div>
