@@ -207,6 +207,21 @@
                     <p class="hero-resource-links text-xs sm:text-sm text-slate-500 dark:text-gray-500 max-w-3xl mx-auto leading-relaxed text-center reveal" style="transition-delay: 320ms;">
                         Learn more: <a href="./help/twitch-drops-miner-for-mac/" class="font-semibold text-brand-purple hover:text-brand-magenta transition-colors">Twitch Drops miner for Mac</a> · <a href="./help/auto-claim-twitch-drops-on-macos/" class="font-semibold text-brand-purple hover:text-brand-magenta transition-colors">auto-claim rewards</a> · <a href="./help/twitch-drops-miner-without-docker/" class="font-semibold text-brand-purple hover:text-brand-magenta transition-colors">no Docker required</a> · <a href="./help/" class="font-semibold text-brand-purple hover:text-brand-magenta transition-colors">help docs</a>
                     </p>
+
+                    <!-- Game Badges/Keywords Strip -->
+                    <div class="w-full max-w-5xl mx-auto mt-12 px-4 text-center reveal" style="transition-delay: 360ms;">
+                        <p class="text-xs uppercase tracking-widest text-slate-400 dark:text-gray-500 font-semibold mb-3">Claim rewards for your favorite campaigns</p>
+                        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm font-medium text-slate-600 dark:text-gray-400">
+                            <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-brand-purple"></span>Rust</span>
+                            <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-brand-cyan"></span>Sea of Thieves</span>
+                            <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-brand-magenta"></span>Overwatch 2</span>
+                            <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-brand-purple"></span>Tarisland</span>
+                            <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-brand-cyan"></span>World of Warcraft</span>
+                            <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-brand-magenta"></span>Valorant</span>
+                            <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-brand-purple"></span>Escape from Tarkov</span>
+                            <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-brand-cyan"></span>Apex Legends</span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </section>
@@ -368,7 +383,7 @@
                                 <svg class="ph-icon text-2xl" aria-hidden="true"><use href="#i-game-controller-bold"/></svg>
                             </div>
                             <h3 class="text-2xl md:text-3xl font-bold mb-3 text-slate-900 dark:text-white">Drops progress tracking</h3>
-                            <p class="text-slate-600 dark:text-gray-400 leading-relaxed">Track active, completed, and upcoming Twitch Drops while SwiftMiner chooses eligible streams and keeps progress moving in the background.</p>
+                            <p class="text-slate-600 dark:text-gray-400 leading-relaxed">Track active, completed, and upcoming Twitch Drops for games like Rust, Sea of Thieves, Overwatch 2, Tarisland, and World of Warcraft while SwiftMiner automatically finds eligible streams and keeps progress moving.</p>
                         </div>
                         <div class="screenshot-frame">
                             <img data-screenshot="drops" src="./assets/landing/drops-dark.webp" width="3358" height="1760" loading="lazy" decoding="async" alt="Drops Screen" class="w-full transition-all duration-300 opacity-100">
@@ -509,7 +524,7 @@
                                 </div>
                                 <h3 class="text-2xl font-bold mb-3 text-slate-900 dark:text-white">Quiet background work</h3>
                                 <p class="text-slate-500 dark:text-gray-400 text-sm leading-relaxed">
-                                    Designed for low CPU, memory, and power use, so you can leave miners running quietly in the background while you work, play, or step away.
+                                    Designed natively to avoid the heavy CPU and RAM consumption of hypervisors and virtual machines. Run active miners quietly in the background without causing your MacBook fans to spin up or your battery to drain.
                                 </p>
                             </div>
                             <span class="text-[10px] text-brand-cyan font-bold uppercase tracking-wider">Low CPU &amp; memory</span>
@@ -543,7 +558,7 @@
                                 </div>
                                 <h3 class="text-2xl font-bold mb-3 text-slate-900 dark:text-white">Built with Swift</h3>
                                 <p class="text-slate-500 dark:text-gray-400 text-sm leading-relaxed">
-                                    Written natively in Swift instead of using an Electron shell or bundled web app. The interface feels immediate and the app stays light.
+                                    Written natively in Swift instead of using resource-heavy wrappers, running external scripts, or configuring Python container images. The interface opens instantly, stays responsive, and runs efficiently for days.
                                 </p>
                             </div>
                             <span class="text-[10px] text-brand-magenta font-bold uppercase tracking-wider">100% Native Swift</span>
@@ -567,6 +582,17 @@
                     </div>
 
                 </div>
+
+                <div class="max-w-4xl mx-auto mt-12 p-8 glass-panel card-glow-purple rounded-3xl border border-black/10 dark:border-white/10 relative overflow-hidden reveal" style="transition-delay: 350ms;">
+                    <h3 class="text-xl font-bold mb-3 text-slate-900 dark:text-white">Why Native Swift beats Docker &amp; Python on macOS</h3>
+                    <p class="text-slate-500 dark:text-gray-400 text-sm leading-relaxed mb-4">
+                        Docker-based miners on Mac must run a virtualized Linux kernel (hypervisor) in the background, which permanently consumes hundreds of megabytes of RAM and drains your laptop battery. Similarly, script-based command-line miners rely on heavy Python runtimes or headless browser engines that spin up multiple resource-hogging background threads.
+                    </p>
+                    <p class="text-slate-500 dark:text-gray-400 text-sm leading-relaxed">
+                        SwiftMiner compiles directly to machine code for both Apple Silicon (M1/M2/M3/M4) and Intel Core chips. It interfaces directly with macOS system frameworks and is digitally signed by Apple, giving you a secure, battery-friendly auto-claimer that runs efficiently for days.
+                    </p>
+                </div>
+            </div>
             </div>
         </section>
 
