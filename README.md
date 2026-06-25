@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <strong><a href="https://swiftminer.app">swiftminer.app</a></strong>
+  <strong><a href="https://swiftminer.app">Twitch Drops Miner for Mac</a></strong>
 </p>
 
 <p align="center">
@@ -138,7 +138,7 @@ The app sits on top of these engines and presents their state in a single interf
 
 ## Install
 
-Download the latest release from the official website [swiftminer.app](https://swiftminer.app) or from [GitHub Releases](https://github.com/johnwatso/SwiftMiner/releases).
+Download the latest release from the official [Twitch Drops Miner for Mac website](https://swiftminer.app) or from [GitHub Releases](https://github.com/johnwatso/SwiftMiner/releases).
 
 1. Download the latest `.zip`
 2. Move `SwiftMiner.app` to `/Applications`
