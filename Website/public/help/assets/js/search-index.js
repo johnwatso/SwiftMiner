@@ -25,8 +25,8 @@ const searchIndex = [
     title: "Twitch Drops Miner for Mac",
     url: "twitch-drops-miner-for-mac/",
     category: "Getting Started",
-    keywords: "twitch drops miner mac macos native app auto claim watch eligible streams browser tabs without docker multi account",
-    snippet: "Use SwiftMiner as a free native Mac app for Twitch Drops mining, tracking, auto-claiming, with no Docker required."
+    keywords: "twitch drops miner mac macos native app auto claim watch eligible streams browser tabs without docker multi account squad mining signed notarized sparkle auto update alternative to python devilxd",
+    snippet: "Learn why SwiftMiner is the best native macOS alternative to Docker/Python miners—featuring Apple notarization, squad mining, and Sparkle auto-updates."
   },
   {
     title: "Auto Claim Twitch Drops on macOS",
@@ -53,8 +53,8 @@ const searchIndex = [
     title: "No Docker Required for Twitch Drops Mining",
     url: "twitch-drops-miner-without-docker/",
     category: "Getting Started",
-    keywords: "twitch drops miner without docker native mac app no container no compose no server setup",
-    snippet: "Use SwiftMiner as a native Mac Twitch Drops miner with no container setup required."
+    keywords: "twitch drops miner without docker native mac app no container no compose no server setup battery saver energy efficient silicon m1 m2 m3 m4 intel hypervisor signed notarized",
+    snippet: "Run Twitch Drops mining natively on macOS without Docker VM overhead, using a signed app with built-in multi-account support and automatic updates."
   },
 
   // Main Window

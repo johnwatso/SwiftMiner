@@ -120,30 +120,70 @@
                 <h2 id="why-native-macos">Why use a native Mac app?</h2>
                 <p>A native app can keep mining quietly in the background, integrate with macOS notifications, store Twitch tokens in Keychain, and present account status without managing browser tabs. SwiftMiner is also signed and notarized, so it follows the normal macOS app trust path.</p>
 
+                <h2 id="four-pillars">The 4 Pillars of SwiftMiner on macOS</h2>
+                <p>SwiftMiner is engineered specifically for macOS, offering a seamless and optimized experience compared to command-line Python scripts or virtualized Docker containers.</p>
+
+                <h3>1. 100% Native & Energy Efficient</h3>
+                <p>SwiftMiner is built natively using Swift and SwiftUI, compiling directly to machine code for both Apple Silicon (M1/M2/M3/M4) and Intel Core processors. Unlike virtualized Docker containers (which require running a heavy Linux VM hypervisor in the background) or running Python runtimes with headless browser engines, SwiftMiner runs with near-zero overhead. It preserves your Mac's battery life and keeps RAM and CPU usage exceptionally low, so your machine stays quiet and cool.</p>
+
+                <h3>2. Apple Developer Signed & Notarized</h3>
+                <p>Security is release-critical. SwiftMiner is digitally signed with an Apple Developer certificate and notarized via Apple's secure automated notary service. When you download and run the app, macOS recognizes it immediately as a trusted app. There are no Gatekeeper security warnings, quarantine bypass prompts, or terminal commands (like <code>xattr -d com.apple.quarantine</code>) required to get up and running.</p>
+
+                <h3>3. Built-in Multi-Account Support (Squad Mining)</h3>
+                <p>Farming Twitch Drops for friends, family, or your own alt accounts is built directly into the visual interface. In command-line miners (such as DevilXD's Python miner), managing multiple accounts requires running separate container instances, setting up custom folders, mapping ports, or managing several terminal shells. SwiftMiner lets you add and run multiple accounts side-by-side with shared or independent priority rules within a single visual window.</p>
+
+                <h3>4. Automatic Updates via Sparkle</h3>
+                <p>Twitch changes its internal API and campaign structures frequently, which immediately breaks older or unmaintained tools. SwiftMiner integrates the secure Sparkle auto-update framework to automatically check, download, and install compatibility patches in the background. Your miner stays working without requiring you to manually check GitHub, download zip archives, copy-paste files, or run command-line pulls.</p>
+
+                <h2 id="comparison">Detailed Setup & Performance Comparison</h2>
+                <p>The table below highlights the differences between running SwiftMiner natively, deploying a Docker/Python-based alternative, and mining manually via standard browser tabs:</p>
+
                 <div class="kb-table-wrap">
                     <table>
                         <thead>
                             <tr>
-                                <th>Approach</th>
-                                <th>Best for</th>
-                                <th>Tradeoff</th>
+                                <th>Feature</th>
+                                <th>SwiftMiner (Native Mac App)</th>
+                                <th>Python / Docker Miner</th>
+                                <th>Browser Tabs</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr>
-                                <td>SwiftMiner native Mac app</td>
-                                <td>Running Twitch Drops mining on a Mac with a signed app, Keychain storage, notifications, and a visual dashboard.</td>
-                                <td>Requires a Mac running the supported macOS version.</td>
+                                <td><strong>Architecture</strong></td>
+                                <td>Native Swift & SwiftUI</td>
+                                <td>Python Script / Docker VM</td>
+                                <td>HTML/JS in Web Browser</td>
                             </tr>
                             <tr>
-                                <td>Browser tabs</td>
-                                <td>Manual viewing when you only need a single short campaign.</td>
-                                <td>Easy to close accidentally, harder to monitor, and inconvenient for multiple accounts.</td>
+                                <td><strong>Apple Signed & Notarized</strong></td>
+                                <td>Yes (Verified by Apple)</td>
+                                <td>No (Raw unverified scripts)</td>
+                                <td>N/A (Browser container)</td>
                             </tr>
                             <tr>
-                                <td>Docker-based miner</td>
-                                <td>Headless servers, Linux hosts, NAS setups, or users who prefer container workflows.</td>
-                                <td>More setup on Mac: images, compose files, ports, volumes, and container troubleshooting.</td>
+                                <td><strong>Resource & Battery Impact</strong></td>
+                                <td>Negligible (Optimized native code)</td>
+                                <td>High (Hypervisor/VM translation overhead)</td>
+                                <td>High (Heavy media engine and tab memory)</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Multiple Accounts</strong></td>
+                                <td>Yes (Built-in Squad Mining dashboard)</td>
+                                <td>Complex (Manual configs/multi-containers)</td>
+                                <td>Inconvenient (Requires profile switching)</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Auto-Updates</strong></td>
+                                <td>Automatic background updates (Sparkle)</td>
+                                <td>Manual (Git / Docker pull commands)</td>
+                                <td>None or manual extension updates</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Setup Complexity</strong></td>
+                                <td>Instant drag-and-drop install</td>
+                                <td>High (Docker, compose YAML, CLI setup)</td>
+                                <td>None (Just navigate to twitch.tv)</td>
                             </tr>
                         </tbody>
                     </table>
@@ -176,6 +216,8 @@
                     <ul class="toc-list">
                         <li><a href="#what-it-does" class="toc-link">What it does</a></li>
                         <li><a href="#why-native-macos" class="toc-link">Native Mac benefits</a></li>
+                        <li><a href="#four-pillars" class="toc-link">The 4 Pillars</a></li>
+                        <li><a href="#comparison" class="toc-link">Comparison Table</a></li>
                         <li><a href="#auto-claim" class="toc-link">Auto claim</a></li>
                         <li><a href="#without-docker" class="toc-link">No Docker required</a></li>
                         <li><a href="#start-mining" class="toc-link">Start mining</a></li>
