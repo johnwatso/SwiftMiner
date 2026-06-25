@@ -579,30 +579,100 @@
                             </div>
                             <span class="text-[10px] text-slate-400 dark:text-gray-500 font-bold uppercase tracking-wider">MIT Licensed · Auditable</span>
                         </div>
-                    </div>
-
-                    <div class="glass-panel card-glow-purple group rounded-3xl p-8 md:p-10 relative overflow-hidden md:col-span-2 reveal" style="transition-delay: 350ms;">
+                                     <div class="glass-panel card-glow-purple group rounded-3xl p-8 md:p-10 relative overflow-hidden md:col-span-2 reveal" style="transition-delay: 350ms;">
                         <div class="relative z-10">
                             <div class="w-12 h-12 rounded-full bg-brand-purple/20 flex items-center justify-center text-brand-purple mb-6 border border-brand-purple/30 shadow-lg">
                                 <svg class="ph-icon text-2xl" aria-hidden="true"><use href="#i-monitor-bold"/></svg>
                             </div>
-                            <h3 class="text-2xl font-bold mb-6 text-slate-900 dark:text-white">Why Native Swift beats Docker &amp; Python on macOS</h3>
+                            <h3 class="text-2xl font-bold mb-3 text-slate-900 dark:text-white text-left">Why Native Swift beats Docker &amp; Python on macOS</h3>
+                            <p class="text-slate-500 dark:text-gray-400 text-sm leading-relaxed max-w-3xl mb-8 text-left">
+                                Running Twitch Drops miners on Mac has traditionally meant relying on raw Python scripts or containerized Docker setups. While these work well on headless servers, they introduce heavy resource, security, and maintenance overhead on a personal Mac.
+                            </p>
                             
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 text-left">
-                                <!-- Docker / Python Column -->
-                                <div class="space-y-2">
-                                    <h4 class="text-sm font-semibold text-slate-400 dark:text-gray-500 uppercase tracking-wider">Docker &amp; Python setups</h4>
-                                    <p class="text-slate-500 dark:text-gray-400 text-sm leading-relaxed">
-                                        Must run a virtualized Linux VM hypervisor in the background, which permanently consumes hundreds of megabytes of RAM and drains laptop battery. Script-based command-line miners rely on heavy Python runtimes or browser engines that spin up multiple resource-hogging threads.
-                                    </p>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8 text-left">
+                                <!-- Native Swift -->
+                                <div class="bg-brand-purple/10 dark:bg-brand-purple/5 border border-brand-purple/30 rounded-2xl p-6 flex flex-col justify-between">
+                                    <div>
+                                        <div class="flex items-center gap-2 mb-4">
+                                            <svg class="ph-icon text-lg text-brand-purple flex-shrink-0" aria-hidden="true"><use href="#i-seal-check-bold"/></svg>
+                                            <h4 class="font-bold text-slate-900 dark:text-white text-base">Native Swift App</h4>
+                                        </div>
+                                        <ul class="space-y-3 text-xs text-slate-600 dark:text-gray-300">
+                                            <li class="flex items-start gap-2">
+                                                <span class="text-brand-purple font-bold">✓</span>
+                                                <span><strong>Instant Setup:</strong> Drag &amp; drop to applications</span>
+                                            </li>
+                                            <li class="flex items-start gap-2">
+                                                <span class="text-brand-purple font-bold">✓</span>
+                                                <span><strong>Near-Zero RAM:</strong> Optimized compiled code</span>
+                                            </li>
+                                            <li class="flex items-start gap-2">
+                                                <span class="text-brand-purple font-bold">✓</span>
+                                                <span><strong>Secure:</strong> Gatekeeper signed &amp; notarized</span>
+                                            </li>
+                                            <li class="flex items-start gap-2">
+                                                <span class="text-brand-purple font-bold">✓</span>
+                                                <span><strong>Auto-Updates:</strong> Native Sparkle updates</span>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                    <span class="text-[9px] text-brand-purple font-bold uppercase tracking-wider mt-4 block">Recommended for macOS</span>
                                 </div>
                                 
-                                <!-- Native Swift Column -->
-                                <div class="space-y-2">
-                                    <h4 class="text-sm font-semibold text-brand-purple uppercase tracking-wider">The Native Advantage</h4>
-                                    <p class="text-slate-500 dark:text-gray-400 text-sm leading-relaxed">
-                                        Compiles directly to machine code for both Apple Silicon and Intel Core chips. It interfaces directly with native macOS frameworks, runs with negligible CPU overhead, and is Apple Developer signed for secure, gatekeeper-approved execution.
-                                    </p>
+                                <!-- Python Script -->
+                                <div class="bg-slate-500/5 dark:bg-white/5 border border-slate-200/50 dark:border-white/10 rounded-2xl p-6 flex flex-col justify-between opacity-85">
+                                    <div>
+                                        <div class="flex items-center gap-2 mb-4">
+                                            <span class="w-4 h-4 rounded-full bg-slate-200 dark:bg-white/10 flex items-center justify-center text-[10px] text-slate-500 dark:text-gray-400 font-bold flex-shrink-0">•</span>
+                                            <h4 class="font-bold text-slate-900 dark:text-white text-base">Python Script</h4>
+                                        </div>
+                                        <ul class="space-y-3 text-xs text-slate-500 dark:text-gray-400">
+                                            <li class="flex items-start gap-2">
+                                                <span class="text-red-500 font-bold">✗</span>
+                                                <span><strong>CLI Setup:</strong> Terminal &amp; dependency config</span>
+                                            </li>
+                                            <li class="flex items-start gap-2">
+                                                <span class="text-red-500 font-bold">✗</span>
+                                                <span><strong>Overhead:</strong> Heavy interpreter runtime</span>
+                                            </li>
+                                            <li class="flex items-start gap-2">
+                                                <span class="text-red-500 font-bold">✗</span>
+                                                <span><strong>Unsigned:</strong> Prompts security alerts</span>
+                                            </li>
+                                            <li class="flex items-start gap-2">
+                                                <span class="text-red-500 font-bold">✗</span>
+                                                <span><strong>Manual Updates:</strong> Manual Git command pulls</span>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </div>
+
+                                <!-- Docker Container -->
+                                <div class="bg-slate-500/5 dark:bg-white/5 border border-slate-200/50 dark:border-white/10 rounded-2xl p-6 flex flex-col justify-between opacity-85">
+                                    <div>
+                                        <div class="flex items-center gap-2 mb-4">
+                                            <span class="w-4 h-4 rounded-full bg-slate-200 dark:bg-white/10 flex items-center justify-center text-[10px] text-slate-500 dark:text-gray-400 font-bold flex-shrink-0">•</span>
+                                            <h4 class="font-bold text-slate-900 dark:text-white text-base">Docker VM Setup</h4>
+                                        </div>
+                                        <ul class="space-y-3 text-xs text-slate-500 dark:text-gray-400">
+                                            <li class="flex items-start gap-2">
+                                                <span class="text-red-500 font-bold">✗</span>
+                                                <span><strong>VM Setup:</strong> Needs Docker Desktop &amp; YAML</span>
+                                            </li>
+                                            <li class="flex items-start gap-2">
+                                                <span class="text-red-500 font-bold">✗</span>
+                                                <span><strong>Battery Drain:</strong> Linux VM hypervisor load</span>
+                                            </li>
+                                            <li class="flex items-start gap-2">
+                                                <span class="text-red-500 font-bold">✗</span>
+                                                <span><strong>Complex:</strong> Virtualized container maps</span>
+                                            </li>
+                                            <li class="flex items-start gap-2">
+                                                <span class="text-red-500 font-bold">✗</span>
+                                                <span><strong>Manual Updates:</strong> Manual image rebuild steps</span>
+                                            </li>
+                                        </ul>
+                                    </div>
                                 </div>
                             </div>
                         </div>
