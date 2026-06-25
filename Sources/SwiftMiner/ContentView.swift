@@ -1426,7 +1426,7 @@ private struct OverviewSystemStateBanner: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(state.color.opacity(0.2), lineWidth: 1)
+                .strokeBorder(.white.opacity(0.10), lineWidth: 1)
         }
     }
 }
