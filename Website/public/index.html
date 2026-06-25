@@ -579,12 +579,15 @@
                             </div>
                             <span class="text-[10px] text-slate-400 dark:text-gray-500 font-bold uppercase tracking-wider">MIT Licensed · Auditable</span>
                         </div>
-                                     <div class="glass-panel card-glow-purple group rounded-3xl p-8 md:p-10 relative overflow-hidden md:col-span-2 reveal" style="transition-delay: 350ms;">
+                    </div>
+
+                    <!-- Card 5: Native vs Python vs Docker comparison (full width) -->
+                    <div class="glass-panel card-glow-purple group rounded-3xl p-8 md:p-10 relative overflow-hidden md:col-span-2 reveal" style="transition-delay: 350ms;">
                         <div class="relative z-10">
                             <div class="w-12 h-12 rounded-full bg-brand-purple/20 flex items-center justify-center text-brand-purple mb-6 border border-brand-purple/30 shadow-lg">
                                 <svg class="ph-icon text-2xl" aria-hidden="true"><use href="#i-monitor-bold"/></svg>
                             </div>
-                            <h3 class="text-2xl font-bold mb-3 text-slate-900 dark:text-white text-left">Why Native Swift beats Docker &amp; Python on macOS</h3>
+                            <h3 class="text-2xl font-bold mb-3 text-slate-900 dark:text-white text-left">Designed for Mac, not ported to it</h3>
                             <p class="text-slate-500 dark:text-gray-400 text-sm leading-relaxed max-w-3xl mb-8 text-left">
                                 Running Twitch Drops miners on Mac has traditionally meant relying on raw Python scripts or containerized Docker setups. While these work well on headless servers, they introduce heavy resource, security, and maintenance overhead on a personal Mac.
                             </p>
@@ -619,29 +622,29 @@
                                     <span class="text-[9px] text-brand-purple font-bold uppercase tracking-wider mt-4 block">Recommended for macOS</span>
                                 </div>
                                 
-                                <!-- Python Script -->
+                                <!-- Python App -->
                                 <div class="bg-slate-500/5 dark:bg-white/5 border border-slate-200/50 dark:border-white/10 rounded-2xl p-6 flex flex-col justify-between opacity-85">
                                     <div>
                                         <div class="flex items-center gap-2 mb-4">
                                             <span class="w-4 h-4 rounded-full bg-slate-200 dark:bg-white/10 flex items-center justify-center text-[10px] text-slate-500 dark:text-gray-400 font-bold flex-shrink-0">•</span>
-                                            <h4 class="font-bold text-slate-900 dark:text-white text-base">Python Script</h4>
+                                            <h4 class="font-bold text-slate-900 dark:text-white text-base">Python App</h4>
                                         </div>
                                         <ul class="space-y-3 text-xs text-slate-500 dark:text-gray-400">
                                             <li class="flex items-start gap-2">
                                                 <span class="text-red-500 font-bold">✗</span>
-                                                <span><strong>CLI Setup:</strong> Terminal &amp; dependency config</span>
+                                                <span><strong>Signing:</strong> Not notarized, needs a Terminal workaround</span>
                                             </li>
                                             <li class="flex items-start gap-2">
                                                 <span class="text-red-500 font-bold">✗</span>
-                                                <span><strong>Overhead:</strong> Heavy interpreter runtime</span>
+                                                <span><strong>Interface:</strong> Cross-platform UI, not native to macOS</span>
                                             </li>
                                             <li class="flex items-start gap-2">
                                                 <span class="text-red-500 font-bold">✗</span>
-                                                <span><strong>Unsigned:</strong> Prompts security alerts</span>
+                                                <span><strong>Runtime:</strong> Packaged Python application</span>
                                             </li>
                                             <li class="flex items-start gap-2">
                                                 <span class="text-red-500 font-bold">✗</span>
-                                                <span><strong>Manual Updates:</strong> Manual Git command pulls</span>
+                                                <span><strong>Updates:</strong> Manual re-download to upgrade</span>
                                             </li>
                                         </ul>
                                     </div>
@@ -678,7 +681,6 @@
                         </div>
                     </div>
 
-                </div>
             </div>
             </div>
         </section>
