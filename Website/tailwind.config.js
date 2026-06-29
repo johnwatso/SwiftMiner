@@ -17,9 +17,9 @@ module.exports = {
           dark: '#090514',
           purple: '#9333ea',
           violet: '#7c3aed',
-          cyan: '#00e5ff',
+          cyan: '#2563eb',
           magenta: '#ff007f',
-          accent: '#00e5ff',
+          accent: '#2563eb',
           border: 'rgba(255, 255, 255, 0.08)'
         }
       },
