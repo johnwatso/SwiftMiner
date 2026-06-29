@@ -397,6 +397,50 @@ public final class MinerManager {
         }
     }
 
+    /// Broadcast current mining preferences to engines without restarting them.
+    public func updateMiningPreferences(
+        priorityGamesForMiner: (ManagedMiner) -> [String],
+        excludedGames: [String],
+        strategy: MiningStrategy,
+        enableBadgesEmotes: Bool,
+        showClaimNotifications: Bool,
+        avoidDuplicateStreams: Bool,
+        prioritiseFollowedStreamers: Bool,
+        failoverStreamers: [GameFailoverStreamer]
+    ) async {
+        self.currentExcludedGames = excludedGames
+        self.currentStrategy = strategy
+        self.currentEnableBadgesEmotes = enableBadgesEmotes
+        self.showClaimNotifications = showClaimNotifications
+        self.avoidDuplicateStreams = avoidDuplicateStreams
+        self.prioritiseFollowedStreamers = prioritiseFollowedStreamers
+        self.failoverStreamers = failoverStreamers
+        self.currentFailoverStreamers = failoverStreamers
+
+        for miner in miners {
+            let priorityGames = priorityGamesForMiner(miner)
+            if miner.id == miners.first?.id {
+                self.currentPriorityGames = priorityGames
+            }
+            guard let engine = engines[miner.id] else { continue }
+            let ignoredGames = Array(ignoredAccountLinkWarnings[miner.accountId] ?? [])
+            await engine.updateMiningPreferences(
+                priorityGames: priorityGames,
+                excludedGames: excludedGames,
+                enableBadgesEmotes: enableBadgesEmotes,
+                showClaimNotifications: showClaimNotifications,
+                avoidDuplicateStreams: avoidDuplicateStreams,
+                prioritiseFollowedStreamers: prioritiseFollowedStreamers,
+                failoverStreamers: failoverStreamers,
+                ignoredAccountLinkWarningGames: ignoredGames
+            )
+            await engine.updateMiningStrategy(strategy)
+            if miner.isRunning {
+                await engine.forceRefresh()
+            }
+        }
+    }
+
     /// Toggle conservative miner restart recovery for persistent stalls/recoverable errors.
     public func updateAntiStallRecovery(enabled: Bool) async {
         antiStallRecoveryEnabled = enabled

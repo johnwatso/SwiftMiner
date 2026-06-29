@@ -22,7 +22,7 @@ public enum GQLHashes {
     public static let playbackAccessToken = "ed230aa1e33e07eebb8928504583da78a5173989fadfb1ac94be06a04f3cdbe9"
     
     /// Fetches live channels for a specific game directory
-    public static let directoryPage_Game = "76cb069d835b8a02914c08dc42c421d0dafda8af5b113a3f19141824b901402f"
+    public static let directoryPage_Game = "cb5dc816e139dcb8a118f14b4b677d59abc224a4b016c4bc2bb00a47fe0ddec4"
     
     /// Fetches broadcast and stream info for a channel
     public static let videoPlayerStreamInfoOverlayChannel = "198492e0857f6aedead9665c81c5a06d67b25b58034649687124083ff288597d"

@@ -1472,6 +1472,22 @@ public final class NavigationModel {
         await minerManager.dataCoordinator.refreshAll()
     }
 
+    public func refreshRunningMinerPreferences() async {
+        let settings = Settings.shared
+        await minerManager.updateMiningPreferences(
+            priorityGamesForMiner: { [weak self] miner in
+                self?.priorityGames(for: miner) ?? settings.priorityGames(forAccountId: miner.accountId)
+            },
+            excludedGames: settings.excludedGames,
+            strategy: settings.miningStrategy,
+            enableBadgesEmotes: settings.enableBadgesEmotes,
+            showClaimNotifications: settings.showClaimNotifications && settings.allowsOperatorNotifications(),
+            avoidDuplicateStreams: settings.avoidDuplicateStreams,
+            prioritiseFollowedStreamers: settings.prioritiseFollowedStreamers,
+            failoverStreamers: settings.gameFailoverStreamers
+        )
+    }
+
     private var settings: Settings { Settings.shared }
 
     private func clearOnboardingPresentation() {

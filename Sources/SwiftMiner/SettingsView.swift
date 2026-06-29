@@ -625,6 +625,12 @@ private struct MiningSettingsView: View {
                 Toggle("Spread miners across streams", isOn: $settings.avoidDuplicateStreams)
                 SettingsSecondaryText("Avoids putting multiple miners on the same stream when a campaign has more than four verified live channels. Small restricted campaigns can still share streams.")
 
+                Toggle("Mine IRL campaigns", isOn: $settings.mineIRLCampaigns)
+                    .onChange(of: settings.mineIRLCampaigns) { _, _ in
+                        Task { await refreshMiningPreferences() }
+                    }
+                SettingsSecondaryText("Allows Twitch IRL-category campaigns to be treated as special earn-anywhere drops. Turn this off to skip IRL campaigns.")
+
                 Toggle("Stall recovery", isOn: $settings.antiStallRecoveryEnabled)
                     .onChange(of: settings.antiStallRecoveryEnabled) { _, newValue in
                         Task { await navigation.minerManager.updateAntiStallRecovery(enabled: newValue) }
@@ -681,6 +687,10 @@ private struct MiningSettingsView: View {
         let count = settings.gamePreferences.count
         guard count > 0 else { return nil }
         return "\(count)"
+    }
+
+    private func refreshMiningPreferences() async {
+        await navigation.refreshRunningMinerPreferences()
     }
 
 }

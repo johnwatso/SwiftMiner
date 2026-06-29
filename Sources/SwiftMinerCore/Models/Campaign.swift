@@ -4,6 +4,8 @@ import Foundation
 
 /// A Twitch game / category
 public struct Game: Codable, Sendable, Identifiable, Equatable {
+    public static let specialIRLCategoryId = "509672"
+
     public let id: String
     public let name: String
     public let boxArtURL: URL?
@@ -23,7 +25,8 @@ public struct Game: Codable, Sendable, Identifiable, Equatable {
         // 26936:  Music
         // 509659: Travel & Outdoors
         // 509663: Special Events
-        ["509658", "26936", "509659", "509663"].contains(id)
+        // 509672: IRL
+        ["509658", "26936", "509659", "509663", Self.specialIRLCategoryId].contains(id)
     }
 }
 
