@@ -6,6 +6,8 @@ on:
       - main
     paths:
       - "Website/public/**"
+      - "docs/appcast.xml"
+      - "docs/release-notes/**"
       - ".github/workflows/deploy-website.yml"
   workflow_dispatch:
 
@@ -31,6 +33,23 @@ jobs:
 
       - name: Configure Pages
         uses: actions/configure-pages@v6
+
+      - name: Merge ShipHook appcast output
+        run: |
+          if [ -f docs/appcast.xml ]; then
+            cp docs/appcast.xml Website/public/appcast.xml
+          fi
+
+          if [ -d docs/release-notes ]; then
+            mkdir -p Website/public/release-notes
+            for file in docs/release-notes/*.html; do
+              [ -e "$file" ] || continue
+              target="Website/public/release-notes/$(basename "$file")"
+              if [ ! -f "$target" ]; then
+                cp "$file" "$target"
+              fi
+            done
+          fi
 
       - name: Upload website
         uses: actions/upload-pages-artifact@v5
