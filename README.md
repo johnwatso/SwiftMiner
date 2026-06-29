@@ -21,10 +21,6 @@
 </p>
 
 <p align="center">
-  SwiftMiner is a personal app I use myself and continue to improve as a fun spare-time project.
-</p>
-
-<p align="center">
   <img src="https://img.shields.io/badge/platform-macOS%2026+-blue" alt="Platform badge">
   <img src="https://img.shields.io/badge/swift-6.0-orange" alt="Swift badge">
   <img src="https://img.shields.io/badge/architecture-Universal%20(Apple%20Silicon%20%2B%20Intel)-black" alt="Architecture badge">
@@ -70,7 +66,7 @@ Another goal of the project was to take advantage of modern Swift and macOS tech
 
 I wanted a solution that ran natively on macOS and made it easier to manage multiple accounts from a single application. I also wanted updates, account management, and miner monitoring to be handled in one place rather than across several separate windows and processes.
 
-SwiftMiner has been built around those ideas. The goal isn’t to reinvent Twitch drop mining—it’s to make it easier to run and manage on macOS while taking advantage of the platform it runs on.
+SwiftMiner has been built around those ideas. The goal isn’t to reinvent Twitch drop mining—it’s to make it easier to run and manage on macOS while taking advantage of the platform it runs on. 
 
 ## What SwiftMiner Does
 
