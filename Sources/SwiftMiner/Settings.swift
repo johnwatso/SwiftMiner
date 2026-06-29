@@ -66,6 +66,10 @@ public final class Settings: ObservableObject {
     @AppStorage("enableBadgesEmotes", store: Settings.appStorageStore)
     public var enableBadgesEmotes: Bool = false
 
+    /// Whether IRL-category campaigns can be mined as earn-anywhere special campaigns.
+    @AppStorage("mineIRLCampaigns", store: Settings.appStorageStore)
+    public var mineIRLCampaigns: Bool = true
+
     /// Prefer spreading miners across different streams for the same campaign when enough streams are available.
     @AppStorage("avoidDuplicateStreams", store: Settings.appStorageStore)
     public var avoidDuplicateStreams: Bool = true
@@ -807,7 +811,11 @@ public final class Settings: ObservableObject {
 
     /// Excluded game names derived from preferences (backward compat for MinerEngine)
     public var excludedGames: [String] {
-        gameNames(for: .excluded)
+        var games = gameNames(for: .excluded)
+        if !mineIRLCampaigns {
+            games.append(Game.specialIRLCategoryId)
+        }
+        return games
     }
 
     /// Add or update a game preference
@@ -1359,6 +1367,7 @@ public final class Settings: ObservableObject {
         appPresenceMode = .dockOnly
         autoStartOnLaunch = false
         enableBadgesEmotes = false
+        mineIRLCampaigns = true
         avoidDuplicateStreams = true
         antiStallRecoveryEnabled = true
         prioritiseFollowedStreamers = false
@@ -1430,6 +1439,7 @@ public final class Settings: ObservableObject {
             autoStartOnLaunch: autoStartOnLaunch,
             startMinimized: startMinimized,
             enableBadgesEmotes: enableBadgesEmotes,
+            mineIRLCampaigns: mineIRLCampaigns,
             avoidDuplicateStreams: avoidDuplicateStreams,
             antiStallRecoveryEnabled: antiStallRecoveryEnabled,
             prioritiseFollowedStreamers: prioritiseFollowedStreamers,
@@ -1482,6 +1492,7 @@ public final class Settings: ObservableObject {
         autoStartOnLaunch = backup.autoStartOnLaunch
         startMinimized = backup.startMinimized
         enableBadgesEmotes = backup.enableBadgesEmotes
+        mineIRLCampaigns = backup.mineIRLCampaigns ?? true
         avoidDuplicateStreams = backup.avoidDuplicateStreams
         antiStallRecoveryEnabled = backup.antiStallRecoveryEnabled
         prioritiseFollowedStreamers = backup.prioritiseFollowedStreamers
@@ -1552,6 +1563,7 @@ public struct SettingsBackup: Codable, Sendable {
     public let autoStartOnLaunch: Bool
     public let startMinimized: Bool
     public let enableBadgesEmotes: Bool
+    public let mineIRLCampaigns: Bool?
     public let avoidDuplicateStreams: Bool
     public let antiStallRecoveryEnabled: Bool
     public let prioritiseFollowedStreamers: Bool
@@ -1596,6 +1608,7 @@ public struct SettingsBackup: Codable, Sendable {
         autoStartOnLaunch: Bool,
         startMinimized: Bool,
         enableBadgesEmotes: Bool,
+        mineIRLCampaigns: Bool? = true,
         avoidDuplicateStreams: Bool,
         antiStallRecoveryEnabled: Bool,
         prioritiseFollowedStreamers: Bool,
@@ -1639,6 +1652,7 @@ public struct SettingsBackup: Codable, Sendable {
         self.autoStartOnLaunch = autoStartOnLaunch
         self.startMinimized = startMinimized
         self.enableBadgesEmotes = enableBadgesEmotes
+        self.mineIRLCampaigns = mineIRLCampaigns
         self.avoidDuplicateStreams = avoidDuplicateStreams
         self.antiStallRecoveryEnabled = antiStallRecoveryEnabled
         self.prioritiseFollowedStreamers = prioritiseFollowedStreamers
