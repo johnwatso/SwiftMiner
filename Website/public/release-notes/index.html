@@ -52,7 +52,10 @@
       <li>Updates the Twitch live-channel directory query hash used when finding streams for Drops campaigns.</li>
       <li>Treats Twitch's IRL category as a special earn-anywhere campaign category, matching recent TwitchDropsMiner behavior.</li>
       <li>Adds a Mining setting to skip IRL campaigns without managing a manual game exclusion.</li>
-      <li>Updates SwiftMiner to version 1.32.1 build 2026062915 while leaving ShipHook-owned appcasts untouched.</li>
+      <li>Skips exact-match internal/test-looking Twitch Drops fixtures so SwiftMiner does not watch or claim them.</li>
+      <li>Stops short-window campaigns with no live streams from starving or repeatedly interrupting a game that does have streams (e.g. Overwatch), while still switching to a restricted esports drop the moment it goes live.</li>
+      <li>Hides and disables supervisor stall recovery while its restart logic is being tightened, avoiding unnecessary miner restarts from idle states.</li>
+      <li>Updates SwiftMiner to version 1.32.1 build 2026070109 while leaving ShipHook-owned appcasts untouched.</li>
     </ul>
     <h2><a href="./1.32.html">Version 1.32</a></h2>
     <ul>

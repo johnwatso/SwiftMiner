@@ -1,5 +1,29 @@
 import Foundation
 
+enum TwitchDropSafetyClassifier {
+    private static let internalTestLabels: Set<String> = [
+        "test",
+        "drop test",
+        "drops test",
+        "twitch test",
+        "twitch drops test",
+        "qa test",
+        "internal test"
+    ]
+
+    static func isInternalTestLabel(_ value: String) -> Bool {
+        internalTestLabels.contains(normalizedLabel(value))
+    }
+
+    private static func normalizedLabel(_ value: String) -> String {
+        value
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+    }
+}
+
 // MARK: - Supporting Types
 
 /// A Twitch game / category
@@ -88,6 +112,10 @@ public struct Reward: Codable, Sendable, Identifiable, Equatable {
         self.description = description
         self.imageURL = imageURL
     }
+
+    public var isLikelyInternalTestReward: Bool {
+        TwitchDropSafetyClassifier.isInternalTestLabel(name)
+    }
 }
 
 // MARK: - Drop
@@ -172,6 +200,13 @@ public struct Drop: Codable, Sendable, Identifiable, Equatable {
 
     /// Alias for requiredMinutes (backward compat)
     public var requiredMinutesWatched: Int { requiredMinutes }
+
+    /// Twitch occasionally exposes QA-looking drop fixtures to real inventories.
+    /// Treat exact "test" labels as non-actionable so SwiftMiner does not watch or claim them.
+    public var isLikelyInternalTestDrop: Bool {
+        TwitchDropSafetyClassifier.isInternalTestLabel(name)
+            || (reward?.isLikelyInternalTestReward ?? false)
+    }
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -313,6 +348,11 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
 
     /// The relevance of this campaign to the current session/feed.
     public var relevance: CampaignRelevance {
+        // Exact test/QA fixtures should not clutter active or prioritised campaign lists.
+        if isLikelyInternalTestCampaign {
+            return .irrelevant
+        }
+
         // 1. Prioritised check
         if isPrioritised {
             return .prioritised
@@ -376,6 +416,15 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
 
     public var unclaimedDrops: [Drop] { drops.filter { !$0.isClaimed } }
 
+    /// Exact-match guard for Twitch QA/test fixtures that should never become mining targets.
+    public var isLikelyInternalTestCampaign: Bool {
+        if TwitchDropSafetyClassifier.isInternalTestLabel(name) {
+            return true
+        }
+
+        return !drops.isEmpty && drops.allSatisfy(\.isLikelyInternalTestDrop)
+    }
+
     /// True if campaign has ended but all drops are claimed (visible in Twitch's "Closed Drop Campaigns")
     public var isClosed: Bool {
         // Campaign is closed if: ended/exired AND all drops are claimed
@@ -393,7 +442,11 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
     /// source of truth for whether progress can be earned, while SwiftMiner still
     /// warns the user that an external account link may be needed for in-game delivery.
     public var canAttemptMining: Bool {
-        isTimeActive && status != .disabled && hasDropsEnabled && !eligibleDrops.isEmpty
+        isTimeActive
+            && status != .disabled
+            && hasDropsEnabled
+            && !isLikelyInternalTestCampaign
+            && !eligibleDrops.isEmpty
     }
 
     /// Drops that require purchasing subscriptions and have no progress yet.

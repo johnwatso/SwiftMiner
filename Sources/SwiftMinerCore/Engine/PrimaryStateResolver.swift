@@ -125,6 +125,7 @@ public enum PrimaryStateResolver {
         // Filter out irrelevant campaigns (no drops) AND hard exclude "Just Chatting"
         let relevantCampaigns = miner.allCampaigns.filter { campaign in
             if campaign.drops.isEmpty { return false }
+            if campaign.isLikelyInternalTestCampaign { return false }
             
             // Hard exclude "Just Chatting"
             let name = campaign.game.name.trimmingCharacters(in: .whitespacesAndNewlines)

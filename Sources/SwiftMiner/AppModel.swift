@@ -85,6 +85,7 @@ public final class AppModel {
     public func setup() async {
         if let manager = minerManager {
             manager.updateClientId(Settings.shared.resolvedClientId)
+            Settings.shared.antiStallRecoveryEnabled = false
             // Multi-miner mode: don't start our own engine.
             // Drive isAuthenticated from MinerManager's miner list.
             reconcileManagerState(manager)

@@ -68,7 +68,7 @@
 <body>
   <main>
     <h1>SwiftMiner 1.32.1</h1>
-    <p class="meta">Version 1.32.1 · Build 2026062915</p>
+    <p class="meta">Version 1.32.1 · Build 2026070109</p>
     <p class="intro">A focused mining logic update that keeps SwiftMiner aligned with current Twitch Drops behavior.</p>
 
     <section>
@@ -78,7 +78,10 @@
         <li>Updates the Twitch live-channel directory query hash used when finding streams for Drops campaigns.</li>
         <li>Treats Twitch's IRL category as a special earn-anywhere campaign category, matching recent TwitchDropsMiner behavior.</li>
         <li>Adds a Mining setting to skip IRL campaigns without managing a manual game exclusion.</li>
-        <li>Prepared as SwiftMiner <strong>1.32.1</strong>, build <strong>2026062915</strong>.</li>
+        <li>Skips exact-match internal/test-looking Twitch Drops fixtures so SwiftMiner does not watch or claim them.</li>
+        <li>Stops short-window campaigns with no live streams from starving or repeatedly interrupting a game that does have streams (e.g. Overwatch), while still switching to a restricted esports drop the moment it goes live.</li>
+        <li>Hides and disables supervisor stall recovery while its restart logic is being tightened, avoiding unnecessary miner restarts from idle states.</li>
+        <li>Prepared as SwiftMiner <strong>1.32.1</strong>, build <strong>2026070109</strong>.</li>
       </ul>
     </section>
   </main>

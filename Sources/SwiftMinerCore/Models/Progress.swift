@@ -39,6 +39,10 @@ public struct Progress: Codable, Sendable, Equatable {
         currentMinutes >= requiredMinutes
     }
 
+    public var isLikelyInternalTestProgress: Bool {
+        TwitchDropSafetyClassifier.isInternalTestLabel(dropName)
+    }
+
     public var remainingMinutes: Int {
         max(0, requiredMinutes - currentMinutes)
     }

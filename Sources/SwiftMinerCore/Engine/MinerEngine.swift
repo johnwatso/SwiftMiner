@@ -102,6 +102,17 @@ public actor MinerEngine {
     public private(set) var allCampaigns: [Campaign] = []
     private var progressEventTracker = DropProgressEventTracker()
 
+    /// Per-game live-channel probe results recorded as a side effect of channel selection,
+    /// keyed by normalized game key. Used to keep campaigns whose game currently has no live,
+    /// watch-mineable channel from out-ranking ones that do. Without this, a soon-to-expire
+    /// limited-time campaign with no live stream can repeatedly preempt or starve an active
+    /// game (e.g. Overwatch) under the end-date-first `.mineAll` ordering.
+    private var gameLiveProbes: [String: (hasLiveChannel: Bool, checkedAt: Date)] = [:]
+    /// How long a "no live channel" probe result keeps a game demoted before it is re-probed.
+    /// Generous enough to span more than one campaign-check cycle so demotion is stable, short
+    /// enough that a game coming online is picked up on the next full rescan.
+    private static let gameLiveProbeFreshness: TimeInterval = 15 * 60
+
     // Configuration
     private let campaignCheckInterval: UInt64 = 300 * 1_000_000_000 // 5 minutes
     private let claimCheckInterval: UInt64 = 2 * 60 * 1_000_000_000 // 2 minutes (conditional polling)
@@ -647,6 +658,11 @@ public actor MinerEngine {
         let campaignId = session?.currentCampaignId
         log("Drop claim event received: dropInstanceId=\(event.dropInstanceId)")
 
+        guard !isLikelyInternalTestDropEvent(dropId: event.dropId, campaignId: campaignId) else {
+            log("Skipped auto-claim for internal/test drop event: \(event.dropId)")
+            return
+        }
+
         // Use the dropInstanceId directly from PubSub event for claiming
         do {
             let response = try await apiClient.claimDrop(dropInstanceId: event.dropInstanceId)
@@ -928,10 +944,12 @@ public actor MinerEngine {
                             forGameCandidates: verificationCandidates,
                             knownSameGameCampaigns: sameGameCampaigns
                         ) {
+                            recordGameLiveProbe(gameKey, hasLiveChannel: true)
                             selectedCampaign = campaign
                             selectedChannel = channel
                             break
                         }
+                        recordGameLiveProbe(gameKey, hasLiveChannel: false)
                         log("No eligible channels available for \(gameName); trying next game.")
                     }
                 }
@@ -1180,8 +1198,25 @@ public actor MinerEngine {
                                 excludedGames: excludedGames,
                                 strategy: miningStrategy
                             ).first, bestCampaign.id != campaign.id {
-                                log("Better campaign now available: \(bestCampaign.name) (\(bestCampaign.gameName)). Switching from \(campaign.name).")
-                                shouldSwitchChannel = true
+                                // Only abandon a working session for a higher-ranked campaign we
+                                // can actually mine right now. Verify reachability with a targeted
+                                // probe rather than trusting the end-date ranking:
+                                //  - A campaign that ranks higher only by end date but has no live
+                                //    channel must not preempt us (this was the 5-minute thrash).
+                                //  - A restricted esports campaign (e.g. OWCS on ow_esports) is
+                                //    only mineable during its scarce live windows, so when a match
+                                //    goes live mid-session we DO want to grab it — even though the
+                                //    stream we're on (e.g. Reign of Talon) is broadly available.
+                                let sameGameCampaigns = Self.sameGameCampaigns(matching: bestCampaign, in: fetched)
+                                if await selectBestChannel(
+                                    forGameCandidates: [bestCampaign],
+                                    knownSameGameCampaigns: sameGameCampaigns
+                                ) != nil {
+                                    log("Higher-ranked campaign \(bestCampaign.name) (\(bestCampaign.gameName)) is live now. Switching from \(campaign.name).")
+                                    shouldSwitchChannel = true
+                                } else {
+                                    log("Higher-ranked campaign \(bestCampaign.name) (\(bestCampaign.gameName)) has no live channel right now; staying on \(campaign.name).")
+                                }
                             }
                         }
                     }
@@ -1249,13 +1284,25 @@ public actor MinerEngine {
                     .map(\.id)
             )
             let claimable = snapshot.progress.filter {
-                $0.isComplete && !$0.isClaimed && !claimedDropIds.contains($0.dropId)
+                $0.isComplete
+                    && !$0.isClaimed
+                    && !claimedDropIds.contains($0.dropId)
+                    && !isLikelyInternalTestProgress($0)
             }
+            let skippedInternalTestDrops = snapshot.progress.filter {
+                $0.isComplete
+                    && !$0.isClaimed
+                    && !claimedDropIds.contains($0.dropId)
+                    && isLikelyInternalTestProgress($0)
+            }.count
 
             if claimable.isEmpty {
                 log("No claimable drops found in inventory")
             } else {
                 log("Found \(claimable.count) claimable drop(s): \(claimable.map { $0.dropName }.joined(separator: ", "))")
+            }
+            if skippedInternalTestDrops > 0 {
+                log("Skipped \(skippedInternalTestDrops) internal/test claimable drop(s)")
             }
 
             for progress in claimable {
@@ -1309,6 +1356,35 @@ public actor MinerEngine {
         return didClaimAnyDrop
     }
 
+    private func isLikelyInternalTestProgress(_ progress: Progress) -> Bool {
+        if progress.isLikelyInternalTestProgress {
+            return true
+        }
+
+        guard let campaign = allCampaigns.first(where: { $0.id == progress.campaignId }) else {
+            return false
+        }
+
+        if campaign.isLikelyInternalTestCampaign {
+            return true
+        }
+
+        return campaign.drops.first(where: { $0.id == progress.dropId })?.isLikelyInternalTestDrop ?? false
+    }
+
+    private func isLikelyInternalTestDropEvent(dropId: String, campaignId: String?) -> Bool {
+        guard let campaignId,
+              let campaign = allCampaigns.first(where: { $0.id == campaignId }) else {
+            return false
+        }
+
+        if campaign.isLikelyInternalTestCampaign {
+            return true
+        }
+
+        return campaign.drops.first(where: { $0.id == dropId })?.isLikelyInternalTestDrop ?? false
+    }
+
     private func syncCampaigns(with snapshot: InventorySnapshot) {
         let mergedCampaigns = DropsService.mergeInventory(snapshot, into: allCampaigns)
         guard mergedCampaigns != allCampaigns else { return }
@@ -1335,6 +1411,7 @@ public actor MinerEngine {
         let blockedCampaigns = campaigns.filter { campaign in
             // Filter only to priority games that aren't linked and have active, uncollected drops
             campaign.isTimeActive
+                && !campaign.isLikelyInternalTestCampaign
                 && !campaign.isAccountConnected
                 && priorityGamesLower.contains(campaign.gameName.lowercased())
                 && campaign.drops.contains(where: { !$0.isClaimed })
@@ -1393,6 +1470,7 @@ public actor MinerEngine {
     private func warnForSubscriptionRequiredCampaigns(in campaigns: [Campaign]) async {
         let subscriptionCampaigns = campaigns.filter { campaign in
             campaign.isTimeActive
+                && !campaign.isLikelyInternalTestCampaign
                 && campaign.subscriptionRequiredDrops.contains(where: { !$0.isClaimed })
         }
 
@@ -1430,6 +1508,11 @@ public actor MinerEngine {
             // from being attempted if Twitch will still track inventory progress.
             guard campaign.isTimeActive && campaign.status != .disabled else {
                 filteredOutReasons["inactive", default: 0] += 1
+                return false
+            }
+
+            guard !campaign.isLikelyInternalTestCampaign else {
+                filteredOutReasons["internal_test", default: 0] += 1
                 return false
             }
 
@@ -1524,6 +1607,7 @@ public actor MinerEngine {
 
             // Basic availability
             guard campaign.isTimeActive && campaign.status != .disabled else { return false }
+            guard !campaign.isLikelyInternalTestCampaign else { return false }
             
             // User preferences
             if excludedSet.contains(gameName) || excludedSet.contains(gameId) { return false }
@@ -1546,14 +1630,61 @@ public actor MinerEngine {
         return hasLinked ? .idleNoEligibleCampaigns : .blockedAccountNotLinked
     }
 
+    /// Record the outcome of a live-channel probe for a game so later ranking and the
+    /// mid-session re-evaluation can avoid preferring games that currently have no live stream.
+    private func recordGameLiveProbe(_ gameKey: String, hasLiveChannel: Bool) {
+        gameLiveProbes[gameKey] = (hasLiveChannel, Date())
+    }
+
+    /// True when the game was probed recently and confirmed to have NO live, watch-mineable
+    /// channel. Stale results (older than `gameLiveProbeFreshness`) are ignored so a game that
+    /// has since come online is not demoted forever.
+    private func isGameFreshlyKnownEmpty(_ gameKey: String) -> Bool {
+        guard let probe = gameLiveProbes[gameKey] else { return false }
+        guard Date().timeIntervalSince(probe.checkedAt) <= Self.gameLiveProbeFreshness else { return false }
+        return !probe.hasLiveChannel
+    }
+
     private func sortedCandidates(
         _ campaigns: [Campaign],
         priorityKeys: [String],
         strategy: MiningStrategy
     ) -> [Campaign] {
-        campaigns.enumerated().sorted { lhs, rhs in
+        let emptyGameKeys = Set(
+            campaigns
+                .map { normalizedGameKey($0.gameName) }
+                .filter { isGameFreshlyKnownEmpty($0) }
+        )
+        return Self.rankCandidates(
+            campaigns,
+            priorityKeys: priorityKeys,
+            strategy: strategy,
+            emptyGameKeys: emptyGameKeys
+        )
+    }
+
+    /// Pure ranking used by `sortedCandidates`. Campaigns whose game is freshly known to have no
+    /// live channel sink below ones that do — this is the primary key so a limited-time campaign
+    /// with no live stream can't out-rank (and thereby starve or thrash) an active game. End-date
+    /// and priority ordering are preserved within each live/empty bucket.
+    static func rankCandidates(
+        _ campaigns: [Campaign],
+        priorityKeys: [String],
+        strategy: MiningStrategy,
+        emptyGameKeys: Set<String>
+    ) -> [Campaign] {
+        func isEmptyGame(_ campaign: Campaign) -> Bool {
+            emptyGameKeys.contains(normalizedGameSelectionKey(campaign.gameName))
+        }
+        return campaigns.enumerated().sorted { lhs, rhs in
             let left = lhs.element
             let right = rhs.element
+
+            // Live games before games with no live channel, regardless of strategy.
+            let leftEmpty = isEmptyGame(left)
+            let rightEmpty = isEmptyGame(right)
+            if leftEmpty != rightEmpty { return !leftEmpty }
+
             let leftPriority = priorityIndex(for: left, priorityKeys: priorityKeys)
             let rightPriority = priorityIndex(for: right, priorityKeys: priorityKeys)
             let leftIsPriority = leftPriority != Int.max
@@ -1600,6 +1731,7 @@ public actor MinerEngine {
             let candidateGameId = normalizedGameSelectionKey(campaign.game.id)
             guard candidateGameKey == gameKey || candidateGameId == gameId else { continue }
             guard campaign.isTimeActive && campaign.status != .disabled else { continue }
+            guard !campaign.isLikelyInternalTestCampaign else { continue }
             guard campaign.canAttemptMining else { continue }
             guard campaign.miningStatus == .available || campaign.miningStatus == .inProgress || campaign.miningStatus == .claimable else { continue }
 
@@ -1628,9 +1760,9 @@ public actor MinerEngine {
         }
     }
 
-    private func priorityIndex(for campaign: Campaign, priorityKeys: [String]) -> Int {
-        let gameName = normalizedGameKey(campaign.gameName)
-        let gameId = normalizedGameKey(campaign.game.id)
+    private static func priorityIndex(for campaign: Campaign, priorityKeys: [String]) -> Int {
+        let gameName = normalizedGameSelectionKey(campaign.gameName)
+        let gameId = normalizedGameSelectionKey(campaign.game.id)
         return priorityKeys.firstIndex { $0 == gameName || $0 == gameId } ?? Int.max
     }
 
