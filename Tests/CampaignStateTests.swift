@@ -111,6 +111,54 @@ final class CampaignStateTests: XCTestCase {
         XCTAssertFalse(campaign.canAttemptMining)
     }
 
+    func testLikelyInternalTestCampaignIsNotActionable() {
+        let campaign = Campaign(
+            id: "c-test", name: "Drops test", game: game, status: .active,
+            startDate: now.addingTimeInterval(-3600), endDate: now.addingTimeInterval(3600),
+            drops: [Drop(id: "d-test", name: "test", requiredMinutes: 1)],
+            isAccountConnected: true
+        )
+
+        XCTAssertTrue(campaign.isLikelyInternalTestCampaign)
+        XCTAssertFalse(campaign.canAttemptMining)
+        XCTAssertEqual(campaign.relevance, CampaignRelevance.irrelevant)
+    }
+
+    func testLegitimateCampaignContainingTestWordRemainsActionable() {
+        let campaign = Campaign(
+            id: "c-legit", name: "Beta Test Rewards", game: game, status: .active,
+            startDate: now.addingTimeInterval(-3600), endDate: now.addingTimeInterval(3600),
+            drops: [Drop(id: "d-legit", name: "Launch Skin", requiredMinutes: 60)],
+            isAccountConnected: true
+        )
+
+        XCTAssertFalse(campaign.isLikelyInternalTestCampaign)
+        XCTAssertTrue(campaign.canAttemptMining)
+        XCTAssertEqual(campaign.relevance, CampaignRelevance.active)
+    }
+
+    func testInternalTestProgressUsesExactLabel() {
+        let internalProgress = Progress(
+            id: "instance-test",
+            dropId: "d-test",
+            dropName: "test",
+            campaignId: "c-test",
+            currentMinutes: 1,
+            requiredMinutes: 1
+        )
+        let legitimateProgress = Progress(
+            id: "instance-legit",
+            dropId: "d-legit",
+            dropName: "Beta Test Reward",
+            campaignId: "c-legit",
+            currentMinutes: 60,
+            requiredMinutes: 60
+        )
+
+        XCTAssertTrue(internalProgress.isLikelyInternalTestProgress)
+        XCTAssertFalse(legitimateProgress.isLikelyInternalTestProgress)
+    }
+
     func testRelevance_Closed_WhenIsClosed() {
         let drop = Drop(id: "d1", name: "D1", requiredMinutes: 60, isClaimed: false)
         let campaign = Campaign(
@@ -229,5 +277,71 @@ final class CampaignStateTests: XCTestCase {
 
         XCTAssertEqual(cachedFallback.count, 2)
         XCTAssertEqual(cachedFallback.first(where: { $0.id == "c1" })?.drops.map(\.name), ["Cached Reward"])
+    }
+
+    // MARK: - Live-aware candidate ranking (Overwatch starvation fix)
+
+    /// A limited-time campaign that ends sooner normally sorts first under `.mineAll`. When its
+    /// game has no live channel, it must sink below a still-active game (Overwatch) that does —
+    /// otherwise it repeatedly preempts / starves the game that can actually be mined.
+    func testRanking_DemotesGamesWithNoLiveChannelBelowLiveOnes() {
+        let overwatch = Game(id: "ow", name: "Overwatch 2")
+        let esports = Game(id: "owcs", name: "OWCS Esports")
+
+        let overwatchCampaign = Campaign(
+            id: "c-ow", name: "Reign of Talon", game: overwatch, status: .active,
+            startDate: now.addingTimeInterval(-3600), endDate: now.addingTimeInterval(7 * 86_400),
+            drops: [Drop(id: "d-ow", name: "Skin", requiredMinutes: 60)],
+            isAccountConnected: true
+        )
+        // Ends sooner — would win the end-date-first sort under `.mineAll`.
+        let limitedCampaign = Campaign(
+            id: "c-owcs", name: "OWCS S2 Campaign 3", game: esports, status: .active,
+            startDate: now.addingTimeInterval(-3600), endDate: now.addingTimeInterval(86_400),
+            drops: [Drop(id: "d-owcs", name: "Loot Box", requiredMinutes: 60)],
+            isAccountConnected: true
+        )
+
+        // Without any empty-game knowledge, the sooner-ending limited campaign sorts first.
+        let naive = MinerEngine.rankCandidates(
+            [overwatchCampaign, limitedCampaign],
+            priorityKeys: [], strategy: .mineAll, emptyGameKeys: []
+        )
+        XCTAssertEqual(naive.first?.id, "c-owcs")
+
+        // Once the esports game is known to have no live channel, Overwatch ranks first.
+        let liveAware = MinerEngine.rankCandidates(
+            [overwatchCampaign, limitedCampaign],
+            priorityKeys: [], strategy: .mineAll, emptyGameKeys: ["owcs esports"]
+        )
+        XCTAssertEqual(liveAware.first?.id, "c-ow")
+        XCTAssertEqual(liveAware.last?.id, "c-owcs")
+    }
+
+    /// Demotion is the primary key: a live non-priority game outranks a priority game that
+    /// currently has no live channel, since an unwatchable priority game can't be mined anyway.
+    func testRanking_LiveNonPriorityBeatsEmptyPriority() {
+        let priorityGame = Game(id: "pri", name: "Priority Game")
+        let liveGame = Game(id: "live", name: "Live Game")
+
+        let priorityCampaign = Campaign(
+            id: "c-pri", name: "Pri", game: priorityGame, status: .active,
+            startDate: now.addingTimeInterval(-3600), endDate: now.addingTimeInterval(86_400),
+            drops: [Drop(id: "d-pri", name: "R", requiredMinutes: 60)],
+            isAccountConnected: true
+        )
+        let liveCampaign = Campaign(
+            id: "c-live", name: "Live", game: liveGame, status: .active,
+            startDate: now.addingTimeInterval(-3600), endDate: now.addingTimeInterval(2 * 86_400),
+            drops: [Drop(id: "d-live", name: "R", requiredMinutes: 60)],
+            isAccountConnected: true
+        )
+
+        let ranked = MinerEngine.rankCandidates(
+            [priorityCampaign, liveCampaign],
+            priorityKeys: ["priority game"], strategy: .prioritiseSelected,
+            emptyGameKeys: ["priority game"]
+        )
+        XCTAssertEqual(ranked.first?.id, "c-live")
     }
 }

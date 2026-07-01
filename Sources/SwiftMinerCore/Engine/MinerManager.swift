@@ -302,7 +302,7 @@ public final class MinerManager {
     public var showClaimNotifications: Bool = false
     public var avoidDuplicateStreams: Bool = true
     public var prioritiseFollowedStreamers: Bool = false
-    public var antiStallRecoveryEnabled: Bool = true
+    public var antiStallRecoveryEnabled: Bool = false
     public var failoverStreamers: [GameFailoverStreamer] = []
     /// Debug-only: broadcast to every engine to bypass link/eligibility gates. Stored here
     /// so engines attached later (e.g. newly added accounts) pick up the current value.
@@ -548,7 +548,7 @@ public final class MinerManager {
         strategy: MiningStrategy,
         enableBadgesEmotes: Bool,
         avoidDuplicateStreams: Bool = true,
-        antiStallRecoveryEnabled: Bool = true,
+        antiStallRecoveryEnabled: Bool = false,
         prioritiseFollowedStreamers: Bool = false,
         failoverStreamers: [GameFailoverStreamer] = [],
         ignoredWarnings: [String] = [],
@@ -783,7 +783,7 @@ public final class MinerManager {
     // MARK: - Control Operations
 
     /// Start a specific miner
-    public func startMiner(minerId: String, priorityGames: [String], excludedGames: [String], strategy: MiningStrategy, enableBadgesEmotes: Bool = false, showClaimNotifications: Bool = false, avoidDuplicateStreams: Bool = true, antiStallRecoveryEnabled: Bool = true, prioritiseFollowedStreamers: Bool = false, failoverStreamers: [GameFailoverStreamer] = []) async throws {
+    public func startMiner(minerId: String, priorityGames: [String], excludedGames: [String], strategy: MiningStrategy, enableBadgesEmotes: Bool = false, showClaimNotifications: Bool = false, avoidDuplicateStreams: Bool = true, antiStallRecoveryEnabled: Bool = false, prioritiseFollowedStreamers: Bool = false, failoverStreamers: [GameFailoverStreamer] = []) async throws {
         guard let engine = engines[minerId],
               let miner = getMiner(id: minerId) else {
             throw TwitchMinerError.sessionNotStarted
@@ -862,7 +862,7 @@ public final class MinerManager {
     }
     
     /// Start all miners with staggered delays to avoid API rate limiting
-    public func startAll(priorityGames: [String], excludedGames: [String], strategy: MiningStrategy, enableBadgesEmotes: Bool = false, showClaimNotifications: Bool = false, avoidDuplicateStreams: Bool = true, antiStallRecoveryEnabled: Bool = true, prioritiseFollowedStreamers: Bool = false, failoverStreamers: [GameFailoverStreamer] = []) async {
+    public func startAll(priorityGames: [String], excludedGames: [String], strategy: MiningStrategy, enableBadgesEmotes: Bool = false, showClaimNotifications: Bool = false, avoidDuplicateStreams: Bool = true, antiStallRecoveryEnabled: Bool = false, prioritiseFollowedStreamers: Bool = false, failoverStreamers: [GameFailoverStreamer] = []) async {
         self.currentPriorityGames = priorityGames
         self.currentExcludedGames = excludedGames
         self.currentStrategy = strategy
@@ -1007,6 +1007,7 @@ public final class MinerManager {
             // 2. Filter out irrelevant campaigns (no drops, Just Chatting)
             let relevant = campaignsForGame.filter { campaign in
                 if campaign.drops.isEmpty { return false }
+                if campaign.isLikelyInternalTestCampaign { return false }
                 let name = campaign.game.name.trimmingCharacters(in: .whitespacesAndNewlines)
                 let id = campaign.game.id.trimmingCharacters(in: .whitespacesAndNewlines)
                 if name.localizedCaseInsensitiveCompare("Just Chatting") == .orderedSame || id == "509658" {

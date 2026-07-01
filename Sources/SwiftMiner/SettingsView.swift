@@ -631,12 +631,6 @@ private struct MiningSettingsView: View {
                     }
                 SettingsSecondaryText("Allows Twitch IRL-category campaigns to be treated as special earn-anywhere drops. Turn this off to skip IRL campaigns.")
 
-                Toggle("Stall recovery", isOn: $settings.antiStallRecoveryEnabled)
-                    .onChange(of: settings.antiStallRecoveryEnabled) { _, newValue in
-                        Task { await navigation.minerManager.updateAntiStallRecovery(enabled: newValue) }
-                    }
-                SettingsSecondaryText("Auto-recovers a miner after a recoverable disconnect or if it goes quiet while other miners stay active.")
-
                 Toggle("Prioritise followed and subscribed streamers", isOn: $settings.prioritiseFollowedStreamers)
                     .onChange(of: settings.prioritiseFollowedStreamers) { _, newValue in
                         Task { await navigation.minerManager.updateFollowedStreamerPriority(enabled: newValue) }
