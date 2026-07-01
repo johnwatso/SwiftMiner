@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fix Twitch drops mining for renamed game categories - Release Notes</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      margin: 0;
+      padding: 32px 20px 48px;
+      font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f4f6f8;
+      color: #0f1720;
+    }
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 28px;
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.86);
+      box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
+    }
+    h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
+    .meta { margin: 0 0 24px; color: #52606d; font-size: 14px; }
+    p { margin: 0 0 16px; }
+    a { color: #0a67a3; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #0b1015; color: #edf2f7; }
+      main {
+        background: rgba(15, 23, 32, 0.88);
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+      }
+      .meta { color: #9fb0c2; }
+      a { color: #73c3ff; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Fix Twitch drops mining for renamed game categories</h1>
+    <p class="meta">Version 1.32.2</p>
+    <p>Fix Twitch drops mining for renamed game categories</p>
+<p>Version 1.32.2 notes:</p>
+<p>- Keep live-aware campaign selection at the center of mining: campaigns with no verified live channel no longer starve a game that can currently progress drops, while restricted esports campaigns still take over once a usable stream is live.</p>
+<p>- Resolve renamed/branded Twitch categories broadly: carry campaign game slugs, consult DirectoryGameRedirect, expand through category search, and fall back to derived slugs without per-game alias maps.</p>
+<p>- Verify directory and per-stream game IDs before accepting live channels, so a bad slug match cannot switch the miner into an unrelated category.</p>
+<p>- Preserve special-event/IRL bypass behavior for campaigns that can earn from ACL channels outside a strict game category.</p>
+<p>- Keep internal/test-looking Twitch fixture drops out of mining/claiming while normal campaigns that include test in broader text remain eligible.</p>
+<p>- Leave supervisor stall restart recovery hidden/disabled while restart handling is tightened to avoid noisy self-restarts from idle states.</p>
+<p>- Bump 1.32.2 build metadata to 2026070116 and update public release notes.</p>
+<p>Implementation:</p>
+<p>- Add optional Game.slug, parse it from Twitch campaign payloads, and merge it across dashboard/details/inventory campaign sources.</p>
+<p>- Pass full Game metadata into DropsService from MinerEngine channel selection.</p>
+<p>- Follow TwitchDropsMiner's slug-first directory lookup approach, with category-search fallback and game-ID validation added for safety.</p>
+<p>- Add regression coverage for Rainbow Six -&gt; Tom Clancy's Rainbow Six Siege category resolution with game-ID validation.</p>
+<p>Validation:</p>
+<p>- xcodebuild -project SwiftMiner.xcodeproj -scheme SwiftMiner -configuration Debug test (325 tests).</p>
+<p>- Built app Info.plist reports 1.32.2 / 2026070116 with SUFeedURL and SUPublicEDKey present.</p>
+<p>- docs/appcast.xml and docs/beta/appcast.xml were intentionally left untouched for ShipHook.</p>
+    <p><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/ccf9133fda73af32647adb538a7001eec008a4a9">ccf9133</a></p>
+  </main>
+</body>
+</html>
