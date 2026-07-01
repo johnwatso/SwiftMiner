@@ -127,3 +127,9 @@ buildServer.json
 .secrets/
 Debug Logs.txt
 Logs for SM.txt
+
+# Sparkle appcasts are authored under docs/ (ShipHook's write location) and copied
+# into the published site by .github/workflows/deploy-website.yml. The Website/public
+# copies are build output — do not commit them.
+Website/public/appcast.xml
+Website/public/beta/appcast.xml
