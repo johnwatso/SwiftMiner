@@ -64,6 +64,32 @@ public final class MinerManager {
             return ResolvedPrimaryState(gameStates: states)
         }
 
+        /// True when the miner is in an active work state but supervisor liveness has gone quiet.
+        /// Refreshing, idle, blocked, and auth states already communicate a clearer user-facing reason.
+        public var showsNoRecentActivityAttention: Bool {
+            guard isRunning,
+                  !needsAuth,
+                  !isHealthy,
+                  !isStalled,
+                  !workerState.isRecovering else {
+                return false
+            }
+
+            switch status {
+            case .watching, .claiming:
+                return true
+            case .idle,
+                 .authenticating,
+                 .fetchingCampaigns,
+                 .waitingForStream,
+                 .paused,
+                 .error,
+                 .idleNoEligibleCampaigns,
+                 .blockedAccountNotLinked:
+                return false
+            }
+        }
+
         /// A concise, deterministic status label for UI badges and list rows.
         @MainActor
         public var statusLabel: String {
@@ -73,7 +99,7 @@ public final class MinerManager {
             if isStalled {
                 return "Miner Unresponsive"
             }
-            if isRunning && !needsAuth && !isHealthy {
+            if showsNoRecentActivityAttention {
                 return "No Recent Activity"
             }
             guard let resolved = resolvedPrimaryState?.resolved else {
@@ -1751,7 +1777,7 @@ public final class MinerManager {
             miner.isRunning = true
             miner.isHealthy = false
             miner.needsAuth = false
-            miner.status = .fetchingCampaigns
+            miner.status = .watching
             
         case .blockedNotLinked:
             miner.workerState = .idle
@@ -1815,9 +1841,9 @@ public final class MinerManager {
             miner.isRunning = true
             miner.isHealthy = false
             miner.needsAuth = false
-            miner.status = .fetchingCampaigns
+            miner.status = .watching
 
-        case .fetchingCampaigns:
+        case .watching where !miner.isHealthy:
             // State 4: Blocked — Account Not Linked
             miner.workerState = .idle
             miner.isStalled = false

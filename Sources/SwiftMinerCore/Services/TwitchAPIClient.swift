@@ -538,13 +538,10 @@ public actor TwitchAPIClient {
         let data = try await makeGraphQLRequest(request: request)
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
 
-        // Debug: log raw response — first 3000 chars to see timeBasedDrops structure
-        if let raw = String(data: data, encoding: .utf8) {
-            print("[TwitchAPIClient] ViewerDropsDashboard raw (first 3000): \(raw.prefix(3000))")
-        }
+        await traceGQLResponse("ViewerDropsDashboard raw", data: data, maxCharacters: 3000)
 
         guard let responseData = json?["data"] as? [String: Any] else {
-            print("[TwitchAPIClient] fetchDropCampaigns: missing data object")
+            await traceGQLDebug { "[TwitchAPIClient] fetchDropCampaigns: missing data object" }
             return []
         }
 
@@ -553,11 +550,13 @@ public actor TwitchAPIClient {
         let drops = (currentUser?["dropCampaigns"] as? [[String: Any]]) ?? (responseData["dropCampaigns"] as? [[String: Any]])
 
         guard let drops = drops else {
-            print("[TwitchAPIClient] fetchDropCampaigns: unexpected shape — currentUser=\(currentUser != nil), drops=nil")
+            let hasCurrentUser = currentUser != nil
+            await traceGQLDebug { "[TwitchAPIClient] fetchDropCampaigns: unexpected shape — currentUser=\(hasCurrentUser), drops=nil" }
             return []
         }
 
-        print("[TwitchAPIClient] fetchDropCampaigns: \(drops.count) raw campaigns from API")
+        let dropsCount = drops.count
+        await traceGQLDebug { "[TwitchAPIClient] fetchDropCampaigns: \(dropsCount) raw campaigns from API" }
         
         // Build basic campaigns first, then only fetch details for time-active ones
         let basicCampaigns = drops.compactMap { drop -> Campaign? in
@@ -567,7 +566,7 @@ public actor TwitchAPIClient {
 
         let activeCampaigns = basicCampaigns.filter { $0.isActive }
         let inactiveCampaigns = basicCampaigns.filter { !$0.isActive }
-        print("[TwitchAPIClient] fetchDropCampaigns: \(activeCampaigns.count) active campaigns, fetching details")
+        await traceGQLDebug { "[TwitchAPIClient] fetchDropCampaigns: \(activeCampaigns.count) active campaigns, fetching details" }
 
         // Fetch campaign details with a concurrency cap of 10 to avoid socket exhaustion.
         // userLogin (e.g. "john") is required — DropCampaignDetails uses user(login:) not user(id:)
@@ -607,7 +606,7 @@ public actor TwitchAPIClient {
         }
 
         let campaigns = enrichedActive + inactiveCampaigns
-        print("[TwitchAPIClient] fetchDropCampaigns: \(campaigns.count) parsed successfully")
+        await traceGQLDebug { "[TwitchAPIClient] fetchDropCampaigns: \(campaigns.count) parsed successfully" }
         return campaigns
     }
     
@@ -624,10 +623,7 @@ public actor TwitchAPIClient {
         
         let data = try await makeGraphQLRequest(request: request)
 
-        // Debug: dump raw DropCampaignDetails response to confirm `self` field presence on timeBasedDrops
-        if let raw = String(data: data, encoding: .utf8) {
-            print("[TwitchAPIClient] DropCampaignDetails raw (first 3000): \(raw.prefix(3000))")
-        }
+        await traceGQLResponse("DropCampaignDetails raw", data: data, maxCharacters: 3000)
 
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
 
@@ -679,9 +675,7 @@ public actor TwitchAPIClient {
 
         let data = try await makeGraphQLRequest(request: request)
 
-        if let raw = String(data: data, encoding: .utf8) {
-            print("[TwitchAPIClient] fetchInventory raw (first 2000): \(raw.prefix(2000))")
-        }
+        await traceGQLResponse("fetchInventory raw", data: data, maxCharacters: 2000)
 
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
 
@@ -691,7 +685,7 @@ public actor TwitchAPIClient {
 
         guard let currentUser = responseData["currentUser"] as? [String: Any],
               let inventory = currentUser["inventory"] as? [String: Any] else {
-            print("[TwitchAPIClient] fetchInventory: missing currentUser/inventory")
+            await traceGQLDebug { "[TwitchAPIClient] fetchInventory: missing currentUser/inventory" }
             return ([], [])
         }
 
@@ -707,21 +701,24 @@ public actor TwitchAPIClient {
                 benefits[benefitId] = ClaimedBenefit(id: benefitId, name: benefitName, lastAwardedAt: date)
             }
             lastKnownClaimedBenefits = benefits
-            print("[TwitchAPIClient] fetchInventory: \(benefits.count) claimed benefit IDs")
+            let benefitCount = benefits.count
+            await traceGQLDebug { "[TwitchAPIClient] fetchInventory: \(benefitCount) claimed benefit IDs" }
         }
 
         // dropCampaignsInProgress is null when no campaigns are actively in-progress (all claimed or not started)
         guard let dropProgress = inventory["dropCampaignsInProgress"] as? [[String: Any]] else {
-            print("[TwitchAPIClient] fetchInventory: dropCampaignsInProgress is null (all drops claimed or not started)")
+            await traceGQLDebug { "[TwitchAPIClient] fetchInventory: dropCampaignsInProgress is null (all drops claimed or not started)" }
             return ([], [])
         }
 
-        print("[TwitchAPIClient] fetchInventory: \(dropProgress.count) campaigns in progress")
+        let dropProgressCount = dropProgress.count
+        await traceGQLDebug { "[TwitchAPIClient] fetchInventory: \(dropProgressCount) campaigns in progress" }
 
         // Cache campaign entities for injection — handles stale "EXPIRED" status in dashboard
         lastKnownInProgressCampaigns = dropProgress.compactMap { parseCampaignFromInProgressDict($0) }
         if !lastKnownInProgressCampaigns.isEmpty {
-            print("[TwitchAPIClient] fetchInventory: cached \(lastKnownInProgressCampaigns.count) in-progress campaign(s): \(lastKnownInProgressCampaigns.map { $0.name })")
+            let campaignNames = lastKnownInProgressCampaigns.map(\.name)
+            await traceGQLDebug { "[TwitchAPIClient] fetchInventory: cached \(campaignNames.count) in-progress campaign(s): \(campaignNames)" }
         }
 
         let progress = parseDropProgress(from: dropProgress)
@@ -762,14 +759,14 @@ public actor TwitchAPIClient {
         let rawCurrentMinutes = session["currentMinutesWatched"]
         guard let dropId = rawDropId as? String,
               let currentMinutes = rawCurrentMinutes as? Int else {
-            traceGQL(
+            await traceGQL(
                 "DropCurrentSessionContext parse-failed drop=\(String(describing: rawDropId)) " +
                 "rawCurrent=\(String(describing: rawCurrentMinutes))"
             )
             return nil
         }
 
-        traceGQL(
+        await traceGQL(
             "DropCurrentSessionContext parsed drop=\(dropId) rawCurrent=\(String(describing: rawCurrentMinutes)) " +
             "parsedCurrent=\(currentMinutes)"
         )
@@ -972,10 +969,7 @@ public actor TwitchAPIClient {
         
         let data = try await makeGraphQLRequest(request: request)
 
-        // Log raw response for debugging
-        if let raw = String(data: data, encoding: .utf8) {
-            print("[TwitchAPIClient] getLiveChannels raw (first 1000): \(raw.prefix(1000))")
-        }
+        await traceGQLResponse("getLiveChannels raw", data: data, maxCharacters: 1000)
 
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         guard let responseData = json?["data"] as? [String: Any] else { return [] }
@@ -991,7 +985,7 @@ public actor TwitchAPIClient {
            !directoryGameId.isEmpty,
            directoryGameId != expectedId {
             let directoryName = (directory["displayName"] as? String) ?? (directory["name"] as? String) ?? gameSlug
-            print("[TwitchAPIClient] getLiveChannels: slug '\(gameSlug)' resolved to \(directoryName) (\(directoryGameId)), expected game id \(expectedId); skipping")
+            await traceGQLDebug { "[TwitchAPIClient] getLiveChannels: slug '\(gameSlug)' resolved to \(directoryName) (\(directoryGameId)), expected game id \(expectedId); skipping" }
             return []
         }
 
@@ -999,9 +993,11 @@ public actor TwitchAPIClient {
         // broadcaster may only have "login" (no "id"/"displayName") — use login as fallback for both
         if let streams = directory["streams"] as? [String: Any],
            let edges = streams["edges"] as? [[String: Any]], !edges.isEmpty {
-            print("[TwitchAPIClient] getLiveChannels: found \(edges.count) edges")
+            let edgeCount = edges.count
+            await traceGQLDebug { "[TwitchAPIClient] getLiveChannels: found \(edgeCount) edges" }
             if let firstNode = (edges.first?["node"] as? [String: Any]) {
-                print("[TwitchAPIClient] getLiveChannels: first node keys = \(firstNode.keys.sorted())")
+                let firstNodeKeys = firstNode.keys.sorted()
+                await traceGQLDebug { "[TwitchAPIClient] getLiveChannels: first node keys = \(firstNodeKeys)" }
             }
             let channels = edges.compactMap { edge -> Channel? in
                 guard let node = edge["node"] as? [String: Any] else { return nil }
@@ -1038,13 +1034,14 @@ public actor TwitchAPIClient {
                     hasDropsEnabled: true
                 )
             }
-            print("[TwitchAPIClient] getLiveChannels: parsed \(channels.count) channels from \(edges.count) edges")
+            let channelCount = channels.count
+            await traceGQLDebug { "[TwitchAPIClient] getLiveChannels: parsed \(channelCount) channels from \(edgeCount) edges" }
             return channels
         }
 
         // Fallback: flat channelList shape
         guard let list = directory["channelList"] as? [[String: Any]] else {
-            print("[TwitchAPIClient] getLiveChannels: no streams/edges or channelList in response")
+            await traceGQLDebug { "[TwitchAPIClient] getLiveChannels: no streams/edges or channelList in response" }
             return []
         }
 
@@ -1142,6 +1139,11 @@ public actor TwitchAPIClient {
 
     // MARK: - Private Helper Methods
 
+    private struct RequestResult {
+        let data: Data
+        let retryCount: Int
+    }
+
     /// Force-refreshes OAuth token after a 401/tokenExpired response and syncs local caches.
     private func refreshAccessTokenAfterExpiry() async throws -> String {
         let refreshedToken = try await authService.forceRefreshToken()
@@ -1149,12 +1151,12 @@ public actor TwitchAPIClient {
         // Integrity token is bound to auth context; force re-fetch after token rotation.
         integrityToken = nil
         integrityTokenExpiry = .distantPast
-        print("[TwitchAPIClient] OAuth token refreshed after tokenExpired; integrity cache invalidated")
+        await traceGQLDebug { "[TwitchAPIClient] OAuth token refreshed after tokenExpired; integrity cache invalidated" }
         return refreshedToken
     }
 
     /// Make a request with automatic retries for transient network errors
-    private func makeRequestWithRetry(_ request: URLRequest, operationName: String, maxAttempts: Int = 3) async throws -> Data {
+    private func makeRequestWithRetry(_ request: URLRequest, operationName: String, maxAttempts: Int = 3) async throws -> RequestResult {
         var lastError: Error?
         
         for attempt in 1...maxAttempts {
@@ -1185,7 +1187,7 @@ public actor TwitchAPIClient {
                             }
                         }
                     }
-                    return data
+                    return RequestResult(data: data, retryCount: attempt - 1)
                 case 401:
                     throw TwitchMinerError.tokenExpired
                 case 403:
@@ -1220,6 +1222,34 @@ public actor TwitchAPIClient {
         throw TwitchMinerError.networkError(lastError?.localizedDescription ?? "Max retry attempts reached")
     }
 
+    private func performMeasuredRequest(
+        _ request: URLRequest,
+        operationName: String,
+        rateLimitWaitSeconds: TimeInterval = 0
+    ) async throws -> Data {
+        let startedAt = Date()
+        do {
+            let result = try await makeRequestWithRetry(request, operationName: operationName)
+            await PerformanceDiagnostics.shared.recordRequest(
+                operation: operationName,
+                durationSeconds: Date().timeIntervalSince(startedAt),
+                succeeded: true,
+                retryCount: result.retryCount,
+                rateLimitWaitSeconds: rateLimitWaitSeconds
+            )
+            return result.data
+        } catch {
+            await PerformanceDiagnostics.shared.recordRequest(
+                operation: operationName,
+                durationSeconds: Date().timeIntervalSince(startedAt),
+                succeeded: false,
+                rateLimitWaitSeconds: rateLimitWaitSeconds,
+                error: error.localizedDescription
+            )
+            throw error
+        }
+    }
+
     /// Make a REST API request
     private func makeRESTRequest(
         url: String,
@@ -1241,11 +1271,12 @@ public actor TwitchAPIClient {
             request.httpBody = body
         }
 
-        let operationName = "REST \(method) \(url)"
+        let operationName = Self.restOperationName(method: method, url: url)
         do {
-            return try await makeRequestWithRetry(request, operationName: operationName)
+            return try await performMeasuredRequest(request, operationName: operationName)
         } catch TwitchMinerError.tokenExpired where allowRefreshRetry {
-            print("[TwitchAPIClient] \(operationName): token expired, forcing refresh and retrying once")
+            await PerformanceDiagnostics.shared.recordTokenRefresh(operation: operationName)
+            await traceGQLDebug { "[TwitchAPIClient] \(operationName): token expired, forcing refresh and retrying once" }
             _ = try await refreshAccessTokenAfterExpiry()
             return try await makeRESTRequest(
                 url: url,
@@ -1262,12 +1293,18 @@ public actor TwitchAPIClient {
         request: GraphQLRequest,
         allowRefreshRetry: Bool = true
     ) async throws -> Data {
+        let operationName = request.operationName
         // Enforce GQL rate limit before making the request
+        let rateLimitStartedAt = Date()
         await rateLimiter.wait()
-        traceGQL(request.operationName)
-
-        // Debug: log token and client ID being used
-        print("[TwitchAPIClient] [GQL] Request: \(request.operationName) token=\(accessToken.prefix(8))…(len:\(accessToken.count)) clientID=\(clientId.prefix(8))…")
+        let rateLimitWaitSeconds = Date().timeIntervalSince(rateLimitStartedAt)
+        await traceGQL(operationName)
+        let tokenPrefix = accessToken.prefix(8)
+        let tokenLength = accessToken.count
+        let clientPrefix = clientId.prefix(8)
+        await traceGQLDebug {
+            "[TwitchAPIClient] Request: \(operationName) token=\(tokenPrefix)…(len:\(tokenLength)) clientID=\(clientPrefix)…"
+        }
 
         guard let requestURL = URL(string: gqlUrl) else {
             throw TwitchMinerError.networkError("Invalid URL")
@@ -1295,9 +1332,14 @@ public actor TwitchAPIClient {
         urlRequest.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
 
         do {
-            return try await makeRequestWithRetry(urlRequest, operationName: request.operationName)
+            return try await performMeasuredRequest(
+                urlRequest,
+                operationName: operationName,
+                rateLimitWaitSeconds: rateLimitWaitSeconds
+            )
         } catch TwitchMinerError.tokenExpired where allowRefreshRetry {
-            print("[TwitchAPIClient] [GQL] \(request.operationName): token expired, forcing refresh and retrying once")
+            await PerformanceDiagnostics.shared.recordTokenRefresh(operation: operationName)
+            await traceGQLDebug { "[TwitchAPIClient] \(operationName): token expired, forcing refresh and retrying once" }
             _ = try await refreshAccessTokenAfterExpiry()
             return try await makeGraphQLRequest(request: request, allowRefreshRetry: false)
         }
@@ -1308,8 +1350,10 @@ public actor TwitchAPIClient {
         operationName: String,
         allowRefreshRetry: Bool = true
     ) async throws -> Data {
+        let rateLimitStartedAt = Date()
         await rateLimiter.wait()
-        traceGQL(operationName)
+        let rateLimitWaitSeconds = Date().timeIntervalSince(rateLimitStartedAt)
+        await traceGQL(operationName)
 
         guard let requestURL = URL(string: gqlUrl) else {
             throw TwitchMinerError.networkError("Invalid URL")
@@ -1333,9 +1377,14 @@ public actor TwitchAPIClient {
         urlRequest.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         do {
-            return try await makeRequestWithRetry(urlRequest, operationName: operationName)
+            return try await performMeasuredRequest(
+                urlRequest,
+                operationName: operationName,
+                rateLimitWaitSeconds: rateLimitWaitSeconds
+            )
         } catch TwitchMinerError.tokenExpired where allowRefreshRetry {
-            print("[TwitchAPIClient] [GQL] \(operationName): token expired, forcing refresh and retrying once")
+            await PerformanceDiagnostics.shared.recordTokenRefresh(operation: operationName)
+            await traceGQLDebug { "[TwitchAPIClient] \(operationName): token expired, forcing refresh and retrying once" }
             _ = try await refreshAccessTokenAfterExpiry()
             return try await makeRawGraphQLRequest(
                 body: body,
@@ -1415,19 +1464,45 @@ public actor TwitchAPIClient {
         request.setValue("https://www.twitch.tv", forHTTPHeaderField: "Origin")
         request.setValue("https://www.twitch.tv", forHTTPHeaderField: "Referer")
 
-        let (data, response) = try await session.data(for: request)
+        let startedAt = Date()
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch {
+            await PerformanceDiagnostics.shared.recordRequest(
+                operation: "IntegrityToken",
+                durationSeconds: Date().timeIntervalSince(startedAt),
+                succeeded: false,
+                error: error.localizedDescription
+            )
+            throw error
+        }
 
         guard let httpResponse = response as? HTTPURLResponse else {
+            await PerformanceDiagnostics.shared.recordRequest(
+                operation: "IntegrityToken",
+                durationSeconds: Date().timeIntervalSince(startedAt),
+                succeeded: false,
+                error: "invalid response type"
+            )
             throw TwitchMinerError.networkError("Integrity token: invalid response type")
         }
-        print("[TwitchAPIClient] integrity endpoint status: \(httpResponse.statusCode)")
+        let integrityStatusCode = httpResponse.statusCode
+        await traceGQLDebug { "[TwitchAPIClient] integrity endpoint status: \(integrityStatusCode)" }
 
         // Twitch returns 200 or 429, but BOTH include a valid token in the body.
         // 429 is a rate-limit signal, but the token is still usable — accept it.
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let token = json["token"] as? String else {
             let msg = String(data: data, encoding: .utf8) ?? "unknown"
-            print("[TwitchAPIClient] integrity token response missing token field (status \(httpResponse.statusCode)): \(msg.prefix(200))")
+            await traceGQLDebug { "[TwitchAPIClient] integrity token response missing token field (status \(integrityStatusCode)): \(msg.prefix(200))" }
+            await PerformanceDiagnostics.shared.recordRequest(
+                operation: "IntegrityToken",
+                durationSeconds: Date().timeIntervalSince(startedAt),
+                succeeded: false,
+                error: "missing token field (status \(integrityStatusCode))"
+            )
             throw TwitchMinerError.networkError("Integrity token fetch failed")
         }
 
@@ -1436,16 +1511,43 @@ public actor TwitchAPIClient {
         integrityTokenExpiry = Date(timeIntervalSince1970: expiryMs / 1000)
         integrityToken = token
 
-        print("[TwitchAPIClient] integrity token refreshed, expires: \(integrityTokenExpiry)")
+        let expiry = integrityTokenExpiry
+        await traceGQLDebug { "[TwitchAPIClient] integrity token refreshed, expires: \(expiry)" }
+        await PerformanceDiagnostics.shared.recordRequest(
+            operation: "IntegrityToken",
+            durationSeconds: Date().timeIntervalSince(startedAt),
+            succeeded: true
+        )
         return token
     }
 
     // MARK: - Trace helpers
 
-    private func traceGQL(_ op: String) {
-        Task {
-            await DebugTrace.shared.emit(.graphQL, op)
+    private func traceGQL(_ op: String) async {
+        await DebugTrace.shared.emit(.graphQL, op)
+    }
+
+    private func traceGQLDebug(_ message: @Sendable () -> String) async {
+        await DebugTrace.shared.emitLazy(.graphQL, message)
+    }
+
+    private func traceGQLResponse(_ label: String, data: Data, maxCharacters: Int) async {
+        await DebugTrace.shared.emitLazy(.graphQL) {
+            guard let raw = String(data: data, encoding: .utf8) else {
+                return "\(label): <non-utf8 response>"
+            }
+            return "\(label): \(raw.prefix(maxCharacters))"
         }
+    }
+
+    private static func restOperationName(method: String, url: String) -> String {
+        guard let components = URLComponents(string: url),
+              let host = components.host else {
+            return "REST \(method)"
+        }
+
+        let path = components.path.isEmpty ? "/" : components.path
+        return "REST \(method) \(host)\(path)"
     }
 
     // MARK: - Parsing Helpers
@@ -1488,9 +1590,6 @@ public actor TwitchAPIClient {
                 let startAt = parseDate(startAtStr),
                 let endAt = parseDate(endAtStr)
             else {
-                let id = campaignDict["id"] as? String ?? "?"
-                let name = campaignDict["name"] as? String ?? "?"
-                print("[TwitchAPIClient] parseCampaigns: dropped '\(name)' (id:\(id)) — missing required field")
                 return nil
             }
 
@@ -1521,7 +1620,6 @@ public actor TwitchAPIClient {
             let name = dropDict["name"] as? String,
             let requiredMinutes = dropDict["requiredMinutesWatched"] as? Int
         else {
-            print("[TwitchAPIClient] parseDrop failed — keys: \(dropDict.keys.sorted()), id=\(dropDict["id"] ?? "nil"), name=\(dropDict["name"] ?? "nil"), req=\(dropDict["requiredMinutesWatched"] ?? "nil")")
             return nil
         }
 
@@ -1569,7 +1667,6 @@ public actor TwitchAPIClient {
             let isClaimed = selfDict["isClaimed"] as? Bool ?? false
             let currentMinutes = selfDict["currentMinutesWatched"] as? Int ?? 0
             let dropInstanceId = selfDict["dropInstanceID"] as? String ?? id
-            print("[TwitchAPIClient] parseDrop '\(name)': self.isClaimed=\(isClaimed), mins=\(currentMinutes)/\(requiredMinutes)")
             progress = Progress(
                 id: dropInstanceId,
                 dropId: id,
@@ -1579,8 +1676,6 @@ public actor TwitchAPIClient {
                 requiredMinutes: requiredMinutes,
                 isClaimed: isClaimed
             )
-        } else {
-            print("[TwitchAPIClient] parseDrop '\(name)': NO self field — benefitIds=\(benefitIds)")
         }
 
         return Drop(
@@ -1770,7 +1865,6 @@ public actor TwitchAPIClient {
                 // rows for progress display, but avoid creating a synthetic claim target
                 // once a drop is complete.
                 if dropInstanceId == nil && currentMinutes >= requiredMinutes {
-                    print("[TwitchAPIClient] parseDropProgress: skipping claimable '\(dropName)' — dropInstanceID missing from self dict")
                     continue
                 }
 
@@ -1786,7 +1880,6 @@ public actor TwitchAPIClient {
             }
         }
 
-        print("[TwitchAPIClient] parseDropProgress: \(results.count) drops parsed from \(progressDicts.count) campaigns in progress")
         return results
     }
 

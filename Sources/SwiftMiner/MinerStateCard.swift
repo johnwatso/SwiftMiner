@@ -169,7 +169,7 @@ struct MinerStateCard: View {
             )
         }
 
-        if miner.isRunning && !miner.needsAuth && !miner.isHealthy {
+        if miner.showsNoRecentActivityAttention {
             return StateConfig(
                 headline: "No Recent Activity",
                 subtitle: "The worker is running, but liveness signals have gone quiet.",
@@ -800,7 +800,7 @@ struct MinerActivitySnapshot {
             )
         }
 
-        if miner.isRunning && !miner.needsAuth && !miner.isHealthy {
+        if miner.showsNoRecentActivityAttention {
             return waitingItem(
                 id: "quiet-\(miner.id)",
                 title: "No Recent Activity",
@@ -1489,7 +1489,7 @@ struct MinerActivitySnapshot {
         if miner.isStalled {
             return "Miner Unresponsive"
         }
-        if miner.isRunning && !miner.needsAuth && !miner.isHealthy {
+        if miner.showsNoRecentActivityAttention {
             return "No Recent Activity"
         }
         if now.id.hasPrefix("waiting-drops-") || now.id.hasPrefix("ignored-link-") {
@@ -1533,7 +1533,7 @@ struct MinerActivitySnapshot {
         if miner.isStalled {
             return "bolt.horizontal.circle.fill"
         }
-        if miner.isRunning && !miner.needsAuth && !miner.isHealthy {
+        if miner.showsNoRecentActivityAttention {
             return "checkmark.circle.trianglebadge.exclamationmark.fill"
         }
         if now.id.hasPrefix("ignored-link-") {
@@ -1580,7 +1580,7 @@ struct MinerActivitySnapshot {
         if miner.isStalled {
             return .red
         }
-        if miner.isRunning && !miner.needsAuth && !miner.isHealthy {
+        if miner.showsNoRecentActivityAttention {
             return .yellow
         }
         if now.id.hasPrefix("ignored-link-") {

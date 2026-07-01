@@ -32,7 +32,7 @@ struct MinerHealthCard: View {
         if miner.isStalled {
             return HealthVerdict(severity: .error, message: "Miner unresponsive")
         }
-        if miner.isRunning && !miner.needsAuth && !miner.isHealthy {
+        if miner.showsNoRecentActivityAttention {
             return HealthVerdict(severity: .warning, message: "No recent activity")
         }
         if miner.needsAuth {

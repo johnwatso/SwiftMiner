@@ -175,13 +175,6 @@ struct OverviewView: View {
         let miners = navigation.minerManager.miners
         let miningMinerCount = miners.filter { $0.status == .watching }.count
 
-        if miningMinerCount > 0 {
-            return .mining(
-                activeMinerCount: miningMinerCount,
-                totalMinerCount: miners.count
-            )
-        }
-
         if miners.contains(where: { $0.needsAuth }) {
             return .blockedAuthenticationExpired
         }
@@ -194,10 +187,6 @@ struct OverviewView: View {
             return .recovering
         }
 
-        if miners.contains(where: { $0.isRunning && !$0.needsAuth && !$0.isHealthy }) {
-            return .noRecentActivity
-        }
-
         let accountLinkBlockedMiners = miners.filter { $0.status == .blockedAccountNotLinked }
         if !accountLinkBlockedMiners.isEmpty {
             return .blockedAccountNotLinked(
@@ -208,6 +197,17 @@ struct OverviewView: View {
 
         if miners.contains(where: { $0.status == .error }) {
             return .blockedNeedsAttention
+        }
+
+        if miners.contains(where: { $0.showsNoRecentActivityAttention }) {
+            return .noRecentActivity
+        }
+
+        if miningMinerCount > 0 {
+            return .mining(
+                activeMinerCount: miningMinerCount,
+                totalMinerCount: miners.count
+            )
         }
 
         if miners.contains(where: { $0.status == .waitingForStream }) {

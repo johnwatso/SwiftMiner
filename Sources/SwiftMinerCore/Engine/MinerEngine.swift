@@ -97,6 +97,7 @@ public actor MinerEngine {
     /// Maximum extra minutes allowed before assuming mining is stalled (matches TDM)
     private static let maxExtraMinutes = 15
     private static let failoverCooldown: TimeInterval = 10 * 60
+    private static let subscriptionWarningRepeatInterval: TimeInterval = 6 * 60 * 60
 
     /// Cache of all campaigns fetched during the last check
     public private(set) var allCampaigns: [Campaign] = []
@@ -124,6 +125,7 @@ public actor MinerEngine {
     private var showClaimNotifications: Bool = false
     private var ignoredAccountLinkWarningGames: Set<String> = []
     private var warnedUnlinkedPriorityGames: Set<String> = []
+    private var subscriptionWarningKeys: [String: Date] = [:]
     private var failoverStreamers: [GameFailoverStreamer] = []
     private var failoverCooldowns: [String: Date] = [:]
     private var pendingFailoverTarget: PendingFailoverTarget?
@@ -802,11 +804,45 @@ public actor MinerEngine {
     private func runMiningLoop() async {
         while isRunning && !Task.isCancelled {
             do {
+                let perfCycleStartedAt = Date()
+                var perfCampaignFetchSeconds: TimeInterval = 0
+                var perfClaimCheckSeconds: TimeInterval = 0
+                var perfChannelSelectionSeconds: TimeInterval = 0
+                var perfWatchStartupSeconds: TimeInterval = 0
+                var perfCandidateCount = 0
+
+                func finishPerformanceCycle(
+                    outcome: String,
+                    campaign: Campaign? = nil,
+                    channel: Channel? = nil
+                ) async {
+                    let finishedAt = Date()
+                    let timing = PerformanceDiagnostics.MiningCycleTiming(
+                        minerId: currentAccount?.id ?? "unknown",
+                        minerLabel: currentAccount?.username ?? "unknown",
+                        startedAt: perfCycleStartedAt,
+                        finishedAt: finishedAt,
+                        outcome: outcome,
+                        totalSeconds: finishedAt.timeIntervalSince(perfCycleStartedAt),
+                        campaignFetchSeconds: perfCampaignFetchSeconds,
+                        claimCheckSeconds: perfClaimCheckSeconds,
+                        channelSelectionSeconds: perfChannelSelectionSeconds,
+                        watchStartupSeconds: perfWatchStartupSeconds,
+                        candidateCount: perfCandidateCount,
+                        selectedCampaign: campaign?.name,
+                        selectedChannel: channel?.displayName
+                    )
+                    await PerformanceDiagnostics.shared.recordMiningCycle(timing)
+                    log(Self.performanceCycleSummary(timing))
+                }
+
                 onStatusChange?(.fetchingCampaigns)
                 log("Fetching active campaigns...")
 
                 // 1. Fetch all campaigns (single call — avoids double API hit).
+                var perfStartedAt = Date()
                 var allEnriched = try await dropsService.fetchCampaigns()
+                perfCampaignFetchSeconds += Date().timeIntervalSince(perfStartedAt)
                 onOperationalEvent?(.successfulPoll)
                 onOperationalEvent?(.campaignRefresh)
                 
@@ -817,12 +853,9 @@ public actor MinerEngine {
                     excludedGames: excludedGames,
                     strategy: miningStrategy
                 )
+                perfCandidateCount = candidates.count
                 
-                log("Campaigns: \(allCampaigns.count) total, \(candidates.count) account-eligible")
-                for c in allEnriched {
-                    // IMPLEMENTATION OF DOMAIN LOGGING REQUIREMENT
-                    log("  · \(c.name) (\(c.gameName)) → Status: \(c.miningStatus.rawValue) → Relevance: \(c.relevance.rawValue)")
-                }
+                log(Self.campaignRefreshSummary(totalCampaigns: allEnriched.count, candidates: candidates))
 
                 await warnForUnlinkedPriorityCampaigns(in: allEnriched)
                 await warnForSubscriptionRequiredCampaigns(in: allEnriched)
@@ -839,9 +872,13 @@ public actor MinerEngine {
                 onCampaignUpdate?(candidates)
 
                 // 2. Claim any ready drops first (Claimable status handled here)
+                perfStartedAt = Date()
                 let didClaimDrops = await claimReadyDrops()
+                perfClaimCheckSeconds += Date().timeIntervalSince(perfStartedAt)
                 if didClaimDrops {
+                    perfStartedAt = Date()
                     allEnriched = try await dropsService.fetchCampaigns(forceRefresh: true)
+                    perfCampaignFetchSeconds += Date().timeIntervalSince(perfStartedAt)
                     onOperationalEvent?(.successfulPoll)
                     onOperationalEvent?(.campaignRefresh)
                     self.allCampaigns = allEnriched
@@ -851,6 +888,7 @@ public actor MinerEngine {
                         excludedGames: excludedGames,
                         strategy: miningStrategy
                     )
+                    perfCandidateCount = candidates.count
                     onCampaignUpdate?(candidates)
                 }
 
@@ -867,6 +905,7 @@ public actor MinerEngine {
                         strategy: miningStrategy
                     )
                     onStatusChange?(emptyState)
+                    await finishPerformanceCycle(outcome: "no-candidates")
                     // Wait up to campaignCheckInterval in 10s ticks, breaking early on triggerRescan()
                     shouldRescanCampaigns = false
                     let tickNs: UInt64 = 10 * 1_000_000_000
@@ -882,6 +921,7 @@ public actor MinerEngine {
                 var selectedCampaign: Campaign?
                 var selectedChannel: Channel?
 
+                perfStartedAt = Date()
                 if streamOverrideLogin != nil {
                     switch await selectStreamOverrideChannel(for: candidates) {
                     case .selected(let campaign, let channel):
@@ -953,11 +993,13 @@ public actor MinerEngine {
                         log("No eligible channels available for \(gameName); trying next game.")
                     }
                 }
+                perfChannelSelectionSeconds += Date().timeIntervalSince(perfStartedAt)
 
                 guard let campaign = selectedCampaign, let channel = selectedChannel else {
                     log("No eligible channels available for \(candidates.count) account-eligible campaign(s)")
                     await cleanupActiveWatchSession(clearTarget: true)
                     onStatusChange?(.waitingForStream)
+                    await finishPerformanceCycle(outcome: "no-channel")
                     shouldRescanCampaigns = false
 
                     // Restricted (ACL) campaigns — e.g. esports drops — often have approved
@@ -1005,14 +1047,19 @@ public actor MinerEngine {
                     // 6. Start watching
                     extraMinutesWatched = 0
                     lastProgressUpdateAt = Date()
+                    perfStartedAt = Date()
                     _ = try await watchSessionManager.startWatching(
                         channel: channel,
                         campaignId: campaign.id,
                         gameName: campaign.game.name,
                         gameId: campaign.game.id
                     )
+                    perfWatchStartupSeconds += Date().timeIntervalSince(perfStartedAt)
                     onStatusChange?(.watching)
+                    await finishPerformanceCycle(outcome: "watching", campaign: campaign, channel: channel)
                 } catch {
+                    perfWatchStartupSeconds += Date().timeIntervalSince(perfStartedAt)
+                    await finishPerformanceCycle(outcome: "watch-start-failed", campaign: campaign, channel: channel)
                     await cleanupActiveWatchSession(clearTarget: true)
                     throw error
                 }
@@ -1476,11 +1523,66 @@ public actor MinerEngine {
 
         guard !subscriptionCampaigns.isEmpty else { return }
 
+        let now = Date()
         for campaign in subscriptionCampaigns {
             let drops = campaign.subscriptionRequiredDrops.filter { !$0.isClaimed }
+            let key = ([campaign.id] + drops.map(\.id).sorted()).joined(separator: "|")
+            if let lastWarnedAt = subscriptionWarningKeys[key],
+               now.timeIntervalSince(lastWarnedAt) < Self.subscriptionWarningRepeatInterval {
+                continue
+            }
+            subscriptionWarningKeys[key] = now
             let dropNames = drops.map(\.name).joined(separator: ", ")
             log("Subscription required: \(campaign.name) has drops that require purchasing Twitch subscriptions: \(dropNames). These drops are being skipped.")
         }
+    }
+
+    private static func campaignRefreshSummary(totalCampaigns: Int, candidates: [Campaign]) -> String {
+        var statusCounts: [MiningCampaignStatus: Int] = [:]
+        for candidate in candidates {
+            statusCounts[candidate.miningStatus, default: 0] += 1
+        }
+
+        let statusSummary = [
+            MiningCampaignStatus.available,
+            .inProgress,
+            .claimable,
+            .claimed,
+            .expired
+        ].compactMap { status -> String? in
+            guard let count = statusCounts[status], count > 0 else { return nil }
+            return "\(status.rawValue)=\(count)"
+        }.joined(separator: ", ")
+
+        let suffix = statusSummary.isEmpty ? "" : " (\(statusSummary))"
+        return "Campaigns: \(totalCampaigns) total, \(candidates.count) account-eligible\(suffix)"
+    }
+
+    private static func performanceCycleSummary(_ timing: PerformanceDiagnostics.MiningCycleTiming) -> String {
+        var parts = [
+            "[Perf] cycle \(timing.outcome):",
+            "total=\(formatPerfDuration(timing.totalSeconds))",
+            "campaigns=\(formatPerfDuration(timing.campaignFetchSeconds))",
+            "claims=\(formatPerfDuration(timing.claimCheckSeconds))",
+            "channels=\(formatPerfDuration(timing.channelSelectionSeconds))",
+            "watchStart=\(formatPerfDuration(timing.watchStartupSeconds))",
+            "candidates=\(timing.candidateCount)"
+        ]
+        if let campaign = timing.selectedCampaign, !campaign.isEmpty {
+            parts.append("campaign=\"\(campaign)\"")
+        }
+        if let channel = timing.selectedChannel, !channel.isEmpty {
+            parts.append("channel=\"\(channel)\"")
+        }
+        return parts.joined(separator: " ")
+    }
+
+    private static func formatPerfDuration(_ seconds: TimeInterval) -> String {
+        let bounded = max(0, seconds)
+        if bounded < 1 {
+            return "\(Int((bounded * 1_000).rounded()))ms"
+        }
+        return String(format: "%.2fs", bounded)
     }
 
     private func candidateCampaigns(
@@ -1489,10 +1591,6 @@ public actor MinerEngine {
         excludedGames: [String],
         strategy: MiningStrategy
     ) -> [Campaign] {
-        log("[CampaignSelect] Strategy: \(strategy.displayName), Total campaigns: \(campaigns.count)")
-        log("[CampaignSelect]   Excluded games: \(excludedGames.count), Priority games: \(priorityGames.count)")
-        log("[CampaignSelect]   Badge/Emotes enabled: \(enableBadgesEmotes)")
-
         let priorityKeys = priorityGames.map { normalizedGameKey($0) }.filter { !$0.isEmpty }
         let prioritySet = Set(priorityKeys)
         let excludedSet = Set(excludedGames.map { normalizedGameKey($0) }.filter { !$0.isEmpty })
@@ -1574,15 +1672,16 @@ public actor MinerEngine {
             return true
         }
 
-        for (reason, count) in filteredOutReasons.sorted(by: { $0.key < $1.key }) {
-            log("[CampaignSelect]   Filtered out \(count) campaigns: \(reason)")
-        }
-
         let sorted = sortedCandidates(eligible, priorityKeys: priorityKeys, strategy: strategy)
-        log("[CampaignSelect]   Eligible campaigns: \(sorted.count)")
-        if let campaign = sorted.first {
-            log("[CampaignSelect]   Best candidate: \(campaign.name) (\(campaign.gameName), status: \(campaign.miningStatus.rawValue))")
-        }
+        let filterSummary = filteredOutReasons
+            .sorted(by: { $0.key < $1.key })
+            .map { "\($0.key)=\($0.value)" }
+            .joined(separator: ", ")
+        let bestSummary = sorted.first
+            .map { ", best=\($0.name) (\($0.gameName), \($0.miningStatus.rawValue))" }
+            ?? ""
+        let filterSuffix = filterSummary.isEmpty ? "" : ", filtered=[\(filterSummary)]"
+        log("[CampaignSelect] \(strategy.displayName): \(campaigns.count) total, \(sorted.count) eligible, excludedGames=\(excludedGames.count), priorityGames=\(priorityGames.count), badgeEmotes=\(enableBadgesEmotes)\(filterSuffix)\(bestSummary)")
         return sorted
     }
 
@@ -1863,6 +1962,12 @@ public actor MinerEngine {
         var fallbackPair: (Campaign, Channel)? = nil
         var verifiedMatches: [(campaign: Campaign, channel: Channel)] = []
         var liveSubscriptionBlockedCampaignIds: Set<String> = []
+        var verifiedChannelCount = 0
+        var noCandidateMatchCount = 0
+        var aclBlockedMatchCount = 0
+        var subscriptionOnlyMatchCount = 0
+        var verificationErrorCount = 0
+        var aclProbeCount = 0
 
         for ch in sortedChannels.prefix(50) {
             let eligibleForChannel = candidates.filter { candidate in
@@ -1872,11 +1977,11 @@ public actor MinerEngine {
             guard !eligibleForChannel.isEmpty else { continue }
 
             let channel = await resolveChannelIdIfNeeded(ch)
-            log("[ChannelSelect]   Verifying \(channel.displayName) (viewers: \(channel.viewerCount ?? 0), id: \(channel.id))...")
 
             do {
                 let activeCampaignIds = try await apiClient.fetchAvailableDrops(channelId: channel.id)
                 anyVerificationSucceeded = true
+                verifiedChannelCount += 1
 
                 // Record all matching candidates for this channel, then choose by campaign
                 // priority after the directory scan. This prevents restricted side campaigns
@@ -1911,16 +2016,16 @@ public actor MinerEngine {
                 if activeKnown.isEmpty {
                     let subscriptionBlocked = activeCampaignIds.compactMap { subscriptionBlockedCampaigns[$0] }
                     if subscriptionBlocked.isEmpty {
-                        log("[ChannelSelect]     None of our candidates active here. Channel drops: \(activeCampaignIds.joined(separator: ", "))")
+                        noCandidateMatchCount += 1
                     } else {
+                        subscriptionOnlyMatchCount += 1
                         subscriptionBlocked.forEach { liveSubscriptionBlockedCampaignIds.insert($0.id) }
-                        let names = subscriptionBlocked.map(\.name).joined(separator: ", ")
-                        log("[ChannelSelect]     Live drop is subscription-required, not watch-mineable: \(names)")
                     }
                 } else {
-                    log("[ChannelSelect]     ACL blocked match on \(channel.displayName) (active ids: \(activeKnown.joined(separator: ", ")))")
+                    aclBlockedMatchCount += 1
                 }
             } catch {
+                verificationErrorCount += 1
                 log("[ChannelSelect]     Warning: Verification failed for \(channel.displayName): \(error.localizedDescription)")
                 if fallbackPair == nil, let best = eligibleForChannel.first {
                     fallbackPair = (best, channel)
@@ -1936,10 +2041,11 @@ public actor MinerEngine {
             let probed = await liveACLChannels(for: candidate)
             for ch in probed {
                 let channel = await resolveChannelIdIfNeeded(ch)
-                log("[ChannelSelect]   Probing ACL channel \(channel.displayName) for \(candidate.name)...")
+                aclProbeCount += 1
                 do {
                     let activeCampaignIds = try await apiClient.fetchAvailableDrops(channelId: channel.id)
                     anyVerificationSucceeded = true
+                    verifiedChannelCount += 1
                     if activeCampaignIds.contains(candidate.id) {
                         log("[ChannelSelect]     Verified: \(candidate.name) active on approved channel \(channel.displayName)")
                         let alreadyRecorded = verifiedMatches.contains {
@@ -1952,10 +2058,23 @@ public actor MinerEngine {
                         }
                     }
                 } catch {
+                    verificationErrorCount += 1
                     log("[ChannelSelect]     Warning: Approved-channel verification failed: \(error.localizedDescription)")
                     if fallbackPair == nil { fallbackPair = (candidate, channel) }
                 }
             }
+        }
+
+        let verificationSummary = [
+            "checked=\(verifiedChannelCount)",
+            noCandidateMatchCount > 0 ? "noMatch=\(noCandidateMatchCount)" : nil,
+            aclBlockedMatchCount > 0 ? "aclBlocked=\(aclBlockedMatchCount)" : nil,
+            subscriptionOnlyMatchCount > 0 ? "subscriptionOnly=\(subscriptionOnlyMatchCount)" : nil,
+            aclProbeCount > 0 ? "aclProbes=\(aclProbeCount)" : nil,
+            verificationErrorCount > 0 ? "errors=\(verificationErrorCount)" : nil
+        ].compactMap { $0 }.joined(separator: ", ")
+        if verifiedChannelCount > 0 || aclProbeCount > 0 || verificationErrorCount > 0 {
+            log("[ChannelSelect]   Verification summary: \(verificationSummary)")
         }
 
         if let best = await bestVerifiedCampaignMatch(candidates: candidates, matches: verifiedMatches, relationshipRanks: relationshipRanks) {

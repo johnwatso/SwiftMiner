@@ -36,8 +36,13 @@ public actor DebugTrace {
 
     /// Emit a trace line if tracing is enabled.
     public func emit(_ category: Category, _ message: String) {
+        emitLazy(category) { message }
+    }
+
+    /// Emit a lazily-built trace line if tracing is enabled.
+    public func emitLazy(_ category: Category, _ message: @Sendable () -> String) {
         guard isEnabled else { return }
-        let line = "[\(category.rawValue)] \(message)"
+        let line = "[\(category.rawValue)] \(message())"
         if let h = handler {
             h(line)
         } else {

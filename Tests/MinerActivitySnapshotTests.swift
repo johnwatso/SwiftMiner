@@ -329,4 +329,56 @@ final class MinerActivitySnapshotTests: XCTestCase {
         XCTAssertEqual(snapshot.statusText, "Recovering...")
         XCTAssertEqual(snapshot.now.title, "Recovering...")
     }
+
+    func testUnhealthyRefreshAndBlockedStatesDoNotCollapseToNoRecentActivity() {
+        let refreshingMiner = makeMiner(
+            status: .fetchingCampaigns,
+            campaigns: [],
+            priorityGames: [],
+            workerState: .running,
+            isHealthy: false
+        )
+        let errorMiner = makeMiner(
+            status: .error,
+            campaigns: [],
+            priorityGames: [],
+            workerState: .running,
+            isHealthy: false
+        )
+        let idleMiner = makeMiner(
+            status: .idleNoEligibleCampaigns,
+            campaigns: [],
+            priorityGames: [],
+            workerState: .running,
+            isHealthy: false
+        )
+
+        let refreshingSnapshot = resolveSnapshot(for: refreshingMiner)
+        let errorSnapshot = resolveSnapshot(for: errorMiner)
+        let idleSnapshot = resolveSnapshot(for: idleMiner)
+
+        XCTAssertEqual(refreshingSnapshot.statusText, "Up to Date")
+        XCTAssertEqual(refreshingSnapshot.now.title, "Up to Date")
+
+        XCTAssertEqual(errorSnapshot.statusText, "Blocked — Needs attention")
+        XCTAssertEqual(errorSnapshot.now.title, "Blocked — Needs attention")
+
+        XCTAssertEqual(idleSnapshot.statusText, "Up to Date")
+        XCTAssertEqual(idleSnapshot.now.title, "Up to Date")
+    }
+
+    func testUnhealthyWatchingMinerStillSurfacesNoRecentActivity() {
+        let miner = makeMiner(
+            status: .watching,
+            campaigns: [],
+            priorityGames: [],
+            workerState: .running,
+            isHealthy: false
+        )
+
+        let snapshot = resolveSnapshot(for: miner)
+
+        XCTAssertEqual(snapshot.statusText, "No Recent Activity")
+        XCTAssertEqual(snapshot.now.title, "No Recent Activity")
+    }
 }

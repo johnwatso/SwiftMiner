@@ -81,6 +81,38 @@ final class ActivityLogStoreTests: XCTestCase {
         XCTAssertEqual(entries, [newest, middle])
     }
 
+    func testNoisyDiagnosticInfoLogsAreNotRecordedInActivityLog() {
+        XCTAssertFalse(NavigationModel.shouldRecordActivityLogMessage(
+            "  · EMPULSE Drops (EMPULSE) → Status: AVAILABLE → Relevance: IRRELEVANT",
+            level: .info
+        ))
+        XCTAssertFalse(NavigationModel.shouldRecordActivityLogMessage(
+            "[CampaignSelect]   Filtered out 100 campaigns: unlinked_not_prioritised",
+            level: .info
+        ))
+        XCTAssertFalse(NavigationModel.shouldRecordActivityLogMessage(
+            "[ChannelSelect]     None of our candidates active here. Channel drops:",
+            level: .info
+        ))
+        XCTAssertFalse(NavigationModel.shouldRecordActivityLogMessage(
+            "No claimable drops found in inventory",
+            level: .info
+        ))
+        XCTAssertFalse(NavigationModel.shouldRecordActivityLogMessage(
+            "Watch heartbeat sent for aspen via Twitch GQL",
+            level: .info
+        ))
+
+        XCTAssertTrue(NavigationModel.shouldRecordActivityLogMessage(
+            "Progress +3 min on Season 3 Lootbox (385/480 min)",
+            level: .info
+        ))
+        XCTAssertTrue(NavigationModel.shouldRecordActivityLogMessage(
+            "Subscription required: Example has drops that require purchasing Twitch subscriptions.",
+            level: .warning
+        ))
+    }
+
     func testUpdateCompletionNotificationUsesIndependentCategory() {
         let update = NavigationModel.CompletedUpdate(
             previousVersion: "1.31",

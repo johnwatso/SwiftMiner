@@ -7,7 +7,7 @@ actor ActivityLogStore {
     private let manager: SQLiteManager
     private let maxEntries: Int
 
-    init(manager: SQLiteManager, maxEntries: Int = 1000) {
+    init(manager: SQLiteManager, maxEntries: Int = 5000) {
         self.manager = manager
         self.maxEntries = max(1, maxEntries)
     }
