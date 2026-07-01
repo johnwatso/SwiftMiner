@@ -845,6 +845,20 @@ public final class NavigationModel {
         }
     }
 
+    /// Start/stop the resource-usage diagnostic to match the current setting.
+    /// Called at launch and whenever the Advanced toggle changes.
+    func startResourceUsageMonitoringIfEnabled() {
+        setResourceUsageMonitoring(enabled: Settings.shared.monitorResourceUsage)
+    }
+
+    func setResourceUsageMonitoring(enabled: Bool) {
+        if enabled {
+            resourceUsageMonitor.start()
+        } else {
+            resourceUsageMonitor.stop()
+        }
+    }
+
     // MARK: - Events
 
     /// Human-readable event entries.
@@ -865,6 +879,8 @@ public final class NavigationModel {
     // MARK: - Miner Manager
 
     public let minerManager: MinerManager
+    /// Opt-in diagnostic that tracks the app's own CPU/memory usage (Advanced settings).
+    let resourceUsageMonitor = ResourceUsageMonitor()
     public let adminLinkingService: any AdminLinkingService
     public let swiftBotConnectionService: any SwiftBotConnectionService
     public let eventOutboxService: EventOutboxService
@@ -960,6 +976,7 @@ public final class NavigationModel {
         }
         if !SwiftMinerRuntime.isRunningTests {
             startSwiftBotStateSync()
+            startResourceUsageMonitoringIfEnabled()
         }
 
         // Wire DM event production — lightweight event emission, notification decisions stay in SwiftBot

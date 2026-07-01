@@ -45,6 +45,12 @@ public final class Settings: ObservableObject {
     /// Maximum number of log entries to keep in memory
     @AppStorage("maxLogEntries", store: Settings.appStorageStore)
     public var maxLogEntries: Int = 500
+
+    /// Diagnostic: when on, SwiftMiner samples its own CPU/memory usage so the
+    /// Advanced "Resource Usage" popup can show averages. Off by default; nothing
+    /// is sampled unless enabled, so there is no cost for normal use.
+    @AppStorage("monitorResourceUsage", store: Settings.appStorageStore)
+    public var monitorResourceUsage: Bool = false
     
     /// Legacy preference retained for users upgrading from the old boolean setting.
     @AppStorage("minimizeToMenuBar", store: Settings.appStorageStore)
@@ -1364,6 +1370,7 @@ public final class Settings: ObservableObject {
         logLevel = .info
         showLogConsole = true
         maxLogEntries = 500
+        monitorResourceUsage = false
         minimizeToMenuBar = false
         appPresenceMode = .dockOnly
         autoStartOnLaunch = false

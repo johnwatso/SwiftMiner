@@ -2129,6 +2129,99 @@ private struct IntegrationsSettingsView: View {
 
 // MARK: - Advanced Settings
 
+/// Small popup summarising SwiftMiner's own CPU/memory usage while the
+/// resource-usage diagnostic is enabled. Reads the live snapshot from the
+/// observable monitor, so it updates in place as new samples arrive.
+private struct ResourceUsagePopover: View {
+    let monitor: ResourceUsageMonitor
+
+    var body: some View {
+        let snapshot = monitor.snapshot
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Resource Usage")
+                .font(.headline)
+
+            if snapshot.sampleCount == 0 {
+                Text(monitor.isRunning
+                    ? "Collecting the first sample\u{2026}"
+                    : "Enable \u{201C}Monitor resource usage\u{201D} to start collecting.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 6) {
+                    GridRow {
+                        Color.clear.frame(width: 0, height: 0)
+                        Text("CPU").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                        Text("Memory").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    }
+                    usageRow("Current", cpu: snapshot.currentCPUPercent, memory: snapshot.currentMemoryBytes)
+                    usageRow("Average", cpu: snapshot.averageCPUPercent, memory: snapshot.averageMemoryBytes)
+                    usageRow("Peak", cpu: snapshot.peakCPUPercent, memory: snapshot.peakMemoryBytes)
+                }
+
+                Text("\(snapshot.sampleCount) sample\(snapshot.sampleCount == 1 ? "" : "s")\(durationSuffix(from: snapshot.startedAt))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack(spacing: 8) {
+                Button("Reset") { monitor.reset() }
+                    .disabled(snapshot.sampleCount == 0)
+                Button("Export CSV\u{2026}") { exportCSV() }
+                    .disabled(snapshot.sampleCount == 0)
+                Spacer()
+            }
+
+            Text("CPU is relative to one core.")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(16)
+        .frame(width: 300)
+    }
+
+    private func exportCSV() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.commaSeparatedText]
+        panel.nameFieldStringValue = "SwiftMiner Resource Usage.csv"
+        panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        try? monitor.csvRepresentation().data(using: .utf8)?.write(to: url, options: .atomic)
+    }
+
+    private func usageRow(_ label: String, cpu: Double, memory: UInt64) -> some View {
+        GridRow {
+            Text(label).foregroundStyle(.secondary)
+            Text(Self.cpuText(cpu)).monospacedDigit()
+            Text(Self.memoryText(memory)).monospacedDigit()
+        }
+    }
+
+    private func durationSuffix(from start: Date?) -> String {
+        guard let start else { return "" }
+        let seconds = Int(Date().timeIntervalSince(start))
+        if seconds < 60 { return " over \(seconds)s" }
+        let minutes = seconds / 60
+        if minutes < 60 { return " over \(minutes)m" }
+        let hours = minutes / 60
+        let remainder = minutes % 60
+        return remainder == 0 ? " over \(hours)h" : " over \(hours)h \(remainder)m"
+    }
+
+    static func cpuText(_ percent: Double) -> String {
+        String(format: "%.1f%%", percent)
+    }
+
+    static func memoryText(_ bytes: UInt64) -> String {
+        let megabytes = Double(bytes) / (1024 * 1024)
+        if megabytes >= 1024 {
+            return String(format: "%.2f GB", megabytes / 1024)
+        }
+        return String(format: "%.0f MB", megabytes)
+    }
+}
+
 private struct AdvancedSettingsView: View {
     @ObservedObject var settings: Settings
     @Environment(NavigationModel.self) private var navigation
@@ -2137,12 +2230,14 @@ private struct AdvancedSettingsView: View {
     @State private var showClientIdAlert = false
     @State private var tempClientId = ""
     @State private var backupMessage: String?
+    @State private var showResourceUsage = false
 
     var body: some View {
         Form {
             apiConfigurationSection
             backupSection
             maintenanceSection
+            diagnosticsSection
 
 #if DEBUG
             debugTestingSection
@@ -2230,6 +2325,27 @@ private struct AdvancedSettingsView: View {
             SettingsSecondaryText("Restores every SwiftMiner preference to its default. Account logins are kept.")
         } header: {
             Text("Maintenance")
+        }
+    }
+
+    private var diagnosticsSection: some View {
+        Section {
+            Toggle("Monitor resource usage", isOn: $settings.monitorResourceUsage)
+                .onChange(of: settings.monitorResourceUsage) { _, newValue in
+                    navigation.setResourceUsageMonitoring(enabled: newValue)
+                }
+
+            Button("Resource Usage\u{2026}") {
+                showResourceUsage = true
+            }
+            .buttonStyle(.link)
+            .popover(isPresented: $showResourceUsage, arrowEdge: .bottom) {
+                ResourceUsagePopover(monitor: navigation.resourceUsageMonitor)
+            }
+
+            SettingsSecondaryText("Samples SwiftMiner's own CPU and memory every 15 seconds so you can see how much it uses. Off by default and nothing is sampled while off — there is no overhead for normal use.")
+        } header: {
+            Text("Diagnostics")
         }
     }
 

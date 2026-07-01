@@ -138,6 +138,7 @@
 		D42560FD670CBBA895C4A0B0 /* CommunityPointsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3B34F2E4A7B27C96831AB24 /* CommunityPointsService.swift */; };
 		D5841DD3685D03279074D0FA /* WebDashboardAssets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 165ABC94EC037719B5DE0C7E /* WebDashboardAssets.swift */; };
 		D5A6926B7FE2FD8EDEC43F28 /* UnattendedHealthModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B867787CA22A6074C1C312B7 /* UnattendedHealthModel.swift */; };
+		D6CC430AD2446A844C8FB57B /* ResourceUsageMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 104E69E6B6B6F84B8E2B240F /* ResourceUsageMonitor.swift */; };
 		D765E5CE3F8F85B72C85B2DB /* LiquidGlass.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A79F35AB0C08E6F2BE9A648 /* LiquidGlass.swift */; };
 		D98D9E425CE00B2FB2C57686 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46366DBAD54AF15E48C9E501 /* main.swift */; };
 		D9E4B76670DBD16E2DB5EAF1 /* DebugTracer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B8617965DD708EF04CA5A35 /* DebugTracer.swift */; };
@@ -233,6 +234,7 @@
 		0F6B0366B64D312D5EC9AC30 /* LegacyAccountMigrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyAccountMigrator.swift; sourceTree = "<group>"; };
 		0F769E922F54C3EE8703F4F5 /* KeychainAccountStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainAccountStore.swift; sourceTree = "<group>"; };
 		0FBDA7B95B97BC454645997C /* DiscordAvatarCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscordAvatarCache.swift; sourceTree = "<group>"; };
+		104E69E6B6B6F84B8E2B240F /* ResourceUsageMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResourceUsageMonitor.swift; sourceTree = "<group>"; };
 		14199B9CF6D97675DE0107D4 /* SwiftMiner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SwiftMiner.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		165ABC94EC037719B5DE0C7E /* WebDashboardAssets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebDashboardAssets.swift; sourceTree = "<group>"; };
 		19C66F8182D8FB572197B2EC /* SparkleConfigTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SparkleConfigTests.swift; sourceTree = "<group>"; };
@@ -526,6 +528,7 @@
 				E783D8A8E6145DE8BED34EED /* MinerTableView.swift */,
 				848496CCF8568D1769A1F40B /* MinerTips.swift */,
 				26908E3B6B9716D33FD72B00 /* NavigationModel.swift */,
+				104E69E6B6B6F84B8E2B240F /* ResourceUsageMonitor.swift */,
 				FE95137E28DEA812A2D3D1E7 /* Settings.swift */,
 				D8A9E39DA6F930F08E6C1E1E /* SettingsView.swift */,
 				DAF81B3BBAA69FF63BECA50C /* SidebarView.swift */,
@@ -1040,6 +1043,7 @@
 				3229F5F5C7C910E35220482E /* MinerTips.swift in Sources */,
 				C0C4E5F34012E0CAAE27792A /* MinersOverviewView.swift in Sources */,
 				D40B7D026EB8107BEA8C7996 /* NavigationModel.swift in Sources */,
+				D6CC430AD2446A844C8FB57B /* ResourceUsageMonitor.swift in Sources */,
 				FE498AC922BA6F34D0EFC819 /* Settings.swift in Sources */,
 				25D5E5483F55EA58AE81948A /* SettingsView.swift in Sources */,
 				939EF6722C3666DD63CDC642 /* SidebarView.swift in Sources */,
