@@ -77,6 +77,25 @@ final class ResourceUsageMonitor {
         let memoryBytes: UInt64
     }
 
+    struct Diagnostics: Equatable {
+        let isRunning: Bool
+        let startedAt: Date?
+        let durationSeconds: TimeInterval?
+        let sampleCount: Int
+        let currentCPUPercent: Double
+        let averageCPUPercent: Double
+        let peakCPUPercent: Double
+        let currentMemoryBytes: UInt64
+        let averageMemoryBytes: UInt64
+        let peakMemoryBytes: UInt64
+        let firstSampleAt: Date?
+        let lastSampleAt: Date?
+        let memoryDeltaBytes: Int64?
+        let memoryGrowthMBPerHour: Double?
+        let topCPUSamples: [Sample]
+        let topMemorySamples: [Sample]
+    }
+
     /// Latest accumulated snapshot. Observed by the diagnostics popup.
     private(set) var snapshot = Snapshot()
 
@@ -156,6 +175,45 @@ final class ResourceUsageMonitor {
         return lines.joined(separator: "\n") + "\n"
     }
 
+    func diagnostics(now: Date = Date()) -> Diagnostics {
+        let first = history.first
+        let last = history.last
+        let duration = snapshot.startedAt.map { max(0, now.timeIntervalSince($0)) }
+        let memoryDelta = Self.memoryDelta(first: first, last: last)
+        let memoryGrowth = Self.memoryGrowthMBPerHour(deltaBytes: memoryDelta, first: first, last: last)
+        let topCPU = Array(history.sorted {
+            if $0.cpuPercent == $1.cpuPercent {
+                return $0.timestamp > $1.timestamp
+            }
+            return $0.cpuPercent > $1.cpuPercent
+        }.prefix(5))
+        let topMemory = Array(history.sorted {
+            if $0.memoryBytes == $1.memoryBytes {
+                return $0.timestamp > $1.timestamp
+            }
+            return $0.memoryBytes > $1.memoryBytes
+        }.prefix(5))
+
+        return Diagnostics(
+            isRunning: isRunning,
+            startedAt: snapshot.startedAt,
+            durationSeconds: duration,
+            sampleCount: snapshot.sampleCount,
+            currentCPUPercent: snapshot.currentCPUPercent,
+            averageCPUPercent: snapshot.averageCPUPercent,
+            peakCPUPercent: snapshot.peakCPUPercent,
+            currentMemoryBytes: snapshot.currentMemoryBytes,
+            averageMemoryBytes: snapshot.averageMemoryBytes,
+            peakMemoryBytes: snapshot.peakMemoryBytes,
+            firstSampleAt: first?.timestamp,
+            lastSampleAt: last?.timestamp,
+            memoryDeltaBytes: memoryDelta,
+            memoryGrowthMBPerHour: memoryGrowth,
+            topCPUSamples: topCPU,
+            topMemorySamples: topMemory
+        )
+    }
+
     private func sample() {
         let now = Date()
 
@@ -189,5 +247,18 @@ final class ResourceUsageMonitor {
         if history.count > maxHistory {
             history.removeFirst(history.count - maxHistory)
         }
+    }
+
+    private static func memoryDelta(first: Sample?, last: Sample?) -> Int64? {
+        guard let first, let last else { return nil }
+        return Int64(last.memoryBytes) - Int64(first.memoryBytes)
+    }
+
+    private static func memoryGrowthMBPerHour(deltaBytes: Int64?, first: Sample?, last: Sample?) -> Double? {
+        guard let deltaBytes, let first, let last else { return nil }
+        let elapsed = last.timestamp.timeIntervalSince(first.timestamp)
+        guard elapsed > 0 else { return nil }
+        let deltaMB = Double(deltaBytes) / (1024 * 1024)
+        return deltaMB / elapsed * 3_600
     }
 }

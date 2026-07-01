@@ -54,7 +54,7 @@ public struct MinerHealthSnapshot: Sendable, Equatable, Identifiable {
             health = .recovering
         } else if miner.status == .error || miner.status == .blockedAccountNotLinked {
             health = .blocked
-        } else if miner.isRunning && !miner.isHealthy {
+        } else if miner.showsNoRecentActivityAttention {
             health = .attention
         } else if miner.status == .watching {
             health = .mining
@@ -88,7 +88,7 @@ public struct MinerHealthSnapshot: Sendable, Equatable, Identifiable {
         if miner.isStalled {
             signals.append("Supervisor marked miner unresponsive")
         }
-        if miner.isRunning && !miner.isHealthy {
+        if miner.showsNoRecentActivityAttention {
             signals.append("No recent healthy activity")
         }
         if minutes(since: miner.lastSuccessfulPollAt, now: now) >= 15 {

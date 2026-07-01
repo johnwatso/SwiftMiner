@@ -1,4 +1,5 @@
 import XCTest
+@testable import SwiftMinerCore
 @testable import SwiftMiner
 
 final class LogRedactorTests: XCTestCase {
@@ -75,7 +76,9 @@ final class LogExporterTests: XCTestCase {
     private func snapshot(
         miners: [LogExporter.Snapshot.Miner] = [],
         events: [LogExporter.Snapshot.Event] = [],
-        settings: [(String, String)] = [("logLevel", "info")]
+        settings: [(String, String)] = [("logLevel", "info")],
+        resourceUsage: ResourceUsageMonitor.Diagnostics? = nil,
+        performance: PerformanceDiagnostics.Snapshot? = nil
     ) -> LogExporter.Snapshot {
         LogExporter.Snapshot(
             generatedAt: Date(timeIntervalSince1970: 1_730_000_500),
@@ -85,6 +88,8 @@ final class LogExporterTests: XCTestCase {
             arch: "arm64",
             miners: miners,
             settings: settings,
+            resourceUsage: resourceUsage,
+            performance: performance,
             events: events
         )
     }
@@ -120,13 +125,108 @@ final class LogExporterTests: XCTestCase {
             currentCampaign: "LoH Launch Drops Week 2",
             currentCampaignId: "abc-123",
             priorityGames: ["Skull and Bones"],
-            statusChangedAt: now.addingTimeInterval(-2_820) // 47m ago
+            statusChangedAt: now.addingTimeInterval(-2_820), // 47m ago
+            statusLabel: "Waiting — Refreshing campaigns",
+            health: "idle",
+            workerState: "running",
+            workerTaskID: "task-123",
+            isHealthy: false,
+            isStalled: false,
+            showsNoRecentActivityAttention: false,
+            lastEventAt: now.addingTimeInterval(-120),
+            lastSuccessfulPollAt: now.addingTimeInterval(-240),
+            lastCampaignRefreshAt: now.addingTimeInterval(-360),
+            stallConfidencePercent: 50,
+            stallSignals: ["No successful poll in 15m"]
         )
         let report = LogExporter.buildReport(snapshot(miners: [miner]), now: now)
         XCTAssertTrue(report.contains("[Gabe]"))
         XCTAssertTrue(report.contains("status=watching"))
         XCTAssertTrue(report.contains("inStatusFor=47m0s"))
+        XCTAssertTrue(report.contains(#"statusLabel="Waiting — Refreshing campaigns""#))
+        XCTAssertTrue(report.contains("health=idle workerState=running isHealthy=false isStalled=false showsNoRecentActivityAttention=false"))
+        XCTAssertTrue(report.contains("workerTaskID=task-123"))
+        XCTAssertTrue(report.contains("lastEventAt=2024-10-27T03:39:40Z (age=2m0s)"))
+        XCTAssertTrue(report.contains("lastSuccessfulPollAt=2024-10-27T03:37:40Z (age=4m0s)"))
+        XCTAssertTrue(report.contains("lastCampaignRefreshAt=2024-10-27T03:35:40Z (age=6m0s)"))
+        XCTAssertTrue(report.contains("stallConfidence=50% signals=[No successful poll in 15m]"))
         XCTAssertTrue(report.contains("LoH Launch Drops Week 2"))
+    }
+
+    func testReportIncludesPerformanceDiagnostics() async {
+        let now = Date(timeIntervalSince1970: 1_730_000_500)
+        await PerformanceDiagnostics.shared.reset()
+        await PerformanceDiagnostics.shared.recordRequest(
+            operation: "ViewerDropsDashboard",
+            durationSeconds: 1.25,
+            succeeded: true,
+            retryCount: 1,
+            rateLimitWaitSeconds: 0.2,
+            finishedAt: now.addingTimeInterval(-30)
+        )
+        await PerformanceDiagnostics.shared.recordMiningCycle(
+            PerformanceDiagnostics.MiningCycleTiming(
+                minerId: "miner-1",
+                minerLabel: "Gabe",
+                startedAt: now.addingTimeInterval(-120),
+                finishedAt: now.addingTimeInterval(-118),
+                outcome: "watching",
+                totalSeconds: 2.0,
+                campaignFetchSeconds: 0.8,
+                claimCheckSeconds: 0.1,
+                channelSelectionSeconds: 0.9,
+                watchStartupSeconds: 0.2,
+                candidateCount: 3,
+                selectedCampaign: "LoH Launch Drops Week 2",
+                selectedChannel: "StreamerOne"
+            )
+        )
+        let performance = await PerformanceDiagnostics.shared.snapshot()
+        let usage = ResourceUsageMonitor.Diagnostics(
+            isRunning: true,
+            startedAt: now.addingTimeInterval(-3600),
+            durationSeconds: 3600,
+            sampleCount: 2,
+            currentCPUPercent: 12.25,
+            averageCPUPercent: 8.5,
+            peakCPUPercent: 24.0,
+            currentMemoryBytes: 130 * 1024 * 1024,
+            averageMemoryBytes: 125 * 1024 * 1024,
+            peakMemoryBytes: 132 * 1024 * 1024,
+            firstSampleAt: now.addingTimeInterval(-1800),
+            lastSampleAt: now.addingTimeInterval(-900),
+            memoryDeltaBytes: 4 * 1024 * 1024,
+            memoryGrowthMBPerHour: 16.0,
+            topCPUSamples: [
+                ResourceUsageMonitor.Sample(
+                    timestamp: now.addingTimeInterval(-900),
+                    cpuPercent: 24.0,
+                    memoryBytes: 132 * 1024 * 1024
+                )
+            ],
+            topMemorySamples: [
+                ResourceUsageMonitor.Sample(
+                    timestamp: now.addingTimeInterval(-900),
+                    cpuPercent: 24.0,
+                    memoryBytes: 132 * 1024 * 1024
+                )
+            ]
+        )
+
+        let report = LogExporter.buildReport(
+            snapshot(resourceUsage: usage, performance: performance),
+            now: now
+        )
+
+        XCTAssertTrue(report.contains("=== Performance Diagnostics ==="))
+        XCTAssertTrue(report.contains("Resource usage: monitoring=true samples=2"))
+        XCTAssertTrue(report.contains("cpu current=12.25% avg=8.50% peak=24.00%"))
+        XCTAssertTrue(report.contains("memory current=130.00 MB avg=125.00 MB peak=132.00 MB delta=+4.00 MB growth=+16.00 MB/hour"))
+        XCTAssertTrue(report.contains("ViewerDropsDashboard: count=1 ok=1 fail=0 avg=1.25s p95=1.25s max=1.25s retries=1 rateLimitWait=200ms"))
+        XCTAssertTrue(report.contains("[Gabe] cycles=1 avg=2.00s p95=2.00s max=2.00s"))
+        XCTAssertTrue(report.contains("outcome=watching total=2.00s campaigns=800ms claims=100ms channels=900ms watchStart=200ms candidates=3"))
+
+        await PerformanceDiagnostics.shared.reset()
     }
 
     func testDefaultFilenameUsesUTCTimestamp() {

@@ -216,7 +216,7 @@ struct MinerApp: App {
                     NSWorkspace.shared.open(URL(string: "https://swiftminer.app/help/")!)
                 }
                 Button("Export Diagnostic Logs…") {
-                    LogExporter.presentSavePanel(navigation: navigation)
+                    Task { await LogExporter.presentSavePanel(navigation: navigation) }
                 }
                 Button("Raise Issue on GitHub…") {
                     GitHubIssueReporter.openNewIssue()

@@ -863,7 +863,7 @@ public final class NavigationModel {
 
     /// Human-readable event entries.
     public var events: [EventEntry] = []
-    private let maxEvents = 1000
+    private let maxEvents = 5000
     private var completedUpdateAwaitingNotification: CompletedUpdate?
     private static let lastLaunchedVersionKey = "SwiftMinerLastLaunchedVersion"
     private static let lastLaunchedBuildKey = "SwiftMinerLastLaunchedBuild"
@@ -1260,6 +1260,7 @@ public final class NavigationModel {
 
     private func processLogMessage(minerId: String, message: String) {
         let level = eventLevel(forLogMessage: message)
+        guard Self.shouldRecordActivityLogMessage(message, level: level) else { return }
         
         // Transform common logs into readable events
         var displayMessage = message
@@ -1293,6 +1294,35 @@ public final class NavigationModel {
         }
 
         return .info
+    }
+
+    nonisolated static func shouldRecordActivityLogMessage(_ message: String, level: EventLevel) -> Bool {
+        guard level == .info else { return true }
+
+        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("· ") {
+            return false
+        }
+
+        if message.hasPrefix("[CampaignSelect]") {
+            return false
+        }
+
+        if message.hasPrefix("[ChannelSelect]   Verifying ")
+            || message.hasPrefix("[ChannelSelect]     None of our candidates active here")
+            || message.hasPrefix("[ChannelSelect]     ACL blocked match")
+            || message.hasPrefix("[ChannelSelect]   Probing ACL channel") {
+            return false
+        }
+
+        if message.hasPrefix("Campaigns: ")
+            || message.hasPrefix("Checking game: ")
+            || message.hasPrefix("No claimable drops found in inventory")
+            || message.hasPrefix("Watch heartbeat sent for ") {
+            return false
+        }
+
+        return true
     }
 
     public func logEvent(message: String, level: EventLevel = .info, minerId: String? = nil, rawMessage: String? = nil) {

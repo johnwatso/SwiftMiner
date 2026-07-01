@@ -47,6 +47,14 @@
   <main>
     <h1>SwiftMiner Release Notes</h1>
     <p class="meta">Recent Sparkle update history</p>
+    <h2><a href="./1.32.3.html">Version 1.32.3</a></h2>
+    <ul>
+      <li>Keeps refresh, idle, and blocked miner states visible when liveness metadata is stale, instead of collapsing the Overview into repeated No Recent Activity cards.</li>
+      <li>Adds miner health, worker-state, liveness timestamp, and stall-signal details to exported diagnostic logs.</li>
+      <li>Keeps long-running diagnostics useful by retaining more Activity Log history, filtering repetitive INFO-only background chatter, summarising campaign/channel checks, and moving raw Twitch GQL debug output behind the debug trace switch.</li>
+      <li>Adds performance diagnostics for resource usage, Twitch request latency/retry/rate-limit behavior, integrity-token fetches, and mining-cycle timings.</li>
+      <li>Updates SwiftMiner to version 1.32.3 build 2026070209.</li>
+    </ul>
     <h2><a href="./1.32.2.html">Version 1.32.2</a></h2>
     <ul>
       <li>Ranks campaigns by live-stream availability first, so a limited-time campaign with no live channel no longer starves a game (such as Overwatch) that has streams ready to mine.</li>
