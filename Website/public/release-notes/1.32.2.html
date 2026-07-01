@@ -68,8 +68,8 @@
 <body>
   <main>
     <h1>SwiftMiner 1.32.2</h1>
-    <p class="meta">Version 1.32.2 · Build 2026070113</p>
-    <p class="intro">A mining-reliability update that stops limited-time campaigns from crowding out games that actually have live streams.</p>
+    <p class="meta">Version 1.32.2 · Build 2026070116</p>
+    <p class="intro">A mining-reliability update that stops limited-time campaigns from crowding out games that actually have live streams and handles Twitch category naming mismatches.</p>
 
     <section>
       <h2>Live-Aware Campaign Selection</h2>
@@ -78,6 +78,14 @@
         <li>Ranks candidate campaigns by live-stream availability first, so a soon-to-expire limited-time campaign with no live channel no longer out-ranks a game (such as Overwatch) that has streams ready to mine.</li>
         <li>Stops the every-few-minutes churn where a working watch session was torn down for a higher-ranked campaign that had no stream to switch to, then immediately resumed — leaving the mineable game barely making progress.</li>
         <li>Still grabs a restricted esports drop the moment it goes live: a switch now happens only when the higher-ranked campaign is verified to have a live, watch-mineable channel.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Game Directory Matching</h2>
+      <p class="summary">Campaigns now resolve to Twitch's canonical live directory category more reliably.</p>
+      <ul>
+        <li>Uses Twitch's campaign slug and category search as fallbacks, then verifies the directory game ID before accepting live drops-enabled streams, so renamed or branded categories such as Rainbow Six Siege resolve without hardcoded aliases.</li>
       </ul>
     </section>
 
@@ -94,7 +102,7 @@
       <p class="summary">Supervisor restart recovery is paused while its logic is reworked.</p>
       <ul>
         <li>Hides and disables supervisor stall recovery by default, avoiding unnecessary miner restarts from idle states until the restart logic is tightened.</li>
-        <li>Prepared as SwiftMiner <strong>1.32.2</strong>, build <strong>2026070113</strong>.</li>
+        <li>Prepared as SwiftMiner <strong>1.32.2</strong>, build <strong>2026070116</strong>.</li>
       </ul>
     </section>
   </main>

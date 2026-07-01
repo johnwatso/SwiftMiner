@@ -1790,7 +1790,7 @@ public actor MinerEngine {
 
         let liveChannels: [Channel]
         do {
-            var fetched = try await dropsService.findLiveChannels(forGame: gameName)
+            var fetched = try await dropsService.findLiveChannels(forGame: primary.game)
             if fetched.isEmpty, candidates.contains(where: { $0.game.isSpecialEvents }) {
                 log("[ChannelSelect]   Special Event bypass: no directory channels for '\(gameName)', using ACL list")
                 fetched = candidates.flatMap(\.channels)
@@ -2076,7 +2076,7 @@ public actor MinerEngine {
         log("[ChannelSelect]   Special Event: \(campaign.game.isSpecialEvents ? "YES" : "NO")")
         
         do {
-            var liveChannels = try await dropsService.findLiveChannels(forGame: campaign.gameName)
+            var liveChannels = try await dropsService.findLiveChannels(forGame: campaign.game)
             
             // SPECIAL EVENTS BYPASS: If no channels found for the specific game,
             // but it's a Special Event campaign, we try the ACL channels.

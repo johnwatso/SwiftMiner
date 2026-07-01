@@ -356,12 +356,70 @@ public actor TwitchAPIClient {
         return deduped
     }
 
-    /// Get the slug for a game name
-    public func getGameSlug(name: String) async throws -> String {
-        guard !name.isEmpty else {
-            throw TwitchMinerError.channelNotFound
+    private static func normalizedDirectoryGameName(_ value: String) -> String {
+        value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+    }
+
+    private static func sortedCategoryFallbacks(_ categories: [Game], matching game: Game) -> [Game] {
+        let gameId = game.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !gameId.isEmpty else { return categories }
+
+        return categories.enumerated().sorted { lhs, rhs in
+            let lhsMatches = lhs.element.id == gameId
+            let rhsMatches = rhs.element.id == gameId
+            if lhsMatches != rhsMatches { return lhsMatches }
+            return lhs.offset < rhs.offset
+        }.map(\.element)
+    }
+
+    private static func appendSlug(_ slug: String?, to slugs: inout [String], seen: inout Set<String>) {
+        let trimmed = slug?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty else { return }
+        let key = trimmed.lowercased()
+        guard seen.insert(key).inserted else { return }
+        slugs.append(trimmed)
+    }
+
+    private static func parseGame(from gameDict: [String: Any]) -> Game {
+        Game(
+            id: gameDict["id"] as? String ?? "",
+            name: (gameDict["displayName"] as? String) ?? (gameDict["name"] as? String) ?? "",
+            slug: gameDict["slug"] as? String,
+            boxArtURL: (gameDict["boxArtURL"] as? String).flatMap { URL(string: $0) }
+        )
+    }
+
+    private static func directoryLookupNames(for name: String) -> [String] {
+        var names: [String] = []
+        var seen = Set<String>()
+
+        func append(_ candidate: String) {
+            let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return }
+            let key = normalizedDirectoryGameName(trimmed)
+            guard seen.insert(key).inserted else { return }
+            names.append(trimmed)
         }
-        
+
+        append(name)
+        return names
+    }
+
+    private static func derivedGameSlug(from name: String) -> String {
+        name
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.union(CharacterSet(charactersIn: " ")).inverted)
+            .joined()
+            .replacingOccurrences(of: "\\s+", with: "-", options: .regularExpression)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+    }
+
+    private func fetchGameSlugFromDirectoryRedirect(name: String) async throws -> String? {
         let request = GraphQLRequest(
             operationName: "DirectoryGameRedirect",
             sha256Hash: GQLHashes.directoryGameRedirect,
@@ -377,29 +435,94 @@ public actor TwitchAPIClient {
                 return slug
             }
             if let displayName = redirect["displayName"] as? String, !displayName.isEmpty {
-                // Last resort: use displayName if name is missing
-                return displayName.lowercased().replacingOccurrences(of: " ", with: "-")
+                return Self.derivedGameSlug(from: displayName)
             }
         }
 
-        // Log the raw response to help diagnose mismatches
         if let raw = String(data: data, encoding: .utf8) {
             print("[TwitchAPIClient] getGameSlug: DirectoryGameRedirect returned no game for '\(name)'. Raw: \(raw.prefix(500))")
         }
+        return nil
+    }
 
-        // Fallback: derive slug from display name (lowercase, spaces → hyphens, strip special chars)
-        let derived = name
-            .lowercased()
-            .components(separatedBy: CharacterSet.alphanumerics.union(CharacterSet(charactersIn: " ")).inverted)
-            .joined()
-            .replacingOccurrences(of: " ", with: "-")
-        
-        if !derived.isEmpty {
-            print("[TwitchAPIClient] getGameSlug: using derived slug '\(derived)' for '\(name)'")
-            return derived
+    public func getGameSlugCandidates(
+        for game: Game,
+        includeCategorySearch: Bool = true
+    ) async throws -> [String] {
+        let trimmedName = game.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else {
+            throw TwitchMinerError.channelNotFound
         }
 
-        throw TwitchMinerError.channelNotFound
+        var slugs: [String] = []
+        var seen = Set<String>()
+
+        Self.appendSlug(game.slug, to: &slugs, seen: &seen)
+
+        for lookupName in Self.directoryLookupNames(for: trimmedName) {
+            if let slug = try await fetchGameSlugFromDirectoryRedirect(name: lookupName) {
+                Self.appendSlug(slug, to: &slugs, seen: &seen)
+            }
+        }
+
+        if includeCategorySearch {
+            do {
+                let categories = try await searchCategories(query: trimmedName, limit: 10)
+                for category in Self.sortedCategoryFallbacks(categories, matching: game) {
+                    if let slug = try? await fetchGameSlugFromDirectoryRedirect(name: category.name) {
+                        Self.appendSlug(slug, to: &slugs, seen: &seen)
+                    }
+                    Self.appendSlug(Self.derivedGameSlug(from: category.name), to: &slugs, seen: &seen)
+                }
+            } catch {
+                print("[TwitchAPIClient] getGameSlugCandidates: category search failed for '\(trimmedName)': \(error.localizedDescription)")
+            }
+        }
+
+        Self.appendSlug(Self.derivedGameSlug(from: trimmedName), to: &slugs, seen: &seen)
+        return slugs
+    }
+
+    public func getCategorySearchGameSlugCandidates(for game: Game) async throws -> [String] {
+        let trimmedName = game.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else {
+            throw TwitchMinerError.channelNotFound
+        }
+
+        var slugs: [String] = []
+        var seen = Set<String>()
+
+        do {
+            let categories = try await searchCategories(query: trimmedName, limit: 10)
+            for category in Self.sortedCategoryFallbacks(categories, matching: game) {
+                if let slug = try? await fetchGameSlugFromDirectoryRedirect(name: category.name) {
+                    Self.appendSlug(slug, to: &slugs, seen: &seen)
+                }
+                Self.appendSlug(Self.derivedGameSlug(from: category.name), to: &slugs, seen: &seen)
+            }
+        } catch {
+            print("[TwitchAPIClient] getCategorySearchGameSlugCandidates: category search failed for '\(trimmedName)': \(error.localizedDescription)")
+        }
+
+        return slugs
+    }
+
+    /// Get the slug for a game name
+    public func getGameSlug(name: String) async throws -> String {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else {
+            throw TwitchMinerError.channelNotFound
+        }
+
+        if let directSlug = try await fetchGameSlugFromDirectoryRedirect(name: trimmedName) {
+            return directSlug
+        }
+
+        let candidates = try await getGameSlugCandidates(for: Game(id: "", name: trimmedName))
+        guard let slug = candidates.first else {
+            throw TwitchMinerError.channelNotFound
+        }
+        return slug
     }
 
     // MARK: - GraphQL Methods
@@ -527,6 +650,7 @@ public actor TwitchAPIClient {
         let mergedGame = Game(
             id: detailedGame.id.isEmpty ? basicGame.id : detailedGame.id,
             name: detailedGame.name.isEmpty ? basicGame.name : detailedGame.name,
+            slug: detailedGame.slug ?? basicGame.slug,
             boxArtURL: detailedGame.boxArtURL ?? basicGame.boxArtURL
         )
 
@@ -819,7 +943,11 @@ public actor TwitchAPIClient {
     }
     
     /// Get live channels for a specific game
-    public func getLiveChannels(gameSlug: String, limit: Int = 100) async throws -> [Channel] {
+    public func getLiveChannels(
+        gameSlug: String,
+        limit: Int = 100,
+        expectedGameId: String? = nil
+    ) async throws -> [Channel] {
         let request = GraphQLRequest(
             operationName: "DirectoryPage_Game",
             sha256Hash: GQLHashes.directoryPage_Game,
@@ -857,6 +985,16 @@ public actor TwitchAPIClient {
             ?? (responseData["directoryPageGame"] as? [String: Any])
             ?? [:]
 
+        let expectedId = expectedGameId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !expectedId.isEmpty,
+           let directoryGameId = directory["id"] as? String,
+           !directoryGameId.isEmpty,
+           directoryGameId != expectedId {
+            let directoryName = (directory["displayName"] as? String) ?? (directory["name"] as? String) ?? gameSlug
+            print("[TwitchAPIClient] getLiveChannels: slug '\(gameSlug)' resolved to \(directoryName) (\(directoryGameId)), expected game id \(expectedId); skipping")
+            return []
+        }
+
         // Parse streams.edges[].node.broadcaster
         // broadcaster may only have "login" (no "id"/"displayName") — use login as fallback for both
         if let streams = directory["streams"] as? [String: Any],
@@ -877,12 +1015,26 @@ public actor TwitchAPIClient {
                 let displayName = (person["displayName"] as? String) ?? login
                 // Parse viewer count for channel quality sorting
                 let viewerCount = node["viewersCount"] as? Int
+                let gameDict = node["game"] as? [String: Any]
+                let streamGameId = (gameDict?["id"] as? String) ?? (directory["id"] as? String)
+                if !expectedId.isEmpty,
+                   let streamGameId,
+                   !streamGameId.isEmpty,
+                   streamGameId != expectedId {
+                    return nil
+                }
+                let streamGameName = (gameDict?["displayName"] as? String)
+                    ?? (gameDict?["name"] as? String)
+                    ?? (directory["displayName"] as? String)
+                    ?? (directory["name"] as? String)
                 return Channel(
                     id: id, 
                     login: login, 
                     displayName: displayName,
                     isLive: true,
                     viewerCount: viewerCount,
+                    gameId: streamGameId,
+                    gameName: streamGameName,
                     hasDropsEnabled: true
                 )
             }
@@ -902,7 +1054,13 @@ public actor TwitchAPIClient {
                   let displayName = dict["displayName"] as? String else {
                 return nil
             }
-            return Channel(id: id, login: login, displayName: displayName)
+            return Channel(
+                id: id,
+                login: login,
+                displayName: displayName,
+                gameId: directory["id"] as? String,
+                gameName: (directory["displayName"] as? String) ?? (directory["name"] as? String)
+            )
         }
     }
     
@@ -1337,11 +1495,7 @@ public actor TwitchAPIClient {
             }
 
             let gameDict = campaignDict["game"] as? [String: Any] ?? [:]
-            let game = Game(
-                id: gameDict["id"] as? String ?? "",
-                name: (gameDict["displayName"] as? String) ?? (gameDict["name"] as? String) ?? "",
-                boxArtURL: (gameDict["boxArtURL"] as? String).flatMap { URL(string: $0) }
-            )
+            let game = Self.parseGame(from: gameDict)
 
             let statusDict = campaignDict["status"] as? String ?? "ACTIVE"
             let status = CampaignStatus(rawValue: statusDict) ?? .active
@@ -1453,11 +1607,7 @@ public actor TwitchAPIClient {
         let name = campaignDict["name"] as? String ?? ""
         
         let gameDict = campaignDict["game"] as? [String: Any] ?? [:]
-        let game = Game(
-            id: gameDict["id"] as? String ?? "",
-            name: (gameDict["displayName"] as? String) ?? (gameDict["name"] as? String) ?? "",
-            boxArtURL: (gameDict["boxArtURL"] as? String).flatMap { URL(string: $0) }
-        )
+        let game = Self.parseGame(from: gameDict)
         
         let statusDict = campaignDict["status"] as? String ?? "ACTIVE"
         let status = CampaignStatus(rawValue: statusDict) ?? .active
@@ -1488,11 +1638,7 @@ public actor TwitchAPIClient {
         let name = campaignDict["name"] as? String ?? ""
         
         let gameDict = campaignDict["game"] as? [String: Any] ?? [:]
-        let game = Game(
-            id: gameDict["id"] as? String ?? "",
-            name: (gameDict["displayName"] as? String) ?? (gameDict["name"] as? String) ?? "",
-            boxArtURL: (gameDict["boxArtURL"] as? String).flatMap { URL(string: $0) }
-        )
+        let game = Self.parseGame(from: gameDict)
         
         let statusDict = campaignDict["status"] as? String ?? "ACTIVE"
         let status = CampaignStatus(rawValue: statusDict) ?? .active
@@ -1557,11 +1703,7 @@ public actor TwitchAPIClient {
               let name = campaignDict["name"] as? String else { return nil }
 
         let gameDict = campaignDict["game"] as? [String: Any] ?? [:]
-        let game = Game(
-            id: gameDict["id"] as? String ?? "",
-            name: (gameDict["displayName"] as? String) ?? (gameDict["name"] as? String) ?? "",
-            boxArtURL: (gameDict["boxArtURL"] as? String).flatMap { URL(string: $0) }
-        )
+        let game = Self.parseGame(from: gameDict)
 
         let statusDict = campaignDict["status"] as? String ?? "ACTIVE"
         let status = CampaignStatus(rawValue: statusDict) ?? .active

@@ -32,11 +32,13 @@ public struct Game: Codable, Sendable, Identifiable, Equatable {
 
     public let id: String
     public let name: String
+    public let slug: String?
     public let boxArtURL: URL?
 
-    public init(id: String, name: String, boxArtURL: URL? = nil) {
+    public init(id: String, name: String, slug: String? = nil, boxArtURL: URL? = nil) {
         self.id = id
         self.name = name
+        self.slug = slug
         self.boxArtURL = boxArtURL
     }
 
