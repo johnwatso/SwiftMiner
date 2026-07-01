@@ -277,8 +277,43 @@ public actor DropsService {
     
     /// Find live channels for a specific game
     public func findLiveChannels(forGame gameName: String) async throws -> [Channel] {
-        let slug = try await apiClient.getGameSlug(name: gameName)
-        return try await apiClient.getLiveChannels(gameSlug: slug)
+        try await findLiveChannels(forGame: Game(id: "", name: gameName))
+    }
+
+    /// Find live channels for a specific Twitch game/category.
+    public func findLiveChannels(forGame game: Game) async throws -> [Channel] {
+        let expectedGameId = game.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        var attemptedSlugs = Set<String>()
+
+        let primarySlugs = try await apiClient.getGameSlugCandidates(
+            for: game,
+            includeCategorySearch: false
+        )
+        for slug in primarySlugs {
+            let slugKey = slug.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard !slugKey.isEmpty, attemptedSlugs.insert(slugKey).inserted else { continue }
+            let channels = try await apiClient.getLiveChannels(
+                gameSlug: slug,
+                expectedGameId: expectedGameId.isEmpty ? nil : expectedGameId
+            )
+            if !channels.isEmpty {
+                return channels
+            }
+        }
+
+        let expandedSlugs = try await apiClient.getCategorySearchGameSlugCandidates(for: game)
+        for slug in expandedSlugs {
+            let slugKey = slug.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard !slugKey.isEmpty, attemptedSlugs.insert(slugKey).inserted else { continue }
+            let channels = try await apiClient.getLiveChannels(
+                gameSlug: slug,
+                expectedGameId: expectedGameId.isEmpty ? nil : expectedGameId
+            )
+            if !channels.isEmpty {
+                return channels
+            }
+        }
+        return []
     }
 
     /// Get best campaign to mine (simple implementation)

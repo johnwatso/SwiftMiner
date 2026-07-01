@@ -116,6 +116,101 @@ final class ServiceTests: XCTestCase {
         }
     }
 
+    func testFindLiveChannelsUsesCanonicalCategorySearchWhenDropsNameDiffersFromDirectoryName() async throws {
+        let redirectNames = StringRequestRecorder()
+        let directorySlugs = StringRequestRecorder()
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+
+            if request.url?.path == "/integrity" {
+                return (response, #"{"token":"integrity-token","expiration":4102444800000}"#.data(using: .utf8)!)
+            }
+
+            if request.url?.path == "/helix/search/categories" {
+                let payload = """
+                {
+                  "data": [
+                    {
+                      "id": "460630",
+                      "name": "Tom Clancy's Rainbow Six Siege",
+                      "box_art_url": "https://example.com/{width}x{height}.jpg"
+                    }
+                  ]
+                }
+                """
+                return (response, payload.data(using: .utf8)!)
+            }
+
+            let body = (try? JSONSerialization.jsonObject(with: request.httpBody ?? Data())) as? [String: Any]
+            let operationName = body?["operationName"] as? String
+            let variables = body?["variables"] as? [String: Any]
+
+            switch operationName {
+            case "DirectoryGameRedirect":
+                let requestedName = variables?["name"] as? String ?? ""
+                redirectNames.append(requestedName)
+                let payload: String
+                if requestedName == "Tom Clancy's Rainbow Six Siege" {
+                    payload = #"{"data":{"game":{"name":"tom-clancys-rainbow-six-siege"}}}"#
+                } else {
+                    payload = #"{"data":{"game":{"name":"rainbow-six-siege"}}}"#
+                }
+                return (response, payload.data(using: .utf8)!)
+
+            case "DirectoryPage_Game":
+                let slug = variables?["slug"] as? String ?? ""
+                directorySlugs.append(slug)
+                let gameId = slug == "tom-clancys-rainbow-six-siege" ? "460630" : "wrong-game"
+                let payload = """
+                {
+                  "data": {
+                    "game": {
+                      "id": "\(gameId)",
+                      "displayName": "Tom Clancy's Rainbow Six Siege",
+                      "streams": {
+                        "edges": [
+                          {
+                            "node": {
+                              "viewersCount": 1234,
+                              "game": {
+                                "id": "\(gameId)",
+                                "displayName": "Tom Clancy's Rainbow Six Siege"
+                              },
+                              "broadcaster": {
+                                "id": "channel-1",
+                                "login": "r6streamer",
+                                "displayName": "R6Streamer"
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+                """
+                return (response, payload.data(using: .utf8)!)
+
+            default:
+                return (response, #"{"data":{}}"#.data(using: .utf8)!)
+            }
+        }
+
+        let dropsService = DropsService(apiClient: apiClient)
+        let channels = try await dropsService.findLiveChannels(
+            forGame: Game(id: "460630", name: "Rainbow Six Siege")
+        )
+
+        XCTAssertEqual(channels.map(\.login), ["r6streamer"])
+        XCTAssertEqual(redirectNames.recordedValues, ["Rainbow Six Siege", "Tom Clancy's Rainbow Six Siege"])
+        XCTAssertEqual(directorySlugs.recordedValues, ["rainbow-six-siege", "tom-clancys-rainbow-six-siege"])
+    }
+
     func testFetchDropCampaignsKeepsConnectionStateFromDetails() async throws {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
@@ -282,6 +377,23 @@ final class ServiceTests: XCTestCase {
 }
 
 // MARK: - Mocking Infrastructure
+
+private final class StringRequestRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [String] = []
+
+    func append(_ value: String) {
+        lock.lock()
+        values.append(value)
+        lock.unlock()
+    }
+
+    var recordedValues: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return values
+    }
+}
 
 class MockURLProtocol: URLProtocol {
     nonisolated(unsafe) static var stubResponseData: Data?

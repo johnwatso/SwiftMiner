@@ -51,9 +51,10 @@
     <ul>
       <li>Ranks campaigns by live-stream availability first, so a limited-time campaign with no live channel no longer starves a game (such as Overwatch) that has streams ready to mine.</li>
       <li>Stops the periodic churn where a working watch session was torn down for a higher-ranked campaign with no stream to switch to, while still grabbing a restricted esports drop the moment it goes live.</li>
+      <li>Uses Twitch's campaign slug and category search as fallbacks, then verifies the directory game ID before accepting live drops-enabled streams, so renamed or branded categories resolve without hardcoded aliases.</li>
       <li>Skips exact-match internal/test-looking Twitch Drops fixtures so SwiftMiner does not watch or claim them.</li>
       <li>Hides and disables supervisor stall recovery while its restart logic is being tightened, avoiding unnecessary miner restarts from idle states.</li>
-      <li>Updates SwiftMiner to version 1.32.2 build 2026070113.</li>
+      <li>Updates SwiftMiner to version 1.32.2 build 2026070116.</li>
     </ul>
     <h2><a href="./1.32.1.html">Version 1.32.1</a></h2>
     <ul>
