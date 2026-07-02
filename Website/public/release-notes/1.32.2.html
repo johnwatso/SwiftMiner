@@ -39,9 +39,30 @@
       border: 1px solid rgba(82, 96, 109, 0.18);
       border-radius: 16px;
       background: rgba(255, 255, 255, 0.42);
-      border-left: 5px solid #0a67a3;
+      border-left: 5px solid var(--accent, #0a67a3);
     }
-    h2 { margin: 0 0 4px; color: #0a67a3; font-size: 18px; }
+    section.green  { --accent: #1c8c73; }
+    section.indigo { --accent: #5f5ac8; }
+    section.violet { --accent: #7b4bd9; }
+    section.amber  { --accent: #b9760a; }
+    section.teal   { --accent: #0a8aa3; }
+    h2 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 4px;
+      color: var(--accent, #0a67a3);
+      font-size: 18px;
+    }
+    .badge {
+      display: inline-grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--accent, #0a67a3) 15%, transparent);
+      font-size: 16px;
+    }
     .summary { margin: 0 0 12px; color: #52606d; font-size: 14px; }
     ul { margin: 0; padding-left: 22px; }
     li { margin: 0 0 8px; }
@@ -71,8 +92,8 @@
     <p class="meta">Version 1.32.2 · Build 2026070116</p>
     <p class="intro">A mining-reliability update that stops limited-time campaigns from crowding out games that actually have live streams and handles Twitch category naming mismatches.</p>
 
-    <section>
-      <h2>Live-Aware Campaign Selection</h2>
+    <section class="green">
+      <h2><span class="badge" aria-hidden="true">📡</span> Live-Aware Campaign Selection</h2>
       <p class="summary">Campaigns with no live stream can no longer starve or repeatedly interrupt a game that does.</p>
       <ul>
         <li>Ranks candidate campaigns by live-stream availability first, so a soon-to-expire limited-time campaign with no live channel no longer out-ranks a game (such as Overwatch) that has streams ready to mine.</li>
@@ -81,24 +102,24 @@
       </ul>
     </section>
 
-    <section>
-      <h2>Game Directory Matching</h2>
+    <section class="indigo">
+      <h2><span class="badge" aria-hidden="true">🗺️</span> Game Directory Matching</h2>
       <p class="summary">Campaigns now resolve to Twitch's canonical live directory category more reliably.</p>
       <ul>
         <li>Uses Twitch's campaign slug and category search as fallbacks, then verifies the directory game ID before accepting live drops-enabled streams, so renamed or branded categories such as Rainbow Six Siege resolve without hardcoded aliases.</li>
       </ul>
     </section>
 
-    <section>
-      <h2>Drop Safety</h2>
+    <section class="teal">
+      <h2><span class="badge" aria-hidden="true">🛡️</span> Drop Safety</h2>
       <p class="summary">Twitch's internal/test drop fixtures are ignored.</p>
       <ul>
         <li>Skips exact-match internal/test-looking Twitch Drops fixtures so SwiftMiner does not watch or claim them, while campaigns that merely contain the word "test" stay mineable.</li>
       </ul>
     </section>
 
-    <section>
-      <h2>Stall Recovery</h2>
+    <section class="amber">
+      <h2><span class="badge" aria-hidden="true">🛠️</span> Stall Recovery</h2>
       <p class="summary">Supervisor restart recovery is paused while its logic is reworked.</p>
       <ul>
         <li>Hides and disables supervisor stall recovery by default, avoiding unnecessary miner restarts from idle states until the restart logic is tightened.</li>

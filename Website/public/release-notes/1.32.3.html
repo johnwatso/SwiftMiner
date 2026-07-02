@@ -39,9 +39,30 @@
       border: 1px solid rgba(82, 96, 109, 0.18);
       border-radius: 16px;
       background: rgba(255, 255, 255, 0.42);
-      border-left: 5px solid #0a67a3;
+      border-left: 5px solid var(--accent, #0a67a3);
     }
-    h2 { margin: 0 0 4px; color: #0a67a3; font-size: 18px; }
+    section.green  { --accent: #1c8c73; }
+    section.indigo { --accent: #5f5ac8; }
+    section.violet { --accent: #7b4bd9; }
+    section.amber  { --accent: #b9760a; }
+    section.teal   { --accent: #0a8aa3; }
+    h2 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 4px;
+      color: var(--accent, #0a67a3);
+      font-size: 18px;
+    }
+    .badge {
+      display: inline-grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--accent, #0a67a3) 15%, transparent);
+      font-size: 16px;
+    }
     .summary { margin: 0 0 12px; color: #52606d; font-size: 14px; }
     ul { margin: 0; padding-left: 22px; }
     li { margin: 0 0 8px; }
@@ -71,8 +92,8 @@
     <p class="meta">Version 1.32.3 · Build 2026070216</p>
     <p class="intro">A diagnostics update that makes long-running logs more useful for performance investigation without adding noisy normal-run output.</p>
 
-    <section>
-      <h2>Drops Filtering</h2>
+    <section class="teal">
+      <h2><span class="badge" aria-hidden="true">🔎</span> Drops Filtering</h2>
       <p class="summary">The Drops tab's miner picker now narrows the feed to the selected account's own work.</p>
       <ul>
         <li>Filters out idle merged account rows so choosing a miner no longer leaves unrelated campaigns visible.</li>
@@ -80,8 +101,8 @@
       </ul>
     </section>
 
-    <section>
-      <h2>Overview Status Accuracy</h2>
+    <section class="green">
+      <h2><span class="badge" aria-hidden="true">🩺</span> Overview Status Accuracy</h2>
       <p class="summary">Manual refresh no longer turns every miner card into a liveness warning.</p>
       <ul>
         <li>Keeps refresh, idle, and blocked miner states visible when liveness metadata is stale, while still warning when an active watching miner genuinely stops reporting activity.</li>
@@ -89,8 +110,8 @@
       </ul>
     </section>
 
-    <section>
-      <h2>Diagnostics Efficiency</h2>
+    <section class="amber">
+      <h2><span class="badge" aria-hidden="true">🧹</span> Diagnostics Efficiency</h2>
       <p class="summary">Long-running reports keep the useful signal instead of filling with repeated background chatter.</p>
       <ul>
         <li>Keeps up to 5,000 Activity Log entries and filters repetitive INFO-only campaign catalog, channel verification, heartbeat, and no-claim messages from exported diagnostics.</li>
@@ -99,8 +120,8 @@
       </ul>
     </section>
 
-    <section>
-      <h2>Performance Diagnostics</h2>
+    <section class="indigo">
+      <h2><span class="badge" aria-hidden="true">📈</span> Performance Diagnostics</h2>
       <p class="summary">Exported reports now explain where SwiftMiner spent time during mining.</p>
       <ul>
         <li>Adds CPU, memory, memory-growth, and top spike summaries to diagnostic exports when resource monitoring is enabled.</li>
