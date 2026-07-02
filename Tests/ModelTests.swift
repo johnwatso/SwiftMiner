@@ -261,6 +261,48 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(candidates.map(\.login), ["approvedstreamer"])
     }
 
+    func testAdaptiveChannelVerificationLimitKeepsBroadScansBounded() {
+        XCTAssertEqual(
+            MinerEngine.adaptiveChannelVerificationLimit(
+                liveChannelCount: 100,
+                candidateCount: 1,
+                hasRestrictedCampaign: false,
+                hasPriorityCampaign: false,
+                avoidDuplicateStreams: false
+            ),
+            16
+        )
+        XCTAssertEqual(
+            MinerEngine.adaptiveChannelVerificationLimit(
+                liveChannelCount: 100,
+                candidateCount: 2,
+                hasRestrictedCampaign: false,
+                hasPriorityCampaign: false,
+                avoidDuplicateStreams: false
+            ),
+            30
+        )
+        XCTAssertEqual(
+            MinerEngine.adaptiveChannelVerificationLimit(
+                liveChannelCount: 100,
+                candidateCount: 1,
+                hasRestrictedCampaign: true,
+                hasPriorityCampaign: false,
+                avoidDuplicateStreams: false
+            ),
+            50
+        )
+    }
+
+    func testNoCandidateBackoffCapsAtFifteenMinutes() {
+        let minute: UInt64 = 60 * 1_000_000_000
+
+        XCTAssertEqual(MinerEngine.noCandidateBackoffInterval(for: 1), 5 * minute)
+        XCTAssertEqual(MinerEngine.noCandidateBackoffInterval(for: 2), 10 * minute)
+        XCTAssertEqual(MinerEngine.noCandidateBackoffInterval(for: 3), 15 * minute)
+        XCTAssertEqual(MinerEngine.noCandidateBackoffInterval(for: 20), 15 * minute)
+    }
+
     func testRestrictedCampaignACLMatchesDirectoryLoginFallback() {
         let game = Game(id: "g1", name: "THE FINALS")
         let now = Date()

@@ -1,6 +1,95 @@
 import Foundation
 import zlib
 
+private actor SharedTwitchLookupCache {
+    static let shared = SharedTwitchLookupCache()
+
+    private struct Entry<Value: Sendable>: Sendable {
+        let value: Value
+        let expiresAt: Date
+    }
+
+    private var campaignMetadataById: [String: Entry<Campaign>] = [:]
+    private var availableDropsByChannel: [String: Entry<[String]>] = [:]
+    private var liveChannelsByLookup: [String: Entry<[Channel]>] = [:]
+    private var slugCandidatesByLookup: [String: Entry<[String]>] = [:]
+
+    private let maxCampaignMetadataEntries = 600
+    private let maxAvailableDropsEntries = 600
+    private let maxLiveChannelEntries = 200
+    private let maxSlugCandidateEntries = 200
+
+    func campaignMetadata(for key: String, now: Date = Date()) -> Campaign? {
+        entryValue(from: campaignMetadataById, key: key, now: now)
+    }
+
+    func storeCampaignMetadata(_ campaign: Campaign, key: String, ttl: TimeInterval) {
+        prune(&campaignMetadataById, maxEntries: maxCampaignMetadataEntries)
+        campaignMetadataById[key] = Entry(value: campaign, expiresAt: Date().addingTimeInterval(ttl))
+    }
+
+    func removeAllCampaignMetadata() {
+        campaignMetadataById.removeAll(keepingCapacity: true)
+    }
+
+    func availableDrops(for key: String, now: Date = Date()) -> [String]? {
+        entryValue(from: availableDropsByChannel, key: key, now: now)
+    }
+
+    func storeAvailableDrops(_ campaignIds: [String], key: String, ttl: TimeInterval) {
+        prune(&availableDropsByChannel, maxEntries: maxAvailableDropsEntries)
+        availableDropsByChannel[key] = Entry(value: campaignIds, expiresAt: Date().addingTimeInterval(ttl))
+    }
+
+    func liveChannels(for key: String, now: Date = Date()) -> [Channel]? {
+        entryValue(from: liveChannelsByLookup, key: key, now: now)
+    }
+
+    func storeLiveChannels(_ channels: [Channel], key: String, ttl: TimeInterval) {
+        prune(&liveChannelsByLookup, maxEntries: maxLiveChannelEntries)
+        liveChannelsByLookup[key] = Entry(value: channels, expiresAt: Date().addingTimeInterval(ttl))
+    }
+
+    func slugCandidates(for key: String, now: Date = Date()) -> [String]? {
+        entryValue(from: slugCandidatesByLookup, key: key, now: now)
+    }
+
+    func storeSlugCandidates(_ slugs: [String], key: String, ttl: TimeInterval) {
+        prune(&slugCandidatesByLookup, maxEntries: maxSlugCandidateEntries)
+        slugCandidatesByLookup[key] = Entry(value: slugs, expiresAt: Date().addingTimeInterval(ttl))
+    }
+
+    private func entryValue<Value: Sendable>(
+        from cache: [String: Entry<Value>],
+        key: String,
+        now: Date
+    ) -> Value? {
+        guard let entry = cache[key], entry.expiresAt > now else { return nil }
+        return entry.value
+    }
+
+    private func prune<Value: Sendable>(_ cache: inout [String: Entry<Value>], maxEntries: Int) {
+        let now = Date()
+        let expired = cache.compactMap { key, entry in
+            entry.expiresAt <= now ? key : nil
+        }
+        for key in expired {
+            cache.removeValue(forKey: key)
+        }
+
+        let overflowCount = cache.count - maxEntries
+        guard overflowCount > 0 else { return }
+
+        let keysToDrop = cache
+            .sorted { $0.value.expiresAt < $1.value.expiresAt }
+            .prefix(overflowCount)
+            .map(\.key)
+        for key in keysToDrop {
+            cache.removeValue(forKey: key)
+        }
+    }
+}
+
 /// Twitch API Client supporting both GraphQL and REST endpoints
 public actor TwitchAPIClient {
     private let clientId: String
@@ -35,6 +124,40 @@ public actor TwitchAPIClient {
     private var followedChannelIdsByUser: [String: (ids: Set<String>, expiresAt: Date)] = [:]
     private var subscriptionByUserAndBroadcaster: [String: (isSubscribed: Bool, expiresAt: Date)] = [:]
     private let channelRelationshipCacheTTL: TimeInterval = 10 * 60
+    private let negativeSubscriptionCacheTTL: TimeInterval = 6 * 60 * 60
+
+    private struct CampaignDetailsCacheEntry {
+        let campaign: Campaign
+        let expiresAt: Date
+    }
+
+    private struct AvailableDropsCacheEntry {
+        let campaignIds: [String]
+        let expiresAt: Date
+    }
+
+    private struct LiveChannelsCacheEntry {
+        let channels: [Channel]
+        let expiresAt: Date
+    }
+
+    private struct SlugCandidatesCacheEntry {
+        let slugs: [String]
+        let expiresAt: Date
+    }
+
+    private var campaignDetailsByKey: [String: CampaignDetailsCacheEntry] = [:]
+    private var availableDropsByChannel: [String: AvailableDropsCacheEntry] = [:]
+    private var liveChannelsByLookup: [String: LiveChannelsCacheEntry] = [:]
+    private var slugCandidatesByLookup: [String: SlugCandidatesCacheEntry] = [:]
+    private let campaignDetailsCacheTTL: TimeInterval = 5 * 60
+    private let availableDropsCacheTTL: TimeInterval = 60
+    private let liveChannelsCacheTTL: TimeInterval = 60
+    private let slugCandidatesCacheTTL: TimeInterval = 30 * 60
+    private let maxCampaignDetailsCacheEntries = 600
+    private let maxAvailableDropsCacheEntries = 600
+    private let maxLiveChannelsCacheEntries = 200
+    private let maxSlugCandidatesCacheEntries = 200
 
     /// Metadata for a claimed benefit from inventory.
     /// Used as a fallback to detect claimed drops when `self` is absent from DropCampaignDetails.
@@ -238,19 +361,26 @@ public actor TwitchAPIClient {
         ]
 
         let isSubscribed: Bool
+        let cacheTTL: TimeInterval?
         do {
             let data = try await makeRESTRequest(url: components.string!, method: "GET")
             let response = try JSONDecoder().decode(UserSubscriptionResponse.self, from: data)
             isSubscribed = !response.data.isEmpty
+            cacheTTL = isSubscribed ? channelRelationshipCacheTTL : negativeSubscriptionCacheTTL
         } catch TwitchMinerError.apiError(let statusCode, _) where statusCode == 404 || statusCode == 403 {
             isSubscribed = false
+            cacheTTL = negativeSubscriptionCacheTTL
         } catch TwitchMinerError.authenticationFailed {
             isSubscribed = false
+            cacheTTL = nil
         } catch {
             isSubscribed = false
+            cacheTTL = nil
         }
 
-        subscriptionByUserAndBroadcaster[cacheKey] = (isSubscribed, Date().addingTimeInterval(channelRelationshipCacheTTL))
+        if let cacheTTL {
+            subscriptionByUserAndBroadcaster[cacheKey] = (isSubscribed, Date().addingTimeInterval(cacheTTL))
+        }
         return isSubscribed
     }
     
@@ -419,6 +549,102 @@ public actor TwitchAPIClient {
             .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
     }
 
+    private static func normalizedLookupKey(_ value: String?) -> String {
+        (value ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+    }
+
+    private static func cacheKey(_ parts: String...) -> String {
+        parts.map { normalizedLookupKey($0) }.joined(separator: "|")
+    }
+
+    private static func pruneCache<Key: Hashable, Value>(
+        _ cache: inout [Key: Value],
+        now: Date = Date(),
+        maxEntries: Int,
+        expiresAt: (Value) -> Date
+    ) {
+        let expiredKeys = cache.compactMap { key, value in
+            expiresAt(value) <= now ? key : nil
+        }
+        for key in expiredKeys {
+            cache.removeValue(forKey: key)
+        }
+
+        let overflowCount = cache.count - maxEntries
+        guard overflowCount > 0 else { return }
+
+        let keysToDrop = cache
+            .sorted { expiresAt($0.value) < expiresAt($1.value) }
+            .prefix(overflowCount)
+            .map(\.key)
+        for key in keysToDrop {
+            cache.removeValue(forKey: key)
+        }
+    }
+
+    private nonisolated static func sharedCampaignMetadata(from campaign: Campaign) -> Campaign {
+        let drops = campaign.drops.map { drop in
+            var copy = drop
+            copy.progress = nil
+            copy.isClaimed = false
+            return copy
+        }
+
+        return Campaign(
+            id: campaign.id,
+            name: campaign.name,
+            game: campaign.game,
+            status: campaign.status,
+            startDate: campaign.startDate,
+            endDate: campaign.endDate,
+            drops: drops,
+            channels: campaign.channels,
+            isAccountConnected: false,
+            allowIsEnabled: campaign.allowIsEnabled,
+            isPrioritised: campaign.isPrioritised
+        )
+    }
+
+    private nonisolated static func campaign(
+        fromSharedMetadata metadata: Campaign,
+        accountContext: Campaign
+    ) -> Campaign {
+        Campaign(
+            id: metadata.id.isEmpty ? accountContext.id : metadata.id,
+            name: metadata.name.isEmpty ? accountContext.name : metadata.name,
+            game: metadata.game.name.isEmpty ? accountContext.game : metadata.game,
+            status: metadata.status,
+            startDate: metadata.startDate,
+            endDate: metadata.endDate,
+            drops: metadata.drops,
+            channels: metadata.channels,
+            isAccountConnected: accountContext.isAccountConnected,
+            allowIsEnabled: metadata.allowIsEnabled ?? accountContext.allowIsEnabled,
+            isPrioritised: accountContext.isPrioritised
+        )
+    }
+
+    private func storeLiveChannels(_ channels: [Channel], lookupKey: String) async -> [Channel] {
+        Self.pruneCache(
+            &liveChannelsByLookup,
+            maxEntries: maxLiveChannelsCacheEntries,
+            expiresAt: { $0.expiresAt }
+        )
+        let expiresAt = Date().addingTimeInterval(liveChannelsCacheTTL)
+        liveChannelsByLookup[lookupKey] = LiveChannelsCacheEntry(
+            channels: channels,
+            expiresAt: expiresAt
+        )
+        await SharedTwitchLookupCache.shared.storeLiveChannels(
+            channels,
+            key: lookupKey,
+            ttl: liveChannelsCacheTTL
+        )
+        return channels
+    }
+
     private func fetchGameSlugFromDirectoryRedirect(name: String) async throws -> String? {
         let request = GraphQLRequest(
             operationName: "DirectoryGameRedirect",
@@ -454,8 +680,28 @@ public actor TwitchAPIClient {
             throw TwitchMinerError.channelNotFound
         }
 
+        let lookupKey = Self.cacheKey(
+            "slug-candidates",
+            trimmedName,
+            game.id,
+            game.slug ?? "",
+            includeCategorySearch ? "expanded" : "primary"
+        )
+        let now = Date()
+        if let cached = slugCandidatesByLookup[lookupKey], cached.expiresAt > now {
+            return cached.slugs
+        }
+        if let shared = await SharedTwitchLookupCache.shared.slugCandidates(for: lookupKey, now: now) {
+            slugCandidatesByLookup[lookupKey] = SlugCandidatesCacheEntry(
+                slugs: shared,
+                expiresAt: now.addingTimeInterval(slugCandidatesCacheTTL)
+            )
+            return shared
+        }
+
         var slugs: [String] = []
         var seen = Set<String>()
+        var cacheable = true
 
         Self.appendSlug(game.slug, to: &slugs, seen: &seen)
 
@@ -475,11 +721,28 @@ public actor TwitchAPIClient {
                     Self.appendSlug(Self.derivedGameSlug(from: category.name), to: &slugs, seen: &seen)
                 }
             } catch {
+                cacheable = false
                 print("[TwitchAPIClient] getGameSlugCandidates: category search failed for '\(trimmedName)': \(error.localizedDescription)")
             }
         }
 
         Self.appendSlug(Self.derivedGameSlug(from: trimmedName), to: &slugs, seen: &seen)
+        if cacheable {
+            Self.pruneCache(
+                &slugCandidatesByLookup,
+                maxEntries: maxSlugCandidatesCacheEntries,
+                expiresAt: { $0.expiresAt }
+            )
+            slugCandidatesByLookup[lookupKey] = SlugCandidatesCacheEntry(
+                slugs: slugs,
+                expiresAt: Date().addingTimeInterval(slugCandidatesCacheTTL)
+            )
+            await SharedTwitchLookupCache.shared.storeSlugCandidates(
+                slugs,
+                key: lookupKey,
+                ttl: slugCandidatesCacheTTL
+            )
+        }
         return slugs
     }
 
@@ -489,8 +752,22 @@ public actor TwitchAPIClient {
             throw TwitchMinerError.channelNotFound
         }
 
+        let lookupKey = Self.cacheKey("category-slug-candidates", trimmedName, game.id)
+        let now = Date()
+        if let cached = slugCandidatesByLookup[lookupKey], cached.expiresAt > now {
+            return cached.slugs
+        }
+        if let shared = await SharedTwitchLookupCache.shared.slugCandidates(for: lookupKey, now: now) {
+            slugCandidatesByLookup[lookupKey] = SlugCandidatesCacheEntry(
+                slugs: shared,
+                expiresAt: now.addingTimeInterval(slugCandidatesCacheTTL)
+            )
+            return shared
+        }
+
         var slugs: [String] = []
         var seen = Set<String>()
+        var cacheable = true
 
         do {
             let categories = try await searchCategories(query: trimmedName, limit: 10)
@@ -501,9 +778,26 @@ public actor TwitchAPIClient {
                 Self.appendSlug(Self.derivedGameSlug(from: category.name), to: &slugs, seen: &seen)
             }
         } catch {
+            cacheable = false
             print("[TwitchAPIClient] getCategorySearchGameSlugCandidates: category search failed for '\(trimmedName)': \(error.localizedDescription)")
         }
 
+        if cacheable {
+            Self.pruneCache(
+                &slugCandidatesByLookup,
+                maxEntries: maxSlugCandidatesCacheEntries,
+                expiresAt: { $0.expiresAt }
+            )
+            slugCandidatesByLookup[lookupKey] = SlugCandidatesCacheEntry(
+                slugs: slugs,
+                expiresAt: Date().addingTimeInterval(slugCandidatesCacheTTL)
+            )
+            await SharedTwitchLookupCache.shared.storeSlugCandidates(
+                slugs,
+                key: lookupKey,
+                ttl: slugCandidatesCacheTTL
+            )
+        }
         return slugs
     }
 
@@ -583,7 +877,11 @@ public actor TwitchAPIClient {
                     nextIndex += 1
                     group.addTask {
                         do {
-                            let details = try await self.fetchCampaignDetails(campaignId: campaign.id, userLogin: self.userLogin)
+                            let details = try await self.fetchCampaignDetails(
+                                campaignId: campaign.id,
+                                userLogin: self.userLogin,
+                                basicCampaign: campaign
+                            )
                             campaign = Self.mergeBasicCampaign(campaign, withDetails: details)
                         } catch {
                             print("[TwitchAPIClient] Failed to fetch details for campaign \(campaign.id): \(error)")
@@ -611,7 +909,30 @@ public actor TwitchAPIClient {
     }
     
     /// Fetch detailed campaign info including timeBasedDrops
-    public func fetchCampaignDetails(campaignId: String, userLogin: String) async throws -> Campaign {
+    public func fetchCampaignDetails(
+        campaignId: String,
+        userLogin: String,
+        basicCampaign: Campaign? = nil
+    ) async throws -> Campaign {
+        let cacheKey = Self.cacheKey("campaign-details", userLogin, campaignId)
+        let now = Date()
+        if let cached = campaignDetailsByKey[cacheKey], cached.expiresAt > now {
+            await traceGQLDebug { "[TwitchAPIClient] DropCampaignDetails cache hit for \(campaignId)" }
+            return cached.campaign
+        }
+        let sharedKey = Self.cacheKey("campaign-metadata", campaignId)
+        if let basicCampaign,
+           basicCampaign.isAccountConnected,
+           let shared = await SharedTwitchLookupCache.shared.campaignMetadata(for: sharedKey, now: now) {
+            let campaign = Self.campaign(fromSharedMetadata: shared, accountContext: basicCampaign)
+            campaignDetailsByKey[cacheKey] = CampaignDetailsCacheEntry(
+                campaign: campaign,
+                expiresAt: now.addingTimeInterval(campaignDetailsCacheTTL)
+            )
+            await traceGQLDebug { "[TwitchAPIClient] DropCampaignDetails shared metadata hit for \(campaignId)" }
+            return campaign
+        }
+
         let request = GraphQLRequest(
             operationName: "DropCampaignDetails",
             sha256Hash: GQLHashes.dropCampaignDetails,
@@ -634,7 +955,22 @@ public actor TwitchAPIClient {
             throw TwitchMinerError.invalidResponse
         }
 
-        return parseDetailedCampaign(from: dropCampaign)
+        let campaign = parseDetailedCampaign(from: dropCampaign)
+        Self.pruneCache(
+            &campaignDetailsByKey,
+            maxEntries: maxCampaignDetailsCacheEntries,
+            expiresAt: { $0.expiresAt }
+        )
+        campaignDetailsByKey[cacheKey] = CampaignDetailsCacheEntry(
+            campaign: campaign,
+            expiresAt: Date().addingTimeInterval(campaignDetailsCacheTTL)
+        )
+        await SharedTwitchLookupCache.shared.storeCampaignMetadata(
+            Self.sharedCampaignMetadata(from: campaign),
+            key: sharedKey,
+            ttl: campaignDetailsCacheTTL
+        )
+        return campaign
     }
 
     /// Combine ViewerDropsDashboard's broad metadata with DropCampaignDetails' richer,
@@ -777,6 +1113,21 @@ public actor TwitchAPIClient {
     /// Fetch drops available for a specific channel.
     /// Returns a list of campaign IDs that this channel can progress.
     public func fetchAvailableDrops(channelId: String) async throws -> [String] {
+        let cacheKey = Self.normalizedLookupKey(channelId)
+        let now = Date()
+        if let cached = availableDropsByChannel[cacheKey], cached.expiresAt > now {
+            await traceGQLDebug { "[TwitchAPIClient] AvailableDrops cache hit for channel \(channelId)" }
+            return cached.campaignIds
+        }
+        if let shared = await SharedTwitchLookupCache.shared.availableDrops(for: cacheKey, now: now) {
+            availableDropsByChannel[cacheKey] = AvailableDropsCacheEntry(
+                campaignIds: shared,
+                expiresAt: now.addingTimeInterval(availableDropsCacheTTL)
+            )
+            await traceGQLDebug { "[TwitchAPIClient] AvailableDrops shared cache hit for channel \(channelId)" }
+            return shared
+        }
+
         let request = GraphQLRequest(
             operationName: "DropsHighlightService_AvailableDrops",
             sha256Hash: GQLHashes.availableDrops,
@@ -792,7 +1143,22 @@ public actor TwitchAPIClient {
             return []
         }
 
-        return campaigns.compactMap { $0["id"] as? String }
+        let campaignIds = campaigns.compactMap { $0["id"] as? String }
+        Self.pruneCache(
+            &availableDropsByChannel,
+            maxEntries: maxAvailableDropsCacheEntries,
+            expiresAt: { $0.expiresAt }
+        )
+        availableDropsByChannel[cacheKey] = AvailableDropsCacheEntry(
+            campaignIds: campaignIds,
+            expiresAt: Date().addingTimeInterval(availableDropsCacheTTL)
+        )
+        await SharedTwitchLookupCache.shared.storeAvailableDrops(
+            campaignIds,
+            key: cacheKey,
+            ttl: availableDropsCacheTTL
+        )
+        return campaignIds
     }
 
     /// Claim a drop
@@ -814,6 +1180,9 @@ public actor TwitchAPIClient {
               let claim = responseData["claimDropBenefit"] as? [String: Any] else {
             throw TwitchMinerError.claimFailed("Invalid response")
         }
+
+        campaignDetailsByKey.removeAll(keepingCapacity: true)
+        await SharedTwitchLookupCache.shared.removeAllCampaignMetadata()
 
         return ClaimDropResponse(
             id: claim["id"] as? String ?? "",
@@ -945,6 +1314,21 @@ public actor TwitchAPIClient {
         limit: Int = 100,
         expectedGameId: String? = nil
     ) async throws -> [Channel] {
+        let lookupKey = Self.cacheKey("live-channels", gameSlug, "\(limit)", expectedGameId ?? "")
+        let now = Date()
+        if let cached = liveChannelsByLookup[lookupKey], cached.expiresAt > now {
+            await traceGQLDebug { "[TwitchAPIClient] getLiveChannels cache hit for slug '\(gameSlug)'" }
+            return cached.channels
+        }
+        if let shared = await SharedTwitchLookupCache.shared.liveChannels(for: lookupKey, now: now) {
+            liveChannelsByLookup[lookupKey] = LiveChannelsCacheEntry(
+                channels: shared,
+                expiresAt: now.addingTimeInterval(liveChannelsCacheTTL)
+            )
+            await traceGQLDebug { "[TwitchAPIClient] getLiveChannels shared cache hit for slug '\(gameSlug)'" }
+            return shared
+        }
+
         let request = GraphQLRequest(
             operationName: "DirectoryPage_Game",
             sha256Hash: GQLHashes.directoryPage_Game,
@@ -986,7 +1370,7 @@ public actor TwitchAPIClient {
            directoryGameId != expectedId {
             let directoryName = (directory["displayName"] as? String) ?? (directory["name"] as? String) ?? gameSlug
             await traceGQLDebug { "[TwitchAPIClient] getLiveChannels: slug '\(gameSlug)' resolved to \(directoryName) (\(directoryGameId)), expected game id \(expectedId); skipping" }
-            return []
+            return await storeLiveChannels([], lookupKey: lookupKey)
         }
 
         // Parse streams.edges[].node.broadcaster
@@ -1036,16 +1420,16 @@ public actor TwitchAPIClient {
             }
             let channelCount = channels.count
             await traceGQLDebug { "[TwitchAPIClient] getLiveChannels: parsed \(channelCount) channels from \(edgeCount) edges" }
-            return channels
+            return await storeLiveChannels(channels, lookupKey: lookupKey)
         }
 
         // Fallback: flat channelList shape
         guard let list = directory["channelList"] as? [[String: Any]] else {
             await traceGQLDebug { "[TwitchAPIClient] getLiveChannels: no streams/edges or channelList in response" }
-            return []
+            return await storeLiveChannels([], lookupKey: lookupKey)
         }
 
-        return list.compactMap { dict -> Channel? in
+        let channels = list.compactMap { dict -> Channel? in
             guard let id = dict["id"] as? String,
                   let login = dict["login"] as? String,
                   let displayName = dict["displayName"] as? String else {
@@ -1059,6 +1443,7 @@ public actor TwitchAPIClient {
                 gameName: (directory["displayName"] as? String) ?? (directory["name"] as? String)
             )
         }
+        return await storeLiveChannels(channels, lookupKey: lookupKey)
     }
     
     /// Fetch the live broadcast ID (stream ID) for a channel.

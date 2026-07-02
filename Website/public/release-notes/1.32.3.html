@@ -68,8 +68,17 @@
 <body>
   <main>
     <h1>SwiftMiner 1.32.3</h1>
-    <p class="meta">Version 1.32.3 · Build 2026070209</p>
+    <p class="meta">Version 1.32.3 · Build 2026070216</p>
     <p class="intro">A diagnostics update that makes long-running logs more useful for performance investigation without adding noisy normal-run output.</p>
+
+    <section>
+      <h2>Drops Filtering</h2>
+      <p class="summary">The Drops tab's miner picker now narrows the feed to the selected account's own work.</p>
+      <ul>
+        <li>Filters out idle merged account rows so choosing a miner no longer leaves unrelated campaigns visible.</li>
+        <li>Keeps current, prioritised, in-progress, claimed, and setup-needed campaigns visible for the selected miner, with card miner counts matching the filter.</li>
+      </ul>
+    </section>
 
     <section>
       <h2>Overview Status Accuracy</h2>
@@ -97,7 +106,10 @@
         <li>Adds CPU, memory, memory-growth, and top spike summaries to diagnostic exports when resource monitoring is enabled.</li>
         <li>Tracks Twitch request counts, average/p95/max latency, failures, retries, token refreshes, integrity-token fetches, and rate-limit wait time by operation.</li>
         <li>Records compact mining-cycle timings for campaign refresh, claim checks, channel selection, and watch startup so slow scans are easier to pinpoint.</li>
-        <li>Prepared as SwiftMiner <strong>1.32.3</strong>, build <strong>2026070209</strong>.</li>
+        <li>Shares static campaign metadata, available-drops, live-directory, and game-slug lookups across miners so multiple accounts do less duplicate Twitch work.</li>
+        <li>Keeps negative subscription checks warm for longer and limits channel verification depth adaptively when broad, unrestricted campaigns have plenty of live streams.</li>
+        <li>Backs off repeated no-candidate scan cycles so idle miners spend less time polling when Twitch has nothing useful to mine.</li>
+        <li>Prepared as SwiftMiner <strong>1.32.3</strong>, build <strong>2026070216</strong>.</li>
       </ul>
     </section>
   </main>
