@@ -3,12 +3,12 @@
     <channel>
         <title>SwiftMiner</title>
         <item>
-            <title>1.32.3</title>
-            <pubDate>Thu, 02 Jul 2026 10:05:57 +1200</pubDate>
-            <sparkle:version>2026070209</sparkle:version>
-            <sparkle:shortVersionString>1.32.3</sparkle:shortVersionString>
+            <title>1.32.4</title>
+            <pubDate>Thu, 02 Jul 2026 22:22:03 +1200</pubDate>
+            <sparkle:version>2026070219</sparkle:version>
+            <sparkle:shortVersionString>1.32.4</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://github.com/johnwatso/SwiftMiner/releases/download/v1.32.3/SwiftMiner-1.32.3.zip" length="10578496" type="application/octet-stream" sparkle:edSignature="1GDh5UMi4LGer5lRi8O3cmz8zmvNu6yJxEzQnGFa9CHPHpEgEdCWNMeMxH/v1RDrKVJAoL6rvY8flaAIyLwLBw=="/>
+            <enclosure url="https://github.com/johnwatso/SwiftMiner/releases/download/v1.32.4/SwiftMiner-1.32.4.zip" length="10660153" type="application/octet-stream" sparkle:edSignature="Gwdmf1AR75qwLkQSG4OhtQhcX43BSaZDIK+kY5QRyfTAA4NUS26+CHkoZtNHiyNvtnDwVPTkF1NVXCY5HpOPCA=="/>
         </item>
     </channel>
 </rss>
