@@ -303,6 +303,78 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(MinerEngine.noCandidateBackoffInterval(for: 20), 15 * minute)
     }
 
+    func testEmptyCandidateStateIgnoresUnlinkedNonPriorityCampaigns() {
+        let now = Date()
+        let unrelated = Campaign(
+            id: "unrelated",
+            name: "Unrelated Public Campaign",
+            game: Game(id: "other-game", name: "Other Game"),
+            status: .active,
+            startDate: now.addingTimeInterval(-3600),
+            endDate: now.addingTimeInterval(3600),
+            drops: [Drop(id: "d1", name: "Drop", requiredMinutes: 60)],
+            isAccountConnected: false
+        )
+
+        let status = MinerEngine.resolveEmptyCandidateState(
+            from: [unrelated],
+            priorityGames: ["THE FINALS"],
+            excludedGames: [],
+            strategy: .prioritiseSelected,
+            includesBadgeAndEmoteCampaigns: false
+        )
+
+        XCTAssertEqual(status, .idleNoEligibleCampaigns)
+    }
+
+    func testEmptyCandidateStateOnlyBlocksForPrioritisedUnlinkedCampaigns() {
+        let now = Date()
+        let priority = Campaign(
+            id: "priority",
+            name: "Priority Campaign",
+            game: Game(id: "the-finals", name: "THE FINALS"),
+            status: .active,
+            startDate: now.addingTimeInterval(-3600),
+            endDate: now.addingTimeInterval(3600),
+            drops: [Drop(id: "d1", name: "Drop", requiredMinutes: 60)],
+            isAccountConnected: false
+        )
+
+        let status = MinerEngine.resolveEmptyCandidateState(
+            from: [priority],
+            priorityGames: ["THE FINALS"],
+            excludedGames: [],
+            strategy: .prioritiseSelected,
+            includesBadgeAndEmoteCampaigns: false
+        )
+
+        XCTAssertEqual(status, .blockedAccountNotLinked)
+    }
+
+    func testEmptyCandidateStateDoesNotBlameLinkForSubscriptionOnlyPriorityCampaign() {
+        let now = Date()
+        let subscriptionOnly = Campaign(
+            id: "priority-sub",
+            name: "Priority Subscription Campaign",
+            game: Game(id: "the-finals", name: "THE FINALS"),
+            status: .active,
+            startDate: now.addingTimeInterval(-3600),
+            endDate: now.addingTimeInterval(3600),
+            drops: [Drop(id: "d1", name: "Sub Drop", requiredMinutes: 0, requiredSubs: 1)],
+            isAccountConnected: false
+        )
+
+        let status = MinerEngine.resolveEmptyCandidateState(
+            from: [subscriptionOnly],
+            priorityGames: ["THE FINALS"],
+            excludedGames: [],
+            strategy: .prioritiseSelected,
+            includesBadgeAndEmoteCampaigns: false
+        )
+
+        XCTAssertEqual(status, .idleNoEligibleCampaigns)
+    }
+
     func testRestrictedCampaignACLMatchesDirectoryLoginFallback() {
         let game = Game(id: "g1", name: "THE FINALS")
         let now = Date()

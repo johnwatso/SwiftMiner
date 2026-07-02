@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>SwiftMiner 1.32.4 - Release Notes</title>
-  <meta name="description" content="Release notes for SwiftMiner 1.32.4, covering Drops miner filtering and mining scan efficiency improvements.">
-  <link rel="canonical" href="https://swiftminer.app/release-notes/1.32.4.html">
+  <title>SwiftMiner 1.32.5 - Release Notes</title>
+  <meta name="description" content="Release notes for SwiftMiner 1.32.5, covering calmer account-link status handling for priority mining.">
+  <link rel="canonical" href="https://swiftminer.app/release-notes/1.32.5.html">
   <meta name="robots" content="index, follow">
   <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
@@ -88,40 +88,35 @@
 </head>
 <body>
   <main>
-    <h1>SwiftMiner 1.32.4</h1>
-    <p class="meta">Version 1.32.4 · Build 2026070219</p>
-    <p class="intro">A follow-up performance and Drops filtering update that reduces duplicate Twitch work while keeping the selected miner view focused on that account's actual campaigns.</p>
+    <h1>SwiftMiner 1.32.5</h1>
+    <p class="meta">Version 1.32.5 · Build 2026070308</p>
+    <p class="intro">A focused status-polish update that keeps healthy miners from sounding blocked when Twitch simply has no mineable priority campaign for them.</p>
 
-    <section class="teal">
-      <h2><span class="badge" aria-hidden="true">🎚️</span> Drops Miner Filtering</h2>
-      <p class="summary">The Drops tab's miner picker now follows the selected account more closely.</p>
+    <section class="green">
+      <h2><span class="badge" aria-hidden="true">🧘</span> Calmer Miner Status</h2>
+      <p class="summary">Account-link warnings now appear only when linking is actually the reason a priority campaign cannot move forward.</p>
       <ul>
-        <li>Filters out unrelated idle campaigns from the merged feed when a single miner is selected.</li>
-        <li>Keeps the selected miner's current, prioritised, in-progress, claimed, setup-needed, blocked, and priority-ready campaigns visible.</li>
-        <li>Scopes grouped game-card account rows and miner counts to the selected miner so the card summary matches the filter.</li>
-        <li>Treats blocked account states as action-required/blocked instead of folding them into generic setup-needed state.</li>
+        <li>Stops unrelated unlinked public campaigns from making a miner look account-blocked after its priority filters have already ruled those campaigns out.</li>
+        <li>Reserves the account-link blocked state for attemptable priority campaigns that genuinely belong to the miner's active priority list.</li>
+        <li>Falls back to no eligible campaigns when the only visible priority campaign is subscription-only and cannot be watched for progress.</li>
       </ul>
     </section>
 
-    <section class="green">
-      <h2><span class="badge" aria-hidden="true">⚡</span> Mining Scan Efficiency</h2>
-      <p class="summary">Multiple miners now share more short-lived Twitch lookup work.</p>
+    <section class="teal">
+      <h2><span class="badge" aria-hidden="true">🎯</span> Priority Mining Behavior</h2>
+      <p class="summary">The mining rule stays the same: prioritised games can still be attempted even before the external game account is linked.</p>
       <ul>
-        <li>Shares static campaign metadata, available-drops, live-directory, and game-slug lookups across miners with bounded caches.</li>
-        <li>Reuses sanitized campaign metadata without sharing account-specific progress or claim state between accounts.</li>
-        <li>Keeps negative subscription checks warm for longer while avoiding cache writes for authentication or transient request failures.</li>
-        <li>Clears campaign metadata caches after successful claims so fresh campaign shape is fetched when claim state may have changed.</li>
+        <li>Keeps the miner focused on its effective priority list, including global priorities used by that account.</li>
+        <li>Avoids presenting account linking as a hard blocker when the miner is simply idle because Twitch has no eligible priority stream available.</li>
       </ul>
     </section>
 
     <section class="indigo">
-      <h2><span class="badge" aria-hidden="true">📡</span> Channel Selection</h2>
-      <p class="summary">Broad scans do less verification work when the best channel choices are already clear.</p>
+      <h2><span class="badge" aria-hidden="true">🧪</span> Reliability Coverage</h2>
+      <p class="summary">Regression tests cover the account-link cases that made this status feel too alarming.</p>
       <ul>
-        <li>Limits channel verification depth adaptively for unrestricted campaigns with many live streams.</li>
-        <li>Preserves deeper verification for restricted campaigns, priority games, multiple candidates, and duplicate-stream avoidance.</li>
-        <li>Backs off repeated no-candidate scan cycles up to 15 minutes while still letting manual rescans interrupt the wait.</li>
-        <li>Prepared as SwiftMiner <strong>1.32.4</strong>, build <strong>2026070219</strong>.</li>
+        <li>Adds tests for unrelated unlinked campaigns, prioritised unlinked campaigns, and subscription-only priority campaigns.</li>
+        <li>Prepared as SwiftMiner <strong>1.32.5</strong>, build <strong>2026070308</strong>.</li>
       </ul>
     </section>
   </main>

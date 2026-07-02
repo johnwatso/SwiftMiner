@@ -902,11 +902,12 @@ public actor MinerEngine {
                     consecutiveNoCandidateCycles += 1
                     log("No account-eligible campaigns matching strategy '\(miningStrategy.displayName)'")
                     await cleanupActiveWatchSession(clearTarget: true)
-                    let emptyState = resolveEmptyCandidateState(
+                    let emptyState = Self.resolveEmptyCandidateState(
                         from: allEnriched,
                         priorityGames: priorityGames,
                         excludedGames: excludedGames,
-                        strategy: miningStrategy
+                        strategy: miningStrategy,
+                        includesBadgeAndEmoteCampaigns: enableBadgesEmotes
                     )
                     onStatusChange?(emptyState)
                     await finishPerformanceCycle(outcome: "no-candidates")
@@ -1696,23 +1697,25 @@ public actor MinerEngine {
     }
 
     /// Resolves the appropriate session status when no candidate campaigns remain after
-    /// filtering (Tasks 3 & 4). Distinguishes between "nothing to mine" and "blocked by link".
-    /// Scoped to the same "candidate universe" as selection (active, not excluded, strategy-compatible).
-    private func resolveEmptyCandidateState(
+    /// filtering. Missing game-account linkage is only presented as blocked when it
+    /// belongs to a game this miner has explicitly prioritised; unrelated public
+    /// unlinked campaigns are normal "no eligible work" noise.
+    internal static func resolveEmptyCandidateState(
         from campaigns: [Campaign],
         priorityGames: [String],
         excludedGames: [String],
-        strategy: MiningStrategy
+        strategy: MiningStrategy,
+        includesBadgeAndEmoteCampaigns: Bool
     ) -> SessionStatus {
-        let priorityKeys = priorityGames.map { normalizedGameKey($0) }.filter { !$0.isEmpty }
+        let priorityKeys = priorityGames.map { normalizedGameSelectionKey($0) }.filter { !$0.isEmpty }
         let prioritySet = Set(priorityKeys)
-        let excludedSet = Set(excludedGames.map { normalizedGameKey($0) }.filter { !$0.isEmpty })
+        let excludedSet = Set(excludedGames.map { normalizedGameSelectionKey($0) }.filter { !$0.isEmpty })
 
         // 1. Define the "Universe" (Active, Enabled, Preferred)
         // We only care about campaigns that the user hasn't explicitly excluded or filtered out by strategy.
         let universe = campaigns.filter { campaign in
-            let gameName = normalizedGameKey(campaign.gameName)
-            let gameId = normalizedGameKey(campaign.game.id)
+            let gameName = normalizedGameSelectionKey(campaign.gameName)
+            let gameId = normalizedGameSelectionKey(campaign.game.id)
 
             // Basic availability
             guard campaign.isTimeActive && campaign.status != .disabled else { return false }
@@ -1721,7 +1724,7 @@ public actor MinerEngine {
             // User preferences
             if excludedSet.contains(gameName) || excludedSet.contains(gameId) { return false }
             if strategy == .onlyPriority && !prioritySet.contains(gameName) && !prioritySet.contains(gameId) { return false }
-            if !enableBadgesEmotes && campaign.hasOnlyBadgesOrEmotes { return false }
+            if !includesBadgeAndEmoteCampaigns && campaign.hasOnlyBadgesOrEmotes { return false }
             
             return true
         }
@@ -1731,12 +1734,23 @@ public actor MinerEngine {
             return .idleNoEligibleCampaigns
         }
 
-        // 2. Distinguish Blocked from Idle within that Universe
-        // If we have campaigns the user WANTS to mine, but they aren't linked, we are blocked.
-        // If we have linked campaigns but they have no eligible drops (e.g. precondition locked), we are idle.
-        let hasLinked = universe.contains(where: { $0.isAccountConnected })
-        
-        return hasLinked ? .idleNoEligibleCampaigns : .blockedAccountNotLinked
+        let priorityUniverse = universe.filter { campaign in
+            let gameName = normalizedGameSelectionKey(campaign.gameName)
+            let gameId = normalizedGameSelectionKey(campaign.game.id)
+            return prioritySet.contains(gameName) || prioritySet.contains(gameId)
+        }
+
+        let unlinkedAttemptablePriorityCampaigns = priorityUniverse.filter { campaign in
+            !campaign.isAccountConnected && campaign.canAttemptMining
+        }
+        guard !unlinkedAttemptablePriorityCampaigns.isEmpty else {
+            return .idleNoEligibleCampaigns
+        }
+
+        let hasLinkedPriorityCampaign = priorityUniverse.contains { campaign in
+            campaign.isAccountConnected && campaign.canAttemptMining
+        }
+        return hasLinkedPriorityCampaign ? .idleNoEligibleCampaigns : .blockedAccountNotLinked
     }
 
     /// Record the outcome of a live-channel probe for a game so later ranking and the
