@@ -328,6 +328,360 @@ final class ServiceTests: XCTestCase {
         XCTAssertTrue(campaign.isMiningEligible)
     }
 
+    func testFetchDropCampaignsReusesRecentCampaignDetails() async throws {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        let startAt = formatter.string(from: Date().addingTimeInterval(-3600))
+        let endAt = formatter.string(from: Date().addingTimeInterval(3600))
+        let operations = StringRequestRecorder()
+
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+
+            if request.url?.path == "/integrity" {
+                return (response, #"{"token":"integrity-token","expiration":4102444800000}"#.data(using: .utf8)!)
+            }
+
+            let body = (try? JSONSerialization.jsonObject(with: request.httpBody ?? Data())) as? [String: Any]
+            let operationName = body?["operationName"] as? String ?? ""
+            operations.append(operationName)
+
+            switch operationName {
+            case "ViewerDropsDashboard":
+                let json = """
+                {
+                  "data": {
+                    "currentUser": {
+                      "dropCampaigns": [
+                        {
+                          "id": "cached-campaign",
+                          "name": "Cached Campaign",
+                          "status": "ACTIVE",
+                          "startAt": "\(startAt)",
+                          "endAt": "\(endAt)",
+                          "self": { "isAccountConnected": true },
+                          "game": {
+                            "id": "game-1",
+                            "displayName": "Cache Game"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+                """
+                return (response, json.data(using: .utf8)!)
+
+            case "DropCampaignDetails":
+                let json = """
+                {
+                  "data": {
+                    "user": {
+                      "dropCampaign": {
+                        "id": "cached-campaign",
+                        "name": "Cached Campaign",
+                        "status": "ACTIVE",
+                        "startAt": "\(startAt)",
+                        "endAt": "\(endAt)",
+                        "self": { "isAccountConnected": true },
+                        "allow": { "isEnabled": false, "channels": null },
+                        "game": {
+                          "id": "game-1",
+                          "displayName": "Cache Game"
+                        },
+                        "timeBasedDrops": [
+                          {
+                            "id": "drop-1",
+                            "name": "Drop One",
+                            "requiredMinutesWatched": 30,
+                            "benefitEdges": [
+                              {
+                                "benefit": {
+                                  "id": "benefit-1",
+                                  "name": "Drop One",
+                                  "distributionType": "DIRECT_ENTITLEMENT"
+                                }
+                              }
+                            ],
+                            "self": {
+                              "currentMinutesWatched": 0,
+                              "isClaimed": false,
+                              "dropInstanceID": "instance-1"
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+                """
+                return (response, json.data(using: .utf8)!)
+
+            default:
+                return (response, #"{"data":{}}"#.data(using: .utf8)!)
+            }
+        }
+
+        await apiClient.setUserLogin("cacheuser")
+
+        let first = try await apiClient.fetchDropCampaigns()
+        let second = try await apiClient.fetchDropCampaigns()
+
+        XCTAssertEqual(first.map(\.id), ["cached-campaign"])
+        XCTAssertEqual(second.map(\.id), ["cached-campaign"])
+        XCTAssertEqual(operations.recordedValues.filter { $0 == "ViewerDropsDashboard" }.count, 2)
+        XCTAssertEqual(operations.recordedValues.filter { $0 == "DropCampaignDetails" }.count, 1)
+    }
+
+    func testFetchDropCampaignsReusesSharedCampaignMetadataAcrossClients() async throws {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        let startAt = formatter.string(from: Date().addingTimeInterval(-3600))
+        let endAt = formatter.string(from: Date().addingTimeInterval(3600))
+        let campaignId = "shared-campaign-\(UUID().uuidString)"
+        let operations = StringRequestRecorder()
+
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+
+            if request.url?.path == "/integrity" {
+                return (response, #"{"token":"integrity-token","expiration":4102444800000}"#.data(using: .utf8)!)
+            }
+
+            let body = (try? JSONSerialization.jsonObject(with: request.httpBody ?? Data())) as? [String: Any]
+            let operationName = body?["operationName"] as? String ?? ""
+            operations.append(operationName)
+
+            switch operationName {
+            case "ViewerDropsDashboard":
+                let json = """
+                {
+                  "data": {
+                    "currentUser": {
+                      "dropCampaigns": [
+                        {
+                          "id": "\(campaignId)",
+                          "name": "Shared Campaign",
+                          "status": "ACTIVE",
+                          "startAt": "\(startAt)",
+                          "endAt": "\(endAt)",
+                          "self": { "isAccountConnected": true },
+                          "game": {
+                            "id": "shared-game",
+                            "displayName": "Shared Game"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+                """
+                return (response, json.data(using: .utf8)!)
+
+            case "DropCampaignDetails":
+                let json = """
+                {
+                  "data": {
+                    "user": {
+                      "dropCampaign": {
+                        "id": "\(campaignId)",
+                        "name": "Shared Campaign",
+                        "status": "ACTIVE",
+                        "startAt": "\(startAt)",
+                        "endAt": "\(endAt)",
+                        "self": { "isAccountConnected": true },
+                        "allow": { "isEnabled": false, "channels": null },
+                        "game": {
+                          "id": "shared-game",
+                          "displayName": "Shared Game"
+                        },
+                        "timeBasedDrops": [
+                          {
+                            "id": "shared-drop",
+                            "name": "Shared Drop",
+                            "requiredMinutesWatched": 30,
+                            "benefitEdges": [
+                              {
+                                "benefit": {
+                                  "id": "shared-benefit",
+                                  "name": "Shared Drop",
+                                  "distributionType": "DIRECT_ENTITLEMENT"
+                                }
+                              }
+                            ],
+                            "self": {
+                              "currentMinutesWatched": 12,
+                              "isClaimed": false,
+                              "dropInstanceID": "shared-instance"
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+                """
+                return (response, json.data(using: .utf8)!)
+
+            case "DropsPage_ClaimDropRewards":
+                let json = """
+                {
+                  "data": {
+                    "claimDropBenefit": {
+                      "id": "shared-instance",
+                      "status": "CLAIMED"
+                    }
+                  }
+                }
+                """
+                return (response, json.data(using: .utf8)!)
+
+            default:
+                return (response, #"{"data":{}}"#.data(using: .utf8)!)
+            }
+        }
+
+        await apiClient.setUserLogin("firstuser")
+        let secondClient = TwitchAPIClient(
+            authService: authService,
+            clientId: "test_client",
+            session: mockSession
+        )
+        await secondClient.setUserLogin("seconduser")
+        let thirdClient = TwitchAPIClient(
+            authService: authService,
+            clientId: "test_client",
+            session: mockSession
+        )
+        await thirdClient.setUserLogin("thirduser")
+
+        let first = try await apiClient.fetchDropCampaigns()
+        let second = try await secondClient.fetchDropCampaigns()
+
+        XCTAssertEqual(first.first?.drops.first?.progress?.currentMinutes, 12)
+        XCTAssertNil(second.first?.drops.first?.progress)
+        XCTAssertEqual(second.first?.isAccountConnected, true)
+        XCTAssertEqual(operations.recordedValues.filter { $0 == "ViewerDropsDashboard" }.count, 2)
+        XCTAssertEqual(operations.recordedValues.filter { $0 == "DropCampaignDetails" }.count, 1)
+
+        let claim = try await apiClient.claimDrop(dropInstanceId: "shared-instance")
+        XCTAssertEqual(claim.status, "CLAIMED")
+
+        _ = try await thirdClient.fetchDropCampaigns()
+        XCTAssertEqual(operations.recordedValues.filter { $0 == "ViewerDropsDashboard" }.count, 3)
+        XCTAssertEqual(operations.recordedValues.filter { $0 == "DropCampaignDetails" }.count, 2)
+    }
+
+    func testFetchAvailableDropsUsesShortLivedChannelCache() async throws {
+        let operations = StringRequestRecorder()
+
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+
+            if request.url?.path == "/integrity" {
+                return (response, #"{"token":"integrity-token","expiration":4102444800000}"#.data(using: .utf8)!)
+            }
+
+            let body = (try? JSONSerialization.jsonObject(with: request.httpBody ?? Data())) as? [String: Any]
+            let operationName = body?["operationName"] as? String ?? ""
+            operations.append(operationName)
+
+            let json = """
+            {
+              "data": {
+                "channel": {
+                  "viewerDropCampaigns": [
+                    { "id": "campaign-a" },
+                    { "id": "campaign-b" }
+                  ]
+                }
+              }
+            }
+            """
+            return (response, json.data(using: .utf8)!)
+        }
+
+        let first = try await apiClient.fetchAvailableDrops(channelId: "channel-1")
+        let second = try await apiClient.fetchAvailableDrops(channelId: "channel-1")
+
+        XCTAssertEqual(first, ["campaign-a", "campaign-b"])
+        XCTAssertEqual(second, ["campaign-a", "campaign-b"])
+        XCTAssertEqual(operations.recordedValues.filter { $0 == "DropsHighlightService_AvailableDrops" }.count, 1)
+    }
+
+    func testGetLiveChannelsUsesShortLivedDirectoryCache() async throws {
+        let operations = StringRequestRecorder()
+
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+
+            if request.url?.path == "/integrity" {
+                return (response, #"{"token":"integrity-token","expiration":4102444800000}"#.data(using: .utf8)!)
+            }
+
+            let body = (try? JSONSerialization.jsonObject(with: request.httpBody ?? Data())) as? [String: Any]
+            let operationName = body?["operationName"] as? String ?? ""
+            operations.append(operationName)
+
+            let json = """
+            {
+              "data": {
+                "game": {
+                  "id": "game-1",
+                  "displayName": "Cache Game",
+                  "streams": {
+                    "edges": [
+                      {
+                        "node": {
+                          "viewersCount": 123,
+                          "game": {
+                            "id": "game-1",
+                            "displayName": "Cache Game"
+                          },
+                          "broadcaster": {
+                            "id": "channel-1",
+                            "login": "cachedstreamer",
+                            "displayName": "CachedStreamer"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+            """
+            return (response, json.data(using: .utf8)!)
+        }
+
+        let first = try await apiClient.getLiveChannels(gameSlug: "cache-game", expectedGameId: "game-1")
+        let second = try await apiClient.getLiveChannels(gameSlug: "cache-game", expectedGameId: "game-1")
+
+        XCTAssertEqual(first.map(\.login), ["cachedstreamer"])
+        XCTAssertEqual(second.map(\.login), ["cachedstreamer"])
+        XCTAssertEqual(operations.recordedValues.filter { $0 == "DirectoryPage_Game" }.count, 1)
+    }
+
     func testJustChattingDoesNotSupportSteamArtwork() {
         XCTAssertFalse(SteamArtworkService.supportsSteamArtwork(forGameName: "Just Chatting"))
         XCTAssertFalse(SteamArtworkService.supportsSteamArtwork(forGameName: " just chatting "))

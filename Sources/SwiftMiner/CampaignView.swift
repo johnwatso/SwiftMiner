@@ -25,6 +25,9 @@ struct DropsListView: View {
 
     private var miners: [MinerManager.ManagedMiner] { navigation.minerManager.miners }
     private var hasAccounts: Bool { !miners.isEmpty }
+    private var selectedMinerAccountId: String? {
+        selectedMinerFilterId == Self.allMinersFilterId ? nil : selectedMinerFilterId
+    }
     private var availableCampaigns: [CampaignViewData] {
         campaigns.isEmpty
             ? navigation.minerManager.dataCoordinator.lastKnownAllCampaigns
@@ -68,6 +71,7 @@ struct DropsListView: View {
                             ForEach(context.visibleGroupedCampaigns) { group in
                                 GameCampaignDeckCard(
                                     group: group,
+                                    selectedAccountId: selectedMinerAccountId,
                                     activityProvider: { campaign in
                                         context.activityByCampaignId[campaign.id] ?? activity(for: campaign)
                                     },
@@ -421,8 +425,17 @@ struct DropsListView: View {
     }
 
     private func matchesSelectedMiner(_ campaign: CampaignViewData) -> Bool {
-        guard selectedMinerFilterId != Self.allMinersFilterId else { return true }
-        return campaign.accountStates.contains { $0.accountId == selectedMinerFilterId }
+        guard let selectedMinerAccountId else { return true }
+        guard let miner = miners.first(where: { $0.accountId == selectedMinerAccountId }) else {
+            return false
+        }
+
+        return DropsMinerCampaignFilter.matches(
+            campaign,
+            selectedAccountId: selectedMinerAccountId,
+            currentCampaignId: miner.currentCampaignId,
+            priorityGames: navigation.priorityGames(for: miner)
+        )
     }
 
     private func matchesSearch(_ campaign: CampaignViewData) -> Bool {
@@ -513,7 +526,7 @@ struct DropsListView: View {
         if campaign.startDate > now {
             return .ready
         }
-        if campaign.accountStates.contains(where: { $0.miningStatus == .needsAuth }) && campaign.hasObtainableRewards {
+        if campaign.accountStates.contains(where: { $0.miningStatus == .needsAuth || $0.miningStatus == .blocked }) && campaign.hasObtainableRewards {
             return .actionRequired
         }
         if campaign.combinedProgressFraction > 0 {
@@ -820,7 +833,7 @@ struct DropsListView: View {
     }
 
     private func isBlockedCampaign(_ campaign: CampaignViewData, activity: CampaignActivitySnapshot) -> Bool {
-        !activity.needsAuthAccounts.isEmpty
+        !activity.needsAuthAccounts.isEmpty || !activity.blockedAccounts.isEmpty
     }
 
     private func filters(for campaign: CampaignViewData, activity: CampaignActivitySnapshot, now: Date) -> Set<DropFilter> {
@@ -859,7 +872,8 @@ struct DropsListView: View {
         let activeMiners = activeMiners(for: campaign, in: activeMinerCandidates)
         let claimedAccounts = campaign.accountStates.filter { $0.miningStatus == .claimed }
         let needsAuthAccounts = campaign.accountStates.filter { $0.miningStatus == .needsAuth }
-        let blockedAccounts = campaign.accountStates.filter { $0.miningStatus == .needsAuth }
+        let blockedAccounts = campaign.accountStates.filter { $0.miningStatus == .blocked }
+        let hasBlockedAccount = !needsAuthAccounts.isEmpty || !blockedAccounts.isEmpty
         let claimableDropCount = campaign.drops.filter { $0.isClaimable && !$0.isClaimed }.count
         let claimedRewardCount = max(
             campaign.dropsClaimed,
@@ -877,7 +891,7 @@ struct DropsListView: View {
             state = .ready
         } else if combinedProgress >= 0.995 || campaign.isCompleted {
             state = .claimed
-        } else if !blockedAccounts.isEmpty && campaign.hasObtainableRewards {
+        } else if hasBlockedAccount && campaign.hasObtainableRewards {
             state = .blocked
         } else if !activeMiners.isEmpty {
             state = .active
@@ -905,6 +919,7 @@ struct DropsListView: View {
 // MARK: - Grouped Game Card
 private struct GameCampaignDeckCard: View {
     let group: GameAggregate
+    let selectedAccountId: String?
     let activityProvider: (CampaignViewData) -> CampaignActivitySnapshot
     var onSteamIdSet: ((String) async -> Void)?
 
@@ -957,7 +972,7 @@ private struct GameCampaignDeckCard: View {
             .idle: 6
         ]
 
-        return mergedStates.values.sorted {
+        let sorted = mergedStates.values.sorted {
             let lhsOrder = statusOrder[$0.miningStatus] ?? Int.max
             let rhsOrder = statusOrder[$1.miningStatus] ?? Int.max
             if lhsOrder != rhsOrder {
@@ -965,10 +980,15 @@ private struct GameCampaignDeckCard: View {
             }
             return $0.username.localizedCaseInsensitiveCompare($1.username) == .orderedAscending
         }
+
+        guard let selectedAccountId else { return sorted }
+        return sorted.filter { $0.accountId == selectedAccountId }
     }
 
     private var activeMinerCount: Int {
-        Set(group.campaigns.flatMap { activityProvider($0.campaign).activeMiners.map(\.accountId) }).count
+        let accountIds = Set(group.campaigns.flatMap { activityProvider($0.campaign).activeMiners.map(\.accountId) })
+        guard let selectedAccountId else { return accountIds.count }
+        return accountIds.contains(selectedAccountId) ? 1 : 0
     }
 
     private var completedCurrentRewardMinerCount: Int {
@@ -977,7 +997,11 @@ private struct GameCampaignDeckCard: View {
             ?? activeCampaigns.first?.campaign
         else { return 0 }
 
-        return currentCampaign.accountStates.filter { account in
+        let accountStates = currentCampaign.accountStates.filter { account in
+            selectedAccountId == nil || account.accountId == selectedAccountId
+        }
+
+        return accountStates.filter { account in
             account.miningStatus == .claimed
                 || account.miningStatus == .claimedUnlinked
                 || account.claimedDropCount > 0

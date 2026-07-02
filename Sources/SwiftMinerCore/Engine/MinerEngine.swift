@@ -89,6 +89,7 @@ public actor MinerEngine {
     private var shouldSwitchChannel = false
     /// Set to true to interrupt the idle wait and immediately re-check for eligible campaigns
     private var shouldRescanCampaigns = false
+    private var consecutiveNoCandidateCycles = 0
 
     /// Counter for minutes watched without a server progress update (local estimation)
     private var extraMinutesWatched: Int = 0
@@ -98,6 +99,8 @@ public actor MinerEngine {
     private static let maxExtraMinutes = 15
     private static let failoverCooldown: TimeInterval = 10 * 60
     private static let subscriptionWarningRepeatInterval: TimeInterval = 6 * 60 * 60
+    private static let noCandidateBackoffBaseInterval: UInt64 = 300 * 1_000_000_000
+    private static let noCandidateBackoffMaxInterval: UInt64 = 15 * 60 * 1_000_000_000
 
     /// Cache of all campaigns fetched during the last check
     public private(set) var allCampaigns: [Campaign] = []
@@ -896,6 +899,7 @@ public actor MinerEngine {
                 // An active stream override can still watch its streamer with no eligible
                 // campaign, so only short-circuit on empty candidates when no override is set.
                 if candidates.isEmpty, streamOverrideLogin == nil {
+                    consecutiveNoCandidateCycles += 1
                     log("No account-eligible campaigns matching strategy '\(miningStrategy.displayName)'")
                     await cleanupActiveWatchSession(clearTarget: true)
                     let emptyState = resolveEmptyCandidateState(
@@ -907,9 +911,14 @@ public actor MinerEngine {
                     onStatusChange?(emptyState)
                     await finishPerformanceCycle(outcome: "no-candidates")
                     // Wait up to campaignCheckInterval in 10s ticks, breaking early on triggerRescan()
+                    let waitInterval = Self.noCandidateBackoffInterval(for: consecutiveNoCandidateCycles)
+                    if waitInterval > campaignCheckInterval {
+                        let minutes = Int(waitInterval / 60_000_000_000)
+                        log("No-candidate backoff active after \(consecutiveNoCandidateCycles) empty scans; next check in \(minutes)m.")
+                    }
                     shouldRescanCampaigns = false
                     let tickNs: UInt64 = 10 * 1_000_000_000
-                    let ticks = Int(campaignCheckInterval / tickNs)
+                    let ticks = Int(waitInterval / tickNs)
                     for _ in 0..<ticks {
                         if shouldRescanCampaigns { break }
                         try await Task.sleep(nanoseconds: tickNs)
@@ -917,6 +926,7 @@ public actor MinerEngine {
                     shouldRescanCampaigns = false
                     continue
                 }
+                consecutiveNoCandidateCycles = 0
 
                 var selectedCampaign: Campaign?
                 var selectedChannel: Channel?
@@ -1944,6 +1954,19 @@ public actor MinerEngine {
             if a.aclBased != b.aclBased { return a.aclBased && !b.aclBased }
             return (a.viewerCount ?? 0) > (b.viewerCount ?? 0)
         }
+        let verificationLimit = Self.adaptiveChannelVerificationLimit(
+            liveChannelCount: sortedChannels.count,
+            candidateCount: candidates.count,
+            hasRestrictedCampaign: candidates.contains { $0.hasChannelRestrictions },
+            hasPriorityCampaign: candidates.contains {
+                Self.priorityIndex(for: $0, priorityKeys: priorityGames) != Int.max
+            },
+            avoidDuplicateStreams: avoidDuplicateStreams
+        )
+        let channelsToVerify = Array(sortedChannels.prefix(verificationLimit))
+        if verificationLimit < sortedChannels.count {
+            log("[ChannelSelect]   Verification limited to top \(verificationLimit) of \(sortedChannels.count) live channel(s)")
+        }
 
         // Pre-compute which candidates each channel could serve (by ACL).
         let candidateIds = Set(candidates.map(\.id))
@@ -1969,7 +1992,7 @@ public actor MinerEngine {
         var verificationErrorCount = 0
         var aclProbeCount = 0
 
-        for ch in sortedChannels.prefix(50) {
+        for ch in channelsToVerify {
             let eligibleForChannel = candidates.filter { candidate in
                 !candidate.hasChannelRestrictions
                     || Self.channelMatchesCampaignACL(ch, campaign: candidate)
@@ -2113,6 +2136,36 @@ public actor MinerEngine {
     /// broadcasts). Returning `false` here means there is genuinely nothing left to try.
     internal static func shouldContinueChannelSelection(liveChannelCount: Int, candidates: [Campaign]) -> Bool {
         liveChannelCount > 0 || candidates.contains { $0.hasChannelRestrictions }
+    }
+
+    internal static func adaptiveChannelVerificationLimit(
+        liveChannelCount: Int,
+        candidateCount: Int,
+        hasRestrictedCampaign: Bool,
+        hasPriorityCampaign: Bool,
+        avoidDuplicateStreams: Bool
+    ) -> Int {
+        guard liveChannelCount > 0 else { return 0 }
+
+        if hasRestrictedCampaign {
+            return min(liveChannelCount, 50)
+        }
+
+        if liveChannelCount <= 16 {
+            return liveChannelCount
+        }
+
+        if hasPriorityCampaign || candidateCount > 1 || avoidDuplicateStreams {
+            return min(liveChannelCount, 30)
+        }
+
+        return min(liveChannelCount, 16)
+    }
+
+    internal static func noCandidateBackoffInterval(for consecutiveCycles: Int) -> UInt64 {
+        guard consecutiveCycles > 1 else { return noCandidateBackoffBaseInterval }
+        let multiplier = UInt64(min(consecutiveCycles, 3))
+        return min(noCandidateBackoffBaseInterval * multiplier, noCandidateBackoffMaxInterval)
     }
 
     internal static func bestVerifiedCampaignMatch(
