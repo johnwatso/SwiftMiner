@@ -47,18 +47,23 @@
   <main>
     <h1>SwiftMiner Release Notes</h1>
     <p class="meta">Recent Sparkle update history</p>
-    <h2>🧘 <a href="./1.32.5.html">Version 1.32.5</a></h2>
+    <h2>🖥️ <a href="./1.32.5.html">Version 1.32.5</a></h2>
     <ul>
+      <li>Lowers SwiftMiner's minimum requirement to macOS 14.0 across the app, libraries, tools, publisher, and tests while retaining native Apple Silicon and Intel release support.</li>
+      <li>Keeps newer macOS 15 and macOS 26 visual features behind availability checks so Sonoma receives the established material-based appearance.</li>
+      <li>Documents a compatibility-first support policy: older macOS versions and Intel remain supported until required features or Apple frameworks make a newer platform necessary.</li>
       <li>Softens account-link status so unrelated unlinked public campaigns no longer make a healthy miner look blocked after priority filtering leaves nothing to mine.</li>
       <li>Shows account-link blocked only for attemptable campaigns that belong to the miner's effective priority list.</li>
       <li>Falls back to no eligible campaigns when a priority campaign is subscription-only and cannot be watched for progress.</li>
-      <li>Separates paid-subscription campaigns from the WebUI's Up Next list and labels their gated drops as requiring a Twitch subscription.</li>
-      <li>Hides the global-priorities toggle for single-miner setups and expands the native Miners workspace to the full available width.</li>
-      <li>Updates Twitch live-directory discovery and uses direct Spade watch heartbeats with automatic GQL fallback.</li>
-      <li>Restores PubSub subscriptions in bounded batches after reconnects.</li>
-      <li>Refreshes all server-confirmed progress in the active campaign after a verified drop advances.</li>
+      <li>Exposes paid-subscription gating through the dashboard API, removes fully gated campaigns from Up Next, and adds a dedicated Subscription required card with Needs Sub labels.</li>
+      <li>Hides the global-priorities toggle for single-miner setups, shares miner-count projections with the WebUI, and expands the native Miners workspace to the full available width.</li>
+      <li>Updates Twitch live-directory discovery and uses direct Spade watch heartbeats with automatic Twitch GQL fallback.</li>
+      <li>Separates desired PubSub topics from socket state, then restores subscriptions deterministically in bounded batches after reconnects.</li>
+      <li>Refreshes the active campaign's complete server-confirmed inventory after verified progress so parallel drops stay synchronized.</li>
       <li>Confirms priority mining behavior is unchanged: prioritised games can still be attempted before the external game account is linked.</li>
-      <li>Adds regression coverage for account-link status, subscription-gated WebUI state, PubSub replay batching, and heartbeat fallback behavior.</li>
+      <li>Cleans compiler warnings, aligns generated Xcode 26.6 metadata with project configuration, and keeps GitHub's language statistics focused on Swift.</li>
+      <li>Refreshes website copy and structured download metadata for the wider macOS support range.</li>
+      <li>Adds regression coverage for account-link status, subscription-gated WebUI state, dashboard projections, single-miner behavior, PubSub replay batching, heartbeat fallback, and campaign progress refreshes.</li>
       <li>Updates SwiftMiner to version 1.32.5 build 2026072010.</li>
     </ul>
     <h2>⚡ <a href="./1.32.4.html">Version 1.32.4</a></h2>

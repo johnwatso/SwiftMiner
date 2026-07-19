@@ -18,7 +18,7 @@ targets:
   SwiftMinerCore:
     type: library.static
     platform: macOS
-    deploymentTarget: "26.0"
+    deploymentTarget: "14.0"
     sources:
       - Sources/SwiftMinerCore
     settings:
@@ -30,7 +30,7 @@ targets:
   SwiftMiner:
     type: application
     platform: macOS
-    deploymentTarget: "26.0"
+    deploymentTarget: "14.0"
     sources:
       - path: Sources/SwiftMiner
         excludes:
@@ -70,7 +70,7 @@ targets:
         SWIFT_VERSION: "6.0"
         SWIFT_STRICT_CONCURRENCY: complete
         PRODUCT_BUNDLE_IDENTIFIER: com.swiftminer.app
-        MACOSX_DEPLOYMENT_TARGET: "26.0"
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
         MARKETING_VERSION: "1.32.5"
         CURRENT_PROJECT_VERSION: "2026072010"
         INFOPLIST_KEY_CFBundleDisplayName: SwiftMiner
@@ -89,7 +89,7 @@ targets:
   SwiftMinerService:
     type: library.static
     platform: macOS
-    deploymentTarget: "26.0"
+    deploymentTarget: "14.0"
     sources:
       - path: Sources/SwiftMinerService
         excludes:
@@ -106,7 +106,7 @@ targets:
   SwiftMinerServiceTool:
     type: tool
     platform: macOS
-    deploymentTarget: "26.0"
+    deploymentTarget: "14.0"
     sources:
       - path: Sources/SwiftMinerService/main.swift
     dependencies:
@@ -120,7 +120,7 @@ targets:
   SwiftMinerCoreTests:
     type: bundle.unit-test
     platform: macOS
-    deploymentTarget: "26.0"
+    deploymentTarget: "14.0"
     sources:
       - Tests
       - path: project.yml
@@ -144,7 +144,7 @@ targets:
   SparklePublisher:
     type: tool
     platform: macOS
-    deploymentTarget: "26.0"
+    deploymentTarget: "14.0"
     sources:
       - path: Tools/SparklePublisher
     settings:
@@ -152,7 +152,7 @@ targets:
         PRODUCT_NAME: SparklePublisher
         PRODUCT_BUNDLE_IDENTIFIER: com.swiftminer.sparklepublisher
         SWIFT_VERSION: "6.0"
-        MACOSX_DEPLOYMENT_TARGET: "26.0"
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
 
 schemes:
   SwiftMiner:
