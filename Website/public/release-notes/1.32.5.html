@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SwiftMiner 1.32.5 - Release Notes</title>
-  <meta name="description" content="Release notes for SwiftMiner 1.32.5, covering calmer account-link status handling for priority mining.">
+  <meta name="description" content="Release notes for SwiftMiner 1.32.5, covering clearer subscription status and more resilient Twitch Drops mining.">
   <link rel="canonical" href="https://swiftminer.app/release-notes/1.32.5.html">
   <meta name="robots" content="index, follow">
   <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
@@ -89,8 +89,8 @@
 <body>
   <main>
     <h1>SwiftMiner 1.32.5</h1>
-    <p class="meta">Version 1.32.5 · Build 2026070308</p>
-    <p class="intro">A focused status-polish update that keeps healthy miners from sounding blocked when Twitch simply has no mineable priority campaign for them.</p>
+    <p class="meta">Version 1.32.5 · Build 2026072009</p>
+    <p class="intro">Clearer status for subscription-gated campaigns, plus updated Twitch mining transports, queries, and reconnect behavior.</p>
 
     <section class="green">
       <h2><span class="badge" aria-hidden="true">🧘</span> Calmer Miner Status</h2>
@@ -99,6 +99,18 @@
         <li>Stops unrelated unlinked public campaigns from making a miner look account-blocked after its priority filters have already ruled those campaigns out.</li>
         <li>Reserves the account-link blocked state for attemptable priority campaigns that genuinely belong to the miner's active priority list.</li>
         <li>Falls back to no eligible campaigns when the only visible priority campaign is subscription-only and cannot be watched for progress.</li>
+        <li>Separates paid-subscription campaigns from the WebUI's Up Next list and labels their gated drops as requiring a Twitch subscription.</li>
+      </ul>
+    </section>
+
+    <section class="amber">
+      <h2><span class="badge" aria-hidden="true">⛏️</span> Mining Reliability</h2>
+      <p class="summary">SwiftMiner follows TwitchDropsMiner's latest proven transport and subscription behavior while keeping progress server-confirmed.</p>
+      <ul>
+        <li>Updates the Twitch live-directory persisted query used to find eligible streams.</li>
+        <li>Sends watch heartbeats directly through Spade first, with Twitch GQL retained as an automatic fallback.</li>
+        <li>Restores desired PubSub topics after reconnects and splits subscription changes into bounded batches.</li>
+        <li>Refreshes the active campaign's complete Twitch inventory after verified progress so parallel drops stay in sync without inventing local progress.</li>
       </ul>
     </section>
 
@@ -116,7 +128,8 @@
       <p class="summary">Regression tests cover the account-link cases that made this status feel too alarming.</p>
       <ul>
         <li>Adds tests for unrelated unlinked campaigns, prioritised unlinked campaigns, and subscription-only priority campaigns.</li>
-        <li>Prepared as SwiftMiner <strong>1.32.5</strong>, build <strong>2026070308</strong>.</li>
+        <li>Adds focused coverage for subscription-gated WebUI state, current Twitch query metadata, PubSub replay batching, and heartbeat fallback behavior.</li>
+        <li>Prepared as SwiftMiner <strong>1.32.5</strong>, build <strong>2026072009</strong>.</li>
       </ul>
     </section>
   </main>

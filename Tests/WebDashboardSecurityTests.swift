@@ -177,6 +177,13 @@ final class WebDashboardSecurityTests: XCTestCase {
         XCTAssertTrue(WebDashboardAssets.appJS.contains("startLoadingCopy()"))
     }
 
+    func testDashboardSeparatesSubscriptionRequiredCampaignsFromUpNext() {
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("CAMPAIGNS.filter(c => !c.requiresSubscription)"))
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("CAMPAIGNS.filter(c => c.requiresSubscription)"))
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("Paid Twitch sub required"))
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("subscriptionRequiredCard() + upNextCard(p)"))
+    }
+
     func testLocalLoginPageShowsOnlyUsernamePasswordForm() async throws {
         let mgr = try await openTempManager()
         defer { Task { await mgr.close() } }

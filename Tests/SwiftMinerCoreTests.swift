@@ -110,6 +110,38 @@ final class SwiftMinerCoreTests: XCTestCase {
         XCTAssertEqual(SpadeBeaconService.watchInterval, 59)
     }
 
+    func testDirectoryPageGameHashMatchesCurrentTwitchQuery() {
+        XCTAssertEqual(
+            GQLHashes.directoryPage_Game,
+            "86bcceb4e8b1a51256ff8eed8bd8aae4acacf80d737efe904f84f3aeadf8cafd"
+        )
+    }
+
+    func testPubSubTopicsAreSplitIntoBoundedBatches() {
+        let topics = (0..<45).map { "topic.\($0)" }
+        let batches = PubSubClient.topicBatches(topics)
+
+        XCTAssertEqual(batches.map(\.count), [20, 20, 5])
+        XCTAssertEqual(Set(batches.flatMap { $0 }), Set(topics))
+        XCTAssertTrue(batches.allSatisfy { $0.count <= PubSubClient.topicBatchSize })
+    }
+
+    func testPubSubReconnectReplaysDesiredTopicsAfterSocketStateReset() {
+        let desired: Set<String> = ["drop.1", "drop.2", "video.1"]
+
+        XCTAssertEqual(
+            PubSubClient.pendingTopicSubscriptions(
+                desired: desired,
+                submitted: ["drop.1", "video.1"]
+            ),
+            ["drop.2"]
+        )
+        XCTAssertEqual(
+            PubSubClient.pendingTopicSubscriptions(desired: desired, submitted: []),
+            ["drop.1", "drop.2", "video.1"]
+        )
+    }
+
     // MARK: - Errors
 
     func testErrorDescriptions() {

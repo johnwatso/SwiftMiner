@@ -203,6 +203,8 @@ final class DiscordAPIRoutesTests: XCTestCase {
                     endsAt: end,
                     dropCount: 4,
                     claimedDrops: 1,
+                    subscriptionRequiredDropCount: 3,
+                    requiresSubscription: true,
                     boxArtURL: "https://example.com/box.jpg"
                 )
             ]
@@ -219,6 +221,8 @@ final class DiscordAPIRoutesTests: XCTestCase {
         XCTAssertEqual(campaigns.first?["status"] as? String, "upcoming")
         XCTAssertEqual(campaigns.first?["dropCount"] as? Int, 4)
         XCTAssertEqual(campaigns.first?["claimedDrops"] as? Int, 1)
+        XCTAssertEqual(campaigns.first?["subscriptionRequiredDropCount"] as? Int, 3)
+        XCTAssertEqual(campaigns.first?["requiresSubscription"] as? Bool, true)
         XCTAssertEqual(campaigns.first?["boxArtURL"] as? String, "https://example.com/box.jpg")
     }
 

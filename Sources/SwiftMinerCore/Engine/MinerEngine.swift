@@ -654,9 +654,10 @@ public actor MinerEngine {
         extraMinutesWatched = 0
         lastProgressUpdateAt = Date()
 
-        if let progress = try? await dropsService.getOverallProgress() {
-            onProgressUpdate?(progress)
-        }
+        await refreshCampaignProgress(
+            campaignId: campaignId,
+            context: "PubSub progress"
+        )
     }
 
     private func handleDropClaim(_ event: DropClaimEvent) async {
@@ -1145,9 +1146,10 @@ public actor MinerEngine {
                                     extraMinutesWatched = 0
                                     lastProgressUpdateAt = Date()
 
-                                    if let progress = try? await dropsService.getOverallProgress() {
-                                        onProgressUpdate?(progress)
-                                    }
+                                    await refreshCampaignProgress(
+                                        campaignId: campaignId,
+                                        context: "current-session progress"
+                                    )
                                 }
                             } else {
                                 let inventoryService = await dropsService.getInventoryService()
@@ -2710,7 +2712,8 @@ public actor MinerEngine {
     private func acknowledgeInventoryProgress(
         _ snapshot: InventorySnapshot,
         campaignId: String,
-        context: String
+        context: String,
+        publishProgressUpdate: Bool = true
     ) async -> Bool {
         let mergedCampaigns = DropsService.mergeInventory(snapshot, into: allCampaigns)
         allCampaigns = mergedCampaigns
@@ -2756,12 +2759,42 @@ public actor MinerEngine {
             extraMinutesWatched = 0
             lastProgressUpdateAt = Date()
 
-            if let progress = try? await dropsService.getOverallProgress() {
+            if publishProgressUpdate,
+               let progress = try? await dropsService.getOverallProgress() {
                 onProgressUpdate?(progress)
             }
         }
 
         return acknowledged
+    }
+
+    /// Refresh all server-confirmed progress for the active campaign after any individual
+    /// progress signal advances. Twitch can advance multiple drops in parallel, so updating
+    /// only the drop named by PubSub/current-session GQL can leave the rest of the UI stale.
+    private func refreshCampaignProgress(campaignId: String?, context: String) async {
+        if let campaignId, !campaignId.isEmpty {
+            do {
+                let inventoryService = await dropsService.getInventoryService()
+                let snapshot = try await inventoryService.fetchInventory(forceRefresh: true)
+                onOperationalEvent?(.successfulPoll)
+                onOperationalEvent?(.inventoryRefresh)
+                _ = await acknowledgeInventoryProgress(
+                    snapshot,
+                    campaignId: campaignId,
+                    context: context,
+                    publishProgressUpdate: false
+                )
+            } catch {
+                emitIssue(error)
+                log("Could not refresh campaign-wide drop progress: \(error.localizedDescription)")
+            }
+        }
+
+        // Publish once after the merge. This also preserves the prior single-drop update
+        // behavior if no campaign ID is available or the forced refresh fails.
+        if let progress = try? await dropsService.getOverallProgress() {
+            onProgressUpdate?(progress)
+        }
     }
 
     private func findDrop(dropId: String, campaignId: String?) -> Drop? {

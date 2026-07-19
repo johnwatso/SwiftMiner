@@ -1247,11 +1247,10 @@ public actor TwitchAPIClient {
         _ = try await makeGraphQLRequest(request: request)
     }
 
-    /// Send Twitch's current watch event payload used to advance active drop sessions.
+    /// Send Twitch's GQL watch event payload used to advance active drop sessions.
     ///
-    /// TwitchDropsMiner currently uses this `sendSpadeEvents` mutation rather than only
-    /// POSTing to the legacy Spade endpoint. The payload is gzip-compressed JSON, then
-    /// base64 encoded inside the GraphQL input.
+    /// This is retained as a fallback when posting directly to Spade fails. The payload
+    /// is gzip-compressed JSON, then base64 encoded inside the GraphQL input.
     public func sendSpadeEvents(
         channelLogin: String,
         channelId: String,

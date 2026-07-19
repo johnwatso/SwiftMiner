@@ -299,7 +299,17 @@ public init(
 
         do {
             do {
-                // Current TwitchDropsMiner path: send the watch event through GQL.
+                // Direct Spade is TwitchDropsMiner's current primary watch transport.
+                try await spadeBeacon.sendBeacon(
+                    channelLogin: session.channelName,
+                    channelId:    session.channelId,
+                    broadcastId:  session.broadcastId ?? "0",
+                    userId:       userId
+                )
+                session.lastHeartbeatTransport = "Spade"
+            } catch {
+                // Retain Twitch's GQL mutation as a fallback if the direct endpoint is
+                // transiently unavailable or rejects the beacon.
                 try await apiClient.sendSpadeEvents(
                     channelLogin: session.channelName,
                     channelId: session.channelId,
@@ -308,17 +318,7 @@ public init(
                     gameName: session.gameName,
                     gameId: session.gameId
                 )
-                session.lastHeartbeatTransport = "Twitch GQL"
-            } catch {
-                // Legacy Spade endpoint fallback. Twitch may still accept it even when it
-                // doesn't advance Drops, but it's useful as a backup if GQL is transiently down.
-                try await spadeBeacon.sendBeacon(
-                    channelLogin: session.channelName,
-                    channelId:    session.channelId,
-                    broadcastId:  session.broadcastId ?? "0",
-                    userId:       userId
-                )
-                session.lastHeartbeatTransport = "legacy Spade"
+                session.lastHeartbeatTransport = "Twitch GQL fallback"
             }
 
             // Update session stats

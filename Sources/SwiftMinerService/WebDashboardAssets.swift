@@ -326,6 +326,10 @@ enum WebDashboardAssets {
         .campaign-row .title { font-size: 14px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .campaign-row .details { font-size: 12px; color: var(--muted); margin-top: 3px; }
         .campaign-row .boxart { width: 42px; height: 56px; border-radius: 8px; }
+        .campaign-gate {
+          flex: none; padding: 5px 9px; border-radius: 999px; font-size: 11px; font-weight: 700;
+          color: #ff7ac8; background: rgba(255, 55, 165, 0.11); border: 1px solid rgba(255, 55, 165, 0.28);
+        }
         .drop { display: flex; align-items: center; gap: 11px; padding: 8px 0; border-top: 1px solid var(--glass-stroke); }
         .drop:first-of-type { border-top: none; padding-top: 0; }
         .drop .icon { width: 34px; height: 45px; flex: none; border-radius: 8px; object-fit: cover;
@@ -921,23 +925,45 @@ enum WebDashboardAssets {
     }
 
     function upNextCard(p) {
-      const campaigns = CAMPAIGNS.slice(0, 6);
+      const campaigns = CAMPAIGNS.filter(c => !c.requiresSubscription).slice(0, 6);
       if (!campaigns.length) return '';
       const accountId = p && p.account && p.account.twitchAccountId;
       let rows = '';
       for (const c of campaigns) {
         const active = c.status === 'available';
         const when = active ? endsIn(c.endsAt) : dateLabel(c.startsAt, 'starts');
+        const gatedCount = Number(c.subscriptionRequiredDropCount || 0);
+        const gatedDetail = gatedCount ? ` · ${gatedCount} ${gatedCount === 1 ? 'drop needs' : 'drops need'} sub` : '';
         rows += `<div class="campaign-row">
           <img class="boxart" alt="" data-game="${esc(c.game)}" data-art="${esc(c.boxArtURL || '')}">
           <div class="copy">
             <div class="title">${esc(c.game)}</div>
-            <div class="details">${esc(c.dropCount || 0)} drops${when ? ' · ' + esc(when) : ''}</div>
+            <div class="details">${esc(c.dropCount || 0)} drops${gatedDetail}${when ? ' · ' + esc(when) : ''}</div>
           </div>
           <button class="btn-secondary campaign-priority" data-game="${esc(c.game)}" ${accountId ? '' : 'disabled'}>${personal.some(g => g.toLowerCase() === String(c.game || '').toLowerCase()) ? 'Prioritised' : 'Prioritise'}</button>
         </div>`;
       }
       return `<div class="card"><div class="label">Up next</div><div class="campaign-list">${rows}</div>${accountId ? '' : '<div class="muted" style="font-size:12px;margin-top:10px">Link Twitch before setting priorities.</div>'}</div>`;
+    }
+
+    function subscriptionRequiredCard() {
+      const campaigns = CAMPAIGNS.filter(c => c.requiresSubscription).slice(0, 6);
+      if (!campaigns.length) return '';
+      let rows = '';
+      for (const c of campaigns) {
+        const active = c.status === 'available';
+        const when = active ? endsIn(c.endsAt) : dateLabel(c.startsAt, 'starts');
+        const gatedCount = Number(c.subscriptionRequiredDropCount || c.dropCount || 0);
+        rows += `<div class="campaign-row">
+          <img class="boxart" alt="" data-game="${esc(c.game)}" data-art="${esc(c.boxArtURL || '')}">
+          <div class="copy">
+            <div class="title">${esc(c.game)}</div>
+            <div class="details">${gatedCount} ${gatedCount === 1 ? 'drop' : 'drops'} · Paid Twitch sub required${when ? ' · ' + esc(when) : ''}</div>
+          </div>
+          <span class="campaign-gate">Needs Sub</span>
+        </div>`;
+      }
+      return `<div class="card"><div class="label">Subscription required</div><div class="campaign-list">${rows}</div></div>`;
     }
 
     function dropsCard(p) {
@@ -976,7 +1002,7 @@ enum WebDashboardAssets {
       }
       personal = (p.personalPriorityGames || []).slice();
       includeGlobalPriorities = p.includesGlobalPriorityGames !== false;
-      $('app').innerHTML = operatorBackCard(p) + heroStateCard(p) + statsRow(p) + progressCard(p) + activationCard(p) + issuesCard(p) + upNextCard(p) + globalCard(p) + personalCard() + dropsCard(p);
+      $('app').innerHTML = operatorBackCard(p) + heroStateCard(p) + statsRow(p) + progressCard(p) + activationCard(p) + issuesCard(p) + subscriptionRequiredCard() + upNextCard(p) + globalCard(p) + personalCard() + dropsCard(p);
       hydrateArt();
       wireActivation();
       wireOperatorBack();

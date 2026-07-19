@@ -100,10 +100,14 @@ public actor PubSubClient: NSObject {
     private let url = URL(string: "wss://pubsub-edge.twitch.tv/v1")!
     private var webSocketTask: URLSessionWebSocketTask?
     private var isConnected = false
+    /// Topics the caller wants to remain subscribed to across socket reconnects.
     private var activeTopics: Set<String> = []
+    /// Topics submitted on the current socket. This is cleared whenever the socket changes.
+    private var submittedTopics: Set<String> = []
     private var accessToken: String?
     
     private let maxTopicsPerConnection = 50
+    static let topicBatchSize = 20
     private let pingInterval: TimeInterval = 180 // 3 minutes
     private let pongTimeout: TimeInterval = 10 // 10 seconds
     
@@ -170,6 +174,22 @@ public actor PubSubClient: NSObject {
         startListening()
         startPingLoop()
 
+        // A caller may reconnect this client without rebuilding its desired topic list.
+        do {
+            try await submitPendingSubscriptions()
+        } catch {
+            pingTask?.cancel()
+            pingTask = nil
+            listenTask?.cancel()
+            listenTask = nil
+            webSocketTask?.cancel(with: .goingAway, reason: nil)
+            webSocketTask = nil
+            isConnected = false
+            submittedTopics.removeAll()
+            onConnectionStateChange?(false)
+            throw error
+        }
+
         log("PubSub connected")
     }
 
@@ -187,6 +207,7 @@ public actor PubSubClient: NSObject {
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
         isConnected = false
+        submittedTopics.removeAll()
 
         onConnectionStateChange?(false)
         log("PubSub disconnected")
@@ -200,51 +221,60 @@ public actor PubSubClient: NSObject {
             throw PubSubError.notConnected
         }
 
-        // Filter out already active topics
-        let newTopics = topics.filter { !activeTopics.contains($0) }
-        guard !newTopics.isEmpty else { return }
+        let requestedTopics = Set(topics)
+        let newTopics = requestedTopics.subtracting(activeTopics)
 
         // Check topic limits
         if activeTopics.count + newTopics.count > maxTopicsPerConnection {
             throw PubSubError.tooManyTopics
         }
 
-        let nonce = UUID().uuidString
-        let data: [String: AnyJSONValue] = [
-            "topics": .array(newTopics.map { .string($0) }),
-            "auth_token": .string(accessToken ?? "")
-        ]
-
-        let message = PubSubMessage(type: .listen, nonce: nonce, data: data)
-        try await sendMessage(message)
-
-        // Add to active topics
+        // Record intent before sending. If a send fails, these topics remain queued and
+        // will be replayed on the next socket instead of being silently lost.
         activeTopics.formUnion(newTopics)
-        log("[PubSub] Subscribed to topics: \(newTopics.joined(separator: ", "))")
+        try await submitPendingSubscriptions()
     }
 
     /// Unsubscribe from topics
     public func unlisten(from topics: [String]) async throws {
-        guard isConnected else { throw PubSubError.notConnected }
+        let requestedTopics = Set(topics)
+        activeTopics.subtract(requestedTopics)
 
-        let nonce = UUID().uuidString
-        let data: [String: AnyJSONValue] = [
-            "topics": .array(topics.map { .string($0) })
-        ]
+        let topicsOnCurrentSocket = requestedTopics.intersection(submittedTopics)
+        guard !topicsOnCurrentSocket.isEmpty else { return }
 
-        let message = PubSubMessage(type: .unlisten, nonce: nonce, data: data)
-        try await sendMessage(message)
-
-        // Remove from active topics
-        for topic in topics {
-            activeTopics.remove(topic)
+        guard isConnected else {
+            submittedTopics.subtract(topicsOnCurrentSocket)
+            return
         }
-        log("[PubSub] Unsubscribed from topics: \(topics.joined(separator: ", "))")
+
+        for batch in Self.topicBatches(Array(topicsOnCurrentSocket)) {
+            try await sendMessage(topicMessage(type: .unlisten, topics: batch))
+            submittedTopics.subtract(batch)
+            log("Unsubscribed from topics: \(batch.joined(separator: ", "))")
+        }
     }
     
     /// Get currently active topics
     public var currentTopics: [String] {
         Array(activeTopics)
+    }
+
+    /// Twitch permits 50 topics per connection, but LISTEN/UNLISTEN messages are kept
+    /// smaller and deterministic so reconnect restoration cannot exceed frame limits.
+    static func topicBatches(_ topics: [String], batchSize: Int = topicBatchSize) -> [[String]] {
+        guard batchSize > 0 else { return [] }
+        let ordered = Array(Set(topics)).sorted()
+        return stride(from: 0, to: ordered.count, by: batchSize).map { start in
+            Array(ordered[start..<min(start + batchSize, ordered.count)])
+        }
+    }
+
+    static func pendingTopicSubscriptions(
+        desired: Set<String>,
+        submitted: Set<String>
+    ) -> [String] {
+        Array(desired.subtracting(submitted)).sorted()
     }
     
     // MARK: - Private Methods
@@ -263,6 +293,27 @@ public actor PubSubClient: NSObject {
             try await webSocketTask.send(.string(string))
         } catch {
             throw PubSubError.messageEncodingFailed(error)
+        }
+    }
+
+    private func topicMessage(type: PubSubMessageType, topics: [String]) -> PubSubMessage {
+        let data: [String: AnyJSONValue] = [
+            "topics": .array(topics.map { .string($0) }),
+            "auth_token": .string(accessToken ?? "")
+        ]
+        return PubSubMessage(type: type, nonce: UUID().uuidString, data: data)
+    }
+
+    private func submitPendingSubscriptions() async throws {
+        let pending = Self.pendingTopicSubscriptions(
+            desired: activeTopics,
+            submitted: submittedTopics
+        )
+
+        for batch in Self.topicBatches(pending) {
+            try await sendMessage(topicMessage(type: .listen, topics: batch))
+            submittedTopics.formUnion(batch)
+            log("Subscribed to topics: \(batch.joined(separator: ", "))")
         }
     }
     
@@ -372,6 +423,7 @@ public actor PubSubClient: NSObject {
         guard isConnected else { return }
         
         isConnected = false
+        submittedTopics.removeAll()
         onConnectionStateChange?(false)
         
         // Attempt reconnect with exponential backoff
@@ -395,6 +447,7 @@ public actor PubSubClient: NSObject {
 
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
+        submittedTopics.removeAll()
 
         // Wait before reconnecting
         try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
@@ -410,10 +463,17 @@ public actor PubSubClient: NSObject {
         startListening()
         startPingLoop()
 
-        // Re-subscribe to topics
-        let topics = Array(activeTopics)
-        if !topics.isEmpty {
-            try? await listen(to: topics)
+        // Replay desired topics on the new socket. Do not route through listen(to:),
+        // because those topics are intentionally already present in activeTopics.
+        do {
+            try await submitPendingSubscriptions()
+        } catch {
+            log("Could not restore PubSub topics after reconnect: \(error.localizedDescription)")
+            isConnected = false
+            submittedTopics.removeAll()
+            onConnectionStateChange?(false)
+            Task { await self.reconnectWithBackoff() }
+            return
         }
 
         reconnectAttempt = 0

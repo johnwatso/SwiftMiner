@@ -157,6 +157,8 @@ public struct WebCampaignSummary: Codable, Sendable {
     public let endsAt: Date
     public let dropCount: Int
     public let claimedDrops: Int
+    public let subscriptionRequiredDropCount: Int
+    public let requiresSubscription: Bool
     public let boxArtURL: String?
 
     public init(
@@ -168,6 +170,8 @@ public struct WebCampaignSummary: Codable, Sendable {
         endsAt: Date,
         dropCount: Int,
         claimedDrops: Int,
+        subscriptionRequiredDropCount: Int = 0,
+        requiresSubscription: Bool = false,
         boxArtURL: String?
     ) {
         self.campaignId = campaignId
@@ -178,6 +182,8 @@ public struct WebCampaignSummary: Codable, Sendable {
         self.endsAt = endsAt
         self.dropCount = dropCount
         self.claimedDrops = claimedDrops
+        self.subscriptionRequiredDropCount = subscriptionRequiredDropCount
+        self.requiresSubscription = requiresSubscription
         self.boxArtURL = boxArtURL
     }
 }
