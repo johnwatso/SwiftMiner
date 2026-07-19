@@ -80,6 +80,7 @@ public actor DiscordProjectionBuilder {
         guard await userExists(discordUserId: discordUserId) else {
             return nil
         }
+        let configuredMinerCount = await manager.allTwitchAccountIds().count
 
         let account = await fetchAccount(discordUserId: discordUserId)
         let issues = await fetchIssues(discordUserId: discordUserId)
@@ -145,6 +146,7 @@ public actor DiscordProjectionBuilder {
             priorityGames: priorityGames,
             personalPriorityGames: personalPriorityGames,
             includesGlobalPriorityGames: includesGlobalPriorityGames,
+            configuredMinerCount: configuredMinerCount,
             diagnostics: diagnostics
         )
     }
@@ -156,6 +158,7 @@ public actor DiscordProjectionBuilder {
         guard let acct = await manager.twitchAccount(twitchId: twitchId) else {
             return nil
         }
+        let configuredMinerCount = await manager.allTwitchAccountIds().count
         let ownerDiscordId = acct.ownerDiscordId
 
         let account = DiscordUserProjection.Account(twitchAccountId: twitchId, username: acct.username)
@@ -194,6 +197,7 @@ public actor DiscordProjectionBuilder {
             priorityGames: priorityGames,
             personalPriorityGames: personalPriorityGames,
             includesGlobalPriorityGames: includesGlobalPriorityGames,
+            configuredMinerCount: configuredMinerCount,
             diagnostics: diagnostics
         )
     }

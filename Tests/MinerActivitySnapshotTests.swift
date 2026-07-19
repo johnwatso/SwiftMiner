@@ -6,6 +6,12 @@ import SwiftMinerService
 @MainActor
 final class MinerActivitySnapshotTests: XCTestCase {
 
+    func testGlobalPriorityToggleOnlyAppearsForMultipleMiners() {
+        XCTAssertFalse(MinersOverviewView.shouldShowGlobalPriorityToggle(minerCount: 0))
+        XCTAssertFalse(MinersOverviewView.shouldShowGlobalPriorityToggle(minerCount: 1))
+        XCTAssertTrue(MinersOverviewView.shouldShowGlobalPriorityToggle(minerCount: 2))
+    }
+
     private func makeMiner(
         status: MinerManager.MinerStatus = .idle,
         campaigns: [Campaign],

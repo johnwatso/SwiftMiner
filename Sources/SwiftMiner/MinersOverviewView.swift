@@ -26,7 +26,11 @@ struct MinersOverviewView: View {
     }
 
     private var hasMultipleMiners: Bool {
-        miners.count > 1
+        Self.shouldShowGlobalPriorityToggle(minerCount: miners.count)
+    }
+
+    static func shouldShowGlobalPriorityToggle(minerCount: Int) -> Bool {
+        minerCount > 1
     }
 
     var body: some View {
@@ -163,7 +167,6 @@ struct MinersOverviewView: View {
 
                     pendingItemsSection(for: miner, campaigns: activeCampaigns)
                 }
-                .frame(maxWidth: 1180, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .padding(.horizontal, 28)
                 .padding(.vertical, 24)
@@ -422,19 +425,21 @@ struct MinersOverviewView: View {
                 Text("Priorities")
                     .font(.headline)
                 Spacer()
-                Toggle("Use global priorities", isOn: Binding(
-                    get: { settings.includesGlobalPriorityGames(forAccountId: miner.accountId) },
-                    set: { include in
-                        settings.setIncludesGlobalPriorityGames(include, forAccountId: miner.accountId)
-                        let updated = settings.priorityGames(forAccountId: miner.accountId)
-                        navigation.minerManager.updatePriorityGames(updated, forMinerId: miner.id)
-                        if miner.isRunning {
-                            Task { await navigation.minerManager.forceRefreshMiner(minerId: miner.id) }
+                if hasMultipleMiners {
+                    Toggle("Use global priorities", isOn: Binding(
+                        get: { settings.includesGlobalPriorityGames(forAccountId: miner.accountId) },
+                        set: { include in
+                            settings.setIncludesGlobalPriorityGames(include, forAccountId: miner.accountId)
+                            let updated = settings.priorityGames(forAccountId: miner.accountId)
+                            navigation.minerManager.updatePriorityGames(updated, forMinerId: miner.id)
+                            if miner.isRunning {
+                                Task { await navigation.minerManager.forceRefreshMiner(minerId: miner.id) }
+                            }
                         }
-                    }
-                ))
-                .toggleStyle(.switch)
-                .controlSize(.small)
+                    ))
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                }
             }
 
             Text(includesGlobal

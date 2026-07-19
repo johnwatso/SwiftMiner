@@ -263,6 +263,8 @@ final class DiscordAPIRoutesTests: XCTestCase {
         XCTAssertEqual(discordProjection.recentCompletedCampaigns.map(\.campaignId), twitchProjection.recentCompletedCampaigns.map(\.campaignId))
         XCTAssertEqual(discordProjection.priorityGames, twitchProjection.priorityGames)
         XCTAssertEqual(discordProjection.personalPriorityGames, twitchProjection.personalPriorityGames)
+        XCTAssertEqual(discordProjection.configuredMinerCount, 1)
+        XCTAssertEqual(twitchProjection.configuredMinerCount, 1)
     }
 }
 

@@ -184,6 +184,13 @@ final class WebDashboardSecurityTests: XCTestCase {
         XCTAssertTrue(WebDashboardAssets.appJS.contains("subscriptionRequiredCard() + upNextCard(p)"))
     }
 
+    func testDashboardHidesGlobalPriorityToggleForSingleMiner() {
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("function hasMultipleConfiguredMiners(p)"))
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("Number(p && p.configuredMinerCount || 0) > 1"))
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("hasMultipleConfiguredMiners(p) ?"))
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("personalCard(p)"))
+    }
+
     func testLocalLoginPageShowsOnlyUsernamePasswordForm() async throws {
         let mgr = try await openTempManager()
         defer { Task { await mgr.close() } }
