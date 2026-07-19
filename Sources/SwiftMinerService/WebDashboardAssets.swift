@@ -888,11 +888,23 @@ enum WebDashboardAssets {
         <div class="muted" style="font-size:12px;margin-top:10px">Set by the operator for every miner. Your own list below runs first.</div></div>`;
     }
 
-    function personalCard() {
+    function hasMultipleConfiguredMiners(p) {
+      return Number(p && p.configuredMinerCount || 0) > 1;
+    }
+
+    function personalCard(p) {
       const globalChecked = includeGlobalPriorities ? 'checked' : '';
       const helper = includeGlobalPriorities
         ? 'Your list runs first, then the operator list fills in behind it.'
         : "Only this miner's list will be used.";
+      const globalToggle = hasMultipleConfiguredMiners(p) ? `
+        <label class="toggle-row">
+          <span class="toggle-copy">
+            <span class="toggle-title">Use global priorities</span>
+            <span class="muted" style="display:block;font-size:12px;margin-top:2px">${helper}</span>
+          </span>
+          <input id="globaltoggle" type="checkbox" ${globalChecked}>
+        </label>` : '';
       let items = '';
       personal.forEach((g, i) => {
         items += `
@@ -905,13 +917,7 @@ enum WebDashboardAssets {
       });
       return `<div class="card">
         <div class="label">Your priorities</div>
-        <label class="toggle-row">
-          <span class="toggle-copy">
-            <span class="toggle-title">Use global priorities</span>
-            <span class="muted" style="display:block;font-size:12px;margin-top:2px">${helper}</span>
-          </span>
-          <input id="globaltoggle" type="checkbox" ${globalChecked}>
-        </label>
+        ${globalToggle}
         <div class="priorities-flow" id="priorities-flow">
           ${items || '<span class="muted" style="font-size:13px">No personal priorities yet — add a game below.</span>'}
         </div>
@@ -1002,7 +1008,7 @@ enum WebDashboardAssets {
       }
       personal = (p.personalPriorityGames || []).slice();
       includeGlobalPriorities = p.includesGlobalPriorityGames !== false;
-      $('app').innerHTML = operatorBackCard(p) + heroStateCard(p) + statsRow(p) + progressCard(p) + activationCard(p) + issuesCard(p) + subscriptionRequiredCard() + upNextCard(p) + globalCard(p) + personalCard() + dropsCard(p);
+      $('app').innerHTML = operatorBackCard(p) + heroStateCard(p) + statsRow(p) + progressCard(p) + activationCard(p) + issuesCard(p) + subscriptionRequiredCard() + upNextCard(p) + globalCard(p) + personalCard(p) + dropsCard(p);
       hydrateArt();
       wireActivation();
       wireOperatorBack();
@@ -1144,7 +1150,7 @@ enum WebDashboardAssets {
     }
 
     function refreshPersonalDOM(message, cls) {
-      const cards = personalCard();
+      const cards = personalCard(PROJ);
       const wrapper = document.createElement('div');
       wrapper.innerHTML = cards;
       const old = $('priorities-flow') && $('priorities-flow').closest('.card');

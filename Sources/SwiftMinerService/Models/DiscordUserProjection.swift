@@ -17,6 +17,8 @@ public struct DiscordUserProjection: Codable, Sendable {
     public let personalPriorityGames: [String]
     /// Whether the operator-level priority list is appended after personal priorities.
     public let includesGlobalPriorityGames: Bool
+    /// Total configured miners on this SwiftMiner host. Used to hide multi-miner-only controls.
+    public let configuredMinerCount: Int
     /// Live health details for browser triage. Nil when the miner is not available.
     public let diagnostics: Diagnostics?
 
@@ -32,6 +34,7 @@ public struct DiscordUserProjection: Codable, Sendable {
         priorityGames: [String] = [],
         personalPriorityGames: [String] = [],
         includesGlobalPriorityGames: Bool = true,
+        configuredMinerCount: Int = 1,
         diagnostics: Diagnostics? = nil
     ) {
         self.discordUserId = discordUserId
@@ -45,6 +48,7 @@ public struct DiscordUserProjection: Codable, Sendable {
         self.priorityGames = priorityGames
         self.personalPriorityGames = personalPriorityGames
         self.includesGlobalPriorityGames = includesGlobalPriorityGames
+        self.configuredMinerCount = configuredMinerCount
         self.diagnostics = diagnostics
     }
 
