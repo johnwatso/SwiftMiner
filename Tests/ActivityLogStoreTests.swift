@@ -99,7 +99,7 @@ final class ActivityLogStoreTests: XCTestCase {
             level: .info
         ))
         XCTAssertFalse(NavigationModel.shouldRecordActivityLogMessage(
-            "Watch heartbeat sent for aspen via Twitch GQL",
+            "Watch heartbeat sent for aspen via Spade",
             level: .info
         ))
 

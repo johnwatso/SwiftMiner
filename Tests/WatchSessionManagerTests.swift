@@ -79,11 +79,48 @@ final class WatchSessionManagerTests: XCTestCase {
         
         let watchTime = await manager.totalWatchTime
         XCTAssertGreaterThan(watchTime, 0)
+        XCTAssertEqual(session.lastHeartbeatTransport, "Spade")
         
         await manager.stopWatching()
         
         let isWatchingAfterStop = await manager.isWatching
         XCTAssertEqual(isWatchingAfterStop, false)
+    }
+
+    func testHeartbeatFallsBackToGQLWhenDirectSpadeFails() async throws {
+        let playbackTokenJson = #"{"data":{"streamPlaybackAccessToken":{"value":"test_token","signature":"test_sig"}}}"#
+
+        MockURLProtocol.requestHandler = { request in
+            let url = request.url?.absoluteString ?? ""
+            let response: (Int) -> HTTPURLResponse = { status in
+                HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!
+            }
+
+            if url.contains("twitch.tv/testchannel") {
+                let html = #"<script>var spade_url = "https://spade.twitch.tv/track";</script>"#
+                return (response(200), html.data(using: .utf8)!)
+            }
+            if url.contains("spade.twitch.tv/track") {
+                return (response(500), Data())
+            }
+            if let body = request.httpBody,
+               let rawBody = String(data: body, encoding: .utf8),
+               rawBody.contains("SendSpadeEvents") {
+                let payload = #"{"data":{"sendSpadeEvents":{"statusCode":204}}}"#
+                return (response(200), payload.data(using: .utf8)!)
+            }
+            return (response(200), playbackTokenJson.data(using: .utf8)!)
+        }
+
+        let channel = Channel(id: "ch123", login: "testchannel", displayName: "TestChannel")
+        let session = try await manager.startWatching(channel: channel, campaignId: "camp456")
+
+        try await Task.sleep(nanoseconds: 200_000_000)
+
+        XCTAssertEqual(session.lastHeartbeatTransport, "Twitch GQL fallback")
+        let watchTime = await manager.totalWatchTime
+        XCTAssertGreaterThan(watchTime, 0)
+        await manager.stopWatching()
     }
     
     func testStartWatchingFailsIfAlreadyWatching() async throws {

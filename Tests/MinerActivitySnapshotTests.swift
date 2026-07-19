@@ -1,6 +1,7 @@
 import XCTest
 @testable import SwiftMinerCore
 @testable import SwiftMiner
+import SwiftMinerService
 
 @MainActor
 final class MinerActivitySnapshotTests: XCTestCase {
@@ -380,5 +381,26 @@ final class MinerActivitySnapshotTests: XCTestCase {
 
         XCTAssertEqual(snapshot.statusText, "No Recent Activity")
         XCTAssertEqual(snapshot.now.title, "No Recent Activity")
+    }
+
+    func testWebCampaignSummaryMarksSubscriptionOnlyCampaignAsGated() {
+        let now = Date()
+        let campaign = Campaign(
+            id: "subscription-only",
+            name: "Subscription Campaign",
+            game: Game(id: "game", name: "Test Game"),
+            status: .active,
+            startDate: now.addingTimeInterval(-60),
+            endDate: now.addingTimeInterval(3_600),
+            drops: [
+                Drop(id: "sub-drop", name: "Subscriber Reward", requiredMinutes: 0, requiredSubs: 1)
+            ],
+            isAccountConnected: true
+        )
+
+        let summary = NavigationModel.webCampaignSummary(from: campaign)
+
+        XCTAssertTrue(summary.requiresSubscription)
+        XCTAssertEqual(summary.subscriptionRequiredDropCount, 1)
     }
 }

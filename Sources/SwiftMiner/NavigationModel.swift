@@ -814,8 +814,9 @@ public final class NavigationModel {
         Settings.shared.priorityGames(forAccountId: miner.accountId)
     }
 
-    private static func webCampaignSummary(from campaign: Campaign) -> WebCampaignSummary {
-        WebCampaignSummary(
+    static func webCampaignSummary(from campaign: Campaign) -> WebCampaignSummary {
+        let subscriptionRequiredDrops = campaign.subscriptionRequiredDrops
+        return WebCampaignSummary(
             campaignId: campaign.id,
             campaignName: campaign.name,
             game: campaign.game.name,
@@ -824,6 +825,8 @@ public final class NavigationModel {
             endsAt: campaign.endDate,
             dropCount: campaign.drops.count,
             claimedDrops: campaign.drops.filter(\.isClaimed).count,
+            subscriptionRequiredDropCount: subscriptionRequiredDrops.count,
+            requiresSubscription: !subscriptionRequiredDrops.isEmpty && campaign.eligibleDrops.isEmpty,
             boxArtURL: campaign.game.boxArtURL?.absoluteString
         )
     }
