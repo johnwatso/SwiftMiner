@@ -153,7 +153,7 @@ Release builds support both Apple Silicon (`arm64`) and Intel (`x86_64`).
 Release builds are signed and notarized through ShipHook, and SwiftMiner includes Sparkle support for update prompts, automatic background checks, and unattended updates when macOS allows them.
 
 > [!NOTE]
-> Intel is fully supported in current versions. However, since Apple is dropping Intel support starting in macOS 27, SwiftMiner may also drop Intel support in a future release.
+> SwiftMiner aims to support both Apple Silicon and Intel Macs, along with the oldest practical macOS version. Support will only be reduced when a required SwiftMiner feature or underlying Apple framework depends on a newer OS or architecture.
 
 ## Releases vs. Development Builds
 
