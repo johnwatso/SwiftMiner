@@ -310,7 +310,7 @@ public extension CampaignViewData {
 
     /// True when there are unclaimed drops in this campaign that are earnable by mining.
     /// Returns false if all drops are claimed, or if the remaining drops require subscriptions with no watch progress.
-    public var hasObtainableRewards: Bool {
+    var hasObtainableRewards: Bool {
         if totalDrops > 0 && dropsClaimed >= totalDrops {
             return false
         }
@@ -329,18 +329,18 @@ public extension CampaignViewData {
     }
 
     /// True when at least one unclaimed reward requires a paid Twitch subscription.
-    public var hasSubscriptionRequiredRewards: Bool {
+    var hasSubscriptionRequiredRewards: Bool {
         drops.contains { $0.isSubscriptionRequired && !$0.isClaimed }
     }
 
     /// True when every remaining unclaimed reward is sub-gated, so watching cannot
     /// make progress until the Twitch subscription requirement is satisfied.
-    public var hasOnlySubscriptionRequiredRewards: Bool {
+    var hasOnlySubscriptionRequiredRewards: Bool {
         let unclaimed = drops.filter { !$0.isClaimed }
         return !unclaimed.isEmpty && unclaimed.allSatisfy(\.isSubscriptionRequired)
     }
 
-    public var subscriptionRequiredRewardNames: [String] {
+    var subscriptionRequiredRewardNames: [String] {
         drops
             .filter { $0.isSubscriptionRequired && !$0.isClaimed }
             .map(\.name)
