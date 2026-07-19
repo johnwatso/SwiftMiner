@@ -47,7 +47,7 @@
   <main>
     <h1>SwiftMiner Release Notes</h1>
     <p class="meta">Recent Sparkle update history</p>
-    <h2>🖥️ <a href="./1.32.5.html">Version 1.32.5</a></h2>
+    <h2>🖥️ <a href="./1.33.html">Version 1.33</a></h2>
     <ul>
       <li>Lowers SwiftMiner's minimum requirement to macOS 14.0 across the app, libraries, tools, publisher, and tests while retaining native Apple Silicon and Intel release support.</li>
       <li>Keeps newer macOS 15 and macOS 26 visual features behind availability checks so Sonoma receives the established material-based appearance.</li>
@@ -64,7 +64,16 @@
       <li>Cleans compiler warnings, aligns generated Xcode 26.6 metadata with project configuration, and keeps GitHub's language statistics focused on Swift.</li>
       <li>Refreshes website copy and structured download metadata for the wider macOS support range.</li>
       <li>Adds regression coverage for account-link status, subscription-gated WebUI state, dashboard projections, single-miner behavior, PubSub replay batching, heartbeat fallback, and campaign progress refreshes.</li>
-      <li>Updates SwiftMiner to version 1.32.5 build 2026072010.</li>
+      <li>Updates SwiftMiner to version 1.33 build 2026072010.</li>
+    </ul>
+    <h2>🧘 <a href="./1.32.5.html">Version 1.32.5</a></h2>
+    <ul>
+      <li>Softens account-link status so unrelated unlinked public campaigns no longer make a healthy miner look blocked after priority filtering leaves nothing to mine.</li>
+      <li>Shows account-link blocked only for attemptable campaigns that belong to the miner's effective priority list.</li>
+      <li>Falls back to no eligible campaigns when a priority campaign is subscription-only and cannot be watched for progress.</li>
+      <li>Confirms priority mining behavior is unchanged: prioritised games can still be attempted before the external game account is linked.</li>
+      <li>Adds regression coverage for unrelated unlinked campaigns, prioritised unlinked campaigns, and subscription-only priority campaigns.</li>
+      <li>Updates SwiftMiner to version 1.32.5 build 2026070308.</li>
     </ul>
     <h2>⚡ <a href="./1.32.4.html">Version 1.32.4</a></h2>
     <ul>
