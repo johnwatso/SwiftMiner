@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Prepare SwiftMiner 1.33 release - Release Notes</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      margin: 0;
+      padding: 32px 20px 48px;
+      font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f4f6f8;
+      color: #0f1720;
+    }
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 28px;
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.86);
+      box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
+    }
+    h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
+    .meta { margin: 0 0 24px; color: #52606d; font-size: 14px; }
+    p { margin: 0 0 16px; }
+    a { color: #0a67a3; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #0b1015; color: #edf2f7; }
+      main {
+        background: rgba(15, 23, 32, 0.88);
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+      }
+      .meta { color: #9fb0c2; }
+      a { color: #73c3ff; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Prepare SwiftMiner 1.33 release</h1>
+    <p class="meta">Version 1.33</p>
+    <p>Prepare SwiftMiner 1.33 release</p>
+<p>Release summary since SwiftMiner 1.32.5:</p>
+<p>- Platform compatibility: lower every app, library, tool, publisher, and test deployment target to macOS 14 while retaining native Apple Silicon and Intel support. Keep macOS 15 Mesh Gradient and macOS 26 Liquid Glass features availability-gated so Sonoma uses established visual fallbacks. Document the compatibility-first policy in the README and website: older macOS versions and Intel remain supported until required app features or Apple frameworks make a newer target necessary.</p>
+<p>- Campaign and WebUI status: restrict account-link blocking to attemptable priority campaigns, treat subscription-only priority work as ineligible when progress cannot be earned, project subscription requirements through the dashboard API, remove fully gated campaigns from Up Next, and present a dedicated Subscription required state with Needs Sub labels. Preserve the existing behavior that prioritised games may be attempted before an external game account is linked.</p>
+<p>- Mining reliability: update Twitch live-directory discovery metadata, use direct Spade watch heartbeats with automatic Twitch GQL fallback, separate desired PubSub subscriptions from per-socket state, restore topics deterministically in bounded batches after reconnects, retry failed restoration with backoff, and refresh the active campaign inventory from Twitch after verified progress so parallel drops remain synchronized.</p>
+<p>- Single-miner experience: hide global-priority controls when only one miner is configured, expose miner-count projections consistently to the WebUI, and allow the native Miners workspace to use the full available width.</p>
+<p>- Quality and repository maintenance: add regression coverage for account-link and subscription-gated states, dashboard projections, single-miner behavior, PubSub batching and replay, heartbeat fallback, current Twitch query metadata, and campaign-wide progress refreshes. Remove redundant Swift access modifiers and immutable-header warnings, align generated Xcode 26.6 project metadata with project.yml, and configure GitHub Linguist to focus repository language statistics on Swift.</p>
+<p>- Website and release metadata: update download requirements and public copy for macOS 14, publish detailed SwiftMiner 1.33 release notes, restore the historical 1.32.5 notes to released build 2026070308, and set MARKETING_VERSION to 1.33 with timestamp build 2026072010 in both project.yml and the generated Xcode project. Leave the stable Sparkle appcast tied to the binary that is currently published.</p>
+    <p><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/7c84a6c97da34100807eda1f82461028d765ecf7">7c84a6c</a></p>
+  </main>
+</body>
+</html>
