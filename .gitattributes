@@ -1,2 +1,9 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Keep GitHub's language bar focused on the native Swift application.
+# These trees contain the public website, published documentation, and
+# repository automation rather than application source code.
+Website/** linguist-detectable=false
+docs/** linguist-detectable=false
+scripts/** linguist-detectable=false

@@ -166,7 +166,7 @@ Building from the current `main` branch includes newer changes that have not bee
 
 ## Requirements
 
-- macOS 26+
+- macOS 14.0+
 - Internet access
 
 ## Project Layout

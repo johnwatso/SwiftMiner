@@ -39,7 +39,7 @@ public struct HTTPResponse: Sendable {
         encoder.dateEncodingStrategy = .iso8601
         encoder.keyEncodingStrategy = .useDefaultKeys
         let data = (try? encoder.encode(value)) ?? Data()
-        var headers = [
+        let headers = [
             "Content-Type": "application/json",
             "Content-Length": "\(data.count)",
             "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"
@@ -50,7 +50,7 @@ public struct HTTPResponse: Sendable {
     public static func error(code: String, message: String, statusCode: Int) -> HTTPResponse {
         let obj: [String: Any] = ["error": code, "message": message]
         let data = (try? JSONSerialization.data(withJSONObject: obj)) ?? Data()
-        var headers = [
+        let headers = [
             "Content-Type": "application/json",
             "Content-Length": "\(data.count)",
             "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"
