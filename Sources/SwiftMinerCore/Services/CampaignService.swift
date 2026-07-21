@@ -29,25 +29,15 @@ public enum CampaignService {
         var allCampaigns = dashboardCampaigns
         for discovered in snapshot.discoveredCampaigns {
             if let index = allCampaigns.firstIndex(where: { $0.id == discovered.id }) {
-                // If inventory says we are connected, trust it! 
-                // This fix addresses the CDL Major 2 "false negative" where dashboard says false but inventory shows progress.
-                if discovered.isAccountConnected && !allCampaigns[index].isAccountConnected {
+                let existing = allCampaigns[index]
+                let merged = mergeDashboardCampaign(existing, withInventory: discovered)
+                if merged.isAccountConnected && !existing.isAccountConnected {
                     print("[CampaignService] Inventory confirmed connection for \(discovered.name)")
-                    let existing = allCampaigns[index]
-                    allCampaigns[index] = Campaign(
-                        id: existing.id,
-                        name: existing.name,
-                        game: existing.game,
-                        status: existing.status,
-                        startDate: existing.startDate,
-                        endDate: existing.endDate,
-                        drops: existing.drops,
-                        channels: existing.channels,
-                        isAccountConnected: true,
-                        allowIsEnabled: existing.allowIsEnabled,
-                        isPrioritised: existing.isPrioritised
-                    )
                 }
+                if existing.channels.isEmpty && !merged.channels.isEmpty {
+                    print("[CampaignService] Inventory supplied \(merged.channels.count) approved channel(s) for \(discovered.name)")
+                }
+                allCampaigns[index] = merged
             } else {
                 print("[CampaignService] Discovered campaign from inventory: \(discovered.name)")
                 allCampaigns.append(discovered)
@@ -55,5 +45,27 @@ public enum CampaignService {
         }
 
         return DropsService.mergeInventory(snapshot, into: allCampaigns)
+    }
+
+    /// Combines the broad dashboard campaign with account-specific Inventory metadata.
+    /// Inventory is allowed to fill fields that the dashboard omitted, especially approved
+    /// channels for short-lived esports campaigns.
+    internal static func mergeDashboardCampaign(
+        _ dashboard: Campaign,
+        withInventory inventory: Campaign
+    ) -> Campaign {
+        Campaign(
+            id: dashboard.id,
+            name: dashboard.name.isEmpty ? inventory.name : dashboard.name,
+            game: dashboard.game.name.isEmpty ? inventory.game : dashboard.game,
+            status: dashboard.status,
+            startDate: dashboard.startDate,
+            endDate: dashboard.endDate,
+            drops: dashboard.drops.isEmpty ? inventory.drops : dashboard.drops,
+            channels: dashboard.channels.isEmpty ? inventory.channels : dashboard.channels,
+            isAccountConnected: dashboard.isAccountConnected || inventory.isAccountConnected,
+            allowIsEnabled: dashboard.allowIsEnabled ?? inventory.allowIsEnabled,
+            isPrioritised: dashboard.isPrioritised
+        )
     }
 }

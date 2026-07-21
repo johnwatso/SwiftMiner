@@ -294,13 +294,75 @@ final class ModelTests: XCTestCase {
         )
     }
 
-    func testNoCandidateBackoffCapsAtFifteenMinutes() {
+    func testApprovedDirectoryChannelsArePrioritizedAheadOfVerificationCap() {
+        let now = Date()
+        let approved = Channel(id: "approved", login: "official", displayName: "Official", viewerCount: 1)
+        let campaign = Campaign(
+            id: "campaign",
+            name: "Restricted Campaign",
+            game: Game(id: "game", name: "Game"),
+            status: .active,
+            startDate: now.addingTimeInterval(-60),
+            endDate: now.addingTimeInterval(3600),
+            drops: [Drop(id: "drop", name: "Drop", requiredMinutes: 30)],
+            channels: [approved],
+            isAccountConnected: true,
+            allowIsEnabled: true
+        )
+        let popular = (0..<75).map { index in
+            Channel(
+                id: "popular-\(index)",
+                login: "popular\(index)",
+                displayName: "Popular \(index)",
+                viewerCount: 10_000 - index
+            )
+        }
+
+        let ordered = MinerEngine.prioritizingKnownApprovedChannels(popular + [approved], campaigns: [campaign])
+
+        XCTAssertEqual(ordered.first?.login, "official")
+        XCTAssertEqual(ordered.count, 76)
+    }
+
+    func testRotatingVerificationBatchEventuallyCoversDirectoryOverflow() {
+        let channels = (0..<100).map { index in
+            Channel(id: "\(index)", login: "channel\(index)", displayName: "Channel \(index)")
+        }
+        var offset = 0
+        var visited: Set<String> = []
+
+        for _ in 0..<20 {
+            let batch = MinerEngine.rotatingVerificationBatch(from: channels, limit: 16, offset: offset)
+            XCTAssertEqual(batch.channels.count, 16)
+            XCTAssertEqual(batch.channels.prefix(8).map(\.id), (0..<8).map(String.init))
+            visited.formUnion(batch.channels.map(\.id))
+            offset = batch.nextOffset
+        }
+
+        XCTAssertEqual(visited, Set(channels.map(\.id)))
+    }
+
+    func testRotatingVerificationBatchCyclesAcrossApprovedChannelOverflow() {
+        let channels = (0..<65).map { index in
+            Channel(id: "\(index)", login: "approved\(index)", displayName: "Approved \(index)")
+        }
+        let first = MinerEngine.rotatingVerificationBatch(from: channels, limit: 30, offset: 0)
+        let second = MinerEngine.rotatingVerificationBatch(from: channels, limit: 30, offset: first.nextOffset)
+        let third = MinerEngine.rotatingVerificationBatch(from: channels, limit: 30, offset: second.nextOffset)
+        let fourth = MinerEngine.rotatingVerificationBatch(from: channels, limit: 30, offset: third.nextOffset)
+        let visited = Set((first.channels + second.channels + third.channels + fourth.channels).map(\.id))
+
+        XCTAssertEqual(first.channels.map(\.id), (0..<30).map(String.init))
+        XCTAssertEqual(visited, Set(channels.map(\.id)))
+    }
+
+    func testNoCandidatePollingRemainsAtFiveMinutes() {
         let minute: UInt64 = 60 * 1_000_000_000
 
         XCTAssertEqual(MinerEngine.noCandidateBackoffInterval(for: 1), 5 * minute)
-        XCTAssertEqual(MinerEngine.noCandidateBackoffInterval(for: 2), 10 * minute)
-        XCTAssertEqual(MinerEngine.noCandidateBackoffInterval(for: 3), 15 * minute)
-        XCTAssertEqual(MinerEngine.noCandidateBackoffInterval(for: 20), 15 * minute)
+        XCTAssertEqual(MinerEngine.noCandidateBackoffInterval(for: 2), 5 * minute)
+        XCTAssertEqual(MinerEngine.noCandidateBackoffInterval(for: 3), 5 * minute)
+        XCTAssertEqual(MinerEngine.noCandidateBackoffInterval(for: 20), 5 * minute)
     }
 
     func testEmptyCandidateStateIgnoresUnlinkedNonPriorityCampaigns() {
@@ -618,6 +680,32 @@ final class ModelTests: XCTestCase {
 
         XCTAssertTrue(
             MinerEngine.shouldContinueChannelSelection(liveChannelCount: 3, candidates: [general])
+        )
+    }
+
+    func testRestrictedCampaignTracksUnavailableApprovedChannelList() {
+        let now = Date()
+        let campaign = Campaign(
+            id: "cdl-day-4",
+            name: "CDL Championship - Day 4",
+            game: Game(id: "2012789438", name: "Call of Duty: Black Ops 7"),
+            status: .active,
+            startDate: now.addingTimeInterval(-3600),
+            endDate: now.addingTimeInterval(3600),
+            drops: [Drop(id: "drop", name: "30 Minute Drop", requiredMinutes: 30)],
+            channels: [],
+            isAccountConnected: true,
+            allowIsEnabled: true
+        )
+
+        XCTAssertTrue(campaign.hasChannelRestrictions)
+        XCTAssertFalse(campaign.hasKnownChannelRestrictions)
+        XCTAssertTrue(campaign.hasUnresolvedChannelRestrictions)
+        XCTAssertFalse(
+            MinerEngine.shouldContinueChannelSelection(liveChannelCount: 0, candidates: [campaign])
+        )
+        XCTAssertTrue(
+            MinerEngine.shouldContinueChannelSelection(liveChannelCount: 1, candidates: [campaign])
         )
     }
 

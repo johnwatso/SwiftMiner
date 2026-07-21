@@ -63,8 +63,12 @@
       <li>Confirms priority mining behavior is unchanged: prioritised games can still be attempted before the external game account is linked.</li>
       <li>Cleans compiler warnings, aligns generated Xcode 26.6 metadata with project configuration, and keeps GitHub's language statistics focused on Swift.</li>
       <li>Refreshes website copy and structured download metadata for the wider macOS support range.</li>
-      <li>Adds regression coverage for account-link status, subscription-gated WebUI state, dashboard projections, single-miner behavior, PubSub replay batching, heartbeat fallback, and campaign progress refreshes.</li>
-      <li>Updates SwiftMiner to version 1.33 build 2026072010.</li>
+      <li>Preserves approved esports channels across Twitch's compact channel response shape and the dashboard/inventory campaign merge, so official broadcasts outside the exact game directory are probed directly.</li>
+      <li>Reports restricted campaigns with unavailable approved-channel metadata explicitly instead of silently treating them as unrestricted.</li>
+      <li>Prioritises known approved streams, rotates bounded directory and approved-channel probes through their overflow, and avoids unverified channel guesses after directory failures.</li>
+      <li>Keeps empty-campaign polling at five-minute intervals so newly started Drops campaigns are not delayed by an escalating idle backoff.</li>
+      <li>Adds regression coverage for account-link status, channel-probe rotation, subscription-gated WebUI state, dashboard projections, single-miner behavior, PubSub replay batching, heartbeat fallback, and campaign progress refreshes.</li>
+      <li>Updates SwiftMiner to version 1.33 build 2026072116.</li>
     </ul>
     <h2>🧘 <a href="./1.32.5.html">Version 1.32.5</a></h2>
     <ul>

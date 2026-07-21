@@ -167,24 +167,15 @@ public actor CampaignDataService {
             if let snapshot = inventory {
                 for discovered in snapshot.discoveredCampaigns {
                     if let index = fresh.firstIndex(where: { $0.id == discovered.id }) {
-                        // Trust inventory for connectivity status
-                        if discovered.isAccountConnected && !fresh[index].isAccountConnected {
+                        let existing = fresh[index]
+                        let merged = CampaignService.mergeDashboardCampaign(existing, withInventory: discovered)
+                        if merged.isAccountConnected && !existing.isAccountConnected {
                             print("[CampaignDataService] Inventory confirmed connection for \(discovered.name)")
-                            let existing = fresh[index]
-                            fresh[index] = Campaign(
-                                id: existing.id,
-                                name: existing.name,
-                                game: existing.game,
-                                status: existing.status,
-                                startDate: existing.startDate,
-                                endDate: existing.endDate,
-                                drops: existing.drops,
-                                channels: existing.channels,
-                                isAccountConnected: true,
-                                allowIsEnabled: existing.allowIsEnabled,
-                                isPrioritised: existing.isPrioritised
-                            )
                         }
+                        if existing.channels.isEmpty && !merged.channels.isEmpty {
+                            print("[CampaignDataService] Inventory supplied \(merged.channels.count) approved channel(s) for \(discovered.name)")
+                        }
+                        fresh[index] = merged
                     } else {
                         print("[CampaignDataService] Discovered campaign from inventory: \(discovered.name)")
                         fresh.append(discovered)
