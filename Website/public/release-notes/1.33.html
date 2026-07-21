@@ -89,7 +89,7 @@
 <body>
   <main>
     <h1>SwiftMiner 1.33</h1>
-    <p class="meta">Version 1.33 · Build 2026072010</p>
+    <p class="meta">Version 1.33 · Build 2026072116</p>
     <p class="intro">A broad compatibility and reliability update: SwiftMiner now supports macOS 14 Sonoma, explains subscription-gated campaigns more clearly, simplifies single-miner setups, and hardens the Twitch transports that keep mining sessions alive.</p>
 
     <section class="violet">
@@ -121,6 +121,12 @@
       <h2><span class="badge" aria-hidden="true">⛏️</span> Mining Reliability</h2>
       <p class="summary">Watch sessions now follow Twitch's current transport behavior and recover their live subscriptions more predictably.</p>
       <ul>
+        <li>Preserves approved-channel lists for short-lived esports campaigns when Twitch returns channels using the compact <code>id</code>/<code>name</code> representation.</li>
+        <li>Merges approved channels discovered through Inventory when the Drops dashboard omits them, allowing official broadcasts outside the exact game directory to be probed directly.</li>
+        <li>Tracks restricted campaigns whose approved-channel list is unavailable as a distinct diagnostic state instead of silently treating them as unrestricted directory campaigns.</li>
+        <li>Moves known approved streams ahead of directory verification limits and directly verifies restricted campaigns whenever the bounded directory scan did not find them.</li>
+        <li>Rotates bounded directory and approved-channel probes across their overflow, ensuring lower-viewer and later-listed eligible streams are eventually checked without increasing per-scan request limits.</li>
+        <li>Rejects unverified approved-channel guesses after directory failures and keeps empty-campaign polling at five-minute intervals so newly started drops are discovered promptly.</li>
         <li>Updates the Twitch live-directory persisted query used to discover eligible Drops streams.</li>
         <li>Sends watch heartbeats directly through Spade as the primary transport, with Twitch GQL retained as an automatic fallback when direct delivery fails.</li>
         <li>Tracks the PubSub topics SwiftMiner wants independently from the topics submitted on the current socket, so reconnecting cannot silently lose desired subscriptions.</li>
@@ -145,11 +151,11 @@
       <p class="summary">The compatibility and mining changes are backed by focused regression coverage and cleaner project metadata.</p>
       <ul>
         <li>Adds tests for unrelated unlinked campaigns, prioritised unlinked campaigns, subscription-only priority campaigns, and single-miner dashboard behavior.</li>
-        <li>Adds focused coverage for subscription-gated WebUI state, dashboard API projections, current Twitch query metadata, PubSub batching and replay, heartbeat fallback, and campaign-wide progress refreshes.</li>
+        <li>Adds focused coverage for approved-channel parsing and dashboard/inventory merging, bounded channel-probe rotation, subscription-gated WebUI state, dashboard API projections, current Twitch query metadata, PubSub batching and replay, heartbeat fallback, and campaign-wide progress refreshes.</li>
         <li>Cleans redundant Swift access modifiers and immutable HTTP response headers so the affected application targets build without those compiler warnings.</li>
         <li>Updates generated Xcode project and scheme metadata for Xcode 26.6 while keeping <code>project.yml</code> as the source of truth.</li>
         <li>Configures GitHub Linguist to keep the repository language bar focused on the native Swift application rather than website, documentation, and release-automation assets.</li>
-        <li>Prepared as SwiftMiner <strong>1.33</strong>, build <strong>2026072010</strong>.</li>
+        <li>Prepared as SwiftMiner <strong>1.33</strong>, build <strong>2026072116</strong>.</li>
       </ul>
     </section>
   </main>

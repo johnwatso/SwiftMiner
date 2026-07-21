@@ -2132,33 +2132,12 @@ public actor TwitchAPIClient {
         let selfDict = campaignDict["self"] as? [String: Any]
         let isAccountConnected = selfDict?["isAccountConnected"] as? Bool ?? false
         
-        // Parse ACL channels from allow.channels (critical for restricted campaigns)
+        // Parse ACL channels from allow.channels (critical for restricted campaigns).
+        // Twitch uses multiple channel shapes here: DropCampaignDetails commonly returns
+        // login/displayName, while CDL/esports and Inventory responses can return `name`.
         let allowDict = campaignDict["allow"] as? [String: Any] ?? [:]
-        let isAllowEnabled = allowDict["isEnabled"] as? Bool ?? true
-        let channelsArray: [Channel] = isAllowEnabled 
-            ? (allowDict["channels"] as? [[String: Any]] ?? []).compactMap { channelDict -> Channel? in
-                guard 
-                    let id = channelDict["id"] as? String,
-                    let login = channelDict["login"] as? String,
-                    let displayName = channelDict["displayName"] as? String
-                else { return nil }
-                
-                let broadcasterType = channelDict["broadcasterType"] as? String ?? ""
-                let description = channelDict["description"] as? String ?? ""
-                let profileImageURL = (channelDict["profileImageURL"] as? String).flatMap { URL(string: $0) }
-                
-                // Mark as ACL-based for prioritization
-                return Channel(
-                    id: id,
-                    login: login,
-                    displayName: displayName,
-                    description: description,
-                    profileImageUrl: profileImageURL,
-                    broadcasterType: broadcasterType,
-                    aclBased: true
-                )
-              }
-            : []
+        let isAllowEnabled = allowDict["isEnabled"] as? Bool
+        let channelsArray = parseAllowedChannels(from: allowDict)
         
         return Campaign(
             id: id,
@@ -2198,16 +2177,12 @@ public actor TwitchAPIClient {
         let selfDict = campaignDict["self"] as? [String: Any]
         let isAccountConnected = selfDict?["isAccountConnected"] as? Bool ?? false
 
-        // Inventory ACL channels use "name" field instead of "login"/"displayName"
+        // Inventory ACL channels often use "name" instead of "login"/"displayName".
+        // Use the same tolerant parser as DropCampaignDetails so neither endpoint can
+        // silently erase an approved esports channel.
         let allowDict = campaignDict["allow"] as? [String: Any] ?? [:]
-        let isAllowEnabled = allowDict["isEnabled"] as? Bool ?? true
-        let channelsArray = isAllowEnabled
-            ? (allowDict["channels"] as? [[String: Any]] ?? []).compactMap { ch -> Channel? in
-                guard let chId = ch["id"] as? String,
-                      let chName = ch["name"] as? String else { return nil }
-                return Channel(id: chId, login: chName, displayName: chName, aclBased: true)
-              }
-            : []
+        let isAllowEnabled = allowDict["isEnabled"] as? Bool
+        let channelsArray = parseAllowedChannels(from: allowDict)
 
         return Campaign(
             id: id,
@@ -2221,6 +2196,45 @@ public actor TwitchAPIClient {
             isAccountConnected: isAccountConnected,
             allowIsEnabled: isAllowEnabled
         )
+    }
+
+    /// Parses Twitch's known approved-channel representations without requiring every
+    /// optional presentation field. A login/name is enough; numeric IDs are resolved later
+    /// by the channel-selection pipeline when Twitch omits them.
+    private func parseAllowedChannels(from allowDict: [String: Any]) -> [Channel] {
+        guard (allowDict["isEnabled"] as? Bool) != false else { return [] }
+
+        return (allowDict["channels"] as? [[String: Any]] ?? []).compactMap { channelDict in
+            func nonEmptyString(_ keys: String...) -> String? {
+                for key in keys {
+                    guard let value = channelDict[key] as? String else { continue }
+                    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty { return trimmed }
+                }
+                return nil
+            }
+
+            guard let login = nonEmptyString("login", "name", "displayName") else {
+                return nil
+            }
+
+            let id = nonEmptyString("id") ?? login
+            let displayName = nonEmptyString("displayName", "name", "login") ?? login
+            let broadcasterType = nonEmptyString("broadcasterType") ?? ""
+            let description = nonEmptyString("description") ?? ""
+            let profileImageURL = nonEmptyString("profileImageURL", "profileImageUrl")
+                .flatMap(URL.init(string:))
+
+            return Channel(
+                id: id,
+                login: login,
+                displayName: displayName,
+                description: description,
+                profileImageUrl: profileImageURL,
+                broadcasterType: broadcasterType,
+                aclBased: true
+            )
+        }
     }
 
     /// Parse drop progress from Inventory GQL response.

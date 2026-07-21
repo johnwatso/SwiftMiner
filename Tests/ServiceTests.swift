@@ -328,6 +328,154 @@ final class ServiceTests: XCTestCase {
         XCTAssertTrue(campaign.isMiningEligible)
     }
 
+    func testFetchDropCampaignsParsesNameOnlyApprovedChannel() async throws {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        let startAt = formatter.string(from: Date().addingTimeInterval(-3600))
+        let endAt = formatter.string(from: Date().addingTimeInterval(3600))
+        let campaignId = "cdl-day-4-\(UUID().uuidString)"
+
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+
+            if request.url?.path == "/integrity" {
+                return (response, #"{"token":"integrity-token","expiration":4102444800000}"#.data(using: .utf8)!)
+            }
+
+            let body = (try? JSONSerialization.jsonObject(with: request.httpBody ?? Data())) as? [String: Any]
+            switch body?["operationName"] as? String {
+            case "ViewerDropsDashboard":
+                let json = """
+                {
+                  "data": {
+                    "currentUser": {
+                      "dropCampaigns": [
+                        {
+                          "id": "\(campaignId)",
+                          "name": "CDL Championship - Day 4",
+                          "status": "ACTIVE",
+                          "startAt": "\(startAt)",
+                          "endAt": "\(endAt)",
+                          "self": { "isAccountConnected": true },
+                          "game": {
+                            "id": "2012789438",
+                            "displayName": "Call of Duty: Black Ops 7"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+                """
+                return (response, json.data(using: .utf8)!)
+
+            case "DropCampaignDetails":
+                let json = """
+                {
+                  "data": {
+                    "user": {
+                      "dropCampaign": {
+                        "id": "\(campaignId)",
+                        "name": "CDL Championship - Day 4",
+                        "status": "ACTIVE",
+                        "startAt": "\(startAt)",
+                        "endAt": "\(endAt)",
+                        "self": { "isAccountConnected": true },
+                        "allow": {
+                          "isEnabled": true,
+                          "channels": [
+                            { "id": "1494318985", "name": "CallofDuty_Esports" }
+                          ]
+                        },
+                        "game": {
+                          "id": "2012789438",
+                          "displayName": "Call of Duty: Black Ops 7"
+                        },
+                        "timeBasedDrops": [
+                          {
+                            "id": "cdl-drop",
+                            "name": "30 Minute Drop",
+                            "requiredMinutesWatched": 30,
+                            "benefitEdges": [],
+                            "self": {
+                              "currentMinutesWatched": 0,
+                              "isClaimed": false,
+                              "dropInstanceID": "cdl-instance"
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+                """
+                return (response, json.data(using: .utf8)!)
+
+            default:
+                return (response, #"{"data":{}}"#.data(using: .utf8)!)
+            }
+        }
+
+        await apiClient.setUserLogin("cdlviewer")
+        let campaigns = try await apiClient.fetchDropCampaigns()
+        let campaign = try XCTUnwrap(campaigns.first)
+
+        XCTAssertEqual(campaign.channels.count, 1)
+        XCTAssertEqual(campaign.channels.first?.id, "1494318985")
+        XCTAssertEqual(campaign.channels.first?.login, "CallofDuty_Esports")
+        XCTAssertEqual(campaign.channels.first?.displayName, "CallofDuty_Esports")
+        XCTAssertTrue(campaign.channels.first?.aclBased ?? false)
+        XCTAssertTrue(campaign.hasKnownChannelRestrictions)
+        XCTAssertFalse(campaign.hasUnresolvedChannelRestrictions)
+    }
+
+    func testCampaignServiceInventoryFillsMissingApprovedChannels() {
+        let now = Date()
+        let game = Game(id: "2012789438", name: "Call of Duty: Black Ops 7")
+        let dashboard = Campaign(
+            id: "cdl-day-4",
+            name: "CDL Championship - Day 4",
+            game: game,
+            status: .active,
+            startDate: now.addingTimeInterval(-3600),
+            endDate: now.addingTimeInterval(3600),
+            drops: [Drop(id: "drop", name: "30 Minute Drop", requiredMinutes: 30)],
+            channels: [],
+            isAccountConnected: false,
+            allowIsEnabled: true
+        )
+        let inventory = Campaign(
+            id: dashboard.id,
+            name: dashboard.name,
+            game: game,
+            status: .active,
+            startDate: dashboard.startDate,
+            endDate: dashboard.endDate,
+            drops: dashboard.drops,
+            channels: [
+                Channel(
+                    id: "1494318985",
+                    login: "CallofDuty_Esports",
+                    displayName: "CallofDuty_Esports",
+                    aclBased: true
+                )
+            ],
+            isAccountConnected: true,
+            allowIsEnabled: true
+        )
+
+        let merged = CampaignService.mergeDashboardCampaign(dashboard, withInventory: inventory)
+
+        XCTAssertEqual(merged.channels.map(\.login), ["CallofDuty_Esports"])
+        XCTAssertTrue(merged.isAccountConnected)
+        XCTAssertTrue(merged.hasKnownChannelRestrictions)
+    }
+
     func testFetchDropCampaignsReusesRecentCampaignDetails() async throws {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]

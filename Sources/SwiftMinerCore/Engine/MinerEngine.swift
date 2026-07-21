@@ -90,6 +90,10 @@ public actor MinerEngine {
     /// Set to true to interrupt the idle wait and immediately re-check for eligible campaigns
     private var shouldRescanCampaigns = false
     private var consecutiveNoCandidateCycles = 0
+    /// Rotating offsets keep bounded directory and approved-channel probes from repeatedly
+    /// checking the same high-ranked prefix while permanently starving lower-ranked streams.
+    private var directoryVerificationOffsets: [String: Int] = [:]
+    private var approvedChannelProbeOffsets: [String: Int] = [:]
 
     /// Counter for minutes watched without a server progress update (local estimation)
     private var extraMinutesWatched: Int = 0
@@ -100,7 +104,9 @@ public actor MinerEngine {
     private static let failoverCooldown: TimeInterval = 10 * 60
     private static let subscriptionWarningRepeatInterval: TimeInterval = 6 * 60 * 60
     private static let noCandidateBackoffBaseInterval: UInt64 = 300 * 1_000_000_000
-    private static let noCandidateBackoffMaxInterval: UInt64 = 15 * 60 * 1_000_000_000
+    // Reliability takes precedence over idle request reduction: a newly-started short campaign
+    // must never wait 10–15 minutes to be discovered just because earlier scans were empty.
+    private static let noCandidateBackoffMaxInterval: UInt64 = 5 * 60 * 1_000_000_000
 
     /// Cache of all campaigns fetched during the last check
     public private(set) var allCampaigns: [Campaign] = []
@@ -1018,7 +1024,7 @@ public actor MinerEngine {
                     // channels that aren't surfaced by the public directory and can go live for
                     // short windows. Re-probe them on a short interval so we don't lose up to a
                     // full campaignCheckInterval before noticing one came online.
-                    let restrictedWaitCandidates = candidates.filter { $0.hasChannelRestrictions }
+                    let restrictedWaitCandidates = candidates.filter { $0.hasKnownChannelRestrictions }
                     let tickNs: UInt64 = 10 * 1_000_000_000
                     let ticks = Int(campaignCheckInterval / tickNs)
                     let aclProbeEveryTicks = 6 // ~60s
@@ -1913,6 +1919,10 @@ public actor MinerEngine {
         let gameName = primary.gameName
         log("[ChannelSelect] Game: \(gameName) — candidates: \(candidates.map(\.name).joined(separator: ", "))")
 
+        for candidate in candidates where candidate.hasUnresolvedChannelRestrictions {
+            log("[ChannelSelect]   Warning: \(candidate.name) is restricted, but Twitch returned no usable approved-channel list; directory verification is best-effort.")
+        }
+
         let liveChannels: [Channel]
         do {
             var fetched = try await dropsService.findLiveChannels(forGame: primary.game)
@@ -1923,15 +1933,10 @@ public actor MinerEngine {
             liveChannels = fetched
         } catch {
             log("[ChannelSelect]   Failed to fetch live channels for '\(gameName)': \(error.localizedDescription)")
-            // Fallback: if any candidate has approved channels, use the first.
-            for candidate in candidates {
-                if let fallback = candidate.channels.first {
-                    currentChannelName = fallback.displayName
-                    currentChannelId = fallback.id
-                    return (candidate, fallback)
-                }
-            }
-            return nil
+            // Continue with an empty directory result. Restricted campaigns still get their
+            // approved channels checked for liveness and verified below; never start watching
+            // an arbitrary ACL entry that may be offline or running a different campaign.
+            liveChannels = []
         }
 
         log("[ChannelSelect]   Found \(liveChannels.count) live candidate channel(s)")
@@ -1970,8 +1975,15 @@ public actor MinerEngine {
             if a.aclBased != b.aclBased { return a.aclBased && !b.aclBased }
             return (a.viewerCount ?? 0) > (b.viewerCount ?? 0)
         }
+        // Known approved channels are the most precise candidates we have. Move every directory
+        // ACL match ahead of the bounded general scan so a low-viewer official stream cannot land
+        // below the verification cap.
+        let orderedChannels = Self.prioritizingKnownApprovedChannels(
+            sortedChannels,
+            campaigns: candidates
+        )
         let verificationLimit = Self.adaptiveChannelVerificationLimit(
-            liveChannelCount: sortedChannels.count,
+            liveChannelCount: orderedChannels.count,
             candidateCount: candidates.count,
             hasRestrictedCampaign: candidates.contains { $0.hasChannelRestrictions },
             hasPriorityCampaign: candidates.contains {
@@ -1979,9 +1991,16 @@ public actor MinerEngine {
             },
             avoidDuplicateStreams: avoidDuplicateStreams
         )
-        let channelsToVerify = Array(sortedChannels.prefix(verificationLimit))
-        if verificationLimit < sortedChannels.count {
-            log("[ChannelSelect]   Verification limited to top \(verificationLimit) of \(sortedChannels.count) live channel(s)")
+        let directoryProbeKey = normalizedGameKey(primary.game.id.isEmpty ? primary.gameName : primary.game.id)
+        let directoryBatch = Self.rotatingVerificationBatch(
+            from: orderedChannels,
+            limit: verificationLimit,
+            offset: directoryVerificationOffsets[directoryProbeKey, default: 0]
+        )
+        directoryVerificationOffsets[directoryProbeKey] = directoryBatch.nextOffset
+        let channelsToVerify = directoryBatch.channels
+        if verificationLimit < orderedChannels.count {
+            log("[ChannelSelect]   Verification bounded to \(verificationLimit) of \(orderedChannels.count) live channel(s); rotating the overflow across scans")
         }
 
         // Pre-compute which candidates each channel could serve (by ACL).
@@ -2007,15 +2026,17 @@ public actor MinerEngine {
         var subscriptionOnlyMatchCount = 0
         var verificationErrorCount = 0
         var aclProbeCount = 0
+        var attemptedChannelIdentities: Set<String> = []
 
         for ch in channelsToVerify {
             let eligibleForChannel = candidates.filter { candidate in
-                !candidate.hasChannelRestrictions
+                !candidate.hasKnownChannelRestrictions
                     || Self.channelMatchesCampaignACL(ch, campaign: candidate)
             }
             guard !eligibleForChannel.isEmpty else { continue }
 
             let channel = await resolveChannelIdIfNeeded(ch)
+            attemptedChannelIdentities.formUnion(Self.identityKeys(for: channel))
 
             do {
                 let activeCampaignIds = try await apiClient.fetchAvailableDrops(channelId: channel.id)
@@ -2072,28 +2093,41 @@ public actor MinerEngine {
             }
         }
 
-        // ACL approved-channel probe: for any candidate with restrictions where the directory
-        // didn't surface a matching channel, probe approved channels directly.
-        for candidate in candidates where candidate.hasChannelRestrictions {
-            let directoryHadMatch = sortedChannels.contains { Self.channelMatchesCampaignACL($0, campaign: candidate) }
-            if directoryHadMatch { continue }
+        // ACL approved-channel probe: when directory verification did not find a campaign,
+        // probe its approved channels directly. This is deliberately based on what was actually
+        // verified, not whether an approved channel happened to exist somewhere in the unscanned
+        // directory tail.
+        for candidate in candidates where candidate.hasKnownChannelRestrictions {
+            let alreadyMatched = verifiedMatches.contains { $0.campaign.id == candidate.id }
+            if alreadyMatched && !avoidDuplicateStreams { continue }
             let probed = await liveACLChannels(for: candidate)
             for ch in probed {
                 let channel = await resolveChannelIdIfNeeded(ch)
+                let channelIdentities = Self.identityKeys(for: channel)
+                guard attemptedChannelIdentities.isDisjoint(with: channelIdentities) else { continue }
+                attemptedChannelIdentities.formUnion(channelIdentities)
                 aclProbeCount += 1
                 do {
                     let activeCampaignIds = try await apiClient.fetchAvailableDrops(channelId: channel.id)
                     anyVerificationSucceeded = true
                     verifiedChannelCount += 1
-                    if activeCampaignIds.contains(candidate.id) {
-                        log("[ChannelSelect]     Verified: \(candidate.name) active on approved channel \(channel.displayName)")
+                    let matches = candidates.filter { possibleMatch in
+                        activeCampaignIds.contains(possibleMatch.id)
+                            && (!possibleMatch.hasKnownChannelRestrictions
+                                || Self.channelMatchesCampaignACL(channel, campaign: possibleMatch))
+                    }
+                    if !matches.isEmpty {
+                        let names = matches.map(\.name).joined(separator: ", ")
+                        log("[ChannelSelect]     Verified: \(names) active on approved channel \(channel.displayName)")
+                    }
+                    for match in matches {
                         let alreadyRecorded = verifiedMatches.contains {
-                            $0.campaign.id == candidate.id &&
+                            $0.campaign.id == match.id &&
                                 Self.normalizedChannelIdentity($0.channel.id) == Self.normalizedChannelIdentity(channel.id)
                         }
-                        let campaignAlreadyRecorded = verifiedMatches.contains { $0.campaign.id == candidate.id }
+                        let campaignAlreadyRecorded = verifiedMatches.contains { $0.campaign.id == match.id }
                         if !alreadyRecorded && (avoidDuplicateStreams || !campaignAlreadyRecorded) {
-                            verifiedMatches.append((campaign: candidate, channel: channel))
+                            verifiedMatches.append((campaign: match, channel: channel))
                         }
                     }
                 } catch {
@@ -2151,7 +2185,7 @@ public actor MinerEngine {
     /// those channels are frequently absent from the public game directory (e.g. esports/official
     /// broadcasts). Returning `false` here means there is genuinely nothing left to try.
     internal static func shouldContinueChannelSelection(liveChannelCount: Int, candidates: [Campaign]) -> Bool {
-        liveChannelCount > 0 || candidates.contains { $0.hasChannelRestrictions }
+        liveChannelCount > 0 || candidates.contains { $0.hasKnownChannelRestrictions }
     }
 
     internal static func adaptiveChannelVerificationLimit(
@@ -2176,6 +2210,47 @@ public actor MinerEngine {
         }
 
         return min(liveChannelCount, 16)
+    }
+
+    /// Stable-partitions directory results so known approved channels are always considered
+    /// before the bounded general stream scan, regardless of viewer count.
+    internal static func prioritizingKnownApprovedChannels(
+        _ channels: [Channel],
+        campaigns: [Campaign]
+    ) -> [Channel] {
+        let restricted = campaigns.filter(\.hasKnownChannelRestrictions)
+        guard !restricted.isEmpty else { return channels }
+
+        let approved = channels.filter { channel in
+            restricted.contains { channelMatchesCampaignACL(channel, campaign: $0) }
+        }
+        let general = channels.filter { channel in
+            !restricted.contains { channelMatchesCampaignACL(channel, campaign: $0) }
+        }
+        return approved + general
+    }
+
+    /// Keeps the most valuable half of a bounded channel batch on every scan and rotates the
+    /// remaining half through the tail. The first scan remains the normal top-N ordering, while
+    /// repeated misses eventually inspect every returned channel without increasing request load.
+    internal static func rotatingVerificationBatch(
+        from channels: [Channel],
+        limit: Int,
+        offset: Int
+    ) -> (channels: [Channel], nextOffset: Int) {
+        guard !channels.isEmpty, limit > 0 else { return ([], 0) }
+        guard channels.count > limit else { return (channels, 0) }
+
+        let headCount = min(channels.count, limit / 2)
+        let head = Array(channels.prefix(headCount))
+        let tail = Array(channels.dropFirst(headCount))
+        let rotatingCapacity = max(1, limit - head.count)
+        let normalizedOffset = ((offset % tail.count) + tail.count) % tail.count
+        let rotating = (0..<min(rotatingCapacity, tail.count)).map { step in
+            tail[(normalizedOffset + step) % tail.count]
+        }
+        let nextOffset = (normalizedOffset + rotating.count) % tail.count
+        return (head + rotating, nextOffset)
     }
 
     internal static func noCandidateBackoffInterval(for consecutiveCycles: Int) -> UInt64 {
@@ -2260,7 +2335,10 @@ public actor MinerEngine {
 
     private func selectBestChannel(from campaign: Campaign) async -> Channel? {
         log("[ChannelSelect] Campaign: \(campaign.name) (game: \(campaign.gameName))")
-        log("[ChannelSelect]   ACL restrictions: \(campaign.hasChannelRestrictions ? "YES (\(campaign.channels.count) channels)" : "NO")")
+        let aclSummary = campaign.hasUnresolvedChannelRestrictions
+            ? "YES (channel list unavailable)"
+            : campaign.hasKnownChannelRestrictions ? "YES (\(campaign.channels.count) channels)" : "NO"
+        log("[ChannelSelect]   ACL restrictions: \(aclSummary)")
         log("[ChannelSelect]   Special Event: \(campaign.game.isSpecialEvents ? "YES" : "NO")")
         
         do {
@@ -2304,7 +2382,7 @@ public actor MinerEngine {
             }
 
             var verificationCandidates = Self.verificationCandidates(from: sortedChannels, campaign: campaign)
-            if campaign.hasChannelRestrictions {
+            if campaign.hasKnownChannelRestrictions {
                 log("[ChannelSelect]   ACL-matched live directory candidates: \(verificationCandidates.count)")
                 if verificationCandidates.isEmpty {
                     log("[ChannelSelect]   No directory candidates matched the campaign ACL; probing approved channels directly...")
@@ -2327,7 +2405,7 @@ public actor MinerEngine {
                 log("[ChannelSelect]   Verifying \(channel.displayName) (viewers: \(channel.viewerCount ?? 0), id: \(channel.id))...")
 
                 // If it's not a Special Event, we can filter by campaign restrictions early
-                if campaign.hasChannelRestrictions && !Self.channelMatchesCampaignACL(channel, campaign: campaign) {
+                if campaign.hasKnownChannelRestrictions && !Self.channelMatchesCampaignACL(channel, campaign: campaign) {
                     log("[ChannelSelect]     Skipping: not in campaign ACL")
                     allVerificationsFailed = false  // not an error — campaign restriction mismatch
                     continue
@@ -2409,7 +2487,7 @@ public actor MinerEngine {
     /// approved channel for the given ACL-restricted campaigns is live, so the engine can wake
     /// from the idle wait and re-run channel selection without burning a full campaign interval.
     private func anyApprovedChannelLive(in candidates: [Campaign]) async -> Bool {
-        for candidate in candidates where candidate.hasChannelRestrictions {
+        for candidate in candidates where candidate.hasKnownChannelRestrictions {
             if !(await liveACLChannels(for: candidate).isEmpty) {
                 return true
             }
@@ -2418,13 +2496,19 @@ public actor MinerEngine {
     }
 
     private func liveACLChannels(for campaign: Campaign, limit: Int = 30) async -> [Channel] {
-        guard campaign.hasChannelRestrictions else { return [] }
+        guard campaign.hasKnownChannelRestrictions else { return [] }
 
         // Probe approved channels concurrently — for restricted campaigns this can be up to
         // `limit` independent live-state checks, and doing them serially adds seconds of latency
         // to channel selection. Each result carries its source index so we can restore the
         // campaign's original channel ordering after the parallel fan-out.
-        let candidates = Array(campaign.channels.prefix(limit).enumerated())
+        let batch = Self.rotatingVerificationBatch(
+            from: campaign.channels,
+            limit: limit,
+            offset: approvedChannelProbeOffsets[campaign.id, default: 0]
+        )
+        approvedChannelProbeOffsets[campaign.id] = batch.nextOffset
+        let candidates = Array(batch.channels.enumerated())
         let resolvedByIndex = await withTaskGroup(of: (Int, Channel)?.self) { group -> [Int: Channel] in
             for (index, channel) in candidates {
                 let login = channel.login.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2471,7 +2555,7 @@ public actor MinerEngine {
     }
 
     internal static func verificationCandidates(from sortedChannels: [Channel], campaign: Campaign) -> [Channel] {
-        guard campaign.hasChannelRestrictions else {
+        guard campaign.hasKnownChannelRestrictions else {
             return Array(sortedChannels.prefix(50))
         }
 

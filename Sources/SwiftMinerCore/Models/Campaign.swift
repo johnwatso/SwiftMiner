@@ -414,7 +414,22 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
         }
     }
 
-    public var hasChannelRestrictions: Bool { !channels.isEmpty }
+    /// Whether Twitch says this campaign is limited to approved channels.
+    ///
+    /// `allow.isEnabled` is authoritative even when Twitch returns an empty or
+    /// temporarily unparseable channel list. Treating that state as unrestricted
+    /// makes esports campaigns look like ordinary game-directory campaigns.
+    public var hasChannelRestrictions: Bool {
+        allowIsEnabled == true || !channels.isEmpty
+    }
+
+    /// Whether SwiftMiner has concrete approved channels it can probe directly.
+    public var hasKnownChannelRestrictions: Bool { !channels.isEmpty }
+
+    /// Twitch says the campaign is restricted, but did not provide a usable ACL.
+    public var hasUnresolvedChannelRestrictions: Bool {
+        allowIsEnabled == true && channels.isEmpty
+    }
 
     public var unclaimedDrops: [Drop] { drops.filter { !$0.isClaimed } }
 
