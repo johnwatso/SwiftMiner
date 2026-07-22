@@ -14,9 +14,17 @@ extension MinerEngine {
         let excludedSet = Set(excludedGames.map { normalizedGameKey($0) }.filter { !$0.isEmpty })
         var filteredOutReasons: [String: Int] = [:]
 
+        let now = Date()
         let eligible = campaigns.filter { campaign in
             let gameName = normalizedGameKey(campaign.gameName)
             let gameId = normalizedGameKey(campaign.game.id)
+
+            // Skip campaigns recently flagged as non-earning (repeated stalls
+            // with no verified progress). They're retried after the cooldown.
+            if MinerEngine.isOnStallCooldown(campaign.id, cooldowns: campaignStallCooldownUntil, now: now) {
+                filteredOutReasons["stalled_cooldown", default: 0] += 1
+                return false
+            }
 
             // 1. Core Eligibility
             // Mine if Twitch exposes usable drops. Missing game-account linkage

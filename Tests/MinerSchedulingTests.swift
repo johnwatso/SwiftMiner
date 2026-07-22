@@ -144,4 +144,39 @@ final class MinerSchedulingTests: XCTestCase {
         let tracker = DropProgressEventTracker()
         XCTAssertNil(tracker.remainingMinutesToNextClaim(campaignId: "c1"))
     }
+
+    // MARK: - Non-earning campaign cooldown
+
+    func testRegisterGenuineStall_ReachesThresholdAtDefault() {
+        var count = 0
+        var result = MinerEngine.registerGenuineStall(consecutiveStalls: count)
+        XCTAssertEqual(result.updatedCount, 1)
+        XCTAssertFalse(result.reachedThreshold)
+
+        count = result.updatedCount
+        result = MinerEngine.registerGenuineStall(consecutiveStalls: count)
+        XCTAssertEqual(result.updatedCount, 2)
+        XCTAssertFalse(result.reachedThreshold)
+
+        count = result.updatedCount
+        result = MinerEngine.registerGenuineStall(consecutiveStalls: count)
+        XCTAssertEqual(result.updatedCount, 3)
+        XCTAssertTrue(result.reachedThreshold, "third consecutive stall should trip the non-earning threshold")
+    }
+
+    func testRegisterGenuineStall_RespectsCustomThreshold() {
+        let result = MinerEngine.registerGenuineStall(consecutiveStalls: 1, threshold: 2)
+        XCTAssertEqual(result.updatedCount, 2)
+        XCTAssertTrue(result.reachedThreshold)
+    }
+
+    func testIsOnStallCooldown_TrueOnlyWhileActive() {
+        let cooldowns = [
+            "active": now.addingTimeInterval(600),   // expires in 10m
+            "expired": now.addingTimeInterval(-60),  // expired 1m ago
+        ]
+        XCTAssertTrue(MinerEngine.isOnStallCooldown("active", cooldowns: cooldowns, now: now))
+        XCTAssertFalse(MinerEngine.isOnStallCooldown("expired", cooldowns: cooldowns, now: now))
+        XCTAssertFalse(MinerEngine.isOnStallCooldown("unknown", cooldowns: cooldowns, now: now))
+    }
 }

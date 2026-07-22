@@ -102,6 +102,50 @@ public actor MinerEngine {
     /// Maximum extra minutes allowed before assuming mining is stalled (matches TDM)
     private static let maxExtraMinutes = 15
 
+    /// Consecutive genuine stall windows (no verified progress, no external
+    /// claim) per campaign. Reset whenever the campaign makes real progress.
+    var consecutiveStallsByCampaign: [String: Int] = [:]
+    /// Campaigns temporarily skipped after repeated non-earning stalls, keyed to
+    /// the time the skip expires, so the miner moves on instead of looping the
+    /// same dead campaign forever.
+    var campaignStallCooldownUntil: [String: Date] = [:]
+    /// After this many back-to-back stall windows with no verified progress and
+    /// no external claim (and no failover streamer to try), a campaign is
+    /// treated as non-earning and put on cooldown.
+    static let nonEarningStallThreshold = 3
+    /// How long a non-earning campaign is skipped before it's retried.
+    static let nonEarningCooldownInterval: TimeInterval = 30 * 60
+
+    /// Whether a campaign is currently on a non-earning cooldown.
+    static func isOnStallCooldown(
+        _ campaignId: String,
+        cooldowns: [String: Date],
+        now: Date = Date()
+    ) -> Bool {
+        guard let until = cooldowns[campaignId] else { return false }
+        return until > now
+    }
+
+    /// Registers one genuine stall window for a campaign and reports whether it
+    /// has now stalled enough times to be treated as non-earning.
+    static func registerGenuineStall(
+        consecutiveStalls: Int,
+        threshold: Int = nonEarningStallThreshold
+    ) -> (updatedCount: Int, reachedThreshold: Bool) {
+        let updated = consecutiveStalls + 1
+        return (updated, updated >= threshold)
+    }
+
+    /// Clears any stall streak and cooldown for a campaign that just made
+    /// server-verified progress, so it is treated as earning again.
+    func noteCampaignProgress(_ campaignId: String?) {
+        guard let campaignId else { return }
+        if consecutiveStallsByCampaign[campaignId] != nil {
+            consecutiveStallsByCampaign[campaignId] = 0
+        }
+        campaignStallCooldownUntil[campaignId] = nil
+    }
+
     /// A higher-ranked campaign normally preempts the current session, but not
     /// while the active drop is within this many minutes of completing —
     /// abandoning it would strand the banked watch time (drop progress is
@@ -682,6 +726,7 @@ public actor MinerEngine {
         // Reset local estimation only when server progress actually advanced.
         extraMinutesWatched = 0
         lastProgressUpdateAt = Date()
+        noteCampaignProgress(campaignId)
 
         await refreshCampaignProgress(
             campaignId: campaignId,
@@ -767,6 +812,31 @@ public actor MinerEngine {
     func emitIssue(_ error: Error) {
         let (category, detail) = Self.classifyIssue(error)
         onOperationalEvent?(.issueDetected(category: category, detail: detail))
+    }
+
+    /// Subscribes to real-time drop/stream events for the current channel.
+    ///
+    /// PubSub is connected at miner startup and on auth refresh, but nothing
+    /// else re-establishes it: if that socket drops (or its initial connect
+    /// failed) the miner would spend the rest of the session blind to real-time
+    /// progress, relying on polling only. So if subscribing fails, attempt one
+    /// reconnect and retry before giving up for this cycle.
+    private func startDropEventsWatching(userId: String, channelId: String) async {
+        do {
+            try await dropEventsService.startWatching(userId: userId, channelId: channelId)
+            log("PubSub watching started for user:\(userId) channel:\(channelId)")
+            return
+        } catch {
+            log("Failed to start PubSub watching: \(error.localizedDescription). Reconnecting PubSub…")
+        }
+
+        do {
+            try await pubSubClient.connect()
+            try await dropEventsService.startWatching(userId: userId, channelId: channelId)
+            log("PubSub reconnected; watching started for user:\(userId) channel:\(channelId)")
+        } catch {
+            log("PubSub reconnect failed: \(error.localizedDescription). Continuing with polling-only progress detection this cycle.")
+        }
     }
 
     private func handleWatchHeartbeatSent(_ session: WatchSession) async {
@@ -1073,15 +1143,7 @@ public actor MinerEngine {
 
                 // 5. Start PubSub watching for this user+channel
                 if let userId = currentAccount?.id {
-                    do {
-                        try await dropEventsService.startWatching(
-                            userId: userId,
-                            channelId: channel.id
-                        )
-                        log("PubSub watching started for user:\(userId) channel:\(channel.id)")
-                    } catch {
-                        log("Failed to start PubSub watching: \(error.localizedDescription)")
-                    }
+                    await startDropEventsWatching(userId: userId, channelId: channel.id)
                 }
 
                 do {
@@ -1178,6 +1240,7 @@ public actor MinerEngine {
                                     // Only treat changed server state as verified progress.
                                     extraMinutesWatched = 0
                                     lastProgressUpdateAt = Date()
+                                    noteCampaignProgress(campaignId)
 
                                     await refreshCampaignProgress(
                                         campaignId: campaignId,
@@ -1245,21 +1308,41 @@ public actor MinerEngine {
                                 log("\(newlyClaimedDrops.count) drop(s) were claimed externally. Updating local state, resetting stall counter.")
                                 extraMinutesWatched = 0 // Reset stall counter
                                 lastProgressUpdateAt = Date()
+                                noteCampaignProgress(campaign.id)
                                 // Don't switch channel - continue mining remaining drops in campaign
-                            } else if let failoverChannel = await selectFailoverChannel(for: campaign, currentChannel: channel) {
-                                log("Progress genuinely stalled. Switching to failover streamer @\(failoverChannel.login) for \(campaign.gameName).")
-                                pendingFailoverTarget = PendingFailoverTarget(
-                                    campaignId: campaign.id,
-                                    streamerLogin: failoverChannel.login
-                                )
-                                lastSwitchReason = .stallDetected(minutes: extraMinutesWatched)
-                                lastSwitchAt = Date()
-                                shouldSwitchChannel = true
                             } else {
-                                log("Progress genuinely stalled (no external claims detected). Switching channel.")
+                                // Genuine stall for this campaign this window — record it so a
+                                // campaign that can never earn (nothing left, unlinked, or a
+                                // Twitch-side crediting outage) is eventually skipped instead of
+                                // being re-selected forever.
+                                let stall = Self.registerGenuineStall(
+                                    consecutiveStalls: consecutiveStallsByCampaign[campaign.id, default: 0]
+                                )
+                                consecutiveStallsByCampaign[campaign.id] = stall.updatedCount
                                 lastSwitchReason = .stallDetected(minutes: extraMinutesWatched)
                                 lastSwitchAt = Date()
-                                shouldSwitchChannel = true
+
+                                if let failoverChannel = await selectFailoverChannel(for: campaign, currentChannel: channel) {
+                                    log("Progress genuinely stalled. Switching to failover streamer @\(failoverChannel.login) for \(campaign.gameName).")
+                                    pendingFailoverTarget = PendingFailoverTarget(
+                                        campaignId: campaign.id,
+                                        streamerLogin: failoverChannel.login
+                                    )
+                                    shouldSwitchChannel = true
+                                } else if stall.reachedThreshold {
+                                    // No better channel and it keeps not earning: cool the
+                                    // campaign down so candidateCampaigns skips it, letting the
+                                    // miner pick other work or go idle instead of looping here.
+                                    let minutes = Int(Self.nonEarningCooldownInterval / 60)
+                                    campaignStallCooldownUntil[campaign.id] = Date().addingTimeInterval(Self.nonEarningCooldownInterval)
+                                    consecutiveStallsByCampaign[campaign.id] = 0
+                                    session?.currentCampaignId = nil
+                                    log("Campaign \"\(campaign.name)\" stalled \(Self.nonEarningStallThreshold)× with no progress and no external claims; skipping it for \(minutes)m and looking for other work.")
+                                    shouldSwitchChannel = true
+                                } else {
+                                    log("Progress genuinely stalled (no external claims detected). Switching channel.")
+                                    shouldSwitchChannel = true
+                                }
                             }
                         } catch {
                             emitIssue(error)
