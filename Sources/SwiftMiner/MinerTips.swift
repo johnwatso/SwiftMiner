@@ -10,7 +10,7 @@ extension View {
 
 private struct MinerTipModifier<T: Tip>: ViewModifier {
     let tip: T
-    @ObservedObject private var settings = Settings.shared
+    private var settings: Settings { .shared }
 
     func body(content: Content) -> some View {
         if settings.tipsEnabled {

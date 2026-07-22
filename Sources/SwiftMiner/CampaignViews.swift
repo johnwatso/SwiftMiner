@@ -32,7 +32,7 @@ struct CampaignSidebarView: View {
 /// One row in the campaign sidebar.
 struct CampaignRowView: View {
     let campaign: Campaign
-    @ObservedObject private var settings = Settings.shared
+    private var settings: Settings { .shared }
 
     private var claimedCount: Int { campaign.drops.filter(\.isClaimed).count }
     private var totalCount: Int   { campaign.drops.count }
@@ -90,7 +90,7 @@ struct CampaignRowView: View {
 struct CampaignDetailView: View {
     let campaign: CampaignViewData
     @Environment(NavigationModel.self) private var navigation
-    @ObservedObject private var settings = Settings.shared
+    private var settings: Settings { .shared }
 
     private var bannerURL: URL? {
         if let artworkURL {

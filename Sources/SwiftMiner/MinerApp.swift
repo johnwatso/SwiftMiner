@@ -12,7 +12,7 @@ struct MinerApp: App {
     @NSApplicationDelegateAdaptor(LaunchContextDelegate.self) private var launchContext
     @StateObject private var updater = AppUpdater()
     @StateObject private var unattendedHealth: UnattendedHealthModel
-    @StateObject private var settings = Settings.shared
+    private var settings: Settings { .shared }
     @StateObject private var presentationController = AppPresentationController()
     @State private var minerManager: MinerManager
     @State private var appModel: AppModel

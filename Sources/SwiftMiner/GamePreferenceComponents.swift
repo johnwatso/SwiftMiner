@@ -7,7 +7,7 @@ import AsyncAlgorithms
 /// Top-level container for the game preferences UI.
 /// Replaces the old "Rules" section with search-driven token selection.
 struct GamePreferencesSection: View {
-    @ObservedObject var settings: Settings
+    var settings: Settings
     let minerManager: MinerManager
 
     var body: some View {
@@ -25,7 +25,7 @@ struct GamePreferencesSection: View {
 
 /// Autocomplete search field that suggests games from active campaigns.
 struct GameSearchField: View {
-    @ObservedObject var settings: Settings
+    var settings: Settings
     let minerManager: MinerManager
     @State private var searchText = ""
     @State private var showSuggestions = false
@@ -456,7 +456,7 @@ struct GameSuggestionRow: View {
 
 /// Displays selected games as tokens in a wrapping flow layout.
 struct GameTokensContainer: View {
-    @ObservedObject var settings: Settings
+    var settings: Settings
     let minerManager: MinerManager
 
     private var orderedPreferences: [GamePreference] {
@@ -502,7 +502,7 @@ struct GameTokensContainer: View {
 /// Supports context menu for toggling state or removing.
 struct GameTokenView: View {
     let preference: GamePreference
-    @ObservedObject var settings: Settings
+    var settings: Settings
     let hasActiveDrops: Bool
 
     private var stateColor: Color {

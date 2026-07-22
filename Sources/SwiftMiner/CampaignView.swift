@@ -14,7 +14,7 @@ struct DropsListView: View {
     @State private var selectedMinerFilterId: String = DropsListView.allMinersFilterId
     @State private var visibleGroupLimit = 24
     @AppStorage("preferSteamArtwork", store: Settings.appStorageStore) private var preferSteamArtwork: Bool = false
-    @ObservedObject private var settings = Settings.shared
+    private var settings: Settings { .shared }
 
     fileprivate static let allMinersFilterId = "__all_miners__"
 

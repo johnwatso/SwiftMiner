@@ -4,7 +4,7 @@ import SwiftMinerCore
 /// Dense, flat event log focused on chronological scanning.
 struct EventLogView: View {
     @Environment(NavigationModel.self) private var navigation
-    @ObservedObject private var settings = Settings.shared
+    private var settings: Settings { .shared }
     @State private var searchText = ""
     @State private var selectedMinerFilterId = Self.allMinersFilterId
     @State private var isFilterHelpPresented = false
@@ -310,7 +310,7 @@ struct EventLogView: View {
 }
 
 private struct EventFilterHelpPopover: View {
-    @ObservedObject private var settings = Settings.shared
+    private var settings: Settings { .shared }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -370,7 +370,7 @@ private struct EventLogRow: View {
     let event: EventEntry
     let isNew: Bool
     @Environment(NavigationModel.self) private var navigation
-    @ObservedObject private var settings = Settings.shared
+    private var settings: Settings { .shared }
     @State private var appeared = false
 
     private var eventFilter: EventFilter {

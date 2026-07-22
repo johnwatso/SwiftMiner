@@ -10,7 +10,7 @@ import SwiftMinerCore
 ///   Activity Log
 struct SidebarView: View {
     @Environment(NavigationModel.self) private var navigation
-    @ObservedObject private var settings = Settings.shared
+    private var settings: Settings { .shared }
     @Namespace private var selectionHighlightNamespace
     @State private var rowFrames: [NavigationModel.SidebarItem: CGRect] = [:]
     @State private var isDraggingSelection = false

@@ -12,7 +12,7 @@ struct AnimatedStatusIcon: View {
     var size: CGFloat = 11
     var weight: Font.Weight = .semibold
 
-    @ObservedObject private var settings = Settings.shared
+    private var settings: Settings { .shared }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var triggerBounce = false
