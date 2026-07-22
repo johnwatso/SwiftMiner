@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fix Overview progress bars sweeping from zero on every appear - Release Notes</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      margin: 0;
+      padding: 32px 20px 48px;
+      font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f4f6f8;
+      color: #0f1720;
+    }
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 28px;
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.86);
+      box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
+    }
+    h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
+    .meta { margin: 0 0 24px; color: #52606d; font-size: 14px; }
+    p { margin: 0 0 16px; }
+    a { color: #0a67a3; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #0b1015; color: #edf2f7; }
+      main {
+        background: rgba(15, 23, 32, 0.88);
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+      }
+      .meta { color: #9fb0c2; }
+      a { color: #73c3ff; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Fix Overview progress bars sweeping from zero on every appear</h1>
+    <p class="meta">Version 1.34.2</p>
+    <p>Fix Overview progress bars sweeping from zero on every appear</p>
+<p>AnimatedLinearProgressView reset its displayed value to 0 in onAppear<br>and animated up to the real value every time it appeared. On the<br>Overview that meant the miner progress bars re-filled from empty each<br>time the page was shown or refreshed — which looked odd and made live<br>progress seem to only move on refresh (a refresh restarts miners and<br>re-mounts the cards, re-triggering the sweep), masking the small<br>incremental steps that were actually happening.</p>
+<p>The bar now seeds its displayed value to the true progress at init, so<br>it renders where the miner actually is on the first frame, and animates<br>only genuine changes. Reduce Motion still applies instantly.</p>
+<p>Ships as 1.34.2 (1.34.1 was released while this was in progress): new<br>1.34.2 notes, MARKETING_VERSION 1.34.2, build 2026072310 (bumped past<br>1.34.1's same-hour 2026072309 so Sparkle sees it as newer). Released<br>1.34.1 notes and the appcast are untouched.</p>
+    <p><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/74e9c9abd76e32c6db86d1ac3468bbd18222243e">74e9c9a</a></p>
+  </main>
+</body>
+</html>
