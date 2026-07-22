@@ -113,6 +113,50 @@ final class ActivityLogStoreTests: XCTestCase {
         ))
     }
 
+    func testActivityLogPageCapsInitialRenderingAndReportsOlderMatches() {
+        let events = (0..<300).map { index in
+            EventEntry(
+                timestamp: Date(timeIntervalSince1970: TimeInterval(1_000 - index)),
+                message: "System event \(index)",
+                level: .info
+            )
+        }
+
+        let page = activityLogPage(
+            events: events,
+            selectedFilters: [.system],
+            selectedMinerID: nil,
+            searchText: "",
+            minerNamesByID: [:],
+            limit: 250
+        )
+
+        XCTAssertEqual(page.entries.count, 250)
+        XCTAssertEqual(page.entries.first?.message, "System event 0")
+        XCTAssertEqual(page.entries.last?.message, "System event 249")
+        XCTAssertTrue(page.hasMore)
+    }
+
+    func testActivityLogPageFiltersBeforeApplyingItsLimit() {
+        let events = [
+            EventEntry(message: "System event", level: .info, minerId: "miner-a"),
+            EventEntry(message: "Drop claimed", level: .info, minerId: "miner-b"),
+            EventEntry(message: "Another drop claimed", level: .info, minerId: "miner-b")
+        ]
+
+        let page = activityLogPage(
+            events: events,
+            selectedFilters: [.drops],
+            selectedMinerID: "miner-b",
+            searchText: "another",
+            minerNamesByID: ["miner-b": "Gabe"],
+            limit: 1
+        )
+
+        XCTAssertEqual(page.entries.map(\.message), ["Another drop claimed"])
+        XCTAssertFalse(page.hasMore)
+    }
+
     func testUpdateCompletionNotificationUsesIndependentCategory() {
         let update = NavigationModel.CompletedUpdate(
             previousVersion: "1.31",

@@ -9,8 +9,10 @@ struct EventLogView: View {
     @State private var selectedMinerFilterId = Self.allMinersFilterId
     @State private var isFilterHelpPresented = false
     @State private var seenEventIds: Set<UUID> = []
+    @State private var visibleEventLimit = Self.initialVisibleEventLimit
 
     private static let allMinersFilterId = "__all_miners__"
+    private static let initialVisibleEventLimit = 250
 
     private var selectedFilters: Set<EventFilter> {
         get { settings.selectedEventFilters }
@@ -21,22 +23,35 @@ struct EventLogView: View {
         navigation.minerManager.miners
     }
 
-    private var visibleEvents: [EventEntry] {
-        navigation.events.filter { event in
-            guard !eventFilters(for: event).intersection(selectedFilters).isEmpty else { return false }
-            guard selectedMinerFilterId == Self.allMinersFilterId || event.minerId == selectedMinerFilterId else { return false }
-            return matchesSearch(event)
+    private var minerNamesByID: [String: String] {
+        miners.reduce(into: [:]) { names, miner in
+            names[miner.id] = miner.displayName
         }
     }
 
     var body: some View {
+        let minerNames = minerNamesByID
+        let page = activityLogPage(
+            events: navigation.events,
+            selectedFilters: selectedFilters,
+            selectedMinerID: selectedMinerFilterId == Self.allMinersFilterId ? nil : selectedMinerFilterId,
+            searchText: searchText,
+            minerNamesByID: minerNames,
+            limit: visibleEventLimit
+        )
+
         VStack(spacing: 0) {
             controlsHeader
 
-            if visibleEvents.isEmpty {
+            if page.entries.isEmpty {
                 emptyState
             } else {
-                eventList
+                eventList(
+                    page,
+                    minerNamesByID: minerNames,
+                    showIcons: settings.showActivityLogIcons,
+                    animateRows: settings.animateActivityLogRows
+                )
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -46,6 +61,15 @@ struct EventLogView: View {
                   !minerIds.contains(selectedMinerFilterId)
             else { return }
             selectedMinerFilterId = Self.allMinersFilterId
+        }
+        .onChange(of: searchText) { _, _ in
+            visibleEventLimit = Self.initialVisibleEventLimit
+        }
+        .onChange(of: selectedMinerFilterId) { _, _ in
+            visibleEventLimit = Self.initialVisibleEventLimit
+        }
+        .onChange(of: selectedFilters) { _, _ in
+            visibleEventLimit = Self.initialVisibleEventLimit
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -68,21 +92,47 @@ struct EventLogView: View {
         }
     }
 
-    private var eventList: some View {
-        List(visibleEvents) { event in
-            let isNew = !seenEventIds.contains(event.id)
-            EventLogRow(event: event, isNew: isNew)
+    private func eventList(
+        _ page: ActivityLogPage,
+        minerNamesByID: [String: String],
+        showIcons: Bool,
+        animateRows: Bool
+    ) -> some View {
+        List {
+            ForEach(page.entries) { event in
+                let isNew = !seenEventIds.contains(event.id)
+                EventLogRow(
+                    event: event,
+                    minerName: event.minerId.flatMap { minerNamesByID[$0] },
+                    isNew: isNew,
+                    showIcon: showIcons,
+                    animateAppearance: animateRows
+                )
                 .listRowInsets(EdgeInsets(top: 3, leading: 12, bottom: 3, trailing: 12))
                 .listRowSeparator(.visible, edges: .bottom)
                 .listRowSeparatorTint(.secondary.opacity(0.14))
                 .listRowBackground(Color.clear)
+            }
+
+            if page.hasMore {
+                Button("Load older activity") {
+                    visibleEventLimit += Self.initialVisibleEventLimit
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+            }
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .onAppear {
-            seenEventIds = Set(visibleEvents.map(\.id))
+            seenEventIds.formUnion(page.entries.map(\.id))
         }
-        .onChange(of: visibleEvents.map(\.id)) { _, ids in
+        .onChange(of: page.entries.map(\.id)) { _, ids in
             seenEventIds.formUnion(ids)
         }
     }
@@ -292,21 +342,49 @@ struct EventLogView: View {
         return "No matching events"
     }
 
-    private func matchesSearch(_ event: EventEntry) -> Bool {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return true }
+}
 
-        let minerName = event.minerId.flatMap { minerId in
-            miners.first(where: { $0.id == minerId })?.displayName
-        } ?? ""
-        let searchableText = [
-            event.message,
-            event.rawMessage ?? "",
-            minerName
-        ].joined(separator: " ")
+struct ActivityLogPage {
+    let entries: [EventEntry]
+    let hasMore: Bool
+}
 
-        return searchableText.localizedCaseInsensitiveContains(query)
+func activityLogPage(
+    events: [EventEntry],
+    selectedFilters: Set<EventFilter>,
+    selectedMinerID: String?,
+    searchText: String,
+    minerNamesByID: [String: String],
+    limit: Int
+) -> ActivityLogPage {
+    guard !selectedFilters.isEmpty, limit > 0 else {
+        return ActivityLogPage(entries: [], hasMore: false)
     }
+
+    let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    var entries: [EventEntry] = []
+    entries.reserveCapacity(min(limit, events.count))
+
+    for event in events {
+        guard selectedMinerID == nil || event.minerId == selectedMinerID else { continue }
+
+        if !query.isEmpty {
+            let minerName = event.minerId.flatMap { minerNamesByID[$0] } ?? ""
+            let matchesSearch = event.message.localizedCaseInsensitiveContains(query)
+                || event.rawMessage?.localizedCaseInsensitiveContains(query) == true
+                || minerName.localizedCaseInsensitiveContains(query)
+            guard matchesSearch else { continue }
+        }
+
+        guard !eventFilters(for: event).isDisjoint(with: selectedFilters) else { continue }
+
+        if entries.count == limit {
+            return ActivityLogPage(entries: entries, hasMore: true)
+        }
+        entries.append(event)
+    }
+
+    return ActivityLogPage(entries: entries, hasMore: false)
 }
 
 private struct EventFilterHelpPopover: View {
@@ -368,9 +446,10 @@ private struct EventFilterHelpPopover: View {
 
 private struct EventLogRow: View {
     let event: EventEntry
+    let minerName: String?
     let isNew: Bool
-    @Environment(NavigationModel.self) private var navigation
-    private var settings: Settings { .shared }
+    let showIcon: Bool
+    let animateAppearance: Bool
     @State private var appeared = false
 
     private var eventFilter: EventFilter {
@@ -399,8 +478,8 @@ private struct EventLogRow: View {
             return parts.isEmpty ? nil : parts.joined(separator: " • ")
         }
 
-        if let miner = navigation.minerManager.miners.first(where: { $0.id == minerId }) {
-            parts.append(miner.displayName)
+        if let minerName {
+            parts.append(minerName)
         } else {
             parts.append("Miner \(minerId.prefix(4))")
         }
@@ -424,7 +503,7 @@ private struct EventLogRow: View {
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(stall.color)
                     .frame(width: 16, alignment: .center)
-            } else if settings.showActivityLogIcons {
+            } else if showIcon {
                 Image(systemName: eventFilter.symbol)
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(eventColor)
@@ -457,10 +536,10 @@ private struct EventLogRow: View {
                 .lineLimit(1)
         }
         .padding(.vertical, metadataText == nil ? 1 : 2)
-        .opacity(settings.animateActivityLogRows && isNew ? (appeared ? 1 : 0) : 1)
-        .offset(y: settings.animateActivityLogRows && isNew ? (appeared ? 0 : 6) : 0)
+        .opacity(animateAppearance && isNew ? (appeared ? 1 : 0) : 1)
+        .offset(y: animateAppearance && isNew ? (appeared ? 0 : 6) : 0)
         .onAppear {
-            guard settings.animateActivityLogRows, isNew else { return }
+            guard animateAppearance, isNew else { return }
             withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                 appeared = true
             }
