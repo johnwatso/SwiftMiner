@@ -125,7 +125,7 @@ enum InventoryDiskCache {
             let data = try JSONEncoder().encode(snapshot)
             try data.write(to: fileURL(accountId: snapshot.accountId), options: .atomic)
         } catch {
-            print("[InventoryDiskCache] Save failed: \(error.localizedDescription)")
+            Logger.campaigns.error("[InventoryDiskCache] Save failed: \(error.localizedDescription)")
         }
     }
 

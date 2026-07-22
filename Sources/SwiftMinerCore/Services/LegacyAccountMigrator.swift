@@ -20,7 +20,7 @@ public enum LegacyAccountMigrator {
             try await migrate(from: KeychainTokenStore(), into: KeychainAccountStore(), defaults: defaults)
         } catch {
             // Leave the flag unset so the migration is retried on the next launch.
-            print("[LegacyAccountMigrator] Migration failed (will retry next launch): \(error.localizedDescription)")
+            Logger.storage.error("Migration failed (will retry next launch): \(error.localizedDescription)")
         }
         #endif
     }
@@ -53,7 +53,7 @@ public enum LegacyAccountMigrator {
                     userInfo: [NSLocalizedDescriptionKey: "Keychain verification mismatch: expected \(legacy.count), found \(imported.count)"]
                 )
             }
-            print("[LegacyAccountMigrator] Migrated \(imported.count) account(s) into the Keychain")
+            Logger.storage.info("Migrated \(imported.count) account(s) into the Keychain")
         }
 
         // Mark the check as done so we never re-import, even when nothing moved.

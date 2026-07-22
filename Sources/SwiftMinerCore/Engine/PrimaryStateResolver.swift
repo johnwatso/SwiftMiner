@@ -141,7 +141,7 @@ public enum PrimaryStateResolver {
         
         // 1a. Global Auth Block
         if miner.needsAuth {
-            print("[PrimaryStateResolver] needsAuth=true → .blocked(.accountNotLinked)")
+            Logger.engine.info("needsAuth=true → .blocked(.accountNotLinked)")
             return .blocked(reasons: [.accountNotLinked])
         }
         
@@ -169,19 +169,19 @@ public enum PrimaryStateResolver {
         // Only block if a prioritised game is unlinked AND we have no other earnable work.
         // If we have other work, we should be .ready for that work instead.
         if !blockedPriority.isEmpty && !hasEarnableWork {
-            print("[PrimaryStateResolver] prioritised campaign(s) unlinked and no other work → .blocked(.accountNotLinked)")
+            Logger.engine.info("prioritised campaign(s) unlinked and no other work → .blocked(.accountNotLinked)")
             return .blocked(reasons: [.accountNotLinked])
         }
         
         // 1c. No Live Streams Block (Stable Engine State)
         if miner.status == .waitingForStream {
-            print("[PrimaryStateResolver] status=.waitingForStream → .blocked(.noLiveStreams)")
+            Logger.engine.info("status=.waitingForStream → .blocked(.noLiveStreams)")
             return .blocked(reasons: [.noLiveStreams])
         }
         
         // 1d. Eligibility Block (No campaigns at all)
         if relevantCampaigns.isEmpty {
-            print("[PrimaryStateResolver] no campaigns with drops → .blocked(.noEligibleCampaign)")
+            Logger.engine.info("no campaigns with drops → .blocked(.noEligibleCampaign)")
             return .blocked(reasons: [.noEligibleCampaign])
         }
         
@@ -190,7 +190,7 @@ public enum PrimaryStateResolver {
             campaign.isTimeActive || campaign.drops.allSatisfy { isEarned($0) }
         }
         if !hasActiveOrComplete {
-            print("[PrimaryStateResolver] all \(relevantCampaigns.count) campaigns are upcoming/inactive → .blocked(.noEligibleCampaign)")
+            Logger.engine.info("all \(relevantCampaigns.count) campaigns are upcoming/inactive → .blocked(.noEligibleCampaign)")
             return .blocked(reasons: [.noEligibleCampaign])
         }
 
@@ -217,7 +217,7 @@ public enum PrimaryStateResolver {
                         progressFraction: min(1.0, max(0.0, fraction)),
                         minutesRemaining: max(0, requiredMinutes - currentMinutes)
                     )
-                    print("[PrimaryStateResolver] status=.watching campaign=\(campaign.name) drop=\(activeDrop.name) progress=\(String(format: "%.2f", fraction)) → .mining")
+                    Logger.engine.info("status=.watching campaign=\(campaign.name) drop=\(activeDrop.name) progress=\(String(format: "%.2f", fraction)) → .mining")
                     return .mining(progress: progress)
                 }
             }
@@ -231,7 +231,7 @@ public enum PrimaryStateResolver {
         }
         
         if hasEarnable {
-            print("[PrimaryStateResolver] hasEarnable=true → .ready")
+            Logger.engine.info("hasEarnable=true → .ready")
             return .ready
         }
         
@@ -243,12 +243,12 @@ public enum PrimaryStateResolver {
         }
         
         if allEarned {
-            print("[PrimaryStateResolver] all drops across \(relevantCampaigns.count) campaigns earned → .completed")
+            Logger.engine.info("all drops across \(relevantCampaigns.count) campaigns earned → .completed")
             return .completed
         }
         
         // 5. Fallback (Scanning/Idle/Claiming)
-        print("[PrimaryStateResolver] fallback → .ready")
+        Logger.engine.info("fallback → .ready")
         return .ready
     }
 

@@ -35,7 +35,7 @@ public actor UnattendedIncidentNotificationService {
                     at: now()
                 ))
             } catch {
-                print("Warning: Failed to send unattended health notification: \(error.localizedDescription)")
+                Logger.notifications.error("Failed to send unattended health notification: \(error.localizedDescription)")
             }
         }
     }

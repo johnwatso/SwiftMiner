@@ -49,7 +49,7 @@ public actor NotificationService {
                 do {
                     _ = try await center.requestAuthorization(options: [.alert, .sound, .badge])
                 } catch {
-                    print("Warning: Notification authorization failed: \(error.localizedDescription)")
+                    Logger.notifications.warning("Notification authorization failed: \(error.localizedDescription)")
                 }
             }
         }
@@ -85,7 +85,7 @@ public actor NotificationService {
         do {
             try await center.add(request)
         } catch {
-            print("Warning: Failed to send notification: \(error.localizedDescription)")
+            Logger.notifications.error("Failed to send notification: \(error.localizedDescription)")
         }
     }
     
@@ -119,7 +119,7 @@ public actor NotificationService {
         do {
             try await center.add(request)
         } catch {
-            print("Warning: Failed to send notification: \(error.localizedDescription)")
+            Logger.notifications.error("Failed to send notification: \(error.localizedDescription)")
         }
     }
 
@@ -151,7 +151,7 @@ public actor NotificationService {
         do {
             try await center.add(request)
         } catch {
-            print("Warning: Failed to send notification: \(error.localizedDescription)")
+            Logger.notifications.error("Failed to send notification: \(error.localizedDescription)")
         }
     }
 
@@ -183,7 +183,7 @@ public actor NotificationService {
         do {
             try await center.add(request)
         } catch {
-            print("Warning: Failed to send notification: \(error.localizedDescription)")
+            Logger.notifications.error("Failed to send notification: \(error.localizedDescription)")
         }
     }
     
@@ -202,7 +202,7 @@ public actor NotificationService {
         if #available(macOS 13.0, *) {
             UNUserNotificationCenter.current().setBadgeCount(visible ? 1 : 0) { error in
                 guard let error else { return }
-                print("Warning: Failed to update notification badge count: \(error.localizedDescription)")
+                Logger.notifications.warning("Failed to update notification badge count: \(error.localizedDescription)")
             }
         }
     }

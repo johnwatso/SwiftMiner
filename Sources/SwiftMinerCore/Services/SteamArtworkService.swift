@@ -60,7 +60,7 @@ public actor SteamArtworkService {
             failedLookups.insert(key)
             UserDefaults.standard.set(manualOverrides, forKey: Self.manualOverridesDefaultsKey)
             UserDefaults.standard.set(appIdCache, forKey: Self.appIdCacheDefaultsKey)
-            print("[SteamArtworkService] Ignoring Steam override for unsupported category '\(gameName)'")
+            Logger.artwork.warning("Ignoring Steam override for unsupported category '\(gameName)'")
             return
         }
 
@@ -73,7 +73,7 @@ public actor SteamArtworkService {
         appIdCache.removeValue(forKey: key)
         failedLookups.remove(key)
         UserDefaults.standard.set(manualOverrides, forKey: Self.manualOverridesDefaultsKey)
-        print("[SteamArtworkService] Manual override set for '\(gameName)': appId=\(appId)")
+        Logger.artwork.info("Manual override set for '\(gameName)': appId=\(appId)")
     }
 
     /// Get portrait (600x900) artwork URL for a game.
@@ -159,10 +159,10 @@ public actor SteamArtworkService {
             let (data, response) = try await URLSession.shared.data(from: remoteURL)
             guard (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
             try data.write(to: localURL, options: .atomic)
-            print("[SteamArtworkService] Cached \(type) image for appId=\(appId)")
+            Logger.artwork.debug("Cached \(type) image for appId=\(appId)")
             return localURL
         } catch {
-            print("[SteamArtworkService] Disk cache write failed for appId=\(appId) type=\(type): \(error)")
+            Logger.artwork.error("Disk cache write failed for appId=\(appId) type=\(type): \(error)")
             return remoteURL
         }
     }
@@ -174,7 +174,7 @@ public actor SteamArtworkService {
     private func lookupAppId(for gameName: String) async -> String? {
         let normalizedName = gameName.lowercased().trimmingCharacters(in: .whitespaces)
         
-        print("[SteamArtworkService] Looking up: '\(gameName)' (normalized: '\(normalizedName)')")
+        Logger.artwork.debug("Looking up: '\(gameName)' (normalized: '\(normalizedName)')")
 
         guard Self.supportsSteamArtwork(forGameName: gameName) else {
             manualOverrides.removeValue(forKey: normalizedName)
@@ -182,37 +182,37 @@ public actor SteamArtworkService {
             failedLookups.insert(normalizedName)
             UserDefaults.standard.set(manualOverrides, forKey: Self.manualOverridesDefaultsKey)
             UserDefaults.standard.set(appIdCache, forKey: Self.appIdCacheDefaultsKey)
-            print("[SteamArtworkService] Skipping Steam artwork for unsupported category '\(gameName)'")
+            Logger.artwork.debug("Skipping Steam artwork for unsupported category '\(gameName)'")
             return nil
         }
         
         // Manual overrides take priority — always used, never skipped
         if let manualId = manualOverrides[normalizedName] {
-            print("[SteamArtworkService] Manual override for '\(gameName)': appId=\(manualId)")
+            Logger.artwork.debug("Manual override for '\(gameName)': appId=\(manualId)")
             return manualId
         }
 
         // Auto-lookup cache
         if let cachedId = appIdCache[normalizedName] {
-            print("[SteamArtworkService] Cache hit for '\(gameName)': appId=\(cachedId)")
+            Logger.artwork.debug("Cache hit for '\(gameName)': appId=\(cachedId)")
             return cachedId
         }
         
         // Don't retry failed lookups in this session
         if failedLookups.contains(normalizedName) {
-            print("[SteamArtworkService] Previously failed lookup for '\(gameName)', skipping")
+            Logger.artwork.debug("Previously failed lookup for '\(gameName)', skipping")
             return nil
         }
         
         do {
             let appId = try await performSearch(gameName: gameName)
             if let appId = appId {
-                print("[SteamArtworkService] Found match for '\(gameName)': appId=\(appId)")
+                Logger.artwork.info("Found match for '\(gameName)': appId=\(appId)")
                 appIdCache[normalizedName] = appId
                 UserDefaults.standard.set(appIdCache, forKey: Self.appIdCacheDefaultsKey)
                 return appId
             } else {
-                print("[SteamArtworkService] No match found for '\(gameName)'")
+                Logger.artwork.info("No match found for '\(gameName)'")
                 failedLookups.insert(normalizedName)
                 return nil
             }
@@ -222,9 +222,9 @@ public actor SteamArtworkService {
             let isCancellation = error is CancellationError
                 || (error as NSError).code == NSURLErrorCancelled
             if isCancellation {
-                print("[SteamArtworkService] Lookup cancelled for '\(gameName)' (transient, will retry)")
+                Logger.artwork.debug("Lookup cancelled for '\(gameName)' (transient, will retry)")
             } else {
-                print("[SteamArtworkService] Lookup failed for '\(gameName)': \(error)")
+                Logger.artwork.warning("Lookup failed for '\(gameName)': \(error)")
             }
             return nil
         }
@@ -257,16 +257,16 @@ public actor SteamArtworkService {
         // Parse Steam search response
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let items = json["items"] as? [[String: Any]] else {
-            print("[SteamArtworkService] Invalid JSON response for '\(gameName)'")
+            Logger.artwork.warning("Invalid JSON response for '\(gameName)'")
             return nil
         }
         
-        print("[SteamArtworkService] Steam returned \(items.count) items for '\(gameName)'")
+        Logger.artwork.debug("Steam returned \(items.count) items for '\(gameName)'")
         
         // Log first few results for debugging
         for (index, item) in items.prefix(3).enumerated() {
             if let name = item["name"] as? String, let appId = item["id"] as? Int {
-                print("[SteamArtworkService] Result \(index + 1): '\(name)' (appId: \(appId))")
+                Logger.artwork.debug("Result \(index + 1): '\(name)' (appId: \(appId))")
             }
         }
         
@@ -283,7 +283,7 @@ public actor SteamArtworkService {
         // 1. Exact name match (case-insensitive) with CDN validation
         if let exact = candidates.first(where: { $0.name.lowercased() == normalizedQuery }) {
             if await cdnPortraitExists(appId: exact.id) {
-                print("[SteamArtworkService] Exact match '\(exact.name)' (appId=\(exact.id)) verified")
+                Logger.artwork.info("Exact match '\(exact.name)' (appId=\(exact.id)) verified")
                 return exact.id
             }
         }
@@ -291,12 +291,12 @@ public actor SteamArtworkService {
         // 2. First candidate whose portrait CDN URL actually returns 200
         for candidate in candidates {
             if await cdnPortraitExists(appId: candidate.id) {
-                print("[SteamArtworkService] Using '\(candidate.name)' (appId=\(candidate.id)) for query '\(gameName)'")
+                Logger.artwork.info("Using '\(candidate.name)' (appId=\(candidate.id)) for query '\(gameName)'")
                 return candidate.id
             }
         }
 
-        print("[SteamArtworkService] No valid portrait CDN URL found for '\(gameName)'")
+        Logger.artwork.info("No valid portrait CDN URL found for '\(gameName)'")
         return nil
     }
 

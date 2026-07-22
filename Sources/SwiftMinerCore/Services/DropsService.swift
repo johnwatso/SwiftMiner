@@ -56,12 +56,12 @@ public actor DropsService {
         // Update cache with enriched data
         self.campaignsCache = enriched
 
-        print("[DropsService] Fetched \(enriched.count) total campaigns")
+        Logger.campaigns.info("Fetched \(enriched.count) total campaigns")
 
         // Filter: must be mining-eligible (active, linked, and has drops still needing progress)
         let active = enriched.filter { $0.isMiningEligible }
 
-        print("[DropsService] Returning \(active.count) mining-eligible campaigns")
+        Logger.campaigns.info("Returning \(active.count) mining-eligible campaigns")
         return active
     }
 
@@ -91,7 +91,7 @@ public actor DropsService {
                     isEligible: campaign.isAccountConnected,
                     lastUpdated: progress?.lastUpdated ?? Date()
                 )
-                print("[State] Drop \(drop.name) → status=\(state.status) eligible=\(campaign.isAccountConnected)")
+                Logger.campaigns.debug("[State] Drop \(drop.name) → status=\(state.status) eligible=\(campaign.isAccountConnected)")
                 return state
             }
         }
@@ -144,7 +144,7 @@ public actor DropsService {
                 }
 
                 if claimedFromInventory {
-                    print("[DropsService] mergeInventory: '\(drop.name)' → CLAIMED via inventory benefit ID \(drop.benefitID)")
+                    Logger.campaigns.info("mergeInventory: '\(drop.name)' → CLAIMED via inventory benefit ID \(drop.benefitID)")
                 }
                 return d
             }

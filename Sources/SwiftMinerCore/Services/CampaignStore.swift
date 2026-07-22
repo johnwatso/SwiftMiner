@@ -26,7 +26,7 @@ public final class CampaignStore {
         // Load cached campaigns immediately so the UI has data before the first API call
         campaigns = CampaignStoreDiskCache.load()
         if !campaigns.isEmpty {
-            print("[CampaignStore] Loaded \(campaigns.count) cached campaigns from disk")
+            Logger.campaigns.info("Loaded \(campaigns.count) cached campaigns from disk")
         }
     }
 
@@ -69,7 +69,7 @@ enum CampaignStoreDiskCache {
             let data = try JSONEncoder().encode(envelope)
             try data.write(to: fileURL, options: .atomic)
         } catch {
-            print("[CampaignStoreDiskCache] Save failed: \(error.localizedDescription)")
+            Logger.campaigns.error("[CampaignStoreDiskCache] Save failed: \(error.localizedDescription)")
         }
     }
 
@@ -80,7 +80,7 @@ enum CampaignStoreDiskCache {
         }
         // Discard stale cache
         guard Date().timeIntervalSince(envelope.savedAt) < maxAge else {
-            print("[CampaignStoreDiskCache] Cache expired, ignoring")
+            Logger.campaigns.warning("[CampaignStoreDiskCache] Cache expired, ignoring")
             return []
         }
         return envelope.campaigns

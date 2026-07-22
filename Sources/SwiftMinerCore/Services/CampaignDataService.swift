@@ -170,14 +170,14 @@ public actor CampaignDataService {
                         let existing = fresh[index]
                         let merged = CampaignService.mergeDashboardCampaign(existing, withInventory: discovered)
                         if merged.isAccountConnected && !existing.isAccountConnected {
-                            print("[CampaignDataService] Inventory confirmed connection for \(discovered.name)")
+                            Logger.campaigns.info("Inventory confirmed connection for \(discovered.name)")
                         }
                         if existing.channels.isEmpty && !merged.channels.isEmpty {
-                            print("[CampaignDataService] Inventory supplied \(merged.channels.count) approved channel(s) for \(discovered.name)")
+                            Logger.campaigns.info("Inventory supplied \(merged.channels.count) approved channel(s) for \(discovered.name)")
                         }
                         fresh[index] = merged
                     } else {
-                        print("[CampaignDataService] Discovered campaign from inventory: \(discovered.name)")
+                        Logger.campaigns.info("Discovered campaign from inventory: \(discovered.name)")
                         fresh.append(discovered)
                     }
                 }
@@ -192,9 +192,9 @@ public actor CampaignDataService {
 
             // Merge: API wins for shared IDs; preserved campaigns follow merge rules.
             let merged = CampaignMergeEngine.merge(fresh: fresh, cached: cached, inventory: snapshot)
-            print("[CampaignDataService] Refresh (@\(accountId)): fetched \(fresh.count), merged \(merged.count) campaigns")
+            Logger.campaigns.info("Refresh (@\(accountId)): fetched \(fresh.count), merged \(merged.count) campaigns")
             for c in fresh {
-                print("  + Fresh: \(c.name) (Connected: \(c.isAccountConnected))")
+                Logger.campaigns.debug("  + Fresh: \(c.name) (Connected: \(c.isAccountConnected))")
             }
             saveCampaignsToCache(merged)
             lastCampaignLoad = Date()
@@ -207,7 +207,7 @@ public actor CampaignDataService {
             }
 
         } catch {
-            print("[CampaignDataService] Refresh failed: \(error) — cached data preserved.")
+            Logger.campaigns.error("Refresh failed: \(error) — cached data preserved.")
             // Don't throw — callers continue to see cached data.
         }
     }
@@ -308,7 +308,7 @@ enum CampaignDiskCache {
             try data.write(to: fileURL, options: .atomic)
             
         } catch {
-            print("[CampaignDiskCache] Save failed: \(error)")
+            Logger.campaigns.error("[CampaignDiskCache] Save failed: \(error)")
         }
     }
     
@@ -326,14 +326,14 @@ enum CampaignDiskCache {
         
         // Validate version
         guard envelope.version == currentVersion else {
-            print("[CampaignDiskCache] Version mismatch, ignoring cache")
+            Logger.campaigns.warning("[CampaignDiskCache] Version mismatch, ignoring cache")
             clear(accountId: accountId)
             return []
         }
         
         // Validate account ID matches
         guard envelope.accountId == accountId else {
-            print("[CampaignDiskCache] Account ID mismatch, ignoring cache")
+            Logger.campaigns.warning("[CampaignDiskCache] Account ID mismatch, ignoring cache")
             return []
         }
         
@@ -404,13 +404,13 @@ enum CampaignDiskCache {
             if inInventory { return true }
             
             // Expired >14 days ago and not in inventory -> remove
-            print("[CampaignDiskCache] Cleanup: Removing campaign \(campaign.name) (expired \(campaign.endDate))")
+            Logger.campaigns.debug("[CampaignDiskCache] Cleanup: Removing campaign \(campaign.name) (expired \(campaign.endDate))")
             return false
         }
         
         let removed = campaigns.count - kept.count
         if removed > 0 {
-            print("[CampaignDiskCache] Cleanup: Removed \(removed) old campaigns, kept \(kept.count)")
+            Logger.campaigns.info("[CampaignDiskCache] Cleanup: Removed \(removed) old campaigns, kept \(kept.count)")
             save(campaigns: kept, accountId: accountId)
         }
     }

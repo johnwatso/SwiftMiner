@@ -151,7 +151,7 @@ public init(
         // TDM PARITY: Fetch Playback Access Token to verify session stability
         // If this fails, the channel might be restricted or user ghost-banned from earning.
         _ = try await apiClient.fetchPlaybackAccessToken(channelLogin: channel.login)
-        print("[WatchSessionManager] Playback access token verified for \(channel.login)")
+        Logger.engine.debug("Playback access token verified for \(channel.login)")
 
         // Fetch broadcast ID for accurate Spade beacons
         let broadcastId = try? await apiClient.fetchBroadcastId(channelLogin: channel.login)

@@ -49,7 +49,7 @@ public actor KeychainTokenStore: TokenStore {
             let plaintext = try AES.GCM.open(box, using: encryptionKey)
             return try JSONDecoder().decode([Account].self, from: plaintext)
         } catch {
-            print("[KeychainTokenStore] Decryption failed: \(error.localizedDescription)")
+            Logger.storage.error("Decryption failed: \(error.localizedDescription)")
             return []
         }
     }

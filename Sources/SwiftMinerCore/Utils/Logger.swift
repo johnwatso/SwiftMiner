@@ -1,75 +1,64 @@
 import Foundation
-import os.log
+import os
 
-/// Logging utility for the Twitch miner
-public actor Logger {
-    public enum LogLevel: String, Sendable, Comparable {
-        case debug = "DEBUG"
-        case info = "INFO"
-        case warning = "WARNING"
-        case error = "ERROR"
-        
-        public static func < (lhs: LogLevel, rhs: LogLevel) -> Bool {
-            let order: [LogLevel] = [.debug, .info, .warning, .error]
-            guard let lhsIndex = order.firstIndex(of: lhs),
-                  let rhsIndex = order.firstIndex(of: rhs) else {
-                return false
-            }
-            return lhsIndex < rhsIndex
-        }
-    }
-    
-    private let subsystem = "com.swiftminer"
-    private let category: String
-    private let osLog: OSLog
-    private var logLevel: LogLevel = .info
-    
-    public var logHandler: (@Sendable (LogLevel, String) -> Void)?
-    
-    public init(category: String = "SwiftMinerCore") {
-        self.category = category
-        self.osLog = OSLog(subsystem: subsystem, category: category)
-    }
-    
-    public func setLogLevel(_ level: LogLevel) {
-        self.logLevel = level
+/// os.log-backed logger for SwiftMinerCore diagnostics.
+///
+/// Messages go to the unified logging system (subsystem `com.swiftminer`), so
+/// diagnostics from Release builds can be recovered with Console.app or
+/// `log show --predicate 'subsystem == "com.swiftminer"'` when a user reports
+/// an unattended failure — unlike `print`, whose output is lost once the app
+/// is launched from Finder.
+///
+/// Messages are logged as public so they survive in `log show` output;
+/// call sites must never interpolate secrets (tokens, cookies, passwords).
+public struct Logger: Sendable {
+    private let osLogger: os.Logger
+
+    public init(category: String) {
+        self.osLogger = os.Logger(subsystem: "com.swiftminer", category: category)
     }
 
-    public func debug(_ message: String) {
-        log(level: .debug, message: message)
+    /// High-volume diagnostic detail. Not persisted by default; visible when
+    /// streaming live (`log stream --level debug`).
+    public func debug(_ message: @autoclosure () -> String) {
+        let text = message()
+        osLogger.debug("\(text, privacy: .public)")
     }
 
-    public func info(_ message: String) {
-        log(level: .info, message: message)
+    /// Routine state transitions and progress notes.
+    public func info(_ message: @autoclosure () -> String) {
+        let text = message()
+        osLogger.info("\(text, privacy: .public)")
     }
 
-    public func warning(_ message: String) {
-        log(level: .warning, message: message)
+    /// Unexpected but recoverable conditions.
+    public func warning(_ message: @autoclosure () -> String) {
+        let text = message()
+        osLogger.notice("\(text, privacy: .public)")
     }
 
-    public func error(_ message: String) {
-        log(level: .error, message: message)
+    /// Failures that degrade functionality.
+    public func error(_ message: @autoclosure () -> String) {
+        let text = message()
+        osLogger.error("\(text, privacy: .public)")
     }
+}
 
-    private func log(level: LogLevel, message: String) {
-        guard level >= logLevel else { return }
+// MARK: - Shared category loggers
 
-        let timestamp = ISO8601DateFormatter().string(from: Date())
-        let formattedMessage = "[\(timestamp)] [\(level.rawValue)] \(message)"
-
-        // Log to OSLog
-        switch level {
-        case .debug:
-            os_log("%{public}@", log: osLog, type: .debug, message)
-        case .info:
-            os_log("%{public}@", log: osLog, type: .info, message)
-        case .warning:
-            os_log("%{public}@", log: osLog, type: .default, message)
-        case .error:
-            os_log("%{public}@", log: osLog, type: .error, message)
-        }
-
-        // Call custom handler
-        logHandler?(level, formattedMessage)
-    }
+extension Logger {
+    /// Miner engine, supervisor, manager, and primary-state resolution.
+    public static let engine = Logger(category: "Engine")
+    /// GraphQL/HTTP traffic with Twitch.
+    public static let api = Logger(category: "TwitchAPI")
+    /// Device-code auth, token refresh, and client fingerprinting.
+    public static let auth = Logger(category: "Auth")
+    /// Campaign discovery, mapping, merging, and drops progress.
+    public static let campaigns = Logger(category: "Campaigns")
+    /// Steam artwork lookup and caching.
+    public static let artwork = Logger(category: "SteamArtwork")
+    /// Keychain, SQLite, and account persistence.
+    public static let storage = Logger(category: "Storage")
+    /// User notifications and unattended-incident reporting.
+    public static let notifications = Logger(category: "Notifications")
 }
