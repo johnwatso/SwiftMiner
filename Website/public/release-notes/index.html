@@ -47,6 +47,19 @@
   <main>
     <h1>SwiftMiner Release Notes</h1>
     <p class="meta">Recent Sparkle update history</p>
+    <h2>🐛 <a href="./1.34.html">Version 1.34</a></h2>
+    <ul>
+      <li>Fixed a reconnect loop in the Twitch live-events (PubSub) client where a replaced connection's own shutdown could be misread as a failure and trigger extra reconnects; cancelled connections now exit quietly, keeping live drop-progress tracking stable.</li>
+      <li>Corrected the active-watch loop's timing so stream-offline detection and the fallback progress poll run on their intended sixty-second schedule instead of roughly every two and a half minutes.</li>
+      <li>No longer abandons a drop within about ten minutes of completing when a higher-priority campaign goes live, unless that new campaign's own window is about to close.</li>
+      <li>Prefers the campaign whose next drop is closest to completing when other ranking factors are equal, so partially-earned drops are finished first.</li>
+      <li>Honors Twitch rate-limit responses by waiting out a short Retry-After and retrying automatically instead of surfacing an error.</li>
+      <li>Detects an unclean shutdown (crash, force-quit, or power loss) and offers a pre-filled bug report on the next launch.</li>
+      <li>Routes the mining engine's diagnostics through the macOS unified log so installed-build activity is recoverable with Console.app, without ever logging authentication tokens.</li>
+      <li>Reworks settings observation and trims the Overview render path so changing one preference no longer refreshes unrelated interface, and unchanged refreshes are skipped.</li>
+      <li>Adds continuous integration (build, full test suite, and a Sparkle-configuration check on every change), splits several large source files, and expands automated coverage to close to 390 checks.</li>
+      <li>Updates SwiftMiner to version 1.34 build 2026072216.</li>
+    </ul>
     <h2>🖥️ <a href="./1.33.html">Version 1.33</a></h2>
     <ul>
       <li>Lowers SwiftMiner's minimum requirement to macOS 14.0 across the app, libraries, tools, publisher, and tests while retaining native Apple Silicon and Intel release support.</li>
