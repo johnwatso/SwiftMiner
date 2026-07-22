@@ -231,8 +231,26 @@ extension MinerEngine {
                 if left.endDate != right.endDate { return left.endDate < right.endDate }
             }
 
+            // Prefer finishing partially-earned drops: banked minutes are lost
+            // if the campaign's streams dry up later, so a campaign whose next
+            // drop is closer to completion outranks an untouched peer.
+            let leftRemaining = minutesToNearestClaim(left)
+            let rightRemaining = minutesToNearestClaim(right)
+            if leftRemaining != rightRemaining { return leftRemaining < rightRemaining }
+
             return lhs.offset < rhs.offset
         }.map(\.element)
+    }
+
+    /// Minutes left on the campaign's most-advanced unclaimed drop, or
+    /// `Int.max` when no drop has any recorded progress.
+    static func minutesToNearestClaim(_ campaign: Campaign) -> Int {
+        campaign.drops.compactMap { drop -> Int? in
+            guard !drop.isClaimed,
+                  let current = drop.progress?.currentMinutes,
+                  current > 0 else { return nil }
+            return max(0, drop.requiredMinutes - current)
+        }.min() ?? Int.max
     }
 
     internal static func sameGameVerificationCandidates(
