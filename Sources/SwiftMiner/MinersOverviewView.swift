@@ -5,7 +5,7 @@ import TipKit
 /// Execution layer overview - scalable multi-miner workspace.
 struct MinersOverviewView: View {
     @Environment(NavigationModel.self) private var navigation
-    @ObservedObject private var settings = Settings.shared
+    private var settings: Settings { .shared }
     @AppStorage("minersDiagnosticsExpanded", store: Settings.appStorageStore)
     private var diagnosticsExpanded = true
     @State private var selectedActivitySummary: MinerManager.MinerActivitySummary?
@@ -1247,7 +1247,7 @@ private struct MinerSourceListRow: View {
     let onClearNickname: () -> Void
     let onOverrideStream: () -> Void
     let onClearStreamOverride: () -> Void
-    @ObservedObject private var settings = Settings.shared
+    private var settings: Settings { .shared }
 
     private var snapshot: MinerActivitySnapshot {
         MinerActivitySnapshot.resolve(

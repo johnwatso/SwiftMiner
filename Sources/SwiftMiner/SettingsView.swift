@@ -7,7 +7,7 @@ import UniformTypeIdentifiers
 
 /// macOS Settings window using a Safari-style TabView with a top toolbar.
 struct SettingsView: View {
-    @StateObject private var settings = Settings.shared
+    @Bindable private var settings = Settings.shared
     @Environment(NavigationModel.self) private var navigation
     @State private var selectedTab: SettingsTab = .general
 
@@ -136,10 +136,10 @@ private struct SettingsTabItem: View {
 // MARK: - General Settings
 
 private struct GeneralSettingsView: View {
-    @ObservedObject var settings: Settings
+    @Bindable var settings: Settings
     @EnvironmentObject private var updater: AppUpdater
     @Environment(NavigationModel.self) private var navigation
-    @StateObject private var loginItemSettings = LoginItemSettings()
+    @State private var loginItemSettings = LoginItemSettings()
 
     var body: some View {
         Form {
@@ -245,7 +245,7 @@ private struct GeneralSettingsView: View {
 // MARK: - Appearance Settings
 
 private struct AppearanceSettingsView: View {
-    @ObservedObject var settings: Settings
+    @Bindable var settings: Settings
 
     var body: some View {
         Form {
@@ -299,7 +299,7 @@ private struct AppearanceSettingsView: View {
 
 private struct UpdatesSettingsView: View {
     @EnvironmentObject private var updater: AppUpdater
-    @ObservedObject private var settings = Settings.shared
+    @Bindable private var settings = Settings.shared
 
     private var updateInstallPolicyDescription: String {
         switch settings.autoUpdateInstallPolicy {
@@ -600,7 +600,7 @@ private struct AccountSettingsAccountRow: View {
 // MARK: - Mining Settings
 
 private struct MiningSettingsView: View {
-    @ObservedObject var settings: Settings
+    @Bindable var settings: Settings
     @Environment(NavigationModel.self) private var navigation
     @State private var isShowingGameManagement = false
 
@@ -692,7 +692,7 @@ private struct MiningSettingsView: View {
 // MARK: - Integrations Settings
 
 private struct WebDashboardSettingsView: View {
-    @ObservedObject var settings: Settings
+    @Bindable var settings: Settings
     @Environment(NavigationModel.self) private var navigation
     @State private var showingInternetSetup = false
     @State private var showingLocalSetup = false
@@ -1296,7 +1296,7 @@ private struct TwitchGlyphShape: Shape {
 }
 
 private struct IntegrationsSettingsView: View {
-    @ObservedObject var settings: Settings
+    @Bindable var settings: Settings
     @Environment(NavigationModel.self) private var navigation
     @State private var isTestingConnection = false
     @State private var connectionTestMessage: String?
@@ -2223,7 +2223,7 @@ private struct ResourceUsagePopover: View {
 }
 
 private struct AdvancedSettingsView: View {
-    @ObservedObject var settings: Settings
+    @Bindable var settings: Settings
     @Environment(NavigationModel.self) private var navigation
     @State private var showResetConfirmation = false
     @State private var showDropCacheConfirmation = false

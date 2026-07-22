@@ -3,10 +3,13 @@ import Security
 import ServiceManagement
 import SwiftMinerCore
 
-/// User settings managed via @AppStorage.
-/// Provides persistent preferences across app launches.
+/// User settings persisted in UserDefaults.
+/// Provides persistent preferences across app launches; properties are
+/// observation-tracked per key via @Observable so views only re-render for
+/// the settings they actually read.
+@Observable
 @MainActor
-public final class Settings: ObservableObject {
+public final class Settings {
     
     // MARK: - Shared Instance
 
@@ -24,106 +27,359 @@ public final class Settings: ObservableObject {
     
     public static let shared = Settings()
 
-    // MARK: - @AppStorage Properties
+    // MARK: - UserDefaults Access
+
+    // Typed accessors that mirror @AppStorage semantics: missing or mistyped
+    // values fall back to the default, enums round-trip through rawValue.
+
+    private static func read(_ key: String, default def: Bool) -> Bool {
+        (appStorageStore.object(forKey: key) as? Bool) ?? def
+    }
+
+    private static func read(_ key: String, default def: Int) -> Int {
+        (appStorageStore.object(forKey: key) as? Int) ?? def
+    }
+
+    private static func read(_ key: String, default def: String) -> String {
+        appStorageStore.string(forKey: key) ?? def
+    }
+
+    private static func read<V: RawRepresentable>(_ key: String, default def: V) -> V where V.RawValue == String {
+        appStorageStore.string(forKey: key).flatMap(V.init(rawValue:)) ?? def
+    }
+
+    private static func write(_ key: String, _ value: Bool) {
+        appStorageStore.set(value, forKey: key)
+    }
+
+    private static func write(_ key: String, _ value: Int) {
+        appStorageStore.set(value, forKey: key)
+    }
+
+    private static func write(_ key: String, _ value: String) {
+        appStorageStore.set(value, forKey: key)
+    }
+
+    private static func write<V: RawRepresentable>(_ key: String, _ value: V) where V.RawValue == String {
+        appStorageStore.set(value.rawValue, forKey: key)
+    }
+
+    // MARK: - Persisted Properties
     
     /// Whether auto-claim is enabled for completed drops
-    @AppStorage("autoClaimEnabled", store: Settings.appStorageStore)
-    public var autoClaimEnabled: Bool = true
+    public var autoClaimEnabled: Bool {
+        get {
+            access(keyPath: \.autoClaimEnabled)
+            return Self.read("autoClaimEnabled", default: true)
+        }
+        set {
+            withMutation(keyPath: \.autoClaimEnabled) {
+                Self.write("autoClaimEnabled", newValue)
+            }
+        }
+    }
     
     /// Whether to auto-claim community points bonuses
-    @AppStorage("autoClaimPointsEnabled", store: Settings.appStorageStore)
-    public var autoClaimPointsEnabled: Bool = true
+    public var autoClaimPointsEnabled: Bool {
+        get {
+            access(keyPath: \.autoClaimPointsEnabled)
+            return Self.read("autoClaimPointsEnabled", default: true)
+        }
+        set {
+            withMutation(keyPath: \.autoClaimPointsEnabled) {
+                Self.write("autoClaimPointsEnabled", newValue)
+            }
+        }
+    }
     
     /// Log level for console output
-    @AppStorage("logLevel", store: Settings.appStorageStore)
-    public var logLevel: LogLevel = .info
+    public var logLevel: LogLevel {
+        get {
+            access(keyPath: \.logLevel)
+            return Self.read("logLevel", default: .info)
+        }
+        set {
+            withMutation(keyPath: \.logLevel) {
+                Self.write("logLevel", newValue)
+            }
+        }
+    }
     
     /// Whether to show the log console in the UI
-    @AppStorage("showLogConsole", store: Settings.appStorageStore)
-    public var showLogConsole: Bool = true
+    public var showLogConsole: Bool {
+        get {
+            access(keyPath: \.showLogConsole)
+            return Self.read("showLogConsole", default: true)
+        }
+        set {
+            withMutation(keyPath: \.showLogConsole) {
+                Self.write("showLogConsole", newValue)
+            }
+        }
+    }
     
     /// Maximum number of log entries to keep in memory
-    @AppStorage("maxLogEntries", store: Settings.appStorageStore)
-    public var maxLogEntries: Int = 500
+    public var maxLogEntries: Int {
+        get {
+            access(keyPath: \.maxLogEntries)
+            return Self.read("maxLogEntries", default: 500)
+        }
+        set {
+            withMutation(keyPath: \.maxLogEntries) {
+                Self.write("maxLogEntries", newValue)
+            }
+        }
+    }
 
     /// Diagnostic: when on, SwiftMiner samples its own CPU/memory usage so the
     /// Advanced "Resource Usage" popup can show averages. Off by default; nothing
     /// is sampled unless enabled, so there is no cost for normal use.
-    @AppStorage("monitorResourceUsage", store: Settings.appStorageStore)
-    public var monitorResourceUsage: Bool = false
+    public var monitorResourceUsage: Bool {
+        get {
+            access(keyPath: \.monitorResourceUsage)
+            return Self.read("monitorResourceUsage", default: false)
+        }
+        set {
+            withMutation(keyPath: \.monitorResourceUsage) {
+                Self.write("monitorResourceUsage", newValue)
+            }
+        }
+    }
     
     /// Legacy preference retained for users upgrading from the old boolean setting.
-    @AppStorage("minimizeToMenuBar", store: Settings.appStorageStore)
-    public var minimizeToMenuBar: Bool = false
+    public var minimizeToMenuBar: Bool {
+        get {
+            access(keyPath: \.minimizeToMenuBar)
+            return Self.read("minimizeToMenuBar", default: false)
+        }
+        set {
+            withMutation(keyPath: \.minimizeToMenuBar) {
+                Self.write("minimizeToMenuBar", newValue)
+            }
+        }
+    }
 
     /// Where SwiftMiner should appear while it is running.
-    @AppStorage("appPresenceMode", store: Settings.appStorageStore)
-    public var appPresenceMode: AppPresenceMode = .dockOnly
+    public var appPresenceMode: AppPresenceMode {
+        get {
+            access(keyPath: \.appPresenceMode)
+            return Self.read("appPresenceMode", default: .dockOnly)
+        }
+        set {
+            withMutation(keyPath: \.appPresenceMode) {
+                Self.write("appPresenceMode", newValue)
+            }
+        }
+    }
     
     /// Whether to start mining automatically on launch (if authenticated)
-    @AppStorage("autoStartOnLaunch", store: Settings.appStorageStore)
-    public var autoStartOnLaunch: Bool = false
+    public var autoStartOnLaunch: Bool {
+        get {
+            access(keyPath: \.autoStartOnLaunch)
+            return Self.read("autoStartOnLaunch", default: false)
+        }
+        set {
+            withMutation(keyPath: \.autoStartOnLaunch) {
+                Self.write("autoStartOnLaunch", newValue)
+            }
+        }
+    }
 
     /// Whether the main window should minimize itself when SwiftMiner launches.
-    @AppStorage("startMinimized", store: Settings.appStorageStore)
-    public var startMinimized: Bool = false
+    public var startMinimized: Bool {
+        get {
+            access(keyPath: \.startMinimized)
+            return Self.read("startMinimized", default: false)
+        }
+        set {
+            withMutation(keyPath: \.startMinimized) {
+                Self.write("startMinimized", newValue)
+            }
+        }
+    }
 
     /// Whether to include campaigns that only give non-drop rewards (badges/emotes)
-    @AppStorage("enableBadgesEmotes", store: Settings.appStorageStore)
-    public var enableBadgesEmotes: Bool = false
+    public var enableBadgesEmotes: Bool {
+        get {
+            access(keyPath: \.enableBadgesEmotes)
+            return Self.read("enableBadgesEmotes", default: false)
+        }
+        set {
+            withMutation(keyPath: \.enableBadgesEmotes) {
+                Self.write("enableBadgesEmotes", newValue)
+            }
+        }
+    }
 
     /// Whether IRL-category campaigns can be mined as earn-anywhere special campaigns.
-    @AppStorage("mineIRLCampaigns", store: Settings.appStorageStore)
-    public var mineIRLCampaigns: Bool = true
+    public var mineIRLCampaigns: Bool {
+        get {
+            access(keyPath: \.mineIRLCampaigns)
+            return Self.read("mineIRLCampaigns", default: true)
+        }
+        set {
+            withMutation(keyPath: \.mineIRLCampaigns) {
+                Self.write("mineIRLCampaigns", newValue)
+            }
+        }
+    }
 
     /// Prefer spreading miners across different streams for the same campaign when enough streams are available.
-    @AppStorage("avoidDuplicateStreams", store: Settings.appStorageStore)
-    public var avoidDuplicateStreams: Bool = true
+    public var avoidDuplicateStreams: Bool {
+        get {
+            access(keyPath: \.avoidDuplicateStreams)
+            return Self.read("avoidDuplicateStreams", default: true)
+        }
+        set {
+            withMutation(keyPath: \.avoidDuplicateStreams) {
+                Self.write("avoidDuplicateStreams", newValue)
+            }
+        }
+    }
 
     /// Whether SwiftMiner should restart a miner that appears stuck after a stall or recoverable error.
     /// Hidden and disabled by default while supervisor recovery is being reworked.
-    @AppStorage("antiStallRecoveryEnabled", store: Settings.appStorageStore)
-    public var antiStallRecoveryEnabled: Bool = false
+    public var antiStallRecoveryEnabled: Bool {
+        get {
+            access(keyPath: \.antiStallRecoveryEnabled)
+            return Self.read("antiStallRecoveryEnabled", default: false)
+        }
+        set {
+            withMutation(keyPath: \.antiStallRecoveryEnabled) {
+                Self.write("antiStallRecoveryEnabled", newValue)
+            }
+        }
+    }
 
     /// Whether followed or subscribed streamers should be preferred during channel selection.
-    @AppStorage("prioritiseFollowedStreamers", store: Settings.appStorageStore)
-    public var prioritiseFollowedStreamers: Bool = false
+    public var prioritiseFollowedStreamers: Bool {
+        get {
+            access(keyPath: \.prioritiseFollowedStreamers)
+            return Self.read("prioritiseFollowedStreamers", default: false)
+        }
+        set {
+            withMutation(keyPath: \.prioritiseFollowedStreamers) {
+                Self.write("prioritiseFollowedStreamers", newValue)
+            }
+        }
+    }
 
     /// Whether to sync all miners state (start/stop together)
-    @AppStorage("syncMinersState", store: Settings.appStorageStore)
-    public var syncMinersState: Bool = true
+    public var syncMinersState: Bool {
+        get {
+            access(keyPath: \.syncMinersState)
+            return Self.read("syncMinersState", default: true)
+        }
+        set {
+            withMutation(keyPath: \.syncMinersState) {
+                Self.write("syncMinersState", newValue)
+            }
+        }
+    }
 
     /// Whether to use Steam CDN artwork instead of Twitch game artwork
-    @AppStorage("preferSteamArtwork", store: Settings.appStorageStore)
-    public var preferSteamArtwork: Bool = true
+    public var preferSteamArtwork: Bool {
+        get {
+            access(keyPath: \.preferSteamArtwork)
+            return Self.read("preferSteamArtwork", default: true)
+        }
+        set {
+            withMutation(keyPath: \.preferSteamArtwork) {
+                Self.write("preferSteamArtwork", newValue)
+            }
+        }
+    }
 
     /// Whether in-app TipKit hints are shown.
-    @AppStorage("tipsEnabled", store: Settings.appStorageStore)
-    public var tipsEnabled: Bool = true
+    public var tipsEnabled: Bool {
+        get {
+            access(keyPath: \.tipsEnabled)
+            return Self.read("tipsEnabled", default: true)
+        }
+        set {
+            withMutation(keyPath: \.tipsEnabled) {
+                Self.write("tipsEnabled", newValue)
+            }
+        }
+    }
 
     /// Whether to run in background when window is closed
-    @AppStorage("runInBackground", store: Settings.appStorageStore)
-    public var runInBackground: Bool = true
+    public var runInBackground: Bool {
+        get {
+            access(keyPath: \.runInBackground)
+            return Self.read("runInBackground", default: true)
+        }
+        set {
+            withMutation(keyPath: \.runInBackground) {
+                Self.write("runInBackground", newValue)
+            }
+        }
+    }
 
     /// Whether to show category icons next to each row in the Activity Log.
-    @AppStorage("showActivityLogIcons", store: Settings.appStorageStore)
-    public var showActivityLogIcons: Bool = true
+    public var showActivityLogIcons: Bool {
+        get {
+            access(keyPath: \.showActivityLogIcons)
+            return Self.read("showActivityLogIcons", default: true)
+        }
+        set {
+            withMutation(keyPath: \.showActivityLogIcons) {
+                Self.write("showActivityLogIcons", newValue)
+            }
+        }
+    }
 
     /// Whether to animate new rows sliding into the Activity Log.
-    @AppStorage("animateActivityLogRows", store: Settings.appStorageStore)
-    public var animateActivityLogRows: Bool = true
+    public var animateActivityLogRows: Bool {
+        get {
+            access(keyPath: \.animateActivityLogRows)
+            return Self.read("animateActivityLogRows", default: true)
+        }
+        set {
+            withMutation(keyPath: \.animateActivityLogRows) {
+                Self.write("animateActivityLogRows", newValue)
+            }
+        }
+    }
 
     /// Whether to animate status icons with Apple-style transitions and drawing effects.
-    @AppStorage("animatedStatusIcons", store: Settings.appStorageStore)
-    public var animatedStatusIcons: Bool = true
+    public var animatedStatusIcons: Bool {
+        get {
+            access(keyPath: \.animatedStatusIcons)
+            return Self.read("animatedStatusIcons", default: true)
+        }
+        set {
+            withMutation(keyPath: \.animatedStatusIcons) {
+                Self.write("animatedStatusIcons", newValue)
+            }
+        }
+    }
 
     /// Whether to use colour in palette-rendered status icons (e.g. the clock badge exclamation icon).
-    @AppStorage("coloredStatusIcons", store: Settings.appStorageStore)
-    public var coloredStatusIcons: Bool = true
+    public var coloredStatusIcons: Bool {
+        get {
+            access(keyPath: \.coloredStatusIcons)
+            return Self.read("coloredStatusIcons", default: true)
+        }
+        set {
+            withMutation(keyPath: \.coloredStatusIcons) {
+                Self.write("coloredStatusIcons", newValue)
+            }
+        }
+    }
 
     /// JSON-encoded array of DropFilter for the Drops list view.
-    @AppStorage("selectedDropsFiltersData", store: Settings.appStorageStore)
-    private var selectedDropsFiltersData: String = "[\"active\"]"
+    private var selectedDropsFiltersData: String {
+        get {
+            access(keyPath: \.selectedDropsFiltersData)
+            return Self.read("selectedDropsFiltersData", default: "[\"active\"]")
+        }
+        set {
+            withMutation(keyPath: \.selectedDropsFiltersData) {
+                Self.write("selectedDropsFiltersData", newValue)
+            }
+        }
+    }
 
     /// Persistent filter selection for the Drops list view.
     public var selectedDropsFilters: Set<DropFilter> {
@@ -145,20 +401,56 @@ public final class Settings: ObservableObject {
     }
 
     /// JSON-encoded array of EventFilter for the Events view.
-    @AppStorage("selectedEventFiltersData", store: Settings.appStorageStore)
-    private var selectedEventFiltersData: String = "[\"audit\",\"drops\",\"errors\",\"heartbeats\",\"mining\",\"system\",\"updates\",\"warnings\"]"
+    private var selectedEventFiltersData: String {
+        get {
+            access(keyPath: \.selectedEventFiltersData)
+            return Self.read("selectedEventFiltersData", default: "[\"audit\",\"drops\",\"errors\",\"heartbeats\",\"mining\",\"system\",\"updates\",\"warnings\"]")
+        }
+        set {
+            withMutation(keyPath: \.selectedEventFiltersData) {
+                Self.write("selectedEventFiltersData", newValue)
+            }
+        }
+    }
 
     /// One-time migration so existing users see heartbeat diagnostics after upgrading.
-    @AppStorage("eventFiltersHeartbeatDefaultApplied", store: Settings.appStorageStore)
-    private var eventFiltersHeartbeatDefaultApplied: Bool = false
+    private var eventFiltersHeartbeatDefaultApplied: Bool {
+        get {
+            access(keyPath: \.eventFiltersHeartbeatDefaultApplied)
+            return Self.read("eventFiltersHeartbeatDefaultApplied", default: false)
+        }
+        set {
+            withMutation(keyPath: \.eventFiltersHeartbeatDefaultApplied) {
+                Self.write("eventFiltersHeartbeatDefaultApplied", newValue)
+            }
+        }
+    }
 
     /// One-time migration so existing users see web-audit entries after upgrading.
-    @AppStorage("eventFiltersAuditDefaultApplied", store: Settings.appStorageStore)
-    private var eventFiltersAuditDefaultApplied: Bool = false
+    private var eventFiltersAuditDefaultApplied: Bool {
+        get {
+            access(keyPath: \.eventFiltersAuditDefaultApplied)
+            return Self.read("eventFiltersAuditDefaultApplied", default: false)
+        }
+        set {
+            withMutation(keyPath: \.eventFiltersAuditDefaultApplied) {
+                Self.write("eventFiltersAuditDefaultApplied", newValue)
+            }
+        }
+    }
 
     /// One-time migration so existing users see update entries after upgrading.
-    @AppStorage("eventFiltersUpdatesDefaultApplied", store: Settings.appStorageStore)
-    private var eventFiltersUpdatesDefaultApplied: Bool = false
+    private var eventFiltersUpdatesDefaultApplied: Bool {
+        get {
+            access(keyPath: \.eventFiltersUpdatesDefaultApplied)
+            return Self.read("eventFiltersUpdatesDefaultApplied", default: false)
+        }
+        set {
+            withMutation(keyPath: \.eventFiltersUpdatesDefaultApplied) {
+                Self.write("eventFiltersUpdatesDefaultApplied", newValue)
+            }
+        }
+    }
 
     /// Persistent filter selection for the Events view.
     public var selectedEventFilters: Set<EventFilter> {
@@ -218,27 +510,72 @@ public final class Settings: ObservableObject {
     /// Bypass account-link/eligibility gates so the miner watches a random live channel
     /// for any time-active campaign. For exercising the watch pipeline only — drops
     /// won't actually credit for unlinked accounts.
-    @AppStorage("debugBypassLinkRequirement", store: Settings.appStorageStore)
-    public var debugBypassLinkRequirement: Bool = false
+    public var debugBypassLinkRequirement: Bool {
+        get {
+            access(keyPath: \.debugBypassLinkRequirement)
+            return Self.read("debugBypassLinkRequirement", default: false)
+        }
+        set {
+            withMutation(keyPath: \.debugBypassLinkRequirement) {
+                Self.write("debugBypassLinkRequirement", newValue)
+            }
+        }
+    }
 #endif
 
     /// Preferred stream quality (for future use)
-    @AppStorage("preferredQuality", store: Settings.appStorageStore)
-    public var preferredQuality: StreamQuality = .auto
+    public var preferredQuality: StreamQuality {
+        get {
+            access(keyPath: \.preferredQuality)
+            return Self.read("preferredQuality", default: .auto)
+        }
+        set {
+            withMutation(keyPath: \.preferredQuality) {
+                Self.write("preferredQuality", newValue)
+            }
+        }
+    }
     
     /// Whether to show notifications for drop claims
-    @AppStorage("showClaimNotifications", store: Settings.appStorageStore)
-    public var showClaimNotifications: Bool = false // Disabled by default per user request
+    public var showClaimNotifications: Bool { // Disabled by default per user request
+        get {
+            access(keyPath: \.showClaimNotifications)
+            return Self.read("showClaimNotifications", default: false)
+        }
+        set {
+            withMutation(keyPath: \.showClaimNotifications) {
+                Self.write("showClaimNotifications", newValue)
+            }
+        }
+    }
 
     /// JSON-encoded warnings that should be suppressed.
     /// Format: "accountId:gameId:warningType"
-    @AppStorage("ignoredWarningsData", store: Settings.appStorageStore)
-    private var ignoredWarningsData: String = "[]"
+    private var ignoredWarningsData: String {
+        get {
+            access(keyPath: \.ignoredWarningsData)
+            return Self.read("ignoredWarningsData", default: "[]")
+        }
+        set {
+            withMutation(keyPath: \.ignoredWarningsData) {
+                Self.write("ignoredWarningsData", newValue)
+            }
+        }
+    }
 
     /// JSON-encoded temporary warning suppressions keyed by
     /// "accountId:gameId:warningType", with ISO-8601 expiry dates.
-    @AppStorage("temporaryIgnoredWarningsData", store: Settings.appStorageStore)
-    private var temporaryIgnoredWarningsData: String = "{}"
+    private var temporaryIgnoredWarningsData: String {
+        get {
+            access(keyPath: \.temporaryIgnoredWarningsData)
+            return Self.read("temporaryIgnoredWarningsData", default: "{}")
+        }
+        set {
+            withMutation(keyPath: \.temporaryIgnoredWarningsData) {
+                Self.write("temporaryIgnoredWarningsData", newValue)
+            }
+        }
+    }
 
     public enum WarningType: String, Codable, Sendable {
         case accountLink = "accountLink"
@@ -379,40 +716,121 @@ public final class Settings: ObservableObject {
     }
 
     /// Last selected game/category (for UI restoration)
-    @AppStorage("lastSelectedGameId", store: Settings.appStorageStore)
-    public var lastSelectedGameId: String = ""
+    public var lastSelectedGameId: String {
+        get {
+            access(keyPath: \.lastSelectedGameId)
+            return Self.read("lastSelectedGameId", default: "")
+        }
+        set {
+            withMutation(keyPath: \.lastSelectedGameId) {
+                Self.write("lastSelectedGameId", newValue)
+            }
+        }
+    }
 
     /// Whether the user explicitly dismissed the optional onboarding surface.
-    @AppStorage("hasDismissedOnboarding", store: Settings.appStorageStore)
-    public var hasDismissedOnboarding: Bool = false
+    public var hasDismissedOnboarding: Bool {
+        get {
+            access(keyPath: \.hasDismissedOnboarding)
+            return Self.read("hasDismissedOnboarding", default: false)
+        }
+        set {
+            withMutation(keyPath: \.hasDismissedOnboarding) {
+                Self.write("hasDismissedOnboarding", newValue)
+            }
+        }
+    }
 
     /// Twitch application Client ID (set once; used by all miners)
-    @AppStorage("twitchClientId", store: Settings.appStorageStore)
-    public var twitchClientId: String = ""
+    public var twitchClientId: String {
+        get {
+            access(keyPath: \.twitchClientId)
+            return Self.read("twitchClientId", default: "")
+        }
+        set {
+            withMutation(keyPath: \.twitchClientId) {
+                Self.write("twitchClientId", newValue)
+            }
+        }
+    }
 
     /// Whether SwiftBot Discord integration is enabled
-    @AppStorage("swiftBotEnabled", store: Settings.appStorageStore)
-    public var swiftBotEnabled: Bool = false
+    public var swiftBotEnabled: Bool {
+        get {
+            access(keyPath: \.swiftBotEnabled)
+            return Self.read("swiftBotEnabled", default: false)
+        }
+        set {
+            withMutation(keyPath: \.swiftBotEnabled) {
+                Self.write("swiftBotEnabled", newValue)
+            }
+        }
+    }
 
     /// SwiftBot integration endpoint (e.g. http://127.0.0.1:8080)
-    @AppStorage("swiftBotEndpoint", store: Settings.appStorageStore)
-    public var swiftBotEndpoint: String = ""
+    public var swiftBotEndpoint: String {
+        get {
+            access(keyPath: \.swiftBotEndpoint)
+            return Self.read("swiftBotEndpoint", default: "")
+        }
+        set {
+            withMutation(keyPath: \.swiftBotEndpoint) {
+                Self.write("swiftBotEndpoint", newValue)
+            }
+        }
+    }
 
     /// Webhook URL SwiftMiner POSTs events to (e.g. http://127.0.0.1:8080/webhooks/swiftminer/events)
-    @AppStorage("swiftBotWebhookURL", store: Settings.appStorageStore)
-    public var swiftBotWebhookURL: String = ""
+    public var swiftBotWebhookURL: String {
+        get {
+            access(keyPath: \.swiftBotWebhookURL)
+            return Self.read("swiftBotWebhookURL", default: "")
+        }
+        set {
+            withMutation(keyPath: \.swiftBotWebhookURL) {
+                Self.write("swiftBotWebhookURL", newValue)
+            }
+        }
+    }
 
     /// Local SwiftMiner API endpoint SwiftBot calls for miner status and setup.
-    @AppStorage("swiftMinerAPIEndpoint", store: Settings.appStorageStore)
-    public var swiftMinerAPIEndpoint: String = "http://127.0.0.1:8080"
+    public var swiftMinerAPIEndpoint: String {
+        get {
+            access(keyPath: \.swiftMinerAPIEndpoint)
+            return Self.read("swiftMinerAPIEndpoint", default: "http://127.0.0.1:8080")
+        }
+        set {
+            withMutation(keyPath: \.swiftMinerAPIEndpoint) {
+                Self.write("swiftMinerAPIEndpoint", newValue)
+            }
+        }
+    }
 
     /// Shared HMAC-SHA256 secret for webhook request signing
-    @AppStorage("swiftBotHmacSecret", store: Settings.appStorageStore)
-    public var swiftBotHmacSecret: String = ""
+    public var swiftBotHmacSecret: String {
+        get {
+            access(keyPath: \.swiftBotHmacSecret)
+            return Self.read("swiftBotHmacSecret", default: "")
+        }
+        set {
+            withMutation(keyPath: \.swiftBotHmacSecret) {
+                Self.write("swiftBotHmacSecret", newValue)
+            }
+        }
+    }
 
     /// API Key for the SwiftMiner HTTP service (used by SwiftBot)
-    @AppStorage("swiftMinerAPIKey", store: Settings.appStorageStore)
-    public var swiftMinerAPIKey: String = ""
+    public var swiftMinerAPIKey: String {
+        get {
+            access(keyPath: \.swiftMinerAPIKey)
+            return Self.read("swiftMinerAPIKey", default: "")
+        }
+        set {
+            withMutation(keyPath: \.swiftMinerAPIKey) {
+                Self.write("swiftMinerAPIKey", newValue)
+            }
+        }
+    }
 
     // MARK: - Web Dashboard
     //
@@ -421,64 +839,172 @@ public final class Settings: ObservableObject {
     // default; the in-process HTTP server registers its routes only when enabled.
 
     /// Whether the self-service web dashboard is enabled
-    @AppStorage("webDashboardEnabled", store: Settings.appStorageStore)
-    public var webDashboardEnabled: Bool = false
+    public var webDashboardEnabled: Bool {
+        get {
+            access(keyPath: \.webDashboardEnabled)
+            return Self.read("webDashboardEnabled", default: false)
+        }
+        set {
+            withMutation(keyPath: \.webDashboardEnabled) {
+                Self.write("webDashboardEnabled", newValue)
+            }
+        }
+    }
 
     /// Public origin the dashboard is served from (e.g. https://swiftminer.example.com).
     /// When SwiftBot is paired this is composed automatically from
     /// `webDashboardSubdomain` + the domain SwiftBot reports.
-    @AppStorage("webDashboardBaseURL", store: Settings.appStorageStore)
-    public var webDashboardBaseURL: String = ""
+    public var webDashboardBaseURL: String {
+        get {
+            access(keyPath: \.webDashboardBaseURL)
+            return Self.read("webDashboardBaseURL", default: "")
+        }
+        set {
+            withMutation(keyPath: \.webDashboardBaseURL) {
+                Self.write("webDashboardBaseURL", newValue)
+            }
+        }
+    }
 
     /// Subdomain for the dashboard when the domain comes from SwiftBot
     /// (e.g. "swiftminer" → swiftminer.example.com).
-    @AppStorage("webDashboardSubdomain", store: Settings.appStorageStore)
-    public var webDashboardSubdomain: String = "swiftminer"
+    public var webDashboardSubdomain: String {
+        get {
+            access(keyPath: \.webDashboardSubdomain)
+            return Self.read("webDashboardSubdomain", default: "swiftminer")
+        }
+        set {
+            withMutation(keyPath: \.webDashboardSubdomain) {
+                Self.write("webDashboardSubdomain", newValue)
+            }
+        }
+    }
 
     /// When a downloaded update gets installed (the install relaunches the app).
-    @AppStorage("autoUpdateInstallPolicy", store: Settings.appStorageStore)
-    public var autoUpdateInstallPolicy: AutoUpdateInstallPolicy = .whenIdle
+    public var autoUpdateInstallPolicy: AutoUpdateInstallPolicy {
+        get {
+            access(keyPath: \.autoUpdateInstallPolicy)
+            return Self.read("autoUpdateInstallPolicy", default: .whenIdle)
+        }
+        set {
+            withMutation(keyPath: \.autoUpdateInstallPolicy) {
+                Self.write("autoUpdateInstallPolicy", newValue)
+            }
+        }
+    }
 
     /// Hour of day (0–23) for scheduled update installs.
-    @AppStorage("autoUpdateInstallHour", store: Settings.appStorageStore)
-    public var autoUpdateInstallHour: Int = 3
+    public var autoUpdateInstallHour: Int {
+        get {
+            access(keyPath: \.autoUpdateInstallHour)
+            return Self.read("autoUpdateInstallHour", default: 3)
+        }
+        set {
+            withMutation(keyPath: \.autoUpdateInstallHour) {
+                Self.write("autoUpdateInstallHour", newValue)
+            }
+        }
+    }
 
     /// Whether the one-time "web dashboard is live" DM announcement has been
     /// sent. Set after the first confirmed tunnel registration; never resent on
     /// updates or relaunches.
-    @AppStorage("webDashboardAnnounced", store: Settings.appStorageStore)
-    public var webDashboardAnnounced: Bool = false
+    public var webDashboardAnnounced: Bool {
+        get {
+            access(keyPath: \.webDashboardAnnounced)
+            return Self.read("webDashboardAnnounced", default: false)
+        }
+        set {
+            withMutation(keyPath: \.webDashboardAnnounced) {
+                Self.write("webDashboardAnnounced", newValue)
+            }
+        }
+    }
 
     /// SwiftBot's public hostname (e.g. swiftbot.example.com), cached from its
     /// tunnel info. Used for Discord sign-in brokered via SwiftBot.
-    @AppStorage("webDashboardSwiftBotHostname", store: Settings.appStorageStore)
-    public var webDashboardSwiftBotHostname: String = ""
+    public var webDashboardSwiftBotHostname: String {
+        get {
+            access(keyPath: \.webDashboardSwiftBotHostname)
+            return Self.read("webDashboardSwiftBotHostname", default: "")
+        }
+        set {
+            withMutation(keyPath: \.webDashboardSwiftBotHostname) {
+                Self.write("webDashboardSwiftBotHostname", newValue)
+            }
+        }
+    }
 
     // Discord identity is handled by SwiftBot (DMs/linking), so the web
     // dashboard intentionally offers only Twitch and local sign-in.
 
     /// Twitch OAuth application client ID used for web sign-in
-    @AppStorage("webDashboardTwitchClientID", store: Settings.appStorageStore)
-    public var webDashboardTwitchClientID: String = ""
+    public var webDashboardTwitchClientID: String {
+        get {
+            access(keyPath: \.webDashboardTwitchClientID)
+            return Self.read("webDashboardTwitchClientID", default: "")
+        }
+        set {
+            withMutation(keyPath: \.webDashboardTwitchClientID) {
+                Self.write("webDashboardTwitchClientID", newValue)
+            }
+        }
+    }
 
     /// Twitch OAuth application client secret used for web sign-in
-    @AppStorage("webDashboardTwitchClientSecret", store: Settings.appStorageStore)
-    public var webDashboardTwitchClientSecret: String = ""
+    public var webDashboardTwitchClientSecret: String {
+        get {
+            access(keyPath: \.webDashboardTwitchClientSecret)
+            return Self.read("webDashboardTwitchClientSecret", default: "")
+        }
+        set {
+            withMutation(keyPath: \.webDashboardTwitchClientSecret) {
+                Self.write("webDashboardTwitchClientSecret", newValue)
+            }
+        }
+    }
 
     /// Whether local username/password sign-in is allowed (default on). Only
     /// honoured for local/LAN access, never over the public domain.
-    @AppStorage("webDashboardLocalEnabled", store: Settings.appStorageStore)
-    public var webDashboardLocalEnabled: Bool = true
+    public var webDashboardLocalEnabled: Bool {
+        get {
+            access(keyPath: \.webDashboardLocalEnabled)
+            return Self.read("webDashboardLocalEnabled", default: true)
+        }
+        set {
+            withMutation(keyPath: \.webDashboardLocalEnabled) {
+                Self.write("webDashboardLocalEnabled", newValue)
+            }
+        }
+    }
 
     /// Username for local sign-in.
-    @AppStorage("webDashboardLocalUsername", store: Settings.appStorageStore)
-    public var webDashboardLocalUsername: String = "admin"
+    public var webDashboardLocalUsername: String {
+        get {
+            access(keyPath: \.webDashboardLocalUsername)
+            return Self.read("webDashboardLocalUsername", default: "admin")
+        }
+        set {
+            withMutation(keyPath: \.webDashboardLocalUsername) {
+                Self.write("webDashboardLocalUsername", newValue)
+            }
+        }
+    }
 
     /// Encoded salted hash of the local password ("iterations:saltHex:hashHex").
     /// Empty until the operator sets a password; local sign-in is unavailable
     /// until then (no default credential ships).
-    @AppStorage("webDashboardLocalPasswordHash", store: Settings.appStorageStore)
-    public var webDashboardLocalPasswordHash: String = ""
+    public var webDashboardLocalPasswordHash: String {
+        get {
+            access(keyPath: \.webDashboardLocalPasswordHash)
+            return Self.read("webDashboardLocalPasswordHash", default: "")
+        }
+        set {
+            withMutation(keyPath: \.webDashboardLocalPasswordHash) {
+                Self.write("webDashboardLocalPasswordHash", newValue)
+            }
+        }
+    }
 
     private static let webDashboardLocalPasswordService = "com.swiftminer.app.web-dashboard.local-password"
 
@@ -557,62 +1083,206 @@ public final class Settings: ObservableObject {
     // Important notifications default ON — these relate to account recovery and action required.
     // Activity notifications default OFF — these are informational and can be noisy.
 
-    @AppStorage("dmCampaignCompletedEnabled", store: Settings.appStorageStore)
-    public var dmCampaignCompletedEnabled: Bool = false
+    public var dmCampaignCompletedEnabled: Bool {
+        get {
+            access(keyPath: \.dmCampaignCompletedEnabled)
+            return Self.read("dmCampaignCompletedEnabled", default: false)
+        }
+        set {
+            withMutation(keyPath: \.dmCampaignCompletedEnabled) {
+                Self.write("dmCampaignCompletedEnabled", newValue)
+            }
+        }
+    }
 
-    @AppStorage("dmConnectionExpiredEnabled", store: Settings.appStorageStore)
-    public var dmConnectionExpiredEnabled: Bool = true
+    public var dmConnectionExpiredEnabled: Bool {
+        get {
+            access(keyPath: \.dmConnectionExpiredEnabled)
+            return Self.read("dmConnectionExpiredEnabled", default: true)
+        }
+        set {
+            withMutation(keyPath: \.dmConnectionExpiredEnabled) {
+                Self.write("dmConnectionExpiredEnabled", newValue)
+            }
+        }
+    }
 
-    @AppStorage("dmWelcomeBackEnabled", store: Settings.appStorageStore)
-    public var dmWelcomeBackEnabled: Bool = false
+    public var dmWelcomeBackEnabled: Bool {
+        get {
+            access(keyPath: \.dmWelcomeBackEnabled)
+            return Self.read("dmWelcomeBackEnabled", default: false)
+        }
+        set {
+            withMutation(keyPath: \.dmWelcomeBackEnabled) {
+                Self.write("dmWelcomeBackEnabled", newValue)
+            }
+        }
+    }
 
-    @AppStorage("dmLinkRequiredEnabled", store: Settings.appStorageStore)
-    public var dmLinkRequiredEnabled: Bool = true
+    public var dmLinkRequiredEnabled: Bool {
+        get {
+            access(keyPath: \.dmLinkRequiredEnabled)
+            return Self.read("dmLinkRequiredEnabled", default: true)
+        }
+        set {
+            withMutation(keyPath: \.dmLinkRequiredEnabled) {
+                Self.write("dmLinkRequiredEnabled", newValue)
+            }
+        }
+    }
 
-    @AppStorage("dmCampaignDetectedEnabled", store: Settings.appStorageStore)
-    public var dmCampaignDetectedEnabled: Bool = false
+    public var dmCampaignDetectedEnabled: Bool {
+        get {
+            access(keyPath: \.dmCampaignDetectedEnabled)
+            return Self.read("dmCampaignDetectedEnabled", default: false)
+        }
+        set {
+            withMutation(keyPath: \.dmCampaignDetectedEnabled) {
+                Self.write("dmCampaignDetectedEnabled", newValue)
+            }
+        }
+    }
 
-    @AppStorage("dmAccountActionRequiredEnabled", store: Settings.appStorageStore)
-    public var dmAccountActionRequiredEnabled: Bool = true
+    public var dmAccountActionRequiredEnabled: Bool {
+        get {
+            access(keyPath: \.dmAccountActionRequiredEnabled)
+            return Self.read("dmAccountActionRequiredEnabled", default: true)
+        }
+        set {
+            withMutation(keyPath: \.dmAccountActionRequiredEnabled) {
+                Self.write("dmAccountActionRequiredEnabled", newValue)
+            }
+        }
+    }
 
-    @AppStorage("quietHoursEnabled", store: Settings.appStorageStore)
-    public var quietHoursEnabled: Bool = false
+    public var quietHoursEnabled: Bool {
+        get {
+            access(keyPath: \.quietHoursEnabled)
+            return Self.read("quietHoursEnabled", default: false)
+        }
+        set {
+            withMutation(keyPath: \.quietHoursEnabled) {
+                Self.write("quietHoursEnabled", newValue)
+            }
+        }
+    }
 
-    @AppStorage("quietHoursStartMinute", store: Settings.appStorageStore)
-    public var quietHoursStartMinute: Int = 22 * 60
+    public var quietHoursStartMinute: Int {
+        get {
+            access(keyPath: \.quietHoursStartMinute)
+            return Self.read("quietHoursStartMinute", default: 22 * 60)
+        }
+        set {
+            withMutation(keyPath: \.quietHoursStartMinute) {
+                Self.write("quietHoursStartMinute", newValue)
+            }
+        }
+    }
 
-    @AppStorage("quietHoursEndMinute", store: Settings.appStorageStore)
-    public var quietHoursEndMinute: Int = 7 * 60
+    public var quietHoursEndMinute: Int {
+        get {
+            access(keyPath: \.quietHoursEndMinute)
+            return Self.read("quietHoursEndMinute", default: 7 * 60)
+        }
+        set {
+            withMutation(keyPath: \.quietHoursEndMinute) {
+                Self.write("quietHoursEndMinute", newValue)
+            }
+        }
+    }
     
     /// JSON-encoded array of GamePreference for selected games
-    @AppStorage("gamePreferencesData", store: Settings.appStorageStore)
-    public var gamePreferencesData: String = "[]"
+    public var gamePreferencesData: String {
+        get {
+            access(keyPath: \.gamePreferencesData)
+            return Self.read("gamePreferencesData", default: "[]")
+        }
+        set {
+            withMutation(keyPath: \.gamePreferencesData) {
+                Self.write("gamePreferencesData", newValue)
+            }
+        }
+    }
 
     /// JSON-encoded array of game-scoped failover streamer rules.
-    @AppStorage("gameFailoverStreamersData", store: Settings.appStorageStore)
-    public var gameFailoverStreamersData: String = "[]"
+    public var gameFailoverStreamersData: String {
+        get {
+            access(keyPath: \.gameFailoverStreamersData)
+            return Self.read("gameFailoverStreamersData", default: "[]")
+        }
+        set {
+            withMutation(keyPath: \.gameFailoverStreamersData) {
+                Self.write("gameFailoverStreamersData", newValue)
+            }
+        }
+    }
 
     /// Legacy storage (kept for migration only)
-    @AppStorage("priorityGamesString", store: Settings.appStorageStore)
-    private var priorityGamesString: String = ""
+    private var priorityGamesString: String {
+        get {
+            access(keyPath: \.priorityGamesString)
+            return Self.read("priorityGamesString", default: "")
+        }
+        set {
+            withMutation(keyPath: \.priorityGamesString) {
+                Self.write("priorityGamesString", newValue)
+            }
+        }
+    }
 
     /// Legacy storage (kept for migration only)
-    @AppStorage("excludedGamesString", store: Settings.appStorageStore)
-    private var excludedGamesString: String = ""
+    private var excludedGamesString: String {
+        get {
+            access(keyPath: \.excludedGamesString)
+            return Self.read("excludedGamesString", default: "")
+        }
+        set {
+            withMutation(keyPath: \.excludedGamesString) {
+                Self.write("excludedGamesString", newValue)
+            }
+        }
+    }
 
     /// JSON-encoded map of Twitch account ID -> ordered priority game names.
-    @AppStorage("accountPriorityGamesData", store: Settings.appStorageStore)
-    public var accountPriorityGamesData: String = "{}"
+    public var accountPriorityGamesData: String {
+        get {
+            access(keyPath: \.accountPriorityGamesData)
+            return Self.read("accountPriorityGamesData", default: "{}")
+        }
+        set {
+            withMutation(keyPath: \.accountPriorityGamesData) {
+                Self.write("accountPriorityGamesData", newValue)
+            }
+        }
+    }
 
     /// JSON-encoded map of Twitch account ID -> whether global priority games
     /// should be appended after the miner's own list. Missing means true for
     /// backward compatibility.
-    @AppStorage("accountIncludesGlobalPriorityGamesData", store: Settings.appStorageStore)
-    public var accountIncludesGlobalPriorityGamesData: String = "{}"
+    public var accountIncludesGlobalPriorityGamesData: String {
+        get {
+            access(keyPath: \.accountIncludesGlobalPriorityGamesData)
+            return Self.read("accountIncludesGlobalPriorityGamesData", default: "{}")
+        }
+        set {
+            withMutation(keyPath: \.accountIncludesGlobalPriorityGamesData) {
+                Self.write("accountIncludesGlobalPriorityGamesData", newValue)
+            }
+        }
+    }
 
     /// Mining strategy selection
-    @AppStorage("miningStrategy", store: Settings.appStorageStore)
-    public var miningStrategy: MiningStrategy = .mineAll
+    public var miningStrategy: MiningStrategy {
+        get {
+            access(keyPath: \.miningStrategy)
+            return Self.read("miningStrategy", default: .mineAll)
+        }
+        set {
+            withMutation(keyPath: \.miningStrategy) {
+                Self.write("miningStrategy", newValue)
+            }
+        }
+    }
 
     // MARK: - Game Preferences
 
@@ -620,10 +1290,10 @@ public final class Settings: ObservableObject {
     /// expensive and `gamePreferences` is read many times per SwiftUI render
     /// (directly, and via `excludedGames`/`gameNames(for:)`), so we cache the
     /// result and only re-decode when the backing JSON string actually changes.
-    /// Plain (non-`@Published`) storage on this `@MainActor` class: mutating it
+    /// `@ObservationIgnored` storage on this `@MainActor` class: mutating it
     /// from the getter is safe and never triggers a view-update cycle.
-    private var cachedGamePreferences: [GamePreference] = []
-    private var cachedGamePreferencesKey: String?
+    @ObservationIgnored private var cachedGamePreferences: [GamePreference] = []
+    @ObservationIgnored private var cachedGamePreferencesKey: String?
 
     /// Decoded game preferences from JSON storage
     public var gamePreferences: [GamePreference] {
@@ -1696,11 +2366,12 @@ public struct SettingsBackup: Codable, Sendable {
     }
 }
 
+@Observable
 @MainActor
-public final class LoginItemSettings: ObservableObject {
-    @Published public private(set) var isEnabled: Bool = false
-    @Published public private(set) var requiresApproval: Bool = false
-    @Published public private(set) var errorMessage: String?
+public final class LoginItemSettings {
+    public private(set) var isEnabled: Bool = false
+    public private(set) var requiresApproval: Bool = false
+    public private(set) var errorMessage: String?
 
     public init() {
         refresh()

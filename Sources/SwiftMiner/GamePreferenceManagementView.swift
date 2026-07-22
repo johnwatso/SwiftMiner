@@ -5,7 +5,7 @@ import SwiftMinerCore
 /// Opened as a sheet from Settings.
 struct GamePreferenceManagementView: View {
     @Environment(\.dismiss) private var dismiss
-    @ObservedObject var settings: Settings
+    var settings: Settings
     let minerManager: MinerManager
 
     private var prioritisedGames: [GamePreference] {
@@ -98,7 +98,7 @@ struct GamePreferenceManagementView: View {
 
 private struct PreferenceRow: View {
     let preference: GamePreference
-    @ObservedObject var settings: Settings
+    var settings: Settings
     @AppStorage("preferSteamArtwork", store: Settings.appStorageStore) private var preferSteamArtwork: Bool = true
     @State private var resolvedArtworkURL: URL?
     @State private var failoverLogin: String = ""

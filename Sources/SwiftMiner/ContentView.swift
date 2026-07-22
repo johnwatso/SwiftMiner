@@ -74,7 +74,7 @@ struct ContentView: View {
 
 struct OverviewView: View {
     @Environment(NavigationModel.self) private var navigation
-    @ObservedObject private var settings = Settings.shared
+    private var settings: Settings { .shared }
     @State private var overviewCampaigns: [CampaignViewData] = []
     @State private var isRefreshing = false
     @State private var steamIdSheetPresentation: SteamIdSheetPresentation?
@@ -306,10 +306,9 @@ struct OverviewView: View {
 
         Task {
             await SteamArtworkService.shared.setManualAppId(for: gameName, appId: appId)
+            // enrichGameNames posts .steamArtworkDidUpdate, which refreshes
+            // overviewCampaigns above — no manual invalidation needed.
             await navigation.minerManager.dataCoordinator.enrichGameNames([gameName])
-            await MainActor.run {
-                Settings.shared.objectWillChange.send()
-            }
         }
     }
 
@@ -1070,7 +1069,7 @@ struct OverviewView: View {
 // MARK: - Miner Status Legend Popover
 
 private struct MinerStatusLegendPopover: View {
-    @ObservedObject private var settings = Settings.shared
+    private var settings: Settings { .shared }
 
     private struct StatusEntry {
         let symbol: String

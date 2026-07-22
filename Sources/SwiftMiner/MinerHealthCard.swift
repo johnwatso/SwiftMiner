@@ -7,7 +7,7 @@ import SwiftMinerCore
 struct MinerHealthCard: View {
     let miners: [MinerManager.ManagedMiner]
     var onSelectMiner: ((String) -> Void)?
-    @ObservedObject private var settings = Settings.shared
+    private var settings: Settings { .shared }
     @EnvironmentObject private var unattendedHealth: UnattendedHealthModel
 
     /// Refreshes time-dependent verdicts (e.g. "stuck for X min") every 30 seconds.

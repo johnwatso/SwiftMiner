@@ -299,7 +299,7 @@ struct MinerActivityCard: View {
     var onClearStreamOverride: (() -> Void)? = nil
 
     @Environment(NavigationModel.self) private var navigation
-    @ObservedObject private var settings = Settings.shared
+    private var settings: Settings { .shared }
     @State private var activityRefreshPulse = Date()
     @State private var streamOverrideEditor: MinerStreamOverridePresentation?
     @State private var nicknameEditor: MinerNicknameEditorPresentation?
