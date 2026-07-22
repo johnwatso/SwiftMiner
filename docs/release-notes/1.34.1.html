@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reconnect PubSub in the mining loop and skip non-earning campaigns - Release Notes</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      margin: 0;
+      padding: 32px 20px 48px;
+      font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f4f6f8;
+      color: #0f1720;
+    }
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 28px;
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.86);
+      box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
+    }
+    h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
+    .meta { margin: 0 0 24px; color: #52606d; font-size: 14px; }
+    p { margin: 0 0 16px; }
+    a { color: #0a67a3; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #0b1015; color: #edf2f7; }
+      main {
+        background: rgba(15, 23, 32, 0.88);
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+      }
+      .meta { color: #9fb0c2; }
+      a { color: #73c3ff; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Reconnect PubSub in the mining loop and skip non-earning campaigns</h1>
+    <p class="meta">Version 1.34.1</p>
+    <p>Reconnect PubSub in the mining loop and skip non-earning campaigns</p>
+<p>Two fixes prompted by a real incident where a miner sat for 3.5 hours on<br>the only campaign eligible for its account, earning nothing:</p>
+<p>- PubSub was connected only at miner start and on auth refresh, never<br>from the mining loop, despite a comment claiming otherwise. If the<br>socket dropped (or its initial connect failed) the miner ran blind on<br>real-time progress for the rest of the session, relying on polling<br>alone. startWatching failures now attempt one reconnect + retry.</p>
+<p>- When a campaign genuinely stalls (no verified progress, no external<br>claim) and there's no failover streamer to try, the miner kept<br>re-selecting that same campaign's streams forever because it was the<br>only eligible one. After nonEarningStallThreshold consecutive such<br>stalls it now puts the campaign on a cooldown so candidateCampaigns<br>skips it, letting the miner find other work or report idle. Any<br>verified progress clears the streak and cooldown.</p>
+<p>Adds tests for registerGenuineStall and isOnStallCooldown. Ships as<br>1.34.1 (1.34 was already released without these): new 1.34.1 release<br>notes, MARKETING_VERSION bumped to 1.34.1, build 2026072309. The<br>released 1.34 notes and the appcast are left untouched.</p>
+    <p><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/6b2c1ff49f9727be947d5ae510656b0d27d0778b">6b2c1ff</a></p>
+  </main>
+</body>
+</html>
