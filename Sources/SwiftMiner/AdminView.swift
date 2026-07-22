@@ -1059,13 +1059,6 @@ private func absoluteTimeString(for date: Date) -> String {
     return formatter.string(from: date)
 }
 
-private extension String {
-    var nilIfBlank: String? {
-        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-    }
-}
-
 #Preview {
     AdminView()
         .environment(NavigationModel(clientId: "preview"))
