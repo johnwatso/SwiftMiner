@@ -30,7 +30,7 @@ public enum MergeService {
                 
                 // Debug logging as requested in Phase 3
                 if !states.isEmpty {
-                    print("[Merge] Drop \(drop.name) (\(drop.id)) → \(states.count) states attached")
+                    Logger.campaigns.info("Drop \(drop.name) (\(drop.id)) → \(states.count) states attached")
                 }
                 
                 return DisplayDrop(base: drop, states: states)

@@ -550,18 +550,18 @@ public final class MinerManager {
         let authService = TwitchAuthService(clientId: clientId, tokenStore: tokenStore)
         do {
             let accounts = try await authService.loadAllAccounts()
-            print("[MinerManager] Loading \(accounts.count) saved accounts from store")
+            Logger.engine.info("Loading \(accounts.count) saved accounts from store")
             for account in accounts {
                 do {
                     try addAccount(account)
                 } catch AccountError.duplicateAccount {
-                    print("[MinerManager] Skipping duplicate saved account: \(account.username)")
+                    Logger.engine.warning("Skipping duplicate saved account: \(account.username)")
                 } catch {
-                    print("[MinerManager] Failed to add saved account \(account.username): \(error)")
+                    Logger.engine.error("Failed to add saved account \(account.username): \(error)")
                 }
             }
         } catch {
-            print("[MinerManager] Failed to load saved accounts: \(error)")
+            Logger.engine.error("Failed to load saved accounts: \(error)")
         }
     }
 
@@ -593,7 +593,7 @@ public final class MinerManager {
         startAntiStallMonitorIfNeeded()
         await setup()
         if autoStart && !miners.isEmpty {
-            print("[MinerManager] Auto-starting \(miners.count) miner(s) on launch")
+            Logger.engine.info("Auto-starting \(miners.count) miner(s) on launch")
             for miner in miners {
                 try? await startMiner(
                     minerId: miner.id,
@@ -728,7 +728,7 @@ public final class MinerManager {
         do {
             try await tokenStore.updateNickname(twitchUserId: miners[index].accountId, nickname: normalized)
         } catch {
-            print("[MinerManager] Failed to update nickname for \(miners[index].accountId): \(error)")
+            Logger.engine.error("Failed to update nickname for \(miners[index].accountId): \(error)")
         }
 
         onMinersChanged?()
@@ -764,7 +764,7 @@ public final class MinerManager {
         do {
             try await tokenStore.updateOperatorStatus(twitchUserId: miners[index].accountId, isOperator: isOperator)
         } catch {
-            print("[MinerManager] Failed to update operator status for \(miners[index].accountId): \(error)")
+            Logger.engine.error("Failed to update operator status for \(miners[index].accountId): \(error)")
         }
         
         onMinersChanged?()
@@ -906,7 +906,7 @@ public final class MinerManager {
         for (index, miner) in notRunningMiners.enumerated() {
             // Stagger starts by 3 seconds between accounts to avoid rate limit bottlenecks
             if index > 0 {
-                print("[MinerManager] Staggering start for @\(miner.username): waiting 3s to avoid rate limits (\(index)/\(totalToStart))")
+                Logger.engine.info("Staggering start for @\(miner.username): waiting 3s to avoid rate limits (\(index)/\(totalToStart))")
                 try? await Task.sleep(nanoseconds: 3 * 1_000_000_000)
             }
             
@@ -1484,7 +1484,7 @@ public final class MinerManager {
         do {
             _ = try addAccount(account)
         } catch {
-            print("[MinerManager] attachActivatedAccount failed: \(error)")
+            Logger.engine.error("attachActivatedAccount failed: \(error)")
         }
     }
 

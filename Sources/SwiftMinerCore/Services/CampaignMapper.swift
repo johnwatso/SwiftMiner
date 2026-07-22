@@ -111,7 +111,7 @@ public enum CampaignMapper {
         let relevance = campaign.relevance
 
         // Required logging: CampaignName → Status → Relevance
-        print("[Campaign] \(campaign.name) → \(miningStatus.rawValue) → \(relevance.rawValue)")
+        Logger.campaigns.debug("\(campaign.name) → \(miningStatus.rawValue) → \(relevance.rawValue)")
 
         return CampaignViewData(
             id: campaign.id,

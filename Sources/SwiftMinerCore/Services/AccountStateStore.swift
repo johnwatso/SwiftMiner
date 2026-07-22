@@ -58,10 +58,10 @@ public final class AccountStateStore: Identifiable {
             self.dropStates = states
             self.lastUpdated = Date()
             self.lastError = nil
-            print("[AccountStateStore/\(username)] Refreshed: \(states.count) states")
+            Logger.storage.debug("[\(username)] Refreshed: \(states.count) states")
         } catch {
             self.lastError = error
-            print("[AccountStateStore/\(username)] Refresh failed: \(error)")
+            Logger.storage.error("[\(username)] Refresh failed: \(error)")
         }
     }
 

@@ -32,14 +32,14 @@ public enum CampaignService {
                 let existing = allCampaigns[index]
                 let merged = mergeDashboardCampaign(existing, withInventory: discovered)
                 if merged.isAccountConnected && !existing.isAccountConnected {
-                    print("[CampaignService] Inventory confirmed connection for \(discovered.name)")
+                    Logger.campaigns.info("Inventory confirmed connection for \(discovered.name)")
                 }
                 if existing.channels.isEmpty && !merged.channels.isEmpty {
-                    print("[CampaignService] Inventory supplied \(merged.channels.count) approved channel(s) for \(discovered.name)")
+                    Logger.campaigns.info("Inventory supplied \(merged.channels.count) approved channel(s) for \(discovered.name)")
                 }
                 allCampaigns[index] = merged
             } else {
-                print("[CampaignService] Discovered campaign from inventory: \(discovered.name)")
+                Logger.campaigns.info("Discovered campaign from inventory: \(discovered.name)")
                 allCampaigns.append(discovered)
             }
         }

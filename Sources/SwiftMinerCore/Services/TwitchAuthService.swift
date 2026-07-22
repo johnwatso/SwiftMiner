@@ -80,9 +80,9 @@ public actor TwitchAuthService {
         guard httpResponse.statusCode == 200 else {
             let message = String(data: data, encoding: .utf8) ?? "Unknown error"
             // Debug logging
-            print("[TwitchAuthService] ERROR: status=\(httpResponse.statusCode)")
-            print("[TwitchAuthService] Request body: client_id=\(clientId.prefix(6))... scopes=''")
-            print("[TwitchAuthService] Response: \(message)")
+            Logger.auth.error("ERROR: status=\(httpResponse.statusCode)")
+            Logger.auth.debug("Request body: client_id=\(clientId.prefix(6))... scopes=''")
+            Logger.auth.error("Response: \(message)")
             throw TwitchMinerError.apiError(statusCode: httpResponse.statusCode, message: message)
         }
 
@@ -92,29 +92,29 @@ public actor TwitchAuthService {
     /// Polls for token after user authorizes the device code
     public func pollForToken(deviceCode: String, interval: Int) async throws -> Account {
         let intervalDuration = UInt64(interval) * 1_000_000_000 // Convert to nanoseconds
-        print("[TwitchAuthService] Starting token polling, interval: \(interval)s")
+        Logger.auth.info("Starting token polling, interval: \(interval)s")
 
         while true {
             try await Task.sleep(nanoseconds: intervalDuration)
-            print("[TwitchAuthService] Polling for token...")
+            Logger.auth.debug("Polling for token...")
 
             do {
                 let account = try await requestToken(deviceCode: deviceCode)
-                print("[TwitchAuthService] Token received! User: \(account.username)")
+                Logger.auth.info("Token received! User: \(account.username)")
                 try await tokenStore.save(account: account)
                 self.currentAccount = account
                 return account
             } catch let error as TwitchMinerError {
                 if case .apiError(let statusCode, let message) = error {
-                    print("[TwitchAuthService] Poll error: status=\(statusCode), message=\(message)")
+                    Logger.auth.debug("Poll error: status=\(statusCode), message=\(message)")
                     // authorization_pending means user hasn't authorized yet, continue polling
                     if message.contains("authorization_pending") {
-                        print("[TwitchAuthService] Authorization pending, continuing...")
+                        Logger.auth.debug("Authorization pending, continuing...")
                         continue
                     }
                     // slow_down means we need to increase interval
                     if message.contains("slow_down") {
-                        print("[TwitchAuthService] Rate limited, slowing down...")
+                        Logger.auth.warning("Rate limited, slowing down...")
                         try await Task.sleep(nanoseconds: intervalDuration)
                         continue
                     }
@@ -147,12 +147,12 @@ public actor TwitchAuthService {
             throw TwitchMinerError.apiError(statusCode: httpResponse.statusCode, message: message)
         }
 
-        // Debug: print raw response
-        let responseString = String(data: data, encoding: .utf8) ?? "<invalid utf8>"
-        print("[TwitchAuthService] Token response: \(responseString)")
-        
+        // The raw body contains the access token — never log its contents.
+        Logger.auth.debug("Token response received (\(data.count) bytes)")
+
+
         let tokenResponse = try JSONDecoder().decode(TokenResponse.self, from: data)
-        print("[TwitchAuthService] Token decoded successfully")
+        Logger.auth.info("Token decoded successfully")
 
         // Validate token to get user info
         let userInfo = try await validateToken(tokenResponse.accessToken)
@@ -260,11 +260,11 @@ public actor TwitchAuthService {
     /// Import a session from TDM cookies (auth-token).
     /// Validates the token and saves it to secure storage.
     public func importTDMSession(token: String) async throws -> Account {
-        print("[TwitchAuthService] Importing TDM session, token prefix: \(token.prefix(10))... len=\(token.count)")
+        Logger.auth.info("Importing TDM session token (len=\(token.count))")
 
         // 1. Validate the token to get user info
         let userInfo = try await validateTokenInternal(token)
-        print("[TwitchAuthService] Token validated for \(userInfo.login)")
+        Logger.auth.info("Token validated for \(userInfo.login)")
 
         // 2. Create account (TDM sessions don't have refresh tokens, so we default to 30d expiry)
         let account = Account(
@@ -294,7 +294,7 @@ public actor TwitchAuthService {
             throw TwitchMinerError.authenticationFailed("Token validation failed: no HTTP response")
         }
         let responseBody = String(data: data, encoding: .utf8) ?? "<non-utf8>"
-        print("[TwitchAuthService] Validate response: status=\(httpResponse.statusCode) body=\(responseBody.prefix(200))")
+        Logger.auth.debug("Validate response: status=\(httpResponse.statusCode) body=\(responseBody.prefix(200))")
         guard httpResponse.statusCode == 200 else {
             throw TwitchMinerError.authenticationFailed("Token validation failed: HTTP \(httpResponse.statusCode) — \(responseBody.prefix(120))")
         }

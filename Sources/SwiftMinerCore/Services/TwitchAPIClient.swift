@@ -399,13 +399,13 @@ public actor TwitchAPIClient {
         // Fallback broadening improves sequel-style searches (e.g. "battlefield 6" -> "battlefield").
         let fallbackQueries = categorySearchFallbackQueries(for: trimmed)
         if !fallbackQueries.isEmpty {
-            print("[TwitchAPIClient] searchCategories: no direct matches for '\(trimmed)', trying fallbacks \(fallbackQueries)")
+            Logger.api.debug("searchCategories: no direct matches for '\(trimmed)', trying fallbacks \(fallbackQueries)")
         }
         var collected: [Game] = []
         var seenIds = Set<String>()
         for fallbackQuery in fallbackQueries {
             let fallbackResults = try await fetchCategories(query: fallbackQuery, limit: cappedLimit)
-            print("[TwitchAPIClient] searchCategories: fallback '\(fallbackQuery)' returned \(fallbackResults.count) categories")
+            Logger.api.debug("searchCategories: fallback '\(fallbackQuery)' returned \(fallbackResults.count) categories")
             for game in fallbackResults where seenIds.insert(game.id).inserted {
                 collected.append(game)
                 if collected.count >= cappedLimit {
@@ -415,7 +415,7 @@ public actor TwitchAPIClient {
         }
 
         if collected.isEmpty {
-            print("[TwitchAPIClient] searchCategories: no categories found for '\(trimmed)' after all fallbacks")
+            Logger.api.info("searchCategories: no categories found for '\(trimmed)' after all fallbacks")
         }
         return collected
     }
@@ -666,7 +666,7 @@ public actor TwitchAPIClient {
         }
 
         if let raw = String(data: data, encoding: .utf8) {
-            print("[TwitchAPIClient] getGameSlug: DirectoryGameRedirect returned no game for '\(name)'. Raw: \(raw.prefix(500))")
+            Logger.api.warning("getGameSlug: DirectoryGameRedirect returned no game for '\(name)'. Raw: \(raw.prefix(500))")
         }
         return nil
     }
@@ -722,7 +722,7 @@ public actor TwitchAPIClient {
                 }
             } catch {
                 cacheable = false
-                print("[TwitchAPIClient] getGameSlugCandidates: category search failed for '\(trimmedName)': \(error.localizedDescription)")
+                Logger.api.warning("getGameSlugCandidates: category search failed for '\(trimmedName)': \(error.localizedDescription)")
             }
         }
 
@@ -779,7 +779,7 @@ public actor TwitchAPIClient {
             }
         } catch {
             cacheable = false
-            print("[TwitchAPIClient] getCategorySearchGameSlugCandidates: category search failed for '\(trimmedName)': \(error.localizedDescription)")
+            Logger.api.warning("getCategorySearchGameSlugCandidates: category search failed for '\(trimmedName)': \(error.localizedDescription)")
         }
 
         if cacheable {
@@ -884,7 +884,7 @@ public actor TwitchAPIClient {
                             )
                             campaign = Self.mergeBasicCampaign(campaign, withDetails: details)
                         } catch {
-                            print("[TwitchAPIClient] Failed to fetch details for campaign \(campaign.id): \(error)")
+                            Logger.api.error("Failed to fetch details for campaign \(campaign.id): \(error)")
                         }
                         return (i, campaign)
                     }
@@ -1560,14 +1560,14 @@ public actor TwitchAPIClient {
                         for gqlError in errors {
                             if let msg = gqlError["message"] as? String {
                                 if msg.contains("PersistedQueryNotFound") {
-                                    print("[TwitchAPIClient] [GQL] PersistedQueryNotFound for \(operationName)")
+                                    Logger.api.error("[GQL] PersistedQueryNotFound for \(operationName)")
                                     throw TwitchMinerError.apiError(
                                         statusCode: 200,
                                         message: "PersistedQueryNotFound: \(operationName) - sha256 hash may be stale"
                                     )
                                 }
                                 // Log other GQL errors too
-                                print("[TwitchAPIClient] [GQL] Error: \(msg)")
+                                Logger.api.warning("[GQL] Error: \(msg)")
                             }
                         }
                     }
@@ -1596,7 +1596,7 @@ public actor TwitchAPIClient {
                 lastError = error
                 if attempt < maxAttempts {
                     let delay = Double(attempt) * 2.0 // Simple backoff: 2s, 4s
-                    print("[TwitchAPIClient] Network error on attempt \(attempt) for \(operationName): \(error.localizedDescription). Retrying in \(delay)s...")
+                    Logger.api.warning("Network error on attempt \(attempt) for \(operationName): \(error.localizedDescription). Retrying in \(delay)s...")
                     try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
                     continue
                 }

@@ -18,7 +18,7 @@ public enum CampaignMergeEngine {
         // CRITICAL (Part 4): Never overwrite cache with an empty API response.
         // This protects against transient API failures or empty responses clearing the UI.
         guard !fresh.isEmpty else {
-            print("[CampaignMergeEngine] API returned empty results; preserving entire cache.")
+            Logger.campaigns.warning("API returned empty results; preserving entire cache.")
             return cached
         }
         
@@ -29,10 +29,10 @@ public enum CampaignMergeEngine {
         for cachedCampaign in cached {
             if !freshIds.contains(cachedCampaign.id) {
                 if shouldPreserve(cachedCampaign, inventory: inventory) {
-                    print("[CampaignMergeEngine] Preserving campaign not in API: \(cachedCampaign.name)")
+                    Logger.campaigns.info("Preserving campaign not in API: \(cachedCampaign.name)")
                     merged.append(cachedCampaign)
                 } else {
-                    print("[CampaignMergeEngine] Dropping expired/unlinked campaign: \(cachedCampaign.name)")
+                    Logger.campaigns.info("Dropping expired/unlinked campaign: \(cachedCampaign.name)")
                 }
             }
         }
