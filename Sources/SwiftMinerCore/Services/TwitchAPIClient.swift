@@ -1539,6 +1539,10 @@ public actor TwitchAPIClient {
         return refreshedToken
     }
 
+    /// Longest 429 Retry-After the client will absorb by sleeping inside the
+    /// request loop; longer waits are thrown so callers can reschedule instead.
+    private static let maxInlineRetryAfterSeconds: TimeInterval = 30
+
     /// Make a request with automatic retries for transient network errors
     private func makeRequestWithRetry(_ request: URLRequest, operationName: String, maxAttempts: Int = 3) async throws -> RequestResult {
         var lastError: Error?
@@ -1577,8 +1581,17 @@ public actor TwitchAPIClient {
                 case 403:
                     throw TwitchMinerError.authenticationFailed("Forbidden")
                 case 429:
-                    let retryAfter = httpResponse.allHeaderFields["Retry-After"] as? String ?? "60"
-                    throw TwitchMinerError.apiError(statusCode: 429, message: "Rate limited, retry after \(retryAfter)s")
+                    let retryAfterHeader = httpResponse.allHeaderFields["Retry-After"] as? String
+                    let retryAfter = retryAfterHeader.flatMap(TimeInterval.init)
+                    // Honor short Retry-After waits inline; anything longer (or an
+                    // unparseable/absent header) surfaces to the caller so engine
+                    // loops aren't stalled behind a long sleep.
+                    if attempt < maxAttempts, let retryAfter, retryAfter <= Self.maxInlineRetryAfterSeconds {
+                        Logger.api.warning("Rate limited on \(operationName); honoring Retry-After of \(retryAfter)s (attempt \(attempt)/\(maxAttempts))")
+                        try await Task.sleep(nanoseconds: UInt64(retryAfter * 1_000_000_000))
+                        continue
+                    }
+                    throw TwitchMinerError.apiError(statusCode: 429, message: "Rate limited, retry after \(retryAfterHeader ?? "60")s")
                 default:
                     let errorMessage = String(data: data, encoding: .utf8) ?? "Unknown error"
                     throw TwitchMinerError.apiError(statusCode: httpResponse.statusCode, message: errorMessage)
