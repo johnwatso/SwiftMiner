@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "Website/**"
+      - "docs/**"
+      - "**.md"
+  pull_request:
+    branches:
+      - main
+    paths-ignore:
+      - "Website/**"
+      - "docs/**"
+      - "**.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen
+
+      - name: Build
+        run: |
+          set -o pipefail
+          xcodebuild -project SwiftMiner.xcodeproj \
+            -scheme SwiftMiner \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath DerivedData \
+            build | tail -100
+
+      - name: Verify Sparkle configuration
+        run: |
+          APP="DerivedData/Build/Products/Debug/SwiftMiner.app"
+          /usr/libexec/PlistBuddy -c 'Print SUFeedURL' "$APP/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Print SUPublicEDKey' "$APP/Contents/Info.plist"
+
+      - name: Test
+        run: |
+          set -o pipefail
+          xcodebuild -project SwiftMiner.xcodeproj \
+            -scheme SwiftMiner \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath DerivedData \
+            test | tail -200
