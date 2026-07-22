@@ -194,6 +194,18 @@ struct DropProgressUpdateResult: Sendable, Equatable {
 struct DropProgressEventTracker: Sendable {
     private(set) var cache: [DropProgressCacheKey: TrackedDropProgress] = [:]
 
+    /// Minutes left on the campaign's most-advanced unclaimed drop, when the
+    /// tracker has verified progress and a known requirement for it.
+    func remainingMinutesToNextClaim(campaignId: String) -> Int? {
+        cache.compactMap { key, tracked -> Int? in
+            guard key.campaignId == campaignId,
+                  !tracked.isClaimed,
+                  tracked.currentMinutes > 0,
+                  let required = tracked.requiredMinutes else { return nil }
+            return max(0, required - tracked.currentMinutes)
+        }.min()
+    }
+
     mutating func observe(_ observation: DropProgressObservation) -> DropProgressUpdateResult {
         let key = DropProgressCacheKey(campaignId: observation.campaignId, dropId: observation.dropId)
         let previous = cache[key]

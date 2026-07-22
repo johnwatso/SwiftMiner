@@ -101,6 +101,25 @@ public actor MinerEngine {
     var lastProgressUpdateAt: Date = Date()
     /// Maximum extra minutes allowed before assuming mining is stalled (matches TDM)
     private static let maxExtraMinutes = 15
+
+    /// A higher-ranked campaign normally preempts the current session, but not
+    /// while the active drop is within this many minutes of completing —
+    /// abandoning it would strand the banked watch time (drop progress is
+    /// per-campaign and is lost on switch).
+    static let preemptionHoldMinutes = 10
+    /// Unless the preempting campaign itself ends within this window; a scarce
+    /// closing window (e.g. an esports broadcast) is worth the strand.
+    static let preemptionImminentEndWindow: TimeInterval = 60 * 60
+
+    static func shouldDeferPreemption(
+        remainingMinutesOnActiveDrop: Int?,
+        preemptorEndDate: Date,
+        now: Date = Date()
+    ) -> Bool {
+        guard let remaining = remainingMinutesOnActiveDrop,
+              remaining <= preemptionHoldMinutes else { return false }
+        return preemptorEndDate.timeIntervalSince(now) > preemptionImminentEndWindow
+    }
     static let failoverCooldown: TimeInterval = 10 * 60
     private static let subscriptionWarningRepeatInterval: TimeInterval = 6 * 60 * 60
     static let noCandidateBackoffBaseInterval: UInt64 = 300 * 1_000_000_000
@@ -126,6 +145,10 @@ public actor MinerEngine {
     // Configuration
     private let campaignCheckInterval: UInt64 = 300 * 1_000_000_000 // 5 minutes
     private let claimCheckInterval: UInt64 = 2 * 60 * 1_000_000_000 // 2 minutes (conditional polling)
+    /// The active-watch loop wakes on this cadence and fires each check on its
+    /// own interval, so a 60s check actually happens every ~60s rather than
+    /// being rounded up to the sum of a long sleep plus the claim wait.
+    private let watchLoopTickInterval: UInt64 = 10 * 1_000_000_000 // 10 seconds
 
     // Mining preferences (set from AppModel/Settings)
     var priorityGames: [String] = []
@@ -1082,14 +1105,18 @@ public actor MinerEngine {
                     throw error
                 }
 
-                // Wait for watch session while periodically checking progress
+                // Wait for watch session while periodically checking progress.
+                // The loop wakes every `watchLoopTickInterval` (10s) and runs each
+                // check on its own cadence via the timestamps below.
                 var lastGqlPoll = Date()
                 var lastCampaignReevaluation = Date()
                 var lastOverrideLiveCheck = Date()
+                var lastClaimCheck = Date()
                 var emptyCurrentDropPolls = 0
+                let claimCheckSeconds = Double(claimCheckInterval) / 1_000_000_000
                 while await watchSessionManager.isWatching && !shouldSwitchChannel {
-                    // Check every 30 seconds for interrupts or polls
-                    try? await Task.sleep(nanoseconds: 30 * 1_000_000_000)
+                    try? await Task.sleep(nanoseconds: watchLoopTickInterval)
+                    if shouldSwitchChannel { break }
 
                     if let overrideLogin = streamOverrideLogin,
                        Date().timeIntervalSince(lastOverrideLiveCheck) >= 60 {
@@ -1278,8 +1305,17 @@ public actor MinerEngine {
                                     forGameCandidates: [bestCampaign],
                                     knownSameGameCampaigns: sameGameCampaigns
                                 ) != nil {
-                                    log("Higher-ranked campaign \(bestCampaign.name) (\(bestCampaign.gameName)) is live now. Switching from \(campaign.name).")
-                                    shouldSwitchChannel = true
+                                    let remainingOnActiveDrop = progressEventTracker
+                                        .remainingMinutesToNextClaim(campaignId: campaign.id)
+                                    if Self.shouldDeferPreemption(
+                                        remainingMinutesOnActiveDrop: remainingOnActiveDrop,
+                                        preemptorEndDate: bestCampaign.endDate
+                                    ) {
+                                        log("Higher-ranked campaign \(bestCampaign.name) (\(bestCampaign.gameName)) is live, but the current drop is \(remainingOnActiveDrop ?? 0) minute(s) from completing — finishing it before switching.")
+                                    } else {
+                                        log("Higher-ranked campaign \(bestCampaign.name) (\(bestCampaign.gameName)) is live now. Switching from \(campaign.name).")
+                                        shouldSwitchChannel = true
+                                    }
                                 } else {
                                     log("Higher-ranked campaign \(bestCampaign.name) (\(bestCampaign.gameName)) has no live channel right now; staying on \(campaign.name).")
                                 }
@@ -1287,29 +1323,25 @@ public actor MinerEngine {
                         }
                     }
 
-                    // Check if we should claim any drops. If claiming or inventory sync
-                    // removes the current campaign from the mineable set, rescan now.
-                    _ = await claimReadyDrops()
-                    if streamOverrideLogin == nil, let currentCampaignId = session?.currentCampaignId {
-                        let currentStillMineable = candidateCampaigns(
-                            from: allCampaigns,
-                            priorityGames: priorityGames,
-                            excludedGames: excludedGames,
-                            strategy: miningStrategy
-                        ).contains { $0.id == currentCampaignId }
+                    // Conditional claim polling: every ~2 minutes while actively
+                    // mining. If claiming or inventory sync removes the current
+                    // campaign from the mineable set, rescan now.
+                    if Date().timeIntervalSince(lastClaimCheck) >= claimCheckSeconds {
+                        lastClaimCheck = Date()
+                        _ = await claimReadyDrops()
+                        if streamOverrideLogin == nil, let currentCampaignId = session?.currentCampaignId {
+                            let currentStillMineable = candidateCampaigns(
+                                from: allCampaigns,
+                                priorityGames: priorityGames,
+                                excludedGames: excludedGames,
+                                strategy: miningStrategy
+                            ).contains { $0.id == currentCampaignId }
 
-                        if !currentStillMineable {
-                            log("Current campaign is no longer mineable after claim sync. Switching target.")
-                            shouldSwitchChannel = true
+                            if !currentStillMineable {
+                                log("Current campaign is no longer mineable after claim sync. Switching target.")
+                                shouldSwitchChannel = true
+                            }
                         }
-                    }
-                    
-                    // Conditional claim polling: Check every 2 minutes when actively mining
-                    // This reduces claim latency without adding background churn when idle
-                    let ticksPerClaimCheck = Int(claimCheckInterval / 10_000_000_000) // 10s ticks
-                    for _ in 0..<ticksPerClaimCheck {
-                        if shouldSwitchChannel { break }
-                        try? await Task.sleep(nanoseconds: 10_000_000_000)
                     }
                 }
 

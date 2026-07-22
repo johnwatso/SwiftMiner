@@ -116,6 +116,7 @@
 		A30AA8EF6C13CF1596110C22 /* UnattendedHealthStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AEFBBEA28C3C08733DCB98A /* UnattendedHealthStore.swift */; };
 		A443288FDCAF0E2F9EB174FF /* EventEmitterService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0658398231AD4B7BD6AF16C5 /* EventEmitterService.swift */; };
 		A46C78368503613F92B006BB /* NotificationServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 512C3988013AEF59E9617A61 /* NotificationServiceTests.swift */; };
+		A59C41A3071F5DAF49E6BC83 /* MinerSchedulingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 395BAF086C00772CB356A508 /* MinerSchedulingTests.swift */; };
 		A99DA21D645821C4EFA9D53A /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 2B1CADAC413BEE9A9D77EF7D /* Sparkle */; };
 		AA421486DE7DD26B85BCB4A4 /* NavigationProjectionStateProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7559E3ABB6B9BA9EDAFCA012 /* NavigationProjectionStateProvider.swift */; };
 		AA7441B4B7D10CB27A7C7040 /* SwiftMinerRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2B4D16DB9BC1EB556FF491F /* SwiftMinerRuntime.swift */; };
@@ -286,6 +287,7 @@
 		320947611A8A4BB7759DAF7C /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
 		32F316BB92BE076C50D64FE3 /* SteamArtworkSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SteamArtworkSheet.swift; sourceTree = "<group>"; };
 		3890500ACC8AE036BC125962 /* UnattendedIncidentNotificationServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnattendedIncidentNotificationServiceTests.swift; sourceTree = "<group>"; };
+		395BAF086C00772CB356A508 /* MinerSchedulingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinerSchedulingTests.swift; sourceTree = "<group>"; };
 		3ABC7C3BDCE6B1CE8756DA5A /* SwiftMinerServiceTool */ = {isa = PBXFileReference; includeInIndex = 0; path = SwiftMinerServiceTool; sourceTree = BUILT_PRODUCTS_DIR; };
 		3AC5F2BA81633C5B76678925 /* CampaignViewData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignViewData.swift; sourceTree = "<group>"; };
 		3C67349DAA237D14A6C21D75 /* PubSubClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PubSubClient.swift; sourceTree = "<group>"; };
@@ -725,6 +727,7 @@
 				637C207EE3AF4206DA9F2C8F /* LogExporterTests.swift */,
 				A62D525DAD95E511F9DA6C90 /* MinerActivitySnapshotTests.swift */,
 				DE2BCE3055439E2EEE026D0C /* MinerHealthSnapshotTests.swift */,
+				395BAF086C00772CB356A508 /* MinerSchedulingTests.swift */,
 				B49AD6618BBB1B989E52153A /* MinerSupervisorTests.swift */,
 				1FBB668242441418AE670CC4 /* ModelTests.swift */,
 				DECCB3AB7329CAE568F00BEC /* NetworkGuard.swift */,
@@ -1174,6 +1177,7 @@
 				0DA97EF00308C1F2837F3394 /* LogExporterTests.swift in Sources */,
 				1A07E9FA650B8CFB69A0D223 /* MinerActivitySnapshotTests.swift in Sources */,
 				9E22D6B864FBD034644E5473 /* MinerHealthSnapshotTests.swift in Sources */,
+				A59C41A3071F5DAF49E6BC83 /* MinerSchedulingTests.swift in Sources */,
 				67BD7A9833B4D30B801F8997 /* MinerSupervisorTests.swift in Sources */,
 				3B331F247AA238C86D43C625 /* ModelTests.swift in Sources */,
 				66ED85C0C416B95E4B08A875 /* NetworkGuard.swift in Sources */,
