@@ -108,10 +108,9 @@ struct OverviewView: View {
         .navigationTitle("Overview")
         .onReceive(NotificationCenter.default.publisher(for: .steamArtworkDidUpdate)) { _ in
             Task { @MainActor in
-                // Trigger a re-render by updating local state
-                overviewCampaigns = await navigation.minerManager.dataCoordinator.allCampaigns(
+                applyOverviewCampaigns(await navigation.minerManager.dataCoordinator.allCampaigns(
                     preferSteamArtwork: settings.preferSteamArtwork
-                )
+                ))
             }
         }
         .toolbar {
@@ -256,14 +255,22 @@ struct OverviewView: View {
             ?? miners.first { $0.status == .error }
     }
 
+    /// Assigns only when the data actually changed, so refresh storms that
+    /// produce an identical campaign array don't invalidate the whole overview.
+    private func applyOverviewCampaigns(_ fresh: [CampaignViewData]) {
+        if fresh != overviewCampaigns {
+            overviewCampaigns = fresh
+        }
+    }
+
     private func refreshSummary() async {
         isRefreshing = true
         if overviewCampaigns.isEmpty && !navigation.minerManager.dataCoordinator.lastKnownAllCampaigns.isEmpty {
             overviewCampaigns = navigation.minerManager.dataCoordinator.lastKnownAllCampaigns
         }
-        overviewCampaigns = await navigation.minerManager.dataCoordinator.allCampaigns(
+        applyOverviewCampaigns(await navigation.minerManager.dataCoordinator.allCampaigns(
             preferSteamArtwork: Settings.shared.preferSteamArtwork
-        )
+        ))
         await enrichPreferredGameArtwork()
         isRefreshing = false
     }
@@ -274,9 +281,9 @@ struct OverviewView: View {
 
         await navigation.restartMinersAndRefreshOverviewData()
 
-        overviewCampaigns = await navigation.minerManager.dataCoordinator.allCampaigns(
+        applyOverviewCampaigns(await navigation.minerManager.dataCoordinator.allCampaigns(
             preferSteamArtwork: Settings.shared.preferSteamArtwork
-        )
+        ))
         await enrichPreferredGameArtwork()
     }
 
@@ -521,11 +528,6 @@ struct OverviewView: View {
             .sorted(by: campaignDisplaySort)
     }
 
-    private var preferredGameFallbacks: [GamePreference] {
-        preferredGames.filter { preference in
-            !uniquePrioritisedCampaigns.contains(where: { matches($0, preference: preference) })
-        }
-    }
 
     private var uniquePrioritisedCampaigns: [CampaignViewData] {
         var seen = Set<String>()
@@ -536,30 +538,12 @@ struct OverviewView: View {
         }
     }
 
-    private var activeFeedCampaigns: [CampaignViewData] {
-        campaigns
-            .filter { campaign in
-                let state = visualState(for: campaign)
-                return state == .watching
-                    || state == .claimable
-                    || state == .inProgress
-                    || isBeingWatched(campaign)
-            }
-            .sorted(by: campaignDisplaySort)
-    }
 
     private func isPrioritisedRailEligible(_ campaign: CampaignViewData) -> Bool {
         campaign.isDisplayableInOverview
             || (campaign.relevance == .prioritised && !campaign.isCompleted)
     }
 
-    private var recentCampaigns: [CampaignViewData] {
-        campaigns
-            .filter { campaign in
-                campaign.isCompleted
-            }
-            .sorted { recentActivityDate(for: $0) > recentActivityDate(for: $1) }
-    }
 
     private var prioritisedFeedItems: [CampaignRailItem] {
         let campaignPool = uniquePrioritisedCampaigns
@@ -974,9 +958,6 @@ struct OverviewView: View {
         }
     }
 
-    private func recentActivityDate(for campaign: CampaignViewData) -> Date {
-        campaign.endDate
-    }
 
     private func initials(for username: String) -> String {
         let tokens = username
@@ -991,41 +972,8 @@ struct OverviewView: View {
         return String(username.prefix(2)).uppercased()
     }
 
-    // MARK: - Campaign Summary
 
-    private var campaignSummarySection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            sectionHeading("Campaign Progress", subtitle: "Active and completed drop campaigns.")
 
-            if summaryCampaigns.isEmpty {
-                CampaignLibraryAmbientRow()
-            } else {
-                VStack(spacing: 10) {
-                    ForEach(summaryCampaigns) { campaign in
-                        OverviewCampaignSummaryRow(
-                            campaign: campaign,
-                            tint: gameTintColor(forGameName: campaign.gameName)
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    private var summaryCampaigns: [CampaignViewData] {
-        // Active campaigns are always shown — they don't need Twitch progress yet.
-        // Only fall back to requiring real progress for recent (completed) campaigns.
-        if !activeFeedCampaigns.isEmpty {
-            return Array(activeFeedCampaigns.prefix(6))
-        }
-        if !prioritisedCampaigns.isEmpty {
-            return Array(prioritisedCampaigns.prefix(6))
-        }
-        return recentCampaigns
-            .filter { $0.isDisplayableInOverview }
-            .prefix(6)
-            .map { $0 }
-    }
 
     private func campaignProgressPercent(for campaign: CampaignViewData) -> Double {
         let progressPercent = (campaign.overviewProgressFraction ?? 0) * 100
@@ -1432,115 +1380,7 @@ private struct OverviewSystemStateBanner: View {
 
 // MARK: - Campaign Summary Row
 
-private struct OverviewCampaignSummaryRow: View {
-    let campaign: CampaignViewData
-    let tint: Color
 
-    private var progressFraction: Double? {
-        campaign.overviewProgressFraction
-    }
-
-    @ViewBuilder
-    private var statusText: some View {
-        switch campaign.overviewState {
-        case .completed:
-            Text("All campaign rewards claimed")
-                .font(.caption)
-                .foregroundStyle(.green)
-        case .claimable:
-            Text("Reward ready to claim")
-                .font(.caption)
-                .foregroundStyle(.orange)
-        case .inProgress:
-            let claimedCopy = campaign.overviewClaimedRewardCount > 0
-                ? " · \(campaign.overviewClaimedRewardCount) claimed"
-                : ""
-            Text("Progress synced from Drops" + claimedCopy)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        case .available:
-            Text("Available")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    var body: some View {
-        HStack(spacing: 14) {
-            CampaignThumbnail(url: campaign.artworkURL, tint: tint)
-                .frame(width: 56, height: 56)
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text(campaign.gameName)
-                    .font(.headline)
-                    .lineLimit(1)
-
-                Text(campaign.campaignName)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-
-                if let progressFraction {
-                    AnimatedLinearProgressView(value: progressFraction, tint: tint)
-                        .frame(maxWidth: 220)
-                }
-
-                statusText
-            }
-
-            Spacer()
-
-            VStack(alignment: .trailing, spacing: 6) {
-                if let progressFraction {
-                    Text("\(Int((progressFraction * 100).rounded()))%")
-                        .font(.title3.weight(.semibold))
-                        .monospacedDigit()
-                        .foregroundStyle(campaign.overviewState == .claimable ? .orange : .primary)
-                } else if campaign.isCompleted {
-                    Text("Done")
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(.green)
-                }
-            }
-        }
-        .padding(16)
-        .background(.thinMaterial.opacity(0.54), in: RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
-                .strokeBorder(.white.opacity(0.12), lineWidth: 1)
-        }
-        .shadow(color: .black.opacity(0.06), radius: 4, y: 1)
-    }
-}
-
-private struct CampaignLibraryAmbientRow: View {
-    var body: some View {
-        HStack(spacing: 14) {
-            ZStack {
-                RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
-                    .fill(.thinMaterial.opacity(0.6))
-
-                Image(systemName: "sparkles.tv")
-                    .font(.title3.weight(.medium))
-                    .foregroundStyle(.secondary)
-            }
-            .frame(width: 56, height: 56)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Up to Date")
-                    .font(.headline)
-
-                Text("No active drop campaigns are available right now.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-        }
-        .padding(16)
-        .background(.ultraThinMaterial.opacity(0.72), in: RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
-    }
-}
 
 // MARK: - Window Configuration
 
