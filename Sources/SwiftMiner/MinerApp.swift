@@ -20,6 +20,7 @@ struct MinerApp: App {
     @State private var notificationDelegate = AppNotificationDelegate()
     @State private var didApplyLaunchWindowPreference = false
     @State private var showLegacyBackupPrompt = false
+    @State private var showUncleanExitPrompt = false
     @Environment(\.openWindow) private var openWindow
 
     init() {
@@ -77,6 +78,16 @@ struct MinerApp: App {
                     await navigation.setup()
                     await appModel.setup()
                     unattendedHealth.startMonitoring()
+
+                    if launchContext.previousExitWasUnclean {
+                        navigation.logEvent(
+                            message: "SwiftMiner didn't shut down cleanly last time (crash, force-quit, or power loss).",
+                            level: .warning,
+                            rawMessage: "[lifecycle] unclean previous exit detected"
+                        )
+                        showUncleanExitPrompt = true
+                    }
+
                     updater.onError = { error in
                         navigation.logEvent(
                             message: "Update check failed: \(error.localizedDescription). You can download manually from https://github.com/johnwatso/SwiftMiner/releases",
@@ -177,6 +188,17 @@ struct MinerApp: App {
                     Button("Keep", role: .cancel) {}
                 } message: {
                     Text("Your accounts are now stored securely in the macOS Keychain. The old encrypted backup file is no longer needed — delete it now, or keep it and we'll ask again next week.")
+                }
+                .alert("SwiftMiner quit unexpectedly", isPresented: $showUncleanExitPrompt) {
+                    Button("Report Issue…") {
+                        GitHubIssueReporter.openNewIssue(
+                            title: "[Crash] ",
+                            note: "SwiftMiner appears to have quit unexpectedly during its previous run. If macOS showed a crash report, attaching it (or the matching .ips file from Console.app → Crash Reports) helps a lot."
+                        )
+                    }
+                    Button("Dismiss", role: .cancel) {}
+                } message: {
+                    Text("The previous run ended without a clean shutdown — this can be a crash, a force-quit, or a power loss. If SwiftMiner crashed, you can report it with the app and macOS versions pre-filled.")
                 }
         }
         .windowStyle(.titleBar)
@@ -399,11 +421,18 @@ private enum AppWindowID {
 /// system launched the app on the user's behalf — login items, reopen-on-restart, etc.
 final class LaunchContextDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     @Published private(set) var wasLaunchedAtLogin: Bool = false
+    @Published private(set) var previousExitWasUnclean: Bool = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if let isDefault = notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool {
             wasLaunchedAtLogin = !isDefault
         }
+
+        previousExitWasUnclean = MainActor.assumeIsolated { CrashSentinel.armAndCheckPreviousExit() }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        MainActor.assumeIsolated { CrashSentinel.markCleanExit() }
 
         // SwiftMiner is single-window by design — disable macOS automatic
         // window tabbing so the Window menu doesn't expose "Show Tab Bar",

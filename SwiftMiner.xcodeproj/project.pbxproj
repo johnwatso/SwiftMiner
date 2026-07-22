@@ -62,6 +62,7 @@
 		5636165D5B221BDF695FD882 /* SwiftMiner.icon in Resources */ = {isa = PBXBuildFile; fileRef = 2B643A3B89EA0F0530799BEC /* SwiftMiner.icon */; };
 		57C5F6196151CAB546E6CBFF /* AuthRequiredSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BF00FC996141AD5345CE864 /* AuthRequiredSheet.swift */; };
 		5A358B12A9E721FCED292BF0 /* RateLimiter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F071D325BFB29DE25B89EE2D /* RateLimiter.swift */; };
+		5B26594BEDC158A0769682AB /* CrashSentinel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87DA7758FAC012A62B587018 /* CrashSentinel.swift */; };
 		5C73106DFFF460DF8CDB6B44 /* SwiftMinerCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 758AF13E9334C95906C1A325 /* SwiftMinerCore.swift */; };
 		5D719D19813209223BA476F9 /* Progress.swift in Sources */ = {isa = PBXBuildFile; fileRef = E226CD7402250468FFD4C2DF /* Progress.swift */; };
 		5FCB29AB39702C89A1B9369F /* DiscordMarkOfficial.svg in Resources */ = {isa = PBXBuildFile; fileRef = 7C7DCDFEAD0FB5F4149126DB /* DiscordMarkOfficial.svg */; };
@@ -324,6 +325,7 @@
 		856A69CE754F0C1084D4A93A /* AdvancedSettingsPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedSettingsPane.swift; sourceTree = "<group>"; };
 		8602894B99CE1D0D592B2767 /* ClaimService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaimService.swift; sourceTree = "<group>"; };
 		877DE35C94E3759F2ECAB592 /* GeneralSettingsPanes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneralSettingsPanes.swift; sourceTree = "<group>"; };
+		87DA7758FAC012A62B587018 /* CrashSentinel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrashSentinel.swift; sourceTree = "<group>"; };
 		8ACF08613C4DC075CA132ED1 /* CampaignService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignService.swift; sourceTree = "<group>"; };
 		8CBA21A1EC2155E1DB26257E /* AggregatedCampaignDataService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AggregatedCampaignDataService.swift; sourceTree = "<group>"; };
 		8F0C36D4A3E4BE2B05796360 /* CampaignCardComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignCardComponents.swift; sourceTree = "<group>"; };
@@ -548,6 +550,7 @@
 				B27F8A9F37F60E7246A380FB /* CampaignView.swift */,
 				C67E7250E0A8C61154B61CBB /* CampaignViews.swift */,
 				A5838C1AEB6D4797976C6C65 /* ContentView.swift */,
+				87DA7758FAC012A62B587018 /* CrashSentinel.swift */,
 				0FBDA7B95B97BC454645997C /* DiscordAvatarCache.swift */,
 				1F950E8C5A6FB7A2598984E0 /* DropFilter.swift */,
 				6E08A9966225179B652AC9C8 /* DropsMinerCampaignFilter.swift */,
@@ -1082,6 +1085,7 @@
 				68E24E9AD5F109B1513A1099 /* CampaignView.swift in Sources */,
 				802FA8EC02560A28823938FA /* CampaignViews.swift in Sources */,
 				CFEDF8BC7550B1E1AF61C70D /* ContentView.swift in Sources */,
+				5B26594BEDC158A0769682AB /* CrashSentinel.swift in Sources */,
 				04B98A1843ABA24597802CD2 /* DiscordAvatarCache.swift in Sources */,
 				F4F5E8141E096FB456EEA30A /* DropFilter.swift in Sources */,
 				473E3173DC609890A19F09A2 /* DropsMinerCampaignFilter.swift in Sources */,
