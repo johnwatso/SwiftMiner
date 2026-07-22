@@ -1031,13 +1031,28 @@ extension MinerEngine {
     }
 
     func failoverRule(for campaign: Campaign) -> GameFailoverStreamer? {
-        let gameId = normalizedGameKey(campaign.game.id)
-        let gameName = normalizedGameKey(campaign.gameName)
+        Self.matchingFailoverRule(
+            in: failoverStreamers,
+            campaignGameId: campaign.game.id,
+            campaignGameName: campaign.gameName
+        )
+    }
 
-        return failoverStreamers.first { rule in
+    /// The first enabled rule whose game id (preferred) or game name matches the
+    /// campaign, compared case- and whitespace-insensitively. Rules with no
+    /// streamer login never match.
+    static func matchingFailoverRule(
+        in streamers: [GameFailoverStreamer],
+        campaignGameId: String,
+        campaignGameName: String
+    ) -> GameFailoverStreamer? {
+        let gameId = normalizedGameSelectionKey(campaignGameId)
+        let gameName = normalizedGameSelectionKey(campaignGameName)
+
+        return streamers.first { rule in
             guard rule.enabled, !rule.streamerLogin.isEmpty else { return false }
-            let ruleGameId = normalizedGameKey(rule.gameId)
-            let ruleGameName = normalizedGameKey(rule.gameName)
+            let ruleGameId = normalizedGameSelectionKey(rule.gameId)
+            let ruleGameName = normalizedGameSelectionKey(rule.gameName)
             return (!ruleGameId.isEmpty && ruleGameId == gameId)
                 || (!ruleGameName.isEmpty && ruleGameName == gameName)
         }
