@@ -95,26 +95,69 @@ public enum AnyJSONValue: Codable, Sendable, Equatable {
     }
 }
 
+/// Seam over the underlying WebSocket so reconnect behaviour is testable.
+protocol PubSubSocket: Sendable {
+    func resume()
+    func send(_ text: String) async throws
+    /// Next text frame; data frames are decoded as UTF-8, other frame kinds return nil.
+    func receive() async throws -> String?
+    func cancel()
+}
+
+typealias PubSubSocketFactory = @Sendable (URL) -> any PubSubSocket
+
+final class URLSessionPubSubSocket: PubSubSocket, @unchecked Sendable {
+    private let task: URLSessionWebSocketTask
+
+    init(url: URL) {
+        task = URLSession(configuration: .default).webSocketTask(with: url)
+    }
+
+    func resume() {
+        task.resume()
+    }
+
+    func send(_ text: String) async throws {
+        try await task.send(.string(text))
+    }
+
+    func receive() async throws -> String? {
+        switch try await task.receive() {
+        case .string(let text):
+            return text
+        case .data(let data):
+            return String(data: data, encoding: .utf8)
+        @unknown default:
+            return nil
+        }
+    }
+
+    func cancel() {
+        task.cancel(with: .goingAway, reason: nil)
+    }
+}
+
 /// Client for Twitch PubSub (WebSocket)
 public actor PubSubClient: NSObject {
     private let url = URL(string: "wss://pubsub-edge.twitch.tv/v1")!
-    private var webSocketTask: URLSessionWebSocketTask?
+    private let socketFactory: PubSubSocketFactory
+    private var socket: (any PubSubSocket)?
     private var isConnected = false
     /// Topics the caller wants to remain subscribed to across socket reconnects.
     private var activeTopics: Set<String> = []
     /// Topics submitted on the current socket. This is cleared whenever the socket changes.
     private var submittedTopics: Set<String> = []
     private var accessToken: String?
-    
+
     private let maxTopicsPerConnection = 50
     static let topicBatchSize = 20
-    private let pingInterval: TimeInterval = 180 // 3 minutes
-    private let pongTimeout: TimeInterval = 10 // 10 seconds
-    
+    private let pingInterval: TimeInterval
+    private let pongTimeout: TimeInterval
+
     // Exponential backoff for reconnects
     private var reconnectAttempt = 0
-    private let maxReconnectDelay: TimeInterval = 60 // Max 60 seconds between attempts
-    private let baseReconnectDelay: TimeInterval = 1 // Start with 1 second
+    private let maxReconnectDelay: TimeInterval
+    private let baseReconnectDelay: TimeInterval
     
     private var pingTask: Task<Void, Never>?
     private var listenTask: Task<Void, Never>?
@@ -145,7 +188,25 @@ public actor PubSubClient: NSObject {
     }
 
     public init(accessToken: String? = nil) {
+        self.init(accessToken: accessToken, socketFactory: { URLSessionPubSubSocket(url: $0) })
+    }
+
+    /// Test seam: inject the socket implementation and timing. Production code
+    /// uses the public initializer, which keeps Twitch's real intervals.
+    init(
+        accessToken: String? = nil,
+        socketFactory: @escaping PubSubSocketFactory,
+        pingInterval: TimeInterval = 180, // 3 minutes
+        pongTimeout: TimeInterval = 10,
+        baseReconnectDelay: TimeInterval = 1,
+        maxReconnectDelay: TimeInterval = 60
+    ) {
         self.accessToken = accessToken
+        self.socketFactory = socketFactory
+        self.pingInterval = pingInterval
+        self.pongTimeout = pongTimeout
+        self.baseReconnectDelay = baseReconnectDelay
+        self.maxReconnectDelay = maxReconnectDelay
         super.init()
     }
     
@@ -163,9 +224,9 @@ public actor PubSubClient: NSObject {
 
         log("Connecting to PubSub...")
 
-        let session = URLSession(configuration: .default)
-        webSocketTask = session.webSocketTask(with: url)
-        webSocketTask?.resume()
+        let newSocket = socketFactory(url)
+        socket = newSocket
+        newSocket.resume()
 
         isConnected = true
         reconnectAttempt = 0 // Reset reconnect counter on successful connect
@@ -182,8 +243,8 @@ public actor PubSubClient: NSObject {
             pingTask = nil
             listenTask?.cancel()
             listenTask = nil
-            webSocketTask?.cancel(with: .goingAway, reason: nil)
-            webSocketTask = nil
+            socket?.cancel()
+            socket = nil
             isConnected = false
             submittedTopics.removeAll()
             onConnectionStateChange?(false)
@@ -204,8 +265,8 @@ public actor PubSubClient: NSObject {
         pongTimeoutTask?.cancel()
         pongTimeoutTask = nil
 
-        webSocketTask?.cancel(with: .goingAway, reason: nil)
-        webSocketTask = nil
+        socket?.cancel()
+        socket = nil
         isConnected = false
         submittedTopics.removeAll()
 
@@ -284,13 +345,13 @@ public actor PubSubClient: NSObject {
     }
     
     private func sendMessage(_ message: PubSubMessage) async throws {
-        guard let webSocketTask = webSocketTask else { throw PubSubError.notConnected }
+        guard let socket else { throw PubSubError.notConnected }
         
         let encoder = JSONEncoder()
         do {
             let data = try encoder.encode(message)
             let string = String(data: data, encoding: .utf8)!
-            try await webSocketTask.send(.string(string))
+            try await socket.send(string)
         } catch {
             throw PubSubError.messageEncodingFailed(error)
         }
@@ -321,22 +382,21 @@ public actor PubSubClient: NSObject {
         listenTask = Task {
             while !Task.isCancelled {
                 do {
-                    guard let message = try await webSocketTask?.receive() else {
-                        log("WebSocket receive returned nil")
+                    guard let socket else {
+                        log("WebSocket receive with no socket")
                         break
                     }
-
-                    switch message {
-                    case .string(let text):
+                    if let text = try await socket.receive() {
                         await handleReceivedText(text)
-                    case .data(let data):
-                        if let text = String(data: data, encoding: .utf8) {
-                            await handleReceivedText(text)
-                        }
-                    @unknown default:
-                        break
                     }
                 } catch {
+                    // A cancelled loop belongs to a socket that was already torn
+                    // down (reconnect or disconnect). Treating its wakeup as a
+                    // connection error caused cascading spurious reconnects.
+                    if Task.isCancelled || error is CancellationError
+                        || (error as? URLError)?.code == .cancelled {
+                        break
+                    }
                     log("WebSocket error: \(error.localizedDescription)")
                     await handleConnectionError(error)
                     break
@@ -395,6 +455,12 @@ public actor PubSubClient: NSObject {
                     startPongTimeout()
 
                 } catch {
+                    // See the listen loop: a cancelled sleep is teardown, not a
+                    // connection failure.
+                    if Task.isCancelled || error is CancellationError
+                        || (error as? URLError)?.code == .cancelled {
+                        break
+                    }
                     log("PING failed: \(error.localizedDescription)")
                     await handleConnectionError(error)
                     break
@@ -445,17 +511,17 @@ public actor PubSubClient: NSObject {
         pongTimeoutTask?.cancel()
         pongTimeoutTask = nil
 
-        webSocketTask?.cancel(with: .goingAway, reason: nil)
-        webSocketTask = nil
+        socket?.cancel()
+        socket = nil
         submittedTopics.removeAll()
 
         // Wait before reconnecting
         try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
 
         // Attempt reconnect
-        let reconnectSession = URLSession(configuration: .default)
-        webSocketTask = reconnectSession.webSocketTask(with: url)
-        webSocketTask?.resume()
+        let newSocket = socketFactory(url)
+        socket = newSocket
+        newSocket.resume()
 
         isConnected = true
         onConnectionStateChange?(true)
