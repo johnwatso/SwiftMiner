@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SwiftMiner 1.34.3 - Release Notes</title>
+  <meta name="description" content="Release notes for SwiftMiner 1.34.3: detects miners that are watching but not earning, records an hourly earning history, and expands the diagnostic report.">
+  <link rel="canonical" href="https://swiftminer.app/release-notes/1.34.3.html">
+  <meta name="robots" content="index, follow">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      margin: 0;
+      padding: 32px 20px 48px;
+      font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f4f6f8;
+      color: #0f1720;
+    }
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 28px;
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.86);
+      box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
+      border: 1px solid rgba(82, 96, 109, 0.12);
+    }
+    h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
+    .meta { margin: 0 0 10px; color: #52606d; font-size: 14px; }
+    .intro { margin: 0 0 24px; color: #384454; }
+    section {
+      margin: 18px 0 0;
+      padding: 18px 18px 14px;
+      border: 1px solid rgba(82, 96, 109, 0.18);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.42);
+      border-left: 5px solid var(--accent, #0a67a3);
+    }
+    section.green { --accent: #1f7a52; }
+    section.amber { --accent: #a8620a; }
+    h2 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 4px;
+      color: var(--accent, #0a67a3);
+      font-size: 18px;
+    }
+    .badge {
+      display: inline-grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--accent, #0a67a3) 15%, transparent);
+      font-size: 16px;
+    }
+    .summary { margin: 0 0 12px; color: #52606d; font-size: 14px; }
+    ul { margin: 0; padding-left: 22px; }
+    li { margin: 0 0 8px; }
+    li:last-child { margin-bottom: 0; }
+    a { color: #0a67a3; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #0b1015; color: #edf2f7; }
+      main {
+        background: rgba(15, 23, 32, 0.88);
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+        border-color: rgba(159, 176, 194, 0.14);
+      }
+      .meta, .summary { color: #9fb0c2; }
+      .intro { color: #c8d3df; }
+      section {
+        border-color: rgba(159, 176, 194, 0.18);
+        background: rgba(255, 255, 255, 0.04);
+      }
+      a { color: #73c3ff; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>SwiftMiner 1.34.3</h1>
+    <p class="meta">Version 1.34.3 · Build 2026072413</p>
+    <p class="intro">SwiftMiner now checks that miners are actually earning, not just that they are running — and keeps a history so you can see when one stopped.</p>
+
+    <section class="green">
+      <h2><span class="badge" aria-hidden="true">📊</span> Earning Checks</h2>
+      <p class="summary">Health monitoring previously only asked whether a miner was responding. It now asks whether it is banking drop progress.</p>
+      <ul>
+        <li>A miner that keeps watching without earning any drop progress is now flagged as <strong>Watching — Not Earning</strong> and raises a Mining Progress Stalled notification. Previously this could continue for hours while every health check reported the miner as perfectly healthy, because it was: polls succeeded and events kept arriving the whole time.</li>
+        <li>The check waits 20 minutes before flagging, so normal channel switches and campaign refreshes are unaffected, and a freshly started watch session is measured from when it began watching. Pinned streams are exempt, since a chosen streamer is expected to sit on a channel that may not be earning.</li>
+        <li>Miner diagnostics now show when each miner last banked drop progress, alongside the existing connection timestamps.</li>
+      </ul>
+    </section>
+
+    <section class="green">
+      <h2><span class="badge" aria-hidden="true">📒</span> Earning Ledger</h2>
+      <p class="summary">A new hourly record of what each account actually earned, kept for the last seven days.</p>
+      <ul>
+        <li>SwiftMiner now records, per miner and per hour, how long it spent watching and how many drop minutes and claims Twitch credited. The headline figure is drop minutes earned per hour watched — a healthy miner sits close to 60.</li>
+        <li>Hours where a miner watched for a meaningful stretch and earned nothing are called out, so a session that quietly stopped earning overnight can be found afterwards instead of having to be caught live.</li>
+        <li>Available from Settings → Advanced → Diagnostics → Earning Ledger. It is always on, is written at most once a minute, and adds no measurable overhead.</li>
+      </ul>
+    </section>
+
+    <section class="amber">
+      <h2><span class="badge" aria-hidden="true">🩺</span> Diagnostics</h2>
+      <p class="summary">The exported report now covers earning, not just connectivity.</p>
+      <ul>
+        <li>Diagnostic reports include a new Earning Ledger section: per-miner totals and earning rate, every non-earning hour, and the last 48 hours in hourly detail. Miner names are redacted as before.</li>
+        <li>The Recovery Timeline in miner diagnostics now shows real events — campaign selections, channel switches, stall detections, inventory refreshes, claims and errors. It had previously always been empty.</li>
+      </ul>
+    </section>
+
+    <section class="amber">
+      <h2><span class="badge" aria-hidden="true">🧰</span> Maintenance</h2>
+      <p class="summary">Housekeeping alongside the changes above.</p>
+      <ul>
+        <li>Corrected the README platform badge, which advertised macOS 26 or later while SwiftMiner in fact supports macOS 14 and later.</li>
+        <li>Added regression coverage for the not-earning checks, the earning ledger, the watch-time accounting, and the expanded diagnostic report.</li>
+        <li>Updates SwiftMiner to version 1.34.3 build 2026072413.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

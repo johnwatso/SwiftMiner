@@ -28,7 +28,14 @@ struct MinerApp: App {
         let healthStore = SwiftMinerRuntime.isRunningTests
             ? nil
             : UnattendedHealthStore(fileURL: UnattendedHealthStore.defaultFileURL())
-        let manager = MinerManager(clientId: clientId, unattendedHealthStore: healthStore)
+        let ledgerStore = SwiftMinerRuntime.isRunningTests
+            ? nil
+            : EarningLedgerStore(fileURL: EarningLedgerStore.defaultFileURL())
+        let manager = MinerManager(
+            clientId: clientId,
+            unattendedHealthStore: healthStore,
+            earningLedgerStore: ledgerStore
+        )
         self._minerManager = State(initialValue: manager)
         self._unattendedHealth = StateObject(wrappedValue: UnattendedHealthModel(store: healthStore))
         self._appModel = State(initialValue: AppModel(clientId: clientId, minerManager: manager))
@@ -157,6 +164,9 @@ struct MinerApp: App {
                     NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)
                 ) { _ in
                     unattendedHealth.stopMonitoring()
+                    // Watch time accumulates in memory between throttled writes; flush so the
+                    // final stretch before quitting survives.
+                    Task { try? await minerManager.earningLedgerStore?.flush() }
                     Task { await appModel.stop() }
                 }
                 .onReceive(

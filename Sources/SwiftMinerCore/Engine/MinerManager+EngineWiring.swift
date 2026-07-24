@@ -66,12 +66,35 @@ extension MinerManager {
         await engine.setProgressUpdateHandler { [weak self] progress in
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                let metric = progress.totalWatchTimeMinutes + progress.claimedDrops
+                let watchMinutes = progress.totalWatchTimeMinutes
+                let claims = progress.claimedDrops
+                let metric = watchMinutes + claims
                 if let previousMetric = self.lastObservedProgressMetric[minerId],
                    metric > previousMetric {
                     self.recordHealth(.miningProgressObserved(minerID: minerId, at: Date()))
+                    // A rising metric is the only proof the miner is actually earning, so it
+                    // is what clears the not-earning invariant.
+                    await self.supervisor.recordDropProgress(minerId: minerId)
+                    await self.applySupervisorSnapshot(for: minerId)
+
+                    // Both totals are cumulative over the account's current campaigns, so the
+                    // ledger takes deltas. The first observation of a session establishes the
+                    // baseline and credits nothing — otherwise an account's whole history
+                    // would land in whichever hour the app happened to launch in. Campaigns
+                    // rotating out can shrink the total, so negatives are floored.
+                    let earnedDelta = max(0, watchMinutes - (self.lastObservedWatchMinutes[minerId] ?? watchMinutes))
+                    let claimDelta = max(0, claims - (self.lastObservedClaimedDrops[minerId] ?? claims))
+                    if let ledger = self.earningLedgerStore, earnedDelta > 0 || claimDelta > 0 {
+                        await ledger.recordEarned(
+                            minerID: minerId,
+                            minutes: earnedDelta,
+                            claims: claimDelta
+                        )
+                    }
                 }
                 self.lastObservedProgressMetric[minerId] = metric
+                self.lastObservedWatchMinutes[minerId] = watchMinutes
+                self.lastObservedClaimedDrops[minerId] = claims
             }
         }
         
@@ -396,11 +419,63 @@ extension MinerManager {
         miners[index].lastEventAt = metadata.lastEventAt
         miners[index].lastSuccessfulPollAt = metadata.lastSuccessfulPollAt
         miners[index].lastCampaignRefreshAt = metadata.lastCampaignRefreshAt
+        miners[index].lastDropProgressAt = metadata.lastDropProgressAt
         miners[index].workerState = metadata.workerState
         miners[index].workerTaskID = metadata.workerTaskID
         miners[index].isHealthy = metadata.isHealthy
         miners[index].isStalled = metadata.isStalled
+        accumulateWatchTime(for: miners[index])
+        evaluateEarningHealth(for: miners[index])
         onMinersChanged?()
+    }
+
+    /// Credits time spent watching to the earning ledger.
+    ///
+    /// Sampled from supervisor snapshots rather than a timer: they already arrive every few
+    /// seconds for a running miner, and a miner that stops producing them is one whose watch
+    /// time we should stop crediting anyway.
+    func accumulateWatchTime(for miner: ManagedMiner, now: Date = Date()) {
+        guard miner.status == .watching else {
+            lastWatchSampleAt[miner.id] = nil
+            return
+        }
+        guard let previousSample = lastWatchSampleAt[miner.id] else {
+            lastWatchSampleAt[miner.id] = now
+            return
+        }
+
+        // Snapshots can arrive several times a second, so time is credited in chunks rather
+        // than once per snapshot — same total, far fewer hops onto the ledger actor.
+        let elapsed = now.timeIntervalSince(previousSample)
+        guard elapsed >= Self.minWatchSampleInterval else { return }
+        lastWatchSampleAt[miner.id] = now
+
+        // A gap this long means the app slept or the miner went quiet; the clock restarts
+        // but the gap itself is not credited as watching.
+        guard elapsed <= Self.maxWatchSampleGap, let earningLedgerStore else { return }
+        Task {
+            await earningLedgerStore.recordWatching(minerID: miner.id, seconds: elapsed, at: now)
+        }
+    }
+
+    /// Opens or clears the not-earning incident as the miner crosses the threshold.
+    ///
+    /// A miner that is watching but earning nothing never changes status, so the
+    /// status-change path that normally records health state never fires for it. This runs
+    /// on every supervisor snapshot instead — which keeps arriving, because liveness is
+    /// exactly what stays healthy in this failure mode — but only writes on a transition so
+    /// the health store isn't rewritten on every poll.
+    func evaluateEarningHealth(for miner: ManagedMiner) {
+        let isNotEarning = miner.isNotEarning()
+        let wasNotEarning = earningStalledMinerIds.contains(miner.id)
+        guard isNotEarning != wasNotEarning else { return }
+
+        if isNotEarning {
+            earningStalledMinerIds.insert(miner.id)
+        } else {
+            earningStalledMinerIds.remove(miner.id)
+        }
+        recordCurrentHealthState(minerID: miner.id)
     }
 
     func applySupervisorSnapshot(for minerId: String) async {
@@ -520,6 +595,18 @@ extension MinerManager {
                 severity: .warning,
                 summary: "The miner has stopped reporting healthy activity",
                 recommendedAction: "Review miner diagnostics",
+                at: at
+            ))
+        } else if miner.isNotEarning(now: at) {
+            let minutes = Int(at.timeIntervalSince(
+                max(miner.lastDropProgressAt ?? .distantPast, miner.statusChangedAt)
+            ) / 60)
+            recordHealth(.incidentObserved(
+                minerID: miner.id,
+                kind: .progressStalled,
+                severity: .warning,
+                summary: "Watching for \(minutes) minutes without earning any drop progress",
+                recommendedAction: "Check the campaign is still eligible for this account",
                 at: at
             ))
         } else if miner.status == .blockedAccountNotLinked {

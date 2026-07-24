@@ -101,6 +101,97 @@ struct ResourceUsagePopover: View {
     }
 }
 
+/// Per-miner earning history: how much was banked per hour actually spent watching.
+/// Liveness diagnostics answer "is it alive?"; this answers "is it earning, and when did
+/// it stop?" — the question a miner that looks healthy and mines nothing raises.
+struct EarningLedgerPopover: View {
+    let store: EarningLedgerStore?
+    let minerNames: [String: String]
+
+    @State private var summaries: [EarningLedgerSummary] = []
+    @State private var nonEarningHours: [EarningLedgerBucket] = []
+    @State private var hasLoaded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Earning Ledger")
+                .font(.headline)
+
+            if !hasLoaded {
+                Text("Loading\u{2026}")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            } else if summaries.isEmpty {
+                Text("No earning history recorded yet. Hours are logged while miners are watching.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
+                    GridRow {
+                        Color.clear.frame(width: 0, height: 0)
+                        Text("Watched").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                        Text("Earned").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                        Text("Rate").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    }
+                    ForEach(summaries) { summary in
+                        GridRow {
+                            Text(minerNames[summary.minerID] ?? summary.minerID)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                            Text(Self.hoursText(summary.watchingSeconds)).monospacedDigit()
+                            Text("\(summary.earnedMinutes)m").monospacedDigit()
+                            Text(Self.rateText(summary.earnedMinutesPerWatchedHour))
+                                .monospacedDigit()
+                                .foregroundStyle(summary.nonEarningHours > 0 ? .orange : .primary)
+                        }
+                    }
+                }
+
+                if nonEarningHours.isEmpty {
+                    Text("No hours of watching without progress.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("\(nonEarningHours.count) hour\(nonEarningHours.count == 1 ? "" : "s") watched without earning anything.")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            Text("A healthy miner earns close to 60 minutes per hour watched. Full history is included in the diagnostic report.")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(16)
+        .frame(width: 340)
+        .task { await load() }
+    }
+
+    private func load() async {
+        guard let store else {
+            hasLoaded = true
+            return
+        }
+        try? await store.flush()
+        summaries = await store.summaries()
+        nonEarningHours = await store.nonEarningHours()
+        hasLoaded = true
+    }
+
+    static func hoursText(_ seconds: TimeInterval) -> String {
+        seconds < 3600
+            ? "\(Int(seconds / 60))m"
+            : String(format: "%.1fh", seconds / 3600)
+    }
+
+    static func rateText(_ minutesPerHour: Double) -> String {
+        String(format: "%.0f m/h", minutesPerHour)
+    }
+}
+
 struct AdvancedSettingsView: View {
     @Bindable var settings: Settings
     @Environment(NavigationModel.self) private var navigation
@@ -110,6 +201,7 @@ struct AdvancedSettingsView: View {
     @State private var tempClientId = ""
     @State private var backupMessage: String?
     @State private var showResourceUsage = false
+    @State private var showEarningLedger = false
 
     var body: some View {
         Form {
@@ -223,6 +315,22 @@ struct AdvancedSettingsView: View {
             }
 
             SettingsSecondaryText("Samples SwiftMiner's own CPU and memory every 15 seconds so you can see how much it uses. Off by default and nothing is sampled while off — there is no overhead for normal use.")
+
+            Button("Earning Ledger\u{2026}") {
+                showEarningLedger = true
+            }
+            .buttonStyle(.link)
+            .popover(isPresented: $showEarningLedger, arrowEdge: .bottom) {
+                EarningLedgerPopover(
+                    store: navigation.minerManager.earningLedgerStore,
+                    minerNames: Dictionary(
+                        navigation.minerManager.miners.map { ($0.id, $0.displayName) },
+                        uniquingKeysWith: { first, _ in first }
+                    )
+                )
+            }
+
+            SettingsSecondaryText("Records how many drop minutes each miner banked per hour spent watching, kept for the last 7 days. Always on and written at most once a minute.")
         } header: {
             Text("Diagnostics")
         }

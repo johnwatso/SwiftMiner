@@ -24,6 +24,9 @@ public struct MinerOperationalMetadata: Sendable, Equatable {
     public var lastEventAt: Date?
     public var lastSuccessfulPollAt: Date?
     public var lastCampaignRefreshAt: Date?
+    /// When the miner last banked verified drop progress. Liveness timestamps above
+    /// only prove the miner is talking to Twitch; this one proves it is earning.
+    public var lastDropProgressAt: Date?
     public var workerState: MinerWorkerState
     public var workerTaskID: String?
     public var isHealthy: Bool
@@ -33,6 +36,7 @@ public struct MinerOperationalMetadata: Sendable, Equatable {
         lastEventAt: Date? = nil,
         lastSuccessfulPollAt: Date? = nil,
         lastCampaignRefreshAt: Date? = nil,
+        lastDropProgressAt: Date? = nil,
         workerState: MinerWorkerState = .idle,
         workerTaskID: String? = nil,
         isHealthy: Bool = true,
@@ -41,6 +45,7 @@ public struct MinerOperationalMetadata: Sendable, Equatable {
         self.lastEventAt = lastEventAt
         self.lastSuccessfulPollAt = lastSuccessfulPollAt
         self.lastCampaignRefreshAt = lastCampaignRefreshAt
+        self.lastDropProgressAt = lastDropProgressAt
         self.workerState = workerState
         self.workerTaskID = workerTaskID
         self.isHealthy = isHealthy
@@ -205,6 +210,16 @@ public actor MinerSupervisor {
         if entry.metadata.workerState == .starting {
             entry.metadata.workerState = .running
         }
+        entries[minerId] = entry
+    }
+
+    /// Records that the miner banked verified drop progress (watch minutes or a claim).
+    /// This is the only signal that distinguishes a miner that is earning from one that
+    /// merely looks alive, so it is recorded separately from ordinary liveness events.
+    public func recordDropProgress(minerId: String, at date: Date = Date()) {
+        var entry = entries[minerId, default: Entry()]
+        entry.metadata.lastDropProgressAt = date
+        entry.metadata.lastEventAt = date
         entries[minerId] = entry
     }
 

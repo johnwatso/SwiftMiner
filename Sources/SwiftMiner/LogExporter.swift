@@ -30,9 +30,11 @@ enum LogExporter {
             let isHealthy: Bool?
             let isStalled: Bool?
             let showsNoRecentActivityAttention: Bool?
+            let showsNotEarningAttention: Bool?
             let lastEventAt: Date?
             let lastSuccessfulPollAt: Date?
             let lastCampaignRefreshAt: Date?
+            let lastDropProgressAt: Date?
             let stallConfidencePercent: Int?
             let stallSignals: [String]
 
@@ -55,9 +57,11 @@ enum LogExporter {
                 isHealthy: Bool? = nil,
                 isStalled: Bool? = nil,
                 showsNoRecentActivityAttention: Bool? = nil,
+                showsNotEarningAttention: Bool? = nil,
                 lastEventAt: Date? = nil,
                 lastSuccessfulPollAt: Date? = nil,
                 lastCampaignRefreshAt: Date? = nil,
+                lastDropProgressAt: Date? = nil,
                 stallConfidencePercent: Int? = nil,
                 stallSignals: [String] = []
             ) {
@@ -79,9 +83,11 @@ enum LogExporter {
                 self.isHealthy = isHealthy
                 self.isStalled = isStalled
                 self.showsNoRecentActivityAttention = showsNoRecentActivityAttention
+                self.showsNotEarningAttention = showsNotEarningAttention
                 self.lastEventAt = lastEventAt
                 self.lastSuccessfulPollAt = lastSuccessfulPollAt
                 self.lastCampaignRefreshAt = lastCampaignRefreshAt
+                self.lastDropProgressAt = lastDropProgressAt
                 self.stallConfidencePercent = stallConfidencePercent
                 self.stallSignals = stallSignals
             }
@@ -103,6 +109,14 @@ enum LogExporter {
         let settings: [(String, String)]
         let resourceUsage: ResourceUsageMonitor.Diagnostics?
         let performance: PerformanceDiagnostics.Snapshot?
+        /// Per-miner earning totals over the ledger's retention window.
+        let earningSummaries: [EarningLedgerSummary]
+        /// Hours where a miner watched meaningfully and banked nothing, newest first.
+        let nonEarningHours: [EarningLedgerBucket]
+        /// Recent hourly buckets, oldest first, so the report shows the shape over time.
+        let earningBuckets: [EarningLedgerBucket]
+        /// Miner display names keyed by miner ID, for labelling ledger rows.
+        let minerNames: [String: String]
         /// Events in chronological order (oldest first).
         let events: [Event]
 
@@ -116,6 +130,10 @@ enum LogExporter {
             settings: [(String, String)],
             resourceUsage: ResourceUsageMonitor.Diagnostics? = nil,
             performance: PerformanceDiagnostics.Snapshot? = nil,
+            earningSummaries: [EarningLedgerSummary] = [],
+            nonEarningHours: [EarningLedgerBucket] = [],
+            earningBuckets: [EarningLedgerBucket] = [],
+            minerNames: [String: String] = [:],
             events: [Event]
         ) {
             self.generatedAt = generatedAt
@@ -127,6 +145,10 @@ enum LogExporter {
             self.settings = settings
             self.resourceUsage = resourceUsage
             self.performance = performance
+            self.earningSummaries = earningSummaries
+            self.nonEarningHours = nonEarningHours
+            self.earningBuckets = earningBuckets
+            self.minerNames = minerNames
             self.events = events
         }
     }
@@ -162,7 +184,8 @@ enum LogExporter {
                     miner.workerState.map { "workerState=\($0)" },
                     miner.isHealthy.map { "isHealthy=\($0)" },
                     miner.isStalled.map { "isStalled=\($0)" },
-                    miner.showsNoRecentActivityAttention.map { "showsNoRecentActivityAttention=\($0)" }
+                    miner.showsNoRecentActivityAttention.map { "showsNoRecentActivityAttention=\($0)" },
+                    miner.showsNotEarningAttention.map { "showsNotEarningAttention=\($0)" }
                 ].compactMap { $0 }
                 if !healthParts.isEmpty {
                     out += "  \(healthParts.joined(separator: " "))\n"
@@ -173,7 +196,8 @@ enum LogExporter {
                 let livenessParts = [
                     formatTimestampField("lastEventAt", miner.lastEventAt, reference: reference, formatter: iso),
                     formatTimestampField("lastSuccessfulPollAt", miner.lastSuccessfulPollAt, reference: reference, formatter: iso),
-                    formatTimestampField("lastCampaignRefreshAt", miner.lastCampaignRefreshAt, reference: reference, formatter: iso)
+                    formatTimestampField("lastCampaignRefreshAt", miner.lastCampaignRefreshAt, reference: reference, formatter: iso),
+                    formatTimestampField("lastDropProgressAt", miner.lastDropProgressAt, reference: reference, formatter: iso)
                 ].compactMap { $0 }
                 if !livenessParts.isEmpty {
                     out += "  \(livenessParts.joined(separator: " "))\n"
@@ -215,6 +239,9 @@ enum LogExporter {
         out += renderPerformanceMetrics(snapshot.performance, formatter: iso, reference: reference)
         out += "\n"
 
+        out += renderEarningLedger(snapshot, formatter: iso)
+        out += "\n"
+
         out += "=== Events (oldest → newest, \(snapshot.events.count)) ===\n"
         if snapshot.events.isEmpty {
             out += "(none)\n"
@@ -224,6 +251,55 @@ enum LogExporter {
                 let miner = event.minerId.map { "  \($0)" } ?? ""
                 let level = event.level.uppercased().padding(toLength: 7, withPad: " ", startingAt: 0)
                 out += "\(ts)  \(level)\(miner)  \(LogRedactor.redact(event.message))\n"
+            }
+        }
+
+        return out
+    }
+
+    /// Renders the earning ledger: what each miner banked per hour actually spent watching.
+    /// A healthy miner sits near 60 min/h; a flat line next to a climbing watch count is the
+    /// signature of a miner that looks alive and earns nothing.
+    private static func renderEarningLedger(
+        _ snapshot: Snapshot,
+        formatter: ISO8601DateFormatter
+    ) -> String {
+        var out = "=== Earning Ledger ===\n"
+        guard !snapshot.earningSummaries.isEmpty else {
+            return out + "(no earning history recorded)\n"
+        }
+
+        func label(_ minerID: String) -> String {
+            LogRedactor.redact(snapshot.minerNames[minerID] ?? minerID)
+        }
+
+        for summary in snapshot.earningSummaries {
+            out += "[\(label(summary.minerID))]"
+            out += " watched=\(formatDuration(summary.watchingSeconds))"
+            out += " earned=\(summary.earnedMinutes)min"
+            out += " claims=\(summary.claimedDrops)"
+            out += " rate=\(String(format: "%.1f", summary.earnedMinutesPerWatchedHour))min/h\n"
+            out += "  coveredHours=\(summary.coveredHours) nonEarningHours=\(summary.nonEarningHours)"
+            if let first = summary.firstHourStart, let last = summary.lastHourStart {
+                out += " window=\(formatter.string(from: first))...\(formatter.string(from: last))"
+            }
+            out += "\n"
+        }
+
+        if !snapshot.nonEarningHours.isEmpty {
+            out += "Non-earning hours (newest first, \(snapshot.nonEarningHours.count)):\n"
+            for bucket in snapshot.nonEarningHours {
+                out += "  \(formatter.string(from: bucket.hourStart))  [\(label(bucket.minerID))]"
+                out += " watched=\(formatDuration(bucket.watchingSeconds)) earned=0min\n"
+            }
+        }
+
+        if !snapshot.earningBuckets.isEmpty {
+            out += "Hourly detail (oldest → newest, \(snapshot.earningBuckets.count)):\n"
+            for bucket in snapshot.earningBuckets {
+                out += "  \(formatter.string(from: bucket.hourStart))  [\(label(bucket.minerID))]"
+                out += " watched=\(formatDuration(bucket.watchingSeconds))"
+                out += " earned=\(bucket.earnedMinutes)min claims=\(bucket.claimedDrops)\n"
             }
         }
 
@@ -450,9 +526,11 @@ enum LogExporter {
                 isHealthy: m.isHealthy,
                 isStalled: m.isStalled,
                 showsNoRecentActivityAttention: m.showsNoRecentActivityAttention,
+                showsNotEarningAttention: m.showsNotEarningAttention,
                 lastEventAt: healthSnapshot.lastEventAt,
                 lastSuccessfulPollAt: healthSnapshot.lastSuccessfulPollAt,
                 lastCampaignRefreshAt: healthSnapshot.lastCampaignRefreshAt,
+                lastDropProgressAt: healthSnapshot.lastDropProgressAt,
                 stallConfidencePercent: healthSnapshot.stallConfidencePercent,
                 stallSignals: healthSnapshot.stallSignals
             )
@@ -472,6 +550,21 @@ enum LogExporter {
             ("syncMinersState", String(settings.syncMinersState)),
             ("runInBackground", String(settings.runInBackground))
         ]
+
+        // Flush first: watch time accumulates in memory between throttled writes, and a
+        // report that omits the last minute of a stall is the report you least want.
+        let ledger = navigation.minerManager.earningLedgerStore
+        try? await ledger?.flush()
+        let earningSummaries = await ledger?.summaries() ?? []
+        let nonEarningHours = await ledger?.nonEarningHours() ?? []
+        // The last 48 hours of detail keeps an overnight session fully readable without
+        // burying the report under a week of rows.
+        let bucketWindowStart = Date().addingTimeInterval(-48 * 60 * 60)
+        let earningBuckets = await ledger?.allBuckets(since: bucketWindowStart) ?? []
+        let minerNames = Dictionary(
+            navigation.minerManager.miners.map { ($0.id, $0.displayName) },
+            uniquingKeysWith: { first, _ in first }
+        )
 
         let events = navigation.events.reversed().map { entry in
             let raw = entry.rawMessage ?? entry.message
@@ -493,6 +586,10 @@ enum LogExporter {
             settings: settingsRows,
             resourceUsage: navigation.resourceUsageMonitor.diagnostics(),
             performance: await PerformanceDiagnostics.shared.snapshot(),
+            earningSummaries: earningSummaries,
+            nonEarningHours: nonEarningHours,
+            earningBuckets: earningBuckets,
+            minerNames: minerNames,
             events: events
         )
     }

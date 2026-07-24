@@ -38,6 +38,8 @@ public final class MinerManager {
         public var lastEventAt: Date?
         public var lastSuccessfulPollAt: Date?
         public var lastCampaignRefreshAt: Date?
+        /// When this miner last banked verified drop progress. `nil` until it earns anything.
+        public var lastDropProgressAt: Date?
         public var workerState: MinerWorkerState = .idle
         public var workerTaskID: String?
         public var isHealthy: Bool = true
@@ -90,6 +92,39 @@ public final class MinerManager {
             }
         }
 
+        /// How long a miner may sit in `.watching` without banking any drop progress
+        /// before it is treated as not earning. Deliberately longer than the engine's own
+        /// 15-minute anti-stall window so in-engine recovery (inventory refresh, channel
+        /// switch, non-earning cooldown) gets a chance to fix it before the user is told.
+        public static let notEarningThreshold: TimeInterval = 20 * 60
+
+        /// True when the miner looks alive but is not banking any drop progress.
+        ///
+        /// This is the failure mode every liveness check misses: polls succeed, events keep
+        /// flowing, the supervisor sees a healthy miner, and the account sits on a stream for
+        /// hours earning nothing. Watching without progress is the only symptom.
+        public func isNotEarning(now: Date = Date()) -> Bool {
+            guard isRunning,
+                  !needsAuth,
+                  !isStalled,
+                  !workerState.isRecovering,
+                  status == .watching,
+                  // A pinned stream is expected to sit on a channel that may not earn.
+                  streamOverrideLogin == nil else {
+                return false
+            }
+
+            // Fall back to the moment the miner started watching when it has never reported
+            // progress, so a freshly started watch session gets the same grace window.
+            let reference = max(lastDropProgressAt ?? .distantPast, statusChangedAt)
+            return now.timeIntervalSince(reference) >= Self.notEarningThreshold
+        }
+
+        /// `isNotEarning` evaluated against the current time, for UI use.
+        public var showsNotEarningAttention: Bool {
+            isNotEarning()
+        }
+
         /// A concise, deterministic status label for UI badges and list rows.
         @MainActor
         public var statusLabel: String {
@@ -101,6 +136,9 @@ public final class MinerManager {
             }
             if showsNoRecentActivityAttention {
                 return "No Recent Activity"
+            }
+            if showsNotEarningAttention {
+                return "Watching — Not Earning"
             }
             guard let resolved = resolvedPrimaryState?.resolved else {
                 return status.displayName
@@ -153,6 +191,7 @@ public final class MinerManager {
             lastEventAt: Date? = nil,
             lastSuccessfulPollAt: Date? = nil,
             lastCampaignRefreshAt: Date? = nil,
+            lastDropProgressAt: Date? = nil,
             workerState: MinerWorkerState = .idle,
             workerTaskID: String? = nil,
             isHealthy: Bool = true,
@@ -177,6 +216,7 @@ public final class MinerManager {
             self.lastEventAt = lastEventAt
             self.lastSuccessfulPollAt = lastSuccessfulPollAt
             self.lastCampaignRefreshAt = lastCampaignRefreshAt
+            self.lastDropProgressAt = lastDropProgressAt
             self.workerState = workerState
             self.workerTaskID = workerTaskID
             self.isHealthy = isHealthy
@@ -348,8 +388,24 @@ public final class MinerManager {
     var antiStallMonitorTask: Task<Void, Never>?
     let supervisor = MinerSupervisor()
     let unattendedHealthStore: UnattendedHealthStore?
+    public let earningLedgerStore: EarningLedgerStore?
     var lastObservedProgressMetric: [String: Int] = [:]
+    var lastObservedWatchMinutes: [String: Int] = [:]
+    var lastObservedClaimedDrops: [String: Int] = [:]
     var initializedCampaignSnapshots: Set<String> = []
+    /// When each miner was last seen watching, so elapsed watch time can be credited to the
+    /// ledger without standing up another timer.
+    var lastWatchSampleAt: [String: Date] = [:]
+    /// Smallest stretch credited in one go, so a burst of snapshots costs one ledger write
+    /// rather than dozens. Hourly buckets do not care about sub-15s precision.
+    static let minWatchSampleInterval: TimeInterval = 15
+    /// Longest gap credited as watch time. Supervisor snapshots arrive every few seconds
+    /// while a miner is watching, so a longer gap means the app was asleep or the miner was
+    /// wedged — time we cannot honestly claim was spent watching.
+    static let maxWatchSampleGap: TimeInterval = 120
+    /// Miners currently flagged as watching-but-not-earning, so the health store is only
+    /// written when a miner crosses the threshold rather than on every supervisor snapshot.
+    var earningStalledMinerIds: Set<String> = []
 
     /// Last start options, used when anti-stall recovery restarts an individual miner.
     var currentPriorityGames: [String] = []
@@ -398,12 +454,14 @@ public final class MinerManager {
         clientId: String, 
         campaignStore: CampaignStore = CampaignStore(),
         tokenStore: any TokenStore = TokenStoreFactory.makeDefault(),
-        unattendedHealthStore: UnattendedHealthStore? = nil
+        unattendedHealthStore: UnattendedHealthStore? = nil,
+        earningLedgerStore: EarningLedgerStore? = nil
     ) {
         self.clientId = clientId
         self.campaignStore = campaignStore
         self.tokenStore = tokenStore
         self.unattendedHealthStore = unattendedHealthStore
+        self.earningLedgerStore = earningLedgerStore
         self.dataCoordinator = MiningDataCoordinator(campaignStore: campaignStore)
     }
     

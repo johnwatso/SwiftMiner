@@ -100,4 +100,22 @@ final class MinerSupervisorTests: XCTestCase {
         let third = await supervisor.nextRecoveryAction(for: [peer, stalled], now: base.addingTimeInterval(154))
         XCTAssertEqual(third?.stage, .authRefresh)
     }
+
+    func testDropProgressIsTrackedSeparatelyFromLiveness() async {
+        let supervisor = MinerSupervisor()
+        let base = Date(timeIntervalSince1970: 50_000)
+
+        await supervisor.registerMiner("miner")
+        await supervisor.recordSuccessfulPoll(minerId: "miner", at: base)
+
+        let beforeProgress = await supervisor.snapshot(for: "miner")
+        XCTAssertNotNil(beforeProgress?.lastSuccessfulPollAt)
+        XCTAssertNil(beforeProgress?.lastDropProgressAt)
+
+        await supervisor.recordDropProgress(minerId: "miner", at: base.addingTimeInterval(60))
+
+        let afterProgress = await supervisor.snapshot(for: "miner")
+        XCTAssertEqual(afterProgress?.lastDropProgressAt, base.addingTimeInterval(60))
+        XCTAssertEqual(afterProgress?.lastEventAt, base.addingTimeInterval(60))
+    }
 }
