@@ -78,7 +78,11 @@ final class LogExporterTests: XCTestCase {
         events: [LogExporter.Snapshot.Event] = [],
         settings: [(String, String)] = [("logLevel", "info")],
         resourceUsage: ResourceUsageMonitor.Diagnostics? = nil,
-        performance: PerformanceDiagnostics.Snapshot? = nil
+        performance: PerformanceDiagnostics.Snapshot? = nil,
+        earningSummaries: [EarningLedgerSummary] = [],
+        nonEarningHours: [EarningLedgerBucket] = [],
+        earningBuckets: [EarningLedgerBucket] = [],
+        minerNames: [String: String] = [:]
     ) -> LogExporter.Snapshot {
         LogExporter.Snapshot(
             generatedAt: Date(timeIntervalSince1970: 1_730_000_500),
@@ -90,6 +94,10 @@ final class LogExporterTests: XCTestCase {
             settings: settings,
             resourceUsage: resourceUsage,
             performance: performance,
+            earningSummaries: earningSummaries,
+            nonEarningHours: nonEarningHours,
+            earningBuckets: earningBuckets,
+            minerNames: minerNames,
             events: events
         )
     }
@@ -234,5 +242,82 @@ final class LogExporterTests: XCTestCase {
         let name = LogExporter.defaultFilename(for: date)
         XCTAssertTrue(name.hasPrefix("SwiftMiner-logs-"))
         XCTAssertTrue(name.hasSuffix(".txt"))
+    }
+
+    // MARK: - Earning ledger
+
+    private func bucket(
+        _ minerID: String,
+        hourOffset: Int,
+        watching: TimeInterval,
+        earned: Int = 0,
+        claims: Int = 0
+    ) -> EarningLedgerBucket {
+        EarningLedgerBucket(
+            minerID: minerID,
+            hourStart: Date(timeIntervalSince1970: 1_699_999_200 + Double(hourOffset) * 3600),
+            watchingSeconds: watching,
+            earnedMinutes: earned,
+            claimedDrops: claims
+        )
+    }
+
+    func testReportRendersEmptyEarningLedger() {
+        let report = LogExporter.buildReport(snapshot())
+        XCTAssertTrue(report.contains("=== Earning Ledger ==="))
+        XCTAssertTrue(report.contains("(no earning history recorded)"))
+    }
+
+    func testReportRendersEarningRateAndNonEarningHours() {
+        let good = bucket("gabe", hourOffset: 0, watching: 3600, earned: 58, claims: 1)
+        let bad = bucket("gabe", hourOffset: 1, watching: 3600)
+        let snap = snapshot(
+            earningSummaries: [EarningLedgerSummary.make(minerID: "gabe", buckets: [good, bad])],
+            nonEarningHours: [bad],
+            earningBuckets: [good, bad],
+            minerNames: ["gabe": "Gabe"]
+        )
+
+        let report = LogExporter.buildReport(snap)
+        XCTAssertTrue(report.contains("[Gabe] watched=2h0m earned=58min claims=1 rate=29.0min/h"))
+        XCTAssertTrue(report.contains("coveredHours=2 nonEarningHours=1"))
+        XCTAssertTrue(report.contains("Non-earning hours (newest first, 1):"))
+        XCTAssertTrue(report.contains("Hourly detail (oldest \u{2192} newest, 2):"))
+    }
+
+    func testReportRedactsMinerNamesInLedgerRows() {
+        let bad = bucket("gabe", hourOffset: 0, watching: 3600)
+        let snap = snapshot(
+            earningSummaries: [EarningLedgerSummary.make(minerID: "gabe", buckets: [bad])],
+            nonEarningHours: [bad],
+            minerNames: ["gabe": "user@example.com"]
+        )
+
+        let report = LogExporter.buildReport(snap)
+        XCTAssertFalse(report.contains("user@example.com"))
+        XCTAssertTrue(report.contains("<email>"))
+    }
+
+    func testReportIncludesNotEarningFlagAndProgressTimestamp() {
+        let now = Date(timeIntervalSince1970: 1_730_000_500)
+        let miner = LogExporter.Snapshot.Miner(
+            id: "gabe",
+            username: "gabe",
+            nickname: "Gabe",
+            status: "watching",
+            needsAuth: false,
+            isRunning: true,
+            dropsClaimed: 3,
+            currentCampaign: nil,
+            currentCampaignId: nil,
+            priorityGames: [],
+            statusChangedAt: now.addingTimeInterval(-7200),
+            showsNotEarningAttention: true,
+            lastDropProgressAt: now.addingTimeInterval(-3600)
+        )
+
+        let report = LogExporter.buildReport(snapshot(miners: [miner]), now: now)
+        XCTAssertTrue(report.contains("showsNotEarningAttention=true"))
+        XCTAssertTrue(report.contains("lastDropProgressAt="))
     }
 }

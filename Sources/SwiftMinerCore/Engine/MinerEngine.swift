@@ -95,6 +95,11 @@ public actor MinerEngine {
     var directoryVerificationOffsets: [String: Int] = [:]
     var approvedChannelProbeOffsets: [String: Int] = [:]
 
+    /// Structured activity events for the diagnostics timeline, oldest first. Bounded so a
+    /// long-running engine never accumulates unbounded history.
+    private var recentActivityEvents: [MinerManager.MinerEvent] = []
+    private static let maxRecentActivityEvents = 50
+
     /// Counter for minutes watched without a server progress update (local estimation)
     var extraMinutesWatched: Int = 0
     /// Timestamp of the last verified progress update (GQL or PubSub)
@@ -623,6 +628,7 @@ public actor MinerEngine {
         let inventoryService = await dropsService.getInventoryService()
         let snapshot = try await inventoryService.fetchInventory(forceRefresh: true)
         syncCampaigns(with: snapshot)
+        recordActivityEvent(.recoveryComplete, "Forced inventory refresh completed")
         onOperationalEvent?(.inventoryRefresh)
         if let progress = try? await dropsService.getOverallProgress() {
             onProgressUpdate?(progress)
@@ -767,6 +773,7 @@ public actor MinerEngine {
                         name: progress.dropName,
                         requiredMinutes: progress.requiredMinutes
                     )
+                    recordActivityEvent(.dropClaimed, "Claimed \(drop.name)")
                     onDropClaimed?(drop)
 
                     // Send local notification if enabled
@@ -811,6 +818,7 @@ public actor MinerEngine {
 
     func emitIssue(_ error: Error) {
         let (category, detail) = Self.classifyIssue(error)
+        recordActivityEvent(.error, detail)
         onOperationalEvent?(.issueDetected(category: category, detail: detail))
     }
 
@@ -1136,10 +1144,19 @@ public actor MinerEngine {
                 }
 
                 // Channel confirmed — commit campaign as active target
+                let previousChannelId = session?.currentChannelId
+                let previousCampaignId = session?.currentCampaignId
                 session?.currentCampaignId = campaign.id
                 log("Selected channel: \(channel.displayName)")
                 session?.currentChannelId = channel.id
                 shouldSwitchChannel = false
+
+                if previousCampaignId != campaign.id {
+                    recordActivityEvent(.campaignSelected, "Selected campaign \(campaign.name)")
+                }
+                if previousChannelId != channel.id {
+                    recordActivityEvent(.channelSwitched, "Watching \(channel.displayName)")
+                }
 
                 // 5. Start PubSub watching for this user+channel
                 if let userId = currentAccount?.id {
@@ -1285,7 +1302,11 @@ public actor MinerEngine {
                     // streamer until they go offline, so progress stalls must not switch channels.
                     if streamOverrideLogin == nil, extraMinutesWatched >= Self.maxExtraMinutes {
                         log("Progress stalled for \(extraMinutesWatched) mins. Refreshing inventory to check for external claims...")
-                        
+                        recordActivityEvent(
+                            .stallDetected,
+                            "No verified progress for \(extraMinutesWatched) min on \(campaign.name)"
+                        )
+
                         // ENHANCEMENT: Force inventory refresh before switching channels
                         // This catches drops claimed on other devices or via Twitch UI
                         do {
@@ -1296,6 +1317,10 @@ public actor MinerEngine {
                             onOperationalEvent?(.inventoryRefresh)
                             
                             log("Inventory refreshed: \(freshInventory.benefitIDs.count) claimed benefits, \(freshInventory.progress.count) in-progress drops")
+                            recordActivityEvent(
+                                .inventoryRefreshed,
+                                "Refreshed inventory: \(freshInventory.benefitIDs.count) claimed, \(freshInventory.progress.count) in progress"
+                            )
                             
                             // Check if ANY drop in current campaign was recently claimed
                             // This handles the case where user claimed via Twitch UI or another device
@@ -1504,6 +1529,7 @@ public actor MinerEngine {
                         dropId: progress.dropId,
                         dropLabel: progress.dropName.isEmpty ? dropLabel(for: progress.dropId, campaignId: progress.campaignId) : progress.dropName
                     )
+                    recordActivityEvent(.dropClaimed, "Claimed \(result.dropName)")
                     onDropClaimed?(drop)
                     session?.dropsClaimed += 1
                     didClaimAnyDrop = true
@@ -1781,11 +1807,24 @@ public actor MinerEngine {
         )
     }
     
-    /// Get recent activity events for UI display (last N events).
+    /// Get recent activity events for UI display (last N events), newest first.
     public func getRecentActivityEvents(limit: Int) async -> [MinerManager.MinerEvent] {
-        // Return recent log messages parsed into structured events
-        // For now, return empty array - full implementation would buffer structured events
-        return []
+        guard limit > 0 else { return [] }
+        return Array(recentActivityEvents.suffix(limit).reversed())
+    }
+
+    /// Append a structured event to the diagnostics timeline.
+    func recordActivityEvent(
+        _ type: MinerManager.MinerEvent.EventType,
+        _ summary: String,
+        at date: Date = Date()
+    ) {
+        recentActivityEvents.append(
+            MinerManager.MinerEvent(timestamp: date, type: type, summary: summary)
+        )
+        if recentActivityEvents.count > Self.maxRecentActivityEvents {
+            recentActivityEvents.removeFirst(recentActivityEvents.count - Self.maxRecentActivityEvents)
+        }
     }
     
     // MARK: - Stall Tracking

@@ -18,6 +18,7 @@ public struct MinerHealthSnapshot: Sendable, Equatable, Identifiable {
     public let lastSuccessfulPollAt: Date?
     public let lastEventAt: Date?
     public let lastCampaignRefreshAt: Date?
+    public let lastDropProgressAt: Date?
     public let stallConfidencePercent: Int
     public let stallSignals: [String]
 
@@ -29,6 +30,7 @@ public struct MinerHealthSnapshot: Sendable, Equatable, Identifiable {
         lastSuccessfulPollAt: Date?,
         lastEventAt: Date?,
         lastCampaignRefreshAt: Date?,
+        lastDropProgressAt: Date? = nil,
         stallConfidencePercent: Int,
         stallSignals: [String]
     ) {
@@ -39,12 +41,15 @@ public struct MinerHealthSnapshot: Sendable, Equatable, Identifiable {
         self.lastSuccessfulPollAt = lastSuccessfulPollAt
         self.lastEventAt = lastEventAt
         self.lastCampaignRefreshAt = lastCampaignRefreshAt
+        self.lastDropProgressAt = lastDropProgressAt
         self.stallConfidencePercent = stallConfidencePercent
         self.stallSignals = stallSignals
     }
 
     @MainActor
     public static func make(miner: MinerManager.ManagedMiner, now: Date = Date()) -> MinerHealthSnapshot {
+        let isNotEarning = miner.isNotEarning(now: now)
+
         let health: Health
         if miner.needsAuth {
             health = .needsAuth
@@ -54,7 +59,7 @@ public struct MinerHealthSnapshot: Sendable, Equatable, Identifiable {
             health = .recovering
         } else if miner.status == .error || miner.status == .blockedAccountNotLinked {
             health = .blocked
-        } else if miner.showsNoRecentActivityAttention {
+        } else if miner.showsNoRecentActivityAttention || isNotEarning {
             health = .attention
         } else if miner.status == .watching {
             health = .mining
@@ -67,7 +72,10 @@ public struct MinerHealthSnapshot: Sendable, Equatable, Identifiable {
         if miner.isStalled {
             confidence = 100
         } else {
-            confidence = min(95, signals.count * 25)
+            // A miner that is demonstrably banking nothing is a stronger signal than any
+            // single liveness gap, so it carries a floor rather than counting as one signal.
+            let base = min(95, signals.count * 25)
+            confidence = isNotEarning ? max(base, 60) : base
         }
 
         return MinerHealthSnapshot(
@@ -78,6 +86,7 @@ public struct MinerHealthSnapshot: Sendable, Equatable, Identifiable {
             lastSuccessfulPollAt: miner.lastSuccessfulPollAt,
             lastEventAt: miner.lastEventAt,
             lastCampaignRefreshAt: miner.lastCampaignRefreshAt,
+            lastDropProgressAt: miner.lastDropProgressAt,
             stallConfidencePercent: confidence,
             stallSignals: signals
         )
@@ -90,6 +99,12 @@ public struct MinerHealthSnapshot: Sendable, Equatable, Identifiable {
         }
         if miner.showsNoRecentActivityAttention {
             signals.append("No recent healthy activity")
+        }
+        if miner.isNotEarning(now: now) {
+            let elapsed = now.timeIntervalSince(
+                max(miner.lastDropProgressAt ?? .distantPast, miner.statusChangedAt)
+            )
+            signals.append("Watching with no drop progress in \(Int(elapsed / 60))m")
         }
         if minutes(since: miner.lastSuccessfulPollAt, now: now) >= 15 {
             signals.append("No successful poll in 15m")
