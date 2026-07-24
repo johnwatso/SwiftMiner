@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Detect miners that watch without earning and record an earning ledger - Release Notes</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      margin: 0;
+      padding: 32px 20px 48px;
+      font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f4f6f8;
+      color: #0f1720;
+    }
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 28px;
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.86);
+      box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
+    }
+    h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
+    .meta { margin: 0 0 24px; color: #52606d; font-size: 14px; }
+    p { margin: 0 0 16px; }
+    a { color: #0a67a3; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #0b1015; color: #edf2f7; }
+      main {
+        background: rgba(15, 23, 32, 0.88);
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+      }
+      .meta { color: #9fb0c2; }
+      a { color: #73c3ff; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Detect miners that watch without earning and record an earning ledger</h1>
+    <p class="meta">Version 1.34.3</p>
+    <p>Detect miners that watch without earning and record an earning ledger</p>
+<p>Health monitoring only measured liveness: polls, events, worker state. A miner<br>could sit in .watching for hours earning nothing while every signal stayed<br>green, which is exactly what happened in the incident behind 1.34.1.</p>
+<p>- Track lastDropProgressAt separately from liveness through the supervisor and<br>ManagedMiner, fed by the progress handler's already-computed rising metric.<br>- Flag a miner watching for 20 minutes without banked progress: a stall signal,<br>attention health, a &quot;Watching - Not Earning&quot; label, and a progressStalled<br>incident. Stream overrides are exempt and a fresh watch session is measured<br>from when it started watching. Evaluated on supervisor snapshots and written<br>only on a threshold crossing, since this failure never changes status and the<br>status-change path would never fire for it.<br>- Add EarningLedgerStore: hourly per-miner watch seconds, earned drop minutes<br>and claims, kept 7 days, throttled to a write a minute and flushed on hour<br>rollover and quit. Watch time samples off existing supervisor snapshots in<br>15s chunks rather than a new timer; earned minutes come from cumulative<br>totals as deltas with the first observation as a baseline.<br>- Surface it in Settings &gt; Advanced &gt; Diagnostics and in the diagnostic report,<br>which gains earning totals, non-earning hours, 48h of hourly detail, plus<br>lastDropProgressAt and the not-earning flag per miner.<br>- Implement MinerEngine.getRecentActivityEvents, which returned an empty array<br>and left the miner Recovery Timeline permanently blank in the app and the<br>Discord/web projection.<br>- Fix the README platform badge, which advertised macOS 26+ against a macOS 14<br>deployment target.</p>
+<p>Set MARKETING_VERSION to 1.34.3 with build 2026072413 in project.yml and the<br>generated project, and publish matching release notes. The stable Sparkle<br>appcast is left to the release pipeline.</p>
+    <p><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/646fb1cddf865dd5667986e69222f61661c73edb">646fb1c</a></p>
+  </main>
+</body>
+</html>
