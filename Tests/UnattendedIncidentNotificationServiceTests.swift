@@ -147,4 +147,73 @@ final class UnattendedIncidentNotificationServiceTests: XCTestCase {
             .appendingPathComponent("SwiftMinerTests-\(UUID().uuidString)", isDirectory: true)
             .appendingPathComponent("unattended-health.json")
     }
+
+    /// Not-earning is a diagnostic signal, not an alert. It fires on every miner the moment
+    /// a fleet stops earning, and its false-positive rate is still unmeasured, so it must
+    /// stay visible-but-silent until the ledger shows it is precise enough to wake someone.
+    func testNotEarningIncidentIsRecordedButDoesNotNotify() async throws {
+        let fileURL = temporaryStoreURL()
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+
+        let openedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let store = UnattendedHealthStore(fileURL: fileURL)
+        try await store.record(.minerObserved(
+            minerID: "miner-1",
+            displayName: "Primary",
+            at: openedAt
+        ))
+        try await store.record(.incidentObserved(
+            minerID: "miner-1",
+            kind: .notEarning,
+            severity: .warning,
+            summary: "Watching for 45 minutes without earning any drop progress",
+            recommendedAction: "Check the campaign is still eligible for this account",
+            at: openedAt
+        ))
+
+        let center = MockNotificationCenter()
+        let service = UnattendedIncidentNotificationService(
+            store: store,
+            center: center,
+            now: { openedAt.addingTimeInterval(30) }
+        )
+
+        await service.deliverPendingNotifications()
+
+        XCTAssertTrue(center.requests.isEmpty)
+        // Still recorded, so the app and the diagnostic report can show it.
+        let incident = await store.snapshot(for: "miner-1")?.activeIncident
+        XCTAssertEqual(incident?.kind, .notEarning)
+        XCTAssertNil(incident?.notificationSentAt)
+    }
+
+    /// The supervisor's "miner unresponsive" stall is a different fault and must still alert.
+    func testSupervisorProgressStallStillNotifies() async throws {
+        let fileURL = temporaryStoreURL()
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+
+        let openedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let store = UnattendedHealthStore(fileURL: fileURL)
+        try await store.record(.minerObserved(minerID: "miner-1", displayName: "Primary", at: openedAt))
+        try await store.record(.incidentObserved(
+            minerID: "miner-1",
+            kind: .progressStalled,
+            severity: .warning,
+            summary: "The miner has stopped reporting healthy activity",
+            recommendedAction: "Review miner diagnostics",
+            at: openedAt
+        ))
+
+        let center = MockNotificationCenter()
+        let service = UnattendedIncidentNotificationService(
+            store: store,
+            center: center,
+            now: { openedAt.addingTimeInterval(30) }
+        )
+
+        await service.deliverPendingNotifications()
+
+        XCTAssertEqual(center.requests.count, 1)
+        XCTAssertEqual(center.requests.first?.content.title, "Mining Progress Stalled")
+    }
 }

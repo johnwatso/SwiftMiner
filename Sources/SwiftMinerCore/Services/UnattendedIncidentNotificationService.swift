@@ -73,7 +73,13 @@ public actor UnattendedIncidentNotificationService {
              .webDashboardUnavailable,
              .automaticUpdateFailed:
             return true
-        case .accountLinkRequired, .other:
+        // Not-earning is surfaced in the app and the diagnostic report but does not notify.
+        // How often watching-without-earning is a genuine fault rather than there being
+        // nothing worth mining is still unmeasured — the earning ledger only started
+        // producing trustworthy numbers in 1.34.4. Promoting it to a notification is a
+        // one-line change once that data shows it is precise enough to be worth waking
+        // someone for.
+        case .notEarning, .accountLinkRequired, .other:
             return false
         }
     }
@@ -86,6 +92,8 @@ public actor UnattendedIncidentNotificationService {
             return "Automatic Recovery Stopped"
         case .progressStalled:
             return "Mining Progress Stalled"
+        case .notEarning:
+            return "Watching Without Earning"
         case .webDashboardUnavailable:
             return "Dashboard Unavailable"
         case .automaticUpdateFailed:

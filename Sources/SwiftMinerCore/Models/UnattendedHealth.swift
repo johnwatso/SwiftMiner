@@ -69,6 +69,10 @@ public struct HealthIncident: Codable, Sendable, Equatable, Identifiable {
         case authenticationExpired
         case recoveryExhausted
         case progressStalled
+        /// Watching, responsive, but banking no drop progress. Kept separate from
+        /// `progressStalled` (which means the supervisor lost the miner entirely) because
+        /// they have different causes, and because this one is not yet notification-worthy.
+        case notEarning
         case webDashboardUnavailable
         case automaticUpdateFailed
         case accountLinkRequired

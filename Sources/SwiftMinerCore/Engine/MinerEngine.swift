@@ -238,6 +238,8 @@ public actor MinerEngine {
     public var onStatusChange: (@Sendable (SessionStatus) -> Void)?
     public var onCampaignUpdate: (@Sendable ([Campaign]) -> Void)?
     public var onProgressUpdate: (@Sendable (OverallProgress) -> Void)?
+    /// Fires with the minutes of verified drop progress each observation added.
+    public var onEarnedProgress: (@Sendable (Int) -> Void)?
     public var onDropClaimed: (@Sendable (Drop) -> Void)?
     public var onError: (@Sendable (TwitchMinerError) -> Void)?
     public var onLogMessage: (@Sendable (String) -> Void)?
@@ -257,6 +259,10 @@ public actor MinerEngine {
 
     public func setProgressUpdateHandler(_ handler: (@Sendable (OverallProgress) -> Void)?) {
         self.onProgressUpdate = handler
+    }
+
+    public func setEarnedProgressHandler(_ handler: (@Sendable (Int) -> Void)?) {
+        self.onEarnedProgress = handler
     }
 
     public func setOperationalEventHandler(_ handler: (@Sendable (OperationalEvent) -> Void)?) {
@@ -715,7 +721,7 @@ public actor MinerEngine {
             requiredMinutes: event.requiredMinutes,
             source: .pubSub
         )
-        let result = progressEventTracker.observe(observation)
+        let result = observeDropProgress(observation)
         tracePubSub(
             "drop-progress drop=\(event.dropId) rawCurrent=\(event.currentMinutes) parsedCurrent=\(event.currentMinutes) " +
             "previous=\(result.previousMinutes.map(String.init) ?? "nil") transition=\(result.transition.traceDescription)"
@@ -1243,7 +1249,7 @@ public actor MinerEngine {
                                     requiredMinutes: requiredMinutes(for: current.dropId, campaignId: campaignId),
                                     source: .gqlPoll
                                 )
-                                let result = progressEventTracker.observe(observation)
+                                let result = observeDropProgress(observation)
                                 traceGQL(
                                     "DropCurrentSessionContext drop=\(current.dropId) parsedCurrent=\(current.currentMinutes) " +
                                     "previous=\(result.previousMinutes.map(String.init) ?? "nil") transition=\(result.transition.traceDescription)"

@@ -27,6 +27,10 @@ public struct MinerOperationalMetadata: Sendable, Equatable {
     /// When the miner last banked verified drop progress. Liveness timestamps above
     /// only prove the miner is talking to Twitch; this one proves it is earning.
     public var lastDropProgressAt: Date?
+    /// When the current worker started. Unlike status timestamps this survives the
+    /// routine watching -> refreshing -> watching churn of normal mining, so it is a
+    /// stable floor for measuring how long a miner has gone without earning.
+    public var workerStartedAt: Date?
     public var workerState: MinerWorkerState
     public var workerTaskID: String?
     public var isHealthy: Bool
@@ -37,6 +41,7 @@ public struct MinerOperationalMetadata: Sendable, Equatable {
         lastSuccessfulPollAt: Date? = nil,
         lastCampaignRefreshAt: Date? = nil,
         lastDropProgressAt: Date? = nil,
+        workerStartedAt: Date? = nil,
         workerState: MinerWorkerState = .idle,
         workerTaskID: String? = nil,
         isHealthy: Bool = true,
@@ -46,6 +51,7 @@ public struct MinerOperationalMetadata: Sendable, Equatable {
         self.lastSuccessfulPollAt = lastSuccessfulPollAt
         self.lastCampaignRefreshAt = lastCampaignRefreshAt
         self.lastDropProgressAt = lastDropProgressAt
+        self.workerStartedAt = workerStartedAt
         self.workerState = workerState
         self.workerTaskID = workerTaskID
         self.isHealthy = isHealthy
@@ -149,6 +155,7 @@ public actor MinerSupervisor {
     public func recordWorkerStart(minerId: String, taskID: String, at date: Date = Date()) {
         var entry = entries[minerId, default: Entry()]
         entry.workerStartedAt = date
+        entry.metadata.workerStartedAt = date
         entry.lastStateUpdateAt = date
         entry.metadata.lastEventAt = date
         entry.metadata.workerTaskID = taskID
@@ -161,6 +168,7 @@ public actor MinerSupervisor {
     public func recordWorkerRunning(minerId: String, at date: Date = Date()) {
         var entry = entries[minerId, default: Entry()]
         entry.workerStartedAt = entry.workerStartedAt ?? date
+        entry.metadata.workerStartedAt = entry.workerStartedAt
         entry.lastStateUpdateAt = date
         entry.metadata.lastEventAt = date
         entry.metadata.workerState = .running
