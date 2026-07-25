@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fix the 1.34.3 earning checks and stop refetching every campaign each cycle - Release Notes</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      margin: 0;
+      padding: 32px 20px 48px;
+      font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f4f6f8;
+      color: #0f1720;
+    }
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 28px;
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.86);
+      box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
+    }
+    h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
+    .meta { margin: 0 0 24px; color: #52606d; font-size: 14px; }
+    p { margin: 0 0 16px; }
+    a { color: #0a67a3; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #0b1015; color: #edf2f7; }
+      main {
+        background: rgba(15, 23, 32, 0.88);
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+      }
+      .meta { color: #9fb0c2; }
+      a { color: #73c3ff; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Fix the 1.34.3 earning checks and stop refetching every campaign each cycle</h1>
+    <p class="meta">Version 1.34.4</p>
+    <p>Fix the 1.34.3 earning checks and stop refetching every campaign each cycle</p>
+<p>Both halves of the 1.34.3 earning work were faulty, found by running it against<br>a real 22-hour session. Its ledger figures should not be trusted.</p>
+<p>- Anchor the not-earning check on the last banked progress, falling back to<br>worker start. It measured from statusChangedAt, but mining cycles through<br>watching -&gt; refreshing -&gt; watching every few minutes, so the clock reset<br>before the threshold could ever be reached and the check never fired. Replayed<br>against the reported session, all five miners now flag correctly.<br>- Count earnings per drop from verified progress transitions instead of the<br>delta of an account-wide total. That total is a snapshot of drops in flight,<br>not a counter: it falls when a drop is claimed and jumps when a campaign<br>carrying existing progress rejoins the set, so the ledger both invented<br>progress and hid it. A drop crossing its requirement reports .claimable rather<br>than .progress, so both are counted or every drop's closing minutes are lost.<br>The same signal now drives lastDropProgressAt, so the health check and the<br>ledger cannot disagree, and earningReferenceDate is defined once instead of<br>being duplicated at three call sites.<br>- Give not-earning its own incident kind that records and displays but does not<br>notify. It can flag every miner at once, and its false-positive rate is still<br>unmeasured because the data needed to judge it was the ledger. The supervisor's<br>progressStalled alert is a different fault and still notifies.<br>- Raise campaignDetailsCacheTTL above the campaign check interval. Both were<br>exactly 5 minutes, so entries expired moments before each refresh asked for<br>them and nothing was ever served from cache: ~154k DropCampaignDetails calls<br>in 22 hours. Per-drop claim and progress state is owned by the inventory<br>snapshot, not this cache, so a longer TTL does not stale it.<br>- Let unlinked campaigns use the cross-miner metadata cache by remembering each<br>account's link state from its own real fetches. The previous gate existed<br>because link state resolves as details || basic, and serving shared metadata<br>would have dropped the details half, silently marking linked campaigns<br>unlinked and removing them from mining. Together roughly 20x fewer requests.</p>
+<p>Set MARKETING_VERSION to 1.34.4 with build 2026072516 in project.yml and the<br>generated project, and publish matching release notes. The stable Sparkle<br>appcast is left to the release pipeline.</p>
+    <p><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/4d25293e42347e2b12b4784e96847fd982f6e42b">4d25293</a></p>
+  </main>
+</body>
+</html>
