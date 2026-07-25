@@ -58,9 +58,10 @@ final class MinerHealthSnapshotTests: XCTestCase {
             lastEventAt: now.addingTimeInterval(-30),
             lastSuccessfulPollAt: now.addingTimeInterval(-30),
             lastDropProgressAt: now.addingTimeInterval(-45 * 60),
+            workerStartedAt: now.addingTimeInterval(-3 * 60 * 60),
             isHealthy: true
         )
-        miner.statusChangedAt = now.addingTimeInterval(-3 * 60 * 60)
+        miner.statusChangedAt = now.addingTimeInterval(-2 * 60)
 
         let snapshot = MinerHealthSnapshot.make(miner: miner, now: now)
 
@@ -82,9 +83,10 @@ final class MinerHealthSnapshotTests: XCTestCase {
             lastEventAt: now.addingTimeInterval(-30),
             lastSuccessfulPollAt: now.addingTimeInterval(-30),
             lastDropProgressAt: now.addingTimeInterval(-4 * 60),
+            workerStartedAt: now.addingTimeInterval(-3 * 60 * 60),
             isHealthy: true
         )
-        miner.statusChangedAt = now.addingTimeInterval(-3 * 60 * 60)
+        miner.statusChangedAt = now.addingTimeInterval(-2 * 60)
 
         let snapshot = MinerHealthSnapshot.make(miner: miner, now: now)
 
@@ -107,17 +109,18 @@ final class MinerHealthSnapshotTests: XCTestCase {
             lastEventAt: now.addingTimeInterval(-30),
             lastSuccessfulPollAt: now.addingTimeInterval(-30),
             lastDropProgressAt: now.addingTimeInterval(-3 * 60 * 60),
+            workerStartedAt: now.addingTimeInterval(-3 * 60 * 60),
             isHealthy: true
         )
-        miner.statusChangedAt = now.addingTimeInterval(-3 * 60 * 60)
+        miner.statusChangedAt = now.addingTimeInterval(-2 * 60)
 
         XCTAssertFalse(miner.isNotEarning(now: now))
         XCTAssertEqual(MinerHealthSnapshot.make(miner: miner, now: now).health, .mining)
     }
 
-    /// A miner that has never earned is measured from when it started watching, so a freshly
-    /// started watch session is not flagged before it has had a chance to bank anything.
-    func testFreshWatchSessionWithoutProgressHistoryIsNotFlagged() {
+    /// A miner that has never earned is measured from when its worker started, so a freshly
+    /// started session is not flagged before it has had a chance to bank anything.
+    func testFreshSessionWithoutProgressHistoryIsNotFlagged() {
         let now = Date(timeIntervalSince1970: 10_000)
         var miner = MinerManager.ManagedMiner(
             id: "miner",
@@ -128,14 +131,55 @@ final class MinerHealthSnapshotTests: XCTestCase {
             priorityGames: [],
             lastEventAt: now.addingTimeInterval(-30),
             lastSuccessfulPollAt: now.addingTimeInterval(-30),
+            workerStartedAt: now.addingTimeInterval(-5 * 60),
             isHealthy: true
         )
-        miner.statusChangedAt = now.addingTimeInterval(-5 * 60)
 
         XCTAssertFalse(miner.isNotEarning(now: now))
 
-        miner.statusChangedAt = now.addingTimeInterval(-25 * 60)
+        miner.workerStartedAt = now.addingTimeInterval(-25 * 60)
         XCTAssertTrue(miner.isNotEarning(now: now))
+    }
+
+    /// Regression for the defect that made the shipped check dead on arrival: normal mining
+    /// cycles watching -> refreshing -> watching every few minutes, and anchoring on
+    /// statusChangedAt reset the clock every cycle so the threshold was never reached.
+    /// A miner that has churned status for hours without earning must still be flagged.
+    func testStatusChurnDoesNotResetTheEarningClock() {
+        let now = Date(timeIntervalSince1970: 10_000)
+        var miner = MinerManager.ManagedMiner(
+            id: "miner",
+            accountId: "account",
+            username: "tester",
+            status: .watching,
+            isRunning: true,
+            priorityGames: [],
+            lastEventAt: now.addingTimeInterval(-5),
+            lastSuccessfulPollAt: now.addingTimeInterval(-5),
+            workerStartedAt: now.addingTimeInterval(-6 * 60 * 60),
+            isHealthy: true
+        )
+        // Re-entered .watching a minute ago, as it does on every mining cycle.
+        miner.statusChangedAt = now.addingTimeInterval(-60)
+
+        XCTAssertTrue(miner.isNotEarning(now: now))
+        XCTAssertEqual(MinerHealthSnapshot.make(miner: miner, now: now).health, .attention)
+    }
+
+    /// Without a worker start or any banked progress there is no honest way to say how long
+    /// the miner has gone without earning, so it must not be flagged on a guess.
+    func testMinerWithNoTimingAnchorIsNotFlagged() {
+        let now = Date(timeIntervalSince1970: 10_000)
+        let miner = MinerManager.ManagedMiner(
+            id: "miner",
+            accountId: "account",
+            username: "tester",
+            status: .watching,
+            isRunning: true,
+            isHealthy: true
+        )
+
+        XCTAssertFalse(miner.isNotEarning(now: now))
     }
 }
 

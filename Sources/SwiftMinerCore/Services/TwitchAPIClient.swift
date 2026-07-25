@@ -141,16 +141,36 @@ public actor TwitchAPIClient {
         let expiresAt: Date
     }
 
+    /// What a real `DropCampaignDetails` fetch reported for this account's link state on a
+    /// given campaign. Remembered so the cross-miner metadata cache can be used without
+    /// discarding the account-specific answer only a real fetch can provide.
+    struct CampaignLinkStateEntry {
+        let isAccountConnected: Bool
+        let expiresAt: Date
+    }
+
     private struct SlugCandidatesCacheEntry {
         let slugs: [String]
         let expiresAt: Date
     }
 
     var campaignDetailsByKey: [String: CampaignDetailsCacheEntry] = [:]
+    var campaignLinkStateByKey: [String: CampaignLinkStateEntry] = [:]
     var availableDropsByChannel: [String: AvailableDropsCacheEntry] = [:]
     var liveChannelsByLookup: [String: LiveChannelsCacheEntry] = [:]
     private var slugCandidatesByLookup: [String: SlugCandidatesCacheEntry] = [:]
-    let campaignDetailsCacheTTL: TimeInterval = 5 * 60
+    /// Must stay comfortably longer than `MinerEngine.campaignCheckInterval` (5 minutes).
+    /// At exactly 5 minutes every entry expired moments before the next refresh asked for
+    /// it, so the cache never hit and each cycle re-fetched details for every active
+    /// campaign — the bulk of SwiftMiner's Twitch traffic. Details are slow-moving
+    /// (name, dates, drop definitions, channel ACL); the fast-moving per-drop claim and
+    /// progress state is owned by the inventory snapshot, which is fetched separately and
+    /// merged over campaigns by `syncCampaigns`, so it is unaffected by this TTL.
+    let campaignDetailsCacheTTL: TimeInterval = 20 * 60
+    /// How long a real fetch's account-link answer is trusted for reuse. Linking a game
+    /// account is a rare, deliberate user action, so this can be long — but not indefinite,
+    /// so a newly linked account is picked up without restarting the miner.
+    let campaignLinkStateTTL: TimeInterval = 20 * 60
     let availableDropsCacheTTL: TimeInterval = 60
     let liveChannelsCacheTTL: TimeInterval = 60
     private let slugCandidatesCacheTTL: TimeInterval = 30 * 60
@@ -607,9 +627,13 @@ public actor TwitchAPIClient {
         )
     }
 
+    /// Rebuild a full campaign from cross-miner metadata plus this account's own context.
+    /// `isAccountConnected` is passed explicitly because it is the one field the shared
+    /// metadata deliberately drops and the dashboard can under-report.
     nonisolated static func campaign(
         fromSharedMetadata metadata: Campaign,
-        accountContext: Campaign
+        accountContext: Campaign,
+        isAccountConnected: Bool
     ) -> Campaign {
         Campaign(
             id: metadata.id.isEmpty ? accountContext.id : metadata.id,
@@ -620,7 +644,7 @@ public actor TwitchAPIClient {
             endDate: metadata.endDate,
             drops: metadata.drops,
             channels: metadata.channels,
-            isAccountConnected: accountContext.isAccountConnected,
+            isAccountConnected: isAccountConnected,
             allowIsEnabled: metadata.allowIsEnabled ?? accountContext.allowIsEnabled,
             isPrioritised: accountContext.isPrioritised
         )

@@ -34,7 +34,7 @@ extension MinerEngine {
                 requiredMinutes: progress.requiredMinutes,
                 source: .inventory
             )
-            let result = progressEventTracker.observe(observation)
+            let result = observeDropProgress(observation)
             traceGQL(
                 "Inventory progress \(context) drop=\(progress.dropId) parsedCurrent=\(progress.currentMinutes) " +
                 "previous=\(result.previousMinutes.map(String.init) ?? "nil") transition=\(result.transition.traceDescription)"
@@ -149,6 +149,25 @@ struct TrackedDropProgress: Sendable, Equatable {
     let isClaimed: Bool
 }
 
+extension MinerEngine {
+    /// Records a drop progress sample and reports any minutes it genuinely earned.
+    ///
+    /// Every observation goes through here so the earning signal stays tied to real
+    /// per-drop transitions. Deriving it from aggregate totals instead does not work:
+    /// those move whenever campaigns enter or leave the account's set or a drop is
+    /// claimed, so they both invent progress that never happened and hide progress
+    /// that did.
+    @discardableResult
+    func observeDropProgress(_ observation: DropProgressObservation) -> DropProgressUpdateResult {
+        let result = progressEventTracker.observe(observation)
+        let earned = result.earnedMinutes
+        if earned > 0 {
+            onEarnedProgress?(earned)
+        }
+        return result
+    }
+}
+
 enum DropProgressTransition: Sendable, Equatable {
     case none
     case progress(dropLabel: String, deltaMinutes: Int, currentMinutes: Int, requiredMinutes: Int?)
@@ -187,6 +206,24 @@ struct DropProgressUpdateResult: Sendable, Equatable {
             return true
         case .none, .regression:
             return false
+        }
+    }
+
+    /// Minutes of verified drop progress this observation added.
+    ///
+    /// This is the only trustworthy measure of earning: it is per drop, never counts the
+    /// same minute twice, and is unaffected by campaigns rotating in and out of the
+    /// account's active set. A drop crossing its requirement reports `.claimable` rather
+    /// than `.progress`, so that case has to be counted too or the closing minutes of every
+    /// drop are lost.
+    var earnedMinutes: Int {
+        switch transition {
+        case .progress(_, let deltaMinutes, _, _):
+            return max(0, deltaMinutes)
+        case .claimable(_, let currentMinutes, _):
+            return max(0, currentMinutes - (previousMinutes ?? 0))
+        case .none, .claimed, .regression:
+            return 0
         }
     }
 }

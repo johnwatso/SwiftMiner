@@ -104,11 +104,27 @@ extension TwitchAPIClient {
             await traceGQLDebug { "[TwitchAPIClient] DropCampaignDetails cache hit for \(campaignId)" }
             return cached.campaign
         }
+        // The cross-miner cache holds only campaign-global metadata; the account-specific
+        // parts are supplied here. Everything except link state comes from `basicCampaign`,
+        // which is already per-account. Link state is the one field a real fetch can know
+        // and the dashboard can miss — `mergeBasicCampaign` takes `details || basic` — so
+        // the shared path is only safe when this account's answer for this campaign is
+        // already known: either the dashboard says connected, or a previous real fetch told
+        // us. Without that, serving shared metadata could silently downgrade a linked
+        // campaign to unlinked and drop it out of mining.
         let sharedKey = Self.cacheKey("campaign-metadata", campaignId)
+        let knownLinkState = campaignLinkStateByKey[cacheKey].flatMap { $0.expiresAt > now ? $0 : nil }
         if let basicCampaign,
-           basicCampaign.isAccountConnected,
+           basicCampaign.isAccountConnected || knownLinkState != nil,
            let shared = await SharedTwitchLookupCache.shared.campaignMetadata(for: sharedKey, now: now) {
-            let campaign = Self.campaign(fromSharedMetadata: shared, accountContext: basicCampaign)
+            // Mirrors `mergeBasicCampaign`'s `details || basic`, with the remembered fetch
+            // standing in for details.
+            let campaign = Self.campaign(
+                fromSharedMetadata: shared,
+                accountContext: basicCampaign,
+                isAccountConnected: basicCampaign.isAccountConnected
+                    || (knownLinkState?.isAccountConnected ?? false)
+            )
             campaignDetailsByKey[cacheKey] = CampaignDetailsCacheEntry(
                 campaign: campaign,
                 expiresAt: now.addingTimeInterval(campaignDetailsCacheTTL)
@@ -148,6 +164,17 @@ extension TwitchAPIClient {
         campaignDetailsByKey[cacheKey] = CampaignDetailsCacheEntry(
             campaign: campaign,
             expiresAt: Date().addingTimeInterval(campaignDetailsCacheTTL)
+        )
+        // Remember what this fetch established about the account's link state, so later
+        // cycles can take the shared metadata path without losing that answer.
+        Self.pruneCache(
+            &campaignLinkStateByKey,
+            maxEntries: maxCampaignDetailsCacheEntries,
+            expiresAt: { $0.expiresAt }
+        )
+        campaignLinkStateByKey[cacheKey] = CampaignLinkStateEntry(
+            isAccountConnected: campaign.isAccountConnected,
+            expiresAt: Date().addingTimeInterval(campaignLinkStateTTL)
         )
         await SharedTwitchLookupCache.shared.storeCampaignMetadata(
             Self.sharedCampaignMetadata(from: campaign),

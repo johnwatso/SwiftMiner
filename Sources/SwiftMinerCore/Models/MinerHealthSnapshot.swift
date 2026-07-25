@@ -100,10 +100,8 @@ public struct MinerHealthSnapshot: Sendable, Equatable, Identifiable {
         if miner.showsNoRecentActivityAttention {
             signals.append("No recent healthy activity")
         }
-        if miner.isNotEarning(now: now) {
-            let elapsed = now.timeIntervalSince(
-                max(miner.lastDropProgressAt ?? .distantPast, miner.statusChangedAt)
-            )
+        if miner.isNotEarning(now: now), let reference = miner.earningReferenceDate {
+            let elapsed = now.timeIntervalSince(reference)
             signals.append("Watching with no drop progress in \(Int(elapsed / 60))m")
         }
         if minutes(since: miner.lastSuccessfulPollAt, now: now) >= 15 {

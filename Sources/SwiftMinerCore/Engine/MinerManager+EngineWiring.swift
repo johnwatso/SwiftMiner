@@ -63,38 +63,18 @@ extension MinerManager {
             }
         }
 
-        await engine.setProgressUpdateHandler { [weak self] progress in
+        // Verified per-drop progress. This is the authoritative earning signal for both the
+        // not-earning health check and the ledger: the aggregate totals carried by
+        // `onProgressUpdate` are a snapshot of in-flight progress, not a counter, so they
+        // fall when a drop is claimed or a campaign leaves the set and jump when one with
+        // existing progress joins it.
+        await engine.setEarnedProgressHandler { [weak self] minutes in
             Task { @MainActor [weak self] in
-                guard let self else { return }
-                let watchMinutes = progress.totalWatchTimeMinutes
-                let claims = progress.claimedDrops
-                let metric = watchMinutes + claims
-                if let previousMetric = self.lastObservedProgressMetric[minerId],
-                   metric > previousMetric {
-                    self.recordHealth(.miningProgressObserved(minerID: minerId, at: Date()))
-                    // A rising metric is the only proof the miner is actually earning, so it
-                    // is what clears the not-earning invariant.
-                    await self.supervisor.recordDropProgress(minerId: minerId)
-                    await self.applySupervisorSnapshot(for: minerId)
-
-                    // Both totals are cumulative over the account's current campaigns, so the
-                    // ledger takes deltas. The first observation of a session establishes the
-                    // baseline and credits nothing — otherwise an account's whole history
-                    // would land in whichever hour the app happened to launch in. Campaigns
-                    // rotating out can shrink the total, so negatives are floored.
-                    let earnedDelta = max(0, watchMinutes - (self.lastObservedWatchMinutes[minerId] ?? watchMinutes))
-                    let claimDelta = max(0, claims - (self.lastObservedClaimedDrops[minerId] ?? claims))
-                    if let ledger = self.earningLedgerStore, earnedDelta > 0 || claimDelta > 0 {
-                        await ledger.recordEarned(
-                            minerID: minerId,
-                            minutes: earnedDelta,
-                            claims: claimDelta
-                        )
-                    }
-                }
-                self.lastObservedProgressMetric[minerId] = metric
-                self.lastObservedWatchMinutes[minerId] = watchMinutes
-                self.lastObservedClaimedDrops[minerId] = claims
+                guard let self, minutes > 0 else { return }
+                self.recordHealth(.miningProgressObserved(minerID: minerId, at: Date()))
+                await self.supervisor.recordDropProgress(minerId: minerId)
+                await self.applySupervisorSnapshot(for: minerId)
+                await self.earningLedgerStore?.recordEarned(minerID: minerId, minutes: minutes)
             }
         }
         
@@ -175,6 +155,7 @@ extension MinerManager {
                 self.resetDailyClaimsIfNeeded()
                 self.claimedTodayIds.insert(drop.id)
                 self.incrementDropsClaimed(minerId: minerId)
+                await self.earningLedgerStore?.recordEarned(minerID: minerId, claims: 1)
 
                 // Find campaign name for the DM event
                 let campaignName = self.getMiner(id: minerId)?.allCampaigns.first(where: {
@@ -420,6 +401,7 @@ extension MinerManager {
         miners[index].lastSuccessfulPollAt = metadata.lastSuccessfulPollAt
         miners[index].lastCampaignRefreshAt = metadata.lastCampaignRefreshAt
         miners[index].lastDropProgressAt = metadata.lastDropProgressAt
+        miners[index].workerStartedAt = metadata.workerStartedAt
         miners[index].workerState = metadata.workerState
         miners[index].workerTaskID = metadata.workerTaskID
         miners[index].isHealthy = metadata.isHealthy
@@ -598,12 +580,10 @@ extension MinerManager {
                 at: at
             ))
         } else if miner.isNotEarning(now: at) {
-            let minutes = Int(at.timeIntervalSince(
-                max(miner.lastDropProgressAt ?? .distantPast, miner.statusChangedAt)
-            ) / 60)
+            let minutes = Int(at.timeIntervalSince(miner.earningReferenceDate ?? at) / 60)
             recordHealth(.incidentObserved(
                 minerID: miner.id,
-                kind: .progressStalled,
+                kind: .notEarning,
                 severity: .warning,
                 summary: "Watching for \(minutes) minutes without earning any drop progress",
                 recommendedAction: "Check the campaign is still eligible for this account",

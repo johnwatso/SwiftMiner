@@ -40,6 +40,8 @@ public final class MinerManager {
         public var lastCampaignRefreshAt: Date?
         /// When this miner last banked verified drop progress. `nil` until it earns anything.
         public var lastDropProgressAt: Date?
+        /// When the current worker started. Survives the routine status churn of mining.
+        public var workerStartedAt: Date?
         public var workerState: MinerWorkerState = .idle
         public var workerTaskID: String?
         public var isHealthy: Bool = true
@@ -98,6 +100,13 @@ public final class MinerManager {
         /// switch, non-earning cooldown) gets a chance to fix it before the user is told.
         public static let notEarningThreshold: TimeInterval = 20 * 60
 
+        /// The point from which time-without-earning is measured: the last banked progress,
+        /// or the worker start for a miner that has never earned. `nil` when neither is
+        /// known, in which case nothing can honestly be concluded.
+        public var earningReferenceDate: Date? {
+            [lastDropProgressAt, workerStartedAt].compactMap { $0 }.max()
+        }
+
         /// True when the miner looks alive but is not banking any drop progress.
         ///
         /// This is the failure mode every liveness check misses: polls succeed, events keep
@@ -114,9 +123,10 @@ public final class MinerManager {
                 return false
             }
 
-            // Fall back to the moment the miner started watching when it has never reported
-            // progress, so a freshly started watch session gets the same grace window.
-            let reference = max(lastDropProgressAt ?? .distantPast, statusChangedAt)
+            // Deliberately NOT `statusChangedAt`: normal mining cycles through
+            // watching -> refreshing -> watching every few minutes, which resets that
+            // timestamp and means the threshold can never be reached.
+            guard let reference = earningReferenceDate else { return false }
             return now.timeIntervalSince(reference) >= Self.notEarningThreshold
         }
 
@@ -192,6 +202,7 @@ public final class MinerManager {
             lastSuccessfulPollAt: Date? = nil,
             lastCampaignRefreshAt: Date? = nil,
             lastDropProgressAt: Date? = nil,
+            workerStartedAt: Date? = nil,
             workerState: MinerWorkerState = .idle,
             workerTaskID: String? = nil,
             isHealthy: Bool = true,
@@ -217,6 +228,7 @@ public final class MinerManager {
             self.lastSuccessfulPollAt = lastSuccessfulPollAt
             self.lastCampaignRefreshAt = lastCampaignRefreshAt
             self.lastDropProgressAt = lastDropProgressAt
+            self.workerStartedAt = workerStartedAt
             self.workerState = workerState
             self.workerTaskID = workerTaskID
             self.isHealthy = isHealthy
@@ -389,9 +401,6 @@ public final class MinerManager {
     let supervisor = MinerSupervisor()
     let unattendedHealthStore: UnattendedHealthStore?
     public let earningLedgerStore: EarningLedgerStore?
-    var lastObservedProgressMetric: [String: Int] = [:]
-    var lastObservedWatchMinutes: [String: Int] = [:]
-    var lastObservedClaimedDrops: [String: Int] = [:]
     var initializedCampaignSnapshots: Set<String> = []
     /// When each miner was last seen watching, so elapsed watch time can be credited to the
     /// ledger without standing up another timer.
