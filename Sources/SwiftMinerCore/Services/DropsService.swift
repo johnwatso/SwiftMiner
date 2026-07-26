@@ -9,6 +9,10 @@ public actor DropsService {
     private var campaignsCache: [Campaign] = []
     private var lastCacheUpdate: Date?
     private let cacheDuration: TimeInterval = 60 // 1 minute
+    /// Coalesces the mining loop and account-state UI when both request the same
+    /// cold campaign data at launch. Actor reentrancy would otherwise allow both
+    /// callers to trigger a complete campaign-detail fan-out.
+    private var campaignsRefreshTask: Task<[Campaign], Error>?
 
     public init(apiClient: TwitchAPIClient, inventoryService: InventoryService? = nil) {
         self.apiClient = apiClient
@@ -35,14 +39,28 @@ public actor DropsService {
             return campaignsCache
         }
 
-        let enriched = try await CampaignService.fetchCampaigns(
-            using: apiClient,
-            inventoryService: inventoryService
-        )
+        if let campaignsRefreshTask {
+            return try await campaignsRefreshTask.value
+        }
 
-        self.campaignsCache = enriched
-        self.lastCacheUpdate = Date()
-        return enriched
+        let refreshTask = Task {
+            try await CampaignService.fetchCampaigns(
+                using: apiClient,
+                inventoryService: inventoryService
+            )
+        }
+        campaignsRefreshTask = refreshTask
+
+        do {
+            let enriched = try await refreshTask.value
+            campaignsRefreshTask = nil
+            campaignsCache = enriched
+            lastCacheUpdate = Date()
+            return enriched
+        } catch {
+            campaignsRefreshTask = nil
+            throw error
+        }
     }
 
     /// Get active campaigns (within time window, linked, and has earnable drops)

@@ -35,9 +35,35 @@ public final class AccountStateStore: Identifiable {
 
     // MARK: - Lifecycle
     
-    public func start() async {
-        await refresh()
-        startAutoRefresh()
+    /// Start account-state hydration without blocking miner startup.
+    ///
+    /// Mining is the critical path at launch. A full drop-state refresh can require
+    /// dozens of campaign-detail requests, so it runs after an initial grace period
+    /// and then continues on the normal refresh cadence.
+    public func start(initialDelay: TimeInterval = 0) {
+        stopAutoRefresh()
+        refreshTask = Task { [weak self] in
+            if initialDelay > 0 {
+                do {
+                    try await Task.sleep(nanoseconds: UInt64(initialDelay * 1_000_000_000))
+                } catch {
+                    return
+                }
+            }
+
+            guard !Task.isCancelled, let self else { return }
+            await self.refresh()
+
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(nanoseconds: UInt64(self.refreshInterval * 1_000_000_000))
+                } catch {
+                    return
+                }
+                guard !Task.isCancelled else { break }
+                await self.refresh()
+            }
+        }
     }
     
     public func stop() {
@@ -66,17 +92,6 @@ public final class AccountStateStore: Identifiable {
     }
 
     // MARK: - Auto-refresh
-
-    private func startAutoRefresh() {
-        stopAutoRefresh()
-        refreshTask = Task { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: UInt64((self?.refreshInterval ?? 300) * 1_000_000_000))
-                guard !Task.isCancelled else { break }
-                await self?.refresh()
-            }
-        }
-    }
 
     public func stopAutoRefresh() {
         refreshTask?.cancel()

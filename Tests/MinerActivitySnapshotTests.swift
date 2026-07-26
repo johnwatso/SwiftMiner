@@ -18,6 +18,7 @@ final class MinerActivitySnapshotTests: XCTestCase {
         currentCampaignId: String? = nil,
         priorityGames: [String] = ["Test Game"],
         workerState: MinerWorkerState = .running,
+        isRunning: Bool = true,
         isHealthy: Bool = true,
         isStalled: Bool = false
     ) -> MinerManager.ManagedMiner {
@@ -28,7 +29,7 @@ final class MinerActivitySnapshotTests: XCTestCase {
             status: status,
             currentCampaignId: currentCampaignId,
             allCampaigns: campaigns,
-            isRunning: true,
+            isRunning: isRunning,
             priorityGames: priorityGames,
             workerState: workerState,
             isHealthy: isHealthy,
@@ -118,6 +119,39 @@ final class MinerActivitySnapshotTests: XCTestCase {
         XCTAssertEqual(blockedSnapshot.statusText, "Blocked — Account not linked")
         XCTAssertEqual(blockedSnapshot.now.title, "Blocked — Account not linked")
         XCTAssertNil(blockedSnapshot.upNext)
+    }
+
+    func testStoppedMinerIsNeverPresentedAsUpToDate() {
+        let miner = makeMiner(
+            status: .idleNoEligibleCampaigns,
+            campaigns: [],
+            priorityGames: [],
+            workerState: .idle,
+            isRunning: false
+        )
+
+        let snapshot = resolveSnapshot(for: miner)
+
+        XCTAssertEqual(miner.statusLabel, "Stopped")
+        XCTAssertEqual(snapshot.statusText, "Stopped")
+        XCTAssertEqual(snapshot.now.title, "Stopped")
+        XCTAssertEqual(snapshot.now.subtitle, "Start this miner to check for and earn drops.")
+    }
+
+    func testPendingMinerStartupIsPresentedAsStarting() {
+        let miner = makeMiner(
+            status: .authenticating,
+            campaigns: [],
+            priorityGames: [],
+            workerState: .idle,
+            isRunning: false
+        )
+
+        let snapshot = resolveSnapshot(for: miner)
+
+        XCTAssertEqual(miner.statusLabel, "Starting...")
+        XCTAssertEqual(snapshot.statusText, "Starting...")
+        XCTAssertEqual(snapshot.now.title, "Starting...")
     }
 
     func testDismissedMissingGameShowsCurrentStatusAsUpToDateAndAttemptableUpNext() {

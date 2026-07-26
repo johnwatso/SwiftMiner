@@ -150,6 +150,24 @@ public final class MinerManager {
             if showsNotEarningAttention {
                 return "Watching — Not Earning"
             }
+            if !isRunning {
+                switch status {
+                case .authenticating:
+                    return "Starting..."
+                case .paused:
+                    return "Paused"
+                case .error:
+                    return "Blocked — Needs attention"
+                case .idle,
+                     .fetchingCampaigns,
+                     .watching,
+                     .claiming,
+                     .waitingForStream,
+                     .idleNoEligibleCampaigns,
+                     .blockedAccountNotLinked:
+                    return "Stopped"
+                }
+            }
             guard let resolved = resolvedPrimaryState?.resolved else {
                 return status.displayName
             }
@@ -738,20 +756,13 @@ public final class MinerManager {
             }
 
             // Hosted unit tests create fake accounts for state assertions. Do not
-            // turn those fixtures into background Twitch sessions.
+            // turn those fixtures into background Twitch sessions. Production state
+            // hydration is intentionally delayed so mining gets first use of the
+            // process-wide Twitch request budget after launch.
             if !SwiftMinerRuntime.isRunningTests {
-                // Start the state store auto-refresh (Phase 2)
-                // Stagger starts to avoid thundering herd - 3s delay per account index
                 let accountIndex = self.miners.firstIndex(where: { $0.id == minerId }) ?? 0
-                if accountIndex > 0 {
-                    let staggerDelay = UInt64(accountIndex * 3 * 1_000_000_000)
-                    do {
-                        try await RuntimeClock.continuous.sleep(nanoseconds: staggerDelay)
-                    } catch {
-                        return
-                    }
-                }
-                await stateStore.start()
+                let initialDelay = TimeInterval(60 + accountIndex * 3)
+                stateStore.start(initialDelay: initialDelay)
             }
         }
         engineSetupTasks[minerId] = setupTask
@@ -886,6 +897,15 @@ public final class MinerManager {
             throw TwitchMinerError.sessionNotStarted
         }
 
+        // Surface startup immediately. Engine setup is normally brief, but the UI must
+        // never describe a miner waiting here as idle or up to date.
+        updateMinerStatus(
+            minerId: minerId,
+            status: .authenticating,
+            priorityGames: priorityGames,
+            needsAuth: false
+        )
+
         // Ensure engine callbacks are registered before starting.
         // addAccount() sets up callbacks in an unstructured Task; awaiting it here
         // eliminates the race where onStatusChange fires before the handler is set.
@@ -928,7 +948,6 @@ public final class MinerManager {
 
         // Update status and sync priority games
         await dataCoordinator.updateAccountNeedsAuth(accountId: miner.accountId, needsAuth: false)
-        updateMinerStatus(minerId: minerId, status: .authenticating, priorityGames: priorityGames, needsAuth: false)
 
         do {
             try await engine.start()

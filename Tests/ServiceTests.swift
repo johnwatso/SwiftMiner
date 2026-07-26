@@ -633,6 +633,46 @@ final class ServiceTests: XCTestCase {
         XCTAssertEqual(operations.recordedValues.filter { $0 == "DropCampaignDetails" }.count, 1)
     }
 
+    func testDropsServiceCoalescesConcurrentColdCampaignRefreshes() async throws {
+        let operations = StringRequestRecorder()
+
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+
+            if request.url?.path == "/integrity" {
+                return (response, #"{"token":"integrity-token","expiration":4102444800000}"#.data(using: .utf8)!)
+            }
+
+            let body = (try? JSONSerialization.jsonObject(with: request.httpBody ?? Data())) as? [String: Any]
+            let operationName = body?["operationName"] as? String ?? ""
+            operations.append(operationName)
+            if operationName == "ViewerDropsDashboard" {
+                Thread.sleep(forTimeInterval: 0.05)
+                let json = #"{"data":{"currentUser":{"dropCampaigns":[]}}}"#
+                return (response, json.data(using: .utf8)!)
+            }
+            return (response, #"{"data":{}}"#.data(using: .utf8)!)
+        }
+
+        let dropsService = DropsService(apiClient: apiClient)
+        async let first = dropsService.fetchCampaigns()
+        async let second = dropsService.fetchCampaigns()
+        let results = try await (first, second)
+
+        XCTAssertTrue(results.0.isEmpty)
+        XCTAssertTrue(results.1.isEmpty)
+        XCTAssertEqual(
+            operations.recordedValues.filter { $0 == "ViewerDropsDashboard" }.count,
+            1,
+            "concurrent launch consumers must share one campaign fan-out"
+        )
+    }
+
     func testFetchDropCampaignsReusesSharedCampaignMetadataAcrossClients() async throws {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]

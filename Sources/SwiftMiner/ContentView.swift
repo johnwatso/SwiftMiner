@@ -986,6 +986,24 @@ struct OverviewView: View {
     }
 
     private func fallbackSubtitle(for miner: MinerManager.ManagedMiner) -> String {
+        if !miner.isRunning {
+            switch miner.status {
+            case .authenticating:
+                return "Starting..."
+            case .paused:
+                return "Paused"
+            case .error:
+                return "Blocked — Needs attention"
+            case .idle,
+                 .fetchingCampaigns,
+                 .watching,
+                 .claiming,
+                 .waitingForStream,
+                 .idleNoEligibleCampaigns,
+                 .blockedAccountNotLinked:
+                return "Stopped"
+            }
+        }
         switch miner.status {
         case .idle:
             return "Up to Date"
