@@ -1,0 +1,62 @@
+{
+  "repository": "DevilXD/TwitchDropsMiner",
+  "branch": "master",
+  "reviewedCommit": "3aec843bbb91a7d00f7bd7784e92bd97e3ee8a5f",
+  "watchedPaths": [
+    "channel.py",
+    "constants.py",
+    "inventory.py",
+    "twitch.py",
+    "websocket.py"
+  ],
+  "hashMappings": [
+    {
+      "upstreamKey": "SlugRedirect",
+      "swiftConstant": "directoryGameRedirect"
+    },
+    {
+      "upstreamKey": "Campaigns",
+      "swiftConstant": "viewerDropsDashboard"
+    },
+    {
+      "upstreamKey": "CampaignDetails",
+      "swiftConstant": "dropCampaignDetails"
+    },
+    {
+      "upstreamKey": "Inventory",
+      "swiftConstant": "inventory"
+    },
+    {
+      "upstreamKey": "ClaimDrop",
+      "swiftConstant": "dropsPage_ClaimDropRewards"
+    },
+    {
+      "upstreamKey": "PlaybackAccessToken",
+      "swiftConstant": "playbackAccessToken"
+    },
+    {
+      "upstreamKey": "GameDirectory",
+      "swiftConstant": "directoryPage_Game"
+    },
+    {
+      "upstreamKey": "GetStreamInfo",
+      "swiftConstant": "videoPlayerStreamInfoOverlayChannel"
+    },
+    {
+      "upstreamKey": "CurrentDrop",
+      "swiftConstant": "currentDrop"
+    },
+    {
+      "upstreamKey": "AvailableDrops",
+      "swiftConstant": "availableDrops"
+    },
+    {
+      "upstreamKey": "ChannelPointsContext",
+      "swiftConstant": "channelPointsContext"
+    },
+    {
+      "upstreamKey": "ClaimCommunityPoints",
+      "swiftConstant": "claimCommunityPoints"
+    }
+  ]
+}

@@ -65,23 +65,12 @@ public actor UnattendedIncidentNotificationService {
         )
     }
 
+    /// Notification is opt-in by promotion: only signals that have reached `.alerted` on
+    /// `HealthIncident.Kind.deliveryStage` interrupt the user. Keeping the policy on the
+    /// kind itself means a newly added signal is silent by construction rather than by
+    /// someone remembering to add it to the right branch here.
     private static func shouldNotify(for kind: HealthIncident.Kind) -> Bool {
-        switch kind {
-        case .authenticationExpired,
-             .recoveryExhausted,
-             .progressStalled,
-             .webDashboardUnavailable,
-             .automaticUpdateFailed:
-            return true
-        // Not-earning is surfaced in the app and the diagnostic report but does not notify.
-        // How often watching-without-earning is a genuine fault rather than there being
-        // nothing worth mining is still unmeasured — the earning ledger only started
-        // producing trustworthy numbers in 1.34.4. Promoting it to a notification is a
-        // one-line change once that data shows it is precise enough to be worth waking
-        // someone for.
-        case .notEarning, .accountLinkRequired, .other:
-            return false
-        }
+        kind.deliveryStage == .alerted
     }
 
     private static func title(for kind: HealthIncident.Kind) -> String {

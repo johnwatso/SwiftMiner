@@ -28,6 +28,53 @@ final class ServiceTests: XCTestCase {
     }
     
     // MARK: - TwitchAPIClient Tests
+
+    func testInventoryFetchReportsCacheAndForcedRefreshNeverMasqueradesAsFresh() async throws {
+        let accountId = "inventory-source-\(UUID().uuidString)"
+        let snapshot = InventorySnapshot(
+            accountId: accountId,
+            benefitIDs: ["benefit"],
+            progress: [],
+            lastUpdated: Date()
+        )
+        InventoryDiskCache.save(snapshot)
+        defer { InventoryDiskCache.clear(accountId: accountId) }
+
+        let service = InventoryService(apiClient: apiClient)
+        await service.setAccountId(accountId)
+        MockURLProtocol.stubError = URLError(.notConnectedToInternet)
+
+        let cached = try await service.fetchInventoryResult()
+        XCTAssertEqual(cached.source, .cache)
+        XCTAssertFalse(cached.isAuthoritative)
+
+        do {
+            _ = try await service.fetchInventoryResult(forceRefresh: true)
+            XCTFail("A forced refresh must not return the cached snapshot after a network failure")
+        } catch {
+            XCTAssertFalse(error.localizedDescription.isEmpty)
+        }
+    }
+
+    func testInventoryNormalReadLabelsExpiredOfflineFallbackAsStale() async throws {
+        let accountId = "inventory-stale-\(UUID().uuidString)"
+        let snapshot = InventorySnapshot(
+            accountId: accountId,
+            benefitIDs: [],
+            progress: [],
+            lastUpdated: Date().addingTimeInterval(-600)
+        )
+        InventoryDiskCache.save(snapshot)
+        defer { InventoryDiskCache.clear(accountId: accountId) }
+
+        let service = InventoryService(apiClient: apiClient)
+        await service.setAccountId(accountId)
+        MockURLProtocol.stubError = URLError(.notConnectedToInternet)
+
+        let result = try await service.fetchInventoryResult()
+        XCTAssertEqual(result.source, .staleCacheFallback)
+        XCTAssertFalse(result.isAuthoritative)
+    }
     
     func testGetCurrentUser() async throws {
         let jsonString = """

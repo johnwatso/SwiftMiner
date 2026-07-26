@@ -117,18 +117,60 @@ final class ConnectionStateRecorder: @unchecked Sendable {
     }
 }
 
+/// Deterministic sleeper used to prove reconnect does not create a socket until its
+/// backoff has actually elapsed. Tests release waits explicitly.
+final class ControlledRuntimeSleeper: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuations: [CheckedContinuation<Void, Error>] = []
+    private var requested: [UInt64] = []
+
+    var requestCount: Int { lock.withLock { requested.count } }
+    var requestedNanoseconds: [UInt64] { lock.withLock { requested } }
+
+    lazy var clock = RuntimeClock(
+        nowNanoseconds: { 0 },
+        sleepNanoseconds: { [weak self] nanoseconds in
+            guard let self else { return }
+            // PubSub uses the same clock for its long-running PING/PONG timers. Let those
+            // use normal cancellation; only reconnect-sized waits are manually controlled.
+            if nanoseconds > 10_000_000_000 {
+                try await Task<Never, Never>.sleep(nanoseconds: nanoseconds)
+                return
+            }
+            try await withCheckedThrowingContinuation { continuation in
+                self.lock.withLock {
+                    self.requested.append(nanoseconds)
+                    self.continuations.append(continuation)
+                }
+            }
+        }
+    )
+
+    func releaseNext() {
+        let continuation: CheckedContinuation<Void, Error>? = lock.withLock {
+            guard !continuations.isEmpty else { return nil }
+            return continuations.removeFirst()
+        }
+        continuation?.resume()
+    }
+}
+
 final class PubSubClientTests: XCTestCase {
 
     private func makeClient(factory: MockSocketFactory,
                             pingInterval: TimeInterval = 600,
-                            pongTimeout: TimeInterval = 600) -> PubSubClient {
+                            pongTimeout: TimeInterval = 600,
+                            runtimeClock: RuntimeClock = .continuous,
+                            baseReconnectDelay: TimeInterval = 0.01) -> PubSubClient {
         PubSubClient(
             accessToken: "test-token",
             socketFactory: { factory.make(url: $0) },
             pingInterval: pingInterval,
             pongTimeout: pongTimeout,
-            baseReconnectDelay: 0.01,
-            maxReconnectDelay: 0.05
+            baseReconnectDelay: baseReconnectDelay,
+            maxReconnectDelay: max(0.05, baseReconnectDelay * 8),
+            runtimeClock: runtimeClock,
+            reconnectJitterFactor: { 1 }
         )
     }
 
@@ -301,6 +343,72 @@ final class PubSubClientTests: XCTestCase {
         try await Task.sleep(nanoseconds: 1_200_000_000)
         XCTAssertEqual(factory.count, 1, "PONG should keep the original socket alive")
         await client.disconnect()
+    }
+
+    func testReconnectWaitsForBackoffBeforeCreatingSocket() async throws {
+        let factory = MockSocketFactory()
+        let sleeper = ControlledRuntimeSleeper()
+        let client = makeClient(
+            factory: factory,
+            runtimeClock: sleeper.clock,
+            baseReconnectDelay: 2
+        )
+
+        try await client.connect()
+        try XCTUnwrap(factory[0]).failReceive(URLError(.networkConnectionLost))
+
+        try await waitUntil("reconnect backoff requested") { sleeper.requestCount == 1 }
+        XCTAssertEqual(factory.count, 1, "reconnect must not bypass its backoff")
+        XCTAssertEqual(sleeper.requestedNanoseconds, [2_000_000_000])
+
+        sleeper.releaseNext()
+        try await waitUntil("socket created after backoff") { factory.count == 2 }
+        await client.disconnect()
+    }
+
+    func testDisconnectDuringBackoffPreventsReconnect() async throws {
+        let factory = MockSocketFactory()
+        let sleeper = ControlledRuntimeSleeper()
+        let client = makeClient(
+            factory: factory,
+            runtimeClock: sleeper.clock,
+            baseReconnectDelay: 2
+        )
+
+        try await client.connect()
+        try XCTUnwrap(factory[0]).failReceive(URLError(.networkConnectionLost))
+        try await waitUntil("reconnect backoff requested") { sleeper.requestCount == 1 }
+
+        await client.disconnect()
+        sleeper.releaseNext()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(factory.count, 1, "an intentional disconnect must cancel pending reconnects")
+    }
+
+    func testReconnectBackoffKeepsGrowingUntilTwitchResponds() async throws {
+        let factory = MockSocketFactory()
+        let sleeper = ControlledRuntimeSleeper()
+        let client = makeClient(
+            factory: factory,
+            runtimeClock: sleeper.clock,
+            baseReconnectDelay: 1
+        )
+
+        try await client.connect()
+        try XCTUnwrap(factory[0]).failReceive(URLError(.networkConnectionLost))
+        try await waitUntil("first reconnect wait") { sleeper.requestCount == 1 }
+        sleeper.releaseNext()
+        try await waitUntil("first replacement socket") { factory.count == 2 }
+
+        // Merely creating/resuming a URLSession socket is not proof of a healthy Twitch
+        // round-trip. With no RESPONSE/PONG/MESSAGE received, the next failure must back off.
+        try XCTUnwrap(factory[1]).failReceive(URLError(.networkConnectionLost))
+        try await waitUntil("second reconnect wait") { sleeper.requestCount == 2 }
+        XCTAssertEqual(sleeper.requestedNanoseconds, [1_000_000_000, 2_000_000_000])
+
+        await client.disconnect()
+        sleeper.releaseNext()
     }
 
     // MARK: - Message delivery

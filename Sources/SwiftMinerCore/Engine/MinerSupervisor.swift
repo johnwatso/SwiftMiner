@@ -67,6 +67,10 @@ public actor MinerSupervisor {
         public var noRecentActivityWindow: TimeInterval
         public var recoveryBaseCooldown: TimeInterval
         public var recoveryMaxCooldown: TimeInterval
+        /// Conservative fallback when no healthy peer exists to prove Twitch connectivity.
+        /// This covers single-account installs and simultaneous worker silence without making
+        /// a short global outage restart every miner immediately.
+        public var localStallTimeout: TimeInterval
 
         public init(
             stallTimeout: TimeInterval = 15 * 60,
@@ -74,7 +78,8 @@ public actor MinerSupervisor {
             startupGracePeriod: TimeInterval = 2 * 60,
             noRecentActivityWindow: TimeInterval = 3 * 60,
             recoveryBaseCooldown: TimeInterval = 45,
-            recoveryMaxCooldown: TimeInterval = 10 * 60
+            recoveryMaxCooldown: TimeInterval = 10 * 60,
+            localStallTimeout: TimeInterval = 20 * 60
         ) {
             self.stallTimeout = stallTimeout
             self.peerFreshnessWindow = peerFreshnessWindow
@@ -82,6 +87,7 @@ public actor MinerSupervisor {
             self.noRecentActivityWindow = noRecentActivityWindow
             self.recoveryBaseCooldown = recoveryBaseCooldown
             self.recoveryMaxCooldown = recoveryMaxCooldown
+            self.localStallTimeout = localStallTimeout
         }
     }
 
@@ -310,10 +316,12 @@ public actor MinerSupervisor {
             let startupAge = entry.workerStartedAt.map { now.timeIntervalSince($0) } ?? .infinity
             let eligibleForStallDetection = miner.isRunning
                 && !miner.needsAuth
-                && hasFreshPeerPoll
                 && startupAge >= configuration.startupGracePeriod
 
-            let isStalled = eligibleForStallDetection && age >= configuration.stallTimeout
+            let stallThreshold = hasFreshPeerPoll
+                ? configuration.stallTimeout
+                : configuration.localStallTimeout
+            let isStalled = eligibleForStallDetection && age >= stallThreshold
             let isHealthy = !miner.isRunning || miner.needsAuth || (!isStalled && age < configuration.noRecentActivityWindow)
 
             entry.metadata.isStalled = isStalled
@@ -372,7 +380,7 @@ public actor MinerSupervisor {
         // the user *why* the miner stopped reporting, not just that it did.
         if let cause = entry.lastIssueCause,
            let issueAt = entry.lastIssueAt,
-           now.timeIntervalSince(issueAt) <= configuration.stallTimeout {
+           now.timeIntervalSince(issueAt) <= max(configuration.stallTimeout, configuration.localStallTimeout) {
             let detail = entry.lastIssueDetail?.trimmingCharacters(in: .whitespacesAndNewlines)
             var fragment = "cause=\(cause.rawValue) • \(cause.displayName)"
             if let detail, !detail.isEmpty {
@@ -385,7 +393,7 @@ public actor MinerSupervisor {
         }
 
         if signalAge >= 0 {
-            return "\(miner.displayName) — cause=\(StallCause.noRecentActivity.rawValue) • \(StallCause.noRecentActivity.displayName) • silent \(signalAge) min while peers were polling"
+            return "\(miner.displayName) — cause=\(StallCause.noRecentActivity.rawValue) • \(StallCause.noRecentActivity.displayName) • silent \(signalAge) min"
         }
         return "\(miner.displayName) — cause=\(StallCause.workerStartupFailure.rawValue) • \(StallCause.workerStartupFailure.displayName)"
     }

@@ -127,7 +127,12 @@ extension TwitchAPIClient {
             )
             campaignDetailsByKey[cacheKey] = CampaignDetailsCacheEntry(
                 campaign: campaign,
-                expiresAt: now.addingTimeInterval(campaignDetailsCacheTTL)
+                expiresAt: Self.sharedCampaignDetailsExpiration(
+                    now: now,
+                    detailsTTL: campaignDetailsCacheTTL,
+                    basicIsAccountConnected: basicCampaign.isAccountConnected,
+                    knownLinkStateExpiresAt: knownLinkState?.expiresAt
+                )
             )
             await traceGQLDebug { "[TwitchAPIClient] DropCampaignDetails shared metadata hit for \(campaignId)" }
             return campaign
@@ -179,9 +184,25 @@ extension TwitchAPIClient {
         await SharedTwitchLookupCache.shared.storeCampaignMetadata(
             Self.sharedCampaignMetadata(from: campaign),
             key: sharedKey,
-            ttl: campaignDetailsCacheTTL
+            ttl: sharedCampaignMetadataTTL
         )
         return campaign
+    }
+
+    /// A shared reconstruction must never keep an account-specific answer alive beyond the
+    /// authoritative link-state entry that made reconstruction safe. Dashboard-confirmed
+    /// linkage is current account context and therefore uses the normal details lifetime.
+    nonisolated static func sharedCampaignDetailsExpiration(
+        now: Date,
+        detailsTTL: TimeInterval,
+        basicIsAccountConnected: Bool,
+        knownLinkStateExpiresAt: Date?
+    ) -> Date {
+        let normalExpiration = now.addingTimeInterval(detailsTTL)
+        guard !basicIsAccountConnected, let knownLinkStateExpiresAt else {
+            return normalExpiration
+        }
+        return min(normalExpiration, knownLinkStateExpiresAt)
     }
 
     /// Combine ViewerDropsDashboard's broad metadata with DropCampaignDetails' richer,

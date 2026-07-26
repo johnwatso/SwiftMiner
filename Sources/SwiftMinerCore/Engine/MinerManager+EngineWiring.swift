@@ -74,7 +74,9 @@ extension MinerManager {
                 self.recordHealth(.miningProgressObserved(minerID: minerId, at: Date()))
                 await self.supervisor.recordDropProgress(minerId: minerId)
                 await self.applySupervisorSnapshot(for: minerId)
-                await self.earningLedgerStore?.recordEarned(minerID: minerId, minutes: minutes)
+                if let accountId = self.getMiner(id: minerId)?.accountId {
+                    await self.earningLedgerStore?.recordEarned(accountID: accountId, minutes: minutes)
+                }
             }
         }
         
@@ -155,7 +157,9 @@ extension MinerManager {
                 self.resetDailyClaimsIfNeeded()
                 self.claimedTodayIds.insert(drop.id)
                 self.incrementDropsClaimed(minerId: minerId)
-                await self.earningLedgerStore?.recordEarned(minerID: minerId, claims: 1)
+                if let accountId = self.getMiner(id: minerId)?.accountId {
+                    await self.earningLedgerStore?.recordEarned(accountID: accountId, claims: 1)
+                }
 
                 // Find campaign name for the DM event
                 let campaignName = self.getMiner(id: minerId)?.allCampaigns.first(where: {
@@ -222,7 +226,11 @@ extension MinerManager {
 
         antiStallMonitorTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 30 * 1_000_000_000)
+                do {
+                    try await RuntimeClock.continuous.sleep(nanoseconds: 30 * 1_000_000_000)
+                } catch {
+                    break
+                }
                 if Task.isCancelled { break }
                 await self?.runAntiStallCheck()
             }
@@ -435,8 +443,9 @@ extension MinerManager {
         // A gap this long means the app slept or the miner went quiet; the clock restarts
         // but the gap itself is not credited as watching.
         guard elapsed <= Self.maxWatchSampleGap, let earningLedgerStore else { return }
+        let accountID = miner.accountId
         Task {
-            await earningLedgerStore.recordWatching(minerID: miner.id, seconds: elapsed, at: now)
+            await earningLedgerStore.recordWatching(accountID: accountID, seconds: elapsed, at: now)
         }
     }
 
@@ -483,31 +492,11 @@ extension MinerManager {
         )
 
         do {
-            switch action.stage {
-            case .refresh:
-                onLogMessage?(action.minerId, "[Supervisor] recovery stage 1 | forcing campaign refresh + inventory refresh")
-                try await engine.forceInventoryRefresh()
-                await engine.forceRefresh()
-            case .restart:
-                onLogMessage?(action.minerId, "[Supervisor] recovery stage 2 | restarting worker, subscriptions, and timers")
-                await stopMiner(minerId: action.minerId)
-                try await startMiner(
-                    minerId: action.minerId,
-                    priorityGames: currentPriorityGames,
-                    excludedGames: currentExcludedGames,
-                    strategy: currentStrategy,
-                    enableBadgesEmotes: currentEnableBadgesEmotes,
-                    showClaimNotifications: showClaimNotifications,
-                    avoidDuplicateStreams: avoidDuplicateStreams,
-                    antiStallRecoveryEnabled: antiStallRecoveryEnabled,
-                    prioritiseFollowedStreamers: prioritiseFollowedStreamers,
-                    failoverStreamers: currentFailoverStreamers
-                )
-            case .authRefresh:
-                onLogMessage?(action.minerId, "[Supervisor] recovery stage 3 | refreshing auth/session state")
-                try await engine.refreshAuthenticationSession()
-                try await engine.forceInventoryRefresh()
-                await engine.forceRefresh()
+            try await withRuntimeTimeout(
+                operationName: "Mining recovery stage \(action.stage.rawValue)",
+                seconds: Self.recoveryTimeoutSeconds(for: action.stage)
+            ) { [self] in
+                try await executeRecoveryStage(action, engine: engine)
             }
 
             await supervisor.noteRecoverySuccess(minerId: action.minerId)
@@ -554,6 +543,47 @@ extension MinerManager {
                 recordCurrentHealthState(minerID: action.minerId)
             }
             onLogMessage?(action.minerId, "[Supervisor] recovery failed | \(error.localizedDescription)")
+        }
+    }
+
+    static func recoveryTimeoutSeconds(for stage: MinerSupervisor.RecoveryStage) -> TimeInterval {
+        switch stage {
+        case .refresh: return 90
+        case .restart, .authRefresh: return 120
+        }
+    }
+
+    private func executeRecoveryStage(
+        _ action: MinerSupervisor.RecoveryAction,
+        engine: MinerEngine
+    ) async throws {
+        switch action.stage {
+        case .refresh:
+            onLogMessage?(action.minerId, "[Supervisor] recovery stage 1 | forcing campaign refresh + inventory refresh")
+            try await engine.forceInventoryRefresh()
+            await engine.forceRefresh()
+        case .restart:
+            onLogMessage?(action.minerId, "[Supervisor] recovery stage 2 | restarting worker, subscriptions, and timers")
+            await stopMiner(minerId: action.minerId)
+            try Task.checkCancellation()
+            try await startMiner(
+                minerId: action.minerId,
+                priorityGames: currentPriorityGames,
+                excludedGames: currentExcludedGames,
+                strategy: currentStrategy,
+                enableBadgesEmotes: currentEnableBadgesEmotes,
+                showClaimNotifications: showClaimNotifications,
+                avoidDuplicateStreams: avoidDuplicateStreams,
+                antiStallRecoveryEnabled: antiStallRecoveryEnabled,
+                prioritiseFollowedStreamers: prioritiseFollowedStreamers,
+                failoverStreamers: currentFailoverStreamers
+            )
+        case .authRefresh:
+            onLogMessage?(action.minerId, "[Supervisor] recovery stage 3 | refreshing auth/session state")
+            try await engine.refreshAuthenticationSession()
+            try Task.checkCancellation()
+            try await engine.forceInventoryRefresh()
+            await engine.forceRefresh()
         }
     }
 

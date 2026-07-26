@@ -2,6 +2,12 @@
 // for MinerEngine. Split from MinerEngine.swift; same actor, same isolation.
 import Foundation
 
+struct MiningChannelSelection: Sendable {
+    let campaign: Campaign
+    let channel: Channel
+    let wasVerified: Bool
+}
+
 extension MinerEngine {
     func candidateCampaigns(
         from campaigns: [Campaign],
@@ -15,13 +21,14 @@ extension MinerEngine {
         var filteredOutReasons: [String: Int] = [:]
 
         let now = Date()
+        let nowTick = runtimeClock.nowNanoseconds()
         let eligible = campaigns.filter { campaign in
             let gameName = normalizedGameKey(campaign.gameName)
             let gameId = normalizedGameKey(campaign.game.id)
 
             // Skip campaigns recently flagged as non-earning (repeated stalls
             // with no verified progress). They're retried after the cooldown.
-            if MinerEngine.isOnStallCooldown(campaign.id, cooldowns: campaignStallCooldownUntil, now: now) {
+            if MinerEngine.isOnStallCooldown(campaign.id, cooldowns: campaignStallCooldownUntil, now: nowTick) {
                 filteredOutReasons["stalled_cooldown", default: 0] += 1
                 return false
             }
@@ -339,7 +346,7 @@ extension MinerEngine {
     func selectBestChannel(
         forGameCandidates candidates: [Campaign],
         knownSameGameCampaigns: [Campaign] = []
-    ) async -> (Campaign, Channel)? {
+    ) async -> MiningChannelSelection? {
         guard let primary = candidates.first else { return nil }
         let gameName = primary.gameName
         log("[ChannelSelect] Game: \(gameName) — candidates: \(candidates.map(\.name).joined(separator: ", "))")
@@ -384,7 +391,7 @@ extension MinerEngine {
             log("[ChannelSelect]   Debug bypass: picking \(resolved.displayName) for random candidate \(randomCandidate.name)")
             currentChannelName = resolved.displayName
             currentChannelId = resolved.id
-            return (randomCandidate, resolved)
+            return MiningChannelSelection(campaign: randomCandidate, channel: resolved, wasVerified: true)
         }
 
         let relationshipRanks = await followedStreamerRanks(for: liveChannels)
@@ -403,6 +410,8 @@ extension MinerEngine {
         // Known approved channels are the most precise candidates we have. Move every directory
         // ACL match ahead of the bounded general scan so a low-viewer official stream cannot land
         // below the verification cap.
+        let nowTick = runtimeClock.nowNanoseconds()
+        unverifiedChannelCooldownUntil = unverifiedChannelCooldownUntil.filter { $0.value > nowTick }
         let orderedChannels = Self.prioritizingKnownApprovedChannels(
             sortedChannels,
             campaigns: candidates
@@ -492,7 +501,7 @@ extension MinerEngine {
                         log("[ChannelSelect]   Selected \(best.campaign.name) on \(best.channel.displayName)")
                         currentChannelName = best.channel.displayName
                         currentChannelId = best.channel.id
-                        return (best.campaign, best.channel)
+                        return MiningChannelSelection(campaign: best.campaign, channel: best.channel, wasVerified: true)
                     }
                     continue
                 }
@@ -512,7 +521,11 @@ extension MinerEngine {
             } catch {
                 verificationErrorCount += 1
                 log("[ChannelSelect]     Warning: Verification failed for \(channel.displayName): \(error.localizedDescription)")
-                if fallbackPair == nil, let best = eligibleForChannel.first {
+                if fallbackPair == nil,
+                   let best = eligibleForChannel.first(where: { candidate in
+                       let key = Self.unverifiedChannelKey(campaignId: candidate.id, channel: channel)
+                       return !(unverifiedChannelCooldownUntil[key].map { $0 > nowTick } ?? false)
+                   }) {
                     fallbackPair = (best, channel)
                 }
             }
@@ -528,6 +541,7 @@ extension MinerEngine {
             let probed = await liveACLChannels(for: candidate)
             for ch in probed {
                 let channel = await resolveChannelIdIfNeeded(ch)
+                let cooldownKey = Self.unverifiedChannelKey(campaignId: candidate.id, channel: channel)
                 let channelIdentities = Self.identityKeys(for: channel)
                 guard attemptedChannelIdentities.isDisjoint(with: channelIdentities) else { continue }
                 attemptedChannelIdentities.formUnion(channelIdentities)
@@ -558,7 +572,8 @@ extension MinerEngine {
                 } catch {
                     verificationErrorCount += 1
                     log("[ChannelSelect]     Warning: Approved-channel verification failed: \(error.localizedDescription)")
-                    if fallbackPair == nil { fallbackPair = (candidate, channel) }
+                    let isCoolingDown = unverifiedChannelCooldownUntil[cooldownKey].map { $0 > nowTick } ?? false
+                    if fallbackPair == nil, !isCoolingDown { fallbackPair = (candidate, channel) }
                 }
             }
         }
@@ -579,7 +594,7 @@ extension MinerEngine {
             log("[ChannelSelect]   Selected \(best.campaign.name) on \(best.channel.displayName)")
             currentChannelName = best.channel.displayName
             currentChannelId = best.channel.id
-            return (best.campaign, best.channel)
+            return MiningChannelSelection(campaign: best.campaign, channel: best.channel, wasVerified: true)
         }
 
         // Only fall back to an unverified channel when the verification itself errored for
@@ -589,7 +604,7 @@ extension MinerEngine {
             log("[ChannelSelect]   ! All verifications errored. Falling back to \(fallback.1.displayName) for \(fallback.0.name)")
             currentChannelName = fallback.1.displayName
             currentChannelId = fallback.1.id
-            return fallback
+            return MiningChannelSelection(campaign: fallback.0, channel: fallback.1, wasVerified: false)
         }
 
         if !liveSubscriptionBlockedCampaignIds.isEmpty {
@@ -601,6 +616,11 @@ extension MinerEngine {
         }
 
         return nil
+    }
+
+    static func unverifiedChannelKey(campaignId: String, channel: Channel) -> String {
+        let identity = normalizedChannelIdentity(channel.id.isEmpty ? channel.login : channel.id)
+        return "\(campaignId)|\(identity)"
     }
 
     /// Decides whether channel selection should proceed past the directory lookup.

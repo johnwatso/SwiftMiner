@@ -216,4 +216,18 @@ final class UnattendedIncidentNotificationServiceTests: XCTestCase {
         XCTAssertEqual(center.requests.count, 1)
         XCTAssertEqual(center.requests.first?.content.title, "Mining Progress Stalled")
     }
+
+    /// Notification is driven by the kind's promotion stage, so a newly added signal is
+    /// silent by construction rather than by someone remembering to handle it here.
+    func testOnlyPromotedSignalsAreAllowedToNotify() {
+        XCTAssertEqual(HealthIncident.Kind.notEarning.deliveryStage, .displayed)
+        XCTAssertEqual(HealthIncident.Kind.accountLinkRequired.deliveryStage, .displayed)
+        XCTAssertEqual(HealthIncident.Kind.other.deliveryStage, .displayed)
+
+        XCTAssertEqual(HealthIncident.Kind.authenticationExpired.deliveryStage, .alerted)
+        XCTAssertEqual(HealthIncident.Kind.recoveryExhausted.deliveryStage, .alerted)
+        XCTAssertEqual(HealthIncident.Kind.progressStalled.deliveryStage, .alerted)
+        XCTAssertEqual(HealthIncident.Kind.webDashboardUnavailable.deliveryStage, .alerted)
+        XCTAssertEqual(HealthIncident.Kind.automaticUpdateFailed.deliveryStage, .alerted)
+    }
 }

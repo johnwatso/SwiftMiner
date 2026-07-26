@@ -380,7 +380,7 @@ public final class MinerManager {
     public var showClaimNotifications: Bool = false
     public var avoidDuplicateStreams: Bool = true
     public var prioritiseFollowedStreamers: Bool = false
-    public var antiStallRecoveryEnabled: Bool = false
+    public var antiStallRecoveryEnabled: Bool = true
     public var failoverStreamers: [GameFailoverStreamer] = []
     /// Debug-only: broadcast to every engine to bypass link/eligibility gates. Stored here
     /// so engines attached later (e.g. newly added accounts) pick up the current value.
@@ -641,7 +641,7 @@ public final class MinerManager {
         strategy: MiningStrategy,
         enableBadgesEmotes: Bool,
         avoidDuplicateStreams: Bool = true,
-        antiStallRecoveryEnabled: Bool = false,
+        antiStallRecoveryEnabled: Bool = true,
         prioritiseFollowedStreamers: Bool = false,
         failoverStreamers: [GameFailoverStreamer] = [],
         ignoredWarnings: [String] = [],
@@ -745,7 +745,11 @@ public final class MinerManager {
                 let accountIndex = self.miners.firstIndex(where: { $0.id == minerId }) ?? 0
                 if accountIndex > 0 {
                     let staggerDelay = UInt64(accountIndex * 3 * 1_000_000_000)
-                    try? await Task.sleep(nanoseconds: staggerDelay)
+                    do {
+                        try await RuntimeClock.continuous.sleep(nanoseconds: staggerDelay)
+                    } catch {
+                        return
+                    }
                 }
                 await stateStore.start()
             }
@@ -876,7 +880,7 @@ public final class MinerManager {
     // MARK: - Control Operations
 
     /// Start a specific miner
-    public func startMiner(minerId: String, priorityGames: [String], excludedGames: [String], strategy: MiningStrategy, enableBadgesEmotes: Bool = false, showClaimNotifications: Bool = false, avoidDuplicateStreams: Bool = true, antiStallRecoveryEnabled: Bool = false, prioritiseFollowedStreamers: Bool = false, failoverStreamers: [GameFailoverStreamer] = []) async throws {
+    public func startMiner(minerId: String, priorityGames: [String], excludedGames: [String], strategy: MiningStrategy, enableBadgesEmotes: Bool = false, showClaimNotifications: Bool = false, avoidDuplicateStreams: Bool = true, antiStallRecoveryEnabled: Bool = true, prioritiseFollowedStreamers: Bool = false, failoverStreamers: [GameFailoverStreamer] = []) async throws {
         guard let engine = engines[minerId],
               let miner = getMiner(id: minerId) else {
             throw TwitchMinerError.sessionNotStarted
@@ -955,7 +959,7 @@ public final class MinerManager {
     }
     
     /// Start all miners with staggered delays to avoid API rate limiting
-    public func startAll(priorityGames: [String], excludedGames: [String], strategy: MiningStrategy, enableBadgesEmotes: Bool = false, showClaimNotifications: Bool = false, avoidDuplicateStreams: Bool = true, antiStallRecoveryEnabled: Bool = false, prioritiseFollowedStreamers: Bool = false, failoverStreamers: [GameFailoverStreamer] = []) async {
+    public func startAll(priorityGames: [String], excludedGames: [String], strategy: MiningStrategy, enableBadgesEmotes: Bool = false, showClaimNotifications: Bool = false, avoidDuplicateStreams: Bool = true, antiStallRecoveryEnabled: Bool = true, prioritiseFollowedStreamers: Bool = false, failoverStreamers: [GameFailoverStreamer] = []) async {
         self.currentPriorityGames = priorityGames
         self.currentExcludedGames = excludedGames
         self.currentStrategy = strategy
@@ -974,7 +978,11 @@ public final class MinerManager {
             // Stagger starts by 3 seconds between accounts to avoid rate limit bottlenecks
             if index > 0 {
                 Logger.engine.info("Staggering start for @\(miner.username): waiting 3s to avoid rate limits (\(index)/\(totalToStart))")
-                try? await Task.sleep(nanoseconds: 3 * 1_000_000_000)
+                do {
+                    try await RuntimeClock.continuous.sleep(nanoseconds: 3 * 1_000_000_000)
+                } catch {
+                    return
+                }
             }
             
             try? await startMiner(

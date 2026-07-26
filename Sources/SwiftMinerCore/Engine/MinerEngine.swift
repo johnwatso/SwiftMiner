@@ -30,6 +30,9 @@ public actor MinerEngine {
             case .networkError(let message):
                 return (.networkError, message)
             case .apiError(let status, let message):
+                if status == 429 {
+                    return (.rateLimited, "HTTP 429 — \(message)")
+                }
                 if (500...599).contains(status) {
                     return (.twitchAPIFailure, "HTTP \(status) — \(message)")
                 }
@@ -64,6 +67,11 @@ public actor MinerEngine {
         switch error {
         case .networkError, .rateLimited:
             return false
+        case .apiError(let statusCode, _):
+            return statusCode != 408
+                && statusCode != 425
+                && statusCode != 429
+                && !(500...599).contains(statusCode)
         default:
             return true
         }
@@ -104,6 +112,10 @@ public actor MinerEngine {
     var extraMinutesWatched: Int = 0
     /// Timestamp of the last verified progress update (GQL or PubSub)
     var lastProgressUpdateAt: Date = Date()
+    /// Monotonic counterpart used for runtime stall decisions. `Date` is retained for
+    /// diagnostics, while this value is immune to wall-clock corrections.
+    var lastProgressUpdateTick: UInt64
+    let runtimeClock: RuntimeClock
     /// Maximum extra minutes allowed before assuming mining is stalled (matches TDM)
     private static let maxExtraMinutes = 15
 
@@ -113,7 +125,7 @@ public actor MinerEngine {
     /// Campaigns temporarily skipped after repeated non-earning stalls, keyed to
     /// the time the skip expires, so the miner moves on instead of looping the
     /// same dead campaign forever.
-    var campaignStallCooldownUntil: [String: Date] = [:]
+    var campaignStallCooldownUntil: [String: UInt64] = [:]
     /// After this many back-to-back stall windows with no verified progress and
     /// no external claim (and no failover streamer to try), a campaign is
     /// treated as non-earning and put on cooldown.
@@ -121,11 +133,47 @@ public actor MinerEngine {
     /// How long a non-earning campaign is skipped before it's retried.
     static let nonEarningCooldownInterval: TimeInterval = 30 * 60
 
+    /// An unverified emergency fallback must prove that it can earn within a few polls.
+    /// Otherwise a Twitch verification outage could strand the miner on a guessed channel
+    /// for the full general stall window.
+    static let unverifiedSelectionPollLimit = 3
+    static let unverifiedChannelCooldownInterval: TimeInterval = 10 * 60
+    var unverifiedChannelCooldownUntil: [String: UInt64] = [:]
+
+    static func shouldAbandonUnverifiedSelection(
+        isUnverified: Bool,
+        emptyPolls: Int,
+        limit: Int = unverifiedSelectionPollLimit
+    ) -> Bool {
+        isUnverified && emptyPolls >= limit
+    }
+
+    static func externallyClaimedDrops(
+        in drops: [Drop],
+        snapshot: InventorySnapshot
+    ) -> [Drop] {
+        drops.filter { drop in
+            let benefitIDs = drop.benefitIds.isEmpty
+                ? (drop.benefitID.isEmpty ? [] : [drop.benefitID])
+                : drop.benefitIds
+            return !drop.isClaimed && benefitIDs.contains { snapshot.benefitIDs.contains($0) }
+        }
+    }
+
+    func resetProgressStallClock(at date: Date = Date()) {
+        lastProgressUpdateAt = date
+        lastProgressUpdateTick = runtimeClock.nowNanoseconds()
+    }
+
+    func progressStallElapsedSeconds() -> TimeInterval {
+        runtimeClock.elapsedSeconds(since: lastProgressUpdateTick)
+    }
+
     /// Whether a campaign is currently on a non-earning cooldown.
     static func isOnStallCooldown(
         _ campaignId: String,
-        cooldowns: [String: Date],
-        now: Date = Date()
+        cooldowns: [String: UInt64],
+        now: UInt64
     ) -> Bool {
         guard let until = cooldowns[campaignId] else { return false }
         return until > now
@@ -411,8 +459,14 @@ public actor MinerEngine {
 
     // MARK: - Initialization
 
-    public init(clientId: String, tokenStore: any TokenStore = TokenStoreFactory.makeDefault()) {
+    public init(
+        clientId: String,
+        tokenStore: any TokenStore = TokenStoreFactory.makeDefault(),
+        runtimeClock: RuntimeClock = .continuous
+    ) {
         self.clientId = clientId
+        self.runtimeClock = runtimeClock
+        self.lastProgressUpdateTick = runtimeClock.nowNanoseconds()
         self.authService = TwitchAuthService(clientId: clientId, tokenStore: tokenStore)
         self.apiClient = TwitchAPIClient(authService: authService, clientId: clientId)
         self.dropsService = DropsService(apiClient: apiClient)
@@ -507,6 +561,7 @@ public actor MinerEngine {
         let workerTaskID = UUID().uuidString
         session = MiningSession()
         progressEventTracker = DropProgressEventTracker()
+        resetProgressStallClock()
         warnedUnlinkedPriorityGames.removeAll()
         onOperationalEvent?(.workerStarted(taskID: workerTaskID))
 
@@ -737,7 +792,7 @@ public actor MinerEngine {
 
         // Reset local estimation only when server progress actually advanced.
         extraMinutesWatched = 0
-        lastProgressUpdateAt = Date()
+        resetProgressStallClock()
         noteCampaignProgress(campaignId)
 
         await refreshCampaignProgress(
@@ -820,6 +875,11 @@ public actor MinerEngine {
         log("Watch session warning: \(error.localizedDescription)")
         let (category, detail) = Self.classifyIssue(error)
         onOperationalEvent?(.issueDetected(category: category, detail: detail))
+
+        if case .watchSessionFailed(let message) = error,
+           message.hasPrefix("Repeated heartbeat delivery failure") {
+            shouldSwitchChannel = true
+        }
     }
 
     func emitIssue(_ error: Error) {
@@ -885,7 +945,11 @@ public actor MinerEngine {
         maintenanceTask = Task { [weak self] in
             while !Task.isCancelled {
                 // Wait for 30 minutes
-                try? await Task.sleep(nanoseconds: 30 * 60 * 1_000_000_000)
+                do {
+                    try await RuntimeClock.continuous.sleep(nanoseconds: 30 * 60 * 1_000_000_000)
+                } catch {
+                    break
+                }
                 if Task.isCancelled { break }
                 
                 guard let self = self else { break }
@@ -1035,8 +1099,12 @@ public actor MinerEngine {
                     let tickNs: UInt64 = 10 * 1_000_000_000
                     let ticks = Int(waitInterval / tickNs)
                     for _ in 0..<ticks {
-                        if shouldRescanCampaigns { break }
-                        try await Task.sleep(nanoseconds: tickNs)
+                        if Task.isCancelled || shouldRescanCampaigns { break }
+                        do {
+                            try await runtimeClock.sleep(nanoseconds: tickNs)
+                        } catch {
+                            break
+                        }
                     }
                     shouldRescanCampaigns = false
                     continue
@@ -1045,6 +1113,7 @@ public actor MinerEngine {
 
                 var selectedCampaign: Campaign?
                 var selectedChannel: Channel?
+                var selectedChannelWasUnverified = false
 
                 perfStartedAt = Date()
                 if streamOverrideLogin != nil {
@@ -1105,13 +1174,14 @@ public actor MinerEngine {
                             log("Checking game: \(gameName) (\(gameCandidates.count) candidate campaign(s))")
                         }
                         let sameGameCampaigns = Self.sameGameCampaigns(matching: gameCandidates[0], in: allEnriched)
-                        if let (campaign, channel) = await selectBestChannel(
+                        if let selection = await selectBestChannel(
                             forGameCandidates: verificationCandidates,
                             knownSameGameCampaigns: sameGameCampaigns
                         ) {
                             recordGameLiveProbe(gameKey, hasLiveChannel: true)
-                            selectedCampaign = campaign
-                            selectedChannel = channel
+                            selectedCampaign = selection.campaign
+                            selectedChannel = selection.channel
+                            selectedChannelWasUnverified = !selection.wasVerified
                             break
                         }
                         recordGameLiveProbe(gameKey, hasLiveChannel: false)
@@ -1136,8 +1206,12 @@ public actor MinerEngine {
                     let ticks = Int(campaignCheckInterval / tickNs)
                     let aclProbeEveryTicks = 6 // ~60s
                     for tick in 0..<ticks {
-                        if shouldRescanCampaigns { break }
-                        try await Task.sleep(nanoseconds: tickNs)
+                        if Task.isCancelled || shouldRescanCampaigns { break }
+                        do {
+                            try await runtimeClock.sleep(nanoseconds: tickNs)
+                        } catch {
+                            break
+                        }
                         if !restrictedWaitCandidates.isEmpty,
                            (tick + 1) % aclProbeEveryTicks == 0,
                            await anyApprovedChannelLive(in: restrictedWaitCandidates) {
@@ -1172,7 +1246,7 @@ public actor MinerEngine {
                 do {
                     // 6. Start watching
                     extraMinutesWatched = 0
-                    lastProgressUpdateAt = Date()
+                    resetProgressStallClock()
                     perfStartedAt = Date()
                     _ = try await watchSessionManager.startWatching(
                         channel: channel,
@@ -1193,19 +1267,23 @@ public actor MinerEngine {
                 // Wait for watch session while periodically checking progress.
                 // The loop wakes every `watchLoopTickInterval` (10s) and runs each
                 // check on its own cadence via the timestamps below.
-                var lastGqlPoll = Date()
-                var lastCampaignReevaluation = Date()
-                var lastOverrideLiveCheck = Date()
-                var lastClaimCheck = Date()
+                var lastGqlPoll = runtimeClock.nowNanoseconds()
+                var lastCampaignReevaluation = runtimeClock.nowNanoseconds()
+                var lastOverrideLiveCheck = runtimeClock.nowNanoseconds()
+                var lastClaimCheck = runtimeClock.nowNanoseconds()
                 var emptyCurrentDropPolls = 0
                 let claimCheckSeconds = Double(claimCheckInterval) / 1_000_000_000
                 while await watchSessionManager.isWatching && !shouldSwitchChannel {
-                    try? await Task.sleep(nanoseconds: watchLoopTickInterval)
-                    if shouldSwitchChannel { break }
+                    do {
+                        try await runtimeClock.sleep(nanoseconds: watchLoopTickInterval)
+                    } catch {
+                        break
+                    }
+                    if Task.isCancelled || shouldSwitchChannel { break }
 
                     if let overrideLogin = streamOverrideLogin,
-                       Date().timeIntervalSince(lastOverrideLiveCheck) >= 60 {
-                        lastOverrideLiveCheck = Date()
+                       runtimeClock.elapsedSeconds(since: lastOverrideLiveCheck) >= 60 {
+                        lastOverrideLiveCheck = runtimeClock.nowNanoseconds()
                         do {
                             if try await apiClient.fetchBroadcastId(channelLogin: overrideLogin) == nil {
                                 log("Stream override @\(overrideLogin) went offline. Clearing override and resuming normal mining.")
@@ -1234,11 +1312,12 @@ public actor MinerEngine {
                     // If it's been >60s since last PubSub/Poll and we haven't hit 100%.
                     // Skipped for a watch-only override session — there is no drop to track.
                     if !streamOverrideWatchOnly,
-                       Date().timeIntervalSince(lastGqlPoll) >= 60 {
-                        lastGqlPoll = Date()
+                       runtimeClock.elapsedSeconds(since: lastGqlPoll) >= 60 {
+                        lastGqlPoll = runtimeClock.nowNanoseconds()
                         do {
                             if let current = try await apiClient.fetchCurrentDrop(channelId: channel.id) {
                                 emptyCurrentDropPolls = 0
+                                selectedChannelWasUnverified = false
                                 onOperationalEvent?(.successfulPoll)
                                 let campaignId = session?.currentCampaignId
                                 let observation = DropProgressObservation(
@@ -1262,7 +1341,7 @@ public actor MinerEngine {
 
                                     // Only treat changed server state as verified progress.
                                     extraMinutesWatched = 0
-                                    lastProgressUpdateAt = Date()
+                                    resetProgressStallClock()
                                     noteCampaignProgress(campaignId)
 
                                     await refreshCampaignProgress(
@@ -1283,6 +1362,7 @@ public actor MinerEngine {
 
                                 if acknowledged {
                                     emptyCurrentDropPolls = 0
+                                    selectedChannelWasUnverified = false
                                 } else {
                                     emptyCurrentDropPolls += 1
                                     if emptyCurrentDropPolls == 1 {
@@ -1297,11 +1377,29 @@ public actor MinerEngine {
                             emitIssue(error)
                             log("Could not verify current drop progress: \(error.localizedDescription)")
                         }
+
+                        if Self.shouldAbandonUnverifiedSelection(
+                            isUnverified: selectedChannelWasUnverified,
+                            emptyPolls: emptyCurrentDropPolls
+                        ) {
+                            let key = Self.unverifiedChannelKey(campaignId: campaign.id, channel: channel)
+                            unverifiedChannelCooldownUntil[key] = runtimeClock.deadline(
+                                after: Self.unverifiedChannelCooldownInterval
+                            )
+                            let minutes = Int(Self.unverifiedChannelCooldownInterval / 60)
+                            log("Unverified fallback \(channel.displayName) produced no drop confirmation after \(emptyCurrentDropPolls) checks; cooling it down for \(minutes)m and selecting another channel.")
+                            recordActivityEvent(
+                                .stallDetected,
+                                "Unverified channel produced no drop confirmation: \(channel.displayName)"
+                            )
+                            shouldSwitchChannel = true
+                            break
+                        }
                     }
 
                     // Stuck detection (matches TDM logic)
                     // We calculate minutes elapsed since last verified progress (GQL/PubSub)
-                    let elapsed = Date().timeIntervalSince(lastProgressUpdateAt)
+                    let elapsed = progressStallElapsedSeconds()
                     extraMinutesWatched = Int(elapsed / 60)
 
                     // While a stream override is active we deliberately stay on the chosen
@@ -1318,7 +1416,8 @@ public actor MinerEngine {
                         do {
                             // Force fresh inventory snapshot fetch (includes benefitIDs)
                             let inventoryService = await dropsService.getInventoryService()
-                            let freshInventory = try await inventoryService.fetchInventory(forceRefresh: true)
+                            let inventoryResult = try await inventoryService.fetchInventoryResult(forceRefresh: true)
+                            let freshInventory = inventoryResult.snapshot
                             onOperationalEvent?(.successfulPoll)
                             onOperationalEvent?(.inventoryRefresh)
                             
@@ -1331,16 +1430,34 @@ public actor MinerEngine {
                             // Check if ANY drop in current campaign was recently claimed
                             // This handles the case where user claimed via Twitch UI or another device
                             let campaignDrops = allCampaigns.first { $0.id == session?.currentCampaignId }?.drops ?? []
-                            let newlyClaimedDrops = campaignDrops.filter { drop in
-                                freshInventory.benefitIDs.contains(drop.benefitID) && !drop.isClaimed
-                            }
+                            let newlyClaimedDrops = Self.externallyClaimedDrops(
+                                in: campaignDrops,
+                                snapshot: freshInventory
+                            )
+
+                            // Merge the authoritative snapshot before making any recovery decision.
+                            // Without this, the same external claim is rediscovered every stall window.
+                            let progressAcknowledged = await acknowledgeInventoryProgress(
+                                freshInventory,
+                                campaignId: campaign.id,
+                                context: "stall recovery"
+                            )
                             
                             if !newlyClaimedDrops.isEmpty {
                                 log("\(newlyClaimedDrops.count) drop(s) were claimed externally. Updating local state, resetting stall counter.")
+                                for drop in newlyClaimedDrops {
+                                    _ = progressEventTracker.markClaimed(
+                                        campaignId: campaign.id,
+                                        dropId: drop.id,
+                                        dropLabel: drop.name
+                                    )
+                                }
                                 extraMinutesWatched = 0 // Reset stall counter
-                                lastProgressUpdateAt = Date()
+                                resetProgressStallClock()
                                 noteCampaignProgress(campaign.id)
                                 // Don't switch channel - continue mining remaining drops in campaign
+                            } else if progressAcknowledged {
+                                log("Inventory confirmed new progress during stall recovery. Keeping the current channel.")
                             } else {
                                 // Genuine stall for this campaign this window — record it so a
                                 // campaign that can never earn (nothing left, unlinked, or a
@@ -1365,7 +1482,9 @@ public actor MinerEngine {
                                     // campaign down so candidateCampaigns skips it, letting the
                                     // miner pick other work or go idle instead of looping here.
                                     let minutes = Int(Self.nonEarningCooldownInterval / 60)
-                                    campaignStallCooldownUntil[campaign.id] = Date().addingTimeInterval(Self.nonEarningCooldownInterval)
+                                    campaignStallCooldownUntil[campaign.id] = runtimeClock.deadline(
+                                        after: Self.nonEarningCooldownInterval
+                                    )
                                     consecutiveStallsByCampaign[campaign.id] = 0
                                     session?.currentCampaignId = nil
                                     log("Campaign \"\(campaign.name)\" stalled \(Self.nonEarningStallThreshold)× with no progress and no external claims; skipping it for \(minutes)m and looking for other work.")
@@ -1386,8 +1505,8 @@ public actor MinerEngine {
                     // mid-session (e.g. a priority campaign goes live after we started watching).
                     let campaignReevalInterval: TimeInterval = 300 // Align with outer campaign loop (5 min)
                     if streamOverrideLogin == nil,
-                       Date().timeIntervalSince(lastCampaignReevaluation) >= campaignReevalInterval {
-                        lastCampaignReevaluation = Date()
+                       runtimeClock.elapsedSeconds(since: lastCampaignReevaluation) >= campaignReevalInterval {
+                        lastCampaignReevaluation = runtimeClock.nowNanoseconds()
                         if let fetched = try? await dropsService.fetchCampaigns() {
                             onOperationalEvent?(.successfulPoll)
                             onOperationalEvent?(.campaignRefresh)
@@ -1440,8 +1559,8 @@ public actor MinerEngine {
                     // Conditional claim polling: every ~2 minutes while actively
                     // mining. If claiming or inventory sync removes the current
                     // campaign from the mineable set, rescan now.
-                    if Date().timeIntervalSince(lastClaimCheck) >= claimCheckSeconds {
-                        lastClaimCheck = Date()
+                    if runtimeClock.elapsedSeconds(since: lastClaimCheck) >= claimCheckSeconds {
+                        lastClaimCheck = runtimeClock.nowNanoseconds()
                         _ = await claimReadyDrops()
                         if streamOverrideLogin == nil, let currentCampaignId = session?.currentCampaignId {
                             let currentStillMineable = candidateCampaigns(
@@ -1464,16 +1583,31 @@ public actor MinerEngine {
                 session?.totalWatchTime += watchTime
                 await cleanupActiveWatchSession(clearTarget: shouldSwitchChannel)
 
+            } catch is CancellationError {
+                await cleanupActiveWatchSession(clearTarget: true)
+                break
             } catch let error as TwitchMinerError {
                 await cleanupActiveWatchSession(clearTarget: true)
                 emitIssue(error)
                 handleError(error)
-                try? await Task.sleep(nanoseconds: campaignCheckInterval)
+                do {
+                    try await runtimeClock.sleep(nanoseconds: campaignCheckInterval)
+                } catch {
+                    break
+                }
             } catch {
+                if Task.isCancelled {
+                    await cleanupActiveWatchSession(clearTarget: true)
+                    break
+                }
                 await cleanupActiveWatchSession(clearTarget: true)
                 emitIssue(error)
                 handleError(.unknown(error.localizedDescription))
-                try? await Task.sleep(nanoseconds: campaignCheckInterval)
+                do {
+                    try await runtimeClock.sleep(nanoseconds: campaignCheckInterval)
+                } catch {
+                    break
+                }
             }
         }
     }
@@ -1520,7 +1654,8 @@ public actor MinerEngine {
             for progress in claimable {
                 let result = await claimService.claimDrop(progress)
                 if result.success {
-                    log("Claimed drop: \(result.dropName)")
+                    let confirmation = result.confirmedByInventory ? " (confirmed by fresh inventory)" : ""
+                    log("Claimed drop: \(result.dropName)\(confirmation)")
 
                     // TDM PARITY: Delete notification after successful claim
                     try? await apiClient.deleteNotification(id: progress.id)
@@ -1549,11 +1684,16 @@ public actor MinerEngine {
                     }
                 } else {
                     let reason = result.error.map { " (\($0))" } ?? ""
-                    log("Warning: Drop claim returned not-success for \(progress.dropName)\(reason)")
+                    let retry = result.retryAfter.map { " — retry in \(Int($0))s" } ?? ""
+                    log("Warning: Drop claim returned not-success for \(progress.dropName)\(reason)\(retry)")
                 }
 
                 // Small delay between claims
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                do {
+                    try await runtimeClock.sleep(nanoseconds: 1_000_000_000)
+                } catch {
+                    return didClaimAnyDrop
+                }
             }
 
             if didClaimAnyDrop {
@@ -1763,6 +1903,11 @@ public actor MinerEngine {
         switch error {
         case .networkError, .rateLimited:
             log("Will retry...")
+        case .apiError(let statusCode, _) where statusCode == 408
+            || statusCode == 425
+            || statusCode == 429
+            || (500...599).contains(statusCode):
+            log("Temporary Twitch failure; will retry...")
         default:
             break
         }
@@ -1787,7 +1932,7 @@ public actor MinerEngine {
     
     /// Get current stall state for UI display.
     public func getStallState() async -> StallState {
-        let elapsed = Date().timeIntervalSince(lastProgressUpdateAt)
+        let elapsed = progressStallElapsedSeconds()
         let minutes = Int(elapsed / 60)
         // An active override intentionally stays put, so a lack of drop progress is not a stall.
         let isStalled = streamOverrideLogin == nil && minutes >= Self.maxExtraMinutes

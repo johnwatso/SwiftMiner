@@ -26,6 +26,27 @@ public struct InventorySnapshot: Codable, Sendable, Equatable {
     }
 }
 
+public enum InventorySnapshotSource: String, Sendable, Equatable {
+    /// The snapshot was returned by Twitch during this call.
+    case network
+    /// A still-valid in-memory or on-disk cache satisfied a normal read.
+    case cache
+    /// Twitch failed during a normal read, so an older cache was returned for offline display.
+    case staleCacheFallback
+}
+
+public struct InventoryFetchResult: Sendable, Equatable {
+    public let snapshot: InventorySnapshot
+    public let source: InventorySnapshotSource
+
+    public var isAuthoritative: Bool { source == .network }
+
+    public init(snapshot: InventorySnapshot, source: InventorySnapshotSource) {
+        self.snapshot = snapshot
+        self.source = source
+    }
+}
+
 public actor InventoryService {
     private let apiClient: TwitchAPIClient
     private var accountId: String?
@@ -45,14 +66,24 @@ public actor InventoryService {
     }
 
     public func fetchInventory(forceRefresh: Bool = false) async throws -> InventorySnapshot {
+        try await fetchInventoryResult(forceRefresh: forceRefresh).snapshot
+    }
+
+    /// Fetches inventory together with its provenance.
+    ///
+    /// A forced refresh is strict: if Twitch cannot supply a new snapshot, the error is
+    /// propagated even when an older cache exists. This prevents mining and recovery logic
+    /// from mistaking stale disk state for authoritative server state. Normal UI reads retain
+    /// the existing offline-cache fallback.
+    public func fetchInventoryResult(forceRefresh: Bool = false) async throws -> InventoryFetchResult {
         guard let accountId else {
-            return .empty(accountId: "")
+            return InventoryFetchResult(snapshot: .empty(accountId: ""), source: .cache)
         }
 
         if !forceRefresh,
            let snapshotCache,
            Date().timeIntervalSince(snapshotCache.lastUpdated) < cacheDuration {
-            return snapshotCache
+            return InventoryFetchResult(snapshot: snapshotCache, source: .cache)
         }
 
         do {
@@ -66,10 +97,13 @@ public actor InventoryService {
             )
             snapshotCache = snapshot
             InventoryDiskCache.save(snapshot)
-            return snapshot
+            return InventoryFetchResult(snapshot: snapshot, source: .network)
         } catch {
+            if forceRefresh {
+                throw error
+            }
             if let cached = await currentSnapshot() {
-                return cached
+                return InventoryFetchResult(snapshot: cached, source: .staleCacheFallback)
             }
             throw error
         }

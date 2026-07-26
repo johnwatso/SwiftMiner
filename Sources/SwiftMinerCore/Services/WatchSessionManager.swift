@@ -47,6 +47,7 @@ public class WatchSession: @unchecked Sendable {
     public var totalWatchTimeSeconds: TimeInterval
     public var lastHeartbeatAt: Date?
     public var lastHeartbeatTransport: String?
+    public var consecutiveHeartbeatFailures: Int
 
     public init(
         id: String,
@@ -60,7 +61,8 @@ public class WatchSession: @unchecked Sendable {
         state: WatchSessionState = .connecting,
         totalWatchTimeSeconds: TimeInterval = 0,
         lastHeartbeatAt: Date? = nil,
-        lastHeartbeatTransport: String? = nil
+        lastHeartbeatTransport: String? = nil,
+        consecutiveHeartbeatFailures: Int = 0
     ) {
         self.id = id
         self.channelId = channelId
@@ -74,6 +76,7 @@ public class WatchSession: @unchecked Sendable {
         self.totalWatchTimeSeconds = totalWatchTimeSeconds
         self.lastHeartbeatAt = lastHeartbeatAt
         self.lastHeartbeatTransport = lastHeartbeatTransport
+        self.consecutiveHeartbeatFailures = consecutiveHeartbeatFailures
     }
 }
 
@@ -84,6 +87,8 @@ private let spadeBeacon: SpadeBeaconService
 private let communityPointsService: CommunityPointsService
 private var activeSession: WatchSession?
 private var heartbeatTask: Task<Void, Never>?
+private let heartbeatFailureThreshold: Int
+private let runtimeClock: RuntimeClock
 
 /// 59-second watch interval — matches the Python reference implementation
 private let heartbeatInterval: TimeInterval
@@ -125,6 +130,24 @@ public init(
     self.apiClient = apiClient
     self.communityPointsService = CommunityPointsService(apiClient: apiClient)
     self.heartbeatInterval = heartbeatInterval
+    self.heartbeatFailureThreshold = 3
+    self.runtimeClock = .continuous
+}
+
+/// Test seam for deterministic heartbeat timing and failure budgets.
+init(
+    apiClient: TwitchAPIClient,
+    urlSession: URLSession,
+    heartbeatInterval: TimeInterval,
+    heartbeatFailureThreshold: Int,
+    runtimeClock: RuntimeClock
+) {
+    self.spadeBeacon = SpadeBeaconService(urlSession: urlSession)
+    self.apiClient = apiClient
+    self.communityPointsService = CommunityPointsService(apiClient: apiClient)
+    self.heartbeatInterval = heartbeatInterval
+    self.heartbeatFailureThreshold = max(1, heartbeatFailureThreshold)
+    self.runtimeClock = runtimeClock
 }
 
     /// Start watching a channel for a specific campaign
@@ -173,7 +196,6 @@ public init(
         )
 
         session.state = .watching
-        session.lastHeartbeatAt = Date()
         activeSession = session
 
         // Start heartbeat loop once the session is watchable so the first beacon is sent immediately.
@@ -257,7 +279,6 @@ public init(
         onStatusChange?(.connecting)
 
         session.state = .watching
-        session.lastHeartbeatAt = Date()
         activeSession = session
 
         // Start heartbeat loop once the session is watchable so the first beacon is sent immediately.
@@ -278,9 +299,9 @@ public init(
         heartbeatTask = Task {
             await sendHeartbeat()
 
-            while !Task.isCancelled {
+            while !Task.isCancelled, activeSession?.state == .watching {
                 do {
-                    try await Task.sleep(nanoseconds: UInt64(heartbeatInterval * 1_000_000_000))
+                    try await runtimeClock.sleep(nanoseconds: UInt64(heartbeatInterval * 1_000_000_000))
 
                     if Task.isCancelled { break }
 
@@ -324,13 +345,46 @@ public init(
             // Update session stats
             session.lastHeartbeatAt = Date()
             session.totalWatchTimeSeconds += heartbeatInterval
+            session.consecutiveHeartbeatFailures = 0
             activeSession = session
             onHeartbeatSent?(session)
 
         } catch {
-            // Non-fatal: log the failure but keep the session alive.
-            // The Python reference also continues on beacon errors.
-            onError?(.watchSessionFailed("Beacon failed: \(error.localizedDescription)"))
+            session.consecutiveHeartbeatFailures += 1
+            activeSession = session
+
+            let category = Self.heartbeatFailureCategory(error)
+            if session.consecutiveHeartbeatFailures >= heartbeatFailureThreshold {
+                let failure = TwitchMinerError.watchSessionFailed(
+                    "Repeated heartbeat delivery failure [\(category)] after \(session.consecutiveHeartbeatFailures) attempts: \(error.localizedDescription)"
+                )
+                session.state = .error(failure.localizedDescription)
+                activeSession = session
+                await communityPointsService.stopAutoClaim()
+                onStatusChange?(.error(failure))
+                onError?(failure)
+            } else {
+                onError?(.watchSessionFailed(
+                    "Beacon failed [\(category)] (\(session.consecutiveHeartbeatFailures)/\(heartbeatFailureThreshold)): \(error.localizedDescription)"
+                ))
+            }
         }
+    }
+
+    static func heartbeatFailureCategory(_ error: Error) -> String {
+        if let twitchError = error as? TwitchMinerError {
+            switch twitchError {
+            case .tokenExpired, .authenticationFailed:
+                return "authentication"
+            case .rateLimited:
+                return "rate-limit"
+            case .networkError:
+                return "network"
+            default:
+                break
+            }
+        }
+        if error is URLError { return "network" }
+        return "transport"
     }
 }

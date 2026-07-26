@@ -153,6 +153,8 @@ public actor PubSubClient: NSObject {
     static let topicBatchSize = 20
     private let pingInterval: TimeInterval
     private let pongTimeout: TimeInterval
+    private let runtimeClock: RuntimeClock
+    private let reconnectJitterFactor: @Sendable () -> Double
 
     // Exponential backoff for reconnects
     private var reconnectAttempt = 0
@@ -162,6 +164,9 @@ public actor PubSubClient: NSObject {
     private var pingTask: Task<Void, Never>?
     private var listenTask: Task<Void, Never>?
     private var pongTimeoutTask: Task<Void, Never>?
+    private var reconnectTask: Task<Void, Never>?
+    private var shouldRemainConnected = false
+    private var connectionGeneration: UInt64 = 0
     
     /// Delegate for handling received messages
     public var onMessage: (@Sendable (String, AnyJSONValue) -> Void)?
@@ -188,7 +193,10 @@ public actor PubSubClient: NSObject {
     }
 
     public init(accessToken: String? = nil) {
-        self.init(accessToken: accessToken, socketFactory: { URLSessionPubSubSocket(url: $0) })
+        self.init(
+            accessToken: accessToken,
+            socketFactory: { URLSessionPubSubSocket(url: $0) }
+        )
     }
 
     /// Test seam: inject the socket implementation and timing. Production code
@@ -199,7 +207,9 @@ public actor PubSubClient: NSObject {
         pingInterval: TimeInterval = 180, // 3 minutes
         pongTimeout: TimeInterval = 10,
         baseReconnectDelay: TimeInterval = 1,
-        maxReconnectDelay: TimeInterval = 60
+        maxReconnectDelay: TimeInterval = 60,
+        runtimeClock: RuntimeClock = .continuous,
+        reconnectJitterFactor: @escaping @Sendable () -> Double = { Double.random(in: 0.8...1.2) }
     ) {
         self.accessToken = accessToken
         self.socketFactory = socketFactory
@@ -207,6 +217,8 @@ public actor PubSubClient: NSObject {
         self.pongTimeout = pongTimeout
         self.baseReconnectDelay = baseReconnectDelay
         self.maxReconnectDelay = maxReconnectDelay
+        self.runtimeClock = runtimeClock
+        self.reconnectJitterFactor = reconnectJitterFactor
         super.init()
     }
     
@@ -223,31 +235,15 @@ public actor PubSubClient: NSObject {
         }
 
         log("Connecting to PubSub...")
+        shouldRemainConnected = true
+        reconnectTask?.cancel()
+        reconnectTask = nil
 
-        let newSocket = socketFactory(url)
-        socket = newSocket
-        newSocket.resume()
-
-        isConnected = true
-        reconnectAttempt = 0 // Reset reconnect counter on successful connect
-        onConnectionStateChange?(true)
-
-        startListening()
-        startPingLoop()
-
-        // A caller may reconnect this client without rebuilding its desired topic list.
         do {
-            try await submitPendingSubscriptions()
+            try await establishConnection()
+            reconnectAttempt = 0
         } catch {
-            pingTask?.cancel()
-            pingTask = nil
-            listenTask?.cancel()
-            listenTask = nil
-            socket?.cancel()
-            socket = nil
-            isConnected = false
-            submittedTopics.removeAll()
-            onConnectionStateChange?(false)
+            shouldRemainConnected = false
             throw error
         }
 
@@ -257,20 +253,11 @@ public actor PubSubClient: NSObject {
     /// Disconnect from the PubSub server
     public func disconnect() async {
         log("Disconnecting from PubSub...")
-
-        pingTask?.cancel()
-        pingTask = nil
-        listenTask?.cancel()
-        listenTask = nil
-        pongTimeoutTask?.cancel()
-        pongTimeoutTask = nil
-
-        socket?.cancel()
-        socket = nil
-        isConnected = false
-        submittedTopics.removeAll()
-
-        onConnectionStateChange?(false)
+        shouldRemainConnected = false
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        connectionGeneration &+= 1
+        tearDownSocket(reportDisconnected: true)
         log("PubSub disconnected")
     }
 
@@ -293,7 +280,12 @@ public actor PubSubClient: NSObject {
         // Record intent before sending. If a send fails, these topics remain queued and
         // will be replayed on the next socket instead of being silently lost.
         activeTopics.formUnion(newTopics)
-        try await submitPendingSubscriptions()
+        do {
+            try await submitPendingSubscriptions()
+        } catch {
+            requestReconnect(generation: connectionGeneration)
+            throw error
+        }
     }
 
     /// Unsubscribe from topics
@@ -309,10 +301,15 @@ public actor PubSubClient: NSObject {
             return
         }
 
-        for batch in Self.topicBatches(Array(topicsOnCurrentSocket)) {
-            try await sendMessage(topicMessage(type: .unlisten, topics: batch))
-            submittedTopics.subtract(batch)
-            log("Unsubscribed from topics: \(batch.joined(separator: ", "))")
+        do {
+            for batch in Self.topicBatches(Array(topicsOnCurrentSocket)) {
+                try await sendMessage(topicMessage(type: .unlisten, topics: batch))
+                submittedTopics.subtract(batch)
+                log("Unsubscribed from topics: \(batch.joined(separator: ", "))")
+            }
+        } catch {
+            requestReconnect(generation: connectionGeneration)
+            throw error
         }
     }
     
@@ -378,7 +375,49 @@ public actor PubSubClient: NSObject {
         }
     }
     
-    private func startListening() {
+    private func establishConnection() async throws {
+        tearDownSocket(reportDisconnected: false)
+        connectionGeneration &+= 1
+        let generation = connectionGeneration
+
+        let newSocket = socketFactory(url)
+        socket = newSocket
+        newSocket.resume()
+        isConnected = true
+
+        startListening(generation: generation)
+        startPingLoop(generation: generation)
+
+        do {
+            // A caller may reconnect this client without rebuilding its desired topic list.
+            try await submitPendingSubscriptions()
+        } catch {
+            tearDownSocket(reportDisconnected: false)
+            throw error
+        }
+
+        onConnectionStateChange?(true)
+    }
+
+    private func tearDownSocket(reportDisconnected: Bool) {
+        let wasConnected = isConnected
+        pingTask?.cancel()
+        pingTask = nil
+        listenTask?.cancel()
+        listenTask = nil
+        pongTimeoutTask?.cancel()
+        pongTimeoutTask = nil
+        socket?.cancel()
+        socket = nil
+        isConnected = false
+        submittedTopics.removeAll()
+
+        if reportDisconnected && wasConnected {
+            onConnectionStateChange?(false)
+        }
+    }
+
+    private func startListening(generation: UInt64) {
         listenTask = Task {
             while !Task.isCancelled {
                 do {
@@ -387,7 +426,8 @@ public actor PubSubClient: NSObject {
                         break
                     }
                     if let text = try await socket.receive() {
-                        await handleReceivedText(text)
+                        guard generation == connectionGeneration else { break }
+                        await handleReceivedText(text, generation: generation)
                     }
                 } catch {
                     // A cancelled loop belongs to a socket that was already torn
@@ -398,14 +438,15 @@ public actor PubSubClient: NSObject {
                         break
                     }
                     log("WebSocket error: \(error.localizedDescription)")
-                    await handleConnectionError(error)
+                    await handleConnectionError(error, generation: generation)
                     break
                 }
             }
         }
     }
 
-    private func handleReceivedText(_ text: String) async {
+    private func handleReceivedText(_ text: String, generation: UInt64) async {
+        guard generation == connectionGeneration else { return }
         log("[PubSub] ← \(text.prefix(200))")
 
         guard let data = text.data(using: .utf8) else { return }
@@ -419,20 +460,25 @@ public actor PubSubClient: NSObject {
                 // Cancel pong timeout
                 pongTimeoutTask?.cancel()
                 pongTimeoutTask = nil
+                reconnectAttempt = 0
                 log("[PubSub] PONG received")
 
             case .reconnect:
                 // Server requested reconnect
                 log("[PubSub] Server requested RECONNECT")
-                await reconnectWithBackoff()
+                requestReconnect(generation: generation)
 
             case .message:
+                reconnectAttempt = 0
                 if let data = message.data,
                    case .string(let topic) = data["topic"],
                    let payload = data["message"] {
                     // Forward message to listener
                     onMessage?(topic, payload)
                 }
+            case .response:
+                // A server response proves the replacement socket completed a real round trip.
+                reconnectAttempt = 0
             default:
                 break
             }
@@ -441,18 +487,18 @@ public actor PubSubClient: NSObject {
         }
     }
 
-    private func startPingLoop() {
+    private func startPingLoop(generation: UInt64) {
         pingTask = Task {
             while !Task.isCancelled {
                 do {
-                    try await Task.sleep(nanoseconds: UInt64(pingInterval * 1_000_000_000))
-                    if Task.isCancelled { break }
+                    try await runtimeClock.sleep(nanoseconds: UInt64(pingInterval * 1_000_000_000))
+                    if Task.isCancelled || generation != connectionGeneration { break }
 
                     log("[PubSub] → PING")
                     try await sendMessage(PubSubMessage(type: .ping))
 
                     // Start PONG timeout
-                    startPongTimeout()
+                    startPongTimeout(generation: generation)
 
                 } catch {
                     // See the listen loop: a cancelled sleep is teardown, not a
@@ -462,22 +508,22 @@ public actor PubSubClient: NSObject {
                         break
                     }
                     log("PING failed: \(error.localizedDescription)")
-                    await handleConnectionError(error)
+                    await handleConnectionError(error, generation: generation)
                     break
                 }
             }
         }
     }
 
-    private func startPongTimeout() {
+    private func startPongTimeout(generation: UInt64) {
         pongTimeoutTask?.cancel()
         pongTimeoutTask = Task {
             do {
-                try await Task.sleep(nanoseconds: UInt64(pongTimeout * 1_000_000_000))
+                try await runtimeClock.sleep(nanoseconds: UInt64(pongTimeout * 1_000_000_000))
                 // If we reach here, PONG was not received in time
-                if !Task.isCancelled {
+                if !Task.isCancelled && generation == connectionGeneration {
                     log("[PubSub] PONG timeout!")
-                    await handleConnectionError(PubSubError.pongTimeout)
+                    await handleConnectionError(PubSubError.pongTimeout, generation: generation)
                 }
             } catch {
                 // Task was cancelled (PONG received)
@@ -485,64 +531,54 @@ public actor PubSubClient: NSObject {
         }
     }
     
-    private func handleConnectionError(_ error: Error) async {
-        guard isConnected else { return }
-        
-        isConnected = false
-        submittedTopics.removeAll()
-        onConnectionStateChange?(false)
-        
-        // Attempt reconnect with exponential backoff
-        await reconnectWithBackoff()
+    private func handleConnectionError(_ error: Error, generation: UInt64) async {
+        guard generation == connectionGeneration, isConnected else { return }
+        requestReconnect(generation: generation)
     }
-    
-    private func reconnectWithBackoff() async {
-        // Calculate backoff delay: min(2^attempt * base, max)
-        let delay = min(pow(2.0, Double(reconnectAttempt)) * baseReconnectDelay, maxReconnectDelay)
-        reconnectAttempt += 1
 
-        log("[PubSub] Reconnecting in \(Int(delay))s (attempt #\(reconnectAttempt))...")
+    private func requestReconnect(generation: UInt64) {
+        guard shouldRemainConnected, generation == connectionGeneration else { return }
+        tearDownSocket(reportDisconnected: true)
+        guard reconnectTask == nil else { return }
 
-        // Clean up current connection
-        pingTask?.cancel()
-        pingTask = nil
-        listenTask?.cancel()
-        listenTask = nil
-        pongTimeoutTask?.cancel()
-        pongTimeoutTask = nil
+        reconnectTask = Task { [weak self] in
+            await self?.runReconnectLoop()
+        }
+    }
 
-        socket?.cancel()
-        socket = nil
-        submittedTopics.removeAll()
+    private func runReconnectLoop() async {
+        while shouldRemainConnected && !Task.isCancelled {
+            let baseDelay = min(
+                pow(2.0, Double(reconnectAttempt)) * baseReconnectDelay,
+                maxReconnectDelay
+            )
+            reconnectAttempt += 1
+            let jitter = min(1.2, max(0.8, reconnectJitterFactor()))
+            let delay = baseDelay * jitter
+            log("[PubSub] Reconnecting in \(String(format: "%.1f", delay))s (attempt #\(reconnectAttempt))...")
 
-        // Wait before reconnecting
-        try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            do {
+                try await runtimeClock.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            } catch {
+                reconnectTask = nil
+                return
+            }
 
-        // Attempt reconnect
-        let newSocket = socketFactory(url)
-        socket = newSocket
-        newSocket.resume()
+            guard shouldRemainConnected, !Task.isCancelled else {
+                reconnectTask = nil
+                return
+            }
 
-        isConnected = true
-        onConnectionStateChange?(true)
-
-        startListening()
-        startPingLoop()
-
-        // Replay desired topics on the new socket. Do not route through listen(to:),
-        // because those topics are intentionally already present in activeTopics.
-        do {
-            try await submitPendingSubscriptions()
-        } catch {
-            log("Could not restore PubSub topics after reconnect: \(error.localizedDescription)")
-            isConnected = false
-            submittedTopics.removeAll()
-            onConnectionStateChange?(false)
-            Task { await self.reconnectWithBackoff() }
-            return
+            do {
+                try await establishConnection()
+                reconnectTask = nil
+                log("[PubSub] Reconnected successfully")
+                return
+            } catch {
+                log("Could not restore PubSub connection: \(error.localizedDescription)")
+            }
         }
 
-        reconnectAttempt = 0
-        log("[PubSub] Reconnected successfully")
+        reconnectTask = nil
     }
 }

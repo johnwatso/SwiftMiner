@@ -96,8 +96,9 @@ public actor TwitchAPIClient {
     private let authService: TwitchAuthService
     private var accessToken: String
     private let session: URLSession
-    /// Limits GQL requests to ≤5 per second to avoid Twitch rate-limiting
-    private let rateLimiter = RateLimiter(maxRequests: 5, per: 1.0)
+    private let requestCoordinator: TwitchRequestCoordinator
+    private let runtimeClock: RuntimeClock
+    private let retryJitterFactor: @Sendable () -> Double
 
     /// Android User-Agent that matches the Android client ID. Starts as a
     /// random pick for pre-login traffic; swapped to a sticky-per-account UA
@@ -167,10 +168,15 @@ public actor TwitchAPIClient {
     /// progress state is owned by the inventory snapshot, which is fetched separately and
     /// merged over campaigns by `syncCampaigns`, so it is unaffected by this TTL.
     let campaignDetailsCacheTTL: TimeInterval = 20 * 60
-    /// How long a real fetch's account-link answer is trusted for reuse. Linking a game
-    /// account is a rare, deliberate user action, so this can be long — but not indefinite,
-    /// so a newly linked account is picked up without restarting the miner.
+    /// Account-link state is mutable and directly decides whether a campaign can be mined,
+    /// so an authoritative answer is never trusted for longer than the details window.
+    /// Keeping this bounded means linking or unlinking a game account is picked up within
+    /// twenty minutes without requiring an app restart.
     let campaignLinkStateTTL: TimeInterval = 20 * 60
+    /// Shared metadata contains only campaign-global facts. It can safely outlive an
+    /// account's link-state answer, which lets staggered miners reuse it without extending
+    /// the lifetime of mutable account state. A real per-account refresh updates this copy.
+    let sharedCampaignMetadataTTL: TimeInterval = 60 * 60
     let availableDropsCacheTTL: TimeInterval = 60
     let liveChannelsCacheTTL: TimeInterval = 60
     private let slugCandidatesCacheTTL: TimeInterval = 30 * 60
@@ -220,10 +226,20 @@ public actor TwitchAPIClient {
     private let gqlUrl = "https://gql.twitch.tv/gql"
     private let integrityUrl = "https://gql.twitch.tv/integrity"
 
-    public init(authService: TwitchAuthService, clientId: String, session: URLSession? = nil) {
+    public init(
+        authService: TwitchAuthService,
+        clientId: String,
+        session: URLSession? = nil,
+        requestCoordinator: TwitchRequestCoordinator = .shared,
+        runtimeClock: RuntimeClock = .continuous,
+        retryJitterFactor: @escaping @Sendable () -> Double = { Double.random(in: 0.8...1.2) }
+    ) {
         self.authService = authService
         self.clientId = clientId
         self.accessToken = "" // Will be updated from auth service
+        self.requestCoordinator = requestCoordinator
+        self.runtimeClock = runtimeClock
+        self.retryJitterFactor = retryJitterFactor
 
         if let session = session {
             self.session = session
@@ -865,6 +881,7 @@ public actor TwitchAPIClient {
     private struct RequestResult {
         let data: Data
         let retryCount: Int
+        let coordinationWaitSeconds: TimeInterval
     }
 
     /// Force-refreshes OAuth token after a 401/tokenExpired response and syncs local caches.
@@ -882,12 +899,39 @@ public actor TwitchAPIClient {
     /// request loop; longer waits are thrown so callers can reschedule instead.
     private static let maxInlineRetryAfterSeconds: TimeInterval = 30
 
+    static func retryAfterSeconds(from value: String?, now: Date = Date()) -> TimeInterval? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
+            return nil
+        }
+        if let seconds = TimeInterval(value), seconds >= 0 {
+            return seconds
+        }
+
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "EEE',' dd MMM yyyy HH':'mm':'ss zzz"
+        guard let date = formatter.date(from: value) else { return nil }
+        return max(0, date.timeIntervalSince(now))
+    }
+
+    private func retryDelay(for attempt: Int) -> TimeInterval {
+        let base = min(pow(2, Double(max(0, attempt - 1))) * 2, 30)
+        return base * min(1.2, max(0.8, retryJitterFactor()))
+    }
+
+    private func sleepBeforeRetry(_ delay: TimeInterval) async throws {
+        try await runtimeClock.sleep(nanoseconds: RuntimeClock.nanoseconds(delay))
+    }
+
     /// Make a request with automatic retries for transient network errors
     private func makeRequestWithRetry(_ request: URLRequest, operationName: String, maxAttempts: Int = 3) async throws -> RequestResult {
         var lastError: Error?
+        var coordinationWaitSeconds: TimeInterval = 0
         
         for attempt in 1...maxAttempts {
             do {
+                coordinationWaitSeconds += try await requestCoordinator.waitForPermit()
                 let (data, response) = try await session.data(for: request)
                 
                 guard let httpResponse = response as? HTTPURLResponse else {
@@ -914,23 +958,39 @@ public actor TwitchAPIClient {
                             }
                         }
                     }
-                    return RequestResult(data: data, retryCount: attempt - 1)
+                    return RequestResult(
+                        data: data,
+                        retryCount: attempt - 1,
+                        coordinationWaitSeconds: coordinationWaitSeconds
+                    )
                 case 401:
                     throw TwitchMinerError.tokenExpired
                 case 403:
                     throw TwitchMinerError.authenticationFailed("Forbidden")
                 case 429:
-                    let retryAfterHeader = httpResponse.allHeaderFields["Retry-After"] as? String
-                    let retryAfter = retryAfterHeader.flatMap(TimeInterval.init)
+                    let retryAfterHeader = httpResponse.value(forHTTPHeaderField: "Retry-After")
+                    let retryAfter = Self.retryAfterSeconds(from: retryAfterHeader) ?? 60
+                    await requestCoordinator.deferRequests(for: retryAfter)
                     // Honor short Retry-After waits inline; anything longer (or an
                     // unparseable/absent header) surfaces to the caller so engine
                     // loops aren't stalled behind a long sleep.
-                    if attempt < maxAttempts, let retryAfter, retryAfter <= Self.maxInlineRetryAfterSeconds {
+                    if attempt < maxAttempts, retryAfter <= Self.maxInlineRetryAfterSeconds {
                         Logger.api.warning("Rate limited on \(operationName); honoring Retry-After of \(retryAfter)s (attempt \(attempt)/\(maxAttempts))")
-                        try await Task.sleep(nanoseconds: UInt64(retryAfter * 1_000_000_000))
                         continue
                     }
-                    throw TwitchMinerError.apiError(statusCode: 429, message: "Rate limited, retry after \(retryAfterHeader ?? "60")s")
+                    throw TwitchMinerError.rateLimited(retryAfter: retryAfter)
+                case 408, 425, 500...599:
+                    let errorMessage = String(data: data, encoding: .utf8) ?? "Transient Twitch failure"
+                    let transient = TwitchMinerError.apiError(
+                        statusCode: httpResponse.statusCode,
+                        message: errorMessage
+                    )
+                    guard attempt < maxAttempts else { throw transient }
+                    let delay = retryDelay(for: attempt)
+                    Logger.api.warning("Transient HTTP \(httpResponse.statusCode) on \(operationName) (attempt \(attempt)/\(maxAttempts)); retrying in \(String(format: "%.1f", delay))s")
+                    try await sleepBeforeRetry(delay)
+                    lastError = transient
+                    continue
                 default:
                     let errorMessage = String(data: data, encoding: .utf8) ?? "Unknown error"
                     throw TwitchMinerError.apiError(statusCode: httpResponse.statusCode, message: errorMessage)
@@ -947,9 +1007,9 @@ public actor TwitchAPIClient {
                 }
                 lastError = error
                 if attempt < maxAttempts {
-                    let delay = Double(attempt) * 2.0 // Simple backoff: 2s, 4s
-                    Logger.api.warning("Network error on attempt \(attempt) for \(operationName): \(error.localizedDescription). Retrying in \(delay)s...")
-                    try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                    let delay = retryDelay(for: attempt)
+                    Logger.api.warning("Network error on attempt \(attempt) for \(operationName): \(error.localizedDescription). Retrying in \(String(format: "%.1f", delay))s...")
+                    try await sleepBeforeRetry(delay)
                     continue
                 }
             }
@@ -971,7 +1031,7 @@ public actor TwitchAPIClient {
                 durationSeconds: Date().timeIntervalSince(startedAt),
                 succeeded: true,
                 retryCount: result.retryCount,
-                rateLimitWaitSeconds: rateLimitWaitSeconds
+                rateLimitWaitSeconds: rateLimitWaitSeconds + result.coordinationWaitSeconds
             )
             return result.data
         } catch {
@@ -1030,10 +1090,6 @@ public actor TwitchAPIClient {
         allowRefreshRetry: Bool = true
     ) async throws -> Data {
         let operationName = request.operationName
-        // Enforce GQL rate limit before making the request
-        let rateLimitStartedAt = Date()
-        await rateLimiter.wait()
-        let rateLimitWaitSeconds = Date().timeIntervalSince(rateLimitStartedAt)
         await traceGQL(operationName)
         let tokenPrefix = accessToken.prefix(8)
         let tokenLength = accessToken.count
@@ -1071,7 +1127,7 @@ public actor TwitchAPIClient {
             return try await performMeasuredRequest(
                 urlRequest,
                 operationName: operationName,
-                rateLimitWaitSeconds: rateLimitWaitSeconds
+                rateLimitWaitSeconds: 0
             )
         } catch TwitchMinerError.tokenExpired where allowRefreshRetry {
             await PerformanceDiagnostics.shared.recordTokenRefresh(operation: operationName)
@@ -1086,9 +1142,6 @@ public actor TwitchAPIClient {
         operationName: String,
         allowRefreshRetry: Bool = true
     ) async throws -> Data {
-        let rateLimitStartedAt = Date()
-        await rateLimiter.wait()
-        let rateLimitWaitSeconds = Date().timeIntervalSince(rateLimitStartedAt)
         await traceGQL(operationName)
 
         guard let requestURL = URL(string: gqlUrl) else {
@@ -1116,7 +1169,7 @@ public actor TwitchAPIClient {
             return try await performMeasuredRequest(
                 urlRequest,
                 operationName: operationName,
-                rateLimitWaitSeconds: rateLimitWaitSeconds
+                rateLimitWaitSeconds: 0
             )
         } catch TwitchMinerError.tokenExpired where allowRefreshRetry {
             await PerformanceDiagnostics.shared.recordTokenRefresh(operation: operationName)

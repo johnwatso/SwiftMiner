@@ -5,11 +5,24 @@ final class MinerSupervisorTests: XCTestCase {
     func testNetworkAndRateLimitErrorsAreRetryable() {
         XCTAssertFalse(MinerEngine.shouldReportFatalError(.networkError("The request timed out.")))
         XCTAssertFalse(MinerEngine.shouldReportFatalError(.rateLimited(retryAfter: 30)))
+        XCTAssertFalse(MinerEngine.shouldReportFatalError(.apiError(statusCode: 429, message: "slow down")))
+        XCTAssertFalse(MinerEngine.shouldReportFatalError(.apiError(statusCode: 503, message: "unavailable")))
+        XCTAssertEqual(
+            MinerEngine.classifyIssue(TwitchMinerError.apiError(statusCode: 429, message: "slow down")).0,
+            .rateLimited
+        )
     }
 
     func testAuthErrorsRemainFatal() {
         XCTAssertTrue(MinerEngine.shouldReportFatalError(.tokenExpired))
         XCTAssertTrue(MinerEngine.shouldReportFatalError(.authenticationFailed("Forbidden")))
+    }
+
+    @MainActor
+    func testRecoveryStagesHaveBoundedDeadlines() {
+        XCTAssertEqual(MinerManager.recoveryTimeoutSeconds(for: .refresh), 90)
+        XCTAssertEqual(MinerManager.recoveryTimeoutSeconds(for: .restart), 120)
+        XCTAssertEqual(MinerManager.recoveryTimeoutSeconds(for: .authRefresh), 120)
     }
 
     func testPeerPollingMinerMarksSilentMinerStalled() async {
@@ -117,5 +130,39 @@ final class MinerSupervisorTests: XCTestCase {
         let afterProgress = await supervisor.snapshot(for: "miner")
         XCTAssertEqual(afterProgress?.lastDropProgressAt, base.addingTimeInterval(60))
         XCTAssertEqual(afterProgress?.lastEventAt, base.addingTimeInterval(60))
+    }
+
+    func testSingleMinerUsesConservativeLocalWatchdog() async {
+        let supervisor = MinerSupervisor(
+            configuration: .init(
+                stallTimeout: 60,
+                peerFreshnessWindow: 300,
+                startupGracePeriod: 0,
+                noRecentActivityWindow: 30,
+                recoveryBaseCooldown: 10,
+                recoveryMaxCooldown: 60,
+                localStallTimeout: 180
+            )
+        )
+        let now = Date(timeIntervalSince1970: 50_000)
+        let miner = MinerManager.ManagedMiner(
+            id: "solo",
+            accountId: "solo-account",
+            username: "solo",
+            status: .watching,
+            isRunning: true
+        )
+
+        await supervisor.registerMiner(miner.id)
+        await supervisor.recordWorkerStart(minerId: miner.id, taskID: "solo-task", at: now.addingTimeInterval(-300))
+        await supervisor.recordSuccessfulPoll(minerId: miner.id, at: now.addingTimeInterval(-120))
+
+        var snapshots = await supervisor.refreshHealth(for: [miner], now: now)
+        XCTAssertEqual(snapshots[miner.id]?.isStalled, false, "solo watchdog should use the longer local timeout")
+
+        snapshots = await supervisor.refreshHealth(for: [miner], now: now.addingTimeInterval(61))
+        XCTAssertEqual(snapshots[miner.id]?.isStalled, true)
+        let action = await supervisor.nextRecoveryAction(for: [miner], now: now.addingTimeInterval(61))
+        XCTAssertEqual(action?.stage, .refresh)
     }
 }
