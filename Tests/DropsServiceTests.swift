@@ -120,4 +120,44 @@ final class DropsServiceTests: XCTestCase {
         XCTAssertNil(updatedDrop.progress)
         XCTAssertFalse(updatedDrop.isClaimed, "Drop should NOT be claimed")
     }
+
+    func testExternalClaimDetectionUsesAllBenefitIDsAndIsIdempotentAfterMerge() {
+        let newlyClaimed = Drop(
+            id: "new",
+            name: "Newly claimed",
+            requiredMinutes: 30,
+            benefitID: "primary",
+            benefitIds: ["primary", "secondary"]
+        )
+        var alreadyClaimed = Drop(
+            id: "old",
+            name: "Already claimed",
+            requiredMinutes: 30,
+            benefitID: "old-benefit"
+        )
+        alreadyClaimed.isClaimed = true
+        let snapshot = InventorySnapshot(
+            accountId: "account",
+            benefitIDs: ["secondary", "old-benefit"],
+            progress: []
+        )
+
+        let detected = MinerEngine.externallyClaimedDrops(
+            in: [newlyClaimed, alreadyClaimed],
+            snapshot: snapshot
+        )
+        XCTAssertEqual(detected.map(\.id), ["new"])
+
+        let campaign = Campaign(
+            id: "campaign",
+            name: "Campaign",
+            game: Game(id: "game", name: "Game"),
+            status: .active,
+            startDate: Date().addingTimeInterval(-60),
+            endDate: Date().addingTimeInterval(3600),
+            drops: [newlyClaimed, alreadyClaimed]
+        )
+        let merged = DropsService.mergeInventory(snapshot, into: [campaign])
+        XCTAssertTrue(MinerEngine.externallyClaimedDrops(in: merged[0].drops, snapshot: snapshot).isEmpty)
+    }
 }

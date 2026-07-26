@@ -242,7 +242,7 @@ public final class Settings {
     public var antiStallRecoveryEnabled: Bool {
         get {
             access(keyPath: \.antiStallRecoveryEnabled)
-            return Self.read("antiStallRecoveryEnabled", default: false)
+            return Self.read("antiStallRecoveryEnabled", default: true)
         }
         set {
             withMutation(keyPath: \.antiStallRecoveryEnabled) {
@@ -1713,6 +1713,17 @@ public final class Settings {
         applyHeartbeatFilterDefaultIfNeeded()
         applyAuditFilterDefaultIfNeeded()
         applyUpdatesFilterDefaultIfNeeded()
+        applyHardenedAntiStallDefaultIfNeeded()
+    }
+
+    /// Earlier builds forcibly disabled this setting on every launch while recovery was being
+    /// reworked. Apply the hardened default once so existing installs are not permanently left
+    /// without a watchdog, while preserving any choice made after this migration.
+    private func applyHardenedAntiStallDefaultIfNeeded() {
+        let migrationKey = "hardenedAntiStallDefaultApplied"
+        guard !Self.read(migrationKey, default: false) else { return }
+        antiStallRecoveryEnabled = true
+        Self.write(migrationKey, true)
     }
 
     /// One-time migration from old comma-separated strings to new JSON model
@@ -2047,7 +2058,7 @@ public final class Settings {
         enableBadgesEmotes = false
         mineIRLCampaigns = true
         avoidDuplicateStreams = true
-        antiStallRecoveryEnabled = false
+        antiStallRecoveryEnabled = true
         prioritiseFollowedStreamers = false
         syncMinersState = true
         runInBackground = true

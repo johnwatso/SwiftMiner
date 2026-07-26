@@ -77,11 +77,48 @@ public struct HealthIncident: Codable, Sendable, Equatable, Identifiable {
         case automaticUpdateFailed
         case accountLinkRequired
         case other
+
+        /// Where each signal sits on the promotion path. Adding a case forces this choice;
+        /// new ones belong at `.displayed` until live data earns them a promotion.
+        public var deliveryStage: DeliveryStage {
+            switch self {
+            // Long-standing signals with a known, specific cause and a clear user action.
+            case .authenticationExpired,
+                 .recoveryExhausted,
+                 .progressStalled,
+                 .webDashboardUnavailable,
+                 .automaticUpdateFailed:
+                return .alerted
+            // Added in 1.34.3. It can flag every miner at once and its false-positive rate
+            // is still unmeasured, because the ledger that would measure it was itself
+            // wrong until 1.34.5. Promote only once that data says it is precise.
+            case .notEarning:
+                return .displayed
+            case .accountLinkRequired, .other:
+                return .displayed
+            }
+        }
     }
 
     public enum Severity: String, Codable, Sendable {
         case warning
         case critical
+    }
+
+    /// How far a signal has been promoted towards interrupting the user.
+    ///
+    /// Every new signal starts at `.displayed` and is only promoted to `.alerted` once real
+    /// data shows it is precise enough to be worth a notification. Going straight to
+    /// `.alerted` means guessing with someone's notification centre: a signal that fires on
+    /// every miner at once is noise, and its false-positive rate cannot be known before it
+    /// has run against live data. Demote rather than tolerate a noisy alert.
+    public enum DeliveryStage: Sendable {
+        /// Kept in the health store for diagnostics only.
+        case recorded
+        /// Shown in the app, status labels and the diagnostic report. Where new signals start.
+        case displayed
+        /// Also worth interrupting the user for.
+        case alerted
     }
 
     public let id: String

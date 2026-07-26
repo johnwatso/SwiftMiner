@@ -8,7 +8,7 @@ import Foundation
 /// every hour rollover, and on demand via `flush()`.
 public actor EarningLedgerStore {
     private struct PersistedState: Codable {
-        static let currentSchemaVersion = 1
+        static let currentSchemaVersion = 2
 
         var schemaVersion = currentSchemaVersion
         var buckets: [String: EarningLedgerBucket] = [:]
@@ -42,20 +42,20 @@ public actor EarningLedgerStore {
     // MARK: - Recording
 
     /// Credits observed watching time to the hour it fell in.
-    public func recordWatching(minerID: String, seconds: TimeInterval, at date: Date = Date()) {
+    public func recordWatching(accountID: String, seconds: TimeInterval, at date: Date = Date()) {
         guard seconds > 0 else { return }
-        mutateBucket(minerID: minerID, at: date) { $0.watchingSeconds += seconds }
+        mutateBucket(accountID: accountID, at: date) { $0.watchingSeconds += seconds }
     }
 
     /// Credits drop minutes and claims that Twitch confirmed during the hour.
     public func recordEarned(
-        minerID: String,
+        accountID: String,
         minutes: Int = 0,
         claims: Int = 0,
         at date: Date = Date()
     ) {
         guard minutes > 0 || claims > 0 else { return }
-        mutateBucket(minerID: minerID, at: date) {
+        mutateBucket(accountID: accountID, at: date) {
             $0.earnedMinutes += max(0, minutes)
             $0.claimedDrops += max(0, claims)
         }
@@ -63,9 +63,9 @@ public actor EarningLedgerStore {
 
     // MARK: - Reading
 
-    public func buckets(for minerID: String, since date: Date? = nil) -> [EarningLedgerBucket] {
+    public func buckets(for accountID: String, since date: Date? = nil) -> [EarningLedgerBucket] {
         state.buckets.values
-            .filter { $0.minerID == minerID && (date == nil || $0.hourStart >= date!) }
+            .filter { $0.accountID == accountID && (date == nil || $0.hourStart >= date!) }
             .sorted { $0.hourStart < $1.hourStart }
     }
 
@@ -73,18 +73,18 @@ public actor EarningLedgerStore {
         state.buckets.values
             .filter { date == nil || $0.hourStart >= date! }
             .sorted {
-                $0.hourStart == $1.hourStart ? $0.minerID < $1.minerID : $0.hourStart < $1.hourStart
+                $0.hourStart == $1.hourStart ? $0.accountID < $1.accountID : $0.hourStart < $1.hourStart
             }
     }
 
     public func summaries(since date: Date? = nil) -> [EarningLedgerSummary] {
-        Dictionary(grouping: allBuckets(since: date), by: \.minerID)
-            .map { EarningLedgerSummary.make(minerID: $0.key, buckets: $0.value) }
-            .sorted { $0.minerID < $1.minerID }
+        Dictionary(grouping: allBuckets(since: date), by: \.accountID)
+            .map { EarningLedgerSummary.make(accountID: $0.key, buckets: $0.value) }
+            .sorted { $0.accountID < $1.accountID }
     }
 
-    public func summary(for minerID: String, since date: Date? = nil) -> EarningLedgerSummary {
-        EarningLedgerSummary.make(minerID: minerID, buckets: buckets(for: minerID, since: date))
+    public func summary(for accountID: String, since date: Date? = nil) -> EarningLedgerSummary {
+        EarningLedgerSummary.make(accountID: accountID, buckets: buckets(for: accountID, since: date))
     }
 
     /// Hours where a miner watched meaningfully and banked nothing, newest first.
@@ -112,13 +112,13 @@ public actor EarningLedgerStore {
     // MARK: - Internals
 
     private func mutateBucket(
-        minerID: String,
+        accountID: String,
         at date: Date,
         _ body: (inout EarningLedgerBucket) -> Void
     ) {
         let hourStart = EarningLedgerBucket.hourStart(for: date)
-        let key = EarningLedgerBucket.id(minerID: minerID, hourStart: hourStart)
-        var bucket = state.buckets[key] ?? EarningLedgerBucket(minerID: minerID, hourStart: hourStart)
+        let key = EarningLedgerBucket.id(accountID: accountID, hourStart: hourStart)
+        var bucket = state.buckets[key] ?? EarningLedgerBucket(accountID: accountID, hourStart: hourStart)
         body(&bucket)
         state.buckets[key] = bucket
         isDirty = true

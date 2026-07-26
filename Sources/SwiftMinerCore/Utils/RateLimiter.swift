@@ -5,32 +5,39 @@ import Foundation
 actor RateLimiter {
 
     private let maxRequests: Int
-    private let windowInterval: TimeInterval
+    private let windowNanoseconds: UInt64
+    private let runtimeClock: RuntimeClock
     /// Ring of timestamps for recent requests
-    private var window: [Date] = []
+    private var window: [UInt64] = []
 
-    init(maxRequests: Int = 5, per windowInterval: TimeInterval = 1.0) {
+    init(
+        maxRequests: Int = 5,
+        per windowInterval: TimeInterval = 1.0,
+        runtimeClock: RuntimeClock = .continuous
+    ) {
         self.maxRequests = maxRequests
-        self.windowInterval = windowInterval
+        self.windowNanoseconds = RuntimeClock.nanoseconds(windowInterval)
+        self.runtimeClock = runtimeClock
     }
 
     /// Suspends the caller until a request slot is available, then claims one.
-    func wait() async {
-        let now = Date()
-        // Evict timestamps outside the current window
-        window = window.filter { now.timeIntervalSince($0) < windowInterval }
-
-        if window.count >= maxRequests, let oldest = window.first {
-            // Sleep until the oldest request leaves the window
-            let delay = windowInterval - now.timeIntervalSince(oldest)
-            if delay > 0 {
-                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+    func wait() async throws {
+        while true {
+            try Task.checkCancellation()
+            let now = runtimeClock.nowNanoseconds()
+            window.removeAll { tick in
+                now >= tick && now - tick >= windowNanoseconds
             }
-            // Re-evict after sleep
-            let after = Date()
-            window = window.filter { after.timeIntervalSince($0) < windowInterval }
-        }
 
-        window.append(Date())
+            if window.count < maxRequests {
+                window.append(now)
+                return
+            }
+
+            guard let oldest = window.min() else { continue }
+            let deadline = oldest.addingReportingOverflow(windowNanoseconds)
+            let availableAt = deadline.overflow ? UInt64.max : deadline.partialValue
+            try await runtimeClock.sleep(nanoseconds: availableAt > now ? availableAt - now : 1)
+        }
     }
 }

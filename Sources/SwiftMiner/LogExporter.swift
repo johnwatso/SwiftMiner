@@ -109,14 +109,14 @@ enum LogExporter {
         let settings: [(String, String)]
         let resourceUsage: ResourceUsageMonitor.Diagnostics?
         let performance: PerformanceDiagnostics.Snapshot?
-        /// Per-miner earning totals over the ledger's retention window.
+        /// Per-account earning totals over the ledger's retention window.
         let earningSummaries: [EarningLedgerSummary]
         /// Hours where a miner watched meaningfully and banked nothing, newest first.
         let nonEarningHours: [EarningLedgerBucket]
         /// Recent hourly buckets, oldest first, so the report shows the shape over time.
         let earningBuckets: [EarningLedgerBucket]
-        /// Miner display names keyed by miner ID, for labelling ledger rows.
-        let minerNames: [String: String]
+        /// Miner display names keyed by account ID, for labelling ledger rows.
+        let accountNames: [String: String]
         /// Events in chronological order (oldest first).
         let events: [Event]
 
@@ -133,7 +133,7 @@ enum LogExporter {
             earningSummaries: [EarningLedgerSummary] = [],
             nonEarningHours: [EarningLedgerBucket] = [],
             earningBuckets: [EarningLedgerBucket] = [],
-            minerNames: [String: String] = [:],
+            accountNames: [String: String] = [:],
             events: [Event]
         ) {
             self.generatedAt = generatedAt
@@ -148,7 +148,7 @@ enum LogExporter {
             self.earningSummaries = earningSummaries
             self.nonEarningHours = nonEarningHours
             self.earningBuckets = earningBuckets
-            self.minerNames = minerNames
+            self.accountNames = accountNames
             self.events = events
         }
     }
@@ -269,12 +269,12 @@ enum LogExporter {
             return out + "(no earning history recorded)\n"
         }
 
-        func label(_ minerID: String) -> String {
-            LogRedactor.redact(snapshot.minerNames[minerID] ?? minerID)
+        func label(_ accountID: String) -> String {
+            LogRedactor.redact(snapshot.accountNames[accountID] ?? accountID)
         }
 
         for summary in snapshot.earningSummaries {
-            out += "[\(label(summary.minerID))]"
+            out += "[\(label(summary.accountID))]"
             out += " watched=\(formatDuration(summary.watchingSeconds))"
             out += " earned=\(summary.earnedMinutes)min"
             out += " claims=\(summary.claimedDrops)"
@@ -289,7 +289,7 @@ enum LogExporter {
         if !snapshot.nonEarningHours.isEmpty {
             out += "Non-earning hours (newest first, \(snapshot.nonEarningHours.count)):\n"
             for bucket in snapshot.nonEarningHours {
-                out += "  \(formatter.string(from: bucket.hourStart))  [\(label(bucket.minerID))]"
+                out += "  \(formatter.string(from: bucket.hourStart))  [\(label(bucket.accountID))]"
                 out += " watched=\(formatDuration(bucket.watchingSeconds)) earned=0min\n"
             }
         }
@@ -297,7 +297,7 @@ enum LogExporter {
         if !snapshot.earningBuckets.isEmpty {
             out += "Hourly detail (oldest → newest, \(snapshot.earningBuckets.count)):\n"
             for bucket in snapshot.earningBuckets {
-                out += "  \(formatter.string(from: bucket.hourStart))  [\(label(bucket.minerID))]"
+                out += "  \(formatter.string(from: bucket.hourStart))  [\(label(bucket.accountID))]"
                 out += " watched=\(formatDuration(bucket.watchingSeconds))"
                 out += " earned=\(bucket.earnedMinutes)min claims=\(bucket.claimedDrops)\n"
             }
@@ -561,8 +561,8 @@ enum LogExporter {
         // burying the report under a week of rows.
         let bucketWindowStart = Date().addingTimeInterval(-48 * 60 * 60)
         let earningBuckets = await ledger?.allBuckets(since: bucketWindowStart) ?? []
-        let minerNames = Dictionary(
-            navigation.minerManager.miners.map { ($0.id, $0.displayName) },
+        let accountNames = Dictionary(
+            navigation.minerManager.miners.map { ($0.accountId, $0.displayName) },
             uniquingKeysWith: { first, _ in first }
         )
 
@@ -589,7 +589,7 @@ enum LogExporter {
             earningSummaries: earningSummaries,
             nonEarningHours: nonEarningHours,
             earningBuckets: earningBuckets,
-            minerNames: minerNames,
+            accountNames: accountNames,
             events: events
         )
     }

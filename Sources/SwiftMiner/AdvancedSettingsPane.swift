@@ -106,7 +106,7 @@ struct ResourceUsagePopover: View {
 /// it stop?" — the question a miner that looks healthy and mines nothing raises.
 struct EarningLedgerPopover: View {
     let store: EarningLedgerStore?
-    let minerNames: [String: String]
+    let accountNames: [String: String]
 
     @State private var summaries: [EarningLedgerSummary] = []
     @State private var nonEarningHours: [EarningLedgerBucket] = []
@@ -136,7 +136,7 @@ struct EarningLedgerPopover: View {
                     }
                     ForEach(summaries) { summary in
                         GridRow {
-                            Text(minerNames[summary.minerID] ?? summary.minerID)
+                            Text(accountNames[summary.accountID] ?? summary.accountID)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                             Text(Self.hoursText(summary.watchingSeconds)).monospacedDigit()
@@ -323,8 +323,8 @@ struct AdvancedSettingsView: View {
             .popover(isPresented: $showEarningLedger, arrowEdge: .bottom) {
                 EarningLedgerPopover(
                     store: navigation.minerManager.earningLedgerStore,
-                    minerNames: Dictionary(
-                        navigation.minerManager.miners.map { ($0.id, $0.displayName) },
+                    accountNames: Dictionary(
+                        navigation.minerManager.miners.map { ($0.accountId, $0.displayName) },
                         uniquingKeysWith: { first, _ in first }
                     )
                 )

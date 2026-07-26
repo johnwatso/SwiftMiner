@@ -9,7 +9,7 @@ public struct EarningLedgerBucket: Codable, Sendable, Equatable, Identifiable {
     /// Wall-clock length of a bucket.
     public static let interval: TimeInterval = 60 * 60
 
-    public let minerID: String
+    public let accountID: String
     /// Start of the hour this bucket covers.
     public let hourStart: Date
     /// Seconds this miner was observed in `.watching` during the hour.
@@ -19,24 +19,24 @@ public struct EarningLedgerBucket: Codable, Sendable, Equatable, Identifiable {
     /// Drops claimed during the hour.
     public var claimedDrops: Int
 
-    public var id: String { Self.id(minerID: minerID, hourStart: hourStart) }
+    public var id: String { Self.id(accountID: accountID, hourStart: hourStart) }
 
     public init(
-        minerID: String,
+        accountID: String,
         hourStart: Date,
         watchingSeconds: TimeInterval = 0,
         earnedMinutes: Int = 0,
         claimedDrops: Int = 0
     ) {
-        self.minerID = minerID
+        self.accountID = accountID
         self.hourStart = hourStart
         self.watchingSeconds = watchingSeconds
         self.earnedMinutes = earnedMinutes
         self.claimedDrops = claimedDrops
     }
 
-    public static func id(minerID: String, hourStart: Date) -> String {
-        "\(minerID)|\(Int(hourStart.timeIntervalSince1970))"
+    public static func id(accountID: String, hourStart: Date) -> String {
+        "\(accountID)|\(Int(hourStart.timeIntervalSince1970))"
     }
 
     /// The start of the bucket a timestamp belongs to.
@@ -54,7 +54,7 @@ public struct EarningLedgerBucket: Codable, Sendable, Equatable, Identifiable {
 
 /// Totals across a span of buckets for one miner.
 public struct EarningLedgerSummary: Sendable, Equatable, Identifiable {
-    public let minerID: String
+    public let accountID: String
     public let watchingSeconds: TimeInterval
     public let earnedMinutes: Int
     public let claimedDrops: Int
@@ -65,10 +65,10 @@ public struct EarningLedgerSummary: Sendable, Equatable, Identifiable {
     public let firstHourStart: Date?
     public let lastHourStart: Date?
 
-    public var id: String { minerID }
+    public var id: String { accountID }
 
     public init(
-        minerID: String,
+        accountID: String,
         watchingSeconds: TimeInterval,
         earnedMinutes: Int,
         claimedDrops: Int,
@@ -77,7 +77,7 @@ public struct EarningLedgerSummary: Sendable, Equatable, Identifiable {
         firstHourStart: Date?,
         lastHourStart: Date?
     ) {
-        self.minerID = minerID
+        self.accountID = accountID
         self.watchingSeconds = watchingSeconds
         self.earnedMinutes = earnedMinutes
         self.claimedDrops = claimedDrops
@@ -94,9 +94,9 @@ public struct EarningLedgerSummary: Sendable, Equatable, Identifiable {
         return Double(earnedMinutes) / (watchingSeconds / 3600)
     }
 
-    public static func make(minerID: String, buckets: [EarningLedgerBucket]) -> EarningLedgerSummary {
+    public static func make(accountID: String, buckets: [EarningLedgerBucket]) -> EarningLedgerSummary {
         EarningLedgerSummary(
-            minerID: minerID,
+            accountID: accountID,
             watchingSeconds: buckets.reduce(0) { $0 + $1.watchingSeconds },
             earnedMinutes: buckets.reduce(0) { $0 + $1.earnedMinutes },
             claimedDrops: buckets.reduce(0) { $0 + $1.claimedDrops },

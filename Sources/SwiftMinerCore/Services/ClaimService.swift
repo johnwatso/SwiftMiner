@@ -1,5 +1,14 @@
 import Foundation
 
+public enum ClaimFailureKind: String, Sendable, Equatable {
+    case transient
+    case rateLimited
+    case authentication
+    case rejected
+    case cancelled
+    case unknown
+}
+
 /// Result of a claim operation
 public struct ClaimResult: Sendable {
     public let dropInstanceId: String
@@ -8,6 +17,9 @@ public struct ClaimResult: Sendable {
     public let success: Bool
     public let error: String?
     public let claimedAt: Date
+    public let confirmedByInventory: Bool
+    public let failureKind: ClaimFailureKind?
+    public let retryAfter: TimeInterval?
 
     public init(
         dropInstanceId: String,
@@ -15,7 +27,10 @@ public struct ClaimResult: Sendable {
         campaignName: String,
         success: Bool,
         error: String? = nil,
-        claimedAt: Date = Date()
+        claimedAt: Date = Date(),
+        confirmedByInventory: Bool = false,
+        failureKind: ClaimFailureKind? = nil,
+        retryAfter: TimeInterval? = nil
     ) {
         self.dropInstanceId = dropInstanceId
         self.dropName = dropName
@@ -23,6 +38,9 @@ public struct ClaimResult: Sendable {
         self.success = success
         self.error = error
         self.claimedAt = claimedAt
+        self.confirmedByInventory = confirmedByInventory
+        self.failureKind = failureKind
+        self.retryAfter = retryAfter
     }
 }
 
@@ -30,10 +48,24 @@ public struct ClaimResult: Sendable {
 public actor ClaimService {
     private let apiClient: TwitchAPIClient
     private let dropsService: DropsService?
+    private let runtimeClock: RuntimeClock
+    private let claimConfirmation: (@Sendable (Progress) async -> Bool)?
+    private struct RetryState: Sendable {
+        let attempts: Int
+        let retryAtTick: UInt64
+    }
+    private var retryStateByDrop: [String: RetryState] = [:]
 
-    public init(apiClient: TwitchAPIClient, dropsService: DropsService? = nil) {
+    public init(
+        apiClient: TwitchAPIClient,
+        dropsService: DropsService? = nil,
+        runtimeClock: RuntimeClock = .continuous,
+        claimConfirmation: (@Sendable (Progress) async -> Bool)? = nil
+    ) {
         self.apiClient = apiClient
         self.dropsService = dropsService
+        self.runtimeClock = runtimeClock
+        self.claimConfirmation = claimConfirmation
     }
 
     /// Claim a single drop
@@ -61,6 +93,19 @@ public actor ClaimService {
             )
         }
 
+        if let retryState = retryStateByDrop[progress.id],
+           !runtimeClock.hasReached(retryState.retryAtTick) {
+            return ClaimResult(
+                dropInstanceId: progress.id,
+                dropName: progress.dropName,
+                campaignName: "",
+                success: false,
+                error: "Claim retry is cooling down",
+                failureKind: .transient,
+                retryAfter: max(1, runtimeClock.remainingSeconds(until: retryState.retryAtTick))
+            )
+        }
+
         do {
             traceClaim("\(progress.dropName) (instanceId=\(progress.id))")
             let response = try await apiClient.claimDrop(dropInstanceId: progress.id)
@@ -72,20 +117,148 @@ public actor ClaimService {
                 campaignName = campaign?.name ?? ""
             }
 
+            if response.status == "CLAIMED" || response.status == "SUCCESS" {
+                retryStateByDrop[progress.id] = nil
+                return ClaimResult(
+                    dropInstanceId: progress.id,
+                    dropName: progress.dropName,
+                    campaignName: campaignName,
+                    success: true
+                )
+            }
+
+            if await confirmClaim(progress) {
+                retryStateByDrop[progress.id] = nil
+                return ClaimResult(
+                    dropInstanceId: progress.id,
+                    dropName: progress.dropName,
+                    campaignName: campaignName,
+                    success: true,
+                    confirmedByInventory: true
+                )
+            }
+
+            return scheduleRetry(
+                for: progress,
+                campaignName: campaignName,
+                kind: .rejected,
+                message: "Twitch returned claim status \(response.status)",
+                requestedDelay: nil
+            )
+        } catch {
+            let classification = Self.classifyFailure(error)
+            if classification.kind != .authentication,
+               classification.kind != .rejected,
+               classification.kind != .cancelled,
+               await confirmClaim(progress) {
+                retryStateByDrop[progress.id] = nil
+                return ClaimResult(
+                    dropInstanceId: progress.id,
+                    dropName: progress.dropName,
+                    campaignName: "",
+                    success: true,
+                    confirmedByInventory: true
+                )
+            }
+
+            return scheduleRetry(
+                for: progress,
+                campaignName: "",
+                kind: classification.kind,
+                message: error.localizedDescription,
+                requestedDelay: classification.retryAfter
+            )
+        }
+    }
+
+    static func classifyFailure(_ error: Error) -> (kind: ClaimFailureKind, retryAfter: TimeInterval?) {
+        if error is CancellationError { return (.cancelled, nil) }
+        if let urlError = error as? URLError, urlError.code == .cancelled {
+            return (.cancelled, nil)
+        }
+        if let twitchError = error as? TwitchMinerError {
+            switch twitchError {
+            case .rateLimited(let retryAfter): return (.rateLimited, retryAfter)
+            case .networkError: return (.transient, nil)
+            case .apiError(let statusCode, _):
+                if statusCode == 408 || statusCode == 425 || statusCode == 429 || (500...599).contains(statusCode) {
+                    return (statusCode == 429 ? .rateLimited : .transient, nil)
+                }
+                if statusCode == 401 || statusCode == 403 { return (.authentication, nil) }
+                return (.rejected, nil)
+            case .tokenExpired, .authenticationFailed, .keychainError:
+                return (.authentication, nil)
+            case .dropAlreadyClaimed:
+                return (.rejected, nil)
+            default:
+                return (.unknown, nil)
+            }
+        }
+        if error is URLError { return (.transient, nil) }
+        return (.unknown, nil)
+    }
+
+    private func scheduleRetry(
+        for progress: Progress,
+        campaignName: String,
+        kind: ClaimFailureKind,
+        message: String,
+        requestedDelay: TimeInterval?
+    ) -> ClaimResult {
+        guard kind == .transient || kind == .rateLimited || kind == .unknown else {
+            retryStateByDrop[progress.id] = nil
             return ClaimResult(
                 dropInstanceId: progress.id,
                 dropName: progress.dropName,
                 campaignName: campaignName,
-                success: response.status == "CLAIMED" || response.status == "SUCCESS"
-            )
-        } catch {
-            return ClaimResult(
-                dropInstanceId: progress.id,
-                dropName: progress.dropName,
-                campaignName: "",
                 success: false,
-                error: error.localizedDescription
+                error: message,
+                failureKind: kind
             )
+        }
+
+        let attempts = retryStateByDrop[progress.id].map { $0.attempts + 1 } ?? 1
+        let exponential = min(30 * pow(2, Double(attempts - 1)), 10 * 60)
+        let delay = max(1, requestedDelay ?? exponential)
+        retryStateByDrop[progress.id] = RetryState(
+            attempts: attempts,
+            retryAtTick: runtimeClock.deadline(after: delay)
+        )
+        return ClaimResult(
+            dropInstanceId: progress.id,
+            dropName: progress.dropName,
+            campaignName: campaignName,
+            success: false,
+            error: message,
+            failureKind: kind,
+            retryAfter: delay
+        )
+    }
+
+    private func confirmClaim(_ progress: Progress) async -> Bool {
+        if let claimConfirmation {
+            return await claimConfirmation(progress)
+        }
+        guard let dropsService else { return false }
+
+        do {
+            let inventoryService = await dropsService.getInventoryService()
+            let result = try await inventoryService.fetchInventoryResult(forceRefresh: true)
+            guard result.isAuthoritative else { return false }
+            if result.snapshot.progress.contains(where: { $0.id == progress.id && $0.isClaimed }) {
+                return true
+            }
+
+            guard let campaign = try? await dropsService.getCampaign(id: progress.campaignId),
+                  let drop = campaign.drops.first(where: { $0.id == progress.dropId }) else {
+                return false
+            }
+            let benefitIDs = drop.benefitIds.isEmpty
+                ? (drop.benefitID.isEmpty ? [] : [drop.benefitID])
+                : drop.benefitIds
+            return benefitIDs.contains { result.snapshot.benefitIDs.contains($0) }
+        } catch {
+            return false
         }
     }
 
@@ -110,7 +283,11 @@ public actor ClaimService {
                 results.append(result)
 
                 // Small delay between claims to avoid rate limiting
-                try? await Task.sleep(nanoseconds: 500_000_000) // 500ms
+                do {
+                    try await runtimeClock.sleep(nanoseconds: 500_000_000)
+                } catch {
+                    break
+                }
             }
 
             return results
@@ -153,7 +330,11 @@ public actor ClaimService {
                 }
 
                 // Small delay between claims
-                try? await Task.sleep(nanoseconds: 500_000_000)
+                do {
+                    try await runtimeClock.sleep(nanoseconds: 500_000_000)
+                } catch {
+                    break
+                }
             }
         } catch {
             traceClaim("claimAllDrops(from:) failed fetching inventory: \(error.localizedDescription)")

@@ -171,12 +171,19 @@ final class MinerSchedulingTests: XCTestCase {
     }
 
     func testIsOnStallCooldown_TrueOnlyWhileActive() {
+        let nowTick: UInt64 = 1_000_000_000
         let cooldowns = [
-            "active": now.addingTimeInterval(600),   // expires in 10m
-            "expired": now.addingTimeInterval(-60),  // expired 1m ago
+            "active": nowTick + 600_000_000_000,
+            "expired": nowTick - 1,
         ]
-        XCTAssertTrue(MinerEngine.isOnStallCooldown("active", cooldowns: cooldowns, now: now))
-        XCTAssertFalse(MinerEngine.isOnStallCooldown("expired", cooldowns: cooldowns, now: now))
-        XCTAssertFalse(MinerEngine.isOnStallCooldown("unknown", cooldowns: cooldowns, now: now))
+        XCTAssertTrue(MinerEngine.isOnStallCooldown("active", cooldowns: cooldowns, now: nowTick))
+        XCTAssertFalse(MinerEngine.isOnStallCooldown("expired", cooldowns: cooldowns, now: nowTick))
+        XCTAssertFalse(MinerEngine.isOnStallCooldown("unknown", cooldowns: cooldowns, now: nowTick))
+    }
+
+    func testUnverifiedSelectionAbandonsAtProbationLimitOnly() {
+        XCTAssertFalse(MinerEngine.shouldAbandonUnverifiedSelection(isUnverified: false, emptyPolls: 100))
+        XCTAssertFalse(MinerEngine.shouldAbandonUnverifiedSelection(isUnverified: true, emptyPolls: 2))
+        XCTAssertTrue(MinerEngine.shouldAbandonUnverifiedSelection(isUnverified: true, emptyPolls: 3))
     }
 }

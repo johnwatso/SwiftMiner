@@ -82,7 +82,7 @@ final class LogExporterTests: XCTestCase {
         earningSummaries: [EarningLedgerSummary] = [],
         nonEarningHours: [EarningLedgerBucket] = [],
         earningBuckets: [EarningLedgerBucket] = [],
-        minerNames: [String: String] = [:]
+        accountNames: [String: String] = [:]
     ) -> LogExporter.Snapshot {
         LogExporter.Snapshot(
             generatedAt: Date(timeIntervalSince1970: 1_730_000_500),
@@ -97,7 +97,7 @@ final class LogExporterTests: XCTestCase {
             earningSummaries: earningSummaries,
             nonEarningHours: nonEarningHours,
             earningBuckets: earningBuckets,
-            minerNames: minerNames,
+            accountNames: accountNames,
             events: events
         )
     }
@@ -247,14 +247,14 @@ final class LogExporterTests: XCTestCase {
     // MARK: - Earning ledger
 
     private func bucket(
-        _ minerID: String,
+        _ accountID: String,
         hourOffset: Int,
         watching: TimeInterval,
         earned: Int = 0,
         claims: Int = 0
     ) -> EarningLedgerBucket {
         EarningLedgerBucket(
-            minerID: minerID,
+            accountID: accountID,
             hourStart: Date(timeIntervalSince1970: 1_699_999_200 + Double(hourOffset) * 3600),
             watchingSeconds: watching,
             earnedMinutes: earned,
@@ -272,10 +272,10 @@ final class LogExporterTests: XCTestCase {
         let good = bucket("gabe", hourOffset: 0, watching: 3600, earned: 58, claims: 1)
         let bad = bucket("gabe", hourOffset: 1, watching: 3600)
         let snap = snapshot(
-            earningSummaries: [EarningLedgerSummary.make(minerID: "gabe", buckets: [good, bad])],
+            earningSummaries: [EarningLedgerSummary.make(accountID: "gabe", buckets: [good, bad])],
             nonEarningHours: [bad],
             earningBuckets: [good, bad],
-            minerNames: ["gabe": "Gabe"]
+            accountNames: ["gabe": "Gabe"]
         )
 
         let report = LogExporter.buildReport(snap)
@@ -288,9 +288,9 @@ final class LogExporterTests: XCTestCase {
     func testReportRedactsMinerNamesInLedgerRows() {
         let bad = bucket("gabe", hourOffset: 0, watching: 3600)
         let snap = snapshot(
-            earningSummaries: [EarningLedgerSummary.make(minerID: "gabe", buckets: [bad])],
+            earningSummaries: [EarningLedgerSummary.make(accountID: "gabe", buckets: [bad])],
             nonEarningHours: [bad],
-            minerNames: ["gabe": "user@example.com"]
+            accountNames: ["gabe": "user@example.com"]
         )
 
         let report = LogExporter.buildReport(snap)

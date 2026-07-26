@@ -28,7 +28,13 @@ public actor CommunityPointsService {
                     // Non-fatal, just wait for next cycle
                 }
                 
-                try? await Task.sleep(nanoseconds: UInt64(checkInterval * 1_000_000_000))
+                do {
+                    try await RuntimeClock.continuous.sleep(
+                        nanoseconds: RuntimeClock.nanoseconds(checkInterval)
+                    )
+                } catch {
+                    break
+                }
             }
         }
     }

@@ -114,10 +114,9 @@ final class CampaignMetadataSharingTests: XCTestCase {
         XCTAssertNil(rebuilt.drops[0].progress)
     }
 
-    /// The details cache exists to spare a refetch on the next cycle. At exactly the
-    /// campaign check interval every entry expired just before it was needed, so the cache
-    /// never hit and each cycle refetched every active campaign.
-    func testDetailsCacheOutlivesTheCampaignRefreshInterval() async {
+    /// Slow campaign metadata may outlive mutable account state, but link state itself must
+    /// remain bounded so linking or unlinking is detected promptly.
+    func testCacheTTLsSeparateSharedMetadataFromMutableLinkState() async {
         let client = TwitchAPIClient(
             authService: TwitchAuthService(clientId: "test", tokenStore: InMemoryTokenStore()),
             clientId: "test"
@@ -126,7 +125,39 @@ final class CampaignMetadataSharingTests: XCTestCase {
 
         let detailsTTL = await client.campaignDetailsCacheTTL
         let linkStateTTL = await client.campaignLinkStateTTL
+        let sharedMetadataTTL = await client.sharedCampaignMetadataTTL
         XCTAssertGreaterThan(detailsTTL, campaignCheckInterval)
         XCTAssertGreaterThan(linkStateTTL, campaignCheckInterval)
+        XCTAssertLessThanOrEqual(linkStateTTL, detailsTTL)
+        XCTAssertGreaterThan(sharedMetadataTTL, detailsTTL)
+    }
+
+    /// A shared cache hit that depends on a remembered link result must expire with that
+    /// result, rather than silently stretching it for another full details-cache window.
+    func testSharedDetailsNeverOutliveRememberedLinkState() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let linkStateExpiration = now.addingTimeInterval(90)
+
+        let expiration = TwitchAPIClient.sharedCampaignDetailsExpiration(
+            now: now,
+            detailsTTL: 20 * 60,
+            basicIsAccountConnected: false,
+            knownLinkStateExpiresAt: linkStateExpiration
+        )
+
+        XCTAssertEqual(expiration, linkStateExpiration)
+    }
+
+    func testDashboardConfirmedLinkageUsesNormalDetailsLifetime() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+
+        let expiration = TwitchAPIClient.sharedCampaignDetailsExpiration(
+            now: now,
+            detailsTTL: 20 * 60,
+            basicIsAccountConnected: true,
+            knownLinkStateExpiresAt: now.addingTimeInterval(90)
+        )
+
+        XCTAssertEqual(expiration, now.addingTimeInterval(20 * 60))
     }
 }

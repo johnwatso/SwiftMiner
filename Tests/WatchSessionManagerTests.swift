@@ -122,6 +122,64 @@ final class WatchSessionManagerTests: XCTestCase {
         XCTAssertGreaterThan(watchTime, 0)
         await manager.stopWatching()
     }
+
+    func testRepeatedFailureOfBothHeartbeatTransportsEndsSession() async throws {
+        let playbackTokenJson = #"{"data":{"streamPlaybackAccessToken":{"value":"test_token","signature":"test_sig"}}}"#
+        let repeatedFailure = expectation(description: "repeated heartbeat failure surfaced")
+
+        MockURLProtocol.requestHandler = { request in
+            let url = request.url?.absoluteString ?? ""
+            let response: (Int) -> HTTPURLResponse = { status in
+                HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!
+            }
+
+            if url.contains("twitch.tv/testchannel") {
+                let html = #"<script>var spade_url = "https://spade.twitch.tv/track";</script>"#
+                return (response(200), html.data(using: .utf8)!)
+            }
+            if url.contains("spade.twitch.tv/track") {
+                return (response(500), Data())
+            }
+            if let body = request.httpBody,
+               let rawBody = String(data: body, encoding: .utf8),
+               rawBody.contains("SendSpadeEvents") {
+                // Use a non-retryable failure here. HTTP 5xx is deliberately retried by the
+                // API client and is covered by MiningReliabilityChaosTests; this test isolates
+                // the watch manager's consecutive *transport* failure budget.
+                return (response(400), Data())
+            }
+            return (response(200), playbackTokenJson.data(using: .utf8)!)
+        }
+
+        manager = WatchSessionManager(
+            apiClient: apiClient,
+            urlSession: mockSession,
+            heartbeatInterval: 0.02,
+            heartbeatFailureThreshold: 2,
+            runtimeClock: .continuous
+        )
+        await manager.setUserId("12345")
+        await manager.setErrorHandler { error in
+            if case .watchSessionFailed(let message) = error,
+               message.hasPrefix("Repeated heartbeat delivery failure") {
+                repeatedFailure.fulfill()
+            }
+        }
+
+        let channel = Channel(id: "ch123", login: "testchannel", displayName: "TestChannel")
+        let session = try await manager.startWatching(channel: channel, campaignId: "camp456")
+
+        await fulfillment(of: [repeatedFailure], timeout: 3)
+        let isWatching = await manager.isWatching
+        XCTAssertFalse(isWatching)
+        XCTAssertEqual(session.consecutiveHeartbeatFailures, 2)
+        if case .error = session.state {
+            // Expected terminal state.
+        } else {
+            XCTFail("Repeated heartbeat failures should end the watch session")
+        }
+        await manager.stopWatching()
+    }
     
     func testStartWatchingFailsIfAlreadyWatching() async throws {
         let playbackTokenJson = "{\"data\": {\"streamPlaybackAccessToken\": {\"value\": \"t\", \"signature\": \"s\"}}}"
