@@ -178,6 +178,23 @@ struct MinerStateCard: View {
             )
         }
 
+        if !miner.isRunning {
+            if miner.status == .authenticating {
+                return StateConfig(
+                    headline: "Starting...",
+                    subtitle: "Preparing this miner and connecting to Twitch.",
+                    icon: "arrow.triangle.2.circlepath",
+                    color: .orange
+                )
+            }
+            return StateConfig(
+                headline: "Stopped",
+                subtitle: "Start this miner to check for and earn drops.",
+                icon: "stop.circle.fill",
+                color: .secondary
+            )
+        }
+
         switch state {
         case .blocked(let reasons):
             if reasons.contains(.accountNotLinked) {
@@ -806,6 +823,25 @@ struct MinerActivitySnapshot {
                 subtitle: "Worker is running, but it has not reported recent liveness yet.",
                 symbol: "clock.badge.exclamationmark",
                 accent: .yellow
+            )
+        }
+
+        if !miner.isRunning {
+            if miner.status == .authenticating {
+                return waitingItem(
+                    id: "starting-\(miner.id)",
+                    title: "Starting...",
+                    subtitle: "Preparing this miner and connecting to Twitch.",
+                    symbol: "arrow.triangle.2.circlepath",
+                    accent: .orange
+                )
+            }
+            return waitingItem(
+                id: "stopped-\(miner.id)",
+                title: "Stopped",
+                subtitle: "Start this miner to check for and earn drops.",
+                symbol: "stop.circle.fill",
+                accent: .secondary
             )
         }
 
@@ -1491,6 +1527,9 @@ struct MinerActivitySnapshot {
         if miner.showsNoRecentActivityAttention {
             return "No Recent Activity"
         }
+        if now.id.hasPrefix("starting-") || now.id.hasPrefix("stopped-") {
+            return now.title
+        }
         if now.id.hasPrefix("waiting-drops-") || now.id.hasPrefix("ignored-link-") {
             return "Up to Date"
         }
@@ -1534,6 +1573,9 @@ struct MinerActivitySnapshot {
         }
         if miner.showsNoRecentActivityAttention {
             return "checkmark.circle.trianglebadge.exclamationmark.fill"
+        }
+        if now.id.hasPrefix("starting-") || now.id.hasPrefix("stopped-") {
+            return now.symbol
         }
         if now.id.hasPrefix("ignored-link-") {
             return "calendar.badge.checkmark"
@@ -1581,6 +1623,9 @@ struct MinerActivitySnapshot {
         }
         if miner.showsNoRecentActivityAttention {
             return .yellow
+        }
+        if now.id.hasPrefix("starting-") || now.id.hasPrefix("stopped-") {
+            return now.accent
         }
         if now.id.hasPrefix("ignored-link-") {
             return .green

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SwiftMiner 1.34.51 - Release Notes</title>
+  <meta name="description" content="Release notes for SwiftMiner 1.34.51: restores immediate multi-account miner startup after the 1.34.5 request-coordination regression.">
+  <link rel="canonical" href="https://swiftminer.app/release-notes/1.34.51.html">
+  <meta name="robots" content="index, follow">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <style>
+    :root { color-scheme: light dark; }
+    body { margin: 0; padding: 32px 20px 48px; font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f4f6f8; color: #0f1720; }
+    main { max-width: 760px; margin: 0 auto; padding: 28px; border-radius: 22px; background: rgba(255,255,255,.86); box-shadow: 0 20px 60px rgba(15,23,32,.10); border: 1px solid rgba(82,96,109,.12); }
+    h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
+    .meta { margin: 0 0 10px; color: #52606d; font-size: 14px; }
+    .intro { margin: 0 0 24px; color: #384454; }
+    section { margin: 18px 0 0; padding: 18px 18px 14px; border: 1px solid rgba(82,96,109,.18); border-radius: 16px; background: rgba(255,255,255,.42); border-left: 5px solid var(--accent,#0a67a3); }
+    section.rose { --accent: #c0344d; } section.green { --accent: #1f7a52; } section.amber { --accent: #a8620a; }
+    h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 4px; color: var(--accent,#0a67a3); font-size: 18px; }
+    .badge { display: inline-grid; width: 28px; height: 28px; place-items: center; border-radius: 8px; background: color-mix(in srgb,var(--accent,#0a67a3) 15%,transparent); font-size: 16px; }
+    .summary { margin: 0 0 12px; color: #52606d; font-size: 14px; }
+    ul { margin: 0; padding-left: 22px; } li { margin: 0 0 8px; } li:last-child { margin-bottom: 0; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #0b1015; color: #edf2f7; }
+      main { background: rgba(15,23,32,.88); box-shadow: 0 24px 70px rgba(0,0,0,.45); border-color: rgba(159,176,194,.14); }
+      .meta, .summary { color: #9fb0c2; } .intro { color: #c8d3df; }
+      section { border-color: rgba(159,176,194,.18); background: rgba(255,255,255,.04); }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>SwiftMiner 1.34.51</h1>
+    <p class="meta">Version 1.34.51 · Build 2026072615</p>
+    <p class="intro">This hotfix restores prompt miner startup for multi-account installations while retaining 1.34.5's process-wide Twitch request coordination.</p>
+
+    <section class="rose">
+      <h2><span class="badge" aria-hidden="true">🚑</span> Miner Startup Restored</h2>
+      <p class="summary">Dashboard hydration can no longer hold every miner in an idle-looking state after launch.</p>
+      <ul>
+        <li>Miner workers start after essential account and callback setup instead of waiting for a complete account-state refresh.</li>
+        <li>Account-state hydration begins in the background after mining has had first use of the shared Twitch request budget.</li>
+        <li>Simultaneous mining and dashboard campaign refreshes for one account share a single in-flight operation instead of duplicating every campaign-detail request.</li>
+      </ul>
+    </section>
+
+    <section class="green">
+      <h2><span class="badge" aria-hidden="true">⛏️</span> Honest Miner Status</h2>
+      <p class="summary">The interface now distinguishes operational startup from completed drop work.</p>
+      <ul>
+        <li>Workers waiting to launch display Starting with connection context.</li>
+        <li>Workers that are not running display Stopped instead of Up to Date.</li>
+        <li>Added regression coverage for startup status and concurrent cold campaign refreshes.</li>
+        <li>Updates SwiftMiner to version 1.34.51 build 2026072615.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>
