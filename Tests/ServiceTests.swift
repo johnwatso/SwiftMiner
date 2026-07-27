@@ -772,7 +772,7 @@ final class ServiceTests: XCTestCase {
                 let json = """
                 {
                   "data": {
-                    "claimDropBenefit": {
+                    "claimDropRewards": {
                       "id": "shared-instance",
                       "status": "CLAIMED"
                     }

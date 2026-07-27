@@ -117,7 +117,7 @@ public actor ClaimService {
                 campaignName = campaign?.name ?? ""
             }
 
-            if response.status == "CLAIMED" || response.status == "SUCCESS" {
+            if Self.successfulClaimStatuses.contains(response.status.uppercased()) {
                 retryStateByDrop[progress.id] = nil
                 return ClaimResult(
                     dropInstanceId: progress.id,
@@ -170,6 +170,19 @@ public actor ClaimService {
             )
         }
     }
+
+    /// Statuses that mean the claim landed.
+    ///
+    /// `claimDropRewards` answers a successful claim with `ELIGIBLE_FOR_ALL`,
+    /// not `CLAIMED` — so accepting only CLAIMED/SUCCESS reported every real
+    /// claim as a failure. `DROP_INSTANCE_ALREADY_CLAIMED` means an earlier
+    /// attempt got there first, which is equally a success for our purposes.
+    static let successfulClaimStatuses: Set<String> = [
+        "CLAIMED",
+        "SUCCESS",
+        "ELIGIBLE_FOR_ALL",
+        "DROP_INSTANCE_ALREADY_CLAIMED",
+    ]
 
     static func classifyFailure(_ error: Error) -> (kind: ClaimFailureKind, retryAfter: TimeInterval?) {
         if error is CancellationError { return (.cancelled, nil) }
