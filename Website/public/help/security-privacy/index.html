@@ -70,6 +70,14 @@
 
                 <h2 id="keychain-storage">Keychain Token Storage</h2>
                 <p>SwiftMiner does not store your Twitch passwords. When you authorize the app using the device activation code, Twitch returns a secure <strong>OAuth Access Token</strong> and <strong>Refresh Token</strong>.</p>
+                <div class="screenshot-wrap">
+                    <picture>
+                        <source srcset="../assets/img/settings-accounts-dark.webp" media="(prefers-color-scheme: dark)">
+                        <img src="../assets/img/settings-accounts-light.webp" alt="SwiftMiner Accounts settings" loading="lazy" decoding="async">
+                    </picture>
+                    <div class="screenshot-caption">SwiftMiner shows which accounts are authorised, but never displays or exports their tokens.</div>
+                </div>
+
                 <p>To protect these tokens, SwiftMiner integrates directly with the native macOS <strong>Keychain Services API</strong>:</p>
                 <ul>
                     <li>Tokens are encrypted and stored inside your system’s secure Keychain, managed by macOS.</li>
@@ -87,6 +95,14 @@
 
                 <h2 id="open-source">Open Source & Auditability</h2>
                 <p>Because SwiftMiner is a completely open-source project hosted on GitHub, the entire codebase is audit-friendly:</p>
+                <div class="screenshot-wrap">
+                    <picture>
+                        <source srcset="../assets/img/settings-advanced-dark.webp" media="(prefers-color-scheme: dark)">
+                        <img src="../assets/img/settings-advanced-light.webp" alt="SwiftMiner Advanced settings" loading="lazy" decoding="async">
+                    </picture>
+                    <div class="screenshot-caption">Exported settings cover preferences, game rules and endpoints — account login tokens are never included.</div>
+                </div>
+
                 <ul>
                     <li>You can review the Swift code that handles Keychain storage, network requests, and API communication.</li>
                     <li>You can compile the application yourself from the source code in Xcode to guarantee that your running binary matches the repository code.</li>

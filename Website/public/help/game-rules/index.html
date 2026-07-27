@@ -75,6 +75,14 @@
 
                 <h2 id="how-selection-works">How SwiftMiner Chooses What to Mine</h2>
                 <p>Before choosing a stream, SwiftMiner builds a list of campaigns that the current Twitch account can reasonably attempt. A campaign must be active, contain an unclaimed reward that can still be earned by watching, and pass your game rules and mining strategy.</p>
+                <div class="screenshot-wrap">
+                    <picture>
+                        <source srcset="../assets/img/game-rules-dark.webp" media="(prefers-color-scheme: dark)">
+                        <img src="../assets/img/game-rules-light.webp" alt="SwiftMiner Game Rules sheet" loading="lazy" decoding="async">
+                    </picture>
+                    <div class="screenshot-caption">The Game Rules sheet holds priorities, exclusions and per-game failover streamers in one place.</div>
+                </div>
+
                 <p>SwiftMiner then looks for a live channel that is actually advertising the selected campaign. A channel merely playing the same game is not enough: Twitch can run several campaigns for one game, including campaigns restricted to particular channels or rewards that require paid subscriptions.</p>
 
                 <ol class="steps-list">

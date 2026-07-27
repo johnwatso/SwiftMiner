@@ -52,8 +52,24 @@
                 <p>If SwiftMiner shows <strong>Needs Auth</strong>, open Settings > Accounts and reconnect the affected account using the Twitch device activation flow.</p>
                 <h2 id="eligible-stream">4. Confirm the stream is eligible</h2>
                 <p>Not every stream in a game category advertises the same active Drops campaign. SwiftMiner tries to choose eligible streams automatically, but campaign data can lag or change while streams are live.</p>
+                <div class="screenshot-wrap">
+                    <picture>
+                        <source srcset="../assets/img/drops-dark.webp" media="(prefers-color-scheme: dark)">
+                        <img src="../assets/img/drops-light.webp" alt="SwiftMiner Drops list" loading="lazy" decoding="async">
+                    </picture>
+                    <div class="screenshot-caption">The Drops tab shows eligibility and claim state per campaign, including drops that need an account link.</div>
+                </div>
+
                 <h2 id="restart">5. Restart the miner</h2>
                 <p>Open the Miners view, stop the affected miner, wait a few seconds, and start it again. If this keeps happening, export diagnostic logs from the Help menu and attach them to a GitHub issue.</p>
+                <div class="screenshot-wrap">
+                    <picture>
+                        <source srcset="../assets/img/activity-log-dark.webp" media="(prefers-color-scheme: dark)">
+                        <img src="../assets/img/activity-log-light.webp" alt="SwiftMiner Activity Log" loading="lazy" decoding="async">
+                    </picture>
+                    <div class="screenshot-caption">The Activity Log records each campaign scan and claim attempt, with the reason a cycle produced no candidates.</div>
+                </div>
+
             </main>
             <aside class="kb-sidebar" aria-label="Sidebar">
                 <div class="sidebar-section"><h2 class="sidebar-title">On this page</h2><ul class="toc-list"><li><a href="#duplicate-viewing" class="toc-link">Duplicate viewing</a></li><li><a href="#publisher-links" class="toc-link">Publisher links</a></li><li><a href="#auth" class="toc-link">Reconnect auth</a></li><li><a href="#eligible-stream" class="toc-link">Eligible stream</a></li><li><a href="#restart" class="toc-link">Restart miner</a></li></ul></div>

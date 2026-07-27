@@ -82,6 +82,14 @@
 
                 <h2 id="miner-stuck">Resolve Stuck Miners</h2>
                 <p>If a miner reports it is running but no progress is accumulating, or if it appears stalled on a single stream:</p>
+                <div class="screenshot-wrap">
+                    <picture>
+                        <source srcset="../assets/img/miners-dark.webp" media="(prefers-color-scheme: dark)">
+                        <img src="../assets/img/miners-light.webp" alt="SwiftMiner Miners tab showing miner health" loading="lazy" decoding="async">
+                    </picture>
+                    <div class="screenshot-caption">The Miners tab reports uptime, last poll and health per account, which usually identifies a stalled miner.</div>
+                </div>
+
                 <ol class="steps-list">
                     <li>
                         <strong>Verify Anti-stall Recovery:</strong>
@@ -112,6 +120,14 @@
 
                 <h2 id="export-logs">Export Diagnostic Logs</h2>
                 <p>If you encounter an issue that you cannot resolve, you can export a log report to attach to a GitHub issue. SwiftMiner logs contain API logs, switches, and system errors.</p>
+                <div class="screenshot-wrap">
+                    <picture>
+                        <source srcset="../assets/img/activity-log-dark.webp" media="(prefers-color-scheme: dark)">
+                        <img src="../assets/img/activity-log-light.webp" alt="SwiftMiner Activity Log" loading="lazy" decoding="async">
+                    </picture>
+                    <div class="screenshot-caption">The Activity Log filters by category and exports a diagnostic report from the toolbar.</div>
+                </div>
+
                 <ol class="steps-list">
                     <li>Go to the macOS menu bar and choose <strong>Help > Export Diagnostic Logs...</strong>.</li>
                     <li>Select a location on your Mac to save the file (e.g., your Desktop) and click <strong>Save</strong>.</li>
