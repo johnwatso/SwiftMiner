@@ -93,6 +93,7 @@
       <p class="summary">Health now answers whether the miner is well, rather than repeating what it is watching.</p>
       <ul>
         <li>Groups uptime, last poll and the miner's actual health verdict into equal-width header cells with state-specific symbols and colours, readable at narrower window sizes.</li>
+        <li>Carries the same status cluster into the Overview banner with fleet-wide values: average uptime and average last poll across the miners each applies to, and a health summary that reads Healthy when every miner is fine and otherwise shows how many are, coloured by the miner most worth attention.</li>
         <li>Reports the health verdict itself — healthy, idle, recovering, needs attention, unresponsive, authentication required or blocked — instead of restating the current campaign.</li>
         <li>Aligns health-check statuses and timestamps into fixed columns so values no longer shift as relative times change length.</li>
         <li>Removes duplicated claim and status summaries that repeated information already shown elsewhere on the page.</li>
