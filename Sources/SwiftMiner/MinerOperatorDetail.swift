@@ -256,60 +256,14 @@ struct MinerOperatorHeader: View {
     /// cells. Drops the labels — not the cells — when the window is too narrow,
     /// so the grouping survives at every width.
     private func statusCluster(showsLabels: Bool) -> some View {
-        HStack(spacing: 0) {
-            MinerStatusCell(
-                label: "Uptime",
-                systemImage: "clock",
-                showsLabel: showsLabels
-            ) {
-                if let started = miner.workerStartedAt, miner.isRunning {
-                    RelativeDurationText(startDate: started)
-                } else {
-                    Text("—")
-                }
-            }
-
-            cellDivider
-
-            MinerStatusCell(
-                label: "Last Poll",
-                systemImage: "clock.arrow.circlepath",
-                showsLabel: showsLabels
-            ) {
-                if let date = health.lastSuccessfulPollAt {
-                    Text(date, style: .relative)
-                } else {
-                    Text("Not yet")
-                }
-            }
-
-            cellDivider
-
-            MinerStatusCell(
-                label: "Health",
-                systemImage: healthSymbol,
-                iconTint: healthTint,
-                showsLabel: showsLabels
-            ) {
-                Text(healthTitle)
-                    .foregroundStyle(healthTint)
-            }
-        }
-        .frame(height: showsLabels ? 44 : 34)
-        .background(
-            .background.secondary,
-            in: RoundedRectangle(cornerRadius: TahoeMetrics.nested, style: .continuous)
+        MinerStatusCluster(
+            uptimeStart: miner.isRunning ? miner.workerStartedAt : nil,
+            lastPollAt: health.lastSuccessfulPollAt,
+            healthTitle: healthTitle,
+            healthSymbol: healthSymbol,
+            healthTint: healthTint,
+            showsLabels: showsLabels
         )
-        .overlay {
-            RoundedRectangle(cornerRadius: TahoeMetrics.nested, style: .continuous)
-                .strokeBorder(.separator.opacity(0.22), lineWidth: 1)
-                .allowsHitTesting(false)
-        }
-        .accessibilityElement(children: .contain)
-    }
-
-    private var cellDivider: some View {
-        Divider().frame(height: 22)
     }
 
     /// The miner's actual health verdict — deliberately *not* `statusLabel`,
@@ -366,6 +320,196 @@ struct MinerOperatorHeader: View {
     }
 }
 
+/// Uptime / Last Poll / Health as one grouped cluster of equal-width cells.
+///
+/// Shared between a single miner's header and the Overview's fleet banner, so
+/// the two read identically — the Overview simply passes aggregated values.
+/// Both time cells take a `Date` rather than preformatted text so they keep
+/// updating on their own; the Overview derives an equivalent date from its
+/// average (`now - average`) instead of duplicating the formatting.
+struct MinerStatusCluster: View {
+    var uptimeStart: Date?
+    var lastPollAt: Date?
+    var healthTitle: String
+    var healthSymbol: String
+    var healthTint: Color
+    var uptimeLabel: String = "Uptime"
+    var lastPollLabel: String = "Last Poll"
+    var healthLabel: String = "Health"
+    var showsLabels: Bool = true
+    /// Widen when the labels are longer than the per-miner defaults.
+    var cellWidth: CGFloat = 118
+
+    var body: some View {
+        HStack(spacing: 0) {
+            MinerStatusCell(
+                label: uptimeLabel,
+                systemImage: "clock",
+                showsLabel: showsLabels,
+                width: cellWidth
+            ) {
+                if let uptimeStart {
+                    RelativeDurationText(startDate: uptimeStart)
+                } else {
+                    Text("—")
+                }
+            }
+
+            cellDivider
+
+            MinerStatusCell(
+                label: lastPollLabel,
+                systemImage: "clock.arrow.circlepath",
+                showsLabel: showsLabels,
+                width: cellWidth
+            ) {
+                if let lastPollAt {
+                    Text(lastPollAt, style: .relative)
+                } else {
+                    Text("Not yet")
+                }
+            }
+
+            cellDivider
+
+            MinerStatusCell(
+                label: healthLabel,
+                systemImage: healthSymbol,
+                iconTint: healthTint,
+                showsLabel: showsLabels,
+                width: cellWidth
+            ) {
+                Text(healthTitle)
+                    .foregroundStyle(healthTint)
+            }
+        }
+        .frame(height: showsLabels ? 44 : 34)
+        .background(
+            .background.secondary,
+            in: RoundedRectangle(cornerRadius: TahoeMetrics.nested, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: TahoeMetrics.nested, style: .continuous)
+                .strokeBorder(.separator.opacity(0.22), lineWidth: 1)
+                .allowsHitTesting(false)
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private var cellDivider: some View {
+        Divider().frame(height: 22)
+    }
+}
+
+/// Fleet-wide rollup of the per-miner status values, for the Overview banner.
+///
+/// Uptime and last poll are averaged across the miners the figure can apply to
+/// — only running miners have an uptime, only polled miners have a last poll —
+/// and expressed as an equivalent date so the cluster's live formatting works
+/// unchanged. Health is not averaged: an average of health states would be
+/// meaningless, so it reports how many miners are fine and takes its colour
+/// from the worst one, which is the miner worth acting on.
+struct MinerFleetStatus {
+    var uptimeStart: Date?
+    var lastPollAt: Date?
+    var healthTitle: String
+    var healthSymbol: String
+    var healthTint: Color
+
+    @MainActor
+    static func make(miners: [MinerManager.ManagedMiner], now: Date = Date()) -> MinerFleetStatus {
+        guard !miners.isEmpty else {
+            return MinerFleetStatus(
+                uptimeStart: nil,
+                lastPollAt: nil,
+                healthTitle: "None",
+                healthSymbol: "person.slash",
+                healthTint: .secondary
+            )
+        }
+
+        let uptimes = miners.compactMap { miner -> TimeInterval? in
+            guard miner.isRunning, let started = miner.workerStartedAt else { return nil }
+            return max(0, now.timeIntervalSince(started))
+        }
+        let snapshots = miners.map { MinerHealthSnapshot.make(miner: $0, now: now) }
+        let pollAges = snapshots.compactMap { snapshot -> TimeInterval? in
+            guard let polled = snapshot.lastSuccessfulPollAt else { return nil }
+            return max(0, now.timeIntervalSince(polled))
+        }
+
+        let healths = snapshots.map(\.health)
+        // A miner with nothing to mine is idle, not unwell — only genuine fault
+        // states count against the fleet.
+        let okCount = healths.filter { $0 == .mining || $0 == .idle }.count
+        let allOK = okCount == miners.count
+
+        // When nothing is wrong, the symbol and colour follow the word: a fleet
+        // reading "Healthy" should not be tinted by the quietest miner in it.
+        // Once something is wrong, both follow the worst miner — that is the one
+        // worth acting on.
+        let representative: MinerHealthSnapshot.Health
+        if allOK {
+            representative = healths.contains(.mining) ? .mining : .idle
+        } else {
+            representative = healths.min { severity(of: $0) < severity(of: $1) } ?? .idle
+        }
+
+        let title: String
+        if allOK {
+            title = representative == .mining ? "Healthy" : "Idle"
+        } else {
+            title = "\(okCount) of \(miners.count)"
+        }
+
+        return MinerFleetStatus(
+            uptimeStart: uptimes.isEmpty ? nil : now.addingTimeInterval(-average(uptimes)),
+            lastPollAt: pollAges.isEmpty ? nil : now.addingTimeInterval(-average(pollAges)),
+            healthTitle: title,
+            healthSymbol: symbol(for: representative),
+            healthTint: tint(for: representative)
+        )
+    }
+
+    private static func average(_ values: [TimeInterval]) -> TimeInterval {
+        guard !values.isEmpty else { return 0 }
+        return values.reduce(0, +) / Double(values.count)
+    }
+
+    /// Lower is more severe, so `min` selects the state worth surfacing.
+    private static func severity(of health: MinerHealthSnapshot.Health) -> Int {
+        switch health {
+        case .stalled, .needsAuth, .blocked: return 0
+        case .attention: return 1
+        case .recovering: return 2
+        case .idle: return 3
+        case .mining: return 4
+        }
+    }
+
+    private static func symbol(for health: MinerHealthSnapshot.Health) -> String {
+        switch health {
+        case .mining: return "checkmark.circle.fill"
+        case .idle: return "pause.circle.fill"
+        case .recovering: return "arrow.triangle.2.circlepath.circle.fill"
+        case .attention: return "exclamationmark.circle.fill"
+        case .stalled: return "exclamationmark.triangle.fill"
+        case .needsAuth: return "person.crop.circle.badge.exclamationmark.fill"
+        case .blocked: return "xmark.circle.fill"
+        }
+    }
+
+    private static func tint(for health: MinerHealthSnapshot.Health) -> Color {
+        switch health {
+        case .mining: return .green
+        case .recovering: return .blue
+        case .attention: return .orange
+        case .stalled, .needsAuth, .blocked: return .red
+        case .idle: return .secondary
+        }
+    }
+}
+
 /// One cell of the header status cluster: a leading symbol, a small uppercase
 /// label, and the value beneath it. Fixed width so the three cells stay equal
 /// regardless of how long any single value renders.
@@ -374,6 +518,7 @@ private struct MinerStatusCell<Content: View>: View {
     let systemImage: String
     var iconTint: Color = .secondary
     var showsLabel: Bool = true
+    var width: CGFloat = 118
     @ViewBuilder let content: Content
 
     init(
@@ -381,12 +526,14 @@ private struct MinerStatusCell<Content: View>: View {
         systemImage: String,
         iconTint: Color = .secondary,
         showsLabel: Bool = true,
+        width: CGFloat = 118,
         @ViewBuilder content: () -> Content
     ) {
         self.label = label
         self.systemImage = systemImage
         self.iconTint = iconTint
         self.showsLabel = showsLabel
+        self.width = width
         self.content = content()
     }
 
@@ -403,6 +550,9 @@ private struct MinerStatusCell<Content: View>: View {
                         .font(.system(size: 9, weight: .semibold))
                         .kerning(0.5)
                         .foregroundStyle(.secondary)
+                        // A wrapped label pushes its value down and breaks the
+                        // cluster's shared baseline.
+                        .lineLimit(1)
                 }
 
                 content
@@ -415,7 +565,7 @@ private struct MinerStatusCell<Content: View>: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 11)
-        .frame(width: showsLabel ? 118 : 96)
+        .frame(width: showsLabel ? width : 96)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(label)
     }

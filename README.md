@@ -124,6 +124,16 @@ SwiftMiner has been built around those ideas. The goal isn’t to reinvent Twitc
   </picture>
 </p>
 
+### Discord
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="Website/public/assets/landing/discord-dark.webp">
+    <source media="(prefers-color-scheme: light)" srcset="Website/public/assets/landing/discord-light.webp">
+    <img src="Website/public/assets/landing/discord-light.webp" alt="SwiftMiner Discord linking">
+  </picture>
+</p>
+
 
 ## How It Works
 

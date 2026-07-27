@@ -166,6 +166,7 @@ struct OverviewView: View {
     private var systemStateBanner: some View {
         OverviewSystemStateBanner(
             state: overviewSystemState,
+            fleet: MinerFleetStatus.make(miners: navigation.minerManager.miners),
             onAction: handleSystemStateAction(_:)
         )
     }
@@ -1370,6 +1371,7 @@ private enum OverviewSystemAction {
 
 private struct OverviewSystemStateBanner: View {
     let state: OverviewSystemState
+    let fleet: MinerFleetStatus
     let onAction: (OverviewSystemAction) -> Void
 
     var body: some View {
@@ -1388,7 +1390,15 @@ private struct OverviewSystemStateBanner: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Spacer(minLength: 12)
+            Spacer(minLength: 18)
+
+            // Same cluster the Miners tab shows per miner, carrying fleet-wide
+            // values. Drops its labels before it drops cells when space is
+            // tight, so the grouping survives at every width.
+            ViewThatFits(in: .horizontal) {
+                fleetCluster(showsLabels: true)
+                fleetCluster(showsLabels: false)
+            }
 
             if let action = state.action {
                 Button {
@@ -1411,6 +1421,23 @@ private struct OverviewSystemStateBanner: View {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .strokeBorder(.white.opacity(0.10), lineWidth: 1)
         }
+    }
+
+    private func fleetCluster(showsLabels: Bool) -> some View {
+        MinerStatusCluster(
+            uptimeStart: fleet.uptimeStart,
+            lastPollAt: fleet.lastPollAt,
+            healthTitle: fleet.healthTitle,
+            healthSymbol: fleet.healthSymbol,
+            healthTint: fleet.healthTint,
+            uptimeLabel: "Avg Uptime",
+            lastPollLabel: "Avg Last Poll",
+            healthLabel: "Fleet Health",
+            showsLabels: showsLabels,
+            // Wider than the per-miner cluster: these labels carry the "Avg" and
+            // "Fleet" qualifiers and must stay on one line.
+            cellWidth: 136
+        )
     }
 }
 
