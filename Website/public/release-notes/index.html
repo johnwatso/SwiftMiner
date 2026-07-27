@@ -47,26 +47,28 @@
   <main>
     <h1>SwiftMiner Release Notes</h1>
     <p class="meta">Recent Sparkle update history</p>
+    <h2>🎁 <a href="./1.35.html">Version 1.35</a></h2>
+    <ul>
+      <li>Restores drop claiming by reading Twitch's current <code>claimDropRewards</code> mutation response while retaining compatibility with the legacy field.</li>
+      <li>Recognises Twitch's successful and already-claimed statuses, and confirms an unreported claim across several spaced inventory reads rather than one immediate read.</li>
+      <li>Surfaces GraphQL messages, empty payloads and unexpected response keys so a future Twitch response change is actionable rather than silent.</li>
+      <li>Records every claim per account so claim history and the Discord "claims today" and "drops claimed this week" figures report real numbers instead of always zero.</li>
+      <li>Redesigns each miner as an operator detail view with identity and live health, a Now → Next → Then summary, a resolved campaign queue, compact subsystem checks and priority controls, with detailed recovery history kept secondary.</li>
+      <li>Adopts macOS Tahoe grouped surfaces with sentence-case sections, roomier spacing, consistent campaign artwork and a cleaner source list.</li>
+      <li>Groups uptime, last poll and the miner's actual health verdict into equal-width header cells, with aligned subsystem health values below.</li>
+      <li>Shows the linked Discord account avatar in the miner header when available, with a local initial fallback.</li>
+      <li>Keeps a prioritised game in the Drops feed for its whole run instead of hiding it once its rewards are all claimed.</li>
+      <li>Counts campaigns a miner is actually watching, so a campaign one account has finished is still counted while another account mines it.</li>
+      <li>Shows Updating during launch-time campaign and progress refreshes instead of prematurely reporting Up to Date, and shows cumulative watched minutes across every timed drop in a campaign.</li>
+      <li>Restores credited drop progress by sending Twitch’s complete current minute-watched beacon payload.</li>
+      <li>Smooths Miners-tab scrolling with lazy off-screen sections, a single activity-snapshot resolve per row, and lighter header redraws.</li>
+    </ul>
     <h2>🚑 <a href="./1.34.51.html">Version 1.34.51</a></h2>
     <ul>
       <li>Fixes a 1.34.5 launch regression that made multi-account miners wait behind a large dashboard campaign refresh before their workers could start.</li>
       <li>Gives mining startup first use of the coordinated Twitch request budget by moving account-state hydration into delayed background work.</li>
       <li>Coalesces simultaneous campaign refreshes for the same account so the mining engine and dashboard cannot duplicate the full campaign-detail request fan-out.</li>
-      <li>Restores drop claiming by reading Twitch's current <code>claimDropRewards</code> mutation response while retaining compatibility with the legacy field.</li>
-      <li>Recognises Twitch's successful and already-claimed statuses and surfaces GraphQL messages or unexpected response keys for actionable diagnostics.</li>
-      <li>Shows Starting or Stopped explicitly instead of incorrectly reporting a miner that is not running as Up to Date.</li>
-      <li>Shows each active drop’s known duration immediately instead of a generic progress-check message.</li>
-      <li>Shows cumulative progress as watched minutes out of required minutes across every timed drop in a campaign, regardless of channel or session.</li>
-      <li>Redesigns each miner as an operator detail view with identity and live health, a Now → Next → Then summary, a resolved campaign queue, compact subsystem checks and priority controls, with detailed recovery history kept secondary.</li>
-      <li>Refines the miner detail view with Tahoe-style grouped surfaces, roomier sentence-case sections, responsive campaign artwork and a cleaner source list.</li>
-      <li>Shows the linked Discord account avatar in the miner header when available, with a local initial fallback.</li>
-      <li>Lazily builds off-screen detail sections and resolves each source-row activity snapshot once per render for smoother navigation and scrolling.</li>
-      <li>Groups uptime, last poll and the actual miner-health verdict into stable responsive header cells, with aligned subsystem health values below.</li>
-      <li>Removes duplicated claim and status summaries and reduces unnecessary uptime redraws.</li>
-      <li>Shows Updating during campaign and progress refreshes instead of prematurely displaying Up to Date.</li>
-      <li>Keeps prioritised artwork visually stable when returning to Overview instead of replaying a placeholder crossfade.</li>
-      <li>Restores credited drop progress by sending Twitch’s complete current minute-watched beacon payload.</li>
-      <li>Updates SwiftMiner to version 1.34.51 build 2026072716.</li>
+      <li>Updates SwiftMiner to version 1.34.51 build 2026072615.</li>
     </ul>
     <h2>🛡️ <a href="./1.34.5.html">Version 1.34.5</a></h2>
     <ul>
