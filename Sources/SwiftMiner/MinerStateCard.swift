@@ -83,11 +83,7 @@ struct MinerStateCard: View {
 
                 Spacer()
 
-                if progress.progressFraction == 0, progress.minutesRemaining > 0 {
-                    Text("Checking progress with Twitch")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else if progress.minutesRemaining > 0 {
+                if progress.minutesRemaining > 0 {
                     Text("\(progress.minutesRemaining) min remaining")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -192,6 +188,15 @@ struct MinerStateCard: View {
                 subtitle: "Start this miner to check for and earn drops.",
                 icon: "stop.circle.fill",
                 color: .secondary
+            )
+        }
+
+        if miner.status == .fetchingCampaigns {
+            return StateConfig(
+                headline: "Updating…",
+                subtitle: "Checking campaigns and drop progress.",
+                icon: "arrow.clockwise",
+                color: .blue
             )
         }
 
@@ -519,8 +524,13 @@ struct MinerActivityCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            if let anchor = liveActivityAnchor {
-                liveActivityTimer(anchor: anchor, accent: snap.now.accent)
+            // A known drop already shows cumulative watched time across every source.
+            // Keep the session-only stopwatch for pure watch overrides, where no drop total exists.
+            if snap.now.progressFraction == nil, let anchor = liveActivityAnchor {
+                MinerLiveActivityTimerView(
+                    anchor: anchor,
+                    accent: effectiveAccent(snap.now.accent)
+                )
             }
         }
     }
@@ -533,37 +543,6 @@ struct MinerActivityCard: View {
         guard miner.isRunning, !miner.needsAuth, !miner.isStalled, miner.isHealthy else { return nil }
         guard miner.status == .watching else { return nil }
         return miner.statusChangedAt
-    }
-
-    @ViewBuilder
-    private func liveActivityTimer(anchor: Date, accent: Color) -> some View {
-        TimelineView(.periodic(from: anchor, by: 1)) { context in
-            let elapsed = max(0, context.date.timeIntervalSince(anchor))
-            HStack(spacing: 5) {
-                PulsingActivityDot(color: effectiveAccent(accent))
-
-                Image(systemName: "timer")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-
-                Text(Self.formatElapsed(elapsed))
-                    .font(.caption.weight(.medium).monospacedDigit())
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.top, 2)
-            .accessibilityLabel("Active for \(Self.formatElapsed(elapsed))")
-        }
-    }
-
-    private static func formatElapsed(_ interval: TimeInterval) -> String {
-        let total = Int(interval)
-        let hours = total / 3600
-        let minutes = (total % 3600) / 60
-        let seconds = total % 60
-        if hours > 0 {
-            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
-        }
-        return String(format: "%02d:%02d", minutes, seconds)
     }
 
     private func nextActivity(_ item: MinerActivityItem) -> some View {
@@ -850,9 +829,7 @@ struct MinerActivitySnapshot {
             if let campaign, hasUnclaimedDrop(in: campaign) {
                 let progress = activeDropProgress(for: campaign, miner: miner)
                 let detail = progress.map { item in
-                    item.remainingMinutes > 0
-                        ? "\(item.dropName) · \(item.remainingMinutes) min remaining"
-                        : "\(item.dropName) · claiming reward"
+                    watchedTimeDetail(for: item)
                 } ?? "Watching this streamer for drops"
 
                 return MinerActivityItem(
@@ -880,15 +857,7 @@ struct MinerActivitySnapshot {
         if miner.status == .watching, let campaign, hasUnclaimedDrop(in: campaign) {
             let progress = activeDropProgress(for: campaign, miner: miner)
             let detail = progress.map { item in
-                if item.currentMinutes == 0, item.remainingMinutes == 0 {
-                    return "\(item.dropName) · checking progress with Twitch"
-                }
-                if item.currentMinutes == 0, item.remainingMinutes > 0 {
-                    return "\(item.dropName) · checking progress with Twitch"
-                }
-                return item.remainingMinutes > 0
-                    ? "\(item.dropName) · \(item.remainingMinutes) min remaining"
-                    : "\(item.dropName) · claiming reward"
+                watchedTimeDetail(for: item)
             } ?? "Tracking eligible stream progress"
 
             return MinerActivityItem(
@@ -924,6 +893,19 @@ struct MinerActivitySnapshot {
                 symbol: "person.crop.circle.badge.exclamationmark",
                 accent: .orange,
                 requiresAccountLink: true
+            )
+        }
+
+        // Refresh status takes precedence over cached campaign state. Otherwise a previous
+        // no-drops snapshot can briefly present as "Up to Date" while launch hydration is
+        // still determining the current answer.
+        if miner.status == .fetchingCampaigns {
+            return waitingItem(
+                id: "fetch-\(miner.id)",
+                title: "Updating…",
+                subtitle: "Checking campaigns and drop progress.",
+                symbol: "arrow.clockwise",
+                accent: .blue
             )
         }
 
@@ -976,10 +958,10 @@ struct MinerActivitySnapshot {
         case .fetchingCampaigns:
             return waitingItem(
                 id: "fetch-\(miner.id)",
-                title: "Up to Date",
-                subtitle: "Checking for active campaigns...",
-                symbol: "calendar.badge.checkmark",
-                accent: .green
+                title: "Updating…",
+                subtitle: "Checking campaigns and drop progress.",
+                symbol: "arrow.clockwise",
+                accent: .blue
             )
         case .waitingForStream:
             if let subscriptionCampaign = subscriptionRequiredPriorityCampaign(
@@ -1140,7 +1122,7 @@ struct MinerActivitySnapshot {
     private static func activeDropProgress(
         for campaign: Campaign,
         miner: MinerManager.ManagedMiner
-    ) -> (dropName: String, fraction: Double, remainingMinutes: Int, currentMinutes: Int)? {
+    ) -> (dropName: String, fraction: Double, currentMinutes: Int, requiredMinutes: Int)? {
         guard let drop = campaign.drops.first(where: { !$0.isClaimed && !$0.isClaimable })
             ?? campaign.drops.first(where: { !$0.isClaimed }) else {
             return nil
@@ -1155,8 +1137,8 @@ struct MinerActivitySnapshot {
             return (
                 dropName: dropName,
                 fraction: 0,
-                remainingMinutes: 0,
-                currentMinutes: 0
+                currentMinutes: 0,
+                requiredMinutes: 0
             )
         }
 
@@ -1164,9 +1146,21 @@ struct MinerActivitySnapshot {
         return (
             dropName: dropName,
             fraction: fraction,
-            remainingMinutes: max(0, requiredMinutes - currentMinutes),
-            currentMinutes: currentMinutes
+            currentMinutes: currentMinutes,
+            requiredMinutes: requiredMinutes
         )
+    }
+
+    /// Uses Twitch's cumulative per-drop total, reconciled with the miner's persisted ledger.
+    /// This is intentionally not tied to the current channel or watch session.
+    private static func watchedTimeDetail(
+        for progress: (dropName: String, fraction: Double, currentMinutes: Int, requiredMinutes: Int)
+    ) -> String {
+        guard progress.requiredMinutes > 0 else {
+            return "\(progress.dropName) · watching eligible stream"
+        }
+        let watchedMinutes = min(progress.requiredMinutes, max(0, progress.currentMinutes))
+        return "\(progress.dropName) · \(watchedMinutes) / \(progress.requiredMinutes) min watched"
     }
 
     private static func subscriptionRequiredItem(
@@ -1548,7 +1542,7 @@ struct MinerActivitySnapshot {
         case .waitingForStream:
             return "Looking for Streams"
         case .fetchingCampaigns:
-            return "Up to Date"
+            return "Updating…"
         case .authenticating:
             return "Reconnecting"
         case .paused:
@@ -1598,7 +1592,7 @@ struct MinerActivitySnapshot {
         case .waitingForStream:
             return "antenna.radiowaves.left.and.right"
         case .fetchingCampaigns:
-            return "calendar.badge.checkmark"
+            return "arrow.clockwise"
         case .authenticating:
             return "arrow.triangle.2.circlepath"
         case .paused:
@@ -1671,6 +1665,51 @@ struct MinerActivityItem: Identifiable {
     var progressFraction: Double? = nil
     var campaignId: String? = nil
     var requiresAccountLink: Bool = false
+}
+
+/// A shared live-session clock used anywhere miner activity is presented.
+/// Drop progress remains Twitch's cumulative verified total; this clock only
+/// describes how long the current uninterrupted watch session has been active.
+struct MinerLiveActivityTimerView: View {
+    let anchor: Date
+    let accent: Color
+    var label: String? = nil
+
+    var body: some View {
+        TimelineView(.periodic(from: anchor, by: 1)) { context in
+            let elapsed = max(0, context.date.timeIntervalSince(anchor))
+            HStack(spacing: 5) {
+                PulsingActivityDot(color: accent)
+
+                Image(systemName: "timer")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+
+                if let label {
+                    Text(label)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Text(Self.formatElapsed(elapsed))
+                    .font(.caption.weight(.medium).monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.top, 2)
+            .accessibilityLabel("\(label ?? "Active") for \(Self.formatElapsed(elapsed))")
+        }
+    }
+
+    static func formatElapsed(_ interval: TimeInterval) -> String {
+        let total = Int(interval)
+        let hours = total / 3600
+        let minutes = (total % 3600) / 60
+        let seconds = total % 60
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+        }
+        return String(format: "%02d:%02d", minutes, seconds)
+    }
 }
 
 /// A small dot that gently pulses to signal the miner is alive and working.

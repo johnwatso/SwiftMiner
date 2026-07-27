@@ -6,8 +6,8 @@ import TipKit
 struct MinersOverviewView: View {
     @Environment(NavigationModel.self) private var navigation
     private var settings: Settings { .shared }
-    @AppStorage("minersDiagnosticsExpanded", store: Settings.appStorageStore)
-    private var diagnosticsExpanded = true
+    @AppStorage("minersRecoveryHistoryExpanded", store: Settings.appStorageStore)
+    private var recoveryHistoryExpanded = false
     @State private var selectedActivitySummary: MinerManager.MinerActivitySummary?
     @State private var hasCapturedInitialLinkIssues = false
     @State private var previousLinkIssuesById: [String: PrioritisedLinkIssue] = [:]
@@ -15,6 +15,7 @@ struct MinersOverviewView: View {
     @State private var nicknameEditor: MinerNicknameEditorPresentation?
     @State private var streamOverrideEditor: MinerStreamOverridePresentation?
     @State private var isDiagnosticsHelpPresented = false
+    @State private var isShowingGameManagement = false
 
     private var miners: [MinerManager.ManagedMiner] {
         navigation.minerManager.miners
@@ -70,6 +71,12 @@ struct MinersOverviewView: View {
             MinerStreamOverrideSheet(
                 miner: presentation.miner,
                 navigation: navigation
+            )
+        }
+        .sheet(isPresented: $isShowingGameManagement) {
+            GamePreferenceManagementView(
+                settings: settings,
+                minerManager: navigation.minerManager
             )
         }
     }
@@ -131,23 +138,45 @@ struct MinersOverviewView: View {
     @ViewBuilder
     private var selectedMinerPane: some View {
         if let miner = selectedMiner {
-            let activeCampaigns = activePrioritisedCampaigns(for: miner)
+            let presentation = operatorPresentation(for: miner)
+            let queueCampaigns = presentation.queue.map(\.campaign)
+            let health = MinerHealthSnapshot.make(miner: miner)
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    MinerActivityCard(miner: miner, prominence: .expanded, onSelect: {
-                        navigation.selectedMinerId = miner.id
-                    }, onLinkAccount: {
-                        startLinkAccountFlow(for: miner)
-                    }, onEditNickname: {
-                        presentNicknameEditor(for: miner)
-                    }, onClearNickname: {
-                        clearNickname(for: miner)
-                    }, onOverrideStream: {
-                        presentStreamOverrideEditor(for: miner)
-                    }, onClearStreamOverride: {
-                        clearStreamOverride(for: miner)
-                    })
+                VStack(alignment: .leading, spacing: 16) {
+                    MinerOperatorHeader(
+                        miner: miner,
+                        health: health,
+                        menu: AnyView(
+                            HStack(spacing: 8) {
+                                if miner.needsAuth || miner.status == .blockedAccountNotLinked {
+                                    Button {
+                                        startLinkAccountFlow(for: miner)
+                                    } label: {
+                                        Label("Reconnect", systemImage: "personalhotspot")
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .controlSize(.small)
+                                }
+
+                                Menu {
+                                    minerContextMenu(for: miner)
+                                } label: {
+                                    Image(systemName: "ellipsis")
+                                        .frame(width: 26, height: 22)
+                                }
+                                .menuStyle(.borderlessButton)
+                                .help("Miner actions")
+                                .accessibilityLabel("Miner actions")
+                            }
+                        )
+                    )
+
+                    MinerMiningSequenceView(
+                        miner: miner,
+                        presentation: presentation,
+                        channelName: selectedActivitySummary?.currentChannelName
+                    )
 
                     if let linkNotice {
                         LinkNoticeBanner(notice: linkNotice) {
@@ -157,15 +186,25 @@ struct MinersOverviewView: View {
                         }
                     }
 
-                    selectedMinerWatchingStreamerSection(for: miner)
+                    pendingItemsSection(for: miner, campaigns: queueCampaigns)
 
-                    minerPrioritiesSection(for: miner)
+                    minerCampaignQueueSection(for: miner, presentation: presentation)
 
-                    minerCampaignsSection(for: miner, campaigns: activeCampaigns)
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .top, spacing: 12) {
+                            minerHealthSummarySection(for: miner)
+                                .frame(minWidth: 300, maxWidth: .infinity, alignment: .topLeading)
+                            minerPrioritiesSection(for: miner)
+                                .frame(minWidth: 300, maxWidth: .infinity, alignment: .topLeading)
+                        }
 
-                    minerDiagnosticsSection(for: miner)
+                        VStack(alignment: .leading, spacing: 12) {
+                            minerHealthSummarySection(for: miner)
+                            minerPrioritiesSection(for: miner)
+                        }
+                    }
 
-                    pendingItemsSection(for: miner, campaigns: activeCampaigns)
+                    minerRecoveryHistorySection(for: miner)
                 }
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .padding(.horizontal, 28)
@@ -190,6 +229,19 @@ struct MinersOverviewView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(24)
         }
+    }
+
+    private func operatorPresentation(for miner: MinerManager.ManagedMiner) -> MinerOperatorPresentation {
+        MinerOperatorPresentation.resolve(
+            for: miner,
+            priorityGames: settings.priorityGames(forAccountId: miner.accountId),
+            excludedGames: settings.excludedGames,
+            strategy: settings.miningStrategy,
+            includesBadgeAndEmoteCampaigns: settings.enableBadgesEmotes,
+            ignoredAccountLinkGameIds: settings.activeIgnoredWarnings
+                .filter { $0.hasPrefix("\(miner.accountId):") && $0.hasSuffix(":accountLink") }
+                .compactMap { $0.components(separatedBy: ":").dropFirst().first }
+        )
     }
 
     private func refreshSelectedActivitySummary(for minerId: String) async {
@@ -286,92 +338,32 @@ struct MinersOverviewView: View {
         }
     }
 
-    private func minerDiagnosticsSection(for miner: MinerManager.ManagedMiner) -> some View {
-        let snapshot = MinerHealthSnapshot.make(miner: miner)
-        let logEvents = navigation.events.filter { $0.minerId == miner.id }.prefix(5)
-        let stallState = StallConfidenceState(percent: snapshot.stallConfidencePercent)
+    private func liveOperationsSection(for miner: MinerManager.ManagedMiner) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 12) {
+                selectedMinerWatchingStreamerSection(for: miner)
+                    .frame(minWidth: 280, maxWidth: .infinity, alignment: .topLeading)
 
-        return DisclosureGroup(isExpanded: $diagnosticsExpanded) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Label(snapshot.statusLabel, systemImage: diagnosticsSystemImage(for: snapshot.health))
-                        .font(.headline)
-                        .foregroundStyle(diagnosticsTint(for: snapshot.health))
-
-                    Spacer()
-
-                    Label {
-                        Text(stallState.title)
-                    } icon: {
-                        Image(systemName: stallState.systemImage)
-                    }
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(stallState.tint)
-                }
-
-                ProgressView(value: Double(snapshot.stallConfidencePercent), total: 100)
-                    .tint(stallState.tint)
-
-                if snapshot.stallSignals.isEmpty {
-                    Text("Recent poll, event and worker signals look normal.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                } else {
-                    VStack(alignment: .leading, spacing: 6) {
-                        ForEach(snapshot.stallSignals, id: \.self) { signal in
-                            Label(signal, systemImage: "smallcircle.filled.circle")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-
-                Divider()
-                    .opacity(0.55)
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Recovery Timeline")
-                        .font(.subheadline.weight(.semibold))
-
-                    if selectedActivitySummary?.recentEvents.isEmpty != false && logEvents.isEmpty {
-                        Text("No recent diagnostic events for this miner.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(selectedActivitySummary?.recentEvents.indices ?? 0..<0, id: \.self) { index in
-                            if let event = selectedActivitySummary?.recentEvents[index] {
-                                MinerDiagnosticTimelineRow(
-                                    title: event.summary,
-                                    detail: event.type.rawValue,
-                                    date: event.timestamp
-                                )
-                            }
-                        }
-
-                        ForEach(Array(logEvents)) { event in
-                            MinerDiagnosticTimelineRow(
-                                title: event.message,
-                                detail: event.level.rawValue.capitalized,
-                                date: event.timestamp
-                            )
-                        }
-                    }
-                }
+                minerHealthSummarySection(for: miner)
+                    .frame(minWidth: 280, maxWidth: .infinity, alignment: .topLeading)
             }
-            .padding(.top, 12)
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "waveform.path.ecg.rectangle")
-                    .foregroundStyle(diagnosticsTint(for: snapshot.health))
 
-                Text("DIAGNOSTICS")
+            VStack(alignment: .leading, spacing: 12) {
+                selectedMinerWatchingStreamerSection(for: miner)
+                minerHealthSummarySection(for: miner)
+            }
+        }
+    }
+
+    private func minerHealthSummarySection(for miner: MinerManager.ManagedMiner) -> some View {
+        let snapshot = MinerHealthSnapshot.make(miner: miner)
+        let hasClaimableDrop = miner.allCampaigns.contains { $0.miningStatus == .claimable }
+
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Text("MINER HEALTH")
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(.tertiary)
-
-                Text(snapshot.statusLabel)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
 
                 Spacer(minLength: 4)
 
@@ -389,6 +381,143 @@ struct MinersOverviewView: View {
                     StallConfidenceHelpPopover()
                 }
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+
+            VStack(spacing: 0) {
+                healthCheckRow(
+                    title: "Connected to Twitch",
+                    status: miner.needsAuth ? "Reconnect" : (miner.isRunning ? "OK" : "Stopped"),
+                    date: snapshot.lastEventAt,
+                    isHealthy: miner.isRunning && !miner.needsAuth
+                )
+                Divider()
+                healthCheckRow(
+                    title: "Campaign inventory",
+                    status: snapshot.lastCampaignRefreshAt == nil ? "Waiting" : "OK",
+                    date: snapshot.lastCampaignRefreshAt,
+                    isHealthy: snapshot.lastCampaignRefreshAt != nil
+                )
+                Divider()
+                healthCheckRow(
+                    title: "Progress detection",
+                    status: miner.isNotEarning() ? "No progress" : "OK",
+                    date: snapshot.lastDropProgressAt ?? snapshot.lastSuccessfulPollAt,
+                    isHealthy: !miner.isNotEarning()
+                )
+                Divider()
+                healthCheckRow(
+                    title: "Drop claimer",
+                    status: hasClaimableDrop ? "Claim pending" : "Ready",
+                    date: nil,
+                    isHealthy: !hasClaimableDrop
+                )
+            }
+
+            HStack(spacing: 8) {
+                Label(snapshot.statusLabel, systemImage: diagnosticsSystemImage(for: snapshot.health))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(diagnosticsTint(for: snapshot.health))
+
+                Spacer()
+
+                if let lastPoll = snapshot.lastSuccessfulPollAt {
+                    Text("Last poll ") + Text(lastPoll, style: .relative)
+                } else {
+                    Text("No successful poll yet")
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .padding(12)
+        }
+        .background(.background.opacity(0.62), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
+                .strokeBorder(.separator.opacity(0.32), lineWidth: 1)
+        }
+    }
+
+    private func healthCheckRow(
+        title: String,
+        status: String,
+        date: Date?,
+        isHealthy: Bool
+    ) -> some View {
+        HStack(spacing: 9) {
+            Image(systemName: isHealthy ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                .foregroundStyle(isHealthy ? .green : .orange)
+                .font(.system(size: 12, weight: .semibold))
+
+            Text(title)
+                .font(.caption)
+                .lineLimit(1)
+
+            Spacer(minLength: 8)
+
+            Text(status)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(isHealthy ? .green : .orange)
+                .lineLimit(1)
+
+            if let date {
+                Text(date, style: .relative)
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .frame(minWidth: 48, alignment: .trailing)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+    }
+
+    private func minerRecoveryHistorySection(for miner: MinerManager.ManagedMiner) -> some View {
+        let logEvents = navigation.events.filter { $0.minerId == miner.id }.prefix(5)
+        let recentEventCount = (selectedActivitySummary?.recentEvents.count ?? 0) + logEvents.count
+
+        return DisclosureGroup(isExpanded: $recoveryHistoryExpanded) {
+            VStack(alignment: .leading, spacing: 8) {
+                if selectedActivitySummary?.recentEvents.isEmpty != false && logEvents.isEmpty {
+                    Text("No recent recovery or diagnostic events for this miner.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(selectedActivitySummary?.recentEvents.indices ?? 0..<0, id: \.self) { index in
+                        if let event = selectedActivitySummary?.recentEvents[index] {
+                            MinerDiagnosticTimelineRow(
+                                title: event.summary,
+                                detail: event.type.rawValue,
+                                date: event.timestamp
+                            )
+                        }
+                    }
+
+                    ForEach(Array(logEvents)) { event in
+                        MinerDiagnosticTimelineRow(
+                            title: event.message,
+                            detail: event.level.rawValue.capitalized,
+                            date: event.timestamp
+                        )
+                    }
+                }
+            }
+            .padding(.top, 12)
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "clock.arrow.circlepath")
+                    .foregroundStyle(.secondary)
+
+                Text("RECOVERY & DIAGNOSTICS")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.tertiary)
+
+                Text(recentEventCount == 0 ? "No recent events" : "\(recentEventCount) recent")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+
+                Spacer(minLength: 4)
+            }
             .contentShape(Rectangle())
         }
         .padding(12)
@@ -397,6 +526,12 @@ struct MinersOverviewView: View {
             RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
                 .strokeBorder(.separator.opacity(0.32), lineWidth: 1)
         }
+    }
+
+    private func liveActivityAnchor(for miner: MinerManager.ManagedMiner) -> Date? {
+        guard miner.isRunning, !miner.needsAuth, !miner.isStalled, miner.isHealthy else { return nil }
+        guard miner.status == .watching else { return nil }
+        return miner.statusChangedAt
     }
 
     // MARK: - Priorities
@@ -420,13 +555,23 @@ struct MinersOverviewView: View {
         let global = includesGlobal
             ? settings.priorityGames.filter { !personalKeys.contains($0.lowercased()) }
             : []
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Priorities")
-                    .font(.headline)
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Text("PRIORITY QUEUE")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.tertiary)
                 Spacer()
+
+                Button {
+                    isShowingGameManagement = true
+                } label: {
+                    Label("Edit", systemImage: "pencil")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
+
                 if hasMultipleMiners {
-                    Toggle("Use global priorities", isOn: Binding(
+                    Toggle("Use global", isOn: Binding(
                         get: { settings.includesGlobalPriorityGames(forAccountId: miner.accountId) },
                         set: { include in
                             settings.setIncludesGlobalPriorityGames(include, forAccountId: miner.accountId)
@@ -441,40 +586,56 @@ struct MinersOverviewView: View {
                     .controlSize(.small)
                 }
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
 
-            Text(includesGlobal
-                ? "Mining order: this miner's own games first, then the global list."
-                : "Mining order: this miner's own games only — the global list is ignored.")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 8) {
                 Text("THIS MINER")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .kerning(0.8)
 
                 if personal.isEmpty {
-                    Text("No personal priorities yet — add games from the web dashboard or Discord.")
+                    Text("No personal priorities — add them from the dashboard or Discord.")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 } else {
-                    FlowLayout(spacing: 6) {
+                    VStack(spacing: 0) {
                         ForEach(Array(personal.enumerated()), id: \.element) { index, game in
-                            RankedPriorityChip(
-                                rank: index + 1,
-                                gameName: game,
-                                isGlobal: false,
-                                onRemove: { removePersonalPriority(game, from: miner) }
-                            )
+                            HStack(spacing: 8) {
+                                Text("\(index + 1)")
+                                    .font(.caption2.weight(.semibold).monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 18, height: 18)
+                                    .background(.quaternary, in: Circle())
+                                Text(game)
+                                    .font(.caption.weight(.medium))
+                                    .lineLimit(1)
+                                Spacer()
+                                Button {
+                                    removePersonalPriority(game, from: miner)
+                                } label: {
+                                    Image(systemName: "xmark.circle")
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(.secondary)
+                                .help("Remove \(game) from this miner")
+                            }
+                            .padding(.vertical, 6)
+
+                            if index < personal.count - 1 { Divider() }
                         }
                     }
+                    .padding(.horizontal, 8)
+                    .background(.background.opacity(0.45), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
                 }
             }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 10)
 
             if includesGlobal {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("THEN GLOBAL")
+                    Text("GLOBAL QUEUE")
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(.secondary)
                         .kerning(0.8)
@@ -498,10 +659,15 @@ struct MinersOverviewView: View {
                         }
                     }
                 }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 12)
             }
         }
-        .padding(20)
-        .glassCard()
+        .background(.background.opacity(0.62), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
+                .strokeBorder(.separator.opacity(0.32), lineWidth: 1)
+        }
     }
 
     private func removePersonalPriority(_ gameName: String, from miner: MinerManager.ManagedMiner) {
@@ -531,6 +697,16 @@ struct MinersOverviewView: View {
                 status: miner.status,
                 isRunning: miner.isRunning
             )
+
+            if let anchor = liveActivityAnchor(for: miner) {
+                MinerLiveActivityTimerView(
+                    anchor: anchor,
+                    accent: settings.coloredStatusIcons ? .green : .secondary,
+                    label: "Current session"
+                )
+                .padding(.horizontal, 12)
+                .padding(.bottom, 10)
+            }
         }
         .background(.background.opacity(0.62), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
         .overlay {
@@ -677,6 +853,73 @@ struct MinersOverviewView: View {
                 for: accountId,
                 campaignId: campaignId
             )
+        }
+    }
+
+    @ViewBuilder
+    private func minerCampaignQueueSection(
+        for miner: MinerManager.ManagedMiner,
+        presentation: MinerOperatorPresentation
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Text("CAMPAIGN QUEUE")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.tertiary)
+
+                Text("\(presentation.queue.count)")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.tertiary)
+
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+
+            if presentation.queue.isEmpty {
+                NoActiveCampaignsRow()
+            } else {
+                HStack(spacing: 10) {
+                    Text("ORDER").frame(width: 52, alignment: .leading)
+                    Text("CAMPAIGN").frame(maxWidth: .infinity, alignment: .leading)
+                    Text("STATUS").frame(width: 150, alignment: .leading)
+                    Text("PROGRESS / INFO").frame(width: 250, alignment: .leading)
+                }
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(.tertiary)
+                .padding(.horizontal, 10)
+                .padding(.bottom, 6)
+
+                VStack(spacing: 0) {
+                    ForEach(Array(presentation.queue.enumerated()), id: \.element.id) { index, entry in
+                        let gameId = warningGameId(for: entry.campaign)
+                        let isIgnored = settings.isIgnoringAccountLinkWarnings(
+                            for: miner.accountId,
+                            gameId: gameId
+                        )
+
+                        MinerCampaignQueueRow(
+                            entry: entry,
+                            isWarningIgnored: isIgnored,
+                            onDismissWarning: {
+                                setLinkReminder(false, for: miner, gameId: gameId, gameName: entry.campaign.game.name)
+                            },
+                            onRemindWarning: {
+                                setLinkReminder(true, for: miner, gameId: gameId, gameName: entry.campaign.game.name)
+                            }
+                        )
+
+                        if index < presentation.queue.count - 1 {
+                            Divider().padding(.leading, 62)
+                        }
+                    }
+                }
+            }
+        }
+        .background(.background.opacity(0.62), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
+                .strokeBorder(.separator.opacity(0.32), lineWidth: 1)
         }
     }
 

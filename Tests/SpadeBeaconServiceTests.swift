@@ -105,7 +105,8 @@ final class SpadeBeaconServiceTests: XCTestCase {
         let post = beaconPOST()
         let body = try XCTUnwrap(String(data: XCTUnwrap(post.bodyData), encoding: .utf8))
         XCTAssertTrue(body.hasPrefix("data="), "Body must be form-encoded: data=<base64>")
-        let b64 = String(body.dropFirst("data=".count))
+        let encoded = String(body.dropFirst("data=".count))
+        let b64 = try XCTUnwrap(encoded.removingPercentEncoding)
         XCTAssertNotNil(Data(base64Encoded: b64), "Value after 'data=' must be valid base64")
     }
 
@@ -156,15 +157,29 @@ final class SpadeBeaconServiceTests: XCTestCase {
 
     func testPayloadStaticFields() async throws {
         stubFallbackFlow()
-        try await service.sendBeacon(channelLogin: "test", channelId: "1", broadcastId: "2", userId: "3")
+        try await service.sendBeacon(
+            channelLogin: "test",
+            channelId: "1",
+            broadcastId: "2",
+            userId: "3",
+            gameName: "Battlefield 6",
+            gameId: "999"
+        )
 
         let props = try beaconProperties()
-        XCTAssertEqual(props["player"]     as? String, "site")
-        XCTAssertEqual(props["location"]   as? String, "channel")
         XCTAssertEqual(props["logged_in"]  as? Bool,   true)
+        XCTAssertEqual(props["is_live"]    as? Bool,   true)
         XCTAssertEqual(props["live"]       as? Bool,   true)
         XCTAssertEqual(props["hidden"]     as? Bool,   false)
         XCTAssertEqual(props["muted"]      as? Bool,   false)
+        XCTAssertEqual(props["minutes_logged"] as? Int, 1)
+        XCTAssertEqual(props["game"] as? String, "Battlefield 6")
+        XCTAssertEqual(props["game_id"] as? String, "999")
+        let clientTimeFormatter = ISO8601DateFormatter()
+        clientTimeFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        XCTAssertNotNil(clientTimeFormatter.date(from: try XCTUnwrap(props["client_time"] as? String)))
+        XCTAssertNil(props["player"])
+        XCTAssertNil(props["location"])
     }
 
     /// Full exact-match against TDM's compact json_minify output with the expected key order.
@@ -174,12 +189,15 @@ final class SpadeBeaconServiceTests: XCTestCase {
             channelLogin: "testchannel",
             channelId: "123",
             broadcastId: "456",
-            userId: "789"
+            userId: "789",
+            gameName: "Test Game",
+            gameId: "987",
+            at: Date(timeIntervalSince1970: 0)
         )
 
         let rawJSON = try decodedBeaconRawString()
         let expected = """
-        [{"event":"minute-watched","properties":{"broadcast_id":"456","channel_id":"123","channel":"testchannel","hidden":false,"live":true,"location":"channel","logged_in":true,"muted":false,"player":"site","user_id":789}}]
+        [{"event":"minute-watched","properties":{"broadcast_id":"456","channel_id":"123","channel":"testchannel","client_time":"1970-01-01T00:00:00.000Z","game":"Test Game","game_id":"987","hidden":false,"is_live":true,"live":true,"logged_in":true,"minutes_logged":1,"muted":false,"user_id":789}}]
         """
         XCTAssertEqual(rawJSON, expected, "Beacon JSON must exactly match TDM's json_minify output")
     }
@@ -373,21 +391,22 @@ private extension SpadeBeaconServiceTests {
 
     /// Decodes the beacon body and returns the first event object in the JSON array.
     func decodedBeaconJSON() throws -> [String: Any] {
-        let post = beaconPOST()
-        let body = try XCTUnwrap(String(data: XCTUnwrap(post.bodyData), encoding: .utf8))
-        let b64  = String(body.dropFirst("data=".count))
-        let json = try XCTUnwrap(Data(base64Encoded: b64))
+        let json = try decodedBeaconData()
         let arr  = try JSONSerialization.jsonObject(with: json) as! [[String: Any]]
         return arr[0]
     }
 
     /// Returns the raw decoded JSON string (for exact-match comparison).
     func decodedBeaconRawString() throws -> String {
+        try XCTUnwrap(String(data: decodedBeaconData(), encoding: .utf8))
+    }
+
+    func decodedBeaconData() throws -> Data {
         let post = beaconPOST()
         let body = try XCTUnwrap(String(data: XCTUnwrap(post.bodyData), encoding: .utf8))
-        let b64  = String(body.dropFirst("data=".count))
-        let data = try XCTUnwrap(Data(base64Encoded: b64))
-        return try XCTUnwrap(String(data: data, encoding: .utf8))
+        let encoded = String(body.dropFirst("data=".count))
+        let base64 = try XCTUnwrap(encoded.removingPercentEncoding)
+        return try XCTUnwrap(Data(base64Encoded: base64))
     }
 
     /// Returns the `properties` dict from the first beacon event.

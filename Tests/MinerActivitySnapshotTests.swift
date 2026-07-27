@@ -6,10 +6,112 @@ import SwiftMinerService
 @MainActor
 final class MinerActivitySnapshotTests: XCTestCase {
 
+    func testLiveActivityTimerFormatsShortAndLongSessions() {
+        XCTAssertEqual(MinerLiveActivityTimerView.formatElapsed(0), "00:00")
+        XCTAssertEqual(MinerLiveActivityTimerView.formatElapsed(65), "01:05")
+        XCTAssertEqual(MinerLiveActivityTimerView.formatElapsed(3_661), "1:01:01")
+    }
+
     func testGlobalPriorityToggleOnlyAppearsForMultipleMiners() {
         XCTAssertFalse(MinersOverviewView.shouldShowGlobalPriorityToggle(minerCount: 0))
         XCTAssertFalse(MinersOverviewView.shouldShowGlobalPriorityToggle(minerCount: 1))
         XCTAssertTrue(MinersOverviewView.shouldShowGlobalPriorityToggle(minerCount: 2))
+    }
+
+    func testOperatorProgressAddsMinutesAcrossEveryTimedDrop() {
+        let firstProgress = Progress(
+            dropId: "drop-1",
+            campaignId: "campaign",
+            currentMinutes: 60,
+            requiredMinutes: 60,
+            isClaimed: true
+        )
+        let secondProgress = Progress(
+            dropId: "drop-2",
+            campaignId: "campaign",
+            currentMinutes: 30,
+            requiredMinutes: 90
+        )
+        let campaign = makeCampaign(
+            id: "campaign",
+            isAccountConnected: true,
+            drops: [
+                Drop(id: "drop-1", name: "First", requiredMinutes: 60, progress: firstProgress, isClaimed: true),
+                Drop(id: "drop-2", name: "Second", requiredMinutes: 90, progress: secondProgress),
+            ]
+        )
+        let miner = makeMiner(
+            status: .watching,
+            campaigns: [campaign],
+            currentCampaignId: campaign.id
+        )
+
+        let progress = MinerOperatorPresentation.aggregateProgress(for: campaign, miner: miner)
+
+        XCTAssertEqual(progress?.currentMinutes, 90)
+        XCTAssertEqual(progress?.requiredMinutes, 150)
+        XCTAssertEqual(progress?.fraction ?? -1, 0.6, accuracy: 0.0001)
+    }
+
+    func testOperatorQueuePinsCurrentAndResolvedNextAheadOfRemainingCampaigns() {
+        let current = makeCampaign(id: "current", gameId: "current-game", gameName: "Current", isAccountConnected: true)
+        let next = makeCampaign(id: "next", gameId: "next-game", gameName: "Next", isAccountConnected: true)
+        let later = makeCampaign(id: "later", gameId: "later-game", gameName: "Later", isAccountConnected: true)
+        let miner = makeMiner(
+            status: .watching,
+            campaigns: [later, next, current],
+            currentCampaignId: current.id,
+            priorityGames: ["Current", "Next", "Later"]
+        )
+
+        let presentation = MinerOperatorPresentation.resolve(
+            for: miner,
+            priorityGames: ["Current", "Next", "Later"],
+            excludedGames: [],
+            strategy: .onlyPriority,
+            includesBadgeAndEmoteCampaigns: false
+        )
+
+        XCTAssertEqual(presentation.snapshot.upNext?.campaignId, next.id)
+        XCTAssertEqual(presentation.queue.map(\.campaign.id), [current.id, next.id, later.id])
+        XCTAssertEqual(presentation.thenCampaigns.map(\.id), [later.id])
+    }
+
+    func testOperatorQueueExcludesUnlinkedNonPriorityCampaigns() {
+        let prioritised = makeCampaign(
+            id: "priority",
+            gameId: "priority-game",
+            gameName: "Priority Game",
+            isAccountConnected: false
+        )
+        let unrelatedUnlinked = makeCampaign(
+            id: "unrelated-unlinked",
+            gameId: "other-game",
+            gameName: "Other Game",
+            isAccountConnected: false
+        )
+        let linkedSmartCandidate = makeCampaign(
+            id: "linked-candidate",
+            gameId: "linked-game",
+            gameName: "Linked Game",
+            isAccountConnected: true
+        )
+        let miner = makeMiner(
+            campaigns: [unrelatedUnlinked, linkedSmartCandidate, prioritised],
+            priorityGames: ["Priority Game"]
+        )
+
+        let presentation = MinerOperatorPresentation.resolve(
+            for: miner,
+            priorityGames: ["Priority Game"],
+            excludedGames: [],
+            strategy: .mineAll,
+            includesBadgeAndEmoteCampaigns: false
+        )
+
+        XCTAssertTrue(presentation.queue.contains { $0.campaign.id == prioritised.id })
+        XCTAssertTrue(presentation.queue.contains { $0.campaign.id == linkedSmartCandidate.id })
+        XCTAssertFalse(presentation.queue.contains { $0.campaign.id == unrelatedUnlinked.id })
     }
 
     private func makeMiner(
@@ -257,6 +359,66 @@ final class MinerActivitySnapshotTests: XCTestCase {
         XCTAssertNotEqual(snapshot.now.campaignId, "claimed")
     }
 
+    func testWatchingNewDropShowsKnownDurationInsteadOfGenericProgressCheck() {
+        let progress = Progress(
+            dropId: "drop-1",
+            campaignId: "active",
+            currentMinutes: 0,
+            requiredMinutes: 60
+        )
+        let drop = Drop(
+            id: "drop-1",
+            name: "Drop 1",
+            requiredMinutes: 60,
+            progress: progress
+        )
+        let campaign = makeCampaign(
+            id: "active",
+            isAccountConnected: true,
+            drops: [drop]
+        )
+        let miner = makeMiner(
+            status: .watching,
+            campaigns: [campaign],
+            currentCampaignId: "active"
+        )
+
+        let snapshot = resolveSnapshot(for: miner)
+
+        XCTAssertEqual(snapshot.now.detail, "Drop 1 · 0 / 60 min watched")
+        XCTAssertEqual(snapshot.now.progressFraction, 0)
+    }
+
+    func testWatchingDropShowsCumulativeMinutesOutOfRequiredMinutes() {
+        let progress = Progress(
+            dropId: "drop-1",
+            campaignId: "active",
+            currentMinutes: 10,
+            requiredMinutes: 60
+        )
+        let drop = Drop(
+            id: "drop-1",
+            name: "Drop 1",
+            requiredMinutes: 60,
+            progress: progress
+        )
+        let campaign = makeCampaign(
+            id: "active",
+            isAccountConnected: true,
+            drops: [drop]
+        )
+        let miner = makeMiner(
+            status: .watching,
+            campaigns: [campaign],
+            currentCampaignId: "active"
+        )
+
+        let snapshot = resolveSnapshot(for: miner)
+
+        XCTAssertEqual(snapshot.now.detail, "Drop 1 · 10 / 60 min watched")
+        XCTAssertEqual(snapshot.now.progressFraction ?? -1, 1.0 / 6.0, accuracy: 0.0001)
+    }
+
     func testWaitingForStreamSurfacesSubscriptionRequiredPriorityCampaign() {
         let creators = makeCampaign(
             id: "creators",
@@ -398,14 +560,49 @@ final class MinerActivitySnapshotTests: XCTestCase {
         let errorSnapshot = resolveSnapshot(for: errorMiner)
         let idleSnapshot = resolveSnapshot(for: idleMiner)
 
-        XCTAssertEqual(refreshingSnapshot.statusText, "Up to Date")
-        XCTAssertEqual(refreshingSnapshot.now.title, "Up to Date")
+        XCTAssertEqual(refreshingSnapshot.statusText, "Updating…")
+        XCTAssertEqual(refreshingSnapshot.now.title, "Updating…")
+        XCTAssertEqual(refreshingSnapshot.now.subtitle, "Checking campaigns and drop progress.")
+        XCTAssertEqual(refreshingSnapshot.now.symbol, "arrow.clockwise")
 
         XCTAssertEqual(errorSnapshot.statusText, "Blocked — Needs attention")
         XCTAssertEqual(errorSnapshot.now.title, "Blocked — Needs attention")
 
         XCTAssertEqual(idleSnapshot.statusText, "Up to Date")
         XCTAssertEqual(idleSnapshot.now.title, "Up to Date")
+    }
+
+    func testCampaignRefreshTakesPriorityOverCachedUpToDateState() {
+        let claimedProgress = Progress(
+            dropId: "drop-1",
+            campaignId: "cached",
+            currentMinutes: 60,
+            requiredMinutes: 60,
+            isClaimed: true
+        )
+        let claimedDrop = Drop(
+            id: "drop-1",
+            name: "Cached Drop",
+            requiredMinutes: 60,
+            progress: claimedProgress,
+            isClaimed: true
+        )
+        let campaign = makeCampaign(
+            id: "cached",
+            isAccountConnected: true,
+            drops: [claimedDrop]
+        )
+        let miner = makeMiner(
+            status: .fetchingCampaigns,
+            campaigns: [campaign],
+            currentCampaignId: "cached"
+        )
+
+        let snapshot = resolveSnapshot(for: miner)
+
+        XCTAssertEqual(snapshot.statusText, "Updating…")
+        XCTAssertEqual(snapshot.now.title, "Updating…")
+        XCTAssertEqual(snapshot.now.symbol, "arrow.clockwise")
     }
 
     func testUnhealthyWatchingMinerStillSurfacesNoRecentActivity() {
