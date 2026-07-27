@@ -36,7 +36,7 @@
 <body>
   <main>
     <h1>SwiftMiner 1.34.51</h1>
-    <p class="meta">Version 1.34.51 · Build 2026072712</p>
+    <p class="meta">Version 1.34.51 · Build 2026072714</p>
     <p class="intro">This hotfix restores prompt miner startup for multi-account installations while retaining 1.34.5's process-wide Twitch request coordination.</p>
 
     <section class="rose">
@@ -58,11 +58,14 @@
         <li>Active miners show the known drop duration immediately instead of a generic “checking progress with Twitch” message.</li>
         <li>Miner progress shows verified watched minutes out of required minutes across every timed drop in the campaign, independent of channel or session.</li>
         <li>Redesigns each miner as an operator detail view with identity and live health, a Now → Next → Then summary, a resolved campaign queue, compact subsystem checks and priority controls, with detailed recovery history kept secondary.</li>
+        <li>Refines the miner detail view with Tahoe-style grouped surfaces, roomier sentence-case sections, responsive campaign artwork and a cleaner source list.</li>
+        <li>Shows the linked Discord account avatar in the miner header when available, with a local initial fallback.</li>
+        <li>Lazily builds off-screen detail sections and resolves each source-row activity snapshot once per render for smoother navigation and scrolling.</li>
         <li>Launch-time campaign and progress refreshes display Updating with a refresh symbol instead of prematurely reporting Up to Date.</li>
         <li>Prioritised artwork stays visually stable when returning to Overview instead of replaying its placeholder crossfade.</li>
         <li>Direct Twitch watch beacons now include the current stream category, client timestamp, live-state, and watched-minute fields required for drop progress to be credited.</li>
         <li>Added regression coverage for startup status and concurrent cold campaign refreshes.</li>
-        <li>Updates SwiftMiner to version 1.34.51 build 2026072712.</li>
+        <li>Updates SwiftMiner to version 1.34.51 build 2026072714.</li>
       </ul>
     </section>
   </main>

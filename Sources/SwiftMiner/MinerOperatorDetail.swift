@@ -198,24 +198,28 @@ struct MinerOperatorPresentation {
 struct MinerOperatorHeader: View {
     let miner: MinerManager.ManagedMiner
     let health: MinerHealthSnapshot
+    /// Avatar of the Discord account this miner is linked to, when there is
+    /// one. Falls back to the initial when the miner is unlinked or SwiftBot
+    /// hasn't resolved the user yet.
+    var discordAvatarURL: URL?
     let menu: AnyView
 
     var body: some View {
         HStack(spacing: 14) {
-            Text(initial)
-                .font(.title2.weight(.semibold))
-                .foregroundStyle(.white)
-                .frame(width: 44, height: 44)
-                .background(Color.accentColor.gradient, in: Circle())
-                .accessibilityHidden(true)
+            CachedDiscordAvatar(url: discordAvatarURL) {
+                initialAvatar
+            }
+            .frame(width: 46, height: 46)
+            .clipShape(Circle())
+            .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(miner.displayName)
                     .font(.title2.weight(.semibold))
                     .lineLimit(1)
 
                 Label(connectionLabel, systemImage: connectionSymbol)
-                    .font(.caption.weight(.semibold))
+                    .font(.subheadline.weight(.medium))
                     .foregroundStyle(connectionTint)
             }
 
@@ -228,9 +232,20 @@ struct MinerOperatorHeader: View {
 
             menu
         }
-        .padding(16)
-        .glassCard(cornerRadius: GlassRadius.medium)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 16)
+        .tahoeRaisedSurface(cornerRadius: TahoeMetrics.card)
         .accessibilityElement(children: .contain)
+    }
+
+    private var initialAvatar: some View {
+        Circle()
+            .fill(Color.accentColor.gradient)
+            .overlay {
+                Text(initial)
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(.white)
+            }
     }
 
     private var initial: String {
@@ -309,13 +324,14 @@ private struct HeaderMetric<Content: View>: View {
     var body: some View {
         HStack(spacing: 7) {
             Image(systemName: systemImage)
-                .font(.system(size: 13, weight: .medium))
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 1) {
                 Text(label)
-                    .font(.caption2)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
                 content
-                    .font(.caption.weight(.semibold))
+                    .font(.subheadline.weight(.medium))
                     .monospacedDigit()
                     .lineLimit(1)
             }
@@ -346,15 +362,25 @@ struct MinerMiningSequenceView: View {
     let presentation: MinerOperatorPresentation
     let channelName: String?
 
+    /// Width of the "Currently mining" and "Up next" artwork. They're peer
+    /// columns, so both use it; height is driven by the row instead. "Then" is
+    /// a compact secondary list and stays small and square.
+    private static let leadArtworkWidth: CGFloat = 76
+
     var body: some View {
         ViewThatFits(in: .horizontal) {
+            // Every column is stretched to the tallest one's height, which then
+            // flows down to the artwork — so the two lead thumbnails end up the
+            // same height as each other and as tall as the text beside them.
             HStack(alignment: .top, spacing: 0) {
-                nowColumn.frame(maxWidth: .infinity, alignment: .leading)
+                nowColumn.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 separator
-                nextColumn.frame(maxWidth: .infinity, alignment: .leading)
+                nextColumn.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 separator
-                thenColumn.frame(maxWidth: .infinity, alignment: .leading)
+                thenColumn.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
+            .fixedSize(horizontal: false, vertical: true)
+
             VStack(alignment: .leading, spacing: 16) {
                 nowColumn
                 Divider()
@@ -363,12 +389,8 @@ struct MinerMiningSequenceView: View {
                 thenColumn
             }
         }
-        .padding(16)
-        .background(Color.accentColor.opacity(0.045), in: RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
-                .strokeBorder(.separator.opacity(0.24), lineWidth: 1)
-        }
+        .padding(18)
+        .tahoeCard(tint: Color.accentColor.opacity(0.05))
         .accessibilityElement(children: .contain)
     }
 
@@ -377,9 +399,14 @@ struct MinerMiningSequenceView: View {
     }
 
     private var nowColumn: some View {
-        SequenceColumn(title: "CURRENTLY MINING") {
+        SequenceColumn(title: "Currently mining") {
             HStack(alignment: .top, spacing: 12) {
-                CampaignArtworkThumbnail(url: presentation.currentCampaign?.game.boxArtURL, symbol: presentation.snapshot.now.symbol, size: 66)
+                CampaignArtworkThumbnail(
+                    url: presentation.currentCampaign?.game.boxArtURL,
+                    symbol: presentation.snapshot.now.symbol,
+                    size: Self.leadArtworkWidth,
+                    fillsHeight: true
+                )
                 VStack(alignment: .leading, spacing: 5) {
                     Text(presentation.snapshot.now.title)
                         .font(.headline)
@@ -421,10 +448,15 @@ struct MinerMiningSequenceView: View {
     }
 
     private var nextColumn: some View {
-        SequenceColumn(title: "UP NEXT") {
+        SequenceColumn(title: "Up next") {
             if let item = presentation.snapshot.upNext {
-                HStack(alignment: .top, spacing: 10) {
-                    CampaignArtworkThumbnail(url: presentation.nextCampaign?.game.boxArtURL, symbol: item.symbol, size: 46)
+                HStack(alignment: .top, spacing: 12) {
+                    CampaignArtworkThumbnail(
+                        url: presentation.nextCampaign?.game.boxArtURL,
+                        symbol: item.symbol,
+                        size: Self.leadArtworkWidth,
+                        fillsHeight: true
+                    )
                     VStack(alignment: .leading, spacing: 4) {
                         Text(item.title).font(.subheadline.weight(.semibold)).lineLimit(1)
                         if let subtitle = item.subtitle {
@@ -447,7 +479,7 @@ struct MinerMiningSequenceView: View {
     }
 
     private var thenColumn: some View {
-        SequenceColumn(title: "THEN") {
+        SequenceColumn(title: "Then") {
             if presentation.thenCampaigns.isEmpty {
                 Text("No further campaigns")
                     .font(.subheadline)
@@ -481,9 +513,12 @@ private struct SequenceColumn<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(.tertiary)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+            // Absorbs any height the column was stretched to, passing it down
+            // to artwork that asked to fill.
             content
+                .frame(maxHeight: .infinity, alignment: .top)
         }
     }
 }
@@ -492,11 +527,20 @@ struct CampaignArtworkThumbnail: View {
     let url: URL?
     let symbol: String
     let size: CGFloat
+    /// When true the artwork stretches to the height of its row rather than
+    /// staying square, so the text beside it doesn't overhang the image.
+    /// `size` then means width only, and `size` is the floor on height.
+    var fillsHeight: Bool = false
+
+    private var cornerRadius: CGFloat {
+        min(14, size * 0.24)
+    }
 
     var body: some View {
         CampaignCardArtwork(url: url, tint: .accentColor)
-            .frame(width: size, height: size)
-            .clipShape(RoundedRectangle(cornerRadius: min(10, size * 0.18), style: .continuous))
+            .frame(width: size)
+            .frame(minHeight: size, maxHeight: fillsHeight ? .infinity : size)
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .overlay {
                 if url == nil {
                     Image(systemName: symbol)
@@ -523,10 +567,11 @@ struct MinerCampaignQueueRow: View {
 
             Image(systemName: statusSymbol)
                 .font(.system(size: 12, weight: .semibold))
+                .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(statusTint)
                 .frame(width: 18)
 
-            CampaignArtworkThumbnail(url: entry.campaign.game.boxArtURL, symbol: "gamecontroller.fill", size: 34)
+            CampaignArtworkThumbnail(url: entry.campaign.game.boxArtURL, symbol: "gamecontroller.fill", size: 36)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(entry.campaign.game.name)
@@ -545,8 +590,8 @@ struct MinerCampaignQueueRow: View {
             infoView
                 .frame(width: 250, alignment: .leading)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
         .accessibilityElement(children: .combine)
     }
 
@@ -557,11 +602,11 @@ struct MinerCampaignQueueRow: View {
             } label: {
                 Label(isWarningIgnored ? "Remind me" : "Dismiss", systemImage: isWarningIgnored ? "bell" : "bell.slash")
             }
-            .buttonStyle(.bordered)
-            .controlSize(.mini)
+            .tahoeButtonStyle()
+            .controlSize(.small)
         } else {
             Text(statusLabel)
-                .font(.caption.weight(.semibold))
+                .font(.subheadline.weight(.medium))
                 .foregroundStyle(statusTint)
                 .lineLimit(1)
         }
