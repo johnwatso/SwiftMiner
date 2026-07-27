@@ -640,6 +640,34 @@ public actor SQLiteManager {
         }
     }
 
+    /// Records a claimed reward so the Discord "drops claimed today / this week"
+    /// stats have something to count. Nothing wrote this table previously, so
+    /// both of those figures always reported zero.
+    ///
+    /// `benefit_id` is the primary key, which makes re-recording the same reward
+    /// a harmless no-op — claims can be retried, and a repeat must not inflate
+    /// the count.
+    public func recordClaimedReward(twitchId: String, benefitId: String, rewardName: String) async {
+        guard !twitchId.isEmpty, !benefitId.isEmpty else { return }
+        do {
+            try await execute { db in
+                let sql = """
+                INSERT OR IGNORE INTO reward_ledger (twitch_id, benefit_id, reward_name)
+                VALUES (?, ?, ?);
+                """
+                var stmt: OpaquePointer?
+                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+                defer { sqlite3_finalize(stmt) }
+                sqlite3_bind_text(stmt, 1, twitchId, -1, SQLITE_TRANSIENT)
+                sqlite3_bind_text(stmt, 2, benefitId, -1, SQLITE_TRANSIENT)
+                sqlite3_bind_text(stmt, 3, rewardName, -1, SQLITE_TRANSIENT)
+                _ = sqlite3_step(stmt)
+            }
+        } catch {
+            Logger.storage.error("[SQLiteManager] recordClaimedReward failed: \(error)")
+        }
+    }
+
     public func fetchClaimsCountToday() async -> Int {
         do {
             return try await query { db in
