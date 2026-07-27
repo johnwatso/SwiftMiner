@@ -359,7 +359,6 @@ struct MinersOverviewView: View {
 
     private func minerHealthSummarySection(for miner: MinerManager.ManagedMiner) -> some View {
         let snapshot = MinerHealthSnapshot.make(miner: miner)
-        let hasClaimableDrop = miner.allCampaigns.contains { $0.miningStatus == .claimable }
 
         return TahoeSection("Miner health") {
             VStack(spacing: 0) {
@@ -383,32 +382,6 @@ struct MinersOverviewView: View {
                     date: snapshot.lastDropProgressAt ?? snapshot.lastSuccessfulPollAt,
                     isHealthy: !miner.isNotEarning()
                 )
-                TahoeRowDivider(leadingInset: 39)
-                healthCheckRow(
-                    title: "Drop claimer",
-                    status: hasClaimableDrop ? "Claim pending" : "Ready",
-                    date: nil,
-                    isHealthy: !hasClaimableDrop
-                )
-
-                HStack(spacing: 8) {
-                    Label(snapshot.statusLabel, systemImage: diagnosticsSystemImage(for: snapshot.health))
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(diagnosticsTint(for: snapshot.health))
-
-                    Spacer()
-
-                    if let lastPoll = snapshot.lastSuccessfulPollAt {
-                        Text("Last poll ") + Text(lastPoll, style: .relative)
-                    } else {
-                        Text("No successful poll yet")
-                    }
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 14)
-                .padding(.top, 10)
-                .padding(.bottom, 12)
             }
         }
     }
@@ -432,17 +405,29 @@ struct MinersOverviewView: View {
 
             Spacer(minLength: 8)
 
+            // Both trailing values sit in fixed columns. Previously the status
+            // was free-width, so it slid sideways whenever the relative time
+            // grew ("29 secs" vs "1 min, 33 secs"), and rows carrying no
+            // timestamp pushed their status out to the row edge.
             Text(status)
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(isHealthy ? .green : .orange)
                 .lineLimit(1)
+                .minimumScaleFactor(0.85)
+                .frame(width: 96, alignment: .trailing)
 
-            if let date {
-                Text(date, style: .relative)
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .frame(minWidth: 52, alignment: .trailing)
+            Group {
+                if let date {
+                    Text(date, style: .relative)
+                } else {
+                    Text("—")
+                }
             }
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.85)
+            .frame(width: 92, alignment: .trailing)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -1109,27 +1094,6 @@ struct MinersOverviewView: View {
         let id = campaign.game.id.trimmingCharacters(in: .whitespacesAndNewlines)
         if !id.isEmpty { return id }
         return normalizedGameKey(campaign.game.name)
-    }
-
-    private func diagnosticsSystemImage(for health: MinerHealthSnapshot.Health) -> String {
-        switch health {
-        case .mining: return "play.circle.fill"
-        case .blocked: return "exclamationmark.triangle.fill"
-        case .needsAuth: return "person.crop.circle.badge.exclamationmark"
-        case .stalled: return "waveform.path.ecg.rectangle"
-        case .recovering: return "arrow.triangle.2.circlepath"
-        case .idle: return "pause.circle"
-        case .attention: return "exclamationmark.circle.fill"
-        }
-    }
-
-    private func diagnosticsTint(for health: MinerHealthSnapshot.Health) -> Color {
-        switch health {
-        case .mining: return .green
-        case .recovering: return .blue
-        case .blocked, .needsAuth, .stalled, .attention: return .orange
-        case .idle: return .secondary
-        }
     }
 
 }

@@ -393,6 +393,11 @@ extension TwitchAPIClient {
         return campaignIds
     }
 
+    /// Response field for the `DropsPage_ClaimDropRewards` mutation.
+    static let claimRewardsKey = "claimDropRewards"
+    /// Older field name, still accepted so a mixed rollout can't break claims.
+    static let legacyClaimBenefitKey = "claimDropBenefit"
+
     /// Claim a drop
     public func claimDrop(dropInstanceId: String) async throws -> ClaimDropResponse {
         let request = GraphQLRequest(
@@ -408,9 +413,52 @@ extension TwitchAPIClient {
         let data = try await makeGraphQLRequest(request: request)
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
 
-        guard let responseData = json?["data"] as? [String: Any],
-              let claim = responseData["claimDropBenefit"] as? [String: Any] else {
-            throw TwitchMinerError.claimFailed("Invalid response")
+        // Twitch returns GraphQL-level failures as HTTP 200 with an `errors`
+        // array and no usable `data`, so they have to be read here or the
+        // reason is lost. A retired persisted-query hash
+        // ("PersistedQueryNotFound"), a renamed field, and a genuinely
+        // unclaimable instance are otherwise indistinguishable — they all used
+        // to collapse into a bare "Invalid response".
+        if let errors = json?["errors"] as? [[String: Any]], !errors.isEmpty {
+            let messages = errors.compactMap { $0["message"] as? String }.filter { !$0.isEmpty }
+            let detail = messages.isEmpty
+                ? "\(errors.count) unnamed GraphQL error(s)"
+                : messages.joined(separator: "; ")
+            traceClaim("claim mutation GraphQL error: \(detail)")
+            throw TwitchMinerError.claimFailed("Twitch GraphQL error: \(detail)")
+        }
+
+        guard let responseData = json?["data"] as? [String: Any] else {
+            traceClaim("claim mutation response had no data object")
+            throw TwitchMinerError.claimFailed("Response contained no data object")
+        }
+
+        // The `DropsPage_ClaimDropRewards` mutation answers with
+        // `claimDropRewards`. This previously read `claimDropBenefit` — a
+        // different, older mutation field that is never present in this
+        // response — so every claim threw, even though Twitch had recorded it.
+        // `claimDropBenefit` is still accepted in case Twitch serves the older
+        // shape to some clients.
+        let claimPayload = responseData[Self.claimRewardsKey] as? [String: Any]
+            ?? responseData[Self.legacyClaimBenefitKey] as? [String: Any]
+
+        guard let claim = claimPayload else {
+            // An explicit null is Twitch saying this instance isn't claimable —
+            // already claimed, expired, or not owned by this account.
+            let isExplicitNull = responseData[Self.claimRewardsKey] is NSNull
+                || responseData[Self.legacyClaimBenefitKey] is NSNull
+            if isExplicitNull {
+                traceClaim("claim mutation returned null for \(dropInstanceId)")
+                throw TwitchMinerError.claimFailed("Claim payload was null — drop instance not claimable")
+            }
+            // Data came back without either known field, which points at another
+            // response-shape change. Name the keys so the new shape is
+            // identifiable straight from the log.
+            let keys = responseData.keys.sorted().joined(separator: ", ")
+            traceClaim("claim payload key absent; data keys: [\(keys)]")
+            throw TwitchMinerError.claimFailed(
+                "Response missing \(Self.claimRewardsKey) (data keys: [\(keys)])"
+            )
         }
 
         campaignDetailsByKey.removeAll(keepingCapacity: true)

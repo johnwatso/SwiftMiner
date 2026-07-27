@@ -226,8 +226,8 @@ struct MinerOperatorHeader: View {
             Spacer(minLength: 18)
 
             ViewThatFits(in: .horizontal) {
-                HStack(spacing: 24) { metrics }
-                HStack(spacing: 12) { compactMetrics }
+                statusCluster(showsLabels: true)
+                statusCluster(showsLabels: false)
             }
 
             menu
@@ -252,36 +252,91 @@ struct MinerOperatorHeader: View {
         String(miner.displayName.trimmingCharacters(in: .whitespacesAndNewlines).first ?? "?").uppercased()
     }
 
-    @ViewBuilder private var metrics: some View {
-        HeaderMetric(label: "Uptime", systemImage: "clock") {
-            if let started = miner.workerStartedAt, miner.isRunning {
-                RelativeDurationText(startDate: started)
-            } else {
-                Text("—")
+    /// The three operational metrics as one grouped cluster of equal-width
+    /// cells. Drops the labels — not the cells — when the window is too narrow,
+    /// so the grouping survives at every width.
+    private func statusCluster(showsLabels: Bool) -> some View {
+        HStack(spacing: 0) {
+            MinerStatusCell(
+                label: "Uptime",
+                systemImage: "clock",
+                showsLabel: showsLabels
+            ) {
+                if let started = miner.workerStartedAt, miner.isRunning {
+                    RelativeDurationText(startDate: started)
+                } else {
+                    Text("—")
+                }
+            }
+
+            cellDivider
+
+            MinerStatusCell(
+                label: "Last Poll",
+                systemImage: "clock.arrow.circlepath",
+                showsLabel: showsLabels
+            ) {
+                if let date = health.lastSuccessfulPollAt {
+                    Text(date, style: .relative)
+                } else {
+                    Text("Not yet")
+                }
+            }
+
+            cellDivider
+
+            MinerStatusCell(
+                label: "Health",
+                systemImage: healthSymbol,
+                iconTint: healthTint,
+                showsLabel: showsLabels
+            ) {
+                Text(healthTitle)
+                    .foregroundStyle(healthTint)
             }
         }
-        HeaderMetric(label: "Last Poll", systemImage: "wave.3.right") {
-            if let date = health.lastSuccessfulPollAt {
-                Text(date, style: .relative)
-            } else {
-                Text("Not yet")
-            }
+        .frame(height: showsLabels ? 44 : 34)
+        .background(
+            .background.secondary,
+            in: RoundedRectangle(cornerRadius: TahoeMetrics.nested, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: TahoeMetrics.nested, style: .continuous)
+                .strokeBorder(.separator.opacity(0.22), lineWidth: 1)
+                .allowsHitTesting(false)
         }
-        HeaderMetric(label: "Health", systemImage: "heart") {
-            Text(health.statusLabel)
-                .foregroundStyle(healthTint)
+        .accessibilityElement(children: .contain)
+    }
+
+    private var cellDivider: some View {
+        Divider().frame(height: 22)
+    }
+
+    /// The miner's actual health verdict — deliberately *not* `statusLabel`,
+    /// which describes current mining activity ("Watching <game>") and belongs
+    /// to the sequence card, not here.
+    private var healthTitle: String {
+        switch health.health {
+        case .mining: return "Healthy"
+        case .idle: return "Idle"
+        case .recovering: return "Recovering"
+        case .attention: return "Attention"
+        case .stalled: return "Unresponsive"
+        case .needsAuth: return "Auth needed"
+        case .blocked: return "Blocked"
         }
     }
 
-    @ViewBuilder private var compactMetrics: some View {
-        if let date = health.lastSuccessfulPollAt {
-            Label { Text(date, style: .relative) } icon: { Image(systemName: "wave.3.right") }
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
+    private var healthSymbol: String {
+        switch health.health {
+        case .mining: return "checkmark.circle.fill"
+        case .idle: return "pause.circle.fill"
+        case .recovering: return "arrow.triangle.2.circlepath.circle.fill"
+        case .attention: return "exclamationmark.circle.fill"
+        case .stalled: return "exclamationmark.triangle.fill"
+        case .needsAuth: return "person.crop.circle.badge.exclamationmark.fill"
+        case .blocked: return "xmark.circle.fill"
         }
-        Image(systemName: "heart.fill")
-            .foregroundStyle(healthTint)
-            .help(health.statusLabel)
     }
 
     private var connectionLabel: String {
@@ -303,39 +358,66 @@ struct MinerOperatorHeader: View {
     private var healthTint: Color {
         switch health.health {
         case .mining: return .green
-        case .blocked, .needsAuth, .stalled: return .orange
-        case .recovering, .attention: return .yellow
+        case .recovering: return .blue
+        case .attention: return .orange
+        case .stalled, .needsAuth, .blocked: return .red
         case .idle: return .secondary
         }
     }
 }
 
-private struct HeaderMetric<Content: View>: View {
+/// One cell of the header status cluster: a leading symbol, a small uppercase
+/// label, and the value beneath it. Fixed width so the three cells stay equal
+/// regardless of how long any single value renders.
+private struct MinerStatusCell<Content: View>: View {
     let label: String
     let systemImage: String
+    var iconTint: Color = .secondary
+    var showsLabel: Bool = true
     @ViewBuilder let content: Content
 
-    init(label: String, systemImage: String, @ViewBuilder content: () -> Content) {
+    init(
+        label: String,
+        systemImage: String,
+        iconTint: Color = .secondary,
+        showsLabel: Bool = true,
+        @ViewBuilder content: () -> Content
+    ) {
         self.label = label
         self.systemImage = systemImage
+        self.iconTint = iconTint
+        self.showsLabel = showsLabel
         self.content = content()
     }
 
     var body: some View {
         HStack(spacing: 7) {
             Image(systemName: systemImage)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(.secondary)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(iconTint)
+                .frame(width: 15)
+
             VStack(alignment: .leading, spacing: 1) {
-                Text(label)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if showsLabel {
+                    Text(label.uppercased())
+                        .font(.system(size: 9, weight: .semibold))
+                        .kerning(0.5)
+                        .foregroundStyle(.secondary)
+                }
+
                 content
-                    .font(.subheadline.weight(.medium))
+                    .font(.subheadline.weight(.semibold))
                     .monospacedDigit()
                     .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
+
+            Spacer(minLength: 0)
         }
+        .padding(.horizontal, 11)
+        .frame(width: showsLabel ? 118 : 96)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(label)
     }
 }
 
@@ -343,7 +425,9 @@ private struct RelativeDurationText: View {
     let startDate: Date
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
+        // The format only resolves to hours and minutes, so a 1s tick bought
+        // nothing but a header rebuild every second.
+        TimelineView(.periodic(from: .now, by: 30)) { context in
             Text(Self.format(context.date.timeIntervalSince(startDate)))
         }
     }
