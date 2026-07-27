@@ -358,7 +358,14 @@ struct DropsListView: View {
             visibleGroupedCampaigns: visibleGroupedCampaigns,
             activityByCampaignId: activityByCampaignId,
             renderSignature: renderSignature,
-            activeMiningCampaignCount: feedCampaigns.filter { activityByCampaignId[$0.id]?.state == .active }.count,
+            // "In motion" means a miner is watching it right now, which is not
+            // the same as the card state being `.active` — the state ladder
+            // resolves `.claimed`/`.blocked` first, so a campaign one account
+            // has finished reads as claimed even while another account mines
+            // it. Counting active miners directly keeps this honest.
+            activeMiningCampaignCount: feedCampaigns.filter {
+                !(activityByCampaignId[$0.id]?.activeMiners.isEmpty ?? true)
+            }.count,
             rewardsClaimedCount: rewardsClaimedCount,
             topClaimedGame: topClaimedGame(in: feedCampaigns, activityByCampaignId: activityByCampaignId),
             mostActiveMiner: mostActiveMiner(in: feedCampaigns)
@@ -371,11 +378,13 @@ struct DropsListView: View {
             return true
         }
 
-        return isPrioritisedCampaign(campaign)
-            && campaign.startDate <= now
-            && campaign.endDate > now
-            && !campaign.isCompleted
-            && (campaign.hasObtainableRewards || campaign.hasSubscriptionRequiredRewards)
+        // A game the user prioritised stays in the feed for its whole run, even
+        // once every reward is claimed. Previously the obtainable-rewards gate
+        // made a prioritised campaign vanish the moment it completed, which
+        // reads as data loss rather than as "finished" — the filter chips are
+        // what should decide where it lands, not whether it appears at all.
+        guard isPrioritisedCampaign(campaign) else { return false }
+        return campaign.startDate <= now && campaign.endDate > now
     }
 
     private func isPrioritisedCampaign(_ campaign: CampaignViewData) -> Bool {

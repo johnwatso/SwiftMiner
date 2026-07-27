@@ -687,6 +687,33 @@ public final class NavigationModel {
             }
         }
 
+        // Persists each claim so the Discord "drops claimed today / this week"
+        // stats have data. Nothing wrote `reward_ledger` before, so both of
+        // those figures always read zero regardless of how much was claimed.
+        minerManager.onDropClaimedEvent = { [weak self] minerId, drop, _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                guard let miner = self.minerManager.miners.first(where: { $0.id == minerId }) else { return }
+
+                // Twitch benefit IDs identify a reward, not a reward-per-user,
+                // so two accounts claiming the same drop share one. The ledger
+                // keys on benefit_id, so scope it per account — otherwise the
+                // second account's claim is silently deduped away and its
+                // per-account count comes out short.
+                let resolved = miner.allCampaigns
+                    .flatMap(\.drops)
+                    .first { $0.id == drop.id }
+                let benefitId = resolved?.benefitIds.first
+                    ?? resolved?.benefitID.nilIfBlank
+                    ?? drop.id
+                await self.sqliteManager.recordClaimedReward(
+                    twitchId: miner.accountId,
+                    benefitId: "\(miner.accountId):\(benefitId)",
+                    rewardName: drop.name
+                )
+            }
+        }
+
         minerManager.onCampaignCompletedEvent = { [weak self] minerId, campaign in
             Task { @MainActor [weak self] in
                 guard let self else { return }

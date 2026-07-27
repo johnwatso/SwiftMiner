@@ -542,7 +542,9 @@ struct MinerMiningSequenceView: View {
                         fillsHeight: true
                     )
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(item.title).font(.subheadline.weight(.semibold)).lineLimit(1)
+                        // Matches "Currently mining" — the two are peer columns
+                        // with equal artwork, so equal type weight too.
+                        Text(item.title).font(.headline).lineLimit(1)
                         if let subtitle = item.subtitle {
                             Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                         }

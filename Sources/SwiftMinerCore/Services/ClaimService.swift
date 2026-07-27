@@ -248,12 +248,37 @@ public actor ClaimService {
         )
     }
 
+    /// Number of inventory re-reads used to confirm a claim that the mutation
+    /// didn't clearly report. Twitch's inventory lags a successful claim by a
+    /// second or two, so a single immediate read reliably says "not claimed"
+    /// for a claim that did in fact land.
+    private static let claimConfirmationAttempts = 3
+    private static let claimConfirmationDelayNanoseconds: UInt64 = 2_000_000_000
+
     private func confirmClaim(_ progress: Progress) async -> Bool {
         if let claimConfirmation {
             return await claimConfirmation(progress)
         }
         guard let dropsService else { return false }
 
+        for attempt in 0..<Self.claimConfirmationAttempts {
+            if attempt > 0 {
+                do {
+                    try await runtimeClock.sleep(nanoseconds: Self.claimConfirmationDelayNanoseconds)
+                } catch {
+                    return false
+                }
+            }
+
+            if await inventoryConfirmsClaim(progress, dropsService: dropsService) {
+                return true
+            }
+        }
+
+        return false
+    }
+
+    private func inventoryConfirmsClaim(_ progress: Progress, dropsService: DropsService) async -> Bool {
         do {
             let inventoryService = await dropsService.getInventoryService()
             let result = try await inventoryService.fetchInventoryResult(forceRefresh: true)

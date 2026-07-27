@@ -53,9 +53,11 @@ struct MinersOverviewView: View {
             NicknameMinerTip.minerCount = miners.count
             await NicknameMinerTip.viewedMinersList.donate()
             // Populates the Discord user cache the header avatar reads from.
-            // No-ops without SwiftBot, so it's gated rather than always fired.
-            if settings.swiftBotEnabled {
-                await navigation.refreshDiscordDisplayNames()
+            // Only worth a request when a miner is actually Discord-linked, and
+            // detached so an unreachable SwiftBot burns its 5s timeout off to
+            // the side rather than inside this task.
+            if settings.swiftBotEnabled, miners.contains(where: { $0.ownerDiscordId != nil }) {
+                Task { await navigation.refreshDiscordDisplayNames() }
             }
         }
         .onChange(of: miners.map(\.id)) { _, _ in
@@ -340,23 +342,6 @@ struct MinersOverviewView: View {
         }
     }
 
-    private func liveOperationsSection(for miner: MinerManager.ManagedMiner) -> some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .top, spacing: 12) {
-                selectedMinerWatchingStreamerSection(for: miner)
-                    .frame(minWidth: 280, maxWidth: .infinity, alignment: .topLeading)
-
-                minerHealthSummarySection(for: miner)
-                    .frame(minWidth: 280, maxWidth: .infinity, alignment: .topLeading)
-            }
-
-            VStack(alignment: .leading, spacing: 12) {
-                selectedMinerWatchingStreamerSection(for: miner)
-                minerHealthSummarySection(for: miner)
-            }
-        }
-    }
-
     private func minerHealthSummarySection(for miner: MinerManager.ManagedMiner) -> some View {
         let snapshot = MinerHealthSnapshot.make(miner: miner)
 
@@ -618,43 +603,6 @@ struct MinersOverviewView: View {
         }
     }
 
-    private func selectedMinerWatchingStreamerSection(for miner: MinerManager.ManagedMiner) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                Text("WATCHING STREAMER")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.tertiary)
-
-                Spacer()
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-
-            SelectedMinerStreamerRow(
-                streamerName: selectedActivitySummary?.currentChannelName,
-                streamerId: selectedActivitySummary?.currentChannelId,
-                campaignName: selectedActivitySummary?.currentCampaignName ?? miner.currentCampaign,
-                status: miner.status,
-                isRunning: miner.isRunning
-            )
-
-            if let anchor = liveActivityAnchor(for: miner) {
-                MinerLiveActivityTimerView(
-                    anchor: anchor,
-                    accent: settings.coloredStatusIcons ? .green : .secondary,
-                    label: "Current session"
-                )
-                .padding(.horizontal, 12)
-                .padding(.bottom, 10)
-            }
-        }
-        .background(.background.opacity(0.62), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
-                .strokeBorder(.separator.opacity(0.32), lineWidth: 1)
-        }
-    }
-
     @ViewBuilder
     private func pendingItemsSection(for miner: MinerManager.ManagedMiner, campaigns: [Campaign]) -> some View {
         let items = pendingItems(for: miner, campaigns: campaigns)
@@ -834,52 +782,6 @@ struct MinersOverviewView: View {
     }
 
     @ViewBuilder
-    private func minerCampaignsSection(for miner: MinerManager.ManagedMiner, campaigns: [Campaign]) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                Text("PRIORITISED CAMPAIGNS")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.tertiary)
-
-                Text("\(campaigns.count)")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.tertiary)
-
-                Spacer()
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-
-            VStack(spacing: 1) {
-                if campaigns.isEmpty {
-                    NoActiveCampaignsRow()
-                } else {
-                    ForEach(campaigns) { campaign in
-                        let gameId = warningGameId(for: campaign)
-                        let isIgnored = settings.isIgnoringAccountLinkWarnings(for: miner.accountId, gameId: gameId)
-
-                        CampaignStatusRow(
-                            miner: miner,
-                            campaign: campaign,
-                            isWarningIgnored: isIgnored,
-                            onDismissWarning: {
-                                setLinkReminder(false, for: miner, gameId: gameId, gameName: campaign.game.name)
-                            },
-                            onRemindWarning: {
-                                setLinkReminder(true, for: miner, gameId: gameId, gameName: campaign.game.name)
-                            }
-                        )
-                    }
-                }
-            }
-        }
-        .background(.background.opacity(0.62), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
-                .strokeBorder(.separator.opacity(0.32), lineWidth: 1)
-        }
-    }
-
     private func activePrioritisedCampaigns(for miner: MinerManager.ManagedMiner) -> [Campaign] {
         let configuredPriorityGames = miner.priorityGames.isEmpty ? settings.priorityGames : miner.priorityGames
         let priorityKeys = configuredPriorityGames
