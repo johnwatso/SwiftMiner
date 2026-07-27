@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SwiftMiner 1.35 - Release Notes</title>
-  <meta name="description" content="Release notes for SwiftMiner 1.35: restores Twitch drop claiming and claim history, and rebuilds the Miners tab around a macOS Tahoe operator view.">
+  <meta name="description" content="Release notes for SwiftMiner 1.35: restores Twitch drop claiming, credited watch progress and claim history, and rebuilds the Miners tab around a macOS Tahoe operator view.">
   <link rel="canonical" href="https://swiftminer.app/release-notes/1.35.html">
   <meta name="robots" content="index, follow">
   <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
@@ -37,28 +37,40 @@
   <main>
     <h1>SwiftMiner 1.35</h1>
     <p class="meta">Version 1.35 · Unreleased</p>
-    <p class="intro">Twitch drop claims were landing but being recorded as failures, so claim history, counters and notifications all stayed empty. This release fixes the claim path end to end and rebuilds the Miners tab around a macOS Tahoe operator view.</p>
+    <p class="intro">Twitch drop claims were landing but being read back as failures, so claim counts, history and notifications all stayed empty. This release repairs the claim path end to end, restores credited watch progress, and rebuilds the Miners tab around a macOS Tahoe operator view.</p>
 
     <section class="rose">
       <h2><span class="badge" aria-hidden="true">🎁</span> Drop Claiming Restored</h2>
-      <p class="summary">Claims were reaching Twitch and succeeding, but the response was misread as a failure — so nothing downstream of a claim ever ran.</p>
+      <p class="summary">Claims were reaching Twitch and succeeding, but the reply was misread — so every claim was reported as a failure and nothing that depends on a claim ever ran.</p>
       <ul>
-        <li>Reads Twitch's current <code>claimDropRewards</code> mutation response, while still accepting the legacy claim field so a mixed rollout cannot break claiming again.</li>
-        <li>Treats Twitch's real success status, and an instance a previous attempt already claimed, as completed — making repeated claim attempts safely idempotent.</li>
-        <li>Confirms an unreported claim across several spaced inventory reads instead of one immediate read, which reported "not claimed" for claims that had in fact landed.</li>
-        <li>Surfaces GraphQL messages, explicit empty payloads and unexpected response keys in diagnostics, so a future Twitch response change is actionable rather than silent.</li>
-        <li>Restores everything that depends on a recorded claim: claim counters, the earning ledger, claim notifications, Discord claim events and Twitch inbox cleanup.</li>
-        <li>Adds regression coverage for current, legacy, already-claimed, malformed and GraphQL-error claim responses, built from real Twitch payloads rather than from the parser.</li>
+        <li>Reads Twitch's current <code>claimDropRewards</code> mutation response. SwiftMiner had been reading a different, older claim field that this response never contains, so every claim was treated as failed even though Twitch had recorded it.</li>
+        <li>Still accepts the legacy claim field, so a mixed Twitch rollout cannot break claiming again.</li>
+        <li>Recognises Twitch's real successful status, as well as an instance a previous attempt had already claimed, making repeated claim attempts safely idempotent.</li>
+        <li>Confirms an otherwise unreported claim across several spaced inventory reads. Twitch's inventory lags a successful claim by a moment, so a single immediate read reported "not claimed" for claims that had in fact landed.</li>
+        <li>Surfaces Twitch GraphQL messages, which arrive alongside an ordinary success response and were previously invisible.</li>
+        <li>Distinguishes an explicitly empty claim payload — meaning the reward is not claimable — from a response whose shape is simply unrecognised, and names the fields Twitch actually returned so a future change is diagnosable rather than silent.</li>
+        <li>Restores everything downstream of a recorded claim: claim counters, the earning ledger, claim notifications, Discord claim events, per-drop claim tracking, and clearing the claimed notification from your Twitch inbox.</li>
       </ul>
     </section>
 
     <section class="rose">
       <h2><span class="badge" aria-hidden="true">📊</span> Claim History Recorded</h2>
-      <p class="summary">Claimed rewards are now persisted, so claim statistics report real numbers.</p>
+      <p class="summary">Claimed rewards are now persisted, so claim statistics report real numbers instead of always reading zero.</p>
       <ul>
-        <li>Every claim is written to the reward ledger. Nothing had ever written it, so Discord's "claims today" and "drops claimed this week" always reported zero regardless of how much had been claimed.</li>
-        <li>Ledger entries are recorded per account, since a Twitch benefit identifies a reward rather than a reward per user — without this, a second account's claim of the same reward was discarded and its totals came out short.</li>
+        <li>Every claim is written to the reward ledger. Nothing had ever written that table, so Discord's "claims today" and "drops claimed this week" reported zero no matter how much had been claimed.</li>
+        <li>Entries are recorded per account. A Twitch benefit identifies a reward rather than a reward per user, so without this a second account claiming the same reward was discarded and its totals came out short.</li>
         <li>Re-recording a reward is a no-op, so claim retries cannot inflate the totals.</li>
+      </ul>
+    </section>
+
+    <section class="rose">
+      <h2><span class="badge" aria-hidden="true">📡</span> Watch Progress Credited</h2>
+      <p class="summary">Watch time is reported to Twitch in the form it now expects, so minutes count toward drops again.</p>
+      <ul>
+        <li>Direct Twitch watch beacons carry the current stream category, client timestamp, live-state and watched-minute fields required for progress to be credited.</li>
+        <li>Heartbeat fallback behaviour is preserved, so a miner keeps reporting watch time when the primary beacon path is unavailable.</li>
+        <li>Progress is shown as verified watched minutes out of required minutes across every timed drop in a campaign, independent of channel or session.</li>
+        <li>Live session timers and progress bars stay consistent between Overview and Miners rather than each keeping its own count.</li>
       </ul>
     </section>
 
@@ -66,38 +78,58 @@
       <h2><span class="badge" aria-hidden="true">⛏️</span> Miners Rebuilt for macOS Tahoe</h2>
       <p class="summary">Each miner is now an operator view: who it is, whether it is healthy, and what it is working on next.</p>
       <ul>
-        <li>Rebuilds the selected miner around an identity and live-health header, a Now → Next → Then summary, a resolved campaign queue, compact subsystem checks and priority controls, with recovery history kept secondary.</li>
-        <li>Adopts Tahoe grouped surfaces with larger concentric corners, sentence-case section headers, roomier spacing and a plain source list with a soft selection pill.</li>
-        <li>Groups uptime, last poll and the miner's actual health verdict into equal-width header cells that stay aligned as values change length.</li>
-        <li>Health now reports the miner's condition rather than repeating which campaign it is watching, and its checks align into fixed columns without duplicated claim or status summaries.</li>
+        <li>Rebuilds the selected miner around an identity and live-health header, a Now → Next → Then summary, a resolved campaign queue, compact subsystem checks and priority controls, with detailed recovery history kept secondary.</li>
+        <li>Introduces reusable Tahoe card, raised-surface, section, row-divider and adaptive button treatments, with fallbacks so earlier macOS releases keep a coherent appearance.</li>
+        <li>Restyles the miner source list as a plain list with a soft selection pill, replacing the boxed, rule-separated list.</li>
+        <li>Moves section headings to sentence case above their grouped content, with larger concentric corners and roomier spacing throughout.</li>
         <li>Shows the linked Discord account avatar in the miner header when one is available, falling back to a local initial.</li>
-        <li>Sizes the current and upcoming campaign artwork consistently, tall enough that the detail beside it fits within the artwork.</li>
+        <li>Gives the current and upcoming campaign matching artwork, sized tall enough that the detail beside it fits within the artwork, with larger queue thumbnails and a vertical fallback at constrained widths.</li>
+        <li>Matches the "Up next" heading weight to "Currently mining" now that the two columns share artwork size.</li>
       </ul>
     </section>
 
     <section class="green">
-      <h2><span class="badge" aria-hidden="true">🎯</span> Clearer Drops and Status</h2>
-      <p class="summary">Prioritised games stay visible, and status text reflects what is actually happening.</p>
+      <h2><span class="badge" aria-hidden="true">🩺</span> Honest Miner Health</h2>
+      <p class="summary">Health now answers whether the miner is well, rather than repeating what it is watching.</p>
+      <ul>
+        <li>Groups uptime, last poll and the miner's actual health verdict into equal-width header cells with state-specific symbols and colours, readable at narrower window sizes.</li>
+        <li>Reports the health verdict itself — healthy, idle, recovering, needs attention, unresponsive, authentication required or blocked — instead of restating the current campaign.</li>
+        <li>Aligns health-check statuses and timestamps into fixed columns so values no longer shift as relative times change length.</li>
+        <li>Removes duplicated claim and status summaries that repeated information already shown elsewhere on the page.</li>
+        <li>Campaign and progress refreshes at launch display Updating with a refresh symbol instead of prematurely reporting Up to Date.</li>
+        <li>Waiting and eligibility states are reported honestly, and unlinked, non-prioritised campaigns are no longer presented as mineable.</li>
+      </ul>
+    </section>
+
+    <section class="green">
+      <h2><span class="badge" aria-hidden="true">🎯</span> Drops and Campaign Visibility</h2>
+      <p class="summary">Prioritised games stay where you expect them, and the dashboard counts reflect reality.</p>
       <ul>
         <li>A prioritised game now stays in the Drops feed for its whole run instead of disappearing once its rewards are all claimed, which read as the game going missing.</li>
-        <li>"Campaigns in motion" counts campaigns a miner is actually watching, so a campaign one account has finished is still counted while another account mines it.</li>
-        <li>Launch-time campaign and progress refreshes display Updating with a refresh symbol instead of prematurely reporting Up to Date.</li>
-        <li>Miner progress shows verified watched minutes out of required minutes across every timed drop in a campaign, independent of channel or session.</li>
-        <li>Unlinked, non-prioritised campaigns are no longer presented as mineable.</li>
+        <li>"Campaigns in motion" counts campaigns a miner is actually watching, so a campaign one account has finished is still counted while another account continues mining it.</li>
         <li>Prioritised artwork stays visually stable when returning to Overview instead of replaying its placeholder crossfade.</li>
       </ul>
     </section>
 
     <section class="amber">
-      <h2><span class="badge" aria-hidden="true">⚡</span> Reliability and Performance</h2>
-      <p class="summary">Smoother scrolling on the Miners tab, and fewer wasted requests.</p>
+      <h2><span class="badge" aria-hidden="true">⚡</span> Performance</h2>
+      <p class="summary">Smoother scrolling on the Miners tab, and fewer wasted redraws and requests.</p>
       <ul>
-        <li>Direct Twitch watch beacons include the stream category, client timestamp, live-state and watched-minute fields required for drop progress to be credited.</li>
-        <li>Removes a translucent backdrop from the scrolling miner header that was resampled every frame, and builds off-screen detail sections lazily.</li>
+        <li>Removes a translucent backdrop from the scrolling miner header that was re-sampled on every frame while scrolling.</li>
+        <li>Builds off-screen detail sections only as they are reached, matching how the Drops feed already worked.</li>
         <li>Resolves each source-row activity snapshot once per render instead of repeating the same work for every field that reads it.</li>
         <li>Refreshes the minute-level uptime display every 30 seconds rather than every second.</li>
-        <li>Only requests Discord display names when a miner is actually linked, and no longer lets an unreachable SwiftBot stall opening the Miners tab.</li>
-        <li>Adds regression coverage for campaign ordering, cumulative progress, eligibility filtering, startup status and beacon payload parity.</li>
+        <li>Only requests Discord display names when a miner is actually linked, and no longer lets an unreachable companion service delay opening the Miners tab.</li>
+      </ul>
+    </section>
+
+    <section class="amber">
+      <h2><span class="badge" aria-hidden="true">🧪</span> Internals</h2>
+      <p class="summary">Coverage for the paths that failed silently, so these regressions surface in tests rather than in production.</p>
+      <ul>
+        <li>Adds claim regression coverage for the current and legacy response fields, real success statuses, already-claimed instances, unrecognised payloads and GraphQL errors — written from real Twitch responses rather than from the parser, which is why the original fault went unnoticed.</li>
+        <li>Adds coverage for campaign ordering, cumulative progress, eligibility filtering, startup status and watch-beacon payload parity.</li>
+        <li>Removes unreachable miner views left behind by the detail rebuild.</li>
       </ul>
     </section>
   </main>
