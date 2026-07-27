@@ -3,83 +3,6 @@ import SwiftUI
 import SwiftMinerCore
 import TipKit
 
-struct StallConfidenceState {
-    let percent: Int
-
-    var title: String {
-        switch percent {
-        case 0..<25: return "Normal"
-        case 25...50: return "Early Warning"
-        case 51..<75: return "Likely Trouble"
-        default: return "High Risk"
-        }
-    }
-
-    var systemImage: String {
-        switch percent {
-        case 0..<25: return "checkmark.circle.fill"
-        case 25...50: return "checkmark.circle.badge.questionmark.fill"
-        case 51..<75: return "checkmark.circle.trianglebadge.exclamationmark.fill"
-        default: return "checkmark.circle.badge.xmark.fill"
-        }
-    }
-
-    var tint: Color {
-        switch percent {
-        case 0..<25: return .green
-        case 25...50: return .yellow
-        case 51..<75: return .orange
-        default: return .red
-        }
-    }
-}
-
-struct StallConfidenceHelpPopover: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Stall Confidence")
-                .font(.headline)
-
-            Text("This is separate from Drop Progress. It estimates how likely the selected miner is stuck: 0% means no stall signals, while 100% means the supervisor has marked the miner unresponsive.")
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-                .lineSpacing(1.5)
-                .fixedSize(horizontal: false, vertical: true)
-
-            VStack(alignment: .leading, spacing: 8) {
-                StallConfidenceHelpRow(state: StallConfidenceState(percent: 0), range: "0-24%")
-                StallConfidenceHelpRow(state: StallConfidenceState(percent: 25), range: "25-50%")
-                StallConfidenceHelpRow(state: StallConfidenceState(percent: 51), range: "51-74%")
-                StallConfidenceHelpRow(state: StallConfidenceState(percent: 75), range: "75-100%")
-            }
-        }
-        .padding(14)
-        .frame(width: 320, alignment: .leading)
-    }
-}
-
-struct StallConfidenceHelpRow: View {
-    let state: StallConfidenceState
-    let range: String
-
-    var body: some View {
-        HStack(spacing: 9) {
-            Image(systemName: state.systemImage)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(state.tint)
-                .frame(width: 16)
-
-            Text(range)
-                .font(.system(size: 12, weight: .semibold))
-                .frame(width: 62, alignment: .leading)
-
-            Text(state.title)
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-        }
-    }
-}
-
 struct MinerDiagnosticTimelineRow: View {
     let title: String
     let detail: String
@@ -239,18 +162,12 @@ struct PendingItemRow: View {
                 Label(item.actionTitle, systemImage: item.actionSystemImage)
                     .labelStyle(.titleAndIcon)
             }
-            .buttonStyle(.bordered)
+            .tahoeButtonStyle()
             .controlSize(.small)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
         .background(.background.opacity(0.001))
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(.separator.opacity(0.24))
-                .frame(height: 1)
-                .padding(.leading, 42)
-        }
     }
 }
 
@@ -286,7 +203,10 @@ struct MinerSourceListRow: View {
     let onClearStreamOverride: () -> Void
     private var settings: Settings { .shared }
 
-    private var snapshot: MinerActivitySnapshot {
+    /// Resolved once per render and threaded through the helpers below. As a
+    /// computed property this ran `resolve` seven times per row per render —
+    /// once for every property that touched it.
+    private var resolvedSnapshot: MinerActivitySnapshot {
         MinerActivitySnapshot.resolve(
             for: miner,
             priorityGames: displayedPriorityGames,
@@ -309,7 +229,7 @@ struct MinerSourceListRow: View {
         miner.status == .blockedAccountNotLinked || miner.status == .error || miner.needsAuth
     }
 
-    private var statusSymbol: String {
+    private func statusSymbol(for snapshot: MinerActivitySnapshot) -> String {
         if snapshot.statusText == "Waiting" {
             return "clock"
         }
@@ -320,11 +240,13 @@ struct MinerSourceListRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 9) {
-            Image(systemName: statusSymbol)
+        let snapshot = resolvedSnapshot
+
+        return HStack(spacing: 9) {
+            Image(systemName: statusSymbol(for: snapshot))
                 .font(.system(size: 12, weight: .semibold))
                 .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(statusColor)
+                .foregroundStyle(snapshot.statusColor)
                 .frame(width: 18, height: 18)
 
             VStack(alignment: .leading, spacing: compact ? 1 : 2) {
@@ -355,7 +277,7 @@ struct MinerSourceListRow: View {
                     }
 
                 if !compact {
-                    Text(activityLabel)
+                    Text(activityLabel(for: snapshot))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -381,31 +303,22 @@ struct MinerSourceListRow: View {
                     .accessibilityLabel("Has pending items")
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, compact ? 7 : 9)
+        .padding(.horizontal, 11)
+        .padding(.vertical, compact ? 8 : 10)
         .frame(maxWidth: .infinity, alignment: .leading)
+        // Tahoe source-list selection: a soft filled pill, no outline.
         .background {
             if isSelected {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(Color.accentColor.opacity(0.13))
+                RoundedRectangle(cornerRadius: TahoeMetrics.row, style: .continuous)
+                    .fill(Color.accentColor.opacity(0.16))
             }
         }
-        .overlay {
-            if isSelected {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .strokeBorder(Color.accentColor.opacity(0.18), lineWidth: 1)
-            }
-        }
-        .contentShape(RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: TahoeMetrics.row, style: .continuous))
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 
-    private var statusColor: Color {
-        snapshot.statusColor
-    }
-
-    private var activityLabel: String {
+    private func activityLabel(for snapshot: MinerActivitySnapshot) -> String {
         if snapshot.now.id.hasPrefix("override-") {
             return "Watching \(snapshot.now.title)"
         }
@@ -646,11 +559,11 @@ struct LinkNoticeBanner: View {
             .foregroundStyle(.secondary)
             .help("Dismiss")
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(.green.opacity(0.08), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(.green.opacity(0.10), in: RoundedRectangle(cornerRadius: TahoeMetrics.card, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
+            RoundedRectangle(cornerRadius: TahoeMetrics.card, style: .continuous)
                 .strokeBorder(.green.opacity(0.22), lineWidth: 1)
         }
     }
@@ -867,8 +780,8 @@ struct NoActiveCampaignsRow: View {
 
             Spacer(minLength: 12)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
         .background(.background.opacity(0.001))
     }
 }
@@ -927,15 +840,11 @@ struct RankedPriorityChip: View {
                 .help("Remove \(gameName) from this miner's personal priorities")
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background((isGlobal ? Color.gray.opacity(0.10) : Color.accentColor.opacity(0.12)), in: Capsule())
-        .overlay {
-            Capsule().stroke(
-                isGlobal ? Color.gray.opacity(0.25) : Color.accentColor.opacity(0.35),
-                lineWidth: 1
-            )
-        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 5)
+        // Tahoe chips read as soft filled capsules; the outline is dropped so
+        // a long list of them doesn't turn into a grid of boxes.
+        .background((isGlobal ? Color.gray.opacity(0.16) : Color.accentColor.opacity(0.16)), in: Capsule())
         .contentShape(Capsule())
     }
 }

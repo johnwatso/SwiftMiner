@@ -14,7 +14,6 @@ struct MinersOverviewView: View {
     @State private var linkNotice: LinkNotice?
     @State private var nicknameEditor: MinerNicknameEditorPresentation?
     @State private var streamOverrideEditor: MinerStreamOverridePresentation?
-    @State private var isDiagnosticsHelpPresented = false
     @State private var isShowingGameManagement = false
 
     private var miners: [MinerManager.ManagedMiner] {
@@ -53,6 +52,11 @@ struct MinersOverviewView: View {
             captureInitialLinkIssuesIfNeeded()
             NicknameMinerTip.minerCount = miners.count
             await NicknameMinerTip.viewedMinersList.donate()
+            // Populates the Discord user cache the header avatar reads from.
+            // No-ops without SwiftBot, so it's gated rather than always fired.
+            if settings.swiftBotEnabled {
+                await navigation.refreshDiscordDisplayNames()
+            }
         }
         .onChange(of: miners.map(\.id)) { _, _ in
             syncSelection()
@@ -81,58 +85,44 @@ struct MinersOverviewView: View {
         }
     }
 
+    // Tahoe source lists are plain: no enclosing box, no inter-row rules — the
+    // selection pill alone carries the structure.
     private var minerListPane: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    ForEach(Array(miners.enumerated()), id: \.element.id) { index, miner in
-                        VStack(spacing: 0) {
-                            Button {
-                                navigation.selectedMinerId = miner.id
-                            } label: {
-                                MinerSourceListRow(
-                                    miner: miner,
-                                    compact: !hasMultipleMiners,
-                                    isSelected: selectionBinding.wrappedValue == miner.id,
-                                    onEditNickname: { presentNicknameEditor(for: miner) },
-                                    onClearNickname: { clearNickname(for: miner) },
-                                    onOverrideStream: { presentStreamOverrideEditor(for: miner) },
-                                    onClearStreamOverride: { clearStreamOverride(for: miner) }
-                                )
-                            }
-                            .buttonStyle(.plain)
-                            .contextMenu {
-                                minerContextMenu(for: miner)
-                            }
-                            .modifier(NicknameTipAttachment(isFirstRow: index == 0))
-
-                            if index < miners.count - 1 {
-                                Divider()
-                                    .padding(.leading, 38)
-                                    .padding(.trailing, 10)
-                            }
-                        }
+        ScrollView {
+            LazyVStack(spacing: 2) {
+                ForEach(Array(miners.enumerated()), id: \.element.id) { index, miner in
+                    Button {
+                        navigation.selectedMinerId = miner.id
+                    } label: {
+                        MinerSourceListRow(
+                            miner: miner,
+                            compact: !hasMultipleMiners,
+                            isSelected: selectionBinding.wrappedValue == miner.id,
+                            onEditNickname: { presentNicknameEditor(for: miner) },
+                            onClearNickname: { clearNickname(for: miner) },
+                            onOverrideStream: { presentStreamOverrideEditor(for: miner) },
+                            onClearStreamOverride: { clearStreamOverride(for: miner) }
+                        )
                     }
+                    .buttonStyle(.plain)
+                    .contextMenu {
+                        minerContextMenu(for: miner)
+                    }
+                    .modifier(NicknameTipAttachment(isFirstRow: index == 0))
                 }
-                .padding(3)
-                .background(.background.opacity(0.24), in: RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
-                        .strokeBorder(.separator.opacity(0.18), lineWidth: 1)
-                }
-                .clipShape(RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
-                .padding(.horizontal, 8)
             }
-            .scrollIndicators(.never)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 4)
         }
+        .scrollIndicators(.never)
         .frame(
-            minWidth: hasMultipleMiners ? 220 : 148,
-            idealWidth: hasMultipleMiners ? 248 : 164,
-            maxWidth: hasMultipleMiners ? 280 : 176
+            minWidth: hasMultipleMiners ? 236 : 156,
+            idealWidth: hasMultipleMiners ? 264 : 172,
+            maxWidth: hasMultipleMiners ? 300 : 184
         )
-        .padding(.leading, 24)
-        .padding(.vertical, 24)
-        .padding(.trailing, hasMultipleMiners ? 12 : 8)
+        .padding(.leading, 18)
+        .padding(.vertical, 20)
+        .padding(.trailing, hasMultipleMiners ? 8 : 6)
     }
 
     @ViewBuilder
@@ -143,10 +133,14 @@ struct MinersOverviewView: View {
             let health = MinerHealthSnapshot.make(miner: miner)
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                // Lazy, matching the Drops feed: sections below the fold (the
+                // campaign queue's artwork rows in particular) aren't built
+                // until they're scrolled to.
+                LazyVStack(alignment: .leading, spacing: TahoeMetrics.sectionSpacing) {
                     MinerOperatorHeader(
                         miner: miner,
                         health: health,
+                        discordAvatarURL: discordAvatarURL(for: miner),
                         menu: AnyView(
                             HStack(spacing: 8) {
                                 if miner.needsAuth || miner.status == .blockedAccountNotLinked {
@@ -155,7 +149,7 @@ struct MinersOverviewView: View {
                                     } label: {
                                         Label("Reconnect", systemImage: "personalhotspot")
                                     }
-                                    .buttonStyle(.bordered)
+                                    .tahoeButtonStyle()
                                     .controlSize(.small)
                                 }
 
@@ -191,14 +185,14 @@ struct MinersOverviewView: View {
                     minerCampaignQueueSection(for: miner, presentation: presentation)
 
                     ViewThatFits(in: .horizontal) {
-                        HStack(alignment: .top, spacing: 12) {
+                        HStack(alignment: .top, spacing: 16) {
                             minerHealthSummarySection(for: miner)
                                 .frame(minWidth: 300, maxWidth: .infinity, alignment: .topLeading)
                             minerPrioritiesSection(for: miner)
                                 .frame(minWidth: 300, maxWidth: .infinity, alignment: .topLeading)
                         }
 
-                        VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: TahoeMetrics.sectionSpacing) {
                             minerHealthSummarySection(for: miner)
                             minerPrioritiesSection(for: miner)
                         }
@@ -207,8 +201,8 @@ struct MinersOverviewView: View {
                     minerRecoveryHistorySection(for: miner)
                 }
                 .frame(maxWidth: .infinity, alignment: .topLeading)
-                .padding(.horizontal, 28)
-                .padding(.vertical, 24)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 22)
             }
             .id(miner.id)
             .task(id: miner.id) {
@@ -242,6 +236,14 @@ struct MinersOverviewView: View {
                 .filter { $0.hasPrefix("\(miner.accountId):") && $0.hasSuffix(":accountLink") }
                 .compactMap { $0.components(separatedBy: ":").dropFirst().first }
         )
+    }
+
+    /// Discord avatar for the account this miner is linked to. Resolved from
+    /// the SwiftBot user cache, which only holds anything once
+    /// `refreshDiscordDisplayNames()` has run.
+    private func discordAvatarURL(for miner: MinerManager.ManagedMiner) -> URL? {
+        guard let discordId = miner.ownerDiscordId else { return nil }
+        return navigation.discordUsersById[discordId]?.avatarURL
     }
 
     private func refreshSelectedActivitySummary(for minerId: String) async {
@@ -359,31 +361,7 @@ struct MinersOverviewView: View {
         let snapshot = MinerHealthSnapshot.make(miner: miner)
         let hasClaimableDrop = miner.allCampaigns.contains { $0.miningStatus == .claimable }
 
-        return VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                Text("MINER HEALTH")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.tertiary)
-
-                Spacer(minLength: 4)
-
-                Button {
-                    isDiagnosticsHelpPresented.toggle()
-                } label: {
-                    Image(systemName: "questionmark.circle")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .help("Explain stall confidence")
-                .accessibilityLabel("Explain stall confidence")
-                .popover(isPresented: $isDiagnosticsHelpPresented, arrowEdge: .top) {
-                    StallConfidenceHelpPopover()
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-
+        return TahoeSection("Miner health") {
             VStack(spacing: 0) {
                 healthCheckRow(
                     title: "Connected to Twitch",
@@ -391,50 +369,47 @@ struct MinersOverviewView: View {
                     date: snapshot.lastEventAt,
                     isHealthy: miner.isRunning && !miner.needsAuth
                 )
-                Divider()
+                TahoeRowDivider(leadingInset: 39)
                 healthCheckRow(
                     title: "Campaign inventory",
                     status: snapshot.lastCampaignRefreshAt == nil ? "Waiting" : "OK",
                     date: snapshot.lastCampaignRefreshAt,
                     isHealthy: snapshot.lastCampaignRefreshAt != nil
                 )
-                Divider()
+                TahoeRowDivider(leadingInset: 39)
                 healthCheckRow(
                     title: "Progress detection",
                     status: miner.isNotEarning() ? "No progress" : "OK",
                     date: snapshot.lastDropProgressAt ?? snapshot.lastSuccessfulPollAt,
                     isHealthy: !miner.isNotEarning()
                 )
-                Divider()
+                TahoeRowDivider(leadingInset: 39)
                 healthCheckRow(
                     title: "Drop claimer",
                     status: hasClaimableDrop ? "Claim pending" : "Ready",
                     date: nil,
                     isHealthy: !hasClaimableDrop
                 )
-            }
 
-            HStack(spacing: 8) {
-                Label(snapshot.statusLabel, systemImage: diagnosticsSystemImage(for: snapshot.health))
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(diagnosticsTint(for: snapshot.health))
+                HStack(spacing: 8) {
+                    Label(snapshot.statusLabel, systemImage: diagnosticsSystemImage(for: snapshot.health))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(diagnosticsTint(for: snapshot.health))
 
-                Spacer()
+                    Spacer()
 
-                if let lastPoll = snapshot.lastSuccessfulPollAt {
-                    Text("Last poll ") + Text(lastPoll, style: .relative)
-                } else {
-                    Text("No successful poll yet")
+                    if let lastPoll = snapshot.lastSuccessfulPollAt {
+                        Text("Last poll ") + Text(lastPoll, style: .relative)
+                    } else {
+                        Text("No successful poll yet")
+                    }
                 }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 14)
+                .padding(.top, 10)
+                .padding(.bottom, 12)
             }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .padding(12)
-        }
-        .background(.background.opacity(0.62), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
-                .strokeBorder(.separator.opacity(0.32), lineWidth: 1)
         }
     }
 
@@ -444,31 +419,33 @@ struct MinersOverviewView: View {
         date: Date?,
         isHealthy: Bool
     ) -> some View {
-        HStack(spacing: 9) {
+        HStack(spacing: 10) {
             Image(systemName: isHealthy ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(isHealthy ? .green : .orange)
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: 13, weight: .semibold))
+                .frame(width: 15)
 
             Text(title)
-                .font(.caption)
+                .font(.subheadline)
                 .lineLimit(1)
 
             Spacer(minLength: 8)
 
             Text(status)
-                .font(.caption.weight(.semibold))
+                .font(.subheadline.weight(.medium))
                 .foregroundStyle(isHealthy ? .green : .orange)
                 .lineLimit(1)
 
             if let date {
                 Text(date, style: .relative)
-                    .font(.caption2.monospacedDigit())
+                    .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
-                    .frame(minWidth: 48, alignment: .trailing)
+                    .frame(minWidth: 52, alignment: .trailing)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
     }
 
     private func minerRecoveryHistorySection(for miner: MinerManager.ManagedMiner) -> some View {
@@ -507,12 +484,11 @@ struct MinersOverviewView: View {
                 Image(systemName: "clock.arrow.circlepath")
                     .foregroundStyle(.secondary)
 
-                Text("RECOVERY & DIAGNOSTICS")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.tertiary)
+                Text("Recovery & diagnostics")
+                    .font(.subheadline.weight(.semibold))
 
                 Text(recentEventCount == 0 ? "No recent events" : "\(recentEventCount) recent")
-                    .font(.caption.weight(.medium))
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
 
@@ -520,12 +496,8 @@ struct MinersOverviewView: View {
             }
             .contentShape(Rectangle())
         }
-        .padding(12)
-        .background(.background.opacity(0.62), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
-                .strokeBorder(.separator.opacity(0.32), lineWidth: 1)
-        }
+        .padding(14)
+        .tahoeCard()
     }
 
     private func liveActivityAnchor(for miner: MinerManager.ManagedMiner) -> Date? {
@@ -555,118 +527,101 @@ struct MinersOverviewView: View {
         let global = includesGlobal
             ? settings.priorityGames.filter { !personalKeys.contains($0.lowercased()) }
             : []
-        return VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                Text("PRIORITY QUEUE")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.tertiary)
-                Spacer()
-
-                Button {
-                    isShowingGameManagement = true
-                } label: {
-                    Label("Edit", systemImage: "pencil")
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.mini)
-
-                if hasMultipleMiners {
-                    Toggle("Use global", isOn: Binding(
-                        get: { settings.includesGlobalPriorityGames(forAccountId: miner.accountId) },
-                        set: { include in
-                            settings.setIncludesGlobalPriorityGames(include, forAccountId: miner.accountId)
-                            let updated = settings.priorityGames(forAccountId: miner.accountId)
-                            navigation.minerManager.updatePriorityGames(updated, forMinerId: miner.id)
-                            if miner.isRunning {
-                                Task { await navigation.minerManager.forceRefreshMiner(minerId: miner.id) }
-                            }
-                        }
-                    ))
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-                }
+        return TahoeSection("Priority queue") {
+            Button {
+                isShowingGameManagement = true
+            } label: {
+                Label("Edit", systemImage: "pencil")
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
+            .tahoeButtonStyle()
+            .controlSize(.small)
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("THIS MINER")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .kerning(0.8)
-
-                if personal.isEmpty {
-                    Text("No personal priorities — add them from the dashboard or Discord.")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                } else {
-                    VStack(spacing: 0) {
-                        ForEach(Array(personal.enumerated()), id: \.element) { index, game in
-                            HStack(spacing: 8) {
-                                Text("\(index + 1)")
-                                    .font(.caption2.weight(.semibold).monospacedDigit())
-                                    .foregroundStyle(.secondary)
-                                    .frame(width: 18, height: 18)
-                                    .background(.quaternary, in: Circle())
-                                Text(game)
-                                    .font(.caption.weight(.medium))
-                                    .lineLimit(1)
-                                Spacer()
-                                Button {
-                                    removePersonalPriority(game, from: miner)
-                                } label: {
-                                    Image(systemName: "xmark.circle")
-                                }
-                                .buttonStyle(.plain)
-                                .foregroundStyle(.secondary)
-                                .help("Remove \(game) from this miner")
-                            }
-                            .padding(.vertical, 6)
-
-                            if index < personal.count - 1 { Divider() }
+            if hasMultipleMiners {
+                Toggle("Use global", isOn: Binding(
+                    get: { settings.includesGlobalPriorityGames(forAccountId: miner.accountId) },
+                    set: { include in
+                        settings.setIncludesGlobalPriorityGames(include, forAccountId: miner.accountId)
+                        let updated = settings.priorityGames(forAccountId: miner.accountId)
+                        navigation.minerManager.updatePriorityGames(updated, forMinerId: miner.id)
+                        if miner.isRunning {
+                            Task { await navigation.minerManager.forceRefreshMiner(minerId: miner.id) }
                         }
                     }
-                    .padding(.horizontal, 8)
-                    .background(.background.opacity(0.45), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
-                }
+                ))
+                .toggleStyle(.switch)
+                .controlSize(.small)
             }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 10)
-
-            if includesGlobal {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("GLOBAL QUEUE")
-                        .font(.system(size: 10, weight: .semibold))
+        } content: {
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("This miner")
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
-                        .kerning(0.8)
 
-                    if global.isEmpty {
-                        Text(settings.priorityGames.isEmpty
-                            ? "The global list is empty."
-                            : "All global games are already covered by this miner's own list.")
-                            .font(.caption)
+                    if personal.isEmpty {
+                        Text("No personal priorities — add them from the dashboard or Discord.")
+                            .font(.callout)
                             .foregroundStyle(.tertiary)
                     } else {
-                        FlowLayout(spacing: 6) {
-                            ForEach(Array(global.enumerated()), id: \.element) { index, game in
-                                RankedPriorityChip(
-                                    rank: personal.count + index + 1,
-                                    gameName: game,
-                                    isGlobal: true,
-                                    onRemove: nil
-                                )
+                        VStack(spacing: 0) {
+                            ForEach(Array(personal.enumerated()), id: \.element) { index, game in
+                                HStack(spacing: 9) {
+                                    Text("\(index + 1)")
+                                        .font(.caption.weight(.semibold).monospacedDigit())
+                                        .foregroundStyle(.secondary)
+                                        .frame(width: 20, height: 20)
+                                        .background(.quaternary, in: Circle())
+                                    Text(game)
+                                        .font(.subheadline)
+                                        .lineLimit(1)
+                                    Spacer()
+                                    Button {
+                                        removePersonalPriority(game, from: miner)
+                                    } label: {
+                                        Image(systemName: "xmark.circle")
+                                    }
+                                    .buttonStyle(.plain)
+                                    .foregroundStyle(.secondary)
+                                    .help("Remove \(game) from this miner")
+                                }
+                                .padding(.vertical, 7)
+
+                                if index < personal.count - 1 { Divider() }
+                            }
+                        }
+                        .padding(.horizontal, 10)
+                        .tahoeCard(cornerRadius: TahoeMetrics.nested)
+                    }
+                }
+
+                if includesGlobal {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Global queue")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+
+                        if global.isEmpty {
+                            Text(settings.priorityGames.isEmpty
+                                ? "The global list is empty."
+                                : "All global games are already covered by this miner's own list.")
+                                .font(.callout)
+                                .foregroundStyle(.tertiary)
+                        } else {
+                            FlowLayout(spacing: 6) {
+                                ForEach(Array(global.enumerated()), id: \.element) { index, game in
+                                    RankedPriorityChip(
+                                        rank: personal.count + index + 1,
+                                        gameName: game,
+                                        isGlobal: true,
+                                        onRemove: nil
+                                    )
+                                }
                             }
                         }
                     }
                 }
-                .padding(.horizontal, 12)
-                .padding(.bottom, 12)
             }
-        }
-        .background(.background.opacity(0.62), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
-                .strokeBorder(.separator.opacity(0.32), lineWidth: 1)
+            .padding(14)
         }
     }
 
@@ -721,33 +676,20 @@ struct MinersOverviewView: View {
         let activeCount = items.filter { !$0.isMuted }.count
 
         if !items.isEmpty {
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 8) {
-                    Text("PENDING")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(.tertiary)
-
-                    Text("\(activeCount)")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(.tertiary)
-
-                    Spacer()
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 9)
-
-                VStack(spacing: 1) {
-                    ForEach(items) { item in
+            // The count tracks items still needing attention, so it's dropped
+            // rather than shown as "0" when every listed item is muted.
+            TahoeSection("Pending", count: activeCount > 0 ? activeCount : nil) {
+                VStack(spacing: 0) {
+                    ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                         PendingItemRow(item: item) {
                             togglePendingMute(item)
                         }
+
+                        if index < items.count - 1 {
+                            TahoeRowDivider(leadingInset: 44)
+                        }
                     }
                 }
-            }
-            .background(.background.opacity(0.62), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
-                    .strokeBorder(.separator.opacity(0.32), lineWidth: 1)
             }
         }
     }
@@ -861,36 +803,23 @@ struct MinersOverviewView: View {
         for miner: MinerManager.ManagedMiner,
         presentation: MinerOperatorPresentation
     ) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                Text("CAMPAIGN QUEUE")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.tertiary)
-
-                Text("\(presentation.queue.count)")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.tertiary)
-
-                Spacer()
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-
+        TahoeSection("Campaign queue", count: presentation.queue.count) {
             if presentation.queue.isEmpty {
                 NoActiveCampaignsRow()
             } else {
-                HStack(spacing: 10) {
-                    Text("ORDER").frame(width: 52, alignment: .leading)
-                    Text("CAMPAIGN").frame(maxWidth: .infinity, alignment: .leading)
-                    Text("STATUS").frame(width: 150, alignment: .leading)
-                    Text("PROGRESS / INFO").frame(width: 250, alignment: .leading)
-                }
-                .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(.tertiary)
-                .padding(.horizontal, 10)
-                .padding(.bottom, 6)
-
                 VStack(spacing: 0) {
+                    HStack(spacing: 10) {
+                        Text("Order").frame(width: 56, alignment: .leading)
+                        Text("Campaign").frame(maxWidth: .infinity, alignment: .leading)
+                        Text("Status").frame(width: 150, alignment: .leading)
+                        Text("Progress").frame(width: 250, alignment: .leading)
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 14)
+                    .padding(.top, 11)
+                    .padding(.bottom, 8)
+
                     ForEach(Array(presentation.queue.enumerated()), id: \.element.id) { index, entry in
                         let gameId = warningGameId(for: entry.campaign)
                         let isIgnored = settings.isIgnoringAccountLinkWarnings(
@@ -910,16 +839,12 @@ struct MinersOverviewView: View {
                         )
 
                         if index < presentation.queue.count - 1 {
-                            Divider().padding(.leading, 62)
+                            TahoeRowDivider(leadingInset: 76)
                         }
                     }
                 }
+                .padding(.bottom, 4)
             }
-        }
-        .background(.background.opacity(0.62), in: RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
-                .strokeBorder(.separator.opacity(0.32), lineWidth: 1)
         }
     }
 

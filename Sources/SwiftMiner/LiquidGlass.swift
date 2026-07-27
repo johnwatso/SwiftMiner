@@ -276,6 +276,178 @@ extension View {
     }
 }
 
+// MARK: - Tahoe Content Surfaces
+
+/// Metrics tuned to the macOS Tahoe look: larger corner radii and more air than
+/// the tighter pre-Tahoe `GlassRadius` scale.
+///
+/// Nested radii follow the concentric rule — an inset child's radius is its
+/// parent's radius minus the inset — so corners stay parallel instead of
+/// pinching at the edges.
+enum TahoeMetrics {
+    static let card: CGFloat = 16       // Top-level grouped section
+    static let nested: CGFloat = 10     // Content inset inside a card
+    static let row: CGFloat = 8         // List rows and selection
+    static let sectionSpacing: CGFloat = 20
+    static let headerGap: CGFloat = 7
+}
+
+private struct TahoeCardModifier: ViewModifier {
+    let cornerRadius: CGFloat
+    let tint: Color?
+
+    private var borderOpacity: Double {
+        // Tahoe's grouped boxes sit on a lighter fill and carry a fainter edge
+        // than the heavier hairline earlier releases needed for separation.
+        if #available(macOS 26, *) { return 0.20 }
+        return 0.32
+    }
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        content
+            .background {
+                shape.fill(.background.secondary)
+                if let tint {
+                    shape.fill(tint)
+                }
+            }
+            .overlay {
+                shape
+                    .strokeBorder(.separator.opacity(borderOpacity), lineWidth: 1)
+                    .allowsHitTesting(false)
+            }
+    }
+}
+
+/// Raised surface for headers and action bars sitting above content.
+///
+/// Deliberately *not* `.glassEffect`: a real Liquid Glass backdrop inside a
+/// scroll view resamples what's behind it every frame, which reads as scroll
+/// jank. This matches the near-opaque `.thinMaterial` treatment the Drops feed
+/// cards use, which scrolls smoothly.
+private struct TahoeRaisedSurfaceModifier: ViewModifier {
+    let cornerRadius: CGFloat
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        content
+            .background(.thinMaterial.opacity(0.96), in: shape)
+            .overlay {
+                shape
+                    .strokeBorder(.separator.opacity(0.22), lineWidth: 1)
+                    .allowsHitTesting(false)
+            }
+    }
+}
+
+extension View {
+    /// Grouped content surface. Content sits on an opaque grouped fill rather
+    /// than glass — under Tahoe, Liquid Glass belongs to the control layer, and
+    /// stacking it behind scrolling content muddies both.
+    func tahoeCard(cornerRadius: CGFloat = TahoeMetrics.card, tint: Color? = nil) -> some View {
+        modifier(TahoeCardModifier(cornerRadius: cornerRadius, tint: tint))
+    }
+
+    /// Raised surface for headers and action bars that sit above content.
+    func tahoeRaisedSurface(cornerRadius: CGFloat = TahoeMetrics.card) -> some View {
+        modifier(TahoeRaisedSurfaceModifier(cornerRadius: cornerRadius))
+    }
+
+    /// Tahoe's glass button treatment where available, bordered elsewhere.
+    @ViewBuilder
+    func tahoeButtonStyle() -> some View {
+        if #available(macOS 26, *) {
+            buttonStyle(.glass)
+        } else {
+            buttonStyle(.bordered)
+        }
+    }
+}
+
+/// A titled content group: sentence-case header above a rounded grouped box,
+/// matching Tahoe's System Settings idiom. Replaces the older pattern of an
+/// all-caps micro-label living inside the box above a divider.
+struct TahoeSection<Accessory: View, Content: View>: View {
+    private let title: String
+    private let count: Int?
+    private let cornerRadius: CGFloat
+    private let tint: Color?
+    private let accessory: Accessory
+    private let content: Content
+
+    init(
+        _ title: String,
+        count: Int? = nil,
+        cornerRadius: CGFloat = TahoeMetrics.card,
+        tint: Color? = nil,
+        @ViewBuilder accessory: () -> Accessory,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self.count = count
+        self.cornerRadius = cornerRadius
+        self.tint = tint
+        self.accessory = accessory()
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: TahoeMetrics.headerGap) {
+            HStack(spacing: 6) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+
+                if let count {
+                    Text(count.formatted())
+                        .font(.subheadline.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 8)
+
+                accessory
+            }
+            .padding(.horizontal, 2)
+
+            content
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .tahoeCard(cornerRadius: cornerRadius, tint: tint)
+        }
+    }
+}
+
+extension TahoeSection where Accessory == EmptyView {
+    init(
+        _ title: String,
+        count: Int? = nil,
+        cornerRadius: CGFloat = TahoeMetrics.card,
+        tint: Color? = nil,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.init(
+            title,
+            count: count,
+            cornerRadius: cornerRadius,
+            tint: tint,
+            accessory: { EmptyView() },
+            content: content
+        )
+    }
+}
+
+/// Hairline between rows inside a `tahoeCard`, inset so it never collides with
+/// the card's rounded corners.
+struct TahoeRowDivider: View {
+    var leadingInset: CGFloat = 12
+
+    var body: some View {
+        Divider()
+            .padding(.leading, leadingInset)
+            .padding(.trailing, 12)
+    }
+}
+
 struct MaterialEmptyStatePanel<Actions: View>: View {
     let title: String
     let systemImage: String
