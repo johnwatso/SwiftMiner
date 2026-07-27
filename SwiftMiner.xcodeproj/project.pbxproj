@@ -117,6 +117,7 @@
 		9E1347517E6967612E7E61F3 /* project.yml in Resources */ = {isa = PBXBuildFile; fileRef = 0E2FDBDE3F08EA177AF0250D /* project.yml */; };
 		9E22D6B864FBD034644E5473 /* MinerHealthSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE2BCE3055439E2EEE026D0C /* MinerHealthSnapshotTests.swift */; };
 		A0C3867E4CC1EF8C66917F4E /* CampaignViewData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AC5F2BA81633C5B76678925 /* CampaignViewData.swift */; };
+		A2547886CB2064FE4961BF08 /* MinerOperatorDetail.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C5FA8EA9DD4F9899530C5F5 /* MinerOperatorDetail.swift */; };
 		A30AA8EF6C13CF1596110C22 /* UnattendedHealthStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AEFBBEA28C3C08733DCB98A /* UnattendedHealthStore.swift */; };
 		A443288FDCAF0E2F9EB174FF /* EventEmitterService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0658398231AD4B7BD6AF16C5 /* EventEmitterService.swift */; };
 		A46C78368503613F92B006BB /* NotificationServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 512C3988013AEF59E9617A61 /* NotificationServiceTests.swift */; };
@@ -355,6 +356,7 @@
 		877DE35C94E3759F2ECAB592 /* GeneralSettingsPanes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneralSettingsPanes.swift; sourceTree = "<group>"; };
 		87DA7758FAC012A62B587018 /* CrashSentinel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrashSentinel.swift; sourceTree = "<group>"; };
 		8ACF08613C4DC075CA132ED1 /* CampaignService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignService.swift; sourceTree = "<group>"; };
+		8C5FA8EA9DD4F9899530C5F5 /* MinerOperatorDetail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinerOperatorDetail.swift; sourceTree = "<group>"; };
 		8CBA21A1EC2155E1DB26257E /* AggregatedCampaignDataService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AggregatedCampaignDataService.swift; sourceTree = "<group>"; };
 		8F0C36D4A3E4BE2B05796360 /* CampaignCardComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignCardComponents.swift; sourceTree = "<group>"; };
 		8F71839BFA92F8055C552374 /* libSwiftMinerCore.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libSwiftMinerCore.a; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -605,6 +607,7 @@
 				0528E48497586BD35DE82149 /* MinerAttention.swift */,
 				D7CF370FB28AF15B644BAD3E /* MinerHealthCard.swift */,
 				FBE90C8FED1ED1FE9B88FD3B /* MinerLoginService.swift */,
+				8C5FA8EA9DD4F9899530C5F5 /* MinerOperatorDetail.swift */,
 				DDCBA37E74C916E35CC73905 /* MinerOverviewView.swift */,
 				CC5245BAB7E806A37EEB9901 /* MinersOverviewComponents.swift */,
 				65FB3E563B38E973DD424620 /* MinersOverviewView.swift */,
@@ -1161,6 +1164,7 @@
 				B5073D6F750D1504525FC42D /* MinerAttention.swift in Sources */,
 				66099E7E794758FB7B605F10 /* MinerHealthCard.swift in Sources */,
 				67256EB1FAB265EDAFAF6A64 /* MinerLoginService.swift in Sources */,
+				A2547886CB2064FE4961BF08 /* MinerOperatorDetail.swift in Sources */,
 				BD0BB11FA94E009CB12F20D8 /* MinerOverviewView.swift in Sources */,
 				376FF02FE674B1336C3FDC7B /* MinerStateCard.swift in Sources */,
 				156A8D4734DACD633E3CC8BB /* MinerTableView.swift in Sources */,
@@ -1323,7 +1327,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026072615;
+				CURRENT_PROJECT_VERSION = 2026072712;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;
@@ -1484,7 +1488,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026072615;
+				CURRENT_PROJECT_VERSION = 2026072712;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;

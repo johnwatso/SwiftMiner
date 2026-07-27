@@ -325,7 +325,9 @@ init(
                     channelLogin: session.channelName,
                     channelId:    session.channelId,
                     broadcastId:  session.broadcastId ?? "0",
-                    userId:       userId
+                    userId:       userId,
+                    gameName:     session.gameName,
+                    gameId:       session.gameId
                 )
                 session.lastHeartbeatTransport = "Spade"
             } catch {

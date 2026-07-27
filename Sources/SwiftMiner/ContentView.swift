@@ -288,10 +288,19 @@ struct OverviewView: View {
     }
 
     /// Enriches `steamArtworkOverrides` for preferred games that have no active campaign.
-    /// No-op when `preferSteamArtwork` is off. Safe to call repeatedly (results are cached).
+    /// Already-resolved and custom-artwork games are skipped so returning to Overview does
+    /// not repeat Steam lookups that cannot change the visible cards.
     private func enrichPreferredGameArtwork() async {
         guard settings.preferSteamArtwork else { return }
-        let names = settings.gamePreferences.filter { $0.state == .preferred }.map(\.gameName)
+        let existingArtwork = navigation.minerManager.dataCoordinator.steamArtworkOverrides
+        let names = settings.gamePreferences
+            .filter {
+                $0.state == .preferred
+                    && $0.customArtworkURL == nil
+                    && existingArtwork[$0.gameName] == nil
+            }
+            .map(\.gameName)
+        guard !names.isEmpty else { return }
         await navigation.minerManager.dataCoordinator.enrichGameNames(names)
     }
 
@@ -1010,7 +1019,7 @@ struct OverviewView: View {
         case .authenticating:
             return "Reconnecting"
         case .fetchingCampaigns:
-            return "Up to Date"
+            return "Updating…"
         case .watching:
             return "Watching — \(miner.currentCampaign ?? "active campaign")"
         case .waitingForStream:
@@ -1060,6 +1069,13 @@ private struct MinerStatusLegendPopover: View {
                 monoColor: .purple,
                 title: "Claiming Reward",
                 description: "A completed drop is being claimed from Twitch."
+            ),
+            StatusEntry(
+                symbol: "arrow.clockwise",
+                paletteColors: nil,
+                monoColor: .blue,
+                title: "Updating",
+                description: "Refreshing campaigns and verified drop progress from Twitch."
             ),
             StatusEntry(
                 symbol: "antenna.radiowaves.left.and.right",
@@ -1210,7 +1226,7 @@ private enum OverviewSystemState: Equatable {
         case .waitingForLiveStream:
             return "Looking for Streams"
         case .waitingRefreshingCampaigns:
-            return "Up to Date"
+            return "Updating…"
         case .waitingAuthenticating:
             return "Reconnecting"
         case .recovering:
@@ -1238,7 +1254,7 @@ private enum OverviewSystemState: Equatable {
         case .waitingForLiveStream:
             return "Checking channels for active streams."
         case .waitingRefreshingCampaigns:
-            return "Checking for campaign opportunities in the background."
+            return "Checking campaigns and drop progress."
         case .waitingAuthenticating:
             return "Reconnecting and restoring Twitch subscriptions."
         case .minerUnresponsive:
@@ -1276,7 +1292,7 @@ private enum OverviewSystemState: Equatable {
         case .waitingForLiveStream:
             return "antenna.radiowaves.left.and.right"
         case .waitingRefreshingCampaigns:
-            return "calendar.badge.checkmark"
+            return "arrow.clockwise"
         case .waitingAuthenticating:
             return "arrow.triangle.2.circlepath"
         case .minerUnresponsive:
@@ -1301,7 +1317,7 @@ private enum OverviewSystemState: Equatable {
         case .waitingForLiveStream:
             return .cyan
         case .waitingRefreshingCampaigns:
-            return .green
+            return .blue
         case .waitingAuthenticating:
             return .orange
         case .minerUnresponsive:
@@ -1321,8 +1337,10 @@ private enum OverviewSystemState: Equatable {
         switch self {
         case .idleNoEligibleCampaigns, .idleAllCampaignsCompleted:
             return .viewDrops
-        case .waitingForLiveStream, .waitingRefreshingCampaigns, .waitingAuthenticating, .recovering:
+        case .waitingForLiveStream, .waitingAuthenticating, .recovering:
             return .viewSchedule
+        case .waitingRefreshingCampaigns:
+            return nil
         case .minerUnresponsive, .noRecentActivity:
             return nil
         case .blockedAccountNotLinked, .blockedAuthenticationExpired, .blockedNeedsAttention:

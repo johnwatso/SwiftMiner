@@ -40,7 +40,7 @@ struct StallConfidenceHelpPopover: View {
             Text("Stall Confidence")
                 .font(.headline)
 
-            Text("This estimates how likely the selected miner is stuck. Lower is healthier: 0% means no stall signals, while 100% means the supervisor has marked the miner unresponsive.")
+            Text("This is separate from Drop Progress. It estimates how likely the selected miner is stuck: 0% means no stall signals, while 100% means the supervisor has marked the miner unresponsive.")
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .lineSpacing(1.5)

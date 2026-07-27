@@ -50,11 +50,16 @@ public actor SpadeBeaconService {
     ///   - channelId:     Numeric channel/user ID string
     ///   - broadcastId:   Live stream broadcast ID (pass `"0"` if unknown)
     ///   - userId:        Authenticated viewer's user ID string
+    ///   - gameName:      Current stream category name
+    ///   - gameId:        Current stream category ID
     public func sendBeacon(
         channelLogin: String,
         channelId: String,
         broadcastId: String,
-        userId: String
+        userId: String,
+        gameName: String = "",
+        gameId: String = "",
+        at date: Date = Date()
     ) async throws {
         traceSpade("minute-watched → channel=\(channelLogin) broadcast=\(broadcastId) user=\(userId)")
         let spadeURL = await resolveSpadeURL(for: channelLogin)
@@ -62,7 +67,10 @@ public actor SpadeBeaconService {
             channelLogin: channelLogin,
             channelId: channelId,
             broadcastId: broadcastId,
-            userId: userId
+            userId: userId,
+            gameName: gameName,
+            gameId: gameId,
+            date: date
         )
         try await post(payload: payload, to: spadeURL, channelLogin: channelLogin)
     }
@@ -161,7 +169,10 @@ public actor SpadeBeaconService {
         channelLogin: String,
         channelId: String,
         broadcastId: String,
-        userId: String
+        userId: String,
+        gameName: String,
+        gameId: String,
+        date: Date
     ) -> Data {
         // TDM PARITY: user_id must be an Integer in the JSON payload.
         let userIdInt: Int64
@@ -173,13 +184,30 @@ public actor SpadeBeaconService {
         }
 
         // TDM PARITY: To match TwitchDropsMiner's `json_minify` (compact, specific key order),
-        // we build the JSON manually. Python order in `channel.py`:
-        // broadcast_id, channel_id, channel, hidden, live, location, logged_in, muted, player, user_id
-        let json = "[{\"event\":\"minute-watched\",\"properties\":{\"broadcast_id\":\"\(broadcastId)\",\"channel_id\":\"\(channelId)\",\"channel\":\"\(channelLogin)\",\"hidden\":false,\"live\":true,\"location\":\"channel\",\"logged_in\":true,\"muted\":false,\"player\":\"site\",\"user_id\":\(userIdInt)}}]"
+        // we build the JSON manually. Twitch accepts the legacy, shorter event with HTTP 204
+        // but does not credit it as watched time, so keep this full property set aligned with
+        // TwitchDropsMiner's current `Stream._watch_payload`.
+        let clientTime = ISO8601DateFormatter.string(
+            from: date,
+            timeZone: TimeZone(secondsFromGMT: 0)!,
+            formatOptions: [.withInternetDateTime, .withFractionalSeconds]
+        )
+        let json = "[{\"event\":\"minute-watched\",\"properties\":{\"broadcast_id\":\(jsonString(broadcastId)),\"channel_id\":\(jsonString(channelId)),\"channel\":\(jsonString(channelLogin)),\"client_time\":\(jsonString(clientTime)),\"game\":\(jsonString(gameName)),\"game_id\":\(jsonString(gameId)),\"hidden\":false,\"is_live\":true,\"live\":true,\"logged_in\":true,\"minutes_logged\":1,\"muted\":false,\"user_id\":\(userIdInt)}}]"
 
         let base64 = Data(json.utf8).base64EncodedString()
-        let formBody = "data=\(base64)"
+        let formAllowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
+        let encodedBase64 = base64.addingPercentEncoding(withAllowedCharacters: formAllowed) ?? base64
+        let formBody = "data=\(encodedBase64)"
         return formBody.data(using: .utf8) ?? Data()
+    }
+
+    /// Returns one JSON string value, including quotes and any required escaping.
+    private func jsonString(_ value: String) -> String {
+        guard let data = try? JSONSerialization.data(withJSONObject: [value]),
+              let arrayJSON = String(data: data, encoding: .utf8) else {
+            return "\"\""
+        }
+        return String(arrayJSON.dropFirst().dropLast())
     }
 
     // MARK: - Network
