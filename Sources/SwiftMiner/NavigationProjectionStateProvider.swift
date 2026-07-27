@@ -23,6 +23,7 @@ final class NavigationProjectionStateProvider: ProjectionStateProvider, @uncheck
             }
             return Self.activeCampaignProjection(
                 from: campaign,
+                miner: miner,
                 currentChannelName: summary?.currentChannelName,
                 currentChannelId: summary?.currentChannelId
             )
@@ -100,6 +101,7 @@ final class NavigationProjectionStateProvider: ProjectionStateProvider, @uncheck
             }
             return Self.activeCampaignProjection(
                 from: campaign,
+                miner: miner,
                 currentChannelName: summary?.currentChannelName,
                 currentChannelId: summary?.currentChannelId
             )
@@ -160,16 +162,21 @@ final class NavigationProjectionStateProvider: ProjectionStateProvider, @uncheck
         }
     }
 
+    // Progress must come from the same reconciliation the native GUI uses:
+    // Twitch's inventory payload alone (`drop.progress`) is absent for drops the
+    // API isn't currently reporting, so the web showed 0 for minutes the miner's
+    // persisted ledger already knows about.
+    @MainActor
     private static func activeCampaignProjection(
         from campaign: Campaign,
+        miner: MinerManager.ManagedMiner,
         currentChannelName: String? = nil,
         currentChannelId: String? = nil
     ) -> DiscordUserProjection.ActiveCampaign {
-        let totalRequired = max(campaign.drops.map(\.requiredMinutes).reduce(0, +), 0)
-        let totalCurrent = campaign.drops.reduce(0) { total, drop in
-            total + (drop.isClaimed ? drop.requiredMinutes : min(drop.progress?.currentMinutes ?? 0, drop.requiredMinutes))
-        }
-        let pct = totalRequired > 0 ? min(Int((Double(totalCurrent) / Double(totalRequired)) * 100), 100) : 0
+        let aggregate = MinerOperatorPresentation.aggregateProgress(for: campaign, miner: miner)
+        let totalRequired = aggregate?.requiredMinutes ?? 0
+        let totalCurrent = aggregate?.currentMinutes ?? 0
+        let pct = aggregate?.percent ?? 0
         return DiscordUserProjection.ActiveCampaign(
             campaignId: campaign.id,
             game: campaign.game.name,

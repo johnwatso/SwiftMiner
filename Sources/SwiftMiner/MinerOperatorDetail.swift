@@ -100,6 +100,17 @@ struct MinerOperatorPresentation {
             }
 
             let status = campaign.activityStatus(for: miner)
+
+            // A queue lists what is coming up. Campaigns that are finished, or
+            // that can't be attempted until the game account is linked, are not
+            // queued work — the header would say "Nothing queued" while rows sat
+            // below it. Priority games used to bypass the claimed check above and
+            // linger here forever; unlinked ones are already surfaced by the
+            // Pending reminders section, so they'd only be duplicated.
+            if campaign.id != snapshot.now.campaignId {
+                guard status != .completed, status != .requiresLink else { return false }
+            }
+
             return status != .expired || campaign.endDate >= recentEndCutoff
         }
 
