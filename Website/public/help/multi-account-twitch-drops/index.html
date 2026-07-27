@@ -78,9 +78,25 @@
 
                 <h2 id="add-accounts">Add multiple Twitch accounts</h2>
                 <p>Add each Twitch account from Settings > Accounts. Every account uses Twitch's activation flow and stores its own authorization token in macOS Keychain. Repeat the setup flow for each account you want SwiftMiner to manage.</p>
+                <div class="screenshot-wrap">
+                    <picture>
+                        <source srcset="../assets/img/settings-accounts-dark.webp" media="(prefers-color-scheme: dark)">
+                        <img src="../assets/img/settings-accounts-light.webp" alt="SwiftMiner Accounts settings with multiple accounts" loading="lazy" decoding="async">
+                    </picture>
+                    <div class="screenshot-caption">Every authorised Twitch account is listed in Settings › Accounts and mines independently.</div>
+                </div>
+
 
                 <h2 id="track-each-miner">Track each miner independently</h2>
                 <p>The Miners view shows current stream, status, campaign, and health details for each account. The Drops view groups campaign state so you can tell which accounts are mining, claimed, blocked, or waiting for setup.</p>
+                <div class="screenshot-wrap">
+                    <picture>
+                        <source srcset="../assets/img/miners-dark.webp" media="(prefers-color-scheme: dark)">
+                        <img src="../assets/img/miners-light.webp" alt="SwiftMiner Miners tab" loading="lazy" decoding="async">
+                    </picture>
+                    <div class="screenshot-caption">The Miners tab gives each account its own status, campaign queue and health reporting.</div>
+                </div>
+
 
                 <h2 id="avoid-conflicts">Avoid duplicate viewing conflicts</h2>
                 <p>Twitch generally counts one active watch session per account. If the same Twitch account is watching elsewhere in a browser, mobile app, or TV app, SwiftMiner's progress can pause. Use separate Twitch accounts for separate miners and avoid watching manually with accounts that are actively mining.</p>

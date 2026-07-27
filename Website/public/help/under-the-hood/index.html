@@ -70,6 +70,14 @@
 
                 <h2 id="architecture">System Architecture</h2>
                 <p>The application is split into three main modules to maintain strict separation of concerns:</p>
+                <div class="screenshot-wrap">
+                    <picture>
+                        <source srcset="../assets/img/activity-log-dark.webp" media="(prefers-color-scheme: dark)">
+                        <img src="../assets/img/activity-log-light.webp" alt="SwiftMiner Activity Log" loading="lazy" decoding="async">
+                    </picture>
+                    <div class="screenshot-caption">The Activity Log surfaces the engine's real work — campaign scans, claim checks and cycle timings.</div>
+                </div>
+
                 <ul>
                     <li><strong>App UI (SwiftUI):</strong> Responsible for the native macOS layouts, including the multi-miner overview cards, real-time log consoles, and account settings panels.</li>
                     <li><strong>SwiftMinerCore:</strong> The core daemon engine that manages token lifecycle operations, active drop tracking, automatic claiming intervals, and database synchronization.</li>

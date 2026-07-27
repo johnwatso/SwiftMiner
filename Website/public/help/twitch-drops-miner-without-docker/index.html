@@ -48,12 +48,28 @@
                 
                 <h2 id="native-app">Native App vs. Virtualized Container</h2>
                 <p>Install SwiftMiner like any standard Mac app. There is no Docker image to pull, no compose file to maintain, and no container filesystem to inspect when something goes wrong. More importantly, Docker on macOS must run a Linux VM hypervisor in the background, which consumes substantial CPU, RAM, and laptop battery. SwiftMiner is built natively in Swift/SwiftUI, executing directly on your Apple Silicon or Intel processor with minimal resource footprint.</p>
+                <div class="screenshot-wrap">
+                    <picture>
+                        <source srcset="../assets/img/miners-dark.webp" media="(prefers-color-scheme: dark)">
+                        <img src="../assets/img/miners-light.webp" alt="SwiftMiner Miners tab" loading="lazy" decoding="async">
+                    </picture>
+                    <div class="screenshot-caption">A native window with per-account controls — no container, no virtualised desktop, no browser tab left open.</div>
+                </div>
+
                 
                 <h2 id="mac-security">Apple Developer Signed & Notarized</h2>
                 <p>Running code in Docker containers or executing third-party scripts can carry security risks. SwiftMiner is fully signed with an Apple Developer certificate and notarized by Apple. This guarantees it runs cleanly on macOS without triggering security blocks, requiring terminal overrides, or bypassing gatekeeper policies.</p>
 
                 <h2 id="squad-mining">Built-in Multi-Account UI</h2>
                 <p>Farming drops across multiple Twitch accounts is simple with SwiftMiner's native multi-account dashboard. Under a Docker setup, you would need to define and run multiple container configurations, map distinct volumes, and manage individual CLI instances. SwiftMiner keeps all your active miners running concurrently under one window.</p>
+                <div class="screenshot-wrap">
+                    <picture>
+                        <source srcset="../assets/img/overview-dark.webp" media="(prefers-color-scheme: dark)">
+                        <img src="../assets/img/overview-light.webp" alt="SwiftMiner Overview dashboard" loading="lazy" decoding="async">
+                    </picture>
+                    <div class="screenshot-caption">Multiple accounts are a first-class part of the UI rather than several containers side by side.</div>
+                </div>
+
 
                 <h2 id="auto-updates">Automatic Sparkle Updates</h2>
                 <p>Twitch API changes regularly break third-party miners. While Docker setups require you to manually detect breakage, pull a new image, and recreate your containers, SwiftMiner leverages the Sparkle framework to automatically install compatibility fixes and relaunch in the background.</p>

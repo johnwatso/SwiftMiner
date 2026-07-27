@@ -78,10 +78,26 @@
 
                 <h2 id="enable-auto-claim">Enable automatic claiming</h2>
                 <p>Auto-claiming is managed from SwiftMiner's mining settings. Open Settings, choose the Mining section, and make sure automatic reward claiming is enabled for the accounts you want SwiftMiner to manage.</p>
+                <div class="screenshot-wrap">
+                    <picture>
+                        <source srcset="../assets/img/settings-mining-dark.webp" media="(prefers-color-scheme: dark)">
+                        <img src="../assets/img/settings-mining-light.webp" alt="SwiftMiner Mining settings" loading="lazy" decoding="async">
+                    </picture>
+                    <div class="screenshot-caption">Auto-claim lives in Settings › Mining, alongside the strategy and stream options that decide what each miner watches.</div>
+                </div>
+
 
                 <h2 id="claim-flow">How the claim flow works</h2>
                 <ol class="steps-list">
-                    <li><strong>Progress reaches 100%:</strong><p>Twitch marks the reward as ready to claim after the required watch time completes.</p></li>
+                    <li><strong>Progress reaches 100%:</strong><p>Twitch marks the reward as ready to claim after the required watch time completes.</p>
+                <div class="screenshot-wrap">
+                    <picture>
+                        <source srcset="../assets/img/drops-dark.webp" media="(prefers-color-scheme: dark)">
+                        <img src="../assets/img/drops-light.webp" alt="SwiftMiner Drops list showing claimed rewards" loading="lazy" decoding="async">
+                    </picture>
+                    <div class="screenshot-caption">Claimed rewards appear in the Drops tab with a green check, so you can confirm a claim landed without opening Twitch.</div>
+                </div>
+</li>
                     <li><strong>SwiftMiner refreshes inventory:</strong><p>The miner checks Twitch inventory and campaign data so it can find claimable rewards accurately.</p></li>
                     <li><strong>The reward is claimed:</strong><p>SwiftMiner submits the claim and records the result in the Activity Log.</p></li>
                     <li><strong>Next reward starts:</strong><p>If the campaign has more rewards, SwiftMiner continues tracking the next drop.</p></li>
