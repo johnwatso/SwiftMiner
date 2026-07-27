@@ -166,13 +166,74 @@ struct OverviewView: View {
     private var systemStateBanner: some View {
         OverviewSystemStateBanner(
             state: overviewSystemState,
-            fleet: MinerFleetStatus.make(miners: navigation.minerManager.miners),
+            fleet: MinerFleetStatus.make(miners: displayedMiners),
             onAction: handleSystemStateAction(_:)
         )
     }
 
+    /// Miners the Overview renders. Normally exactly the real ones; in DEBUG it
+    /// can be padded for marketing screenshots — see `demoExpanded(_:)`.
+    private var displayedMiners: [MinerManager.ManagedMiner] {
+        #if DEBUG
+        return Self.demoExpanded(navigation.minerManager.miners)
+        #else
+        return navigation.minerManager.miners
+        #endif
+    }
+
+    #if DEBUG
+    /// Pads the miner list with copies of the real ones under demo names, so a
+    /// larger fleet can be captured for the website without inventing pixels —
+    /// the cards are the real UI rendered over real campaign data.
+    ///
+    /// Set `SWIFTMINER_DEMO_MINERS=5` in the scheme's environment. Compiled out
+    /// of Release entirely, and a no-op unless the variable asks for more
+    /// miners than actually exist.
+    static func demoExpanded(_ miners: [MinerManager.ManagedMiner]) -> [MinerManager.ManagedMiner] {
+        guard let raw = ProcessInfo.processInfo.environment["SWIFTMINER_DEMO_MINERS"],
+              let target = Int(raw),
+              target > miners.count,
+              !miners.isEmpty else {
+            return miners
+        }
+
+        let demoNames = ["pixelpanda", "nightowl", "emberfox", "quietcomet", "saltmarsh"]
+        var result = miners
+        for index in 0..<(target - miners.count) {
+            // Cycle the real miners as templates so the extra cards differ from
+            // one another rather than repeating a single campaign.
+            let template = miners[index % miners.count]
+            let name = demoNames[index % demoNames.count]
+            result.append(
+                MinerManager.ManagedMiner(
+                    id: "demo-\(index)-\(name)",
+                    accountId: "demo-\(index)",
+                    username: name,
+                    status: template.status,
+                    needsAuth: false,
+                    currentCampaign: template.currentCampaign,
+                    currentCampaignId: template.currentCampaignId,
+                    allCampaigns: template.allCampaigns,
+                    dropsClaimed: template.dropsClaimed,
+                    isRunning: template.isRunning,
+                    priorityGames: template.priorityGames,
+                    lastEventAt: template.lastEventAt,
+                    lastSuccessfulPollAt: template.lastSuccessfulPollAt,
+                    lastCampaignRefreshAt: template.lastCampaignRefreshAt,
+                    lastDropProgressAt: template.lastDropProgressAt,
+                    workerStartedAt: template.workerStartedAt,
+                    workerState: template.workerState,
+                    isHealthy: true,
+                    isStalled: false
+                )
+            )
+        }
+        return result
+    }
+    #endif
+
     private var overviewSystemState: OverviewSystemState {
-        let miners = navigation.minerManager.miners
+        let miners = displayedMiners
         let miningMinerCount = miners.filter { $0.status == .watching }.count
 
         if miners.contains(where: { $0.needsAuth }) {
@@ -332,7 +393,7 @@ struct OverviewView: View {
     // MARK: - Miner Activity
 
     private var minerActivitySection: some View {
-        let miners = navigation.minerManager.miners
+        let miners = displayedMiners
 
         return VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
