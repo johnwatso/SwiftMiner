@@ -9,7 +9,18 @@ actor SharedTwitchLookupCache {
         let expiresAt: Date
     }
 
+    struct CampaignMetadataResolution: Sendable {
+        let campaign: Campaign
+        let loadedByCaller: Bool
+    }
+
+    private struct CampaignMetadataRefresh {
+        let id: UUID
+        let task: Task<Campaign, Error>
+    }
+
     private var campaignMetadataById: [String: Entry<Campaign>] = [:]
+    private var campaignMetadataRefreshes: [String: CampaignMetadataRefresh] = [:]
     private var availableDropsByChannel: [String: Entry<[String]>] = [:]
     private var liveChannelsByLookup: [String: Entry<[Channel]>] = [:]
     private var slugCandidatesByLookup: [String: Entry<[String]>] = [:]
@@ -28,8 +39,55 @@ actor SharedTwitchLookupCache {
         campaignMetadataById[key] = Entry(value: campaign, expiresAt: Date().addingTimeInterval(ttl))
     }
 
+    /// Coalesces the same safe, campaign-global detail lookup across miner accounts.
+    /// The initiating account receives its full response; waiters receive only the scrubbed
+    /// metadata copy so progress, claims, and account-link state never cross accounts.
+    func resolveCampaignMetadata(
+        for key: String,
+        ttl: TimeInterval,
+        load: @escaping @Sendable () async throws -> Campaign
+    ) async throws -> CampaignMetadataResolution {
+        let now = Date()
+        if let cached = campaignMetadata(for: key, now: now) {
+            return CampaignMetadataResolution(campaign: cached, loadedByCaller: false)
+        }
+
+        if let refresh = campaignMetadataRefreshes[key] {
+            let detailed = try await refresh.task.value
+            return CampaignMetadataResolution(
+                campaign: TwitchAPIClient.sharedCampaignMetadata(from: detailed),
+                loadedByCaller: false
+            )
+        }
+
+        let refreshID = UUID()
+        let task = Task { try await load() }
+        campaignMetadataRefreshes[key] = CampaignMetadataRefresh(id: refreshID, task: task)
+
+        do {
+            let detailed = try await task.value
+            if campaignMetadataRefreshes[key]?.id == refreshID {
+                storeCampaignMetadata(
+                    TwitchAPIClient.sharedCampaignMetadata(from: detailed),
+                    key: key,
+                    ttl: ttl
+                )
+                campaignMetadataRefreshes.removeValue(forKey: key)
+            }
+            return CampaignMetadataResolution(campaign: detailed, loadedByCaller: true)
+        } catch {
+            if campaignMetadataRefreshes[key]?.id == refreshID {
+                campaignMetadataRefreshes.removeValue(forKey: key)
+            }
+            throw error
+        }
+    }
+
     func removeAllCampaignMetadata() {
         campaignMetadataById.removeAll(keepingCapacity: true)
+        // Detach in-flight generations so a response that started before invalidation cannot
+        // repopulate this cache. The owning client may still use its own account-safe result.
+        campaignMetadataRefreshes.removeAll(keepingCapacity: true)
     }
 
     func availableDrops(for key: String, now: Date = Date()) -> [String]? {
@@ -97,6 +155,7 @@ public actor TwitchAPIClient {
     private var accessToken: String
     private let session: URLSession
     private let requestCoordinator: TwitchRequestCoordinator
+    private let requestCoordinatorClientID = UUID().uuidString
     private let runtimeClock: RuntimeClock
     private let retryJitterFactor: @Sendable () -> Double
 
@@ -123,9 +182,7 @@ public actor TwitchAPIClient {
     /// only include a login. `AvailableDrops` and PubSub require the numeric ID.
     private var channelIdByLogin: [String: String] = [:]
     private var followedChannelIdsByUser: [String: (ids: Set<String>, expiresAt: Date)] = [:]
-    private var subscriptionByUserAndBroadcaster: [String: (isSubscribed: Bool, expiresAt: Date)] = [:]
     private let channelRelationshipCacheTTL: TimeInterval = 10 * 60
-    private let negativeSubscriptionCacheTTL: TimeInterval = 6 * 60 * 60
 
     struct CampaignDetailsCacheEntry {
         let campaign: Campaign
@@ -157,6 +214,11 @@ public actor TwitchAPIClient {
 
     var campaignDetailsByKey: [String: CampaignDetailsCacheEntry] = [:]
     var campaignLinkStateByKey: [String: CampaignLinkStateEntry] = [:]
+    struct DropCampaignRefresh {
+        let id: UUID
+        let task: Task<[Campaign], Error>
+    }
+    var dropCampaignRefresh: DropCampaignRefresh?
     /// Both caches above survive a relaunch via `CampaignDetailsDiskCache`. Restoring them
     /// is what keeps the first refresh after launch from re-fetching `DropCampaignDetails`
     /// for every active campaign. See that type for why this is safe with respect to TTLs.
@@ -355,21 +417,26 @@ public actor TwitchAPIClient {
         )
     }
 
-    /// Returns relationship state between the authenticated user and candidate broadcasters.
-    /// Followed channels are fetched in pages once per cache window; subscriptions are checked
-    /// per broadcaster because Twitch exposes that as a single-channel endpoint.
+    /// Returns followed-channel state between the authenticated user and candidate broadcasters.
+    ///
+    /// Subscription status used to be fetched once per candidate channel. A single popular game
+    /// can expose dozens of channels, so five miners could enqueue hundreds of non-critical REST
+    /// calls ahead of miners that were still discovering campaigns. The user-facing preference is
+    /// specifically to prioritise followed streamers; one paginated followed-channel request is
+    /// sufficient to honour it without blocking startup on subscription enrichment.
     public func getChannelRelationships(userId: String, broadcasterIds: [String]) async -> [String: ChannelRelationship] {
         let uniqueIds = Array(Set(broadcasterIds.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }))
         guard !userId.isEmpty, !uniqueIds.isEmpty else { return [:] }
 
-        let followedIds = (try? await getFollowedChannelIds(userId: userId)) ?? []
+        guard let followedIds = try? await getFollowedChannelIds(userId: userId) else {
+            return [:]
+        }
         var relationships: [String: ChannelRelationship] = [:]
 
         for broadcasterId in uniqueIds {
-            let isSubscribed = await isUserSubscribed(userId: userId, broadcasterId: broadcasterId)
             relationships[broadcasterId] = ChannelRelationship(
                 isFollowed: followedIds.contains(broadcasterId),
-                isSubscribed: isSubscribed
+                isSubscribed: false
             )
         }
 
@@ -407,42 +474,6 @@ public actor TwitchAPIClient {
         return followedIds
     }
 
-    private func isUserSubscribed(userId: String, broadcasterId: String) async -> Bool {
-        let cacheKey = "\(userId):\(broadcasterId)"
-        if let cached = subscriptionByUserAndBroadcaster[cacheKey], cached.expiresAt > Date() {
-            return cached.isSubscribed
-        }
-
-        var components = URLComponents(string: "\(helixUrl)/subscriptions/user")!
-        components.queryItems = [
-            URLQueryItem(name: "broadcaster_id", value: broadcasterId),
-            URLQueryItem(name: "user_id", value: userId)
-        ]
-
-        let isSubscribed: Bool
-        let cacheTTL: TimeInterval?
-        do {
-            let data = try await makeRESTRequest(url: components.string!, method: "GET")
-            let response = try JSONDecoder().decode(UserSubscriptionResponse.self, from: data)
-            isSubscribed = !response.data.isEmpty
-            cacheTTL = isSubscribed ? channelRelationshipCacheTTL : negativeSubscriptionCacheTTL
-        } catch TwitchMinerError.apiError(let statusCode, _) where statusCode == 404 || statusCode == 403 {
-            isSubscribed = false
-            cacheTTL = negativeSubscriptionCacheTTL
-        } catch TwitchMinerError.authenticationFailed {
-            isSubscribed = false
-            cacheTTL = nil
-        } catch {
-            isSubscribed = false
-            cacheTTL = nil
-        }
-
-        if let cacheTTL {
-            subscriptionByUserAndBroadcaster[cacheKey] = (isSubscribed, Date().addingTimeInterval(cacheTTL))
-        }
-        return isSubscribed
-    }
-    
     /// Search Twitch categories (games) by name using the Helix REST API.
     /// Returns up to `limit` matching games with their Twitch IDs and box-art URLs.
     public func searchCategories(query: String, limit: Int = 10) async throws -> [Game] {
@@ -952,7 +983,9 @@ public actor TwitchAPIClient {
         
         for attempt in 1...maxAttempts {
             do {
-                coordinationWaitSeconds += try await requestCoordinator.waitForPermit()
+                coordinationWaitSeconds += try await requestCoordinator.waitForPermit(
+                    clientID: requestCoordinatorClientID
+                )
                 let (data, response) = try await session.data(for: request)
                 
                 guard let httpResponse = response as? HTTPURLResponse else {

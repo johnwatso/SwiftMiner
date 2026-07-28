@@ -41,10 +41,10 @@ extension MinerManager {
             }
 
             if relevant.isEmpty {
-                // Check if any of the EXCLUDED or NO-DROP campaigns are not linked.
-                // John wants "Not linked -> .blocked(.notLinked)" to be driven by prioritised games.
+                // Link-state warnings still matter for prioritised games even if
+                // Twitch did not return an otherwise relevant campaign.
                 let isNotLinked = !campaignsForGame.isEmpty && campaignsForGame.contains { !$0.isAccountConnected }
-                
+
                 if isNotLinked {
                     states.append(MinerGameState(
                         minerId: miner.id,
@@ -67,17 +67,19 @@ extension MinerManager {
 
             var activeCampaign: Campaign?
             var blockedReason: MinerGameStateReason?
-            var allClaimed = true
+            var nothingLeftToMine = true
 
             for campaign in relevant {
-                if !campaign.drops.allSatisfy({ $0.isClaimed }) {
-                    allClaimed = false
+                // Subscription-gated drops are never mineable, so a campaign left with
+                // only those reads the same as one that is fully claimed.
+                if campaign.hasWatchableWorkRemaining {
+                    nothingLeftToMine = false
                 } else {
                     continue
                 }
 
-                // Check if campaign can be attempted. Missing game-account linkage
-                // is a warning, not a hard block, when Twitch still exposes usable drops.
+                // Missing game-account linkage is a warning, not a hard block,
+                // when Twitch still exposes usable drops for a prioritised game.
                 if campaign.canAttemptMining {
                     if activeCampaign == nil {
                         activeCampaign = campaign
@@ -92,7 +94,7 @@ extension MinerManager {
                 }
             }
 
-            if allClaimed {
+            if nothingLeftToMine {
                 states.append(MinerGameState(
                     minerId: miner.id,
                     gameId: gameId,

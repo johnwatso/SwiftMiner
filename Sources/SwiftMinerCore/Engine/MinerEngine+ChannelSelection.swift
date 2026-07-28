@@ -20,7 +20,6 @@ extension MinerEngine {
         let excludedSet = Set(excludedGames.map { normalizedGameKey($0) }.filter { !$0.isEmpty })
         var filteredOutReasons: [String: Int] = [:]
 
-        let now = Date()
         let nowTick = runtimeClock.nowNanoseconds()
         let eligible = campaigns.filter { campaign in
             let gameName = normalizedGameKey(campaign.gameName)
@@ -177,8 +176,23 @@ extension MinerEngine {
 
     /// Record the outcome of a live-channel probe for a game so later ranking and the
     /// mid-session re-evaluation can avoid preferring games that currently have no live stream.
-    func recordGameLiveProbe(_ gameKey: String, hasLiveChannel: Bool) {
-        gameLiveProbes[gameKey] = (hasLiveChannel, Date())
+    func recordGameLiveProbe(
+        _ gameKey: String,
+        hasLiveChannel: Bool,
+        campaignId: String? = nil,
+        channelName: String? = nil
+    ) {
+        let checkedAt = Date()
+        gameLiveProbes[gameKey] = (hasLiveChannel, checkedAt)
+        onGameChannelAvailability?(
+            GameChannelAvailability(
+                gameKey: gameKey,
+                hasEligibleChannel: hasLiveChannel,
+                campaignId: campaignId,
+                channelName: channelName,
+                checkedAt: checkedAt
+            )
+        )
     }
 
     /// True when the game was probed recently and confirmed to have NO live, watch-mineable

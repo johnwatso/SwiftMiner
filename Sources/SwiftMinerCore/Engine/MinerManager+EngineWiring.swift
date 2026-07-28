@@ -33,6 +33,15 @@ extension MinerManager {
             }
         }
 
+        await engine.setGameChannelAvailabilityHandler { [weak self] availability in
+            Task { @MainActor [weak self] in
+                guard let self,
+                      let index = self.miners.firstIndex(where: { $0.id == minerId }) else { return }
+                self.miners[index].gameChannelAvailability[availability.gameKey] = availability
+                self.onMinersChanged?()
+            }
+        }
+
         await engine.setStatusChangeHandler { [weak self] status in
             Task { @MainActor [weak self] in
                 guard let self = self else { return }

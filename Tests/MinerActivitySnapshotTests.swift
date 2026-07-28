@@ -77,7 +77,7 @@ final class MinerActivitySnapshotTests: XCTestCase {
         XCTAssertEqual(presentation.thenCampaigns.map(\.id), [later.id])
     }
 
-    func testOperatorQueueExcludesUnlinkedNonPriorityCampaigns() {
+    func testOperatorQueueExcludesAllUnlinkedCampaignsButKeepsPendingWarning() {
         let prioritised = makeCampaign(
             id: "priority",
             gameId: "priority-game",
@@ -109,9 +109,79 @@ final class MinerActivitySnapshotTests: XCTestCase {
             includesBadgeAndEmoteCampaigns: false
         )
 
-        XCTAssertTrue(presentation.queue.contains { $0.campaign.id == prioritised.id })
+        XCTAssertFalse(presentation.queue.contains { $0.campaign.id == prioritised.id })
         XCTAssertTrue(presentation.queue.contains { $0.campaign.id == linkedSmartCandidate.id })
         XCTAssertFalse(presentation.queue.contains { $0.campaign.id == unrelatedUnlinked.id })
+        XCTAssertEqual(presentation.snapshot.blockedPriority.map(\.campaignId), [prioritised.id])
+    }
+
+    func testOperatorQueueCarriesRealChannelProbeInsteadOfAssumingNoLiveChannels() throws {
+        let campaign = makeCampaign(id: "checked", isAccountConnected: true)
+        let sameGameCampaign = makeCampaign(id: "unchecked", isAccountConnected: true)
+        let checkedAt = Date().addingTimeInterval(-60)
+        let availability = GameChannelAvailability(
+            gameKey: "test game",
+            hasEligibleChannel: true,
+            campaignId: campaign.id,
+            channelName: "DropStreamer",
+            checkedAt: checkedAt
+        )
+        let miner = makeMiner(
+            campaigns: [campaign, sameGameCampaign],
+            gameChannelAvailability: ["test game": availability]
+        )
+
+        let presentation = MinerOperatorPresentation.resolve(
+            for: miner,
+            priorityGames: ["Test Game"],
+            excludedGames: [],
+            strategy: .prioritiseSelected,
+            includesBadgeAndEmoteCampaigns: false
+        )
+
+        let entry = try XCTUnwrap(presentation.queue.first { $0.campaign.id == campaign.id })
+        XCTAssertEqual(entry.channelAvailability, availability)
+        XCTAssertTrue(entry.channelAvailability?.isFresh(at: checkedAt) ?? false)
+        XCTAssertNil(
+            presentation.queue.first { $0.campaign.id == sameGameCampaign.id }?.channelAvailability,
+            "A channel verified for one campaign must not be reported as eligible for every campaign in the game"
+        )
+    }
+
+    func testSmartUpNextExplainsWhyEarlierCampaignPrecedesPrioritisedGame() {
+        let now = Date()
+        let brawlhalla = makeCampaign(
+            id: "brawlhalla",
+            gameId: "brawlhalla-id",
+            gameName: "Brawlhalla",
+            isAccountConnected: true,
+            endDate: now.addingTimeInterval(60 * 60)
+        )
+        let battlefield = makeCampaign(
+            id: "battlefield",
+            gameId: "battlefield-id",
+            gameName: "Battlefield 6",
+            isAccountConnected: true,
+            endDate: now.addingTimeInterval(2 * 60 * 60)
+        )
+        let miner = makeMiner(
+            campaigns: [battlefield, brawlhalla],
+            priorityGames: ["Battlefield 6"]
+        )
+
+        let snapshot = MinerActivitySnapshot.resolve(
+            for: miner,
+            priorityGames: ["Battlefield 6"],
+            excludedGames: [],
+            strategy: .mineAll,
+            includesBadgeAndEmoteCampaigns: false
+        )
+
+        XCTAssertEqual(snapshot.upNext?.campaignId, brawlhalla.id)
+        XCTAssertEqual(
+            snapshot.upNext?.detail,
+            "Ends before prioritised Battlefield 6 · Smart strategy"
+        )
     }
 
     private func makeMiner(
@@ -119,6 +189,7 @@ final class MinerActivitySnapshotTests: XCTestCase {
         campaigns: [Campaign],
         currentCampaignId: String? = nil,
         priorityGames: [String] = ["Test Game"],
+        gameChannelAvailability: [String: GameChannelAvailability] = [:],
         workerState: MinerWorkerState = .running,
         isRunning: Bool = true,
         isHealthy: Bool = true,
@@ -131,6 +202,7 @@ final class MinerActivitySnapshotTests: XCTestCase {
             status: status,
             currentCampaignId: currentCampaignId,
             allCampaigns: campaigns,
+            gameChannelAvailability: gameChannelAvailability,
             isRunning: isRunning,
             priorityGames: priorityGames,
             workerState: workerState,
@@ -144,7 +216,8 @@ final class MinerActivitySnapshotTests: XCTestCase {
         gameId: String = "game-1",
         gameName: String = "Test Game",
         isAccountConnected: Bool,
-        drops: [Drop] = [Drop(id: "drop-1", name: "Drop 1", requiredMinutes: 60)]
+        drops: [Drop] = [Drop(id: "drop-1", name: "Drop 1", requiredMinutes: 60)],
+        endDate: Date? = nil
     ) -> Campaign {
         let now = Date()
         return Campaign(
@@ -152,7 +225,7 @@ final class MinerActivitySnapshotTests: XCTestCase {
             name: "Campaign \(id)",
             game: Game(id: gameId, name: gameName),
             startDate: now.addingTimeInterval(-3600),
-            endDate: now.addingTimeInterval(3600),
+            endDate: endDate ?? now.addingTimeInterval(3600),
             drops: drops,
             isAccountConnected: isAccountConnected
         )
@@ -168,14 +241,45 @@ final class MinerActivitySnapshotTests: XCTestCase {
         )
     }
 
-    func testUpNextCanShowUnlinkedAttemptableCampaign() {
+    func testUpNextHidesUnlinkedPrioritisedCampaignButKeepsPendingWarning() {
         let campaign = makeCampaign(id: "unlinked", isAccountConnected: false)
-        let miner = makeMiner(campaigns: [campaign])
+        let miner = makeMiner(campaigns: [campaign], currentCampaignId: campaign.id)
 
         let snapshot = resolveSnapshot(for: miner)
 
-        XCTAssertEqual(snapshot.upNext?.campaignId, "unlinked")
-        XCTAssertFalse(snapshot.upNext?.requiresAccountLink ?? true)
+        XCTAssertEqual(campaign.activityStatus(for: miner), .requiresLink)
+        XCTAssertNil(snapshot.upNext)
+        XCTAssertEqual(snapshot.blockedPriority.map(\.campaignId), ["unlinked"])
+        XCTAssertTrue(snapshot.blockedPriority.first?.requiresAccountLink ?? false)
+        XCTAssertFalse(snapshot.isActivelyWatching)
+        XCTAssertEqual(snapshot.currentSectionTitle, "Current status")
+        XCTAssertEqual(snapshot.sourceListActivityLabel, "Up to Date")
+    }
+
+    func testPrioritisedUnlinkedCampaignOnlyAppearsAsMiningAfterActualWatchStarts() {
+        let campaign = makeCampaign(id: "unlinked", isAccountConnected: false)
+        let miner = makeMiner(
+            status: .watching,
+            campaigns: [campaign],
+            currentCampaignId: campaign.id
+        )
+
+        let presentation = MinerOperatorPresentation.resolve(
+            for: miner,
+            priorityGames: ["Test Game"],
+            excludedGames: [],
+            strategy: .prioritiseSelected,
+            includesBadgeAndEmoteCampaigns: false
+        )
+
+        XCTAssertEqual(presentation.snapshot.now.id, "now-unlinked")
+        XCTAssertTrue(presentation.snapshot.isActivelyWatching)
+        XCTAssertEqual(presentation.snapshot.currentSectionTitle, "Currently mining")
+        XCTAssertEqual(presentation.snapshot.sourceListActivityLabel, "Watching Test Game")
+        XCTAssertNil(presentation.snapshot.upNext)
+        XCTAssertEqual(presentation.snapshot.blockedPriority.map(\.campaignId), [campaign.id])
+        XCTAssertEqual(presentation.queue.map(\.campaign.id), [campaign.id])
+        XCTAssertEqual(presentation.queue.first?.status, .watching)
     }
 
     func testUpNextHidesUnlinkedNonPrioritisedCampaign() {
@@ -218,8 +322,8 @@ final class MinerActivitySnapshotTests: XCTestCase {
         XCTAssertEqual(idleSnapshot.now.title, "Up to Date")
         XCTAssertNil(idleSnapshot.upNext)
 
-        XCTAssertEqual(blockedSnapshot.statusText, "Blocked — Account not linked")
-        XCTAssertEqual(blockedSnapshot.now.title, "Blocked — Account not linked")
+        XCTAssertEqual(blockedSnapshot.statusText, "Up to Date")
+        XCTAssertEqual(blockedSnapshot.now.title, "Up to Date")
         XCTAssertNil(blockedSnapshot.upNext)
     }
 
@@ -256,7 +360,7 @@ final class MinerActivitySnapshotTests: XCTestCase {
         XCTAssertEqual(snapshot.now.title, "Starting...")
     }
 
-    func testDismissedMissingGameShowsCurrentStatusAsUpToDateAndAttemptableUpNext() {
+    func testDismissedMissingGameShowsCurrentStatusAsUpToDateWithoutUpNext() {
         let campaign = makeCampaign(id: "unlinked", isAccountConnected: false)
         let miner = makeMiner(status: .blockedAccountNotLinked, campaigns: [campaign])
 
@@ -271,10 +375,7 @@ final class MinerActivitySnapshotTests: XCTestCase {
 
         XCTAssertEqual(snapshot.statusText, "Up to Date")
         XCTAssertEqual(snapshot.now.title, "Up to Date")
-        XCTAssertEqual(snapshot.upNext?.campaignId, "unlinked")
-        XCTAssertEqual(snapshot.upNext?.title, "Test Game")
-        XCTAssertEqual(snapshot.upNext?.detail, "Likely based on current priority rules")
-        XCTAssertFalse(snapshot.upNext?.requiresAccountLink ?? true)
+        XCTAssertNil(snapshot.upNext)
         XCTAssertTrue(snapshot.blockedPriority.isEmpty)
     }
 
@@ -387,6 +488,9 @@ final class MinerActivitySnapshotTests: XCTestCase {
 
         XCTAssertEqual(snapshot.now.detail, "Drop 1 · 0 / 60 min watched")
         XCTAssertEqual(snapshot.now.progressFraction, 0)
+        XCTAssertTrue(snapshot.isActivelyWatching)
+        XCTAssertEqual(snapshot.currentSectionTitle, "Currently mining")
+        XCTAssertEqual(snapshot.sourceListActivityLabel, "Watching Test Game")
     }
 
     func testWatchingDropShowsCumulativeMinutesOutOfRequiredMinutes() {
@@ -419,19 +523,19 @@ final class MinerActivitySnapshotTests: XCTestCase {
         XCTAssertEqual(snapshot.now.progressFraction ?? -1, 1.0 / 6.0, accuracy: 0.0001)
     }
 
-    func testWaitingForStreamSurfacesSubscriptionRequiredPriorityCampaign() {
+    func testWaitingForStreamIgnoresSubscriptionRequiredPriorityCampaign() {
         let creators = makeCampaign(
             id: "creators",
             gameId: "g007",
             gameName: "007 First Light",
-            isAccountConnected: false,
+            isAccountConnected: true,
             drops: [Drop(id: "creator-drop", name: "Creator Drop", requiredMinutes: 60)]
         )
         let launchBadge = makeCampaign(
             id: "launch-sub",
             gameId: "g007",
             gameName: "007 First Light",
-            isAccountConnected: false,
+            isAccountConnected: true,
             drops: [
                 Drop(
                     id: "badge",
@@ -455,25 +559,24 @@ final class MinerActivitySnapshotTests: XCTestCase {
             includesBadgeAndEmoteCampaigns: false
         )
 
-        XCTAssertEqual(snapshot.statusText, "Subscription Required")
-        XCTAssertEqual(snapshot.now.title, "Subscription Required")
-        XCTAssertEqual(snapshot.now.subtitle, "007 First Light")
-        XCTAssertEqual(snapshot.now.detail, "007 Gun Barrel Badge needs a paid Twitch sub.")
+        XCTAssertEqual(snapshot.statusText, "Looking for Streams")
+        XCTAssertEqual(snapshot.now.title, "Looking for Streams")
+        XCTAssertFalse(snapshot.now.id.hasPrefix("subscription-"))
     }
 
-    func testSubscriptionRequiredCurrentStateSuppressesSameGameUpNext() {
+    func testSubscriptionRequiredCampaignDoesNotSuppressSameGameUpNext() {
         let creators = makeCampaign(
             id: "creators",
             gameId: "g007",
             gameName: "007 First Light",
-            isAccountConnected: false,
+            isAccountConnected: true,
             drops: [Drop(id: "creator-drop", name: "Creator Drop", requiredMinutes: 60)]
         )
         let launchBadge = makeCampaign(
             id: "launch-sub",
             gameId: "g007",
             gameName: "007 First Light",
-            isAccountConnected: false,
+            isAccountConnected: true,
             drops: [
                 Drop(
                     id: "badge",
@@ -497,8 +600,7 @@ final class MinerActivitySnapshotTests: XCTestCase {
             includesBadgeAndEmoteCampaigns: false
         )
 
-        XCTAssertEqual(snapshot.statusText, "Subscription Required")
-        XCTAssertNil(snapshot.upNext)
+        XCTAssertEqual(snapshot.upNext?.campaignId, "creators")
     }
 
     func testStalledMinerSurfacesOperationalStateInsteadOfNoCampaigns() {

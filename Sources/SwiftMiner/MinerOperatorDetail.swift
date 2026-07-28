@@ -20,6 +20,7 @@ struct MinerCampaignQueueEntry: Identifiable {
     let position: Int
     let status: CampaignActivityStatus
     let progress: MinerCampaignProgress?
+    let channelAvailability: GameChannelAvailability?
 
     var id: String { campaign.id }
 }
@@ -79,6 +80,10 @@ struct MinerOperatorPresentation {
 
         var campaigns = miner.allCampaigns.filter { campaign in
             guard campaign.status != .disabled, !campaign.isLikelyInternalTestCampaign else { return false }
+            // Unlinked campaigns stay out of prospective queue positions. If the
+            // engine is actively watching a prioritised one, retain that current
+            // row so the operator view reflects the real session.
+            guard campaign.isAccountConnected || campaign.id == snapshot.now.campaignId else { return false }
             let gameId = normalizedKey(campaign.game.id)
             let gameName = normalizedKey(campaign.game.name)
             let isPriority = prioritySet.contains(gameId) || prioritySet.contains(gameName)
@@ -89,10 +94,7 @@ struct MinerOperatorPresentation {
                 if strategy == .onlyPriority {
                     guard isPriority else { return false }
                 } else if !isPriority {
-                    // Match the engine's eligibility rule: an unlinked campaign is only
-                    // attemptable when its game is explicitly prioritised for this miner.
-                    guard campaign.isAccountConnected,
-                          campaign.isTimeActive,
+                    guard campaign.isTimeActive,
                           campaign.canAttemptMining,
                           !campaign.drops.isEmpty,
                           !campaign.drops.allSatisfy(\.isClaimed) else { return false }
@@ -101,14 +103,9 @@ struct MinerOperatorPresentation {
 
             let status = campaign.activityStatus(for: miner)
 
-            // A queue lists what is coming up. Campaigns that are finished, or
-            // that can't be attempted until the game account is linked, are not
-            // queued work unless the user explicitly prioritised that game. Keeping
-            // prioritised campaigns visible gives their "Needs setup" row somewhere
-            // actionable to live; unrelated unlinked campaigns remain reminders only.
+            // A queue lists only work the miner can actually schedule.
             if campaign.id != snapshot.now.campaignId {
-                guard status != .completed,
-                      status != .requiresLink || isPriority else { return false }
+                guard status != .completed, status != .requiresLink else { return false }
             }
 
             return status != .expired || campaign.endDate >= recentEndCutoff
@@ -144,11 +141,21 @@ struct MinerOperatorPresentation {
         }
 
         let queue = campaigns.enumerated().map { index, campaign in
-            MinerCampaignQueueEntry(
+            let gameAvailability = miner.gameChannelAvailability[normalizedKey(campaign.game.name)]
+            let campaignAvailability: GameChannelAvailability? = gameAvailability.flatMap { availability in
+                guard !availability.hasEligibleChannel
+                    || availability.campaignId == nil
+                    || availability.campaignId == campaign.id else {
+                    return nil
+                }
+                return availability
+            }
+            return MinerCampaignQueueEntry(
                 campaign: campaign,
                 position: index + 1,
                 status: campaign.activityStatus(for: miner),
-                progress: aggregateProgress(for: campaign, miner: miner)
+                progress: aggregateProgress(for: campaign, miner: miner),
+                channelAvailability: campaignAvailability
             )
         }
 
@@ -644,7 +651,7 @@ struct MinerMiningSequenceView: View {
     }
 
     private var nowColumn: some View {
-        SequenceColumn(title: "Currently mining") {
+        SequenceColumn(title: presentation.snapshot.currentSectionTitle) {
             HStack(alignment: .top, spacing: 12) {
                 CampaignArtworkThumbnail(
                     url: presentation.currentCampaign?.game.boxArtURL,
@@ -880,7 +887,7 @@ struct MinerCampaignQueueRow: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         case .waitingForStream:
-            Text("No eligible channels live")
+            Text(channelAvailabilityDetail)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         case .requiresLink:
@@ -918,6 +925,12 @@ struct MinerCampaignQueueRow: View {
     }
 
     private var statusLabel: String {
+        if entry.status == .waitingForStream,
+           let availability = entry.channelAvailability {
+            guard availability.isFresh() else { return "Pending check" }
+            return availability.hasEligibleChannel ? "Ready" : "Waiting"
+        }
+
         switch entry.status {
         case .watching: return "Watching"
         case .waitingForStream: return "Waiting"
@@ -927,6 +940,32 @@ struct MinerCampaignQueueRow: View {
         case .upcoming: return "Upcoming"
         case .expired: return "Ended"
         }
+    }
+
+    private var channelAvailabilityDetail: String {
+        guard let availability = entry.channelAvailability else {
+            return "Not checked yet — checked when reached"
+        }
+
+        let relative = Self.relativeTime(from: availability.checkedAt)
+        if availability.isFresh() {
+            if availability.hasEligibleChannel {
+                return availability.channelName.map { "Eligible: \($0) · verified \(relative)" }
+                    ?? "Eligible stream verified \(relative)"
+            }
+            return "Checked \(relative) — none eligible"
+        }
+        if availability.hasEligibleChannel {
+            return availability.channelName.map { "Last eligible stream: \($0) · \(relative)" }
+                ?? "Last check found an eligible stream \(relative)"
+        }
+        return "Last checked \(relative) — recheck pending"
+    }
+
+    private static func relativeTime(from date: Date, now: Date = Date()) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .full
+        return formatter.localizedString(for: date, relativeTo: now)
     }
 
     private var statusSymbol: String {
@@ -942,6 +981,12 @@ struct MinerCampaignQueueRow: View {
     }
 
     private var statusTint: Color {
+        if entry.status == .waitingForStream,
+           let availability = entry.channelAvailability {
+            guard availability.isFresh() else { return .secondary }
+            return availability.hasEligibleChannel ? .green : .cyan
+        }
+
         switch entry.status {
         case .watching, .completed: return .green
         case .waitingForStream: return .cyan

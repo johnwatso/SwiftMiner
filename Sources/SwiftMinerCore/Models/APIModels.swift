@@ -110,22 +110,6 @@ public struct FollowedChannelsResponse: Codable, Sendable {
     public let pagination: Pagination?
 }
 
-public struct UserSubscriptionResponse: Codable, Sendable {
-    public struct Subscription: Codable, Sendable {
-        public let broadcasterId: String
-        public let broadcasterLogin: String
-        public let broadcasterName: String
-
-        enum CodingKeys: String, CodingKey {
-            case broadcasterId = "broadcaster_id"
-            case broadcasterLogin = "broadcaster_login"
-            case broadcasterName = "broadcaster_name"
-        }
-    }
-
-    public let data: [Subscription]
-}
-
 public struct ChannelRelationship: Sendable, Equatable {
     public let isFollowed: Bool
     public let isSubscribed: Bool

@@ -1,4 +1,5 @@
 import Foundation
+import SwiftMinerCore
 
 /// Filter options for the Drops list view.
 public enum DropFilter: String, CaseIterable, Identifiable, Hashable, Codable {
@@ -28,6 +29,37 @@ public enum DropFilter: String, CaseIterable, Identifiable, Hashable, Codable {
         case .completed: return "checkmark.circle.fill"
         case .ended: return "clock"
         }
+    }
+}
+
+/// Drops-filter rules that must remain independent of the miner scheduler.
+/// An unlinked campaign remains actionable in Drops because linking the game
+/// account is a setup task, even when an explicit priority lets mining proceed.
+enum DropsCampaignFilterRules {
+    static func matchesNeedsSetup(_ campaign: CampaignViewData, now: Date) -> Bool {
+        guard campaign.startDate <= now,
+              !campaign.isExpired(now: now),
+              campaign.endDate > now,
+              !campaign.isCompleted,
+              campaign.hasObtainableRewards
+        else {
+            return false
+        }
+
+        return campaign.accountStates.contains {
+            $0.miningStatus == .needsAuth || $0.miningStatus == .blocked
+        }
+    }
+
+    /// Public unlinked campaigns are intentionally `.irrelevant` to the normal
+    /// curated feed. Preserve them when Needs Setup is selected so the filter
+    /// can surface the account-link work it exists to show.
+    static func preservesCampaignOutsideCuratedFeed(
+        _ campaign: CampaignViewData,
+        selectedFilters: Set<DropFilter>,
+        now: Date
+    ) -> Bool {
+        selectedFilters.contains(.needsSetup) && matchesNeedsSetup(campaign, now: now)
     }
 }
 

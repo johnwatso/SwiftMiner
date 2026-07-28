@@ -47,6 +47,20 @@
   <main>
     <h1>SwiftMiner Release Notes</h1>
     <p class="meta">Recent Sparkle update history</p>
+    <h2>🐛 <a href="./1.35.1.html">Version 1.35.1</a></h2>
+    <ul>
+      <li>Stops a miner reporting Subscription Required as its current state; subscription-gated campaigns count as finished work and stay visible as a mutable Pending reminder.</li>
+      <li>Stops a subscription-gated campaign suppressing the Up next row for another campaign in the same game.</li>
+      <li>Fixes the multi-miner launch slowdown that could leave accounts on Updating for more than three minutes by combining a bounded fleet request budget with the existing five-request-per-second ceiling for each miner.</li>
+      <li>Coalesces campaign refreshes at the Twitch client boundary so the mining engine and dashboard share one campaign-detail fan-out.</li>
+      <li>Lets simultaneous miners share safe campaign definitions while keeping progress, claims, authentication and uncertain account-link state isolated per account.</li>
+      <li>Prioritises followed streamers with one paginated lookup instead of one subscription request per candidate channel.</li>
+      <li>Explains Smart's deadline-first queue ordering and reports real per-miner channel checks instead of claiming every queued campaign has no eligible live channel.</li>
+      <li>Keeps completed and unlinked campaigns out of prospective Up next and Then positions, and only says Watching or Currently mining for a real watch session.</li>
+      <li>Restores the Drops "Needs Setup" filter so live unlinked campaigns remain visible without blocking explicitly prioritised mining.</li>
+      <li>Updates SwiftMiner to version 1.35.1 build 2026072909.</li>
+    </ul>
+
     <h2>🎁 <a href="./1.35.html">Version 1.35</a></h2>
     <ul>
       <li>Restores drop claiming by reading Twitch's current <code>claimDropRewards</code> mutation response, which SwiftMiner had never been reading, while retaining compatibility with the legacy field.</li>

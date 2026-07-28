@@ -155,6 +155,24 @@ final class MiningReliabilityChaosTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(clock.now, 45_000_000_000)
     }
 
+    func testCoordinatorKeepsPerClientLimitInsideLargerFleetBudget() async throws {
+        let clock = ChaosClock()
+        let coordinator = TwitchRequestCoordinator(
+            maxRequests: 4,
+            maxRequestsPerClient: 2,
+            per: 1,
+            runtimeClock: clock.clock
+        )
+
+        _ = try await coordinator.waitForPermit(clientID: "a")
+        _ = try await coordinator.waitForPermit(clientID: "a")
+        _ = try await coordinator.waitForPermit(clientID: "b")
+        XCTAssertEqual(clock.now, 0)
+
+        _ = try await coordinator.waitForPermit(clientID: "a")
+        XCTAssertGreaterThanOrEqual(clock.now, 1_000_000_000)
+    }
+
     func testAmbiguousClaimIsAcceptedWhenFreshInventoryConfirmsIt() async throws {
         let clock = ChaosClock()
         let coordinator = TwitchRequestCoordinator(maxRequests: 100, runtimeClock: clock.clock)

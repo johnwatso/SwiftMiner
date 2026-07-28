@@ -32,6 +32,10 @@ public final class MinerManager {
         public var currentCampaignId: String?
         public var streamOverrideLogin: String?
         public var allCampaigns: [Campaign] = []
+        /// Latest account-specific eligible-channel checks, keyed by normalized game name.
+        /// The engine checks games as it reaches them during campaign selection; absence means
+        /// "not checked yet", not "no channels live".
+        public var gameChannelAvailability: [String: GameChannelAvailability] = [:]
         /// True while `allCampaigns` holds disk-cached data seeded at launch rather
         /// than a live fetch. Lets the UI render immediately without treating stale
         /// campaigns as grounds for nagging the user (see `MinerAttention`). Cleared
@@ -218,6 +222,7 @@ public final class MinerManager {
             currentCampaignId: String? = nil,
             streamOverrideLogin: String? = nil,
             allCampaigns: [Campaign] = [],
+            gameChannelAvailability: [String: GameChannelAvailability] = [:],
             dropsClaimed: Int = 0,
             isRunning: Bool = false,
             priorityGames: [String] = [],
@@ -244,6 +249,7 @@ public final class MinerManager {
             self.currentCampaignId = currentCampaignId
             self.streamOverrideLogin = Self.normalizedStreamOverrideLogin(streamOverrideLogin)
             self.allCampaigns = allCampaigns
+            self.gameChannelAvailability = gameChannelAvailability
             self.dropsClaimed = dropsClaimed
             self.isRunning = isRunning
             self.priorityGames = priorityGames

@@ -104,6 +104,41 @@ final class ServiceTests: XCTestCase {
         XCTAssertEqual(MockURLProtocol.lastRequest?.url?.path, "/helix/users")
     }
 
+    func testFollowedChannelRankingDoesNotFanOutSubscriptionRequests() async throws {
+        let requestedPaths = StringRequestRecorder()
+        MockURLProtocol.requestHandler = { request in
+            requestedPaths.append(request.url?.path ?? "")
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            let json = """
+            {
+              "data": [
+                {
+                  "broadcaster_id": "followed",
+                  "broadcaster_login": "followed_streamer",
+                  "broadcaster_name": "Followed Streamer"
+                }
+              ],
+              "pagination": {}
+            }
+            """
+            return (response, Data(json.utf8))
+        }
+
+        let relationships = await apiClient.getChannelRelationships(
+            userId: "viewer",
+            broadcasterIds: ["followed", "not-followed"]
+        )
+
+        XCTAssertEqual(relationships["followed"], ChannelRelationship(isFollowed: true))
+        XCTAssertEqual(relationships["not-followed"], ChannelRelationship())
+        XCTAssertEqual(requestedPaths.recordedValues, ["/helix/channels/followed"])
+    }
+
     func testGetChannelByLoginResolvesNumericId() async throws {
         let jsonString = """
         {
@@ -673,6 +708,45 @@ final class ServiceTests: XCTestCase {
         )
     }
 
+    func testAPIClientCoalescesConcurrentColdCampaignRefreshes() async throws {
+        let operations = StringRequestRecorder()
+
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+
+            if request.url?.path == "/integrity" {
+                return (response, #"{"token":"integrity-token","expiration":4102444800000}"#.data(using: .utf8)!)
+            }
+
+            let body = (try? JSONSerialization.jsonObject(with: request.httpBody ?? Data())) as? [String: Any]
+            let operationName = body?["operationName"] as? String ?? ""
+            operations.append(operationName)
+            if operationName == "ViewerDropsDashboard" {
+                Thread.sleep(forTimeInterval: 0.05)
+                return (response, #"{"data":{"currentUser":{"dropCampaigns":[]}}}"#.data(using: .utf8)!)
+            }
+            return (response, #"{"data":{}}"#.data(using: .utf8)!)
+        }
+
+        let client = apiClient!
+        async let engineRefresh = client.fetchDropCampaigns()
+        async let projectionRefresh = client.fetchDropCampaigns()
+        let results = try await (engineRefresh, projectionRefresh)
+
+        XCTAssertTrue(results.0.isEmpty)
+        XCTAssertTrue(results.1.isEmpty)
+        XCTAssertEqual(
+            operations.recordedValues.filter { $0 == "ViewerDropsDashboard" }.count,
+            1,
+            "engine and projection refreshes must share the same API-client fan-out"
+        )
+    }
+
     func testFetchDropCampaignsReusesSharedCampaignMetadataAcrossClients() async throws {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
@@ -724,6 +798,7 @@ final class ServiceTests: XCTestCase {
                 return (response, json.data(using: .utf8)!)
 
             case "DropCampaignDetails":
+                Thread.sleep(forTimeInterval: 0.05)
                 let json = """
                 {
                   "data": {
@@ -802,11 +877,15 @@ final class ServiceTests: XCTestCase {
         )
         await thirdClient.setUserLogin("thirduser")
 
-        let first = try await apiClient.fetchDropCampaigns()
-        let second = try await secondClient.fetchDropCampaigns()
+        let firstClient = apiClient!
+        async let firstRefresh = firstClient.fetchDropCampaigns()
+        async let secondRefresh = secondClient.fetchDropCampaigns()
+        let (first, second) = try await (firstRefresh, secondRefresh)
 
-        XCTAssertEqual(first.first?.drops.first?.progress?.currentMinutes, 12)
-        XCTAssertNil(second.first?.drops.first?.progress)
+        let accountProgress = [first, second].compactMap { campaigns in
+            campaigns.first?.drops.first?.progress?.currentMinutes
+        }
+        XCTAssertEqual(accountProgress, [12], "only the account that made the detail request keeps its progress")
         XCTAssertEqual(second.first?.isAccountConnected, true)
         XCTAssertEqual(operations.recordedValues.filter { $0 == "ViewerDropsDashboard" }.count, 2)
         XCTAssertEqual(operations.recordedValues.filter { $0 == "DropCampaignDetails" }.count, 1)
