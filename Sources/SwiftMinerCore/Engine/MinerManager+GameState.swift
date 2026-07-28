@@ -15,18 +15,33 @@ extension MinerManager {
         // Smart strategy regularly schedules a campaign for a game that is not on the prioritised
         // list — an earlier deadline wins. Evaluating prioritised games alone meant the miner
         // described itself using games it was not working on, reporting "Drops complete" while it
-        // was actively hunting streams for the campaign it had just selected. Append the game the
-        // scheduler actually chose so the resolved state reflects real work.
+        // was actively hunting streams for the campaign it had just selected.
+        //
+        // `currentCampaignId` alone is not enough: the no-channel path clears the watch target
+        // before waiting, so in exactly the state this needs to describe it is already nil.
+        // `gameChannelAvailability` is the durable record — it survives that cleanup and names
+        // the campaign each game was last probed for.
         var gamesToEvaluate = priorityGames
-        if let current = miner.allCampaigns.first(where: { $0.id == miner.currentCampaignId }) {
-            let currentName = current.gameName.lowercased()
-            let currentId = current.game.id.lowercased()
-            let alreadyCovered = priorityGames.contains {
+        var scheduledCampaignIds: [String] = []
+        if let currentCampaignId = miner.currentCampaignId {
+            scheduledCampaignIds.append(currentCampaignId)
+        }
+        scheduledCampaignIds.append(
+            contentsOf: miner.gameChannelAvailability.values
+                .sorted { $0.checkedAt > $1.checkedAt }
+                .compactMap(\.campaignId)
+        )
+
+        for campaignId in scheduledCampaignIds {
+            guard let scheduled = miner.allCampaigns.first(where: { $0.id == campaignId }) else { continue }
+            let scheduledName = scheduled.gameName.lowercased()
+            let scheduledId = scheduled.game.id.lowercased()
+            let alreadyCovered = gamesToEvaluate.contains {
                 let key = $0.lowercased()
-                return key == currentName || key == currentId
+                return key == scheduledName || key == scheduledId
             }
             if !alreadyCovered {
-                gamesToEvaluate.append(current.gameName)
+                gamesToEvaluate.append(scheduled.gameName)
             }
         }
 

@@ -394,4 +394,39 @@ final class PrimaryStateResolverTests: XCTestCase {
         let states = MinerManager.evaluateGameStates(for: miner, priorityGames: miner.priorityGames)
         XCTAssertEqual(states.count, 1)
     }
+
+    func testWaitingWithClearedTargetStillReportsTheCampaignBeingWaitedOn() {
+        // The no-channel path clears the watch target before waiting, so currentCampaignId is nil
+        // in exactly this state. gameChannelAvailability is the durable record of what the miner
+        // is waiting on; without it the miner reported "Drops complete" while actively hunting.
+        var gatedDrop = Drop(id: "gated", name: "Gated Reward", requiredMinutes: 0, requiredSubs: 1)
+        gatedDrop.progress = nil
+        let gated = createCampaign(
+            id: "gated-campaign",
+            gameId: "finals",
+            gameName: "THE FINALS",
+            drops: [gatedDrop]
+        )
+        let waitingOn = createCampaign(
+            id: "esports",
+            gameId: "brawlhalla",
+            gameName: "Brawlhalla",
+            drops: [createDrop(id: "d1")]
+        )
+        var miner = createMiner(
+            status: .waitingForStream,
+            allCampaigns: [gated, waitingOn],
+            currentCampaignId: nil,
+            priorityGames: ["THE FINALS"]
+        )
+        miner.gameChannelAvailability["brawlhalla"] = GameChannelAvailability(
+            gameKey: "brawlhalla",
+            hasEligibleChannel: false,
+            campaignId: "esports",
+            checkedAt: Date()
+        )
+
+        XCTAssertEqual(miner.resolvedPrimaryState?.resolved?.gameName, "Brawlhalla")
+        XCTAssertEqual(miner.statusLabel, "Waiting — No live stream")
+    }
 }

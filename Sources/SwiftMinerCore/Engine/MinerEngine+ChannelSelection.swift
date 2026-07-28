@@ -985,6 +985,9 @@ extension MinerEngine {
                             await ChannelLivenessCache.shared.recordOffline(login: login)
                             return nil
                         }
+                        // Resets any escalated backoff, so a channel that has just come back
+                        // online is probed at full speed again rather than staying skipped.
+                        await ChannelLivenessCache.shared.recordLive(login: login)
                         let resolved = await self.resolveChannelIdIfNeeded(channel)
                         return (index, Channel(
                             id: resolved.id,

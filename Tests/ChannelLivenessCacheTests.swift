@@ -48,6 +48,63 @@ final class ChannelLivenessCacheTests: XCTestCase {
         XCTAssertFalse(known, "By the next probe the miss must have expired so Twitch is asked again")
     }
 
+    /// The escalation is the only place responsiveness is traded away. This bounds that trade:
+    /// a channel dark for hours is still rediscovered within `maximumBackoff`, which must stay
+    /// small against a tournament broadcast lasting hours.
+    func testEscalatedBackoffStaysBounded() async {
+        let clock = TestClock()
+        let cache = ChannelLivenessCache(now: { clock.current })
+
+        // Simulate a channel dark for a very long time.
+        for _ in 0..<500 {
+            await cache.recordOffline(login: "tournamentchannel")
+            clock.advance(by: ChannelLivenessCache.maximumBackoff)
+        }
+
+        let window = await cache.backoff(forConsecutiveMisses: 500)
+        XCTAssertLessThanOrEqual(window, ChannelLivenessCache.maximumBackoff)
+        XCTAssertLessThanOrEqual(
+            ChannelLivenessCache.maximumBackoff,
+            5 * 60,
+            "Worst-case rediscovery must stay a small fraction of a broadcast"
+        )
+    }
+
+    func testBackoffOnlyEscalatesAfterSustainedDarkness() async {
+        let cache = ChannelLivenessCache()
+
+        // A channel cycling on and off keeps the fast window.
+        let early = await cache.backoff(forConsecutiveMisses: 1)
+        XCTAssertEqual(early, ChannelLivenessCache.ttl)
+        let stillEarly = await cache.backoff(forConsecutiveMisses: ChannelLivenessCache.missesBeforeEscalation)
+        XCTAssertEqual(stillEarly, ChannelLivenessCache.ttl)
+
+        // Only sustained darkness escalates.
+        let later = await cache.backoff(forConsecutiveMisses: ChannelLivenessCache.missesBeforeEscalation * 3)
+        XCTAssertGreaterThan(later, ChannelLivenessCache.ttl)
+    }
+
+    func testGoingLiveResetsEscalationImmediately() async {
+        let clock = TestClock()
+        let cache = ChannelLivenessCache(now: { clock.current })
+
+        for _ in 0..<100 {
+            await cache.recordOffline(login: "tournamentchannel")
+            clock.advance(by: ChannelLivenessCache.maximumBackoff)
+        }
+
+        await cache.recordLive(login: "tournamentchannel")
+
+        let known = await cache.isKnownOffline(login: "tournamentchannel")
+        XCTAssertFalse(known, "A channel seen live must be probed again immediately")
+
+        // And the next miss is back to the fast window, not the escalated one.
+        await cache.recordOffline(login: "tournamentchannel")
+        clock.advance(by: ChannelLivenessCache.ttl)
+        let stillKnown = await cache.isKnownOffline(login: "tournamentchannel")
+        XCTAssertFalse(stillKnown, "Escalation must reset after a live sighting")
+    }
+
     func testLiveChannelsAreNeverCached() async {
         let cache = ChannelLivenessCache()
 

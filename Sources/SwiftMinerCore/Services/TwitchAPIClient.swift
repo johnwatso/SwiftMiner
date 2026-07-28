@@ -188,6 +188,11 @@ public actor TwitchAPIClient {
     /// selection cycle — each retry also forced a doomed token refresh.
     private var followedChannelLookupRetryAt: [String: Date] = [:]
     private let followedChannelLookupBackoff: TimeInterval = 5 * 60
+    /// Users whose token Twitch will not accept for the follow endpoint at all — typically a
+    /// session imported without Helix follow scope. Retrying that is not a backoff problem, it
+    /// is permanently unanswerable, and each attempt costs a doomed token refresh. Give up for
+    /// the session rather than rediscovering it every five minutes for every account.
+    private var followedChannelLookupUnavailable: Set<String> = []
 
     struct CampaignDetailsCacheEntry {
         let campaign: Campaign
@@ -433,6 +438,9 @@ public actor TwitchAPIClient {
         let uniqueIds = Array(Set(broadcasterIds.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }))
         guard !userId.isEmpty, !uniqueIds.isEmpty else { return [:] }
 
+        if followedChannelLookupUnavailable.contains(userId) {
+            return [:]
+        }
         if let retryAt = followedChannelLookupRetryAt[userId], retryAt > Date() {
             return [:]
         }
@@ -442,9 +450,14 @@ public actor TwitchAPIClient {
             followedIds = try await getFollowedChannelIds(userId: userId)
             followedChannelLookupRetryAt[userId] = nil
         } catch {
-            followedChannelLookupRetryAt[userId] = Date().addingTimeInterval(followedChannelLookupBackoff)
-            let backoffMinutes = Int(followedChannelLookupBackoff / 60)
-            Logger.api.info("Follow lookup unavailable; ranking channels without follow state for \(backoffMinutes)m: \(error.localizedDescription)")
+            if Self.isPermanentFollowLookupRejection(error) {
+                followedChannelLookupUnavailable.insert(userId)
+                Logger.api.info("Twitch will not serve follow state for this session; ranking channels without it from now on: \(error.localizedDescription)")
+            } else {
+                followedChannelLookupRetryAt[userId] = Date().addingTimeInterval(followedChannelLookupBackoff)
+                let backoffMinutes = Int(followedChannelLookupBackoff / 60)
+                Logger.api.info("Follow lookup unavailable; ranking channels without follow state for \(backoffMinutes)m: \(error.localizedDescription)")
+            }
             return [:]
         }
         var relationships: [String: ChannelRelationship] = [:]
@@ -457,6 +470,21 @@ public actor TwitchAPIClient {
         }
 
         return relationships
+    }
+
+    /// A rejection no amount of retrying will change: the session's token is not accepted for
+    /// this endpoint. Distinguished from transport or server-side failures, which are worth
+    /// retrying later.
+    static func isPermanentFollowLookupRejection(_ error: Error) -> Bool {
+        guard let minerError = error as? TwitchMinerError else { return false }
+        switch minerError {
+        case .tokenExpired, .authenticationFailed:
+            return true
+        case .apiError(let statusCode, _):
+            return statusCode == 401 || statusCode == 403
+        default:
+            return false
+        }
     }
 
     private func getFollowedChannelIds(userId: String) async throws -> Set<String> {
