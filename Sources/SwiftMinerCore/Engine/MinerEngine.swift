@@ -1246,7 +1246,15 @@ public actor MinerEngine {
                             selectedChannelWasUnverified = !selection.wasVerified
                             break
                         }
-                        recordGameLiveProbe(gameKey, hasLiveChannel: false)
+                        // Carry the campaign we were unable to find a channel for. The watch
+                        // session's target is cleared before the wait, so this is the only
+                        // durable record of what the miner is actually waiting on — without it
+                        // the miner describes itself from games it has already finished.
+                        recordGameLiveProbe(
+                            gameKey,
+                            hasLiveChannel: false,
+                            campaignId: gameCandidates[0].id
+                        )
                         log("No eligible channels available for \(gameName); trying next game.")
                     }
                 }

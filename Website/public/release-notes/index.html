@@ -47,6 +47,15 @@
   <main>
     <h1>SwiftMiner Release Notes</h1>
     <p class="meta">Recent Sparkle update history</p>
+    <h2>⚡ <a href="./1.36.1.html">Version 1.36.1</a></h2>
+    <ul>
+      <li>A miner waiting for a stream no longer reports Drops complete while its card says Looking for Streams.</li>
+      <li>Records the campaign a miner is waiting on when the channel search comes up empty, so its reported state matches reality.</li>
+      <li>Backs off re-checking approved channels that have been offline a long time, capped so rediscovery stays within five minutes.</li>
+      <li>Stops retrying the followed-channel lookup for sessions Twitch will never serve it for, which was costing a token refresh every attempt.</li>
+      <li>Updates SwiftMiner to version 1.36.1 build 2026072912.</li>
+    </ul>
+
     <h2>🖼️ <a href="./1.36.html">Version 1.36</a></h2>
     <ul>
       <li>Game artwork saved before higher-resolution box art existed now upgrades itself on load, instead of staying soft on an upgraded install while a fresh one looked correct.</li>
