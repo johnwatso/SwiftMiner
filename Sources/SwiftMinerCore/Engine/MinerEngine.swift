@@ -248,6 +248,10 @@ public actor MinerEngine {
               remaining <= preemptionHoldMinutes else { return false }
         return preemptorEndDate.timeIntervalSince(now) > preemptionImminentEndWindow
     }
+    /// How often approved channels for ACL-restricted campaigns are re-probed while waiting.
+    /// `ChannelLivenessCache.ttl` must stay strictly below this so a cached miss has always
+    /// expired by the next probe, and the cache can never delay noticing a channel go live.
+    static let aclProbeInterval: TimeInterval = 60
     static let failoverCooldown: TimeInterval = 10 * 60
     private static let subscriptionWarningRepeatInterval: TimeInterval = 6 * 60 * 60
     static let noCandidateBackoffBaseInterval: UInt64 = 300 * 1_000_000_000
@@ -634,12 +638,29 @@ public actor MinerEngine {
         // Configure PubSub/DropEventsService
         await configureDropEventsService()
 
-        // Load token into apiClient (required before any GQL requests) and PubSub
+        // Load token into apiClient (required before any GQL requests) and PubSub.
+        // Token acquisition and the PubSub connection are attempted separately: a token failure
+        // used to skip the connect call *and* the client updates below it, silently leaving the
+        // whole fleet on polling with no real-time drop progress and nothing surfaced to the user.
         do {
             let token = try await apiClient.getAccessToken()
             log("Access token loaded (\(token.prefix(8))…, length: \(token.count))")
             await apiClient.updateAccessToken(token)
             await pubSubClient.updateAccessToken(token)
+        } catch {
+            log("Could not load access token: \(error.localizedDescription)")
+            // A rejected token cannot be recovered by retrying the watch loop; it needs the user.
+            if let minerError = error as? TwitchMinerError {
+                switch minerError {
+                case .authenticationFailed, .tokenExpired:
+                    onError?(minerError)
+                default:
+                    break
+                }
+            }
+        }
+
+        do {
             try await pubSubClient.connect()
             log("PubSub connected")
         } catch {
@@ -1245,7 +1266,7 @@ public actor MinerEngine {
                     let restrictedWaitCandidates = candidates.filter { $0.hasKnownChannelRestrictions }
                     let tickNs: UInt64 = 10 * 1_000_000_000
                     let ticks = Int(campaignCheckInterval / tickNs)
-                    let aclProbeEveryTicks = 6 // ~60s
+                    let aclProbeEveryTicks = Int(Self.aclProbeInterval / (Double(tickNs) / 1_000_000_000))
                     for tick in 0..<ticks {
                         if Task.isCancelled || shouldRescanCampaigns { break }
                         do {

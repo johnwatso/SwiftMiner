@@ -326,4 +326,72 @@ final class PrimaryStateResolverTests: XCTestCase {
         XCTAssertEqual(state?.state, .blocked)
         XCTAssertEqual(state?.reason, .notLinked)
     }
+
+    // MARK: - Scheduler-selected (non-prioritised) game
+
+    func testScheduledNonPrioritisedGameProducesItsOwnState() {
+        // Smart strategy picks an earlier-ending campaign for a game the user did not prioritise.
+        let scheduled = createCampaign(
+            id: "esports",
+            gameId: "brawlhalla",
+            gameName: "Brawlhalla",
+            drops: [createDrop(id: "d1")]
+        )
+        let miner = createMiner(
+            status: .waitingForStream,
+            allCampaigns: [scheduled],
+            currentCampaignId: "esports",
+            priorityGames: ["THE FINALS"]
+        )
+
+        let states = MinerManager.evaluateGameStates(for: miner, priorityGames: miner.priorityGames)
+
+        XCTAssertEqual(states.count, 2, "The prioritised game and the game actually scheduled must both be evaluated")
+        let scheduledState = states.first { $0.gameName == "Brawlhalla" }
+        XCTAssertEqual(scheduledState?.state, .blocked)
+        XCTAssertEqual(scheduledState?.reason, .noLiveStreams)
+        XCTAssertEqual(scheduledState?.campaignId, "esports")
+    }
+
+    func testWaitingOnScheduledGameIsNotReportedAsDropsComplete() {
+        // The prioritised game has nothing watchable left (its only reward is subscription-gated),
+        // while the miner is actively waiting for a stream for the campaign it did schedule.
+        // Reporting the miner as finished here is what hid real work behind "Drops complete".
+        var gatedDrop = Drop(id: "gated", name: "Gated Reward", requiredMinutes: 0, requiredSubs: 1)
+        gatedDrop.progress = nil
+        let gated = createCampaign(
+            id: "gated-campaign",
+            gameId: "finals",
+            gameName: "THE FINALS",
+            drops: [gatedDrop]
+        )
+        let scheduled = createCampaign(
+            id: "esports",
+            gameId: "brawlhalla",
+            gameName: "Brawlhalla",
+            drops: [createDrop(id: "d1")]
+        )
+        let miner = createMiner(
+            status: .waitingForStream,
+            allCampaigns: [gated, scheduled],
+            currentCampaignId: "esports",
+            priorityGames: ["THE FINALS"]
+        )
+
+        XCTAssertEqual(miner.resolvedPrimaryState?.resolved?.gameName, "Brawlhalla")
+        XCTAssertEqual(miner.statusLabel, "Waiting — No live stream")
+    }
+
+    func testScheduledGameAlreadyPrioritisedIsNotDuplicated() {
+        let campaign = createCampaign(id: "c1", drops: [createDrop(id: "d1")])
+        let miner = createMiner(
+            status: .waitingForStream,
+            allCampaigns: [campaign],
+            currentCampaignId: "c1",
+            priorityGames: ["Test Game"]
+        )
+
+        let states = MinerManager.evaluateGameStates(for: miner, priorityGames: miner.priorityGames)
+        XCTAssertEqual(states.count, 1)
+    }
 }

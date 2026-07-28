@@ -183,6 +183,11 @@ public actor TwitchAPIClient {
     private var channelIdByLogin: [String: String] = [:]
     private var followedChannelIdsByUser: [String: (ids: Set<String>, expiresAt: Date)] = [:]
     private let channelRelationshipCacheTTL: TimeInterval = 10 * 60
+    /// Backoff after a failed follow lookup. Follow state only reorders otherwise-equal
+    /// channels, so a failure must degrade quietly instead of being retried by every
+    /// selection cycle — each retry also forced a doomed token refresh.
+    private var followedChannelLookupRetryAt: [String: Date] = [:]
+    private let followedChannelLookupBackoff: TimeInterval = 5 * 60
 
     struct CampaignDetailsCacheEntry {
         let campaign: Campaign
@@ -428,7 +433,18 @@ public actor TwitchAPIClient {
         let uniqueIds = Array(Set(broadcasterIds.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }))
         guard !userId.isEmpty, !uniqueIds.isEmpty else { return [:] }
 
-        guard let followedIds = try? await getFollowedChannelIds(userId: userId) else {
+        if let retryAt = followedChannelLookupRetryAt[userId], retryAt > Date() {
+            return [:]
+        }
+
+        let followedIds: Set<String>
+        do {
+            followedIds = try await getFollowedChannelIds(userId: userId)
+            followedChannelLookupRetryAt[userId] = nil
+        } catch {
+            followedChannelLookupRetryAt[userId] = Date().addingTimeInterval(followedChannelLookupBackoff)
+            let backoffMinutes = Int(followedChannelLookupBackoff / 60)
+            Logger.api.info("Follow lookup unavailable; ranking channels without follow state for \(backoffMinutes)m: \(error.localizedDescription)")
             return [:]
         }
         var relationships: [String: ChannelRelationship] = [:]

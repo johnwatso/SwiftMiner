@@ -974,8 +974,15 @@ extension MinerEngine {
                 guard !login.isEmpty else { continue }
 
                 group.addTask {
+                    // Shared across every miner: liveness is account-independent, and the cache
+                    // window is shorter than the ACL re-probe interval so a channel coming online
+                    // is still caught on the next tick. See ChannelLivenessCache.
+                    if await ChannelLivenessCache.shared.isKnownOffline(login: login) {
+                        return nil
+                    }
                     do {
                         guard try await self.apiClient.fetchBroadcastId(channelLogin: login) != nil else {
+                            await ChannelLivenessCache.shared.recordOffline(login: login)
                             return nil
                         }
                         let resolved = await self.resolveChannelIdIfNeeded(channel)

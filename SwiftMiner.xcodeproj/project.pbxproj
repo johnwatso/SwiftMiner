@@ -97,6 +97,7 @@
 		8678D2740E99E270510283CC /* ClaimService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8602894B99CE1D0D592B2767 /* ClaimService.swift */; };
 		86F53EA04C314F8DC4C23BCE /* UnattendedHealthStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B199FBD956E177F78210A113 /* UnattendedHealthStoreTests.swift */; };
 		887E4BB173AF9184D7977C5D /* TokenStoreFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = F78D7567C8507C092BDE5F44 /* TokenStoreFactory.swift */; };
+		88AE50BCEB7043FF5A148BA0 /* ChannelLivenessCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 150DA97EC15BAA3B90DB54A4 /* ChannelLivenessCache.swift */; };
 		8970B3F141C511A712A55ECB /* InMemoryTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5514C53B137FE700B25098EF /* InMemoryTokenStore.swift */; };
 		8A189758FADFEF7A7FB91DE3 /* DropsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82BF51F236A3CA9B372DC12D /* DropsService.swift */; };
 		8CBFCDD006CBD3C8BF54CA2B /* CampaignCardComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F0C36D4A3E4BE2B05796360 /* CampaignCardComponents.swift */; };
@@ -140,6 +141,7 @@
 		B0B3F31B7C6EC4F7BED6F11B /* DropsServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D227823A0CF0DEDA834B486B /* DropsServiceTests.swift */; };
 		B16F074B9745C37F55F481B7 /* PubSubClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C67349DAA237D14A6C21D75 /* PubSubClient.swift */; };
 		B5073D6F750D1504525FC42D /* MinerAttention.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0528E48497586BD35DE82149 /* MinerAttention.swift */; };
+		B5B0F32E53B7AE0C8F300E5F /* ChannelLivenessCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A174CB07DBB49229CB2E6678 /* ChannelLivenessCacheTests.swift */; };
 		B6820745B5DB991B2905AD36 /* SpadeBeaconService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 514F43250FDCF5A12579A212 /* SpadeBeaconService.swift */; };
 		B6A2FFB252B8C1507FD9C478 /* SwiftMinerCoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F01C7FACEB7BCCB9E95430C4 /* SwiftMinerCoreTests.swift */; };
 		B6E086CE2CD03B35132CE34F /* GameCampaignCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22F003BE203D0621CBA86E29 /* GameCampaignCards.swift */; };
@@ -276,6 +278,7 @@
 		0F769E922F54C3EE8703F4F5 /* KeychainAccountStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainAccountStore.swift; sourceTree = "<group>"; };
 		104E69E6B6B6F84B8E2B240F /* ResourceUsageMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResourceUsageMonitor.swift; sourceTree = "<group>"; };
 		14199B9CF6D97675DE0107D4 /* SwiftMiner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SwiftMiner.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		150DA97EC15BAA3B90DB54A4 /* ChannelLivenessCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelLivenessCache.swift; sourceTree = "<group>"; };
 		165ABC94EC037719B5DE0C7E /* WebDashboardAssets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebDashboardAssets.swift; sourceTree = "<group>"; };
 		17054AC963AE815169890A76 /* RuntimeClock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeClock.swift; sourceTree = "<group>"; };
 		19C66F8182D8FB572197B2EC /* SparkleConfigTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SparkleConfigTests.swift; sourceTree = "<group>"; };
@@ -376,6 +379,7 @@
 		9E6ADBB3EDC315786AE0BB1F /* DebugTrace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugTrace.swift; sourceTree = "<group>"; };
 		9E8311BE15D3372DD6D2F2CA /* SQLiteTokenStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLiteTokenStore.swift; sourceTree = "<group>"; };
 		A0D7BDAE584D407975194C00 /* AdminView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminView.swift; sourceTree = "<group>"; };
+		A174CB07DBB49229CB2E6678 /* ChannelLivenessCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelLivenessCacheTests.swift; sourceTree = "<group>"; };
 		A3B34F2E4A7B27C96831AB24 /* CommunityPointsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunityPointsService.swift; sourceTree = "<group>"; };
 		A5838C1AEB6D4797976C6C65 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		A5B111F33F9BAEDF35E4BD16 /* MinerSupervisor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinerSupervisor.swift; sourceTree = "<group>"; };
@@ -678,6 +682,7 @@
 				D12899BD6300ED21BCE6187E /* CampaignMergeEngine.swift */,
 				8ACF08613C4DC075CA132ED1 /* CampaignService.swift */,
 				E8AA7E5479C3A8C70111FF9A /* CampaignStore.swift */,
+				150DA97EC15BAA3B90DB54A4 /* ChannelLivenessCache.swift */,
 				8602894B99CE1D0D592B2767 /* ClaimService.swift */,
 				A3B34F2E4A7B27C96831AB24 /* CommunityPointsService.swift */,
 				CA4CEDB6297B13DCF0FDD8A7 /* DropEventsService.swift */,
@@ -757,6 +762,7 @@
 				B2CF7310267C5DADE83E23CE /* CampaignMetadataSharingTests.swift */,
 				E3C6E1FF09A07505FAF56FDF /* CampaignStateTests.swift */,
 				573073692F55774FD9E03776 /* CampaignTabRoutingTests.swift */,
+				A174CB07DBB49229CB2E6678 /* ChannelLivenessCacheTests.swift */,
 				AA337D3B4BF522E65F51DB29 /* ClaimServiceTests.swift */,
 				9801029B6FF0AE01627EE293 /* DiscordAPIRoutesTests.swift */,
 				6E3DEEF3F6DA2049777E3722 /* DropsMinerCampaignFilterTests.swift */,
@@ -1054,6 +1060,7 @@
 				9C994CF88FA618EC31177E03 /* CampaignStore.swift in Sources */,
 				A0C3867E4CC1EF8C66917F4E /* CampaignViewData.swift in Sources */,
 				452068B427E46A9AE589897A /* Channel.swift in Sources */,
+				88AE50BCEB7043FF5A148BA0 /* ChannelLivenessCache.swift in Sources */,
 				8678D2740E99E270510283CC /* ClaimService.swift in Sources */,
 				D42560FD670CBBA895C4A0B0 /* CommunityPointsService.swift in Sources */,
 				C660191D720F6365F91706D5 /* DebugTrace.swift in Sources */,
@@ -1224,6 +1231,7 @@
 				7E402CB3D782A91832915A52 /* CampaignMetadataSharingTests.swift in Sources */,
 				374303964418BDD39C426435 /* CampaignStateTests.swift in Sources */,
 				2D011D07DA750AF66BFC2C25 /* CampaignTabRoutingTests.swift in Sources */,
+				B5B0F32E53B7AE0C8F300E5F /* ChannelLivenessCacheTests.swift in Sources */,
 				D421E764CC96327AB1098DCF /* ClaimServiceTests.swift in Sources */,
 				DD4BEB71DFE7F4289A2EE792 /* DiscordAPIRoutesTests.swift in Sources */,
 				438B6472439EF51F023C7F1D /* DropsMinerCampaignFilterTests.swift in Sources */,
@@ -1351,7 +1359,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026072909;
+				CURRENT_PROJECT_VERSION = 2026072910;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;
@@ -1362,7 +1370,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.35.1;
+				MARKETING_VERSION = 1.35.11;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -1512,7 +1520,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026072909;
+				CURRENT_PROJECT_VERSION = 2026072910;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;
@@ -1523,7 +1531,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.35.1;
+				MARKETING_VERSION = 1.35.11;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
