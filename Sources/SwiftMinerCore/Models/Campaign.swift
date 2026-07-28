@@ -39,7 +39,23 @@ public struct Game: Codable, Sendable, Identifiable, Equatable {
         self.id = id
         self.name = name
         self.slug = slug
-        self.boxArtURL = boxArtURL
+        // Normalise here rather than at each parse site. Campaigns are persisted to disk and
+        // restored verbatim, so a URL captured at Twitch's small default before box-art sizing
+        // existed would otherwise keep rendering soft forever — clearing the image cache only
+        // re-downloads the same low-resolution asset.
+        self.boxArtURL = TwitchBoxArt.sized(boxArtURL)
+    }
+
+    /// Restored campaigns run through the same normalisation as freshly parsed ones, so a
+    /// stale on-disk cache upgrades itself instead of needing a migration.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try container.decode(String.self, forKey: .id),
+            name: try container.decode(String.self, forKey: .name),
+            slug: try container.decodeIfPresent(String.self, forKey: .slug),
+            boxArtURL: try container.decodeIfPresent(URL.self, forKey: .boxArtURL)
+        )
     }
 
     /// Whether this game represents a global/special event category that can host drops

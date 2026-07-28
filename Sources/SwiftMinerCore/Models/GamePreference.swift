@@ -28,9 +28,24 @@ public struct GamePreference: Codable, Sendable, Identifiable, Equatable {
     ) {
         self.gameId = gameId
         self.gameName = gameName
-        self.boxArtURL = Self.durableArtworkURL(boxArtURL)
+        self.boxArtURL = TwitchBoxArt.sized(Self.durableArtworkURL(boxArtURL))
         self.customArtworkURL = customArtworkURL
         self.state = state
+    }
+
+    /// Preferences live in `@AppStorage` and outlive app updates, so one written before box-art
+    /// sizing existed still holds Twitch's small default. Decoding through the initialiser
+    /// upgrades it in place — without this, prioritised tiles stay soft on an existing install
+    /// while a fresh one looks correct.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            gameId: try container.decode(String.self, forKey: .gameId),
+            gameName: try container.decode(String.self, forKey: .gameName),
+            boxArtURL: try container.decodeIfPresent(URL.self, forKey: .boxArtURL),
+            customArtworkURL: try container.decodeIfPresent(URL.self, forKey: .customArtworkURL),
+            state: try container.decode(PreferenceState.self, forKey: .state)
+        )
     }
 
     /// `boxArtURL` is written from whatever artwork the UI had resolved at the time,
