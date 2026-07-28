@@ -224,6 +224,7 @@ public actor CampaignDataService {
     public static func clearAllCachedDropData() {
         CampaignDiskCache.clearAll()
         InventoryDiskCache.clearAll()
+        CampaignDetailsDiskCache.clearAll()
     }
     
     // MARK: - Private: Cache Management

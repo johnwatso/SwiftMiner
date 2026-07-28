@@ -6,6 +6,7 @@ import TipKit
 struct MinersOverviewView: View {
     @Environment(NavigationModel.self) private var navigation
     private var settings: Settings { .shared }
+    private var twitchAvatars: TwitchAvatarStore { .shared }
     @AppStorage("minersRecoveryHistoryExpanded", store: Settings.appStorageStore)
     private var recoveryHistoryExpanded = false
     @State private var selectedActivitySummary: MinerManager.MinerActivitySummary?
@@ -59,6 +60,13 @@ struct MinersOverviewView: View {
             if settings.swiftBotEnabled, miners.contains(where: { $0.ownerDiscordId != nil }) {
                 Task { await navigation.refreshDiscordDisplayNames() }
             }
+            // Twitch pictures come from a per-account lookup, so this is detached
+            // for the same reason and re-checked at most once a day per miner.
+            Task { await refreshTwitchAvatars() }
+        }
+        .onChange(of: settings.minerAvatarSource) { _, _ in
+            // Switching to Twitch can need pictures the Discord-only pass skipped.
+            Task { await refreshTwitchAvatars() }
         }
         .onChange(of: miners.map(\.id)) { _, _ in
             syncSelection()
@@ -142,7 +150,7 @@ struct MinersOverviewView: View {
                     MinerOperatorHeader(
                         miner: miner,
                         health: health,
-                        discordAvatarURL: discordAvatarURL(for: miner),
+                        avatarURL: avatarURL(for: miner),
                         menu: AnyView(
                             HStack(spacing: 8) {
                                 if miner.needsAuth || miner.status == .blockedAccountNotLinked {
@@ -240,12 +248,38 @@ struct MinersOverviewView: View {
         )
     }
 
+    /// The picture shown in the miner header, from whichever service the
+    /// Appearance setting prefers — falling back to the other one, and to the
+    /// initial when neither has anything yet.
+    private func avatarURL(for miner: MinerManager.ManagedMiner) -> URL? {
+        settings.minerAvatarSource.resolve(
+            discord: discordAvatarURL(for: miner),
+            twitch: twitchAvatars.url(forAccountId: miner.accountId)
+        )
+    }
+
     /// Discord avatar for the account this miner is linked to. Resolved from
     /// the SwiftBot user cache, which only holds anything once
     /// `refreshDiscordDisplayNames()` has run.
     private func discordAvatarURL(for miner: MinerManager.ManagedMiner) -> URL? {
         guard let discordId = miner.ownerDiscordId else { return nil }
         return navigation.discordUsersById[discordId]?.avatarURL
+    }
+
+    /// Miners whose Twitch picture is worth a lookup: all of them when Twitch is
+    /// the chosen source, otherwise only the ones with no Discord picture to show,
+    /// so an all-Discord setup spends nothing on requests it will never draw.
+    private var minersNeedingTwitchAvatar: [MinerManager.ManagedMiner] {
+        guard settings.minerAvatarSource == .discord else { return miners }
+        return miners.filter { discordAvatarURL(for: $0) == nil }
+    }
+
+    private func refreshTwitchAvatars() async {
+        twitchAvatars.pruneEntries(keepingAccountIds: Set(miners.map(\.accountId)))
+        await twitchAvatars.refreshIfNeeded(
+            miners: minersNeedingTwitchAvatar,
+            manager: navigation.minerManager
+        )
     }
 
     private func refreshSelectedActivitySummary(for minerId: String) async {
@@ -629,6 +663,11 @@ struct MinersOverviewView: View {
 
     private func pendingItems(for miner: MinerManager.ManagedMiner, campaigns: [Campaign]) -> [PendingItem] {
         var items: [PendingItem] = []
+
+        // Every item below is derived from campaign data, so none of it is
+        // trustworthy while that data is the launch-time disk seed. Matches the
+        // badge rule in MinerAttention.hasPendingAttention.
+        guard !miner.campaignsAreProvisional else { return items }
 
         // Account-link issues (one per game)
         let allLinkIssues = prioritisedLinkIssues(for: miner, includeIgnored: true)

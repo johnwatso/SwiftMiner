@@ -85,7 +85,8 @@ final class MiningReliabilityChaosTests: XCTestCase {
             session: session,
             requestCoordinator: coordinator,
             runtimeClock: clock.clock,
-            retryJitterFactor: { 1 }
+            retryJitterFactor: { 1 },
+            persistsCampaignCaches: false
         )
         let attempts = LockedInt()
         MockURLProtocol.requestHandler = { request in
@@ -119,7 +120,8 @@ final class MiningReliabilityChaosTests: XCTestCase {
             session: session,
             requestCoordinator: coordinator,
             runtimeClock: clock.clock,
-            retryJitterFactor: { 1 }
+            retryJitterFactor: { 1 },
+            persistsCampaignCaches: false
         )
         let second = TwitchAPIClient(
             authService: authService,
@@ -127,7 +129,8 @@ final class MiningReliabilityChaosTests: XCTestCase {
             session: session,
             requestCoordinator: coordinator,
             runtimeClock: clock.clock,
-            retryJitterFactor: { 1 }
+            retryJitterFactor: { 1 },
+            persistsCampaignCaches: false
         )
         let attempts = LockedInt()
         MockURLProtocol.requestHandler = { request in
@@ -161,7 +164,8 @@ final class MiningReliabilityChaosTests: XCTestCase {
             session: session,
             requestCoordinator: coordinator,
             runtimeClock: clock.clock,
-            retryJitterFactor: { 1 }
+            retryJitterFactor: { 1 },
+            persistsCampaignCaches: false
         )
         MockURLProtocol.stubError = URLError(.networkConnectionLost)
         let service = ClaimService(
@@ -200,7 +204,8 @@ final class MiningReliabilityChaosTests: XCTestCase {
             session: session,
             requestCoordinator: coordinator,
             runtimeClock: clock.clock,
-            retryJitterFactor: { 1 }
+            retryJitterFactor: { 1 },
+            persistsCampaignCaches: false
         )
         let service = ClaimService(
             apiClient: client,
@@ -241,7 +246,8 @@ final class MiningReliabilityChaosTests: XCTestCase {
                 session: session,
                 requestCoordinator: coordinator,
                 runtimeClock: clock.clock,
-                retryJitterFactor: { 1 }
+                retryJitterFactor: { 1 },
+                persistsCampaignCaches: false
             )
         }
         let attempts = LockedInt()

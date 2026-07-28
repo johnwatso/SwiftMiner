@@ -119,6 +119,14 @@ struct GeneralSettingsView: View {
 
 struct AppearanceSettingsView: View {
     @Bindable var settings: Settings
+    @Environment(NavigationModel.self) private var navigation
+    @State private var artworkRefreshState: ArtworkRefreshState = .idle
+
+    private enum ArtworkRefreshState: Equatable {
+        case idle
+        case refreshing
+        case finished
+    }
 
     var body: some View {
         Form {
@@ -126,8 +134,47 @@ struct AppearanceSettingsView: View {
                 Toggle("Use Steam artwork for game images", isOn: $settings.preferSteamArtwork)
                     .minerTip(SteamArtworkTip())
                 SettingsSecondaryText("Falls back to Twitch artwork when a game is not found on Steam.")
+
+                LabeledContent("Cached Artwork") {
+                    HStack(spacing: 8) {
+                        Button("Clear and Redownload") {
+                            Task { await refreshArtwork() }
+                        }
+                        .disabled(artworkRefreshState == .refreshing)
+
+                        switch artworkRefreshState {
+                        case .refreshing:
+                            ProgressView()
+                                .controlSize(.small)
+                                .accessibilityLabel("Redownloading artwork")
+                        case .finished:
+                            // Transient confirmation rather than an alert: the action
+                            // is recoverable and interrupting the user to acknowledge
+                            // a cache refresh would be disproportionate.
+                            Label("Updated", systemImage: "checkmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                                .font(.callout)
+                                .transition(.opacity)
+                        case .idle:
+                            EmptyView()
+                        }
+                    }
+                }
+                SettingsSecondaryText("Discards downloaded game images and fetches them again. Artwork you uploaded yourself is kept.")
             } header: {
                 Text("Artwork")
+            }
+
+            Section {
+                Picker("Take pictures from", selection: $settings.minerAvatarSource) {
+                    ForEach(MinerAvatarSource.allCases) { source in
+                        Text(source.label).tag(source)
+                    }
+                }
+                .frame(maxWidth: 320)
+                SettingsSecondaryText(settings.minerAvatarSource.detail)
+            } header: {
+                Text("Miner Pictures")
             }
 
             Section {
@@ -155,6 +202,30 @@ struct AppearanceSettingsView: View {
         .padding(.horizontal, 24)
         .padding(.bottom, 20)
         .padding(.top, 10)
+    }
+
+    /// Clears every derived artwork cache and pulls fresh images.
+    ///
+    /// Order matters: the stale preference links go first, so nothing re-reads a
+    /// dead cache path while the images are being refetched.
+    private func refreshArtwork() async {
+        withAnimation { artworkRefreshState = .refreshing }
+
+        settings.clearCachedArtworkLinks()
+
+        let coordinator = navigation.minerManager.dataCoordinator
+        await CampaignArtworkCache.shared.clearCache()
+        await coordinator.clearSteamArtworkCache()
+        await coordinator.refreshAll()
+        _ = await coordinator.allCampaigns(preferSteamArtwork: settings.preferSteamArtwork)
+        NotificationCenter.default.post(name: .dropsCampaignsDidUpdate, object: coordinator)
+
+        withAnimation { artworkRefreshState = .finished }
+
+        // Let the confirmation stand long enough to read, then return the row to
+        // rest so it doesn't imply a permanent state.
+        try? await Task.sleep(for: .seconds(3))
+        withAnimation { artworkRefreshState = .idle }
     }
 
     private var simplerVisualEffectsBinding: Binding<Bool> {

@@ -68,7 +68,7 @@ final class AggregatedCampaignDataServiceTests: XCTestCase {
 
     private func makeCampaignDataService(accountId: String) async -> CampaignDataService {
         let authService = TwitchAuthService(clientId: "test_client", tokenStore: TestTokenStore())
-        let apiClient = TwitchAPIClient(authService: authService, clientId: "test_client", session: .shared)
+        let apiClient = TwitchAPIClient(authService: authService, clientId: "test_client", session: .shared, persistsCampaignCaches: false)
         let inventoryService = InventoryService(apiClient: apiClient)
         await inventoryService.setAccountId(accountId)
         return CampaignDataService(apiClient: apiClient, inventoryService: inventoryService, accountId: accountId)

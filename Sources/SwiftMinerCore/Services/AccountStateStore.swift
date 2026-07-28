@@ -70,6 +70,34 @@ public final class AccountStateStore: Identifiable {
         stopAutoRefresh()
     }
 
+    /// Populates drop states from cached campaigns at launch, so progress figures
+    /// aren't zero for the ~60s before the first hydration lands.
+    ///
+    /// Needs no cache of its own: `DropState` is derived entirely from campaigns
+    /// plus an inventory snapshot, and both of those are already on disk. This
+    /// mirrors the mapping in `DropsService.fetchDropStates` against caller-supplied
+    /// campaigns that have had the cached inventory merged in.
+    ///
+    /// Leaves `lastUpdated` nil — nothing has been verified with Twitch yet, and
+    /// claiming otherwise would misreport freshness.
+    public func seed(from campaigns: [Campaign]) {
+        guard dropStates.isEmpty else { return }
+
+        dropStates = campaigns.flatMap { campaign in
+            campaign.drops.map { drop in
+                DropState(
+                    dropId: drop.id,
+                    accountId: accountId,
+                    progressMinutes: drop.progress?.currentMinutes ?? 0,
+                    requiredMinutes: drop.requiredMinutes,
+                    isClaimed: drop.isClaimed,
+                    isEligible: campaign.isAccountConnected,
+                    lastUpdated: drop.progress?.lastUpdated ?? Date()
+                )
+            }
+        }
+    }
+
     // MARK: - Refresh
     
     public func refresh(forceRefresh: Bool = false) async {

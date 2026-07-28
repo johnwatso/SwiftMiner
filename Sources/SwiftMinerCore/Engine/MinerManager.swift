@@ -32,6 +32,11 @@ public final class MinerManager {
         public var currentCampaignId: String?
         public var streamOverrideLogin: String?
         public var allCampaigns: [Campaign] = []
+        /// True while `allCampaigns` holds disk-cached data seeded at launch rather
+        /// than a live fetch. Lets the UI render immediately without treating stale
+        /// campaigns as grounds for nagging the user (see `MinerAttention`). Cleared
+        /// the first time the engine pushes a real fetch.
+        public var campaignsAreProvisional: Bool = false
         public var dropsClaimed: Int
         public var isRunning: Bool
         public var priorityGames: [String]
@@ -755,6 +760,13 @@ public final class MinerManager {
                 miners[idx].stateStore = stateStore
             }
 
+            await seedCampaignsFromDiskCache(
+                minerId: minerId,
+                accountId: account.id,
+                inventoryService: inventoryService
+            )
+            await restoreClaimCountFromLedger(minerId: minerId, accountId: account.id)
+
             // Hosted unit tests create fake accounts for state assertions. Do not
             // turn those fixtures into background Twitch sessions. Production state
             // hydration is intentionally delayed so mining gets first use of the
@@ -768,7 +780,88 @@ public final class MinerManager {
         engineSetupTasks[minerId] = setupTask
         return minerId
     }
-    
+
+    /// Paints the miner's campaign list from disk at launch so the Miners tab,
+    /// the queue and the projections aren't blank while the first poll runs.
+    ///
+    /// Deliberately seeds only the UI-facing copy on `ManagedMiner`, never
+    /// `MinerEngine.allCampaigns`. The engine's copy drives real decisions —
+    /// candidate selection, claim attempts, inventory merges — and must not act
+    /// on campaigns that may have expired or been claimed elsewhere since the
+    /// cache was written. The engine overwrites this copy through
+    /// `updateMiner(allCampaigns:)` on its first successful fetch, so the seed
+    /// needs no separate invalidation.
+    ///
+    /// Costs no Twitch requests, which matters: state hydration is deliberately
+    /// held back at launch so mining gets first call on the request budget.
+    private func seedCampaignsFromDiskCache(
+        minerId: String,
+        accountId: String,
+        inventoryService: InventoryService
+    ) async {
+        // Reads the inventory disk cache when nothing is in memory, so claimed
+        // and in-progress drops are reflected rather than showing everything at
+        // zero. InventoryService is an actor, so this decode is already off-main.
+        let snapshot = await inventoryService.currentSnapshot()
+
+        // The campaign cache is megabytes per account and this type is
+        // @MainActor, so decoding it here would swap a blank minute for a launch
+        // hitch. Read, decode and merge on a background executor; only the
+        // assignment comes back to the main actor.
+        let seeded = await Task.detached(priority: .userInitiated) {
+            // A cache old enough to be mostly expired campaigns is worse than an
+            // empty list — it would paint a wall of dead work on launch.
+            guard CampaignDiskCache.isValid(accountId: accountId, maxAge: Self.campaignSeedMaxAge) else {
+                return [Campaign]()
+            }
+            let cached = CampaignDiskCache.load(accountId: accountId)
+            guard !cached.isEmpty else { return [Campaign]() }
+            return snapshot.map { DropsService.mergeInventory($0, into: cached) } ?? cached
+        }.value
+
+        guard !seeded.isEmpty else { return }
+
+        // The first live fetch may have landed while the decode was running.
+        guard let idx = miners.firstIndex(where: { $0.id == minerId }),
+              miners[idx].allCampaigns.isEmpty else { return }
+
+        miners[idx].allCampaigns = seeded
+        miners[idx].campaignsAreProvisional = true
+
+        // The drop-state ledger is derived from exactly this data and has no disk
+        // cache of its own, so seed it from the same merge rather than leaving
+        // progress at zero until hydration runs a minute from now.
+        miners[idx].stateStore?.seed(from: seeded)
+
+        onMinersChanged?()
+    }
+
+    /// Restores today's claim count from the earning ledger.
+    ///
+    /// `dropsClaimed` is only ever incremented in-session, but the menu bar renders
+    /// the sum of it as "drops claimed today" — so every relaunch silently reset the
+    /// day's figure to zero and under-reported for the rest of the day. The ledger
+    /// already records each claim, so the honest number is on disk; this just reads
+    /// it back. Scoped to the start of today to match the label, not lifetime.
+    private func restoreClaimCountFromLedger(minerId: String, accountId: String) async {
+        guard let earningLedgerStore else { return }
+
+        let startOfToday = Calendar.current.startOfDay(for: Date())
+        let summary = await earningLedgerStore.summary(for: accountId, since: startOfToday)
+        guard summary.claimedDrops > 0 else { return }
+
+        // Never clobber claims this session already counted.
+        guard let idx = miners.firstIndex(where: { $0.id == minerId }),
+              miners[idx].dropsClaimed == 0 else { return }
+
+        miners[idx].dropsClaimed = summary.claimedDrops
+        onMinersChanged?()
+    }
+
+    /// How stale a campaign cache may be and still be worth showing at launch.
+    /// `nonisolated` so the background seed decode can read it.
+    nonisolated private static let campaignSeedMaxAge: TimeInterval = 24 * 60 * 60
+
     /// Remove an account from management
     public func removeAccount(minerId: String) async {
         guard let miner = getMiner(id: minerId) else { return }
@@ -857,6 +950,31 @@ public final class MinerManager {
         engines[minerId]
     }
     
+    /// Resolve the Twitch profile picture for a miner's own account.
+    ///
+    /// Goes through the miner's engine client so the request carries that account's
+    /// token — Helix `/users` with no parameters answers for whoever is authenticated.
+    /// Works whether or not the miner is running, since the account is set on the
+    /// client during engine setup. Best effort: any failure returns `nil` and leaves
+    /// the caller with whatever picture it had cached.
+    public func fetchTwitchProfileImageURL(minerId: String) async -> URL? {
+        guard !SwiftMinerRuntime.isRunningTests, let engine = engines[minerId] else { return nil }
+
+        // The account is applied to the API client inside the setup task, so a
+        // lookup issued right after launch has to wait for it.
+        if let setupTask = engineSetupTasks[minerId] {
+            await setupTask.value
+        }
+
+        do {
+            let user = try await engine.getAPIClient().getCurrentUser()
+            return user.profileImageUrl
+        } catch {
+            Logger.engine.debug("Twitch profile picture lookup failed for miner \(minerId): \(error)")
+            return nil
+        }
+    }
+
     /// Get a structured activity summary for a specific miner (for UI display).
     /// This provides a clean, structured snapshot of miner state without requiring
     /// the UI to parse raw engine logs.

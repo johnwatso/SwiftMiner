@@ -79,10 +79,10 @@ struct MinerOperatorPresentation {
 
         var campaigns = miner.allCampaigns.filter { campaign in
             guard campaign.status != .disabled, !campaign.isLikelyInternalTestCampaign else { return false }
+            let gameId = normalizedKey(campaign.game.id)
+            let gameName = normalizedKey(campaign.game.name)
+            let isPriority = prioritySet.contains(gameId) || prioritySet.contains(gameName)
             if campaign.id != snapshot.now.campaignId {
-                let gameId = normalizedKey(campaign.game.id)
-                let gameName = normalizedKey(campaign.game.name)
-                let isPriority = prioritySet.contains(gameId) || prioritySet.contains(gameName)
                 guard !excludedSet.contains(gameId), !excludedSet.contains(gameName) else { return false }
                 guard includesBadgeAndEmoteCampaigns || !campaign.hasOnlyBadgesOrEmotes else { return false }
 
@@ -103,12 +103,12 @@ struct MinerOperatorPresentation {
 
             // A queue lists what is coming up. Campaigns that are finished, or
             // that can't be attempted until the game account is linked, are not
-            // queued work — the header would say "Nothing queued" while rows sat
-            // below it. Priority games used to bypass the claimed check above and
-            // linger here forever; unlinked ones are already surfaced by the
-            // Pending reminders section, so they'd only be duplicated.
+            // queued work unless the user explicitly prioritised that game. Keeping
+            // prioritised campaigns visible gives their "Needs setup" row somewhere
+            // actionable to live; unrelated unlinked campaigns remain reminders only.
             if campaign.id != snapshot.now.campaignId {
-                guard status != .completed, status != .requiresLink else { return false }
+                guard status != .completed,
+                      status != .requiresLink || isPriority else { return false }
             }
 
             return status != .expired || campaign.endDate >= recentEndCutoff
@@ -209,15 +209,15 @@ struct MinerOperatorPresentation {
 struct MinerOperatorHeader: View {
     let miner: MinerManager.ManagedMiner
     let health: MinerHealthSnapshot
-    /// Avatar of the Discord account this miner is linked to, when there is
-    /// one. Falls back to the initial when the miner is unlinked or SwiftBot
-    /// hasn't resolved the user yet.
-    var discordAvatarURL: URL?
+    /// Profile picture for this miner, from whichever service `Settings.minerAvatarSource`
+    /// resolved it to. Falls back to the initial when neither service has one — an
+    /// unlinked miner whose Twitch picture hasn't been fetched yet, say.
+    var avatarURL: URL?
     let menu: AnyView
 
     var body: some View {
         HStack(spacing: 14) {
-            CachedDiscordAvatar(url: discordAvatarURL) {
+            CachedAvatarImage(url: avatarURL) {
                 initialAvatar
             }
             .frame(width: 46, height: 46)

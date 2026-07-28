@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SwiftMiner 1.35 - Release Notes</title>
-  <meta name="description" content="Release notes for SwiftMiner 1.35: restores Twitch drop claiming, credited watch progress and claim history, and rebuilds the Miners tab around a macOS Tahoe operator view.">
+  <meta name="description" content="Release notes for SwiftMiner 1.35: restores Twitch drop claiming and credited watch progress, rebuilds the Miners tab, and improves launch performance, campaign artwork and documentation.">
   <link rel="canonical" href="https://swiftminer.app/release-notes/1.35.html">
   <meta name="robots" content="index, follow">
   <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
@@ -36,8 +36,8 @@
 <body>
   <main>
     <h1>SwiftMiner 1.35</h1>
-    <p class="meta">Version 1.35 · Unreleased</p>
-    <p class="intro">Twitch drop claims were landing but being read back as failures, so claim counts, history and notifications all stayed empty. This release repairs the claim path end to end, restores credited watch progress, and rebuilds the Miners tab around a macOS Tahoe operator view.</p>
+    <p class="meta">Version 1.35 · Build 2026072814</p>
+    <p class="intro">Twitch drop claims were landing but being read back as failures, so claim counts, history and notifications all stayed empty. This release repairs the claim path end to end, restores credited watch progress, rebuilds the Miners tab around a macOS Tahoe operator view, and makes campaign data and artwork available much sooner after launch.</p>
 
     <section class="rose">
       <h2><span class="badge" aria-hidden="true">🎁</span> Drop Claiming Restored</h2>
@@ -71,6 +71,7 @@
         <li>Heartbeat fallback behaviour is preserved, so a miner keeps reporting watch time when the primary beacon path is unavailable.</li>
         <li>Progress is shown as verified watched minutes out of required minutes across every timed drop in a campaign, independent of channel or session.</li>
         <li>Live session timers and progress bars stay consistent between Overview and Miners rather than each keeping its own count.</li>
+        <li>The WebUI now uses the same reconciled progress as the app, including minutes retained in the miner's persisted ledger when Twitch omits older drops from its current inventory response. Required minutes and zero-minute rewards are handled consistently too.</li>
       </ul>
     </section>
 
@@ -83,6 +84,8 @@
         <li>Restyles the miner source list as a plain list with a soft selection pill, replacing the boxed, rule-separated list.</li>
         <li>Moves section headings to sentence case above their grouped content, with larger concentric corners and roomier spacing throughout.</li>
         <li>Shows the linked Discord account avatar in the miner header when one is available, falling back to a local initial.</li>
+        <li>Adds a Twitch profile picture option under Settings › Appearance, so a miner's header picture can come from its own Twitch account instead of Discord. Either choice falls back to the other service, then to the initial, and resolved pictures are cached so they appear immediately at launch.</li>
+        <li>Includes the selected avatar source in settings backups while keeping older backups compatible.</li>
         <li>Gives the current and upcoming campaign matching artwork, sized tall enough that the detail beside it fits within the artwork, with larger queue thumbnails and a vertical fallback at constrained widths.</li>
         <li>Matches the "Up next" heading weight to "Currently mining" now that the two columns share artwork size.</li>
       </ul>
@@ -99,16 +102,21 @@
         <li>Removes duplicated claim and status summaries that repeated information already shown elsewhere on the page.</li>
         <li>Campaign and progress refreshes at launch display Updating with a refresh symbol instead of prematurely reporting Up to Date.</li>
         <li>Waiting and eligibility states are reported honestly, and unlinked, non-prioritised campaigns are no longer presented as mineable.</li>
+        <li>The campaign queue no longer retains completed work. Prioritised games that still need account linking remain visible as actionable "Needs setup" rows, while unrelated unlinked campaigns stay out of the queue.</li>
       </ul>
     </section>
 
     <section class="green">
-      <h2><span class="badge" aria-hidden="true">🎯</span> Drops and Campaign Visibility</h2>
-      <p class="summary">Prioritised games stay where you expect them, and the dashboard counts reflect reality.</p>
+      <h2><span class="badge" aria-hidden="true">🎯</span> Campaign Visibility and Artwork</h2>
+      <p class="summary">Prioritised games stay where you expect them, the dashboard counts reflect reality, and artwork remains sharp and available across launches.</p>
       <ul>
         <li>A prioritised game now stays in the Drops feed for its whole run instead of disappearing once its rewards are all claimed, which read as the game going missing.</li>
         <li>"Campaigns in motion" counts campaigns a miner is actually watching, so a campaign one account has finished is still counted while another account continues mining it.</li>
         <li>Prioritised artwork stays visually stable when returning to Overview instead of replaying its placeholder crossfade.</li>
+        <li>Restores Twitch artwork for prioritised Overview cards from the launch cache and shares one persistent artwork cache with Drops, so game images survive relaunches.</li>
+        <li>Requests sharp 600×800 Twitch box art from both templated and fixed-size artwork URLs instead of stretching the soft 120×160 response.</li>
+        <li>Uses Twitch artwork by default and rejects Steam's successful-but-blank grey placeholder files, including old placeholders already on disk, so titles such as THE FINALS and Battlefield 6 no longer lose real artwork.</li>
+        <li>The Clear and Redownload Artwork action now clears the shared persistent image cache as well as stale preference links.</li>
       </ul>
     </section>
 
@@ -121,6 +129,19 @@
         <li>Resolves each source-row activity snapshot once per render instead of repeating the same work for every field that reads it.</li>
         <li>Refreshes the minute-level uptime display every 30 seconds rather than every second.</li>
         <li>Only requests Discord display names when a miner is actually linked, and no longer lets an unreachable companion service delay opening the Miners tab.</li>
+        <li>Restores campaign details, account-link state and recent progress from disk while the first live refresh runs, avoiding the cold-launch details fan-out without letting cached data drive mining.</li>
+        <li>Keeps persistent campaign-detail data isolated when a client changes Twitch accounts, and invalidates pre-claim details on disk immediately after a successful claim.</li>
+        <li>Centers animated refresh symbols on their visible glyph so they rotate in place instead of orbiting.</li>
+      </ul>
+    </section>
+
+    <section class="green">
+      <h2><span class="badge" aria-hidden="true">📚</span> Illustrated Help and Website</h2>
+      <p class="summary">The website and help centre now show the current app instead of relying on old or text-only guidance.</p>
+      <ul>
+        <li>Adds light and dark window screenshots for Overview, Miners, Drops, Activity Log, Discord, Game Rules and every Settings pane, placing 36 contextual illustrations across all 20 help articles.</li>
+        <li>Refreshes the landing-page screenshots, adds the Discord view and updates the group overview to show a real five-miner fleet.</li>
+        <li>Updates image dimensions, alternative text, README previews and screenshot cache versions so returning visitors receive the new captures.</li>
       </ul>
     </section>
 
@@ -129,8 +150,10 @@
       <p class="summary">Coverage for the paths that failed silently, so these regressions surface in tests rather than in production.</p>
       <ul>
         <li>Adds claim regression coverage for the current and legacy response fields, real success statuses, already-claimed instances, unrecognised payloads and GraphQL errors — written from real Twitch responses rather than from the parser, which is why the original fault went unnoticed.</li>
-        <li>Adds coverage for campaign ordering, cumulative progress, eligibility filtering, startup status and watch-beacon payload parity.</li>
+        <li>Adds coverage for campaign ordering, cumulative progress, WebUI parity, eligibility filtering, startup status, persistent campaign and artwork caches, account isolation, avatar fallback and watch-beacon payload parity.</li>
+        <li>Adds a DEBUG-only multi-miner fixture for authentic fleet screenshots; it is compiled out of Release builds.</li>
         <li>Removes unreachable miner views left behind by the detail rebuild.</li>
+        <li>Updates SwiftMiner to version 1.35 build 2026072814.</li>
       </ul>
     </section>
   </main>

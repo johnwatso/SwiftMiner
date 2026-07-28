@@ -3,14 +3,15 @@ import CryptoKit
 import Foundation
 import SwiftUI
 
-/// Disk- and memory-backed cache for Discord profile pictures.
+/// Disk- and memory-backed cache for miner profile pictures, from Discord or Twitch.
 ///
-/// Discord avatar URLs embed the avatar hash, so the URL changes whenever a user
-/// updates their picture — hashing the full URL gives a stable, change-aware cache
-/// key without any extra invalidation logic. Cached files live in the user's Caches
-/// directory so the OS can reclaim the space under pressure.
-actor DiscordAvatarCache {
-    static let shared = DiscordAvatarCache()
+/// Both services embed the picture's identity in its URL — Discord the avatar hash,
+/// Twitch a per-upload path — so the URL changes whenever a user swaps their picture.
+/// Hashing the full URL therefore gives a stable, change-aware cache key without any
+/// extra invalidation logic. Cached files live in the user's Caches directory so the
+/// OS can reclaim the space under pressure.
+actor AvatarImageCache {
+    static let shared = AvatarImageCache()
 
     /// Decoded images kept in memory to avoid re-reading/decoding from disk on every
     /// view appearance. Bounded by `NSCache`'s own eviction under memory pressure.
@@ -19,14 +20,18 @@ actor DiscordAvatarCache {
     /// In-flight downloads, so concurrent requests for the same avatar share one fetch.
     private var inFlight: [String: Task<NSImage?, Never>] = [:]
 
+    /// True once the pre-Twitch cache folder has been cleared this launch.
+    private var hasPrunedLegacyDirectory = false
+
     private var cacheDirectory: URL? {
         FileManager.default
             .urls(for: .cachesDirectory, in: .userDomainMask)
             .first?
-            .appendingPathComponent("SwiftMiner/DiscordAvatars", isDirectory: true)
+            .appendingPathComponent("SwiftMiner/Avatars", isDirectory: true)
     }
 
     func image(for url: URL) async -> NSImage? {
+        pruneLegacyDirectoryIfNeeded()
         let key = Self.key(for: url)
 
         if let cached = memory.object(forKey: key as NSString) {
@@ -81,16 +86,29 @@ actor DiscordAvatarCache {
         }
     }
 
+    /// Discards the Discord-only cache folder this one replaced. Its contents are
+    /// re-downloaded into the new folder on demand, so nothing is lost.
+    private func pruneLegacyDirectoryIfNeeded() {
+        guard !hasPrunedLegacyDirectory else { return }
+        hasPrunedLegacyDirectory = true
+
+        guard let legacy = FileManager.default
+            .urls(for: .cachesDirectory, in: .userDomainMask)
+            .first?
+            .appendingPathComponent("SwiftMiner/DiscordAvatars", isDirectory: true) else { return }
+        try? FileManager.default.removeItem(at: legacy)
+    }
+
     private static func key(for url: URL) -> String {
         let digest = SHA256.hash(data: Data(url.absoluteString.utf8))
         return digest.map { String(format: "%02x", $0) }.joined()
     }
 }
 
-/// Renders a Discord avatar through `DiscordAvatarCache`, falling back to `fallback`
+/// Renders a profile picture through `AvatarImageCache`, falling back to `fallback`
 /// while loading or when no URL/image is available. A cached avatar appears instantly
 /// on subsequent shows — no re-download and no network flicker.
-struct CachedDiscordAvatar<Fallback: View>: View {
+struct CachedAvatarImage<Fallback: View>: View {
     let url: URL?
     @ViewBuilder var fallback: () -> Fallback
 
@@ -112,7 +130,7 @@ struct CachedDiscordAvatar<Fallback: View>: View {
                 image = nil
                 return
             }
-            image = await DiscordAvatarCache.shared.image(for: url)
+            image = await AvatarImageCache.shared.image(for: url)
         }
     }
 }

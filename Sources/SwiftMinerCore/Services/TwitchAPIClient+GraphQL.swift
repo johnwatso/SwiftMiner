@@ -88,16 +88,97 @@ extension TwitchAPIClient {
         }
 
         let campaigns = enrichedActive + inactiveCampaigns
+        persistCampaignCachesIfNeeded()
         await traceGQLDebug { "[TwitchAPIClient] fetchDropCampaigns: \(campaigns.count) parsed successfully" }
         return campaigns
     }
-    
+
+    /// Restores the campaign-details and link-state caches from disk on first use.
+    ///
+    /// Without this, every cold launch re-fetched `DropCampaignDetails` for each of the
+    /// ~100 time-active campaigns, per account, through the 5-request-per-second global
+    /// gate — the bulk of the wait before mining starts.
+    ///
+    /// Existing in-memory entries always win: a live cycle's answer is never displaced by
+    /// a file. Loading is deferred until a login is known, because the cache keys embed it.
+    func loadPersistedCampaignCachesIfNeeded() {
+        guard persistsCampaignCaches, !hasLoadedPersistedCampaignCaches, !userLogin.isEmpty else { return }
+        hasLoadedPersistedCampaignCaches = true
+
+        let contents = CampaignDetailsDiskCache.load(userLogin: userLogin)
+        guard !contents.isEmpty else { return }
+
+        for (key, entry) in contents.details where campaignDetailsByKey[key] == nil {
+            campaignDetailsByKey[key] = CampaignDetailsCacheEntry(
+                campaign: entry.campaign,
+                expiresAt: entry.expiresAt
+            )
+        }
+        for (key, entry) in contents.linkStates where campaignLinkStateByKey[key] == nil {
+            campaignLinkStateByKey[key] = CampaignLinkStateEntry(
+                isAccountConnected: entry.isAccountConnected,
+                expiresAt: entry.expiresAt
+            )
+        }
+
+        Self.pruneCache(
+            &campaignDetailsByKey,
+            maxEntries: maxCampaignDetailsCacheEntries,
+            expiresAt: { $0.expiresAt }
+        )
+        Self.pruneCache(
+            &campaignLinkStateByKey,
+            maxEntries: maxCampaignDetailsCacheEntries,
+            expiresAt: { $0.expiresAt }
+        )
+
+        let restoredDetails = campaignDetailsByKey.count
+        let restoredLinkStates = campaignLinkStateByKey.count
+        Logger.campaigns.info(
+            "[CampaignDetailsDiskCache] Restored \(restoredDetails) campaign details, \(restoredLinkStates) link states"
+        )
+    }
+
+    /// Writes both caches out when they have gained anything since the last write. Called
+    /// once at the end of a campaign refresh, so a cycle costs a single write rather than
+    /// one per campaign, and an all-cache-hit cycle costs nothing.
+    func persistCampaignCachesIfNeeded() {
+        guard persistsCampaignCaches, campaignCachesNeedPersisting, !userLogin.isEmpty else { return }
+        campaignCachesNeedPersisting = false
+
+        CampaignDetailsDiskCache.save(
+            details: campaignDetailsByKey.mapValues {
+                CampaignDetailsDiskCache.DetailsEntry(campaign: $0.campaign, expiresAt: $0.expiresAt)
+            },
+            linkStates: campaignLinkStateByKey.mapValues {
+                CampaignDetailsDiskCache.LinkStateEntry(
+                    isAccountConnected: $0.isAccountConnected,
+                    expiresAt: $0.expiresAt
+                )
+            },
+            userLogin: userLogin
+        )
+    }
+
+    /// A successful claim changes the account-specific drop state held inside detailed
+    /// campaign responses. Remove that state from memory and disk immediately so quitting
+    /// before the next refresh cannot resurrect the pre-claim response on relaunch.
+    func invalidateCampaignDetailsAfterClaim() async {
+        campaignDetailsByKey.removeAll(keepingCapacity: true)
+        if persistsCampaignCaches {
+            campaignCachesNeedPersisting = true
+            persistCampaignCachesIfNeeded()
+        }
+        await SharedTwitchLookupCache.shared.removeAllCampaignMetadata()
+    }
+
     /// Fetch detailed campaign info including timeBasedDrops
     public func fetchCampaignDetails(
         campaignId: String,
         userLogin: String,
         basicCampaign: Campaign? = nil
     ) async throws -> Campaign {
+        loadPersistedCampaignCachesIfNeeded()
         let cacheKey = Self.cacheKey("campaign-details", userLogin, campaignId)
         let now = Date()
         if let cached = campaignDetailsByKey[cacheKey], cached.expiresAt > now {
@@ -134,6 +215,7 @@ extension TwitchAPIClient {
                     knownLinkStateExpiresAt: knownLinkState?.expiresAt
                 )
             )
+            campaignCachesNeedPersisting = true
             await traceGQLDebug { "[TwitchAPIClient] DropCampaignDetails shared metadata hit for \(campaignId)" }
             return campaign
         }
@@ -181,6 +263,7 @@ extension TwitchAPIClient {
             isAccountConnected: campaign.isAccountConnected,
             expiresAt: Date().addingTimeInterval(campaignLinkStateTTL)
         )
+        campaignCachesNeedPersisting = true
         await SharedTwitchLookupCache.shared.storeCampaignMetadata(
             Self.sharedCampaignMetadata(from: campaign),
             key: sharedKey,
@@ -461,8 +544,7 @@ extension TwitchAPIClient {
             )
         }
 
-        campaignDetailsByKey.removeAll(keepingCapacity: true)
-        await SharedTwitchLookupCache.shared.removeAllCampaignMetadata()
+        await invalidateCampaignDetailsAfterClaim()
 
         return ClaimDropResponse(
             id: claim["id"] as? String ?? "",

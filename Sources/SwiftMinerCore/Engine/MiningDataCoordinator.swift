@@ -84,6 +84,14 @@ public final class MiningDataCoordinator {
                 service: dataService
             )
 
+            // Registration is what makes the per-account disk caches reachable —
+            // `allCampaigns()` reads them through `accountServices`. The Drops view
+            // asks for campaigns as soon as a miner appears in the list, which is
+            // strictly before this Task runs, so its first read came back empty and
+            // it sat on the loading splash until the network refresh below finally
+            // posted an update. Telling it now lets it paint from disk immediately.
+            NotificationCenter.default.post(name: .dropsCampaignsDidUpdate, object: self)
+
             // Fake accounts created by hosted unit tests must remain inert.
             if !SwiftMinerRuntime.isRunningTests {
                 // Trigger initial aggregation

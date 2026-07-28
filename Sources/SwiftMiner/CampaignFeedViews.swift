@@ -837,26 +837,6 @@ struct CampaignStateBadge: View {
     }
 }
 
-@MainActor
-private final class CampaignArtworkImageCache {
-    static let shared = CampaignArtworkImageCache()
-
-    private let images = NSCache<NSURL, NSImage>()
-
-    func image(for url: URL) -> NSImage? {
-        images.object(forKey: url as NSURL)
-    }
-
-    func insert(_ image: NSImage, for url: URL) {
-        images.setObject(image, forKey: url as NSURL)
-    }
-}
-
-private struct LoadedCampaignArtwork {
-    let url: URL
-    let image: NSImage
-}
-
 struct CampaignArtworkBackground: View {
     let url: URL?
     let title: String
@@ -871,11 +851,8 @@ struct CampaignArtworkBackground: View {
     }
 
     private var displayedImage: NSImage? {
-        guard let resolvedArtworkURL else { return nil }
-        if loadedArtwork?.url == resolvedArtworkURL {
-            return loadedArtwork?.image
-        }
-        return CampaignArtworkImageCache.shared.image(for: resolvedArtworkURL)
+        guard loadedArtwork?.url == resolvedArtworkURL else { return nil }
+        return loadedArtwork?.image
     }
 
     var body: some View {
@@ -910,18 +887,7 @@ struct CampaignArtworkBackground: View {
             return
         }
 
-        if let cached = CampaignArtworkImageCache.shared.image(for: url) {
-            loadedArtwork = LoadedCampaignArtwork(url: url, image: cached)
-            failedArtworkURL = nil
-            return
-        }
-
-        let image: NSImage?
-        if url.isFileURL {
-            image = NSImage(contentsOf: url)
-        } else {
-            image = await fetchRemoteArtwork(from: url)
-        }
+        let image = await CampaignArtworkCache.shared.image(for: url)
 
         guard !Task.isCancelled else { return }
         guard let image else {
@@ -929,21 +895,8 @@ struct CampaignArtworkBackground: View {
             return
         }
 
-        CampaignArtworkImageCache.shared.insert(image, for: url)
         loadedArtwork = LoadedCampaignArtwork(url: url, image: image)
         failedArtworkURL = nil
-    }
-
-    private func fetchRemoteArtwork(from url: URL) async -> NSImage? {
-        var request = URLRequest(url: url)
-        request.cachePolicy = .returnCacheDataElseLoad
-
-        guard let (data, response) = try? await URLSession.shared.data(for: request),
-              let response = response as? HTTPURLResponse,
-              (200..<300).contains(response.statusCode) else {
-            return nil
-        }
-        return NSImage(data: data)
     }
 
     private var initialsOverlay: some View {

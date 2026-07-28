@@ -119,7 +119,8 @@ final class CampaignMetadataSharingTests: XCTestCase {
     func testCacheTTLsSeparateSharedMetadataFromMutableLinkState() async {
         let client = TwitchAPIClient(
             authService: TwitchAuthService(clientId: "test", tokenStore: InMemoryTokenStore()),
-            clientId: "test"
+            clientId: "test",
+            persistsCampaignCaches: false
         )
         let campaignCheckInterval: TimeInterval = 5 * 60
 

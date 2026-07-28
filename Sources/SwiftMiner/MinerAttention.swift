@@ -16,6 +16,13 @@ enum MinerAttention {
             return true
         }
 
+        // Campaign-derived reminders wait for a live fetch. The launch-time disk
+        // seed exists to fill the UI, not to nag: a day-old cache could ask the
+        // user to link a game they already linked, or sub to a finished campaign.
+        // Auth and blocked states above are miner state, not campaign state, so
+        // they still surface immediately.
+        guard !miner.campaignsAreProvisional else { return false }
+
         let priorityKeys = Set(
             settings.priorityGames
                 .map(normalizedGameKey)
