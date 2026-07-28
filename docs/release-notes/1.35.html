@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Release SwiftMiner 1.35 - Release Notes</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      margin: 0;
+      padding: 32px 20px 48px;
+      font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f4f6f8;
+      color: #0f1720;
+    }
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 28px;
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.86);
+      box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
+    }
+    h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
+    .meta { margin: 0 0 24px; color: #52606d; font-size: 14px; }
+    p { margin: 0 0 16px; }
+    a { color: #0a67a3; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #0b1015; color: #edf2f7; }
+      main {
+        background: rgba(15, 23, 32, 0.88);
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+      }
+      .meta { color: #9fb0c2; }
+      a { color: #73c3ff; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Release SwiftMiner 1.35</h1>
+    <p class="meta">Version 1.35</p>
+    <p>Release SwiftMiner 1.35</p>
+<p>SwiftMiner 1.35 restores the Twitch drop claim and watch-progress paths,<br>rebuilds the Miners tab around a macOS Tahoe operator view, makes health and<br>campaign state more truthful, and substantially improves cold-launch and<br>artwork behaviour.</p>
+<p>Drop claiming and claim history</p>
+<p>- Read Twitch's current claimDropRewards mutation response while retaining<br>compatibility with the legacy claimDropBenefit field.<br>- Recognise Twitch's real successful and already-claimed statuses so retries<br>are idempotent rather than reported as failures.<br>- Surface GraphQL messages, explicit null claim payloads and unexpected reply<br>keys instead of collapsing response changes into a generic invalid-response<br>error.<br>- Confirm ambiguous claims across several spaced inventory reads because<br>Twitch's inventory can lag behind a successful mutation.<br>- Record every claimed reward in the earning ledger, scoped per account, so<br>claim totals, history, notifications, Discord events, drop state and Twitch<br>inbox cleanup all run correctly without double-counting retries.<br>- Invalidate cached pre-claim campaign details in memory and on disk as soon<br>as a claim succeeds.</p>
+<p>Credited watch progress and reporting</p>
+<p>- Send Twitch's complete current minute-watched beacon payload, including the<br>stream category, client timestamp, live state and watched-minute fields,<br>while preserving GraphQL heartbeat fallback.<br>- Show cumulative verified minutes across every timed drop in a campaign and<br>share the same live timer/progress calculation between Overview and Miners.<br>- Bring WebUI progress into parity with the app by reconciling Twitch's partial<br>inventory response with the miner's persisted ledger, using the correct<br>required-minute total and excluding zero-minute rewards.</p>
+<p>Miners rebuilt for macOS Tahoe</p>
+<p>- Replace the selected miner page with an operator-focused identity and health<br>header, Now / Next / Then summary, resolved campaign queue, compact subsystem<br>checks, priority controls and secondary recovery diagnostics.<br>- Introduce reusable Tahoe cards, raised surfaces, section treatments, row<br>dividers and adaptive buttons, with coherent fallbacks on older macOS.<br>- Restyle the miner source list with a soft selection pill, roomier grouped<br>sections, sentence-case headings and larger concentric corners.<br>- Add matching artwork for current and upcoming campaigns, larger queue<br>thumbnails and a responsive vertical fallback at narrow widths.<br>- Add selectable Discord or Twitch miner pictures under Settings &gt; Appearance.<br>The other service is used as a fallback, then a local initial; resolved<br>pictures are cached for launch and the choice is included in settings backups.<br>- Remove completed campaigns from the queue. Prioritised games that still need<br>linking remain visible as actionable Needs setup rows, while unrelated<br>unlinked campaigns stay out of the queue.</p>
+<p>Honest health and campaign visibility</p>
+<p>- Report actual miner health -- healthy, idle, recovering, needs attention,<br>unresponsive, authentication required or blocked -- instead of repeating the<br>current campaign.<br>- Group uptime, last poll and health into equal-width responsive cells and<br>align subsystem status/timestamp columns.<br>- Reuse the status cluster on Overview with correctly scoped fleet averages and<br>a worst-state health summary instead of averaging categorical health states.<br>- Show Starting, Stopped and Updating at the correct times, plus honest waiting,<br>subscription and eligibility states.<br>- Keep prioritised campaigns visible in Drops for their whole active window,<br>even after their rewards are claimed, and count campaigns in motion from the<br>miners actually watching them.<br>- Keep prioritised artwork stable when returning to Overview rather than<br>replaying its placeholder transition.</p>
+<p>Artwork reliability</p>
+<p>- Request sharp 600x800 Twitch box art from both templated and fixed-size URLs<br>instead of stretching the default 120x160 image.<br>- Prefer Twitch artwork by default and reject Steam's successful-but-blank grey<br>placeholder images, including stale placeholders already cached on disk.<br>This restores real artwork for games such as THE FINALS and Battlefield 6.<br>- Restore prioritised Overview artwork from cached campaign data and share one<br>persistent artwork cache across Overview, Drops and miner details so images<br>survive relaunches and duplicate downloads are coalesced.<br>- Make Clear and Redownload Artwork invalidate the persistent image cache and<br>stale preference links as well as in-memory state.</p>
+<p>Launch performance and efficiency</p>
+<p>- Persist campaign details and account-link state with their original TTLs,<br>removing the cold-launch DropCampaignDetails fan-out for roughly 100 active<br>campaigns per account.<br>- Seed recent campaign and progress presentation from disk while the first live<br>refresh runs, without allowing cached data to make mining decisions.<br>- Keep campaign-detail files isolated when a Twitch client changes accounts and<br>preserve account-specific link and progress boundaries.<br>- Coalesce concurrent campaign refreshes for the same account and continue to<br>share safe campaign-global metadata across miners.<br>- Build off-screen miner sections lazily, resolve source-row snapshots once per<br>render, refresh minute-level uptime every 30 seconds and remove the scrolling<br>translucent header backdrop.<br>- Only resolve Discord display names for linked miners and detach that lookup so<br>an unavailable SwiftBot cannot delay the Miners tab.<br>- Centre animated refresh glyphs on their visible symbol so they rotate in<br>place rather than orbiting.</p>
+<p>Website and help</p>
+<p>- Refresh the Overview, Miners, Drops, Activity Log and Discord website captures<br>in light and dark mode, including an authentic five-miner fleet overview.<br>- Add light/dark screenshots for the main app, Game Rules and all Settings panes,<br>placing 36 contextual illustrations across all 20 help articles.<br>- Update screenshot dimensions, alternative text, README previews and the site<br>cache key so returning visitors receive the current images.<br>- Add a DEBUG-only multi-miner presentation fixture for genuine screenshots;<br>it is absent from Release builds.</p>
+<p>Validation and release metadata</p>
+<p>- Expand regression coverage for real claim responses, campaign ordering,<br>cumulative and WebUI progress, eligibility, startup states, persistent caches,<br>account isolation, avatar fallback and beacon payload parity.<br>- Pass the complete Xcode suite: 494 tests, 0 failures.<br>- Build successfully in Debug and universal Release configurations.<br>- Set MARKETING_VERSION to 1.35 and CURRENT_PROJECT_VERSION to 2026072814.<br>- Preserve the Sparkle feed URL and EdDSA public key; the ShipHook-owned appcast<br>remains on the currently published release until 1.35 is built and notarised.</p>
+    <p><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/bd0621675d7ad94fcadb375d9c90412da73aeeb3">bd06216</a></p>
+  </main>
+</body>
+</html>
