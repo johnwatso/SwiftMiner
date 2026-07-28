@@ -12,10 +12,28 @@ extension MinerManager {
     public static func evaluateGameStates(for miner: ManagedMiner, priorityGames: [String]) -> [MinerGameState] {
         if priorityGames.isEmpty { return [] }
 
+        // Smart strategy regularly schedules a campaign for a game that is not on the prioritised
+        // list — an earlier deadline wins. Evaluating prioritised games alone meant the miner
+        // described itself using games it was not working on, reporting "Drops complete" while it
+        // was actively hunting streams for the campaign it had just selected. Append the game the
+        // scheduler actually chose so the resolved state reflects real work.
+        var gamesToEvaluate = priorityGames
+        if let current = miner.allCampaigns.first(where: { $0.id == miner.currentCampaignId }) {
+            let currentName = current.gameName.lowercased()
+            let currentId = current.game.id.lowercased()
+            let alreadyCovered = priorityGames.contains {
+                let key = $0.lowercased()
+                return key == currentName || key == currentId
+            }
+            if !alreadyCovered {
+                gamesToEvaluate.append(current.gameName)
+            }
+        }
+
         var states: [MinerGameState] = []
         var seenGames = Set<String>()
 
-        for priorityGame in priorityGames {
+        for priorityGame in gamesToEvaluate {
             let gameKey = priorityGame.lowercased()
             guard seenGames.insert(gameKey).inserted else { continue }
 

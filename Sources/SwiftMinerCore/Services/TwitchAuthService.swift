@@ -210,7 +210,13 @@ public actor TwitchAuthService {
 
     private func performRefresh(account: Account) async throws -> String {
         guard !account.refreshToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw TwitchMinerError.tokenExpired
+            // No refresh grant: TDM cookie imports store an empty refresh token, and the web
+            // client ID returns expires_in = 0 so the device flow invents a 30-day deadline.
+            // Both fabricate `tokenExpiry`, so it must never be treated as proof the token is
+            // dead — Twitch is the only authority on that. Trusting the local deadline used to
+            // fail every refresh instantly, which took PubSub offline for the whole fleet while
+            // the token was still working perfectly for GraphQL.
+            return try await revalidateWithoutRefreshGrant(account: account)
         }
 
         var request = URLRequest(url: tokenURL)
@@ -250,6 +256,51 @@ public actor TwitchAuthService {
 
         return refreshedAccount.accessToken
     }
+
+    /// Re-establishes the real lifetime of a token that has no refresh grant.
+    ///
+    /// Twitch's validate endpoint is the only authority on whether such a token is still good.
+    /// A transport failure deliberately leaves the existing token in place: a network blip must
+    /// not be able to take a working account offline, and the request layer will surface a real
+    /// rejection on its own.
+    private func revalidateWithoutRefreshGrant(account: Account) async throws -> String {
+        let info: TokenValidationResponse
+        do {
+            info = try await validateTokenInternal(account.accessToken)
+        } catch let error as TwitchMinerError {
+            if case .authenticationFailed = error {
+                Logger.auth.warning("Token for \(account.username) rejected by Twitch and no refresh grant is available; re-authentication required")
+                throw TwitchMinerError.tokenExpired
+            }
+            Logger.auth.info("Could not reach Twitch to revalidate \(account.username); keeping the existing token")
+            return account.accessToken
+        } catch {
+            Logger.auth.info("Could not reach Twitch to revalidate \(account.username); keeping the existing token")
+            return account.accessToken
+        }
+
+        // expires_in = 0 means Twitch advertises no expiry for this token. Re-arm the local
+        // window so the account does not fall back into this path on every single request.
+        let remaining = info.expiresIn > 0 ? TimeInterval(info.expiresIn) : Self.assumedTokenLifetime
+        let renewed = Account(
+            id: account.id,
+            username: account.username,
+            nickname: account.nickname,
+            ownerDiscordId: account.ownerDiscordId,
+            accessToken: account.accessToken,
+            refreshToken: account.refreshToken,
+            tokenExpiry: Date().addingTimeInterval(remaining),
+            scopes: info.scopes.isEmpty ? account.scopes : info.scopes
+        )
+
+        try? await tokenStore.save(account: renewed)
+        self.currentAccount = renewed
+        Logger.auth.info("Revalidated \(account.username) with Twitch; token is still live")
+        return renewed.accessToken
+    }
+
+    /// Fallback window applied when Twitch reports no expiry for a token.
+    static let assumedTokenLifetime: TimeInterval = 30 * 24 * 3600
 
     /// Validates an OAuth token and returns user info.
     public func validateToken(_ token: String) async throws -> (userId: String, login: String) {
@@ -295,8 +346,16 @@ public actor TwitchAuthService {
         }
         let responseBody = String(data: data, encoding: .utf8) ?? "<non-utf8>"
         Logger.auth.debug("Validate response: status=\(httpResponse.statusCode) body=\(responseBody.prefix(200))")
+        // Only a 401 means the token itself is dead. Any other non-200 is a Twitch-side problem
+        // and must stay distinguishable, so callers can retry instead of dropping the account.
+        if httpResponse.statusCode == 401 {
+            throw TwitchMinerError.authenticationFailed("Token rejected by Twitch — \(responseBody.prefix(120))")
+        }
         guard httpResponse.statusCode == 200 else {
-            throw TwitchMinerError.authenticationFailed("Token validation failed: HTTP \(httpResponse.statusCode) — \(responseBody.prefix(120))")
+            throw TwitchMinerError.apiError(
+                statusCode: httpResponse.statusCode,
+                message: "Token validation failed — \(responseBody.prefix(120))"
+            )
         }
 
         return try JSONDecoder().decode(TokenValidationResponse.self, from: data)

@@ -47,6 +47,17 @@
   <main>
     <h1>SwiftMiner Release Notes</h1>
     <p class="meta">Recent Sparkle update history</p>
+    <h2>📡 <a href="./1.35.11.html">Version 1.35.11</a></h2>
+    <ul>
+      <li>Restores real-time drop progress for every account: a made-up 30-day token deadline was failing each refresh instantly and silently taking the live connection offline, even though the token was still valid.</li>
+      <li>Revalidates such tokens with Twitch instead of trusting an invented expiry, and surfaces a genuinely rejected token as an account needing reconnection.</li>
+      <li>Shares approved-channel liveness checks across miners, ending the 641 probes and 22 minutes of rate-limit backoff that idle miners were spending every few minutes.</li>
+      <li>Keeps the liveness cache window below the probe interval so an approved channel going live is still caught on the next tick.</li>
+      <li>Stops the followed-channel lookup retrying after failure, which was forcing a doomed token refresh every time.</li>
+      <li>Stops a miner waiting for a stream reporting Drops complete by including the game the scheduler actually chose.</li>
+      <li>Updates SwiftMiner to version 1.35.11 build 2026072910.</li>
+    </ul>
+
     <h2>🐛 <a href="./1.35.1.html">Version 1.35.1</a></h2>
     <ul>
       <li>Stops a miner reporting Subscription Required as its current state; subscription-gated campaigns count as finished work and stay visible as a mutable Pending reminder.</li>
