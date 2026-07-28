@@ -17,7 +17,7 @@ final class WatchSessionManagerTests: XCTestCase {
         mockSession = URLSession(configuration: config)
         
         authService = TwitchAuthService(clientId: "test_client", tokenStore: TestTokenStore())
-        apiClient = TwitchAPIClient(authService: authService, clientId: "test_client", session: mockSession)
+        apiClient = TwitchAPIClient(authService: authService, clientId: "test_client", session: mockSession, persistsCampaignCaches: false)
         
         // Use a very short interval for testing heartbeats (0.1s)
         manager = WatchSessionManager(apiClient: apiClient, urlSession: mockSession, heartbeatInterval: 0.1)

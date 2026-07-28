@@ -1,7 +1,9 @@
 // Shared campaign card state, artwork, and inspector components.
 import SwiftUI
 import SwiftMinerCore
+import AppKit
 import CoreImage
+import CryptoKit
 import TipKit
 
 enum CampaignCardState: String {
@@ -259,33 +261,147 @@ struct CampaignMinerInspectorPopover: View {
     }
 }
 
+/// Memory- and disk-backed cache shared by campaign artwork in Drops, Overview,
+/// and the miner detail UI. Hashing the full URL keeps different sources and image
+/// sizes isolated; Settings' Clear and Redownload action explicitly invalidates it.
+actor CampaignArtworkCache {
+    static let shared = CampaignArtworkCache()
+
+    private let memory = NSCache<NSString, NSImage>()
+    private var inFlight: [String: Task<NSImage?, Never>] = [:]
+    private let cacheDirectory: URL?
+    private let session: URLSession
+
+    init(cacheDirectory: URL? = nil, session: URLSession = .shared) {
+        self.cacheDirectory = cacheDirectory ?? FileManager.default
+            .urls(for: .cachesDirectory, in: .userDomainMask)
+            .first?
+            .appendingPathComponent("SwiftMiner/CampaignArtwork", isDirectory: true)
+        self.session = session
+    }
+
+    func image(for url: URL) async -> NSImage? {
+        let key = Self.key(for: url)
+
+        if let cached = memory.object(forKey: key as NSString) {
+            return cached
+        }
+
+        if url.isFileURL {
+            guard let image = NSImage(contentsOf: url) else { return nil }
+            memory.setObject(image, forKey: key as NSString)
+            return image
+        }
+
+        if let localURL = cacheDirectory?.appendingPathComponent(key),
+           FileManager.default.fileExists(atPath: localURL.path) {
+            if let image = NSImage(contentsOf: localURL) {
+                memory.setObject(image, forKey: key as NSString)
+                return image
+            }
+            // A partial or invalid image should never become a permanent miss.
+            try? FileManager.default.removeItem(at: localURL)
+        }
+
+        if let existing = inFlight[key] {
+            return await existing.value
+        }
+
+        let task = Task<NSImage?, Never> { [weak self] in
+            await self?.download(url: url, key: key)
+        }
+        inFlight[key] = task
+        let image = await task.value
+        inFlight[key] = nil
+        return image
+    }
+
+    func clearCache() {
+        memory.removeAllObjects()
+        if let cacheDirectory {
+            try? FileManager.default.removeItem(at: cacheDirectory)
+        }
+    }
+
+    private func download(url: URL, key: String) async -> NSImage? {
+        var request = URLRequest(url: url)
+        request.cachePolicy = .returnCacheDataElseLoad
+
+        guard let (data, response) = try? await session.data(for: request),
+              let response = response as? HTTPURLResponse,
+              (200..<300).contains(response.statusCode),
+              let image = NSImage(data: data) else {
+            return nil
+        }
+
+        if let localURL = cacheDirectory?.appendingPathComponent(key) {
+            try? FileManager.default.createDirectory(
+                at: localURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try? data.write(to: localURL, options: .atomic)
+        }
+        memory.setObject(image, forKey: key as NSString)
+        return image
+    }
+
+    private static func key(for url: URL) -> String {
+        let digest = SHA256.hash(data: Data(url.absoluteString.utf8))
+        return digest.map { String(format: "%02x", $0) }.joined()
+    }
+}
+
+struct LoadedCampaignArtwork {
+    let url: URL
+    let image: NSImage
+}
+
 struct CampaignCardArtwork: View {
     let url: URL?
     let tint: Color
+    @State private var loadedArtwork: LoadedCampaignArtwork?
 
     private var resolvedURL: URL? {
         url?.highResolutionArtworkURL
     }
 
+    private var displayedImage: NSImage? {
+        guard loadedArtwork?.url == resolvedURL else { return nil }
+        return loadedArtwork?.image
+    }
+
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .top) {
-                if let resolvedURL {
-                    AsyncImage(url: resolvedURL) { image in
-                        image
-                            .resizable()
-                            .interpolation(.high)
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
-                    } placeholder: {
-                        placeholder
-                    }
+                placeholder
+
+                if let displayedImage {
+                    Image(nsImage: displayedImage)
+                        .resizable()
+                        .interpolation(.high)
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
                 } else {
-                    placeholder
+                    Color.clear
                 }
             }
             .frame(width: geo.size.width, height: geo.size.height)
             .clipped()
+        }
+        .task(id: resolvedURL) {
+            guard let resolvedURL else {
+                loadedArtwork = nil
+                return
+            }
+
+            let image = await CampaignArtworkCache.shared.image(for: resolvedURL)
+            guard !Task.isCancelled else { return }
+            guard let image else {
+                loadedArtwork = nil
+                return
+            }
+
+            loadedArtwork = LoadedCampaignArtwork(url: resolvedURL, image: image)
         }
     }
 

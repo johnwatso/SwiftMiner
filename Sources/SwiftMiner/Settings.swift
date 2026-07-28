@@ -277,15 +277,51 @@ public final class Settings {
         }
     }
 
-    /// Whether to use Steam CDN artwork instead of Twitch game artwork
+    /// Whether to use Steam CDN artwork instead of Twitch game artwork.
+    ///
+    /// Off by default. Twitch box art is now requested at a usable resolution
+    /// (see `TwitchBoxArt`), which removed the original reason to reach for Steam,
+    /// and Steam answers 200 with a blank grey placeholder for titles it has no
+    /// library art for — so preferring it could replace real artwork with nothing.
     public var preferSteamArtwork: Bool {
         get {
             access(keyPath: \.preferSteamArtwork)
-            return Self.read("preferSteamArtwork", default: true)
+            return Self.read("preferSteamArtwork", default: false)
         }
         set {
             withMutation(keyPath: \.preferSteamArtwork) {
                 Self.write("preferSteamArtwork", newValue)
+            }
+        }
+    }
+
+    /// Which service the miner header picture is pulled from. Whichever source is
+    /// picked, the other one is used when it has nothing, and the initial is drawn
+    /// when neither does.
+    public var minerAvatarSource: MinerAvatarSource {
+        get {
+            access(keyPath: \.minerAvatarSource)
+            return Self.read("minerAvatarSource", default: .discord)
+        }
+        set {
+            withMutation(keyPath: \.minerAvatarSource) {
+                Self.write("minerAvatarSource", newValue)
+            }
+        }
+    }
+
+    /// JSON-encoded map of Twitch account ID -> cached profile-picture URL and the
+    /// time it was resolved. Twitch only hands the URL out through an authenticated
+    /// lookup, so caching it is what lets an avatar draw at launch; see
+    /// `TwitchAvatarStore`, which owns the encoding.
+    public var twitchAvatarsData: String {
+        get {
+            access(keyPath: \.twitchAvatarsData)
+            return Self.read("twitchAvatarsData", default: "{}")
+        }
+        set {
+            withMutation(keyPath: \.twitchAvatarsData) {
+                Self.write("twitchAvatarsData", newValue)
             }
         }
     }
@@ -1627,6 +1663,24 @@ public final class Settings {
         gamePreferences = prefs
     }
 
+    /// Drops persisted artwork links so the next render falls back to live artwork.
+    ///
+    /// Rewriting each preference through `GamePreference.init` is what does the work:
+    /// it rejects `file://` URLs outright, so any cache path stored by an older build
+    /// is discarded here. Uploaded artwork is passed through untouched — it lives in
+    /// Application Support and is the user's own file, not a cache.
+    public func clearCachedArtworkLinks() {
+        gamePreferences = gamePreferences.map { preference in
+            GamePreference(
+                gameId: preference.gameId,
+                gameName: preference.gameName,
+                boxArtURL: preference.resolvedBoxArtURL,
+                customArtworkURL: preference.customArtworkURL,
+                state: preference.state
+            )
+        }
+    }
+
     public func removeCustomArtwork(for game: Game) {
         var prefs = gamePreferences
         guard let index = prefs.firstIndex(where: { preferenceMatches($0, gameId: game.id, gameName: game.name) }) else {
@@ -2097,7 +2151,9 @@ public final class Settings {
         accountIncludesGlobalPriorityGamesData = "{}"
         selectedDropsFiltersData = "[\"active\"]"
         miningStrategy = .mineAll
-        preferSteamArtwork = true
+        preferSteamArtwork = false
+        minerAvatarSource = .discord
+        twitchAvatarsData = "{}"
         ignoredWarningsData = "[]"
 #if DEBUG
         debugBypassLinkRequirement = false
@@ -2134,6 +2190,7 @@ public final class Settings {
             prioritiseFollowedStreamers: prioritiseFollowedStreamers,
             syncMinersState: syncMinersState,
             preferSteamArtwork: preferSteamArtwork,
+            minerAvatarSource: minerAvatarSource.rawValue,
             tipsEnabled: tipsEnabled,
             runInBackground: runInBackground,
             showActivityLogIcons: showActivityLogIcons,
@@ -2187,6 +2244,7 @@ public final class Settings {
         prioritiseFollowedStreamers = backup.prioritiseFollowedStreamers
         syncMinersState = backup.syncMinersState
         preferSteamArtwork = backup.preferSteamArtwork
+        minerAvatarSource = backup.minerAvatarSource.flatMap(MinerAvatarSource.init(rawValue:)) ?? .discord
         tipsEnabled = backup.tipsEnabled
         runInBackground = backup.runInBackground
         showActivityLogIcons = backup.showActivityLogIcons
@@ -2258,6 +2316,8 @@ public struct SettingsBackup: Codable, Sendable {
     public let prioritiseFollowedStreamers: Bool
     public let syncMinersState: Bool
     public let preferSteamArtwork: Bool
+    /// Optional: backups written before miner avatars were selectable have no value.
+    public let minerAvatarSource: String?
     public let tipsEnabled: Bool
     public let runInBackground: Bool
     public let showActivityLogIcons: Bool
@@ -2303,6 +2363,7 @@ public struct SettingsBackup: Codable, Sendable {
         prioritiseFollowedStreamers: Bool,
         syncMinersState: Bool,
         preferSteamArtwork: Bool,
+        minerAvatarSource: String? = nil,
         tipsEnabled: Bool,
         runInBackground: Bool,
         showActivityLogIcons: Bool,
@@ -2347,6 +2408,7 @@ public struct SettingsBackup: Codable, Sendable {
         self.prioritiseFollowedStreamers = prioritiseFollowedStreamers
         self.syncMinersState = syncMinersState
         self.preferSteamArtwork = preferSteamArtwork
+        self.minerAvatarSource = minerAvatarSource
         self.tipsEnabled = tipsEnabled
         self.runInBackground = runInBackground
         self.showActivityLogIcons = showActivityLogIcons
@@ -2464,6 +2526,41 @@ extension Settings.LogLevel {
     }
 }
 
+
+/// Which service a miner's header picture comes from.
+public enum MinerAvatarSource: String, CaseIterable, Identifiable, Sendable {
+    /// The Discord account the miner is linked to, resolved through SwiftBot.
+    case discord
+    /// The miner's own Twitch account.
+    case twitch
+
+    public var id: String { rawValue }
+
+    public var label: String {
+        switch self {
+        case .discord: return "Discord"
+        case .twitch: return "Twitch"
+        }
+    }
+
+    public var detail: String {
+        switch self {
+        case .discord:
+            return "Use the picture from the Discord account a miner is linked to. Miners with no linked Discord fall back to their Twitch picture."
+        case .twitch:
+            return "Use the picture from the miner's own Twitch account. Falls back to the linked Discord picture when Twitch has none."
+        }
+    }
+
+    /// Picks the preferred picture, then the other service's, then nothing — the
+    /// caller draws the initial when this returns `nil`.
+    public func resolve(discord: URL?, twitch: URL?) -> URL? {
+        switch self {
+        case .discord: return discord ?? twitch
+        case .twitch: return twitch ?? discord
+        }
+    }
+}
 
 /// When automatically downloaded updates are installed.
 public enum AutoUpdateInstallPolicy: String, CaseIterable, Identifiable {

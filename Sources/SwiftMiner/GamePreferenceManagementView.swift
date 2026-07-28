@@ -99,7 +99,7 @@ struct GamePreferenceManagementView: View {
 private struct PreferenceRow: View {
     let preference: GamePreference
     var settings: Settings
-    @AppStorage("preferSteamArtwork", store: Settings.appStorageStore) private var preferSteamArtwork: Bool = true
+    @AppStorage("preferSteamArtwork", store: Settings.appStorageStore) private var preferSteamArtwork: Bool = false
     @State private var resolvedArtworkURL: URL?
     @State private var failoverLogin: String = ""
 
@@ -125,7 +125,7 @@ private struct PreferenceRow: View {
                         // Prefer Steam portrait; leave nil (shows placeholder) if lookup fails — never falls back to Twitch URL
                         resolvedArtworkURL = await SteamArtworkService.shared.portraitURL(for: preference.gameName)
                     } else {
-                        resolvedArtworkURL = preference.boxArtURL
+                        resolvedArtworkURL = preference.resolvedBoxArtURL
                     }
                 }
 

@@ -28,9 +28,30 @@ public struct GamePreference: Codable, Sendable, Identifiable, Equatable {
     ) {
         self.gameId = gameId
         self.gameName = gameName
-        self.boxArtURL = boxArtURL
+        self.boxArtURL = Self.durableArtworkURL(boxArtURL)
         self.customArtworkURL = customArtworkURL
         self.state = state
+    }
+
+    /// `boxArtURL` is written from whatever artwork the UI had resolved at the time,
+    /// which — with Steam artwork preferred — is a `file://` path inside
+    /// `~/Library/Caches`. That directory is purgeable by macOS, so preferences
+    /// persisted a link that could simply evaporate, leaving a permanently blank
+    /// tile with no route back to the remote image. Only remote URLs are durable
+    /// enough to store here; artwork the user deliberately uploaded lives in
+    /// `customArtworkURL` under Application Support and is left alone.
+    private static func durableArtworkURL(_ url: URL?) -> URL? {
+        guard let url, url.isFileURL else { return url }
+        return nil
+    }
+
+    /// `boxArtURL` as it should actually be rendered. Preferences written before
+    /// cache paths were rejected may still hold one, and that file may be gone —
+    /// treat a missing file as absent so callers fall back to live artwork.
+    public var resolvedBoxArtURL: URL? {
+        guard let boxArtURL else { return nil }
+        guard boxArtURL.isFileURL else { return boxArtURL }
+        return FileManager.default.fileExists(atPath: boxArtURL.path) ? boxArtURL : nil
     }
 }
 

@@ -157,6 +157,18 @@ public actor TwitchAPIClient {
 
     var campaignDetailsByKey: [String: CampaignDetailsCacheEntry] = [:]
     var campaignLinkStateByKey: [String: CampaignLinkStateEntry] = [:]
+    /// Both caches above survive a relaunch via `CampaignDetailsDiskCache`. Restoring them
+    /// is what keeps the first refresh after launch from re-fetching `DropCampaignDetails`
+    /// for every active campaign. See that type for why this is safe with respect to TTLs.
+    ///
+    /// Disabled in tests: the cache is a real file in Application Support, so leaving it on
+    /// would let a suite read the developer's live campaign data and let one run's writes
+    /// change the next run's request counts.
+    let persistsCampaignCaches: Bool
+    var hasLoadedPersistedCampaignCaches = false
+    /// Set whenever a real fetch (or a shared-metadata reconstruction) adds something the
+    /// persisted copy does not have yet, so an all-cache-hit cycle writes nothing.
+    var campaignCachesNeedPersisting = false
     var availableDropsByChannel: [String: AvailableDropsCacheEntry] = [:]
     var liveChannelsByLookup: [String: LiveChannelsCacheEntry] = [:]
     private var slugCandidatesByLookup: [String: SlugCandidatesCacheEntry] = [:]
@@ -205,7 +217,16 @@ public actor TwitchAPIClient {
 
     /// Set the authenticated user's login (call after successful auth)
     public func setUserLogin(_ login: String) {
+        guard login != userLogin else { return }
+        // Campaign cache keys embed the login, and the persisted file is per account, so a
+        // different login means a different file. Flush what this client has learned before
+        // switching, then let the new login load its own on next use.
+        persistCampaignCachesIfNeeded()
+        campaignDetailsByKey.removeAll(keepingCapacity: true)
+        campaignLinkStateByKey.removeAll(keepingCapacity: true)
+        campaignCachesNeedPersisting = false
         self.userLogin = login
+        hasLoadedPersistedCampaignCaches = false
     }
 
     /// Returns benefit metadata from the most recent inventory fetch.
@@ -232,7 +253,8 @@ public actor TwitchAPIClient {
         session: URLSession? = nil,
         requestCoordinator: TwitchRequestCoordinator = .shared,
         runtimeClock: RuntimeClock = .continuous,
-        retryJitterFactor: @escaping @Sendable () -> Double = { Double.random(in: 0.8...1.2) }
+        retryJitterFactor: @escaping @Sendable () -> Double = { Double.random(in: 0.8...1.2) },
+        persistsCampaignCaches: Bool = true
     ) {
         self.authService = authService
         self.clientId = clientId
@@ -240,6 +262,7 @@ public actor TwitchAPIClient {
         self.requestCoordinator = requestCoordinator
         self.runtimeClock = runtimeClock
         self.retryJitterFactor = retryJitterFactor
+        self.persistsCampaignCaches = persistsCampaignCaches
 
         if let session = session {
             self.session = session
@@ -473,9 +496,7 @@ public actor TwitchAPIClient {
             guard let id = dict["id"] as? String,
                   let name = dict["name"] as? String else { return nil }
             let artURL: URL? = (dict["box_art_url"] as? String).flatMap { raw in
-                URL(string: raw
-                    .replacingOccurrences(of: "{width}", with: "188")
-                    .replacingOccurrences(of: "{height}", with: "250"))
+                URL(string: TwitchBoxArt.sized(raw))
             }
             return Game(id: id, name: name, boxArtURL: artURL)
         }
@@ -556,7 +577,7 @@ public actor TwitchAPIClient {
             id: gameDict["id"] as? String ?? "",
             name: (gameDict["displayName"] as? String) ?? (gameDict["name"] as? String) ?? "",
             slug: gameDict["slug"] as? String,
-            boxArtURL: (gameDict["boxArtURL"] as? String).flatMap { URL(string: $0) }
+            boxArtURL: (gameDict["boxArtURL"] as? String).flatMap { URL(string: TwitchBoxArt.sized($0)) }
         )
     }
 

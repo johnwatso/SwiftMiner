@@ -103,7 +103,12 @@ public actor SteamArtworkService {
         // Serve from disk if already cached — skip CDN availability check entirely
         if let localURL = localImageURL(appId: appId, type: "hero"),
            FileManager.default.fileExists(atPath: localURL.path) {
-            return localURL
+            // Same placeholder trap as portraits; don't serve a blank banner.
+            if Self.isPlaceholderFile(at: localURL) {
+                try? FileManager.default.removeItem(at: localURL)
+            } else {
+                return localURL
+            }
         }
         // First time: find a working CDN URL, then download and cache it
         let candidates = [
@@ -149,7 +154,13 @@ public actor SteamArtworkService {
     private func resolveImageURL(remote remoteURL: URL, appId: String, type: String) async -> URL? {
         guard let localURL = localImageURL(appId: appId, type: type) else { return remoteURL }
         if FileManager.default.fileExists(atPath: localURL.path) {
-            return localURL
+            // Evict a placeholder cached before this check existed, so the entry
+            // re-evaluates instead of serving a blank tile forever.
+            if Self.isPlaceholderFile(at: localURL) {
+                try? FileManager.default.removeItem(at: localURL)
+            } else {
+                return localURL
+            }
         }
         do {
             try FileManager.default.createDirectory(
@@ -158,6 +169,14 @@ public actor SteamArtworkService {
             )
             let (data, response) = try await URLSession.shared.data(from: remoteURL)
             guard (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+
+            // Returning nil leaves the campaign's Twitch box art in place, which is
+            // a real image — caching this would replace it with a blank tile.
+            guard !Self.isPlaceholderArtwork(data) else {
+                Logger.artwork.info("Ignoring Steam placeholder \(type) for appId=\(appId) (\(data.count) bytes)")
+                return nil
+            }
+
             try data.write(to: localURL, options: .atomic)
             Logger.artwork.debug("Cached \(type) image for appId=\(appId)")
             return localURL
@@ -167,8 +186,60 @@ public actor SteamArtworkService {
         }
     }
     
+    // MARK: - Placeholder Detection
+
+    /// Steam answers 200 for titles it holds no library art for, serving a flat grey
+    /// 300x450 image instead of returning 404. Every status check therefore passes and
+    /// the blank tile gets cached as if it were real artwork — Battlefield 6 (appId
+    /// 2807960) does exactly this, which is why its art never appeared until a custom
+    /// image was uploaded over it.
+    ///
+    /// Two signals separate the placeholder from real box art, and either is enough:
+    /// it is ~1.6KB where real portraits run tens of KB, and it is encoded with a
+    /// single greyscale channel where real artwork is colour.
+    private static let minimumArtworkBytes = 5_000
+
+    private static func isPlaceholderArtwork(_ data: Data) -> Bool {
+        if data.count < minimumArtworkBytes { return true }
+        if let components = jpegComponentCount(data), components < 3 { return true }
+        return false
+    }
+
+    /// Cheap disk-side check — size only, to avoid reading every cached image on hit.
+    private static func isPlaceholderFile(at url: URL) -> Bool {
+        guard let size = try? FileManager.default
+            .attributesOfItem(atPath: url.path)[.size] as? Int else { return false }
+        return size < minimumArtworkBytes
+    }
+
+    /// Component count from the JPEG frame header: 1 is greyscale, 3 is colour.
+    /// Walks the segment chain rather than assuming a fixed offset, since APP
+    /// segments (EXIF, ICC) vary in size between images.
+    private static func jpegComponentCount(_ data: Data) -> Int? {
+        let bytes = [UInt8](data.prefix(4096))
+        guard bytes.count > 4, bytes[0] == 0xFF, bytes[1] == 0xD8 else { return nil }
+
+        var index = 2
+        while index + 9 < bytes.count {
+            guard bytes[index] == 0xFF else {
+                index += 1
+                continue
+            }
+            let marker = bytes[index + 1]
+            // SOF0...SOF15 carry the frame header. C4/C8/CC sit in the same range
+            // but are Huffman/arithmetic tables, not frame headers.
+            if marker >= 0xC0, marker <= 0xCF, marker != 0xC4, marker != 0xC8, marker != 0xCC {
+                return Int(bytes[index + 9])
+            }
+            let length = Int(bytes[index + 2]) << 8 | Int(bytes[index + 3])
+            guard length > 0 else { return nil }
+            index += 2 + length
+        }
+        return nil
+    }
+
     // MARK: - Private Methods
-    
+
     /// Look up Steam App ID from game name
     /// Uses Steam Store search API and caches results
     private func lookupAppId(for gameName: String) async -> String? {

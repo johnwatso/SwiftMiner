@@ -18,7 +18,7 @@ final class ClaimServiceTests: XCTestCase {
         mockSession = URLSession(configuration: config)
         
         authService = TwitchAuthService(clientId: "test_client", tokenStore: TestTokenStore())
-        apiClient = TwitchAPIClient(authService: authService, clientId: "test_client", session: mockSession)
+        apiClient = TwitchAPIClient(authService: authService, clientId: "test_client", session: mockSession, persistsCampaignCaches: false)
         dropsService = DropsService(apiClient: apiClient)
         claimService = ClaimService(apiClient: apiClient, dropsService: dropsService)
     }

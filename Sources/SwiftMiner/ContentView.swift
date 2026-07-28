@@ -72,6 +72,62 @@ struct ContentView: View {
 
 // MARK: - Overview View
 
+enum OverviewArtworkResolver {
+    static func artworkURL(
+        for preference: GamePreference,
+        campaigns: [CampaignViewData]
+    ) -> URL? {
+        campaigns.lazy.compactMap { campaign in
+            guard matches(
+                gameId: campaign.gameId,
+                gameName: campaign.gameName,
+                preference: preference
+            ) else { return nil }
+            return usable(campaign.artworkURL)
+        }.first
+    }
+
+    static func artworkURL(
+        for preference: GamePreference,
+        campaigns: [Campaign]
+    ) -> URL? {
+        campaigns.lazy.compactMap { campaign in
+            guard matches(
+                gameId: campaign.game.id,
+                gameName: campaign.game.name,
+                preference: preference
+            ) else { return nil }
+            return usable(campaign.game.boxArtURL)
+        }.first
+    }
+
+    static func matches(
+        gameId: String?,
+        gameName: String,
+        preference: GamePreference
+    ) -> Bool {
+        let idMatches = gameId.map { !$0.isEmpty && $0 == preference.gameId } ?? false
+        let nameMatches = gameName.localizedCaseInsensitiveCompare(preference.gameName) == .orderedSame
+            || comparableName(gameName) == comparableName(preference.gameName)
+        return idMatches || nameMatches
+    }
+
+    private static func usable(_ url: URL?) -> URL? {
+        guard let url else { return nil }
+        guard url.isFileURL else { return url }
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
+    private static func comparableName(_ value: String) -> String {
+        value
+            .lowercased()
+            .unicodeScalars
+            .filter { CharacterSet.alphanumerics.contains($0) }
+            .map(String.init)
+            .joined()
+    }
+}
+
 struct OverviewView: View {
     @Environment(NavigationModel.self) private var navigation
     private var settings: Settings { .shared }
@@ -111,6 +167,17 @@ struct OverviewView: View {
                 applyOverviewCampaigns(await navigation.minerManager.dataCoordinator.allCampaigns(
                     preferSteamArtwork: settings.preferSteamArtwork
                 ))
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .dropsCampaignsDidUpdate)) { _ in
+            // Miner registration makes the per-account disk caches available after
+            // Overview's first task may already have returned empty. Drops listens to
+            // this same event; keep Overview on the same source-of-truth timeline.
+            Task { @MainActor in
+                applyOverviewCampaigns(await navigation.minerManager.dataCoordinator.allCampaigns(
+                    preferSteamArtwork: settings.preferSteamArtwork
+                ))
+                await enrichPreferredGameArtwork()
             }
         }
         .toolbar {
@@ -730,12 +797,25 @@ struct OverviewView: View {
             forGameName: preference.gameName,
             gameId: preference.gameId
         )
+        // This item is built precisely because the game has no *eligible* campaign,
+        // but an ineligible one (completed, unlinked) usually still exists and
+        // carries live Twitch art. Preferences hold no remote URL of their own once
+        // a dead cache path is discarded, so without this the tile drops to initials.
+        let campaignArtwork = OverviewArtworkResolver.artworkURL(
+            for: preference,
+            campaigns: campaigns
+        ) ?? OverviewArtworkResolver.artworkURL(
+            for: preference,
+            campaigns: navigation.minerManager.miners.flatMap(\.allCampaigns)
+        )
+
         let artworkURL = preference.customArtworkURL
             ?? (
                 supportsSteamArtwork
                     ? navigation.minerManager.dataCoordinator.steamArtworkOverrides[preference.gameName]
-                        ?? preference.boxArtURL
-                    : preference.boxArtURL
+                        ?? preference.resolvedBoxArtURL
+                        ?? campaignArtwork
+                    : preference.resolvedBoxArtURL ?? campaignArtwork
             )
         return CampaignRailItem(
             id: "preferred-\(preference.gameId.isEmpty ? preference.gameName : preference.gameId)",
@@ -864,8 +944,8 @@ struct OverviewView: View {
                                 gameId: pref.gameId
                             )
                             ? navigation.minerManager.dataCoordinator.steamArtworkOverrides[pref.gameName]
-                                ?? (settings.preferSteamArtwork ? nil : pref.boxArtURL)
-                            : pref.boxArtURL
+                                ?? (settings.preferSteamArtwork ? nil : pref.resolvedBoxArtURL)
+                            : pref.resolvedBoxArtURL
                         )
                 },
                 tint: .orange,
@@ -960,10 +1040,11 @@ struct OverviewView: View {
     }
 
     private func matches(_ campaign: CampaignViewData, preference: GamePreference) -> Bool {
-        let idMatches = campaign.gameId != nil && campaign.gameId == preference.gameId
-        let nameMatches = campaign.gameName.localizedCaseInsensitiveCompare(preference.gameName) == .orderedSame
-            || comparableGameName(campaign.gameName) == comparableGameName(preference.gameName)
-        return idMatches || nameMatches
+        OverviewArtworkResolver.matches(
+            gameId: campaign.gameId,
+            gameName: campaign.gameName,
+            preference: preference
+        )
     }
 
     private func campaignDetailText(

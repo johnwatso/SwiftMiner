@@ -289,11 +289,26 @@ private struct ReconnectingSpinnerView: View {
     let color: Color
     @State private var angle: Double = 0
 
+    /// SF Symbols sit on a text baseline, so an `Image`'s layout frame is a line box,
+    /// not a tight glyph box. The default `.center` anchor therefore spins the glyph
+    /// about a point that is not its visual centre, and the whole icon orbits instead
+    /// of turning in place. `arrow.clockwise` is the worst offender — its ink centre
+    /// of mass sits low and left of the frame centre, giving ~2.9pt of orbit at size 44.
+    ///
+    /// These anchors are the alpha-weighted ink centroid of the rendered glyph, which
+    /// is the point the eye reads as "the middle". Chosen to minimise worst-case orbit
+    /// across the sizes and weights used in the app (9–48pt): both stay under 0.4pt.
+    private var rotationAnchor: UnitPoint {
+        symbol == "arrow.clockwise"
+            ? UnitPoint(x: 0.464, y: 0.546)
+            : UnitPoint(x: 0.488, y: 0.510)
+    }
+
     var body: some View {
         Image(systemName: symbol)
             .font(.system(size: size, weight: weight))
             .foregroundStyle(color)
-            .rotationEffect(.degrees(angle))
+            .rotationEffect(.degrees(angle), anchor: rotationAnchor)
             .onAppear {
                 withAnimation(.linear(duration: 4.0).repeatForever(autoreverses: false)) {
                     angle = 360

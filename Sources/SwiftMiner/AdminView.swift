@@ -457,7 +457,7 @@ private struct DiscordPersonView: View {
     @ViewBuilder
     private var avatar: some View {
         if let avatarURL {
-            CachedDiscordAvatar(url: avatarURL) {
+            CachedAvatarImage(url: avatarURL) {
                 fallbackAvatar
             }
             .frame(width: 24, height: 24)

@@ -389,7 +389,12 @@ extension MinerManager {
             miner.currentCampaignId = campaignId
             if campaignId == nil { miner.currentCampaign = nil } // clear name when ID is cleared
         }
-        if let campaigns = allCampaigns { miner.allCampaigns = campaigns }
+        if let campaigns = allCampaigns {
+            // Anything arriving here came from a live engine fetch, so the
+            // launch-time disk seed is no longer what's on screen.
+            miner.allCampaigns = campaigns
+            miner.campaignsAreProvisional = false
+        }
         if let running = isRunning { miner.isRunning = running }
         if let needsAuth = needsAuth { miner.needsAuth = needsAuth }
         if let priorityGames = priorityGames { miner.priorityGames = priorityGames }
