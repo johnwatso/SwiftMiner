@@ -696,6 +696,33 @@ struct MinerActivitySnapshot {
     let statusColor: Color
     let statusSymbol: String
 
+    /// True only when the snapshot represents an actual watch session. A
+    /// campaign ID can also be attached to waiting or blocked status items, so
+    /// it is not sufficient evidence that the miner is currently watching.
+    var isActivelyWatching: Bool {
+        now.id.hasPrefix("now-") || now.id.hasPrefix("override-")
+    }
+
+    var currentSectionTitle: String {
+        if now.id.hasPrefix("now-") {
+            return "Currently mining"
+        }
+        if now.id.hasPrefix("override-") {
+            return "Currently watching"
+        }
+        return "Current status"
+    }
+
+    var sourceListActivityLabel: String {
+        if isActivelyWatching {
+            return "Watching \(now.title)"
+        }
+        if statusText == "Up to Date", let upNext {
+            return "Likely next: \(upNext.title)"
+        }
+        return statusText
+    }
+
     @MainActor
     static func resolve(
         for miner: MinerManager.ManagedMiner,
@@ -714,24 +741,25 @@ struct MinerActivitySnapshot {
             priorityGames: activePriorityGames,
             excludedGames: excludedGames,
             strategy: strategy,
-            includesBadgeAndEmoteCampaigns: includesBadgeAndEmoteCampaigns,
-            ignoredAccountLinkGameIds: ignoredAccountLinkGameIds
+            includesBadgeAndEmoteCampaigns: includesBadgeAndEmoteCampaigns
         )
 
         let next = likelyNextItem(
             for: miner,
             excludingCampaignId: currentCampaign?.id ?? miner.currentCampaignId,
-            excludingSameGameAsCampaignId: now.id.hasPrefix("subscription-") ? now.campaignId : nil,
             priorityGames: activePriorityGames,
             excludedGames: excludedGames,
             strategy: strategy,
-            includesBadgeAndEmoteCampaigns: includesBadgeAndEmoteCampaigns,
-            ignoredAccountLinkGameIds: ignoredAccountLinkGameIds
+            includesBadgeAndEmoteCampaigns: includesBadgeAndEmoteCampaigns
         )
         
         let blocked = blockedPriorityItems(
             for: miner,
-            excludingCampaignId: currentCampaign?.id ?? miner.currentCampaignId,
+            // A stale current ID for an unlinked campaign must not suppress its
+            // separate Pending reminder; it is no longer current scheduling work.
+            excludingCampaignId: currentCampaign?.isAccountConnected == true
+                ? (currentCampaign?.id ?? miner.currentCampaignId)
+                : nil,
             priorityGames: activePriorityGames,
             excludedGames: excludedGames,
             strategy: strategy,
@@ -772,8 +800,7 @@ struct MinerActivitySnapshot {
         priorityGames: [String],
         excludedGames: [String],
         strategy: MiningStrategy,
-        includesBadgeAndEmoteCampaigns: Bool,
-        ignoredAccountLinkGameIds: [String]
+        includesBadgeAndEmoteCampaigns: Bool
     ) -> MinerActivityItem {
         if miner.workerState.isRecovering {
             return waitingItem(
@@ -912,15 +939,10 @@ struct MinerActivitySnapshot {
         if let resolved = miner.resolvedPrimaryState?.resolved {
             switch resolved.state {
             case .blocked:
-                if resolved.reason == .notLinked,
-                   isAccountLinkWarningIgnored(
-                    gameId: resolved.gameId,
-                    gameName: resolved.gameName,
-                    ignoredAccountLinkGameIds: ignoredAccountLinkGameIds
-                   ) {
+                if resolved.reason == .notLinked {
                     return upToDateItem(
-                        id: "ignored-link-\(miner.id)-\(resolved.gameId)",
-                        subtitle: "No mineable drops are available after dismissed link warnings."
+                        id: "unlinked-\(miner.id)-\(resolved.gameId)",
+                        subtitle: "Unlinked campaigns are not included in this miner's queue."
                     )
                 }
                 return blockedCurrentItem(for: miner, resolved: resolved)
@@ -964,18 +986,9 @@ struct MinerActivitySnapshot {
                 accent: .blue
             )
         case .waitingForStream:
-            if let subscriptionCampaign = subscriptionRequiredPriorityCampaign(
-                for: miner,
-                priorityGames: priorityGames,
-                excludedGames: excludedGames,
-                strategy: strategy
-            ) {
-                return subscriptionRequiredItem(
-                    for: miner,
-                    campaign: subscriptionCampaign,
-                    isWaitingForStream: true
-                )
-            }
+            // Subscription-gated campaigns are never scheduled, so they must not
+            // stand in for the miner's real state here. They stay visible as a
+            // mutable Pending item on the miner instead.
             return waitingItem(
                 id: "stream-\(miner.id)",
                 title: "Looking for Streams",
@@ -984,26 +997,9 @@ struct MinerActivitySnapshot {
                 accent: .cyan
             )
         case .blockedAccountNotLinked:
-            if allAccountLinkBlocksIgnored(
-                for: miner,
-                excludingCampaignId: campaign?.id ?? miner.currentCampaignId,
-                priorityGames: priorityGames,
-                excludedGames: excludedGames,
-                strategy: strategy,
-                includesBadgeAndEmoteCampaigns: includesBadgeAndEmoteCampaigns,
-                ignoredAccountLinkGameIds: ignoredAccountLinkGameIds
-            ) {
-                return upToDateItem(
-                    id: "ignored-link-\(miner.id)",
-                    subtitle: "No mineable drops are available after dismissed link warnings."
-                )
-            }
-            return waitingItem(
-                id: "link-\(miner.id)",
-                title: "Blocked — Account not linked",
-                subtitle: "Link your account to earn drops.",
-                symbol: "personalhotspot.slash",
-                accent: .orange
+            return upToDateItem(
+                id: "unlinked-\(miner.id)",
+                subtitle: "Unlinked campaigns are not included in this miner's queue."
             )
         case .idleNoEligibleCampaigns:
             return waitingItem(
@@ -1071,27 +1067,11 @@ struct MinerActivitySnapshot {
     private static func blockedCurrentItem(for miner: MinerManager.ManagedMiner, resolved: MinerGameState) -> MinerActivityItem {
         switch resolved.reason {
         case .notLinked:
-            return MinerActivityItem(
-                id: "blocked-link-\(miner.id)-\(resolved.gameId)",
-                title: "Blocked — Account not linked",
-                subtitle: resolved.gameName,
-                detail: "Link this game account to earn drops.",
-                symbol: "personalhotspot.slash",
-                accent: .orange,
-                campaignId: resolved.campaignId,
-                requiresAccountLink: true
+            return upToDateItem(
+                id: "unlinked-\(miner.id)-\(resolved.gameId)",
+                subtitle: "Unlinked campaigns are not included in this miner's queue."
             )
         case .noLiveStreams:
-            if let campaign = resolved.campaignId.flatMap({ id in
-                miner.allCampaigns.first { $0.id == id }
-            }),
-               let subscriptionCampaign = subscriptionRequiredCampaign(matchingGameOf: campaign, in: miner.allCampaigns) {
-                return subscriptionRequiredItem(
-                    for: miner,
-                    campaign: subscriptionCampaign,
-                    isWaitingForStream: true
-                )
-            }
             return MinerActivityItem(
                 id: "blocked-stream-\(miner.id)-\(resolved.gameId)",
                 title: "Looking for Streams",
@@ -1163,58 +1143,22 @@ struct MinerActivitySnapshot {
         return "\(progress.dropName) · \(watchedMinutes) / \(progress.requiredMinutes) min watched"
     }
 
-    private static func subscriptionRequiredItem(
-        for miner: MinerManager.ManagedMiner,
-        campaign: Campaign,
-        isWaitingForStream: Bool
-    ) -> MinerActivityItem {
-        let dropNames = campaign.subscriptionRequiredDrops.map(\.name).filter { !$0.isEmpty }
-        let dropSummary = dropNames.prefix(2).joined(separator: ", ")
-        let extra = dropNames.count > 2 ? ", and more" : ""
-        let detail: String
-        if dropSummary.isEmpty {
-            detail = isWaitingForStream
-                ? "Live drops for this game need a paid Twitch sub."
-                : "This campaign needs a paid Twitch sub."
-        } else {
-            detail = "\(dropSummary)\(extra) needs a paid Twitch sub."
-        }
-
-        return MinerActivityItem(
-            id: "subscription-\(miner.id)-\(campaign.id)",
-            title: "Subscription Required",
-            subtitle: campaign.game.name,
-            detail: detail,
-            symbol: "creditcard",
-            accent: .pink,
-            campaignId: campaign.id
-        )
-    }
-
     private static func likelyNextItem(
         for miner: MinerManager.ManagedMiner,
         excludingCampaignId activeCampaignId: String?,
-        excludingSameGameAsCampaignId suppressedGameCampaignId: String? = nil,
         priorityGames: [String],
         excludedGames: [String],
         strategy: MiningStrategy,
-        includesBadgeAndEmoteCampaigns: Bool,
-        ignoredAccountLinkGameIds: [String]
+        includesBadgeAndEmoteCampaigns: Bool
     ) -> MinerActivityItem? {
         let priorityKeys = priorityGames.map(normalizedGameKey).filter { !$0.isEmpty }
         let prioritySet = Set(priorityKeys)
         let excludedSet = Set(excludedGames.map(normalizedGameKey).filter { !$0.isEmpty })
-        let suppressedGameCampaign = suppressedGameCampaignId.flatMap { id in
-            miner.allCampaigns.first { $0.id == id }
-        }
 
         let candidates = miner.allCampaigns.filter { campaign in
             guard campaign.id != activeCampaignId else { return false }
-            if let suppressedGameCampaign,
-               campaignMatchesSameGame(campaign, suppressedGameCampaign) {
-                return false
-            }
             guard !isSpecialEventsCampaign(campaign) else { return false }
+            guard campaign.isAccountConnected else { return false }
             guard !campaign.drops.isEmpty else { return false }
             guard campaign.isTimeActive, campaign.status != .disabled else { return false }
             guard !campaign.drops.allSatisfy(\.isClaimed) else { return false }
@@ -1230,15 +1174,6 @@ struct MinerActivitySnapshot {
             guard campaign.canAttemptMining else {
                 return false
             }
-            // Unlinked campaigns are only attemptable when prioritised for this miner;
-            // mirror the engine so "Up Next" doesn't surface another miner's priority.
-            if !campaign.isAccountConnected {
-                let gameName = normalizedGameKey(campaign.game.name)
-                let gameId = normalizedGameKey(campaign.game.id)
-                guard prioritySet.contains(gameName) || prioritySet.contains(gameId) else {
-                    return false
-                }
-            }
             if !includesBadgeAndEmoteCampaigns && campaign.hasOnlyBadgesOrEmotes {
                 return false
             }
@@ -1251,85 +1186,50 @@ struct MinerActivitySnapshot {
         }
 
         guard let campaign = sortedCandidates(eligible, priorityKeys: priorityKeys, strategy: strategy).first else {
-            guard let blockedCampaign = sortedCandidates(candidates, priorityKeys: priorityKeys, strategy: strategy).first(where: { campaign in
-                !campaign.isAccountConnected &&
-                isAccountLinkWarningIgnored(
-                    gameId: campaign.game.id,
-                    gameName: campaign.game.name,
-                    ignoredAccountLinkGameIds: ignoredAccountLinkGameIds
-                )
-            }) else {
-                return nil
-            }
-
-            return MinerActivityItem(
-                id: "next-blocked-\(blockedCampaign.id)",
-                title: blockedCampaign.game.name,
-                subtitle: blockedCampaign.name,
-                detail: "Blocked — account not linked",
-                symbol: "personalhotspot.slash",
-                accent: .orange,
-                campaignId: blockedCampaign.id,
-                requiresAccountLink: false
-            )
+            return nil
         }
 
         return MinerActivityItem(
             id: "next-\(campaign.id)",
             title: campaign.game.name,
             subtitle: campaign.name,
-            detail: "Likely based on current priority rules",
+            detail: likelyNextDetail(
+                for: campaign,
+                among: eligible,
+                priorityKeys: priorityKeys,
+                strategy: strategy
+            ),
             symbol: "arrow.forward.circle",
             accent: .secondary,
             campaignId: campaign.id
         )
     }
 
-    private static func subscriptionRequiredPriorityCampaign(
-        for miner: MinerManager.ManagedMiner,
-        priorityGames: [String],
-        excludedGames: [String],
+    private static func likelyNextDetail(
+        for campaign: Campaign,
+        among candidates: [Campaign],
+        priorityKeys: [String],
         strategy: MiningStrategy
-    ) -> Campaign? {
-        let priorityKeys = priorityGames.map(normalizedGameKey).filter { !$0.isEmpty }
-        let prioritySet = Set(priorityKeys)
-        let excludedSet = Set(excludedGames.map(normalizedGameKey).filter { !$0.isEmpty })
+    ) -> String {
+        let selectedPriority = priorityIndex(for: campaign, priorityKeys: priorityKeys)
 
-        let candidates = miner.allCampaigns.filter { campaign in
-            guard isSubscriptionRequiredOnly(campaign) else { return false }
-            guard !isSpecialEventsCampaign(campaign) else { return false }
-            guard campaign.isTimeActive, campaign.status != .disabled else { return false }
-
-            let gameName = normalizedGameKey(campaign.game.name)
-            let gameId = normalizedGameKey(campaign.game.id)
-            guard !excludedSet.contains(gameName), !excludedSet.contains(gameId) else { return false }
-            if !prioritySet.isEmpty {
-                guard prioritySet.contains(gameName) || prioritySet.contains(gameId) else { return false }
+        switch strategy {
+        case .mineAll:
+            if selectedPriority == Int.max,
+               let prioritised = sortedCandidates(
+                   candidates.filter { priorityIndex(for: $0, priorityKeys: priorityKeys) != Int.max },
+                   priorityKeys: priorityKeys,
+                   strategy: .mineAll
+               ).first {
+                return "Ends before prioritised \(prioritised.game.name) · Smart strategy"
             }
-            guard strategy != .onlyPriority || prioritySet.contains(gameName) || prioritySet.contains(gameId) else { return false }
-            return true
+            return "Earliest-ending eligible campaign · Smart strategy"
+        case .prioritiseSelected, .onlyPriority:
+            if selectedPriority != Int.max {
+                return "Prioritised game #\(selectedPriority + 1)"
+            }
+            return "Next eligible campaign after prioritised games"
         }
-
-        return sortedCandidates(candidates, priorityKeys: priorityKeys, strategy: strategy).first
-    }
-
-    private static func subscriptionRequiredCampaign(matchingGameOf campaign: Campaign, in campaigns: [Campaign]) -> Campaign? {
-        let gameName = normalizedGameKey(campaign.game.name)
-        let gameId = normalizedGameKey(campaign.game.id)
-
-        return campaigns.first { candidate in
-            isSubscriptionRequiredOnly(candidate) &&
-                (normalizedGameKey(candidate.game.name) == gameName || normalizedGameKey(candidate.game.id) == gameId)
-        }
-    }
-
-    private static func isSubscriptionRequiredOnly(_ campaign: Campaign) -> Bool {
-        !campaign.subscriptionRequiredDrops.isEmpty && campaign.eligibleDrops.isEmpty
-    }
-
-    private static func campaignMatchesSameGame(_ campaign: Campaign, _ other: Campaign) -> Bool {
-        normalizedGameKey(campaign.game.name) == normalizedGameKey(other.game.name) ||
-            normalizedGameKey(campaign.game.id) == normalizedGameKey(other.game.id)
     }
 
     private static func blockedPriorityItems(
@@ -1438,68 +1338,6 @@ struct MinerActivitySnapshot {
         return name.localizedCaseInsensitiveCompare("Just Chatting") == .orderedSame || id == "509658"
     }
 
-    private static func allAccountLinkBlocksIgnored(
-        for miner: MinerManager.ManagedMiner,
-        excludingCampaignId activeCampaignId: String?,
-        priorityGames: [String],
-        excludedGames: [String],
-        strategy: MiningStrategy,
-        includesBadgeAndEmoteCampaigns: Bool,
-        ignoredAccountLinkGameIds: [String]
-    ) -> Bool {
-        let blocked = accountLinkBlockedCampaigns(
-            for: miner,
-            excludingCampaignId: activeCampaignId,
-            priorityGames: priorityGames,
-            excludedGames: excludedGames,
-            strategy: strategy,
-            includesBadgeAndEmoteCampaigns: includesBadgeAndEmoteCampaigns
-        )
-        guard !blocked.isEmpty else { return false }
-
-        return blocked.allSatisfy { campaign in
-            isAccountLinkWarningIgnored(
-                gameId: campaign.game.id,
-                gameName: campaign.game.name,
-                ignoredAccountLinkGameIds: ignoredAccountLinkGameIds
-            )
-        }
-    }
-
-    private static func accountLinkBlockedCampaigns(
-        for miner: MinerManager.ManagedMiner,
-        excludingCampaignId activeCampaignId: String?,
-        priorityGames: [String],
-        excludedGames: [String],
-        strategy: MiningStrategy,
-        includesBadgeAndEmoteCampaigns: Bool
-    ) -> [Campaign] {
-        let priorityKeys = priorityGames.map(normalizedGameKey).filter { !$0.isEmpty }
-        let prioritySet = Set(priorityKeys)
-        let excludedSet = Set(excludedGames.map(normalizedGameKey).filter { !$0.isEmpty })
-
-        return miner.allCampaigns.filter { campaign in
-            guard campaign.id != activeCampaignId else { return false }
-            guard !isSpecialEventsCampaign(campaign) else { return false }
-            guard !campaign.drops.isEmpty else { return false }
-            guard campaign.isTimeActive, campaign.status != .disabled else { return false }
-            guard !campaign.drops.allSatisfy(\.isClaimed) else { return false }
-
-            let gameName = normalizedGameKey(campaign.game.name)
-            let gameId = normalizedGameKey(campaign.game.id)
-            guard !excludedSet.contains(gameName), !excludedSet.contains(gameId) else { return false }
-            guard strategy != .onlyPriority || prioritySet.contains(gameName) || prioritySet.contains(gameId) else { return false }
-            if !prioritySet.isEmpty {
-                guard prioritySet.contains(gameName) || prioritySet.contains(gameId) else { return false }
-            }
-            guard !campaign.isAccountConnected else { return false }
-            if !includesBadgeAndEmoteCampaigns && campaign.hasOnlyBadgesOrEmotes {
-                return false
-            }
-            return true
-        }
-    }
-
     private static func isAccountLinkWarningIgnored(
         gameId: String,
         gameName: String,
@@ -1524,11 +1362,10 @@ struct MinerActivitySnapshot {
         if now.id.hasPrefix("starting-") || now.id.hasPrefix("stopped-") {
             return now.title
         }
-        if now.id.hasPrefix("waiting-drops-") || now.id.hasPrefix("ignored-link-") {
+        if now.id.hasPrefix("waiting-drops-") ||
+            now.id.hasPrefix("ignored-link-") ||
+            now.id.hasPrefix("unlinked-") {
             return "Up to Date"
-        }
-        if now.id.hasPrefix("subscription-") {
-            return "Subscription Required"
         }
         if now.id.hasPrefix("override-") {
             return "Watching \(now.title)"
@@ -1552,7 +1389,7 @@ struct MinerActivitySnapshot {
         case .idleNoEligibleCampaigns:
             return "Up to Date"
         case .blockedAccountNotLinked:
-            return "Blocked — Account not linked"
+            return "Up to Date"
         case .idle:
             return "Up to Date"
         }
@@ -1571,11 +1408,8 @@ struct MinerActivitySnapshot {
         if now.id.hasPrefix("starting-") || now.id.hasPrefix("stopped-") {
             return now.symbol
         }
-        if now.id.hasPrefix("ignored-link-") {
+        if now.id.hasPrefix("ignored-link-") || now.id.hasPrefix("unlinked-") {
             return "calendar.badge.checkmark"
-        }
-        if now.id.hasPrefix("subscription-") {
-            return now.symbol
         }
         if now.id.hasPrefix("override-") {
             return now.symbol
@@ -1602,7 +1436,7 @@ struct MinerActivitySnapshot {
         case .idleNoEligibleCampaigns:
             return "calendar.badge.checkmark"
         case .blockedAccountNotLinked:
-            return "personalhotspot.slash"
+            return "calendar.badge.checkmark"
         case .idle:
             return "calendar.badge.checkmark"
         }
@@ -1621,11 +1455,8 @@ struct MinerActivitySnapshot {
         if now.id.hasPrefix("starting-") || now.id.hasPrefix("stopped-") {
             return now.accent
         }
-        if now.id.hasPrefix("ignored-link-") {
+        if now.id.hasPrefix("ignored-link-") || now.id.hasPrefix("unlinked-") {
             return .green
-        }
-        if now.id.hasPrefix("subscription-") {
-            return now.accent
         }
         if now.id.hasPrefix("override-") {
             return now.accent
@@ -1648,7 +1479,7 @@ struct MinerActivitySnapshot {
         case .idleNoEligibleCampaigns:
             return .secondary
         case .blockedAccountNotLinked:
-            return .orange
+            return .green
         case .idle:
             return now.accent
         }

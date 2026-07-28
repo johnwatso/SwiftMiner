@@ -29,12 +29,13 @@ final class WarningSuppressionTests: XCTestCase {
         )
     }
 
-    func testMinerEngineStrictPrioritisation() async {
+    func testMinerEngineKeepsPrioritisedUnlinkedCampaignEligible() async {
         let clientId = "test-client"
         let engine = MinerEngine(clientId: clientId)
         
         let priorityGame = "Rust"
         let otherGame = "World of Tanks"
+        let unrelatedUnlinkedGame = "Apex Legends"
         
         // 1. Set priority to only "Rust"
         await engine.updateMiningPreferences(
@@ -46,24 +47,36 @@ final class WarningSuppressionTests: XCTestCase {
         // 2. Create campaigns for both
         let game1 = Game(id: "g1", name: priorityGame)
         let game2 = Game(id: "g2", name: otherGame)
+        let game3 = Game(id: "g3", name: unrelatedUnlinkedGame)
         
         let campaign1 = Campaign(
             id: "c1", name: "Rust Drops", game: game1, status: .active,
             startDate: Date().addingTimeInterval(-3600), endDate: Date().addingTimeInterval(3600),
             drops: [Drop(id: "d1", name: "D1", requiredMinutes: 60)],
-            isAccountConnected: false // Blocked!
+            isAccountConnected: false
         )
         
         let campaign2 = Campaign(
             id: "c2", name: "WoT Drops", game: game2, status: .active,
             startDate: Date().addingTimeInterval(-3600), endDate: Date().addingTimeInterval(3600),
             drops: [Drop(id: "d2", name: "D2", requiredMinutes: 60)],
-            isAccountConnected: false // Blocked!
+            isAccountConnected: true
         )
-        
-        // We can't directly check the 'log' but we can check 'allCampaigns' 
-        // to see if they were filtered during the fetch (if we could mock fetch).
-        // Since we can't easily mock the fetch loop here without more plumbing,
-        // we'll at least verify the engine state can be updated.
+
+        let campaign3 = Campaign(
+            id: "c3", name: "Apex Drops", game: game3, status: .active,
+            startDate: Date().addingTimeInterval(-3600), endDate: Date().addingTimeInterval(3600),
+            drops: [Drop(id: "d3", name: "D3", requiredMinutes: 60)],
+            isAccountConnected: false
+        )
+
+        let candidates = await engine.candidateCampaigns(
+            from: [campaign1, campaign2, campaign3],
+            priorityGames: [priorityGame],
+            excludedGames: [],
+            strategy: .prioritiseSelected
+        )
+
+        XCTAssertEqual(candidates.map(\.id), [campaign1.id, campaign2.id])
     }
 }

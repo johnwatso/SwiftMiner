@@ -1,5 +1,36 @@
 import Foundation
 
+/// The latest account-specific result of checking a Twitch game for a stream that can
+/// actually earn one of this miner's drops. A directory being non-empty is not enough:
+/// the engine records success only after campaign verification has found a usable channel.
+public struct GameChannelAvailability: Sendable, Equatable {
+    public static let freshnessInterval: TimeInterval = 15 * 60
+
+    public let gameKey: String
+    public let hasEligibleChannel: Bool
+    public let campaignId: String?
+    public let channelName: String?
+    public let checkedAt: Date
+
+    public init(
+        gameKey: String,
+        hasEligibleChannel: Bool,
+        campaignId: String? = nil,
+        channelName: String? = nil,
+        checkedAt: Date
+    ) {
+        self.gameKey = gameKey
+        self.hasEligibleChannel = hasEligibleChannel
+        self.campaignId = campaignId
+        self.channelName = channelName
+        self.checkedAt = checkedAt
+    }
+
+    public func isFresh(at now: Date = Date()) -> Bool {
+        now.timeIntervalSince(checkedAt) <= Self.freshnessInterval
+    }
+}
+
 /// Main actor that orchestrates the Twitch drops mining lifecycle
 public actor MinerEngine {
     public enum IssueCategory: String, Sendable, Equatable {
@@ -294,6 +325,7 @@ public actor MinerEngine {
     public var onOperationalEvent: (@Sendable (OperationalEvent) -> Void)?
     public var onLinkWarning: (@Sendable (String) -> Void)?
     public var onStreamOverrideChange: (@Sendable (String?) -> Void)?
+    public var onGameChannelAvailability: (@Sendable (GameChannelAvailability) -> Void)?
     
     // MARK: - Callback Setters
 
@@ -323,6 +355,10 @@ public actor MinerEngine {
 
     public func setStreamOverrideChangeHandler(_ handler: (@Sendable (String?) -> Void)?) {
         self.onStreamOverrideChange = handler
+    }
+
+    public func setGameChannelAvailabilityHandler(_ handler: (@Sendable (GameChannelAvailability) -> Void)?) {
+        self.onGameChannelAvailability = handler
     }
 
     /// Update mining preferences (priority/excluded games)
@@ -1178,7 +1214,12 @@ public actor MinerEngine {
                             forGameCandidates: verificationCandidates,
                             knownSameGameCampaigns: sameGameCampaigns
                         ) {
-                            recordGameLiveProbe(gameKey, hasLiveChannel: true)
+                            recordGameLiveProbe(
+                                gameKey,
+                                hasLiveChannel: true,
+                                campaignId: selection.campaign.id,
+                                channelName: selection.channel.displayName
+                            )
                             selectedCampaign = selection.campaign
                             selectedChannel = selection.channel
                             selectedChannelWasUnverified = !selection.wasVerified

@@ -7,6 +7,34 @@ extension TwitchAPIClient {
 
     /// Fetch drop campaigns
     public func fetchDropCampaigns() async throws -> [Campaign] {
+        if let dropCampaignRefresh {
+            return try await dropCampaignRefresh.task.value
+        }
+
+        let refreshID = UUID()
+        let refreshTask = Task { [self] in
+            try await fetchDropCampaignsUncoalesced()
+        }
+        dropCampaignRefresh = DropCampaignRefresh(id: refreshID, task: refreshTask)
+
+        do {
+            let campaigns = try await refreshTask.value
+            if dropCampaignRefresh?.id == refreshID {
+                dropCampaignRefresh = nil
+            }
+            return campaigns
+        } catch {
+            if dropCampaignRefresh?.id == refreshID {
+                dropCampaignRefresh = nil
+            }
+            throw error
+        }
+    }
+
+    /// Performs the actual dashboard/detail fan-out. Callers enter through
+    /// `fetchDropCampaigns()`, which shares this work when the mining engine and the
+    /// Drops projection ask for the same cold data at launch.
+    private func fetchDropCampaignsUncoalesced() async throws -> [Campaign] {
         let request = GraphQLRequest(
             operationName: "ViewerDropsDashboard",
             sha256Hash: GQLHashes.viewerDropsDashboard,
@@ -96,8 +124,8 @@ extension TwitchAPIClient {
     /// Restores the campaign-details and link-state caches from disk on first use.
     ///
     /// Without this, every cold launch re-fetched `DropCampaignDetails` for each of the
-    /// ~100 time-active campaigns, per account, through the 5-request-per-second global
-    /// gate — the bulk of the wait before mining starts.
+    /// ~100 time-active campaigns per account through the coordinated request gate — the
+    /// bulk of the wait before mining starts.
     ///
     /// Existing in-memory entries always win: a live cycle's answer is never displaced by
     /// a file. Loading is deferred until a login is known, because the cache keys embed it.
@@ -220,6 +248,54 @@ extension TwitchAPIClient {
             return campaign
         }
 
+        // A dashboard-confirmed link gives this account all of the account-specific context
+        // needed to use scrubbed campaign metadata safely. Coalesce the remaining cold lookup
+        // across miners: its initiator keeps the full response, while every waiter receives a
+        // copy with progress, claims, and link state removed and supplies its own context here.
+        if let basicCampaign, basicCampaign.isAccountConnected {
+            let resolution = try await SharedTwitchLookupCache.shared.resolveCampaignMetadata(
+                for: sharedKey,
+                ttl: sharedCampaignMetadataTTL
+            ) { [self] in
+                try await fetchCampaignDetailsFromNetwork(
+                    campaignId: campaignId,
+                    userLogin: userLogin
+                )
+            }
+            let campaign = resolution.loadedByCaller
+                ? resolution.campaign
+                : Self.campaign(
+                    fromSharedMetadata: resolution.campaign,
+                    accountContext: basicCampaign,
+                    isAccountConnected: true
+                )
+            cacheCampaignDetailsForAccount(campaign, cacheKey: cacheKey)
+            await traceGQLDebug {
+                resolution.loadedByCaller
+                    ? "[TwitchAPIClient] DropCampaignDetails populated shared metadata for \(campaignId)"
+                    : "[TwitchAPIClient] DropCampaignDetails shared in-flight hit for \(campaignId)"
+            }
+            return campaign
+        }
+
+        let campaign = try await fetchCampaignDetailsFromNetwork(
+            campaignId: campaignId,
+            userLogin: userLogin
+        )
+        cacheCampaignDetailsForAccount(campaign, cacheKey: cacheKey)
+        await SharedTwitchLookupCache.shared.storeCampaignMetadata(
+            Self.sharedCampaignMetadata(from: campaign),
+            key: sharedKey,
+            ttl: sharedCampaignMetadataTTL
+        )
+        return campaign
+    }
+
+    private func fetchCampaignDetailsFromNetwork(
+        campaignId: String,
+        userLogin: String
+    ) async throws -> Campaign {
+
         let request = GraphQLRequest(
             operationName: "DropCampaignDetails",
             sha256Hash: GQLHashes.dropCampaignDetails,
@@ -242,7 +318,10 @@ extension TwitchAPIClient {
             throw TwitchMinerError.invalidResponse
         }
 
-        let campaign = parseDetailedCampaign(from: dropCampaign)
+        return parseDetailedCampaign(from: dropCampaign)
+    }
+
+    private func cacheCampaignDetailsForAccount(_ campaign: Campaign, cacheKey: String) {
         Self.pruneCache(
             &campaignDetailsByKey,
             maxEntries: maxCampaignDetailsCacheEntries,
@@ -264,12 +343,6 @@ extension TwitchAPIClient {
             expiresAt: Date().addingTimeInterval(campaignLinkStateTTL)
         )
         campaignCachesNeedPersisting = true
-        await SharedTwitchLookupCache.shared.storeCampaignMetadata(
-            Self.sharedCampaignMetadata(from: campaign),
-            key: sharedKey,
-            ttl: sharedCampaignMetadataTTL
-        )
-        return campaign
     }
 
     /// A shared reconstruction must never keep an account-specific answer alive beyond the

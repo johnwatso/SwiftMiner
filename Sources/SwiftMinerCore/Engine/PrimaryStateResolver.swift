@@ -145,40 +145,30 @@ public enum PrimaryStateResolver {
             return .blocked(reasons: [.accountNotLinked])
         }
         
-        // 1b. Specific Campaign Block (Disconnected)
-        // John: "disconnected campaign account... must show 'Link Required'"
-        // Task 1 UPDATE: Miners only reason about what they can actually do.
-        // We only show blocked if the user is TRYING to mine something prioritised
-        // that is blocked, OR if they have no eligible work but have prioritised games.
-        
+        // 1b. A prioritised, active campaign can still be attempted while its
+        // external game account is unlinked. Keep the link warning as a blocked
+        // presentation only when there is no linked earnable work to fall back to.
         let priorityGamesLower = Set(miner.priorityGames.map { $0.lowercased() })
-        
-        // Find prioritised games that are active but unlinked.
         let blockedPriority = relevantCampaigns.filter { campaign in
-            campaign.isTimeActive && 
-            !campaign.isAccountConnected && 
-            priorityGamesLower.contains(campaign.gameName.lowercased()) &&
-            campaign.drops.contains { !isEarned($0) }
+            campaign.isTimeActive &&
+                !campaign.isAccountConnected &&
+                priorityGamesLower.contains(campaign.gameName.lowercased()) &&
+                campaign.drops.contains { !isEarned($0) }
         }
-        
-        // Find any active, linked, earnable campaign.
         let hasEarnableWork = relevantCampaigns.contains { campaign in
             campaign.isTimeActive && campaign.isAccountConnected && campaign.drops.contains { !isEarned($0) }
         }
-        
-        // Only block if a prioritised game is unlinked AND we have no other earnable work.
-        // If we have other work, we should be .ready for that work instead.
         if !blockedPriority.isEmpty && !hasEarnableWork {
             Logger.engine.info("prioritised campaign(s) unlinked and no other work → .blocked(.accountNotLinked)")
             return .blocked(reasons: [.accountNotLinked])
         }
-        
+
         // 1c. No Live Streams Block (Stable Engine State)
         if miner.status == .waitingForStream {
             Logger.engine.info("status=.waitingForStream → .blocked(.noLiveStreams)")
             return .blocked(reasons: [.noLiveStreams])
         }
-        
+
         // 1d. Eligibility Block (No campaigns at all)
         if relevantCampaigns.isEmpty {
             Logger.engine.info("no campaigns with drops → .blocked(.noEligibleCampaign)")

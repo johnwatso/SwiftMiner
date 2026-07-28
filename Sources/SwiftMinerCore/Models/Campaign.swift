@@ -472,6 +472,16 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
         drops.filter { $0.isSubscriptionRequired && !$0.isClaimed && ($0.progress?.currentMinutes ?? 0) == 0 }
     }
 
+    /// Whether watching can still earn anything here.
+    /// Subscription-gated drops can never be earned by watching, so a campaign whose
+    /// only unclaimed drops are gated counts as finished for scheduling and status.
+    public var hasWatchableWorkRemaining: Bool {
+        drops.contains { drop in
+            guard !drop.isClaimed else { return false }
+            return !(drop.isSubscriptionRequired && (drop.progress?.currentMinutes ?? 0) == 0)
+        }
+    }
+
     /// Returns drops that can be earned now (not claimed, NOT yet claimable, and all preconditions met).
     public var earnableDrops: [Drop] {
         drops.filter { drop in

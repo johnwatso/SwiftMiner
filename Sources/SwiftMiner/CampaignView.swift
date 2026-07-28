@@ -378,6 +378,14 @@ struct DropsListView: View {
             return true
         }
 
+        if DropsCampaignFilterRules.preservesCampaignOutsideCuratedFeed(
+            campaign,
+            selectedFilters: selectedFilters,
+            now: now
+        ) {
+            return true
+        }
+
         // A game the user prioritised stays in the feed for its whole run, even
         // once every reward is claimed. Previously the obtainable-rewards gate
         // made a prioritised campaign vanish the moment it completed, which
@@ -804,26 +812,8 @@ struct DropsListView: View {
         }
     }
 
-    private func matchesNeedsSetupFilter(_ campaign: CampaignViewData, activity: CampaignActivitySnapshot, now: Date) -> Bool {
-        // Needs setup must only contain active, live, and mineable/actionable campaigns
-        guard campaign.startDate <= now else {
-            return false
-        }
-        // It must NOT contain ended/expired campaigns
-        guard !campaign.isExpired(now: now) && campaign.endDate > now else {
-            return false
-        }
-        // It must NOT contain completed/fully claimed campaigns
-        guard !campaign.isCompleted else {
-            return false
-        }
-        // It must have obtainable rewards remaining
-        guard campaign.hasObtainableRewards else {
-            return false
-        }
-        // Link-only warnings are represented after claim as "Claimed · not linked";
-        // before then, they should not become their own Drops state.
-        return isBlockedCampaign(campaign, activity: activity)
+    private func matchesNeedsSetupFilter(_ campaign: CampaignViewData, now: Date) -> Bool {
+        DropsCampaignFilterRules.matchesNeedsSetup(campaign, now: now)
     }
 
     private func matchesUpcomingFilter(_ campaign: CampaignViewData, activity: CampaignActivitySnapshot, now: Date) -> Bool {
@@ -846,7 +836,7 @@ struct DropsListView: View {
     }
 
     private func filters(for campaign: CampaignViewData, activity: CampaignActivitySnapshot, now: Date) -> Set<DropFilter> {
-        if matchesNeedsSetupFilter(campaign, activity: activity, now: now) {
+        if matchesNeedsSetupFilter(campaign, now: now) {
             return [.needsSetup]
         }
 

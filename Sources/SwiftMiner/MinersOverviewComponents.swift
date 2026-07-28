@@ -319,16 +319,7 @@ struct MinerSourceListRow: View {
     }
 
     private func activityLabel(for snapshot: MinerActivitySnapshot) -> String {
-        if snapshot.now.id.hasPrefix("override-") {
-            return "Watching \(snapshot.now.title)"
-        }
-        if snapshot.now.campaignId != nil {
-            return "Watching \(snapshot.now.title)"
-        }
-        if let next = snapshot.upNext {
-            return "Likely next: \(next.title)"
-        }
-        return snapshot.statusText
+        snapshot.sourceListActivityLabel
     }
 
     private var priorityLabel: String {

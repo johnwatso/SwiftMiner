@@ -87,9 +87,73 @@ final class DropsMinerCampaignFilterTests: XCTestCase {
         )
     }
 
+    func testNeedsSetupPreservesLiveUnlinkedCampaignOutsideCuratedFeed() {
+        let campaign = makeCampaign(
+            id: "campaign-unlinked",
+            gameName: "Unlinked Game",
+            isAccountConnected: false,
+            relevance: .irrelevant,
+            accountStates: [
+                AccountState(
+                    accountId: "selected",
+                    username: "Selected",
+                    initials: "S",
+                    miningStatus: .blocked
+                )
+            ]
+        )
+
+        XCTAssertTrue(DropsCampaignFilterRules.matchesNeedsSetup(campaign, now: now))
+        XCTAssertTrue(
+            DropsCampaignFilterRules.preservesCampaignOutsideCuratedFeed(
+                campaign,
+                selectedFilters: [.needsSetup],
+                now: now
+            )
+        )
+        XCTAssertFalse(
+            DropsCampaignFilterRules.preservesCampaignOutsideCuratedFeed(
+                campaign,
+                selectedFilters: [.active],
+                now: now
+            ),
+            "Unlinked public campaigns should only bypass curation for Needs Setup"
+        )
+    }
+
+    func testNeedsSetupDoesNotPreserveEndedUnlinkedCampaign() {
+        let campaign = makeCampaign(
+            id: "campaign-ended-unlinked",
+            gameName: "Ended Unlinked Game",
+            isAccountConnected: false,
+            relevance: .irrelevant,
+            endDate: now.addingTimeInterval(-60),
+            accountStates: [
+                AccountState(
+                    accountId: "selected",
+                    username: "Selected",
+                    initials: "S",
+                    miningStatus: .blocked
+                )
+            ]
+        )
+
+        XCTAssertFalse(DropsCampaignFilterRules.matchesNeedsSetup(campaign, now: now))
+        XCTAssertFalse(
+            DropsCampaignFilterRules.preservesCampaignOutsideCuratedFeed(
+                campaign,
+                selectedFilters: [.needsSetup],
+                now: now
+            )
+        )
+    }
+
     private func makeCampaign(
         id: String,
         gameName: String,
+        isAccountConnected: Bool = true,
+        relevance: CampaignRelevance = .active,
+        endDate: Date? = nil,
         accountStates: [AccountState]
     ) -> CampaignViewData {
         CampaignViewData(
@@ -104,10 +168,10 @@ final class DropsMinerCampaignFilterTests: XCTestCase {
             totalDrops: 1,
             status: "ACTIVE",
             miningStatus: .available,
-            isAccountConnected: true,
-            relevance: .active,
+            isAccountConnected: isAccountConnected,
+            relevance: relevance,
             startDate: now.addingTimeInterval(-3600),
-            endDate: now.addingTimeInterval(3600),
+            endDate: endDate ?? now.addingTimeInterval(3600),
             drops: [
                 DropViewData(
                     id: "drop-\(id)",
