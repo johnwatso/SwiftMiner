@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SwiftMiner 1.35.2 - Release Notes</title>
+  <meta name="description" content="Release notes for SwiftMiner 1.35.2: game artwork stored before box-art sizing existed now upgrades itself instead of rendering soft forever.">
+  <link rel="canonical" href="https://swiftminer.app/release-notes/1.35.2.html">
+  <meta name="robots" content="index, follow">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      margin: 0;
+      padding: 32px 20px 48px;
+      font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f4f6f8;
+      color: #0f1720;
+    }
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 28px;
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.86);
+      box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
+      border: 1px solid rgba(82, 96, 109, 0.12);
+    }
+    h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
+    .meta { margin: 0 0 10px; color: #52606d; font-size: 14px; }
+    .intro { margin: 0 0 24px; color: #384454; }
+    section {
+      margin: 18px 0 0;
+      padding: 18px 18px 14px;
+      border: 1px solid rgba(82, 96, 109, 0.18);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.42);
+      border-left: 5px solid var(--accent, #0a67a3);
+    }
+    section.green  { --accent: #1c8c73; }
+    section.indigo { --accent: #5f5ac8; }
+    section.violet { --accent: #7b4bd9; }
+    section.amber  { --accent: #b9760a; }
+    section.teal   { --accent: #0a8aa3; }
+    section.rose   { --accent: #c0344d; }
+    h2 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 4px;
+      color: var(--accent, #0a67a3);
+      font-size: 18px;
+    }
+    .badge {
+      display: inline-grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--accent, #0a67a3) 15%, transparent);
+      font-size: 16px;
+    }
+    .summary { margin: 0 0 12px; color: #52606d; font-size: 14px; }
+    ul { margin: 0; padding-left: 22px; }
+    li { margin: 0 0 8px; }
+    li:last-child { margin-bottom: 0; }
+    code {
+      font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: rgba(82, 96, 109, 0.12);
+      padding: 1px 5px;
+      border-radius: 5px;
+    }
+    a { color: #0a67a3; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #0b1015; color: #edf2f7; }
+      main {
+        background: rgba(15, 23, 32, 0.88);
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+        border-color: rgba(159, 176, 194, 0.14);
+      }
+      .meta, .summary { color: #9fb0c2; }
+      .intro { color: #c8d3df; }
+      section {
+        border-color: rgba(159, 176, 194, 0.18);
+        background: rgba(255, 255, 255, 0.04);
+      }
+      code { background: rgba(159, 176, 194, 0.18); }
+      a { color: #73c3ff; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>SwiftMiner 1.35.2</h1>
+    <p class="meta">Version 1.35.2 &middot; Build 2026072911</p>
+    <p class="intro">Game artwork looked sharp on a fresh install but stayed soft on an existing one, and clearing the artwork cache never helped. Stored artwork links now upgrade themselves on load.</p>
+
+    <section class="rose">
+      <h2><span class="badge" aria-hidden="true">&#128444;</span> Artwork Resolution</h2>
+      <p class="summary">Existing installs were pinned to Twitch's smallest box art.</p>
+      <ul>
+        <li>Game artwork saved before higher-resolution box art existed now upgrades itself when it is loaded. SwiftMiner resized artwork links only at the moment they arrived from Twitch, but campaigns and prioritised games are saved to disk and restored exactly as they were stored &mdash; so any artwork remembered from an earlier version kept its original small size indefinitely.</li>
+        <li>This is why clearing the artwork cache appeared to do nothing: it discarded the downloaded images, then fetched them again from the same low-resolution link. It is also why a fresh install looked correct while an upgraded one did not.</li>
+        <li>No cache clearing or re-selection is needed &mdash; existing artwork corrects itself on the next launch.</li>
+        <li>Artwork you uploaded yourself is left untouched, and artwork remembered from a purgeable system cache folder is still discarded rather than resurrected as a broken link.</li>
+      </ul>
+    </section>
+
+    <section class="indigo">
+      <h2><span class="badge" aria-hidden="true">&#129514;</span> Under the Hood</h2>
+      <p class="summary">Regression coverage for the stored-artwork path.</p>
+      <ul>
+        <li>Adds tests that decode artwork saved by an earlier version and assert it comes back at full resolution, for both saved campaigns and prioritised games.</li>
+        <li>Adds coverage for the resizing rules themselves: baked-in sizes, template links, links that must be left alone, and Twitch's dimension ceiling above which it stops preserving aspect ratio.</li>
+        <li>Prepared as SwiftMiner <strong>1.35.2</strong>, build <strong>2026072911</strong>.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>
