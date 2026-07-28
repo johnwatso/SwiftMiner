@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Release SwiftMiner 1.35.1 - Release Notes</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      margin: 0;
+      padding: 32px 20px 48px;
+      font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f4f6f8;
+      color: #0f1720;
+    }
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 28px;
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.86);
+      box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
+    }
+    h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
+    .meta { margin: 0 0 24px; color: #52606d; font-size: 14px; }
+    p { margin: 0 0 16px; }
+    a { color: #0a67a3; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #0b1015; color: #edf2f7; }
+      main {
+        background: rgba(15, 23, 32, 0.88);
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+      }
+      .meta { color: #9fb0c2; }
+      a { color: #73c3ff; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Release SwiftMiner 1.35.1</h1>
+    <p class="meta">Version 1.35.1</p>
+    <p>Release SwiftMiner 1.35.1</p>
+<p>A follow-up to 1.35 that removes the multi-miner launch slowdown and stops<br>the miner status card reporting a paywall it was never waiting on.</p>
+<p>Subscription-gated campaigns</p>
+<p>- Stop presenting a subscription-gated campaign as a miner's current state.<br>Campaign and channel selection already excluded them, but the highest<br>priority one was substituted for the real status, so every idle miner<br>appeared parked on a paywall while it was actually looking for streams for<br>a different game.<br>- Treat a campaign whose only unclaimed drops need a paid subscription as<br>finished, so a prioritised game left with only those reads as up to date<br>rather than blocked.<br>- Stop a gated campaign suppressing the Up next row for another campaign in<br>the same game, which concealed work that could actually be mined.<br>- Keep the gated campaign visible as a mutable Pending reminder on the miner.</p>
+<p>Requests and launch performance</p>
+<p>- Fix the multi-miner launch slowdown that could leave accounts on Updating<br>for more than three minutes, by combining a bounded fleet request budget<br>with the existing five-request-per-second ceiling for each miner.<br>- Coalesce campaign refreshes at the Twitch client boundary so the mining<br>engine and dashboard share one campaign-detail fan-out.<br>- Coalesce cross-miner campaign-detail lookups once Twitch has confirmed each<br>account's link state, sharing campaign definitions while keeping progress,<br>claims, authentication and uncertain link state isolated per account.<br>- Prioritise followed streamers with one paginated followed-channel lookup<br>instead of one subscription request per candidate channel.</p>
+<p>Queue and status honesty</p>
+<p>- Explain Smart's deadline-first ordering, and report the miner's real recent<br>channel check instead of assuming no eligible live channel.<br>- Ignore unrelated unlinked campaigns while keeping an explicitly prioritised<br>game mineable before its external account is linked.<br>- Keep completed and unlinked campaigns out of prospective Up next and Then<br>positions, and only say Watching or Currently mining for a real session.<br>- Restore the Drops &quot;Needs Setup&quot; filter for live unlinked campaigns.</p>
+<p>Tests and versioning</p>
+<p>- Add coverage for startup refresh coalescing, per-miner ceilings inside the<br>fleet budget, account-state isolation, and followed-channel selection.<br>- Assert a subscription-gated priority game reads as up to date and no longer<br>suppresses a mineable campaign for the same game.<br>- Update SwiftMiner to version 1.35.1, build 2026072909, and add the 1.35.1<br>release notes page.</p>
+    <p><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/01df63507949bd027d81b37d35709c736d0d39af">01df635</a></p>
+  </main>
+</body>
+</html>
