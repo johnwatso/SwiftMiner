@@ -406,6 +406,30 @@ enum LogExporter {
             }
         }
 
+        if !performance.transportHosts.isEmpty {
+            out += "HTTP transport:\n"
+            for host in performance.transportHosts {
+                out += "  \(host.host): count=\(host.requestCount) reused=\(host.reusedConnectionCount)"
+                out += " taskAvg=\(formatPerfDuration(host.averageTaskSeconds))"
+                if let dns = host.averageDNSSeconds {
+                    out += " dnsAvg=\(formatPerfDuration(dns))"
+                }
+                if let connect = host.averageConnectSeconds {
+                    out += " connectAvg=\(formatPerfDuration(connect))"
+                }
+                if let tls = host.averageTLSSeconds {
+                    out += " tlsAvg=\(formatPerfDuration(tls))"
+                }
+                if let response = host.averageResponseSeconds {
+                    out += " responseAvg=\(formatPerfDuration(response))"
+                }
+                if !host.protocols.isEmpty {
+                    out += " protocols=\(host.protocols.joined(separator: ","))"
+                }
+                out += "\n"
+            }
+        }
+
         if performance.miningCycles.isEmpty {
             out += "Mining cycles: none recorded\n"
         } else {

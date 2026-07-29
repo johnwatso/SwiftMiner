@@ -15,7 +15,9 @@ struct MinersOverviewView: View {
     @State private var linkNotice: LinkNotice?
     @State private var nicknameEditor: MinerNicknameEditorPresentation?
     @State private var streamOverrideEditor: MinerStreamOverridePresentation?
-    @State private var isShowingGameManagement = false
+    @State private var isRefreshingSelectedMiner = false
+
+    private static let operatorSummaryCardHeight: CGFloat = 130
 
     private var miners: [MinerManager.ManagedMiner] {
         navigation.minerManager.miners
@@ -48,6 +50,20 @@ struct MinersOverviewView: View {
             }
         }
         .navigationTitle("Miners")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    guard let miner = selectedMiner else { return }
+                    refreshMiner(miner)
+                } label: {
+                    Label("Refresh", systemImage: "arrow.clockwise")
+                }
+                .help(selectedMiner?.isRunning == true
+                    ? "Refresh this miner's Twitch campaigns and inventory"
+                    : "Start this miner before refreshing its Twitch campaigns and inventory")
+                .disabled(selectedMiner?.isRunning != true || isRefreshingSelectedMiner)
+            }
+        }
         .task {
             syncSelection()
             captureInitialLinkIssuesIfNeeded()
@@ -85,12 +101,6 @@ struct MinersOverviewView: View {
             MinerStreamOverrideSheet(
                 miner: presentation.miner,
                 navigation: navigation
-            )
-        }
-        .sheet(isPresented: $isShowingGameManagement) {
-            GamePreferenceManagementView(
-                settings: settings,
-                minerManager: navigation.minerManager
             )
         }
     }
@@ -175,6 +185,10 @@ struct MinersOverviewView: View {
                             }
                         )
                     )
+
+                    if let attention = MinerAttentionIssue.resolve(miner: miner, events: navigation.events) {
+                        minerAttentionSection(for: miner, attention: attention)
+                    }
 
                     MinerMiningSequenceView(
                         miner: miner,
@@ -322,6 +336,40 @@ struct MinersOverviewView: View {
         }
     }
 
+    private func restartMiner(for miner: MinerManager.ManagedMiner) {
+        Task {
+            await navigation.minerManager.stopMiner(minerId: miner.id)
+            try? await navigation.minerManager.startMiner(
+                minerId: miner.id,
+                priorityGames: settings.priorityGames(forAccountId: miner.accountId),
+                excludedGames: settings.excludedGames,
+                strategy: settings.miningStrategy,
+                enableBadgesEmotes: settings.enableBadgesEmotes,
+                showClaimNotifications: settings.showClaimNotifications,
+                avoidDuplicateStreams: settings.avoidDuplicateStreams,
+                antiStallRecoveryEnabled: settings.antiStallRecoveryEnabled,
+                prioritiseFollowedStreamers: settings.prioritiseFollowedStreamers,
+                failoverStreamers: settings.gameFailoverStreamers
+            )
+            await refreshSelectedActivitySummary(for: miner.id)
+        }
+    }
+
+    /// Refreshes only the selected miner. This leaves every other miner's
+    /// engine, channel and Twitch request budget untouched.
+    private func refreshMiner(_ miner: MinerManager.ManagedMiner) {
+        guard miner.isRunning, !isRefreshingSelectedMiner else { return }
+
+        Task {
+            isRefreshingSelectedMiner = true
+            defer { isRefreshingSelectedMiner = false }
+
+            await navigation.minerManager.forceRefreshMiner(minerId: miner.id)
+            await navigation.minerManager.dataCoordinator.refreshMiner(minerId: miner.id)
+            await refreshSelectedActivitySummary(for: miner.id)
+        }
+    }
+
     private func presentNicknameEditor(for miner: MinerManager.ManagedMiner) {
         nicknameEditor = MinerNicknameEditorPresentation(miner: miner)
     }
@@ -402,7 +450,56 @@ struct MinersOverviewView: View {
                     isHealthy: !miner.isNotEarning()
                 )
             }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .frame(height: Self.operatorSummaryCardHeight, alignment: .topLeading)
         }
+    }
+
+    private func minerAttentionSection(
+        for miner: MinerManager.ManagedMiner,
+        attention: MinerAttentionIssue
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.red)
+                Text("Needs attention")
+                    .font(.headline)
+                Spacer()
+            }
+
+            Text(attention.title)
+                .font(.subheadline.weight(.semibold))
+
+            Text(attention.detail)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("What to do")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text(attention.recommendation)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let action = attention.action {
+                Button(action.title) {
+                    switch action {
+                    case .reconnect:
+                        startLinkAccountFlow(for: miner)
+                    case .restart:
+                        restartMiner(for: miner)
+                    }
+                }
+                .tahoeButtonStyle()
+            }
+        }
+        .padding(16)
+        .tahoeCard(tint: .red.opacity(0.08))
+        .accessibilityElement(children: .combine)
     }
 
     private func healthCheckRow(
@@ -531,109 +628,77 @@ struct MinersOverviewView: View {
         let global = includesGlobal
             ? settings.priorityGames.filter { !personalKeys.contains($0.lowercased()) }
             : []
-        return TahoeSection("Priority queue") {
-            Button {
-                isShowingGameManagement = true
-            } label: {
-                Label("Edit", systemImage: "pencil")
-            }
-            .tahoeButtonStyle()
-            .controlSize(.small)
+        let effectivePriorities = personal.map { ($0, false) } + global.map { ($0, true) }
 
-            if hasMultipleMiners {
-                Toggle("Use global", isOn: Binding(
-                    get: { settings.includesGlobalPriorityGames(forAccountId: miner.accountId) },
-                    set: { include in
-                        settings.setIncludesGlobalPriorityGames(include, forAccountId: miner.accountId)
-                        let updated = settings.priorityGames(forAccountId: miner.accountId)
-                        navigation.minerManager.updatePriorityGames(updated, forMinerId: miner.id)
-                        if miner.isRunning {
-                            Task { await navigation.minerManager.forceRefreshMiner(minerId: miner.id) }
+        return TahoeSection("Priority queue") {
+            VStack(alignment: .leading, spacing: 12) {
+                if hasMultipleMiners {
+                    HStack(alignment: .center, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Global priorities")
+                                .font(.subheadline.weight(.medium))
+                            Text(includesGlobal
+                                ? "Combined with this miner's own queue"
+                                : "Only this miner's own queue is active")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
+
+                        Spacer(minLength: 12)
+
+                        Toggle("Include global priorities", isOn: Binding(
+                            get: { settings.includesGlobalPriorityGames(forAccountId: miner.accountId) },
+                            set: { include in
+                                settings.setIncludesGlobalPriorityGames(include, forAccountId: miner.accountId)
+                                let updated = settings.priorityGames(forAccountId: miner.accountId)
+                                navigation.minerManager.updatePriorityGames(updated, forMinerId: miner.id)
+                                if miner.isRunning {
+                                    Task { await navigation.minerManager.forceRefreshMiner(minerId: miner.id) }
+                                }
+                            }
+                        ))
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                        .help("Include priorities shared by all miners")
+                        .accessibilityLabel("Include global priorities")
                     }
-                ))
-                .toggleStyle(.switch)
-                .controlSize(.small)
-            }
-        } content: {
-            VStack(alignment: .leading, spacing: 14) {
+
+                    Divider()
+                }
+
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("This miner")
+                    Text("Priority order")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
 
-                    if personal.isEmpty {
-                        Text("No personal priorities — add them from the dashboard or Discord.")
-                            .font(.callout)
-                            .foregroundStyle(.tertiary)
-                    } else {
-                        VStack(spacing: 0) {
-                            ForEach(Array(personal.enumerated()), id: \.element) { index, game in
-                                HStack(spacing: 9) {
-                                    Text("\(index + 1)")
-                                        .font(.caption.weight(.semibold).monospacedDigit())
-                                        .foregroundStyle(.secondary)
-                                        .frame(width: 20, height: 20)
-                                        .background(.quaternary, in: Circle())
-                                    Text(game)
-                                        .font(.subheadline)
-                                        .lineLimit(1)
-                                    Spacer()
-                                    Button {
-                                        removePersonalPriority(game, from: miner)
-                                    } label: {
-                                        Image(systemName: "xmark.circle")
-                                    }
-                                    .buttonStyle(.plain)
-                                    .foregroundStyle(.secondary)
-                                    .help("Remove \(game) from this miner")
-                                }
-                                .padding(.vertical, 7)
-
-                                if index < personal.count - 1 { Divider() }
-                            }
-                        }
-                        .padding(.horizontal, 10)
-                        .tahoeCard(cornerRadius: TahoeMetrics.nested)
-                    }
-                }
-
-                if includesGlobal {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Global queue")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-
-                        if global.isEmpty {
-                            Text(settings.priorityGames.isEmpty
-                                ? "The global list is empty."
-                                : "All global games are already covered by this miner's own list.")
+                    Group {
+                        if effectivePriorities.isEmpty {
+                            Text("No priorities yet — global priorities are managed from Overview; personal priorities are edited by the miner owner in WebUI.")
                                 .font(.callout)
                                 .foregroundStyle(.tertiary)
                         } else {
-                            FlowLayout(spacing: 6) {
-                                ForEach(Array(global.enumerated()), id: \.element) { index, game in
-                                    RankedPriorityChip(
-                                        rank: personal.count + index + 1,
-                                        gameName: game,
-                                        isGlobal: true,
-                                        onRemove: nil
-                                    )
+                            ScrollView(.horizontal) {
+                                HStack(spacing: 6) {
+                                    ForEach(Array(effectivePriorities.enumerated()), id: \.offset) { index, priority in
+                                        RankedPriorityChip(
+                                            rank: index + 1,
+                                            gameName: priority.0,
+                                            isGlobal: priority.1,
+                                            onRemove: nil
+                                        )
+                                    }
                                 }
                             }
+                            .scrollIndicators(.never)
                         }
                     }
+                    .frame(height: 28, alignment: .leading)
                 }
             }
             .padding(14)
-        }
-    }
-
-    private func removePersonalPriority(_ gameName: String, from miner: MinerManager.ManagedMiner) {
-        let updated = settings.deprioritiseGameForAccount(accountId: miner.accountId, gameName: gameName)
-        navigation.minerManager.updatePriorityGames(updated, forMinerId: miner.id)
-        if miner.isRunning {
-            Task { await navigation.minerManager.forceRefreshMiner(minerId: miner.id) }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .frame(height: Self.operatorSummaryCardHeight, alignment: .topLeading)
         }
     }
 
@@ -820,7 +885,6 @@ struct MinersOverviewView: View {
         }
     }
 
-    @ViewBuilder
     private func activePrioritisedCampaigns(for miner: MinerManager.ManagedMiner) -> [Campaign] {
         let configuredPriorityGames = miner.priorityGames.isEmpty ? settings.priorityGames : miner.priorityGames
         let priorityKeys = configuredPriorityGames

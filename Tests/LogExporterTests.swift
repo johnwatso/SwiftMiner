@@ -189,6 +189,18 @@ final class LogExporterTests: XCTestCase {
                 selectedChannel: "StreamerOne"
             )
         )
+        await PerformanceDiagnostics.shared.recordTransport(
+            HTTPTransportTiming(
+                host: "gql.twitch.tv",
+                taskSeconds: 0.42,
+                dnsSeconds: 0.02,
+                connectSeconds: 0.06,
+                tlsSeconds: 0.03,
+                responseSeconds: 0.40,
+                reusedConnection: true,
+                networkProtocol: "h2"
+            )
+        )
         let performance = await PerformanceDiagnostics.shared.snapshot()
         let usage = ResourceUsageMonitor.Diagnostics(
             isRunning: true,
@@ -233,6 +245,48 @@ final class LogExporterTests: XCTestCase {
         XCTAssertTrue(report.contains("ViewerDropsDashboard: count=1 ok=1 fail=0 avg=1.25s p95=1.25s max=1.25s retries=1 rateLimitWait=200ms"))
         XCTAssertTrue(report.contains("[Gabe] cycles=1 avg=2.00s p95=2.00s max=2.00s"))
         XCTAssertTrue(report.contains("outcome=watching total=2.00s campaigns=800ms claims=100ms channels=900ms watchStart=200ms candidates=3"))
+        XCTAssertTrue(report.contains("gql.twitch.tv: count=1 reused=1 taskAvg=420ms dnsAvg=20ms connectAvg=60ms tlsAvg=30ms responseAvg=400ms protocols=h2"))
+
+        await PerformanceDiagnostics.shared.reset()
+    }
+
+    func testTransportDiagnosticsKeepOnlyBoundedTimingSamples() async {
+        await PerformanceDiagnostics.shared.reset()
+
+        for value in 0...200 {
+            await PerformanceDiagnostics.shared.recordTransport(
+                HTTPTransportTiming(
+                    host: "gql.twitch.tv",
+                    taskSeconds: 0,
+                    dnsSeconds: TimeInterval(value)
+                )
+            )
+        }
+
+        let snapshot = await PerformanceDiagnostics.shared.snapshot()
+        guard let host = snapshot.transportHosts.first else {
+            return XCTFail("expected transport diagnostics for gql.twitch.tv")
+        }
+        XCTAssertEqual(host.requestCount, 201)
+        // The first of 201 samples is dropped; this catches accidental unbounded growth.
+        XCTAssertEqual(host.averageDNSSeconds ?? -1, 100.5, accuracy: 0.000_001)
+
+        await PerformanceDiagnostics.shared.reset()
+    }
+
+    func testTransportDiagnosticsKeepOnlyBoundedHostEntries() async {
+        await PerformanceDiagnostics.shared.reset()
+
+        for value in 0...20 {
+            await PerformanceDiagnostics.shared.recordTransport(
+                HTTPTransportTiming(host: "host-\(value).example", taskSeconds: 0)
+            )
+        }
+
+        let hosts = await PerformanceDiagnostics.shared.snapshot().transportHosts
+        XCTAssertEqual(hosts.count, 20)
+        XCTAssertFalse(hosts.contains { $0.host == "host-0.example" })
+        XCTAssertTrue(hosts.contains { $0.host == "host-20.example" })
 
         await PerformanceDiagnostics.shared.reset()
     }

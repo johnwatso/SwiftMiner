@@ -333,6 +333,19 @@ public final class MiningDataCoordinator {
         await aggregatedService.refreshAll()
     }
 
+    /// Force refresh one miner's campaign and inventory data, then update the
+    /// shared CampaignStore without issuing requests for the other accounts.
+    public func refreshMiner(minerId: String) async {
+        guard let accountId = minerAccountIds[minerId] else { return }
+
+        if let engine = minerEngines[minerId] {
+            let currentCampaignId = await engine.currentCampaignId
+            await aggregatedService.updateActiveCampaign(accountId: accountId, campaignId: currentCampaignId)
+        }
+
+        await aggregatedService.refreshAccount(accountId: accountId)
+    }
+
     /// Update whether an account needs manual re-authentication in aggregated UI state.
     public func updateAccountNeedsAuth(accountId: String, needsAuth: Bool) async {
         await aggregatedService.updateAccountNeedsAuth(accountId: accountId, needsAuth: needsAuth)

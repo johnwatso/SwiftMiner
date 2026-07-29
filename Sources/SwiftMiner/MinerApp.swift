@@ -24,6 +24,9 @@ struct MinerApp: App {
     @Environment(\.openWindow) private var openWindow
 
     init() {
+        if !SwiftMinerRuntime.isRunningTests {
+            AppMetrics.shared.start()
+        }
         let clientId = ClientConfiguration.clientId
         let healthStore = SwiftMinerRuntime.isRunningTests
             ? nil

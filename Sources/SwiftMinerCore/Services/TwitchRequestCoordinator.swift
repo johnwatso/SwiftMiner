@@ -10,7 +10,8 @@ public actor TwitchRequestCoordinator {
     public static let shared = TwitchRequestCoordinator(
         maxRequests: 20,
         maxRequestsPerClient: 5,
-        connectivity: { NetworkAvailability.shared.isOnline }
+        connectivity: { NetworkAvailability.shared.isOnline },
+        connectivityWaiter: { await NetworkAvailability.shared.waitUntilOnline() }
     )
 
     private let maxRequests: Int
@@ -19,6 +20,7 @@ public actor TwitchRequestCoordinator {
     private let offlinePollNanoseconds: UInt64
     private let runtimeClock: RuntimeClock
     private let connectivity: @Sendable () -> Bool
+    private let connectivityWaiter: (@Sendable () async -> Void)?
     private var requestTicks: [UInt64] = []
     private var requestTicksByClient: [String: [UInt64]] = [:]
     private var deferredUntilTick: UInt64?
@@ -29,7 +31,8 @@ public actor TwitchRequestCoordinator {
         per window: TimeInterval = 1,
         offlinePollInterval: TimeInterval = 2,
         runtimeClock: RuntimeClock = .continuous,
-        connectivity: @escaping @Sendable () -> Bool = { true }
+        connectivity: @escaping @Sendable () -> Bool = { true },
+        connectivityWaiter: (@Sendable () async -> Void)? = nil
     ) {
         self.maxRequests = max(1, maxRequests)
         self.maxRequestsPerClient = maxRequestsPerClient.map { max(1, $0) }
@@ -37,6 +40,7 @@ public actor TwitchRequestCoordinator {
         self.offlinePollNanoseconds = Self.nanoseconds(offlinePollInterval)
         self.runtimeClock = runtimeClock
         self.connectivity = connectivity
+        self.connectivityWaiter = connectivityWaiter
     }
 
     /// Waits for connectivity, a shared `Retry-After` cooldown, and both fleet and client slots.
@@ -47,7 +51,15 @@ public actor TwitchRequestCoordinator {
 
         while !connectivity() {
             try Task.checkCancellation()
-            try await runtimeClock.sleep(nanoseconds: offlinePollNanoseconds)
+            if let connectivityWaiter {
+                await connectivityWaiter()
+                try Task.checkCancellation()
+            } else {
+                // Keep the injectable polling fallback for deterministic tests and custom
+                // coordinators. Production uses the NWPathMonitor waiter below and resumes as
+                // soon as macOS reports a route again.
+                try await runtimeClock.sleep(nanoseconds: offlinePollNanoseconds)
+            }
         }
 
         while true {
@@ -138,17 +150,51 @@ private final class NetworkAvailability: @unchecked Sendable {
     private let queue = DispatchQueue(label: "com.swiftminer.network-path")
     private let lock = NSLock()
     private var online = true
+    private var onlineWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
 
     var isOnline: Bool {
         lock.withLock { online }
     }
 
+    func waitUntilOnline() async {
+        guard !isOnline else { return }
+
+        let waiterID = UUID()
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                let resumeImmediately = lock.withLock { () -> Bool in
+                    guard !online else { return true }
+                    onlineWaiters[waiterID] = continuation
+                    return false
+                }
+                if resumeImmediately {
+                    continuation.resume()
+                }
+            }
+        } onCancel: {
+            let continuation = self.lock.withLock {
+                self.onlineWaiters.removeValue(forKey: waiterID)
+            }
+            continuation?.resume()
+        }
+    }
+
     private init() {
         monitor.pathUpdateHandler = { [weak self] path in
-            self?.lock.withLock {
-                self?.online = path.status != .unsatisfied
-            }
+            self?.updateAvailability(isOnline: path.status != .unsatisfied)
         }
         monitor.start(queue: queue)
+    }
+
+    private func updateAvailability(isOnline: Bool) {
+        let waiters: [CheckedContinuation<Void, Never>] = lock.withLock {
+            let becameOnline = !online && isOnline
+            online = isOnline
+            guard becameOnline else { return [] }
+            let pending = Array(onlineWaiters.values)
+            onlineWaiters.removeAll()
+            return pending
+        }
+        waiters.forEach { $0.resume() }
     }
 }

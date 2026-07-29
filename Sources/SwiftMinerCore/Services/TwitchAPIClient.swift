@@ -154,6 +154,9 @@ public actor TwitchAPIClient {
     private let authService: TwitchAuthService
     private var accessToken: String
     private let session: URLSession
+    /// Retained by the session while it emits transport metrics. Nil for injected test sessions,
+    /// whose delegate behaviour must remain entirely under the test's control.
+    private let transportMetricsCollector: TwitchHTTPTransportMetricsCollector?
     private let requestCoordinator: TwitchRequestCoordinator
     private let requestCoordinatorClientID = UUID().uuidString
     private let runtimeClock: RuntimeClock
@@ -338,11 +341,14 @@ public actor TwitchAPIClient {
 
         if let session = session {
             self.session = session
+            self.transportMetricsCollector = nil
         } else {
             let config = URLSessionConfiguration.default
             config.timeoutIntervalForRequest = 30
             config.timeoutIntervalForResource = 60
-            self.session = URLSession(configuration: config)
+            let collector = TwitchHTTPTransportMetricsCollector()
+            self.transportMetricsCollector = collector
+            self.session = URLSession(configuration: config, delegate: collector, delegateQueue: nil)
         }
     }
 

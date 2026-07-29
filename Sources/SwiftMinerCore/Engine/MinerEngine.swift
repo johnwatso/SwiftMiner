@@ -125,6 +125,9 @@ public actor MinerEngine {
     private var isRunning = false
     private var mainTask: Task<Void, Never>?
     private var maintenanceTask: Task<Void, Never>?
+    /// A real watch session is user-requested work. Keep normal App Nap heuristics from
+    /// deprioritising its heartbeat and recovery timers, while still allowing macOS to sleep.
+    private var activeWatchActivity: NSObjectProtocol?
     var currentAccount: Account?
     private var shouldSwitchChannel = false
     /// Set to true to interrupt the idle wait and immediately re-check for eligible campaigns
@@ -808,6 +811,7 @@ public actor MinerEngine {
         try? await dropEventsService.stopWatching()
         
         await watchSessionManager.stopWatching()
+        endActiveWatchActivity()
         
         session?.status = .stopped
         session?.endedAt = Date()
@@ -1151,6 +1155,7 @@ public actor MinerEngine {
         let channelId = session?.currentChannelId
 
         await watchSessionManager.stopWatching()
+        endActiveWatchActivity()
         if let channelId, !channelId.isEmpty {
             try? await dropEventsService.stopWatchingChannel(channelId)
         }
@@ -1161,6 +1166,20 @@ public actor MinerEngine {
             currentChannelName = nil
             currentChannelId = nil
         }
+    }
+
+    private func beginActiveWatchActivity(for channel: Channel) {
+        guard activeWatchActivity == nil else { return }
+        activeWatchActivity = ProcessInfo.processInfo.beginActivity(
+            options: .userInitiatedAllowingIdleSystemSleep,
+            reason: "Mining Twitch Drops on \(channel.displayName)"
+        )
+    }
+
+    private func endActiveWatchActivity() {
+        guard let activeWatchActivity else { return }
+        ProcessInfo.processInfo.endActivity(activeWatchActivity)
+        self.activeWatchActivity = nil
     }
     
     // MARK: - Maintenance Loop
@@ -1481,6 +1500,7 @@ public actor MinerEngine {
                         gameName: campaign.game.name,
                         gameId: campaign.game.id
                     )
+                    beginActiveWatchActivity(for: channel)
                     perfWatchStartupSeconds += Date().timeIntervalSince(perfStartedAt)
                     onStatusChange?(.watching)
                     await finishPerformanceCycle(outcome: "watching", campaign: campaign, channel: channel)

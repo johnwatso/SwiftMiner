@@ -43,6 +43,36 @@ private final class LockedInt: @unchecked Sendable {
     func get() -> Int { lock.withLock { value } }
 }
 
+private final class ConnectivityGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var online = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    var isOnline: Bool { lock.withLock { online } }
+    var waiterCount: Int { lock.withLock { waiters.count } }
+
+    func waitUntilOnline() async {
+        guard !isOnline else { return }
+        await withCheckedContinuation { continuation in
+            let resumeImmediately = lock.withLock { () -> Bool in
+                guard !online else { return true }
+                waiters.append(continuation)
+                return false
+            }
+            if resumeImmediately { continuation.resume() }
+        }
+    }
+
+    func restoreConnectivity() {
+        let pending = lock.withLock { () -> [CheckedContinuation<Void, Never>] in
+            online = true
+            defer { waiters.removeAll() }
+            return waiters
+        }
+        pending.forEach { $0.resume() }
+    }
+}
+
 @MainActor
 final class MiningReliabilityChaosTests: XCTestCase {
     private var session: URLSession!
@@ -171,6 +201,29 @@ final class MiningReliabilityChaosTests: XCTestCase {
 
         _ = try await coordinator.waitForPermit(clientID: "a")
         XCTAssertGreaterThanOrEqual(clock.now, 1_000_000_000)
+    }
+
+    func testCoordinatorUsesConnectivitySignalInsteadOfPolling() async throws {
+        let clock = ChaosClock()
+        let gate = ConnectivityGate()
+        let coordinator = TwitchRequestCoordinator(
+            maxRequests: 1,
+            offlinePollInterval: 60,
+            runtimeClock: clock.clock,
+            connectivity: { gate.isOnline },
+            connectivityWaiter: { await gate.waitUntilOnline() }
+        )
+
+        let permit = Task { try await coordinator.waitForPermit() }
+        for _ in 0..<20 where gate.waiterCount == 0 {
+            await Task.yield()
+        }
+        XCTAssertEqual(gate.waiterCount, 1)
+        XCTAssertTrue(clock.requestedSleeps.isEmpty, "the coordinator should wait for NWPath, not poll")
+
+        gate.restoreConnectivity()
+        _ = try await permit.value
+        XCTAssertEqual(clock.now, 0)
     }
 
     func testAmbiguousClaimIsAcceptedWhenFreshInventoryConfirmsIt() async throws {

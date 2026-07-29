@@ -31,6 +31,21 @@ public actor PerformanceDiagnostics {
         public let error: String?
     }
 
+    /// URLSession's lower-level view of Twitch transport. Operation metrics include rate-limit
+    /// coordination and retries; these timings identify where the final HTTP transaction spent
+    /// time when an operation itself is slow.
+    public struct TransportHost: Sendable, Equatable {
+        public let host: String
+        public let requestCount: Int
+        public let reusedConnectionCount: Int
+        public let averageTaskSeconds: TimeInterval
+        public let averageDNSSeconds: TimeInterval?
+        public let averageConnectSeconds: TimeInterval?
+        public let averageTLSSeconds: TimeInterval?
+        public let averageResponseSeconds: TimeInterval?
+        public let protocols: [String]
+    }
+
     public struct MiningCycleTiming: Sendable, Equatable {
         public let minerId: String
         public let minerLabel: String
@@ -93,6 +108,7 @@ public actor PerformanceDiagnostics {
         public let requestOperations: [RequestOperation]
         public let slowRequests: [RecentRequest]
         public let miningCycles: [MiningCycleSummary]
+        public let transportHosts: [TransportHost]
     }
 
     private struct RequestAccumulator {
@@ -119,14 +135,31 @@ public actor PerformanceDiagnostics {
         var slowCycles: [MiningCycleTiming] = []
     }
 
+    private struct TransportAccumulator {
+        var requestCount = 0
+        var reusedConnectionCount = 0
+        var totalTaskSeconds: TimeInterval = 0
+        var dnsSamples: [TimeInterval] = []
+        var connectSamples: [TimeInterval] = []
+        var tlsSamples: [TimeInterval] = []
+        var responseSamples: [TimeInterval] = []
+        var protocols: Set<String> = []
+        var lastRecordedOrder: UInt64 = 0
+    }
+
     private var requestsByOperation: [String: RequestAccumulator] = [:]
     private var slowRequests: [RecentRequest] = []
     private var miningByMiner: [String: MiningAccumulator] = [:]
+    private var transportByHost: [String: TransportAccumulator] = [:]
+    private var transportRecordOrder: UInt64 = 0
 
     private let maxLatencySamplesPerOperation = 200
     private let maxSlowRequests = 20
     private let maxDurationsPerMiner = 100
     private let maxSlowCyclesPerMiner = 5
+    private let maxTransportHosts = 20
+    private let maxTransportSamplesPerHost = 200
+    private let maxProtocolsPerHost = 8
 
     private init() {}
 
@@ -134,6 +167,8 @@ public actor PerformanceDiagnostics {
         requestsByOperation.removeAll(keepingCapacity: true)
         slowRequests.removeAll(keepingCapacity: true)
         miningByMiner.removeAll(keepingCapacity: true)
+        transportByHost.removeAll(keepingCapacity: true)
+        transportRecordOrder = 0
     }
 
     public func recordRequest(
@@ -196,6 +231,39 @@ public actor PerformanceDiagnostics {
         accumulator.tokenRefreshCount += 1
         accumulator.lastAt = Date()
         requestsByOperation[key] = accumulator
+    }
+
+    func recordTransport(_ timing: HTTPTransportTiming) {
+        let host = timing.host.trimmingCharacters(in: .whitespacesAndNewlines)
+        let key = host.isEmpty ? "unknown" : host
+        if transportByHost[key] == nil, transportByHost.count >= maxTransportHosts,
+           let oldestHost = transportByHost.min(by: { $0.value.lastRecordedOrder < $1.value.lastRecordedOrder })?.key {
+            transportByHost.removeValue(forKey: oldestHost)
+        }
+        var accumulator = transportByHost[key, default: TransportAccumulator()]
+        accumulator.requestCount += 1
+        accumulator.reusedConnectionCount += timing.reusedConnection ? 1 : 0
+        accumulator.totalTaskSeconds += timing.taskSeconds
+        if let dnsSeconds = timing.dnsSeconds {
+            Self.appendTransportSample(dnsSeconds, to: &accumulator.dnsSamples, limit: maxTransportSamplesPerHost)
+        }
+        if let connectSeconds = timing.connectSeconds {
+            Self.appendTransportSample(connectSeconds, to: &accumulator.connectSamples, limit: maxTransportSamplesPerHost)
+        }
+        if let tlsSeconds = timing.tlsSeconds {
+            Self.appendTransportSample(tlsSeconds, to: &accumulator.tlsSamples, limit: maxTransportSamplesPerHost)
+        }
+        if let responseSeconds = timing.responseSeconds {
+            Self.appendTransportSample(responseSeconds, to: &accumulator.responseSamples, limit: maxTransportSamplesPerHost)
+        }
+        if let networkProtocol = timing.networkProtocol,
+           !networkProtocol.isEmpty,
+           accumulator.protocols.contains(networkProtocol) || accumulator.protocols.count < maxProtocolsPerHost {
+            accumulator.protocols.insert(networkProtocol)
+        }
+        transportRecordOrder &+= 1
+        accumulator.lastRecordedOrder = transportRecordOrder
+        transportByHost[key] = accumulator
     }
 
     public func recordMiningCycle(_ timing: MiningCycleTiming) {
@@ -280,11 +348,26 @@ public actor PerformanceDiagnostics {
             return $0.lastCycle.finishedAt > $1.lastCycle.finishedAt
         }
 
+        let transportHosts = transportByHost.map { host, accumulator in
+            TransportHost(
+                host: host,
+                requestCount: accumulator.requestCount,
+                reusedConnectionCount: accumulator.reusedConnectionCount,
+                averageTaskSeconds: accumulator.requestCount == 0 ? 0 : accumulator.totalTaskSeconds / Double(accumulator.requestCount),
+                averageDNSSeconds: Self.average(accumulator.dnsSamples),
+                averageConnectSeconds: Self.average(accumulator.connectSamples),
+                averageTLSSeconds: Self.average(accumulator.tlsSamples),
+                averageResponseSeconds: Self.average(accumulator.responseSamples),
+                protocols: accumulator.protocols.sorted()
+            )
+        }.sorted { $0.host < $1.host }
+
         return Snapshot(
             generatedAt: Date(),
             requestOperations: requestOperations,
             slowRequests: slowRequests,
-            miningCycles: miningCycles
+            miningCycles: miningCycles,
+            transportHosts: transportHosts
         )
     }
 
@@ -293,5 +376,21 @@ public actor PerformanceDiagnostics {
         let sorted = values.sorted()
         let index = min(sorted.count - 1, Int(ceil(Double(sorted.count) * 0.95)) - 1)
         return sorted[max(0, index)]
+    }
+
+    private static func average(_ values: [TimeInterval]) -> TimeInterval? {
+        guard !values.isEmpty else { return nil }
+        return values.reduce(0, +) / Double(values.count)
+    }
+
+    private static func appendTransportSample(
+        _ value: TimeInterval,
+        to samples: inout [TimeInterval],
+        limit: Int
+    ) {
+        samples.append(value)
+        if samples.count > limit {
+            samples.removeFirst(samples.count - limit)
+        }
     }
 }

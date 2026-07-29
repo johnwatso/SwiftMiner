@@ -337,6 +337,16 @@ public actor AggregatedCampaignDataService {
         let aggregated = await getAggregatedCampaignsInternal()
         await updateCampaignStore(using: aggregated)
     }
+
+    /// Force refresh for one account while retaining the other accounts' cached
+    /// campaign data in the shared feed.
+    public func refreshAccount(accountId: String) async {
+        guard let service = accountServices[accountId] else { return }
+
+        await service.refresh()
+        let aggregated = await getAggregatedCampaignsInternal()
+        await updateCampaignStore(using: aggregated)
+    }
     
     /// Push aggregated campaigns to CampaignStore (if configured)
     private func updateCampaignStore(using aggregated: [AggregatedCampaign]) async {

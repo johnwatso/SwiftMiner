@@ -45,7 +45,11 @@ public final class Settings {
     }
 
     private static func read<V: RawRepresentable>(_ key: String, default def: V) -> V where V.RawValue == String {
-        appStorageStore.string(forKey: key).flatMap(V.init(rawValue:)) ?? def
+        guard let rawValue = appStorageStore.string(forKey: key),
+              let value = V(rawValue: rawValue) else {
+            return def
+        }
+        return value
     }
 
     private static func write(_ key: String, _ value: Bool) {
