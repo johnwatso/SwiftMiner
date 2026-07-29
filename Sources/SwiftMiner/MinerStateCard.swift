@@ -314,7 +314,6 @@ struct MinerActivityCard: View {
     let miner: MinerManager.ManagedMiner
     var prominence: MinerActivityCardProminence = .compact
     var onSelect: (() -> Void)? = nil
-    var onLinkAccount: (() -> Void)? = nil
     var onEditNickname: (() -> Void)? = nil
     var onClearNickname: (() -> Void)? = nil
     var onOverrideStream: (() -> Void)? = nil
@@ -340,10 +339,6 @@ struct MinerActivityCard: View {
         )
     }
 
-    private func showsLinkAccountButton(_ snap: MinerActivitySnapshot) -> Bool {
-        snap.now.requiresAccountLink || snap.upNext?.requiresAccountLink == true
-    }
-
     private var isExpanded: Bool {
         prominence == .expanded
     }
@@ -365,17 +360,6 @@ struct MinerActivityCard: View {
             VStack(alignment: .leading, spacing: isExpanded ? 7 : 10) {
                 ActivityLabel("Current Status", color: .secondary)
                 currentActivity(snap: snap)
-            }
-
-            if showsLinkAccountButton(snap) {
-                Button {
-                    onLinkAccount?()
-                } label: {
-                    Label("Link Account", systemImage: "personalhotspot.slash")
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .disabled(onLinkAccount == nil)
             }
 
             Divider()
@@ -613,17 +597,6 @@ struct MinerActivityCard: View {
                     }
 
                     Spacer(minLength: 6)
-
-                    Button {
-                        onLinkAccount?()
-                    } label: {
-                        Text("Link")
-                            .font(.caption2.weight(.bold))
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.mini)
-                    .tint(.orange)
-                    .disabled(onLinkAccount == nil)
                 }
             }
         }
@@ -1158,15 +1131,19 @@ struct MinerActivitySnapshot {
         let candidates = miner.allCampaigns.filter { campaign in
             guard campaign.id != activeCampaignId else { return false }
             guard !isSpecialEventsCampaign(campaign) else { return false }
-            guard campaign.isAccountConnected else { return false }
             guard !campaign.drops.isEmpty else { return false }
             guard campaign.isTimeActive, campaign.status != .disabled else { return false }
             guard !campaign.drops.allSatisfy(\.isClaimed) else { return false }
 
             let gameName = normalizedGameKey(campaign.game.name)
             let gameId = normalizedGameKey(campaign.game.id)
+            let isPriority = prioritySet.contains(gameName) || prioritySet.contains(gameId)
+            // Match the engine: an unlinked campaign is still schedulable when this miner
+            // explicitly prioritises its game. The resulting item carries the link warning
+            // rather than disappearing from "Up Next".
+            guard campaign.isAccountConnected || isPriority else { return false }
             guard !excludedSet.contains(gameName), !excludedSet.contains(gameId) else { return false }
-            guard strategy != .onlyPriority || prioritySet.contains(gameName) || prioritySet.contains(gameId) else { return false }
+            guard strategy != .onlyPriority || isPriority else { return false }
             return true
         }
 
@@ -1201,7 +1178,8 @@ struct MinerActivitySnapshot {
             ),
             symbol: "arrow.forward.circle",
             accent: .secondary,
-            campaignId: campaign.id
+            campaignId: campaign.id,
+            requiresAccountLink: !campaign.isAccountConnected
         )
     }
 

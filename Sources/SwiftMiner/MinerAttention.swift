@@ -100,3 +100,70 @@ enum MinerAttention {
         value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 }
+
+/// A concise explanation of a miner problem, plus the one next step SwiftMiner recommends.
+/// This keeps the miner tab actionable without requiring people to interpret raw event logs.
+struct MinerAttentionIssue: Equatable {
+    enum Action: Equatable {
+        case reconnect
+        case restart
+
+        var title: String {
+            switch self {
+            case .reconnect: return "Reconnect Twitch"
+            case .restart: return "Restart Miner"
+            }
+        }
+    }
+
+    let title: String
+    let detail: String
+    let recommendation: String
+    let action: Action?
+
+    static func resolve(
+        miner: MinerManager.ManagedMiner,
+        events: [EventEntry]
+    ) -> MinerAttentionIssue? {
+        if miner.needsAuth {
+            return MinerAttentionIssue(
+                title: "Twitch needs to be reconnected",
+                detail: "This miner can no longer use its saved Twitch session.",
+                recommendation: "Reconnect Twitch, then SwiftMiner will resume this miner automatically.",
+                action: .reconnect
+            )
+        }
+
+        if miner.workerState == .failed || miner.status == .error {
+            let latestError = events.first { event in
+                event.minerId == miner.id && event.level == .error
+            }?.message
+            return MinerAttentionIssue(
+                title: "The mining worker stopped",
+                detail: latestError ?? "SwiftMiner stopped this worker after an unexpected mining error.",
+                recommendation: "Restart this miner. If it fails again, export its diagnostics and contact support.",
+                action: .restart
+            )
+        }
+
+        if miner.isStalled {
+            return MinerAttentionIssue(
+                title: "The miner is no longer responding",
+                detail: "Other mining activity continued, but this worker stopped reporting Twitch activity.",
+                recommendation: "Restart this miner to rebuild its Twitch session.",
+                action: .restart
+            )
+        }
+
+        if miner.showsNoRecentActivityAttention {
+            return MinerAttentionIssue(
+                title: "No recent activity from this miner",
+                detail: "The worker is still running, but its normal liveness signals have gone quiet.",
+                recommendation: "Wait for the automatic recovery. Restart the miner if this message does not clear.",
+                action: .restart
+            )
+        }
+
+        return nil
+    }
+}

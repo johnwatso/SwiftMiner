@@ -511,8 +511,6 @@ struct OverviewView: View {
                         MinerActivityCard(miner: miner, prominence: .compact, onSelect: {
                             navigation.selectedMinerId = miner.id
                             navigation.selectedItem = .miners
-                        }, onLinkAccount: {
-                            startLinkAccountFlow(for: miner)
                         })
                     }
                 }

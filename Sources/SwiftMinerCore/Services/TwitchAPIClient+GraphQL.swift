@@ -483,14 +483,14 @@ extension TwitchAPIClient {
         let rawCurrentMinutes = session["currentMinutesWatched"]
         guard let dropId = rawDropId as? String,
               let currentMinutes = rawCurrentMinutes as? Int else {
-            await traceGQL(
+            traceGQL(
                 "DropCurrentSessionContext parse-failed drop=\(String(describing: rawDropId)) " +
                 "rawCurrent=\(String(describing: rawCurrentMinutes))"
             )
             return nil
         }
 
-        await traceGQL(
+        traceGQL(
             "DropCurrentSessionContext parsed drop=\(dropId) rawCurrent=\(String(describing: rawCurrentMinutes)) " +
             "parsedCurrent=\(currentMinutes)"
         )

@@ -77,7 +77,7 @@ final class MinerActivitySnapshotTests: XCTestCase {
         XCTAssertEqual(presentation.thenCampaigns.map(\.id), [later.id])
     }
 
-    func testOperatorQueueExcludesAllUnlinkedCampaignsButKeepsPendingWarning() {
+    func testOperatorQueueIncludesPrioritisedUnlinkedCampaignButExcludesUnrelatedOne() {
         let prioritised = makeCampaign(
             id: "priority",
             gameId: "priority-game",
@@ -109,9 +109,13 @@ final class MinerActivitySnapshotTests: XCTestCase {
             includesBadgeAndEmoteCampaigns: false
         )
 
-        XCTAssertFalse(presentation.queue.contains { $0.campaign.id == prioritised.id })
+        XCTAssertTrue(presentation.queue.contains { $0.campaign.id == prioritised.id })
         XCTAssertTrue(presentation.queue.contains { $0.campaign.id == linkedSmartCandidate.id })
         XCTAssertFalse(presentation.queue.contains { $0.campaign.id == unrelatedUnlinked.id })
+        XCTAssertEqual(
+            presentation.queue.first { $0.campaign.id == prioritised.id }?.status,
+            .requiresLink
+        )
         XCTAssertEqual(presentation.snapshot.blockedPriority.map(\.campaignId), [prioritised.id])
     }
 
@@ -241,7 +245,7 @@ final class MinerActivitySnapshotTests: XCTestCase {
         )
     }
 
-    func testUpNextHidesUnlinkedPrioritisedCampaignButKeepsPendingWarning() {
+    func testCurrentUnlinkedPrioritisedCampaignIsNotRepeatedAsUpNext() {
         let campaign = makeCampaign(id: "unlinked", isAccountConnected: false)
         let miner = makeMiner(campaigns: [campaign], currentCampaignId: campaign.id)
 
@@ -254,6 +258,17 @@ final class MinerActivitySnapshotTests: XCTestCase {
         XCTAssertFalse(snapshot.isActivelyWatching)
         XCTAssertEqual(snapshot.currentSectionTitle, "Current status")
         XCTAssertEqual(snapshot.sourceListActivityLabel, "Up to Date")
+    }
+
+    func testUpNextShowsUnlinkedPrioritisedCampaignWithLinkRequirement() {
+        let campaign = makeCampaign(id: "unlinked", isAccountConnected: false)
+        let miner = makeMiner(campaigns: [campaign])
+
+        let snapshot = resolveSnapshot(for: miner)
+
+        XCTAssertEqual(snapshot.upNext?.campaignId, campaign.id)
+        XCTAssertTrue(snapshot.upNext?.requiresAccountLink ?? false)
+        XCTAssertEqual(snapshot.blockedPriority.map(\.campaignId), [campaign.id])
     }
 
     func testPrioritisedUnlinkedCampaignOnlyAppearsAsMiningAfterActualWatchStarts() {

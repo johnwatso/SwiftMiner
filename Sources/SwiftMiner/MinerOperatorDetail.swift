@@ -80,13 +80,13 @@ struct MinerOperatorPresentation {
 
         var campaigns = miner.allCampaigns.filter { campaign in
             guard campaign.status != .disabled, !campaign.isLikelyInternalTestCampaign else { return false }
-            // Unlinked campaigns stay out of prospective queue positions. If the
-            // engine is actively watching a prioritised one, retain that current
-            // row so the operator view reflects the real session.
-            guard campaign.isAccountConnected || campaign.id == snapshot.now.campaignId else { return false }
             let gameId = normalizedKey(campaign.game.id)
             let gameName = normalizedKey(campaign.game.name)
             let isPriority = prioritySet.contains(gameId) || prioritySet.contains(gameName)
+            // Keep prospective queue rows aligned with the engine: a prioritised game may
+            // be attempted before its external game account is linked. The row retains its
+            // requires-link status instead of silently omitting real scheduling work.
+            guard campaign.isAccountConnected || campaign.id == snapshot.now.campaignId || isPriority else { return false }
             if campaign.id != snapshot.now.campaignId {
                 guard !excludedSet.contains(gameId), !excludedSet.contains(gameName) else { return false }
                 guard includesBadgeAndEmoteCampaigns || !campaign.hasOnlyBadgesOrEmotes else { return false }
@@ -105,7 +105,8 @@ struct MinerOperatorPresentation {
 
             // A queue lists only work the miner can actually schedule.
             if campaign.id != snapshot.now.campaignId {
-                guard status != .completed, status != .requiresLink else { return false }
+                guard status != .completed else { return false }
+                guard status != .requiresLink || isPriority else { return false }
             }
 
             return status != .expired || campaign.endDate >= recentEndCutoff
