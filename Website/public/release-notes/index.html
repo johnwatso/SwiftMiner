@@ -53,6 +53,7 @@
       <li>Stops the wait between scans drifting: time spent checking approved channels used to push every later check further out, stretching a sixty-second re-check closer to seventy.</li>
       <li>Adds profiling markers around channel selection and approved-channel checks to help explain high CPU use while idle.</li>
       <li>Adds a state-consistency test suite that fails if any two surfaces claim a miner is both finished and working.</li>
+      <li>Preserves every critical Twitch mining signal in delivery order, including claims and stream-offline notices, while reconciling silent real-time progress safely.</li>
       <li>Updates SwiftMiner to version 1.36.2 build 2026072913.</li>
     </ul>
 

@@ -117,6 +117,19 @@ final class ConnectionStateRecorder: @unchecked Sendable {
     }
 }
 
+/// Thread-safe recorder used to prove that PubSub waits for an async message handler before
+/// reading the next frame. This protects the event-ordering guarantee relied on by MinerEngine.
+final class MessageRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var topics: [String] = []
+
+    func append(_ topic: String) {
+        lock.withLock { topics.append(topic) }
+    }
+
+    var values: [String] { lock.withLock { topics } }
+}
+
 /// Deterministic sleeper used to prove reconnect does not create a socket until its
 /// backoff has actually elapsed. Tests release waits explicitly.
 final class ControlledRuntimeSleeper: @unchecked Sendable {
@@ -427,6 +440,36 @@ final class PubSubClientTests: XCTestCase {
         )
 
         await fulfillment(of: [expectation], timeout: 3)
+        await client.disconnect()
+    }
+
+    func testIncomingMessagesAwaitHandlerAndPreserveSocketOrder() async throws {
+        let factory = MockSocketFactory()
+        let client = makeClient(factory: factory)
+        let recorder = MessageRecorder()
+        let firstStarted = expectation(description: "first handler started")
+        let secondFinished = expectation(description: "second handler finished")
+
+        await client.setMessageHandler { topic, _ in
+            if topic == "user-drop-events.1" {
+                firstStarted.fulfill()
+                try? await Task.sleep(nanoseconds: 150_000_000)
+            }
+            recorder.append(topic)
+            if topic == "user-drop-events.2" {
+                secondFinished.fulfill()
+            }
+        }
+
+        try await client.connect()
+        let socket = try XCTUnwrap(factory[0])
+        socket.push(#"{"type":"MESSAGE","data":{"topic":"user-drop-events.1","message":"{}"}}"#)
+        socket.push(#"{"type":"MESSAGE","data":{"topic":"user-drop-events.2","message":"{}"}}"#)
+
+        await fulfillment(of: [firstStarted], timeout: 3)
+        XCTAssertFalse(recorder.values.contains("user-drop-events.2"))
+        await fulfillment(of: [secondFinished], timeout: 3)
+        XCTAssertEqual(recorder.values, ["user-drop-events.1", "user-drop-events.2"])
         await client.disconnect()
     }
 

@@ -59,13 +59,13 @@ public actor DropEventsService {
     // MARK: - Callbacks (set before calling startWatching)
 
     /// Called when Twitch reports updated drop progress via PubSub.
-    public var onDropProgress: (@Sendable (DropProgressEvent) -> Void)?
+    public var onDropProgress: (@Sendable (DropProgressEvent) async -> Void)?
 
     /// Called when Twitch signals a drop is claimable (`drop-claim` event).
-    public var onDropClaim: (@Sendable (DropClaimEvent) -> Void)?
+    public var onDropClaim: (@Sendable (DropClaimEvent) async -> Void)?
 
     /// Called when the watched stream goes offline (`stream-down` event).
-    public var onStreamDown: (@Sendable (String) -> Void)?
+    public var onStreamDown: (@Sendable (String) async -> Void)?
 
     /// Called when any stream-state event arrives.
     public var onStreamState: (@Sendable (StreamStateEvent) -> Void)?
@@ -84,15 +84,15 @@ public actor DropEventsService {
     
     // MARK: - Callback Setters
     
-    public func setDropProgressHandler(_ handler: (@Sendable (DropProgressEvent) -> Void)?) {
+    public func setDropProgressHandler(_ handler: (@Sendable (DropProgressEvent) async -> Void)?) {
         self.onDropProgress = handler
     }
     
-    public func setDropClaimHandler(_ handler: (@Sendable (DropClaimEvent) -> Void)?) {
+    public func setDropClaimHandler(_ handler: (@Sendable (DropClaimEvent) async -> Void)?) {
         self.onDropClaim = handler
     }
     
-    public func setStreamDownHandler(_ handler: (@Sendable (String) -> Void)?) {
+    public func setStreamDownHandler(_ handler: (@Sendable (String) async -> Void)?) {
         self.onStreamDown = handler
     }
     
@@ -105,7 +105,7 @@ public actor DropEventsService {
     public func configure() async {
         let service = self  // strong capture — actors are Sendable reference types
         await pubSubClient.setMessageHandler { @Sendable topic, payload in
-            Task { await service.handleMessage(topic: topic, payload: payload) }
+            await service.handleMessage(topic: topic, payload: payload)
         }
     }
 
@@ -143,7 +143,7 @@ public actor DropEventsService {
 
     // MARK: - Message dispatch
 
-    private func handleMessage(topic: String, payload: AnyJSONValue) {
+    private func handleMessage(topic: String, payload: AnyJSONValue) async {
         // Twitch PubSub sends the inner event as a JSON-encoded string (double-encoded).
         let jsonString: String
         switch payload {
@@ -162,16 +162,16 @@ public actor DropEventsService {
         else { return }
 
         if topic.hasPrefix("user-drop-events.") {
-            handleDropEvent(type: type, data: json["data"] as? [String: Any] ?? [:])
+            await handleDropEvent(type: type, data: json["data"] as? [String: Any] ?? [:])
         } else if topic.hasPrefix("video-playback-by-id.") {
             let channelId = String(topic.dropFirst("video-playback-by-id.".count))
-            handleStreamEvent(type: type, channelId: channelId, json: json)
+            await handleStreamEvent(type: type, channelId: channelId, json: json)
         }
     }
 
     // MARK: - Drop event parsing
 
-    private func handleDropEvent(type: String, data: [String: Any]) {
+    private func handleDropEvent(type: String, data: [String: Any]) async {
         switch type {
         case "drop-progress":
             let rawDropId = data["drop_id"]
@@ -194,7 +194,7 @@ public actor DropEventsService {
                 "parsedCurrent=\(current) rawRequired=\(String(describing: rawRequired)) parsedRequired=\(required)"
             )
 
-            onDropProgress?(DropProgressEvent(
+            await onDropProgress?(DropProgressEvent(
                 dropId: dropId,
                 currentMinutes: current,
                 requiredMinutes: required
@@ -207,7 +207,7 @@ public actor DropEventsService {
             let channelId  = (data["channel_id"]        ?? data["channelId"])      as? String ?? ""
             guard !instanceId.isEmpty else { return }
 
-            onDropClaim?(DropClaimEvent(
+            await onDropClaim?(DropClaimEvent(
                 dropInstanceId: instanceId,
                 dropId: dropId,
                 channelId: channelId
@@ -220,13 +220,13 @@ public actor DropEventsService {
 
     // MARK: - Stream state event parsing
 
-    private func handleStreamEvent(type: String, channelId: String, json: [String: Any]) {
+    private func handleStreamEvent(type: String, channelId: String, json: [String: Any]) async {
         switch type {
         case "stream-up":
             onStreamState?(StreamStateEvent(channelId: channelId, kind: .up))
 
         case "stream-down":
-            onStreamDown?(channelId)
+            await onStreamDown?(channelId)
             onStreamState?(StreamStateEvent(channelId: channelId, kind: .down))
 
         case "viewcount":

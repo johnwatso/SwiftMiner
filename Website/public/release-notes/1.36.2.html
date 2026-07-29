@@ -125,6 +125,7 @@
         <li>Adds profiling markers around channel selection and approved-channel checks, so time spent while idle can be attributed properly. Average CPU while mining nothing has been high and the cause is still unknown.</li>
         <li>Adds a state-consistency test suite that fails if any two surfaces ever again claim a miner is both finished and working, covering every session status.</li>
         <li>The internal clock now conforms to Swift's standard clock protocol, so reliability tests keep control of time instead of waiting in real seconds.</li>
+        <li>Processes Twitch progress, claims, offline notices, and current-session polling in one lossless ordered queue. This prevents a burst of real-time messages from dropping a claim or overtaking an earlier progress update.</li>
         <li>Prepared as SwiftMiner <strong>1.36.2</strong>, build <strong>2026072913</strong>.</li>
       </ul>
     </section>
