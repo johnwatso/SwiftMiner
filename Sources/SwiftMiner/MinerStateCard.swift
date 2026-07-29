@@ -1349,52 +1349,62 @@ struct MinerActivitySnapshot {
             ignored.contains(normalizedGameKey(gameName))
     }
 
+    @MainActor
     private static func statusText(for miner: MinerManager.ManagedMiner, now: MinerActivityItem) -> String {
-        if miner.workerState.isRecovering {
-            return "Recovering..."
-        }
-        if miner.isStalled {
-            return "Miner Unresponsive"
-        }
-        if miner.showsNoRecentActivityAttention {
-            return "No Recent Activity"
-        }
-        if now.id.hasPrefix("starting-") || now.id.hasPrefix("stopped-") {
-            return now.title
-        }
-        if now.id.hasPrefix("waiting-drops-") ||
-            now.id.hasPrefix("ignored-link-") ||
-            now.id.hasPrefix("unlinked-") {
-            return "Up to Date"
-        }
-        if now.id.hasPrefix("override-") {
-            return "Watching \(now.title)"
+        // Precedence lives in MinerPresentedState so this card and `ManagedMiner.statusLabel`
+        // cannot drift apart again — they previously resolved independently and contradicted
+        // each other. Only the wording is chosen here; the card keeps its own richer phrasing
+        // and the few refinements below that depend on the resolved activity item.
+        let state = MinerPresentedState.resolve(for: miner)
+
+        // Item-level refinements the canonical state deliberately does not model: these describe
+        // *why* there is nothing to do, which only the activity item knows.
+        if !state.isOperationalFault {
+            if now.id.hasPrefix("starting-") || now.id.hasPrefix("stopped-") {
+                return now.title
+            }
+            if now.id.hasPrefix("waiting-drops-") ||
+                now.id.hasPrefix("ignored-link-") ||
+                now.id.hasPrefix("unlinked-") {
+                return "Up to Date"
+            }
         }
 
-        switch miner.status {
+        switch state {
+        case .recovering:
+            return "Recovering..."
+        case .unresponsive:
+            return "Miner Unresponsive"
+        case .noRecentActivity:
+            return "No Recent Activity"
+        case .notEarning:
+            return "Watching — Not Earning"
+        case .starting:
+            return "Starting..."
+        case .stopped:
+            return "Stopped"
+        case .paused:
+            return "Paused"
+        case .needsAttention:
+            return "Blocked — Needs attention"
+        case .reconnecting:
+            return "Reconnecting"
+        case .updating:
+            return "Updating…"
+        case .watchingOverride:
+            return "Watching \(now.title)"
         case .watching:
             return "Watching \(now.title)"
         case .claiming:
             return "Claiming Rewards"
-        case .waitingForStream:
+        case .lookingForStreams:
             return "Looking for Streams"
-        case .fetchingCampaigns:
-            return "Updating…"
-        case .authenticating:
-            return "Reconnecting"
-        case .paused:
-            return "Paused"
-        case .error:
-            return "Blocked — Needs attention"
-        case .idleNoEligibleCampaigns:
-            return "Up to Date"
-        case .blockedAccountNotLinked:
-            return "Up to Date"
-        case .idle:
+        case .upToDate:
             return "Up to Date"
         }
     }
 
+    @MainActor
     private static func statusSymbol(for miner: MinerManager.ManagedMiner, now: MinerActivityItem) -> String {
         if miner.workerState.isRecovering {
             return "wrench.and.screwdriver.fill"
@@ -1442,6 +1452,7 @@ struct MinerActivitySnapshot {
         }
     }
 
+    @MainActor
     private static func statusColor(for miner: MinerManager.ManagedMiner, now: MinerActivityItem) -> Color {
         if miner.workerState.isRecovering {
             return .orange

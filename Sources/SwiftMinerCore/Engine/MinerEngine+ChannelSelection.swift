@@ -968,6 +968,10 @@ extension MinerEngine {
         )
         approvedChannelProbeOffsets[campaign.id] = batch.nextOffset
         let candidates = Array(batch.channels.enumerated())
+        // Explicit begin/end rather than the closure form: wrapping a task group in a
+        // non-Sendable closure trips strict concurrency.
+        let probeSignpost = MiningSignpost.begin(.aclProbe)
+        defer { MiningSignpost.end(.aclProbe, probeSignpost) }
         let resolvedByIndex = await withTaskGroup(of: (Int, Channel)?.self) { group -> [Int: Channel] in
             for (index, channel) in candidates {
                 let login = channel.login.trimmingCharacters(in: .whitespacesAndNewlines)

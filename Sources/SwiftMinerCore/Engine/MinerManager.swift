@@ -145,62 +145,44 @@ public final class MinerManager {
         }
 
         /// A concise, deterministic status label for UI badges and list rows.
+        ///
+        /// Derives from `MinerPresentedState` so this and the activity card cannot disagree.
+        /// This label used to resolve independently from per-game state, which covers only
+        /// prioritised games — so a miner waiting on a non-prioritised campaign reported
+        /// "Drops complete" while its card said "Looking for Streams".
         @MainActor
         public var statusLabel: String {
-            if workerState.isRecovering {
+            switch MinerPresentedState.resolve(for: self) {
+            case .recovering:
                 return "Recovering..."
-            }
-            if isStalled {
+            case .unresponsive:
                 return "Miner Unresponsive"
-            }
-            if showsNoRecentActivityAttention {
+            case .noRecentActivity:
                 return "No Recent Activity"
-            }
-            if showsNotEarningAttention {
+            case .notEarning:
                 return "Watching — Not Earning"
-            }
-            if !isRunning {
-                switch status {
-                case .authenticating:
-                    return "Starting..."
-                case .paused:
-                    return "Paused"
-                case .error:
-                    return "Blocked — Needs attention"
-                case .idle,
-                     .fetchingCampaigns,
-                     .watching,
-                     .claiming,
-                     .waitingForStream,
-                     .idleNoEligibleCampaigns,
-                     .blockedAccountNotLinked:
-                    return "Stopped"
-                }
-            }
-            guard let resolved = resolvedPrimaryState?.resolved else {
-                return status.displayName
-            }
-            switch resolved.state {
-            case .watching:
-                return "Watching \(resolved.gameName)"
-            case .blocked:
-                switch resolved.reason {
-                case .notLinked:
-                    return "Blocked — Account not linked"
-                case .noLiveStreams:
-                    return "Waiting — No live stream"
-                case .noCampaign, .noEligibleCampaign, .campaignExpired, .noDropsAvailable, .none:
-                    return "Idle — No eligible campaigns"
-                }
-            case .idle:
-                switch resolved.reason {
-                case .noDropsAvailable:
-                    return "Drops complete"
-                case .noCampaign, .noEligibleCampaign, .campaignExpired:
-                    return "Idle — No eligible campaigns"
-                case .none, .notLinked, .noLiveStreams:
-                    return "Idle — No eligible campaigns"
-                }
+            case .starting:
+                return "Starting..."
+            case .stopped:
+                return "Stopped"
+            case .paused:
+                return "Paused"
+            case .needsAttention:
+                return "Blocked — Needs attention"
+            case .reconnecting:
+                return "Waiting — Authenticating"
+            case .updating:
+                return "Waiting — Refreshing campaigns"
+            case .watchingOverride(let login):
+                return "Watching @\(login)"
+            case .watching(let gameName):
+                return gameName.map { "Watching \($0)" } ?? "Watching"
+            case .claiming:
+                return "Claiming"
+            case .lookingForStreams:
+                return "Waiting — No live stream"
+            case .upToDate:
+                return "Drops complete"
             }
         }
 
