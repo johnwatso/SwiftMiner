@@ -74,27 +74,15 @@ extension MinerManager {
             }
 
             if relevant.isEmpty {
-                // Link-state warnings still matter for prioritised games even if
-                // Twitch did not return an otherwise relevant campaign.
-                let isNotLinked = !campaignsForGame.isEmpty && campaignsForGame.contains { !$0.isAccountConnected }
-
-                if isNotLinked {
-                    states.append(MinerGameState(
-                        minerId: miner.id,
-                        gameId: gameId,
-                        gameName: gameName,
-                        state: .blocked,
-                        reason: .notLinked
-                    ))
-                } else {
-                    states.append(MinerGameState(
-                        minerId: miner.id,
-                        gameId: gameId,
-                        gameName: gameName,
-                        state: .idle,
-                        reason: .noEligibleCampaign
-                    ))
-                }
+                // Account linking is surfaced separately as a warning. It must not
+                // turn a prioritised game into a blocked scheduling state.
+                states.append(MinerGameState(
+                    minerId: miner.id,
+                    gameId: gameId,
+                    gameName: gameName,
+                    state: .idle,
+                    reason: .noEligibleCampaign
+                ))
                 continue
             }
 
@@ -119,10 +107,10 @@ extension MinerManager {
                     }
                 }
 
-                // Collect blocking reasons (scan all campaigns; blocked wins)
-                if campaign.isTimeActive && !campaign.isAccountConnected {
-                    if blockedReason == nil { blockedReason = .notLinked }
-                } else if !campaign.isActive {
+                // Expiry remains a real scheduling block. Missing game-account
+                // linkage does not: a prioritised campaign is still attempted when
+                // Twitch exposes usable drops.
+                if !campaign.isActive {
                     if blockedReason == nil { blockedReason = .campaignExpired }
                 }
             }

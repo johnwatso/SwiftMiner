@@ -149,7 +149,6 @@ struct MinersOverviewView: View {
     private var selectedMinerPane: some View {
         if let miner = selectedMiner {
             let presentation = operatorPresentation(for: miner)
-            let queueCampaigns = presentation.queue.map(\.campaign)
             let health = MinerHealthSnapshot.make(miner: miner)
 
             ScrollView {
@@ -204,7 +203,7 @@ struct MinersOverviewView: View {
                         }
                     }
 
-                    pendingItemsSection(for: miner, campaigns: queueCampaigns)
+                    pendingItemsSection(for: miner, campaigns: miner.allCampaigns)
 
                     minerCampaignQueueSection(for: miner, presentation: presentation)
 
@@ -609,96 +608,42 @@ struct MinersOverviewView: View {
 
     // MARK: - Priorities
 
-    /// Games prioritised specifically for this miner. Derived from the miner's
-    /// reactive effective list so DM/web/global changes refresh it live. Global
-    /// duplicates are hidden only while the global list applies — when this
-    /// miner opts out of global priorities, its own entries stand alone.
-    private func personalPriorityGames(for miner: MinerManager.ManagedMiner) -> [String] {
-        guard settings.includesGlobalPriorityGames(forAccountId: miner.accountId) else {
-            return miner.priorityGames
-        }
-        let globalKeys = Set(settings.priorityGames.map { $0.lowercased() })
-        return miner.priorityGames.filter { !globalKeys.contains($0.lowercased()) }
-    }
-
     private func minerPrioritiesSection(for miner: MinerManager.ManagedMiner) -> some View {
-        let includesGlobal = settings.includesGlobalPriorityGames(forAccountId: miner.accountId)
-        let personal = personalPriorityGames(for: miner)
-        let personalKeys = Set(personal.map { $0.lowercased() })
-        let global = includesGlobal
-            ? settings.priorityGames.filter { !personalKeys.contains($0.lowercased()) }
-            : []
-        let effectivePriorities = personal.map { ($0, false) } + global.map { ($0, true) }
+        let miningType = miningType(for: miner)
 
-        return TahoeSection("Priority queue") {
-            VStack(alignment: .leading, spacing: 12) {
-                if hasMultipleMiners {
-                    HStack(alignment: .center, spacing: 12) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Global priorities")
-                                .font(.subheadline.weight(.medium))
-                            Text(includesGlobal
-                                ? "Combined with this miner's own queue"
-                                : "Only this miner's own queue is active")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+        return TahoeSection("Mining Type") {
+            HStack(alignment: .center, spacing: 12) {
+                Image(systemName: miningType.symbol)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.tint)
+                    .frame(width: 30, height: 30)
+                    .accessibilityHidden(true)
 
-                        Spacer(minLength: 12)
-
-                        Toggle("Include global priorities", isOn: Binding(
-                            get: { settings.includesGlobalPriorityGames(forAccountId: miner.accountId) },
-                            set: { include in
-                                settings.setIncludesGlobalPriorityGames(include, forAccountId: miner.accountId)
-                                let updated = settings.priorityGames(forAccountId: miner.accountId)
-                                navigation.minerManager.updatePriorityGames(updated, forMinerId: miner.id)
-                                if miner.isRunning {
-                                    Task { await navigation.minerManager.forceRefreshMiner(minerId: miner.id) }
-                                }
-                            }
-                        ))
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                        .controlSize(.small)
-                        .help("Include priorities shared by all miners")
-                        .accessibilityLabel("Include global priorities")
-                    }
-
-                    Divider()
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Priority order")
-                        .font(.caption.weight(.semibold))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(miningType.title)
+                        .font(.subheadline.weight(.semibold))
+                    Text(miningType.detail)
+                        .font(.caption)
                         .foregroundStyle(.secondary)
-
-                    Group {
-                        if effectivePriorities.isEmpty {
-                            Text("No priorities yet — global priorities are managed from Overview; personal priorities are edited by the miner owner in WebUI.")
-                                .font(.callout)
-                                .foregroundStyle(.tertiary)
-                        } else {
-                            ScrollView(.horizontal) {
-                                HStack(spacing: 6) {
-                                    ForEach(Array(effectivePriorities.enumerated()), id: \.offset) { index, priority in
-                                        RankedPriorityChip(
-                                            rank: index + 1,
-                                            gameName: priority.0,
-                                            isGlobal: priority.1,
-                                            onRemove: nil
-                                        )
-                                    }
-                                }
-                            }
-                            .scrollIndicators(.never)
-                        }
-                    }
-                    .frame(height: 28, alignment: .leading)
                 }
+
+                Spacer(minLength: 0)
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .topLeading)
             .frame(height: Self.operatorSummaryCardHeight, alignment: .topLeading)
+            .accessibilityElement(children: .combine)
+        }
+    }
+
+    private func miningType(for miner: MinerManager.ManagedMiner) -> (title: String, detail: String, symbol: String) {
+        switch settings.prioritySource(forAccountId: miner.accountId) {
+        case .global:
+            return ("Global", "Uses priorities shared by all miners.", "globe")
+        case .globalAndPersonal:
+            return ("Global + Personal", "Uses this miner’s priorities first, then shared priorities.", "point.3.connected.trianglepath.dotted")
+        case .personal:
+            return ("Personal", "Uses only this miner’s priorities.", "person")
         }
     }
 

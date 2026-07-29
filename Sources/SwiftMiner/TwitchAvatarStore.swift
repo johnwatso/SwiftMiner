@@ -35,7 +35,11 @@ final class TwitchAvatarStore {
     }
 
     func url(forAccountId accountId: String) -> URL? {
-        entriesByAccountId[accountId]?.url
+        guard let url = entriesByAccountId[accountId]?.url,
+              !Self.isGenericTwitchProfileImage(url) else {
+            return nil
+        }
+        return url
     }
 
     /// Resolves the picture for every given miner whose entry is missing or stale.
@@ -57,7 +61,11 @@ final class TwitchAvatarStore {
 
         for miner in stale {
             guard let url = await manager.fetchTwitchProfileImageURL(minerId: miner.id) else { continue }
-            entriesByAccountId[miner.accountId] = Entry(url: url, fetchedAt: Date())
+            if Self.isGenericTwitchProfileImage(url) {
+                entriesByAccountId.removeValue(forKey: miner.accountId)
+            } else {
+                entriesByAccountId[miner.accountId] = Entry(url: url, fetchedAt: Date())
+            }
         }
 
         persist()
@@ -76,7 +84,15 @@ final class TwitchAvatarStore {
 
     static func needsRefresh(_ entry: Entry?, now: Date = Date()) -> Bool {
         guard let entry else { return true }
+        guard !isGenericTwitchProfileImage(entry.url) else { return true }
         return now.timeIntervalSince(entry.fetchedAt) >= refreshInterval
+    }
+
+    /// Twitch returns this stock "404 user" image for accounts without a
+    /// profile picture. Treat it as no picture so callers can retain their own
+    /// visual fallback (the WebUI uses the Twitch mark).
+    static func isGenericTwitchProfileImage(_ url: URL) -> Bool {
+        url.path.lowercased().contains("/xarth/404_user_")
     }
 
     static func decode(_ json: String) -> [String: Entry] {

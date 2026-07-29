@@ -181,19 +181,18 @@ final class WatchSessionManagerTests: XCTestCase {
         await manager.stopWatching()
     }
     
-    func testStartWatchingFailsIfAlreadyWatching() async throws {
+    func testStartWatchingReplacesResidualSession() async throws {
         let playbackTokenJson = "{\"data\": {\"streamPlaybackAccessToken\": {\"value\": \"t\", \"signature\": \"s\"}}}"
         MockURLProtocol.stubResponseData = playbackTokenJson.data(using: .utf8)
         
         let channel = Channel(id: "ch1", login: "l1", displayName: "d1")
         _ = try await manager.startWatching(channel: channel, campaignId: "c1")
-        
-        do {
-            _ = try await manager.startWatching(channel: channel, campaignId: "c2")
-            XCTFail("Should have thrown error")
-        } catch TwitchMinerError.watchSessionFailed(let message) {
-            XCTAssertEqual(message, "Session already active")
-        }
+
+        let replacement = try await manager.startWatching(channel: channel, campaignId: "c2")
+        let currentCampaignId = await manager.currentSession?.campaignId
+
+        XCTAssertEqual(replacement.campaignId, "c2")
+        XCTAssertEqual(currentCampaignId, "c2")
     }
     
     func testPauseAndResume() async throws {

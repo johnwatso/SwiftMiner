@@ -140,9 +140,23 @@ public final class NavigationModel {
         let endpoint = Settings.shared.swiftMinerAPIEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
         let port = URL(string: endpoint)?.port.flatMap { UInt16(exactly: $0) } ?? 8080
 
+        // The WebUI can draw a miner's custom Twitch picture immediately after
+        // startup, even if the native Miners screen has not been opened yet.
+        Task {
+            await TwitchAvatarStore.shared.refreshIfNeeded(
+                miners: minerManager.miners,
+                manager: minerManager
+            )
+        }
+
         let projectionBuilder = DiscordProjectionBuilder(
             manager: sqliteManager,
-            stateProvider: NavigationProjectionStateProvider(model: self)
+            stateProvider: NavigationProjectionStateProvider(model: self),
+            twitchProfileImageURL: { accountId in
+                await MainActor.run {
+                    TwitchAvatarStore.shared.url(forAccountId: accountId)
+                }
+            }
         )
         let clientId = Settings.shared.resolvedClientId
         let authService = TwitchAuthService(clientId: clientId, tokenStore: minerManager.tokenStore)
@@ -201,18 +215,24 @@ public final class NavigationModel {
                 gameName: gameName
             )
         }
-        await routes.setOnSetPriorities { [weak self] discordUserId, accountId, games, includeGlobalPriorities in
+        await routes.setOnSetPriorities { [weak self] discordUserId, accountId, games, includeGlobalPriorities, prioritySource in
             guard let self else { return nil }
             return await self.handleDiscordSetPriorities(
                 discordUserId: discordUserId,
                 accountId: accountId,
                 games: games,
-                includeGlobalPriorities: includeGlobalPriorities
+                includeGlobalPriorities: includeGlobalPriorities,
+                prioritySource: prioritySource
             )
         }
-        await routes.setOnSetPrioritiesByAccount { [weak self] accountId, games, includeGlobalPriorities in
+        await routes.setOnSetPrioritiesByAccount { [weak self] accountId, games, includeGlobalPriorities, prioritySource in
             guard let self else { return nil }
-            return await self.handleSetPrioritiesByAccount(accountId: accountId, games: games, includeGlobalPriorities: includeGlobalPriorities)
+            return await self.handleSetPrioritiesByAccount(
+                accountId: accountId,
+                games: games,
+                includeGlobalPriorities: includeGlobalPriorities,
+                prioritySource: prioritySource
+            )
         }
         await routes.setOnKnownGames { [weak self] in
             guard let self else { return [] }
@@ -1227,7 +1247,9 @@ public final class NavigationModel {
                 failoverStreamers: settings.gameFailoverStreamers
             )
         }
-        await minerManager.forceRefreshAllMiners()
+        // `startMiner` already begins with a fresh campaign scan. Forcing a
+        // second one immediately afterwards can interrupt its first watch
+        // session before setup has completed.
         await minerManager.dataCoordinator.refreshAll()
     }
 

@@ -847,10 +847,16 @@ public actor MinerEngine {
     
     /// Triggers an immediate campaign rescan and potential channel switch.
     /// Wakes the engine from idle sleep or breaks the current watch session.
-    public func forceRefresh() {
+    public func forceRefresh() async {
         log("Forcing immediate campaign rescan...")
         shouldRescanCampaigns = true
-        shouldSwitchChannel = true
+        // A fresh worker already has a campaign scan in flight. Interrupting its
+        // first watch setup here used to race the new session against cleanup.
+        // Once a session exists, switching away is safe and makes the refresh
+        // immediate; otherwise the in-flight initial scan satisfies the request.
+        if await watchSessionManager.currentSession != nil {
+            shouldSwitchChannel = true
+        }
         onOperationalEvent?(.stateUpdate)
     }
 
@@ -1491,6 +1497,16 @@ public actor MinerEngine {
 
                 do {
                     // 6. Start watching
+                    if shouldRescanCampaigns {
+                        // The selected target was produced by the scan currently
+                        // in flight, so consuming the queued request here avoids
+                        // immediately tearing down a brand-new watch session.
+                        shouldRescanCampaigns = false
+                    }
+                    if await watchSessionManager.currentSession != nil {
+                        log("Cleaning up a residual watch session before starting the selected channel.")
+                        await cleanupActiveWatchSession(clearTarget: false)
+                    }
                     extraMinutesWatched = 0
                     resetProgressStallClock()
                     perfStartedAt = Date()

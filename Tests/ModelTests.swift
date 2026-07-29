@@ -389,7 +389,7 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(status, .idleNoEligibleCampaigns)
     }
 
-    func testEmptyCandidateStateOnlyBlocksForPrioritisedUnlinkedCampaigns() {
+    func testEmptyCandidateStateDoesNotBlockForPrioritisedUnlinkedCampaigns() {
         let now = Date()
         let priority = Campaign(
             id: "priority",
@@ -410,7 +410,7 @@ final class ModelTests: XCTestCase {
             includesBadgeAndEmoteCampaigns: false
         )
 
-        XCTAssertEqual(status, .blockedAccountNotLinked)
+        XCTAssertEqual(status, .idleNoEligibleCampaigns)
     }
 
     func testEmptyCandidateStateDoesNotBlameLinkForSubscriptionOnlyPriorityCampaign() {

@@ -77,7 +77,7 @@ final class MinerActivitySnapshotTests: XCTestCase {
         XCTAssertEqual(presentation.thenCampaigns.map(\.id), [later.id])
     }
 
-    func testOperatorQueueIncludesPrioritisedUnlinkedCampaignButExcludesUnrelatedOne() {
+    func testOperatorQueueExcludesUnlinkedCampaignsUntilTheyAreActuallyWatched() {
         let prioritised = makeCampaign(
             id: "priority",
             gameId: "priority-game",
@@ -109,14 +109,55 @@ final class MinerActivitySnapshotTests: XCTestCase {
             includesBadgeAndEmoteCampaigns: false
         )
 
-        XCTAssertTrue(presentation.queue.contains { $0.campaign.id == prioritised.id })
+        XCTAssertFalse(presentation.queue.contains { $0.campaign.id == prioritised.id })
         XCTAssertTrue(presentation.queue.contains { $0.campaign.id == linkedSmartCandidate.id })
         XCTAssertFalse(presentation.queue.contains { $0.campaign.id == unrelatedUnlinked.id })
-        XCTAssertEqual(
-            presentation.queue.first { $0.campaign.id == prioritised.id }?.status,
-            .requiresLink
-        )
         XCTAssertEqual(presentation.snapshot.blockedPriority.map(\.campaignId), [prioritised.id])
+    }
+
+    func testUpNextAndQueueExcludeEndedOrClaimableCampaigns() {
+        let now = Date()
+        let ended = makeCampaign(
+            id: "ended",
+            gameId: "ended-game",
+            gameName: "Ended Game",
+            isAccountConnected: true,
+            endDate: now.addingTimeInterval(-60)
+        )
+        let claimableProgress = Progress(
+            dropId: "claimable-drop",
+            campaignId: "claimable",
+            currentMinutes: 60,
+            requiredMinutes: 60
+        )
+        let claimable = makeCampaign(
+            id: "claimable",
+            gameId: "claimable-game",
+            gameName: "Claimable Game",
+            isAccountConnected: true,
+            drops: [Drop(
+                id: "claimable-drop",
+                name: "Claimable Drop",
+                requiredMinutes: 60,
+                progress: claimableProgress
+            )]
+        )
+        let miner = makeMiner(
+            campaigns: [ended, claimable],
+            priorityGames: ["Ended Game", "Claimable Game"]
+        )
+
+        let presentation = MinerOperatorPresentation.resolve(
+            for: miner,
+            priorityGames: miner.priorityGames,
+            excludedGames: [],
+            strategy: .onlyPriority,
+            includesBadgeAndEmoteCampaigns: false
+        )
+
+        XCTAssertNil(presentation.snapshot.upNext)
+        XCTAssertTrue(presentation.queue.isEmpty)
+        XCTAssertTrue(presentation.thenCampaigns.isEmpty)
     }
 
     func testOperatorQueueCarriesRealChannelProbeInsteadOfAssumingNoLiveChannels() throws {
@@ -338,7 +379,7 @@ final class MinerActivitySnapshotTests: XCTestCase {
         XCTAssertNil(idleSnapshot.upNext)
 
         XCTAssertEqual(blockedSnapshot.statusText, "Up to Date")
-        XCTAssertEqual(blockedSnapshot.now.title, "Up to Date")
+        XCTAssertEqual(blockedSnapshot.now.title, "Priority game ready")
         XCTAssertNil(blockedSnapshot.upNext)
     }
 
@@ -375,7 +416,7 @@ final class MinerActivitySnapshotTests: XCTestCase {
         XCTAssertEqual(snapshot.now.title, "Starting...")
     }
 
-    func testDismissedMissingGameShowsCurrentStatusAsUpToDateWithoutUpNext() {
+    func testDismissedLinkReminderStillShowsPrioritisedCampaignUpNext() {
         let campaign = makeCampaign(id: "unlinked", isAccountConnected: false)
         let miner = makeMiner(status: .blockedAccountNotLinked, campaigns: [campaign])
 
@@ -389,8 +430,8 @@ final class MinerActivitySnapshotTests: XCTestCase {
         )
 
         XCTAssertEqual(snapshot.statusText, "Up to Date")
-        XCTAssertEqual(snapshot.now.title, "Up to Date")
-        XCTAssertNil(snapshot.upNext)
+        XCTAssertEqual(snapshot.now.title, "Priority game ready")
+        XCTAssertEqual(snapshot.upNext?.campaignId, campaign.id)
         XCTAssertTrue(snapshot.blockedPriority.isEmpty)
     }
 

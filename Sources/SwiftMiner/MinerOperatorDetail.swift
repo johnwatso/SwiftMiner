@@ -63,6 +63,9 @@ struct MinerOperatorPresentation {
         ignoredAccountLinkGameIds: [String] = [],
         now: Date = Date()
     ) -> MinerOperatorPresentation {
+        // Retained for call-site compatibility. Eligibility is derived from each
+        // campaign's own `isTimeActive` state, not a grace period after it ends.
+        _ = now
         let snapshot = MinerActivitySnapshot.resolve(
             for: miner,
             priorityGames: priorityGames,
@@ -76,40 +79,32 @@ struct MinerOperatorPresentation {
         let priorityKeys = effectivePriorities.map(normalizedKey).filter { !$0.isEmpty }
         let prioritySet = Set(priorityKeys)
         let excludedSet = Set(excludedGames.map(normalizedKey).filter { !$0.isEmpty })
-        let recentEndCutoff = now.addingTimeInterval(-24 * 60 * 60)
 
         var campaigns = miner.allCampaigns.filter { campaign in
             guard campaign.status != .disabled, !campaign.isLikelyInternalTestCampaign else { return false }
             let gameId = normalizedKey(campaign.game.id)
             let gameName = normalizedKey(campaign.game.name)
             let isPriority = prioritySet.contains(gameId) || prioritySet.contains(gameName)
-            // Keep prospective queue rows aligned with the engine: a prioritised game may
-            // be attempted before its external game account is linked. The row retains its
-            // requires-link status instead of silently omitting real scheduling work.
-            guard campaign.isAccountConnected || campaign.id == snapshot.now.campaignId || isPriority else { return false }
-            if campaign.id != snapshot.now.campaignId {
+            let isCurrentWatch = miner.status == .watching && campaign.id == snapshot.now.campaignId
+
+            // This is the actionable campaign queue, not a list of possible link
+            // reminders. An unlinked campaign remains visible in Pending and may still
+            // be attempted by the engine when prioritised, but it must not be presented
+            // as an already queued campaign before a watch session actually starts.
+            guard isCurrentWatch || campaign.isAccountConnected else { return false }
+            if !isCurrentWatch {
                 guard !excludedSet.contains(gameId), !excludedSet.contains(gameName) else { return false }
                 guard includesBadgeAndEmoteCampaigns || !campaign.hasOnlyBadgesOrEmotes else { return false }
+                guard campaign.isTimeActive,
+                      campaign.canAttemptMining,
+                      !campaign.earnableDrops.isEmpty else { return false }
 
                 if strategy == .onlyPriority {
                     guard isPriority else { return false }
-                } else if !isPriority {
-                    guard campaign.isTimeActive,
-                          campaign.canAttemptMining,
-                          !campaign.drops.isEmpty,
-                          !campaign.drops.allSatisfy(\.isClaimed) else { return false }
                 }
             }
 
-            let status = campaign.activityStatus(for: miner)
-
-            // A queue lists only work the miner can actually schedule.
-            if campaign.id != snapshot.now.campaignId {
-                guard status != .completed else { return false }
-                guard status != .requiresLink || isPriority else { return false }
-            }
-
-            return status != .expired || campaign.endDate >= recentEndCutoff
+            return true
         }
 
         campaigns.sort { lhs, rhs in
@@ -316,16 +311,42 @@ struct MinerOperatorHeader: View {
         if !miner.isRunning { return "Stopped" }
         if miner.needsAuth { return "Needs authentication" }
         if miner.isStalled { return "Unresponsive" }
-        if !miner.isHealthy { return "Attention" }
-        return "Online"
+        switch health.health {
+        case .attention:
+            if miner.showsNotEarningAttention { return "Not earning drops" }
+            if miner.showsNoRecentActivityAttention { return "No recent activity" }
+            return "Checking miner"
+        case .recovering:
+            return "Recovering"
+        case .blocked:
+            return "Blocked"
+        case .needsAuth:
+            return "Needs authentication"
+        case .mining, .idle, .stalled:
+            return "Online"
+        }
     }
 
     private var connectionSymbol: String {
-        miner.isRunning && miner.isHealthy && !miner.needsAuth ? "checkmark.circle.fill" : "exclamationmark.circle.fill"
+        switch health.health {
+        case .mining, .idle:
+            return "checkmark.circle.fill"
+        case .recovering:
+            return "arrow.triangle.2.circlepath.circle.fill"
+        case .attention, .stalled, .needsAuth, .blocked:
+            return "exclamationmark.circle.fill"
+        }
     }
 
     private var connectionTint: Color {
-        miner.isRunning && miner.isHealthy && !miner.needsAuth ? .green : .orange
+        switch health.health {
+        case .mining, .idle:
+            return .green
+        case .recovering:
+            return .blue
+        case .attention, .stalled, .needsAuth, .blocked:
+            return .orange
+        }
     }
 
     private var healthTint: Color {

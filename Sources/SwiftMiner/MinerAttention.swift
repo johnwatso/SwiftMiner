@@ -164,6 +164,17 @@ struct MinerAttentionIssue: Equatable {
             )
         }
 
+        if miner.showsNotEarningAttention {
+            let reference = miner.earningReferenceDate ?? Date()
+            let minutes = max(1, Int(Date().timeIntervalSince(reference) / 60))
+            return MinerAttentionIssue(
+                title: "This miner is not earning drop progress",
+                detail: "It has been watching for \(minutes) minutes since the last confirmed drop progress.",
+                recommendation: "SwiftMiner will keep checking Twitch. Restart the miner if progress does not resume after the next campaign check.",
+                action: .restart
+            )
+        }
+
         return nil
     }
 }

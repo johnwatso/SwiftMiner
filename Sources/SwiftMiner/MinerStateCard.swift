@@ -913,10 +913,7 @@ struct MinerActivitySnapshot {
             switch resolved.state {
             case .blocked:
                 if resolved.reason == .notLinked {
-                    return upToDateItem(
-                        id: "unlinked-\(miner.id)-\(resolved.gameId)",
-                        subtitle: "Unlinked campaigns are not included in this miner's queue."
-                    )
+                    return unlinkedPriorityItem(id: "unlinked-\(miner.id)-\(resolved.gameId)")
                 }
                 return blockedCurrentItem(for: miner, resolved: resolved)
             case .idle:
@@ -970,10 +967,7 @@ struct MinerActivitySnapshot {
                 accent: .cyan
             )
         case .blockedAccountNotLinked:
-            return upToDateItem(
-                id: "unlinked-\(miner.id)",
-                subtitle: "Unlinked campaigns are not included in this miner's queue."
-            )
+            return unlinkedPriorityItem(id: "unlinked-\(miner.id)")
         case .idleNoEligibleCampaigns:
             return waitingItem(
                 id: "idle-\(miner.id)",
@@ -1037,13 +1031,22 @@ struct MinerActivitySnapshot {
         )
     }
 
+    private static func unlinkedPriorityItem(id: String) -> MinerActivityItem {
+        MinerActivityItem(
+            id: id,
+            title: "Priority game ready",
+            subtitle: "SwiftMiner can still mine it while account linking is pending.",
+            detail: "Link the game account on Twitch to receive its rewards.",
+            symbol: "personalhotspot",
+            accent: .orange,
+            requiresAccountLink: true
+        )
+    }
+
     private static func blockedCurrentItem(for miner: MinerManager.ManagedMiner, resolved: MinerGameState) -> MinerActivityItem {
         switch resolved.reason {
         case .notLinked:
-            return upToDateItem(
-                id: "unlinked-\(miner.id)-\(resolved.gameId)",
-                subtitle: "Unlinked campaigns are not included in this miner's queue."
-            )
+            return unlinkedPriorityItem(id: "unlinked-\(miner.id)-\(resolved.gameId)")
         case .noLiveStreams:
             return MinerActivityItem(
                 id: "blocked-stream-\(miner.id)-\(resolved.gameId)",
@@ -1148,18 +1151,16 @@ struct MinerActivitySnapshot {
         }
 
         let eligible = candidates.filter { campaign in
-            guard campaign.canAttemptMining else {
+            // Keep this in lockstep with `MinerEngine.candidateCampaigns`: a
+            // claimable-but-not-yet-claimed reward has no watch progress left,
+            // so it is not actually "Up next" for mining.
+            guard campaign.canAttemptMining, !campaign.earnableDrops.isEmpty else {
                 return false
             }
             if !includesBadgeAndEmoteCampaigns && campaign.hasOnlyBadgesOrEmotes {
                 return false
             }
-            switch campaign.miningStatus {
-            case .available, .inProgress, .claimable:
-                return true
-            case .claimed, .expired:
-                return false
-            }
+            return true
         }
 
         guard let campaign = sortedCandidates(eligible, priorityKeys: priorityKeys, strategy: strategy).first else {

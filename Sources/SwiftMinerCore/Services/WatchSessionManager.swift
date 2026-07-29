@@ -161,9 +161,12 @@ init(
         gameName: String = "",
         gameId: String = ""
     ) async throws -> WatchSession {
-        // Check if session is already active
+        // A rescan can reach this boundary just as a previous watch is winding
+        // down. Replace that residual session instead of turning a recoverable
+        // ordering race into a failed miner worker.
         if activeSession != nil {
-            throw TwitchMinerError.watchSessionFailed("Session already active")
+            Logger.engine.info("Replacing residual watch session before starting a new one")
+            await stopWatching()
         }
 
         // Validate channel
@@ -351,7 +354,12 @@ init(
             activeSession = session
             onHeartbeatSent?(session)
 
+        } catch is CancellationError {
+            // Expected when a refresh or shutdown cancels an in-flight beacon.
+            // It must not count toward the heartbeat failure budget.
+            return
         } catch {
+            guard !Task.isCancelled else { return }
             session.consecutiveHeartbeatFailures += 1
             activeSession = session
 

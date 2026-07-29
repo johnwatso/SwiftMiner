@@ -13,10 +13,15 @@ public struct DiscordUserProjection: Codable, Sendable {
     public let issues: [Issue]
     public let dmState: DiscordDMState
     public let priorityGames: [String]
+    /// Canonical remote box-art URLs keyed by normalized game name. This avoids
+    /// making web clients guess Twitch CDN URLs from user-facing game names.
+    public let priorityGameArtwork: [String: String]
     /// Games prioritised specifically for this user's miner, excluding the global list.
     public let personalPriorityGames: [String]
     /// Whether the operator-level priority list is appended after personal priorities.
     public let includesGlobalPriorityGames: Bool
+    /// The user-facing source selection for this miner's priority queue.
+    public let prioritySource: String
     /// Total configured miners on this SwiftMiner host. Used to hide multi-miner-only controls.
     public let configuredMinerCount: Int
     /// Live health details for browser triage. Nil when the miner is not available.
@@ -32,8 +37,10 @@ public struct DiscordUserProjection: Codable, Sendable {
         issues: [Issue] = [],
         dmState: DiscordDMState = DiscordDMState(),
         priorityGames: [String] = [],
+        priorityGameArtwork: [String: String] = [:],
         personalPriorityGames: [String] = [],
         includesGlobalPriorityGames: Bool = true,
+        prioritySource: String = "global",
         configuredMinerCount: Int = 1,
         diagnostics: Diagnostics? = nil
     ) {
@@ -46,8 +53,10 @@ public struct DiscordUserProjection: Codable, Sendable {
         self.issues = issues
         self.dmState = dmState
         self.priorityGames = priorityGames
+        self.priorityGameArtwork = priorityGameArtwork
         self.personalPriorityGames = personalPriorityGames
         self.includesGlobalPriorityGames = includesGlobalPriorityGames
+        self.prioritySource = prioritySource
         self.configuredMinerCount = configuredMinerCount
         self.diagnostics = diagnostics
     }
@@ -62,10 +71,15 @@ public struct DiscordUserProjection: Codable, Sendable {
     public struct Account: Codable, Sendable {
         public let twitchAccountId: String
         public let username: String
+        /// A custom Twitch profile picture, when one is available. The generic
+        /// Twitch placeholder is deliberately omitted so clients can use their
+        /// own fallback artwork.
+        public let profileImageURL: URL?
 
-        public init(twitchAccountId: String, username: String) {
+        public init(twitchAccountId: String, username: String, profileImageURL: URL? = nil) {
             self.twitchAccountId = twitchAccountId
             self.username = username
+            self.profileImageURL = profileImageURL
         }
     }
 

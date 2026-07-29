@@ -145,31 +145,13 @@ public enum PrimaryStateResolver {
             return .blocked(reasons: [.accountNotLinked])
         }
         
-        // 1b. A prioritised, active campaign can still be attempted while its
-        // external game account is unlinked. Keep the link warning as a blocked
-        // presentation only when there is no linked earnable work to fall back to.
-        let priorityGamesLower = Set(miner.priorityGames.map { $0.lowercased() })
-        let blockedPriority = relevantCampaigns.filter { campaign in
-            campaign.isTimeActive &&
-                !campaign.isAccountConnected &&
-                priorityGamesLower.contains(campaign.gameName.lowercased()) &&
-                campaign.drops.contains { !isEarned($0) }
-        }
-        let hasEarnableWork = relevantCampaigns.contains { campaign in
-            campaign.isTimeActive && campaign.isAccountConnected && campaign.drops.contains { !isEarned($0) }
-        }
-        if !blockedPriority.isEmpty && !hasEarnableWork {
-            Logger.engine.info("prioritised campaign(s) unlinked and no other work → .blocked(.accountNotLinked)")
-            return .blocked(reasons: [.accountNotLinked])
-        }
-
-        // 1c. No Live Streams Block (Stable Engine State)
+        // 1b. No Live Streams Block (Stable Engine State)
         if miner.status == .waitingForStream {
             Logger.engine.info("status=.waitingForStream → .blocked(.noLiveStreams)")
             return .blocked(reasons: [.noLiveStreams])
         }
 
-        // 1d. Eligibility Block (No campaigns at all)
+        // 1c. Eligibility Block (No campaigns at all)
         if relevantCampaigns.isEmpty {
             Logger.engine.info("no campaigns with drops → .blocked(.noEligibleCampaign)")
             return .blocked(reasons: [.noEligibleCampaign])
@@ -217,7 +199,7 @@ public enum PrimaryStateResolver {
         // Task 3.3: "ready = eligible but not started"
         // Eligible here means "has drops with progress < 100%".
         let hasEarnable = relevantCampaigns.contains { campaign in
-            campaign.isTimeActive && campaign.isAccountConnected && campaign.drops.contains { !isEarned($0) }
+            campaign.isTimeActive && campaign.drops.contains { !isEarned($0) }
         }
         
         if hasEarnable {
