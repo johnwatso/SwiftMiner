@@ -1,4 +1,5 @@
 import Foundation
+import AsyncAlgorithms
 
 /// The latest account-specific result of checking a Twitch game for a stream that can
 /// actually earn one of this miner's drops. A directory being non-empty is not enough:
@@ -979,6 +980,41 @@ public actor MinerEngine {
         onOperationalEvent?(.heartbeat)
     }
 
+    /// Waits out the gap between scans, waking early when there is a reason to.
+    ///
+    /// Expressed as a timer sequence over the engine's injectable clock rather than a hand-rolled
+    /// loop of sleeps and modulo arithmetic, so cancellation propagates at the await point and
+    /// the cadence is stated once. `RuntimeClock` conforms to `Clock`, which keeps the reliability
+    /// tests in control of time here instead of waiting in real seconds.
+    ///
+    /// Restricted (ACL) campaigns — esports drops, typically — have approved channels the public
+    /// directory never lists, and they go live for short windows. Re-probing them every
+    /// `aclProbeInterval` means a broadcast starting mid-wait is picked up promptly instead of
+    /// losing up to a full `campaignCheckInterval`.
+    private func waitForNextScan(restrictedCandidates: [Campaign]) async {
+        let tick = Duration.seconds(10)
+        let totalTicks = max(1, Int(campaignCheckInterval / (10 * 1_000_000_000)))
+        let ticksPerACLProbe = max(1, Int(Self.aclProbeInterval / 10))
+
+        var elapsedTicks = 0
+        let timer = AsyncTimerSequence(interval: tick, clock: runtimeClock)
+
+        for await _ in timer {
+            if Task.isCancelled || shouldRescanCampaigns { return }
+
+            elapsedTicks += 1
+            if elapsedTicks >= totalTicks { return }
+
+            guard !restrictedCandidates.isEmpty,
+                  elapsedTicks % ticksPerACLProbe == 0 else { continue }
+
+            if await anyApprovedChannelLive(in: restrictedCandidates) {
+                log("An approved channel for a restricted campaign just went live — re-checking immediately.")
+                return
+            }
+        }
+    }
+
     private func cleanupActiveWatchSession(clearTarget: Bool) async {
         let channelId = session?.currentChannelId
 
@@ -1231,10 +1267,13 @@ public actor MinerEngine {
                             log("Checking game: \(gameName) (\(gameCandidates.count) candidate campaign(s))")
                         }
                         let sameGameCampaigns = Self.sameGameCampaigns(matching: gameCandidates[0], in: allEnriched)
-                        if let selection = await selectBestChannel(
+                        let selectionSignpost = MiningSignpost.begin(.channelSelection)
+                        let selection = await selectBestChannel(
                             forGameCandidates: verificationCandidates,
                             knownSameGameCampaigns: sameGameCampaigns
-                        ) {
+                        )
+                        MiningSignpost.end(.channelSelection, selectionSignpost)
+                        if let selection {
                             recordGameLiveProbe(
                                 gameKey,
                                 hasLiveChannel: true,
@@ -1272,23 +1311,9 @@ public actor MinerEngine {
                     // short windows. Re-probe them on a short interval so we don't lose up to a
                     // full campaignCheckInterval before noticing one came online.
                     let restrictedWaitCandidates = candidates.filter { $0.hasKnownChannelRestrictions }
-                    let tickNs: UInt64 = 10 * 1_000_000_000
-                    let ticks = Int(campaignCheckInterval / tickNs)
-                    let aclProbeEveryTicks = Int(Self.aclProbeInterval / (Double(tickNs) / 1_000_000_000))
-                    for tick in 0..<ticks {
-                        if Task.isCancelled || shouldRescanCampaigns { break }
-                        do {
-                            try await runtimeClock.sleep(nanoseconds: tickNs)
-                        } catch {
-                            break
-                        }
-                        if !restrictedWaitCandidates.isEmpty,
-                           (tick + 1) % aclProbeEveryTicks == 0,
-                           await anyApprovedChannelLive(in: restrictedWaitCandidates) {
-                            log("An approved channel for a restricted campaign just went live — re-checking immediately.")
-                            break
-                        }
-                    }
+                    let waitSignpost = MiningSignpost.begin(.idleWait)
+                    await waitForNextScan(restrictedCandidates: restrictedWaitCandidates)
+                    MiningSignpost.end(.idleWait, waitSignpost)
                     shouldRescanCampaigns = false
                     continue
                 }

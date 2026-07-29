@@ -60,6 +60,69 @@ public struct RuntimeClock: Sendable {
     }
 }
 
+// MARK: - Clock conformance
+
+/// Conformance to Swift's `Clock`, so this injectable clock can drive the standard async
+/// timing primitives — `AsyncTimerSequence` and friends — instead of hand-rolled tick loops.
+///
+/// This is what keeps time injectable at those call sites: adopting `AsyncTimerSequence` on
+/// `ContinuousClock` would have made the reliability tests wait in real wall-clock time.
+extension RuntimeClock: Clock {
+    public struct Instant: InstantProtocol, Sendable {
+        public let nanoseconds: UInt64
+
+        public init(nanoseconds: UInt64) {
+            self.nanoseconds = nanoseconds
+        }
+
+        public func advanced(by duration: Duration) -> Instant {
+            let delta = duration.wholeNanoseconds
+            if delta >= 0 {
+                let result = nanoseconds.addingReportingOverflow(UInt64(delta))
+                return Instant(nanoseconds: result.overflow ? .max : result.partialValue)
+            }
+            let magnitude = UInt64(-delta)
+            return Instant(nanoseconds: magnitude > nanoseconds ? 0 : nanoseconds - magnitude)
+        }
+
+        public func duration(to other: Instant) -> Duration {
+            if other.nanoseconds >= nanoseconds {
+                return .nanoseconds(Int64(clamping: other.nanoseconds - nanoseconds))
+            }
+            return .nanoseconds(-Int64(clamping: nanoseconds - other.nanoseconds))
+        }
+
+        public static func < (lhs: Instant, rhs: Instant) -> Bool {
+            lhs.nanoseconds < rhs.nanoseconds
+        }
+    }
+
+    public var now: Instant {
+        Instant(nanoseconds: nowProvider())
+    }
+
+    /// Driven by the injected sleep provider, so a test clock stays in control.
+    public var minimumResolution: Duration { .nanoseconds(1) }
+
+    public func sleep(until deadline: Instant, tolerance: Duration?) async throws {
+        let current = nowProvider()
+        guard deadline.nanoseconds > current else { return }
+        try await sleepProvider(deadline.nanoseconds - current)
+    }
+}
+
+private extension Duration {
+    /// Whole nanoseconds, saturating rather than trapping.
+    var wholeNanoseconds: Int64 {
+        let (seconds, attoseconds) = components
+        let fromSeconds = seconds.multipliedReportingOverflow(by: 1_000_000_000)
+        if fromSeconds.overflow { return seconds > 0 ? .max : .min }
+        let fromAttoseconds = attoseconds / 1_000_000_000
+        let total = fromSeconds.partialValue.addingReportingOverflow(fromAttoseconds)
+        return total.overflow ? (seconds > 0 ? .max : .min) : total.partialValue
+    }
+}
+
 public struct RuntimeTimeoutError: LocalizedError, Sendable, Equatable {
     public let operation: String
     public let seconds: TimeInterval

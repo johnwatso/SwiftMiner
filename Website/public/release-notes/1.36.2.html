@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SwiftMiner 1.36.2 - Release Notes</title>
+  <meta name="description" content="Release notes for SwiftMiner 1.36.2: one source of truth for what a miner is doing, drift-free waiting, and profiling hooks for idle CPU.">
+  <link rel="canonical" href="https://swiftminer.app/release-notes/1.36.2.html">
+  <meta name="robots" content="index, follow">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      margin: 0;
+      padding: 32px 20px 48px;
+      font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f4f6f8;
+      color: #0f1720;
+    }
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 28px;
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.86);
+      box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
+      border: 1px solid rgba(82, 96, 109, 0.12);
+    }
+    h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
+    .meta { margin: 0 0 10px; color: #52606d; font-size: 14px; }
+    .intro { margin: 0 0 24px; color: #384454; }
+    section {
+      margin: 18px 0 0;
+      padding: 18px 18px 14px;
+      border: 1px solid rgba(82, 96, 109, 0.18);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.42);
+      border-left: 5px solid var(--accent, #0a67a3);
+    }
+    section.green  { --accent: #1c8c73; }
+    section.indigo { --accent: #5f5ac8; }
+    section.violet { --accent: #7b4bd9; }
+    section.amber  { --accent: #b9760a; }
+    section.teal   { --accent: #0a8aa3; }
+    section.rose   { --accent: #c0344d; }
+    h2 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 4px;
+      color: var(--accent, #0a67a3);
+      font-size: 18px;
+    }
+    .badge {
+      display: inline-grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--accent, #0a67a3) 15%, transparent);
+      font-size: 16px;
+    }
+    .summary { margin: 0 0 12px; color: #52606d; font-size: 14px; }
+    ul { margin: 0; padding-left: 22px; }
+    li { margin: 0 0 8px; }
+    li:last-child { margin-bottom: 0; }
+    code {
+      font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: rgba(82, 96, 109, 0.12);
+      padding: 1px 5px;
+      border-radius: 5px;
+    }
+    a { color: #0a67a3; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #0b1015; color: #edf2f7; }
+      main {
+        background: rgba(15, 23, 32, 0.88);
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+        border-color: rgba(159, 176, 194, 0.14);
+      }
+      .meta, .summary { color: #9fb0c2; }
+      .intro { color: #c8d3df; }
+      section {
+        border-color: rgba(159, 176, 194, 0.18);
+        background: rgba(255, 255, 255, 0.04);
+      }
+      code { background: rgba(159, 176, 194, 0.18); }
+      a { color: #73c3ff; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>SwiftMiner 1.36.2</h1>
+    <p class="meta">Version 1.36.2 &middot; Build 2026072913</p>
+    <p class="intro">Structural work on the mining loop rather than new behaviour. A miner now describes itself from a single source of truth, waiting no longer drifts, and there are proper profiling hooks for the idle CPU use that has not yet been explained.</p>
+
+    <section class="teal">
+      <h2><span class="badge" aria-hidden="true">&#127919;</span> One Source of Truth</h2>
+      <p class="summary">The recurring cause of contradictory status text is now gone.</p>
+      <ul>
+        <li>A miner's state was worked out independently in two places: the details label derived it from per-game data covering only prioritised games, while the activity card used the engine's actual session state. Nothing made them agree, which is how a miner came to report <strong>Looking for Streams</strong> and <strong>Drops complete</strong> at the same time.</li>
+        <li>Both now resolve through one shared state, so they cannot drift apart. Per-game data is used only to name the game, never to decide what the miner is doing &mdash; deriving the state from it was the original fault, since a miner working a campaign outside its prioritised list described itself using games it had already finished.</li>
+      </ul>
+    </section>
+
+    <section class="amber">
+      <h2><span class="badge" aria-hidden="true">&#9201;</span> Waiting No Longer Drifts</h2>
+      <p class="summary">Approved channels are re-checked on schedule instead of gradually falling behind.</p>
+      <ul>
+        <li>The wait between scans slept for a fixed period <em>after</em> finishing each round of work, so the time spent checking approved channels pushed every later check further out. A nominal sixty-second re-check was really closer to seventy, compounding across a long wait and slowing how quickly a channel going live was noticed.</li>
+        <li>Waiting now runs on a fixed schedule, so the re-check interval is the interval. Cancellation is handled properly rather than being caught and discarded.</li>
+      </ul>
+    </section>
+
+    <section class="indigo">
+      <h2><span class="badge" aria-hidden="true">&#129514;</span> Under the Hood</h2>
+      <p class="summary">Groundwork for diagnosing what has not been explained yet.</p>
+      <ul>
+        <li>Adds profiling markers around channel selection and approved-channel checks, so time spent while idle can be attributed properly. Average CPU while mining nothing has been high and the cause is still unknown.</li>
+        <li>Adds a state-consistency test suite that fails if any two surfaces ever again claim a miner is both finished and working, covering every session status.</li>
+        <li>The internal clock now conforms to Swift's standard clock protocol, so reliability tests keep control of time instead of waiting in real seconds.</li>
+        <li>Prepared as SwiftMiner <strong>1.36.2</strong>, build <strong>2026072913</strong>.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>
