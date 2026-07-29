@@ -118,60 +118,16 @@ extension MinerEngine {
     }
 
     /// Resolves the appropriate session status when no candidate campaigns remain after
-    /// filtering. Missing game-account linkage is only presented as blocked when it
-    /// belongs to a game this miner has explicitly prioritised; unrelated public
-    /// unlinked campaigns are normal "no eligible work" noise.
+    /// filtering. A missing game-account link is a delivery warning, never a scheduling
+    /// block for a prioritised game, so it must not be inferred from an empty result.
     internal static func resolveEmptyCandidateState(
-        from campaigns: [Campaign],
-        priorityGames: [String],
-        excludedGames: [String],
-        strategy: MiningStrategy,
-        includesBadgeAndEmoteCampaigns: Bool
+        from _: [Campaign],
+        priorityGames _: [String],
+        excludedGames _: [String],
+        strategy _: MiningStrategy,
+        includesBadgeAndEmoteCampaigns _: Bool
     ) -> SessionStatus {
-        let priorityKeys = priorityGames.map { normalizedGameSelectionKey($0) }.filter { !$0.isEmpty }
-        let prioritySet = Set(priorityKeys)
-        let excludedSet = Set(excludedGames.map { normalizedGameSelectionKey($0) }.filter { !$0.isEmpty })
-
-        // 1. Define the "Universe" (Active, Enabled, Preferred)
-        // We only care about campaigns that the user hasn't explicitly excluded or filtered out by strategy.
-        let universe = campaigns.filter { campaign in
-            let gameName = normalizedGameSelectionKey(campaign.gameName)
-            let gameId = normalizedGameSelectionKey(campaign.game.id)
-
-            // Basic availability
-            guard campaign.isTimeActive && campaign.status != .disabled else { return false }
-            guard !campaign.isLikelyInternalTestCampaign else { return false }
-            
-            // User preferences
-            if excludedSet.contains(gameName) || excludedSet.contains(gameId) { return false }
-            if strategy == .onlyPriority && !prioritySet.contains(gameName) && !prioritySet.contains(gameId) { return false }
-            if !includesBadgeAndEmoteCampaigns && campaign.hasOnlyBadgesOrEmotes { return false }
-            
-            return true
-        }
-
-        guard !universe.isEmpty else {
-            // Nothing in the user's preferred/available universe exists to mine.
-            return .idleNoEligibleCampaigns
-        }
-
-        let priorityUniverse = universe.filter { campaign in
-            let gameName = normalizedGameSelectionKey(campaign.gameName)
-            let gameId = normalizedGameSelectionKey(campaign.game.id)
-            return prioritySet.contains(gameName) || prioritySet.contains(gameId)
-        }
-
-        let unlinkedAttemptablePriorityCampaigns = priorityUniverse.filter { campaign in
-            !campaign.isAccountConnected && campaign.canAttemptMining
-        }
-        guard !unlinkedAttemptablePriorityCampaigns.isEmpty else {
-            return .idleNoEligibleCampaigns
-        }
-
-        let hasLinkedPriorityCampaign = priorityUniverse.contains { campaign in
-            campaign.isAccountConnected && campaign.canAttemptMining
-        }
-        return hasLinkedPriorityCampaign ? .idleNoEligibleCampaigns : .blockedAccountNotLinked
+        .idleNoEligibleCampaigns
     }
 
     /// Record the outcome of a live-channel probe for a game so later ranking and the

@@ -315,16 +315,16 @@ final class PrimaryStateResolverTests: XCTestCase {
         XCTAssertEqual(state?.campaignId, "c1")
     }
 
-    func testPrioritisedGame_NotLinkedEvenIfNoDrops_ProducesBlocked() {
-        // Campaign exists but has no drops (relevant.isEmpty is true)
-        // But it is NOT linked.
+    func testPrioritisedGame_NotLinkedWithoutDropsIsNotReportedAsLinkBlocked() {
+        // Campaign exists but has no drops (relevant.isEmpty is true). Missing
+        // linkage must remain a warning rather than becoming the game state.
         let campaign = createCampaign(id: "c1", isAccountConnected: false, drops: [])
         let miner = createMiner(allCampaigns: [campaign], priorityGames: ["Test Game"])
 
         XCTAssertEqual(miner.gameStates.count, 1)
         let state = miner.gameStates.first
-        XCTAssertEqual(state?.state, .blocked)
-        XCTAssertEqual(state?.reason, .notLinked)
+        XCTAssertEqual(state?.state, .idle)
+        XCTAssertEqual(state?.reason, .noEligibleCampaign)
     }
 
     // MARK: - Scheduler-selected (non-prioritised) game

@@ -248,7 +248,10 @@ final class DiscordAPIRoutesTests: XCTestCase {
 
         let builder = DiscordProjectionBuilder(
             manager: harness.manager,
-            stateProvider: LinkedTwitchProjectionStateProvider()
+            stateProvider: LinkedTwitchProjectionStateProvider(),
+            twitchProfileImageURL: { accountId in
+                accountId == twitchAccountId ? URL(string: "https://example.com/twitch-avatar.png") : nil
+            }
         )
 
         let maybeDiscordProjection = await builder.buildProjection(discordUserId: discordUserId)
@@ -257,6 +260,8 @@ final class DiscordAPIRoutesTests: XCTestCase {
         let twitchProjection = try XCTUnwrap(maybeTwitchProjection)
 
         XCTAssertEqual(discordProjection.account?.twitchAccountId, twitchAccountId)
+        XCTAssertEqual(discordProjection.account?.profileImageURL, URL(string: "https://example.com/twitch-avatar.png"))
+        XCTAssertEqual(twitchProjection.account?.profileImageURL, URL(string: "https://example.com/twitch-avatar.png"))
         XCTAssertEqual(discordProjection.state, twitchProjection.state)
         XCTAssertEqual(discordProjection.activeCampaign?.campaignId, twitchProjection.activeCampaign?.campaignId)
         XCTAssertEqual(discordProjection.activeCampaign?.game, "Linked Twitch Game")

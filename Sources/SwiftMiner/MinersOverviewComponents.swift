@@ -96,7 +96,7 @@ struct PendingItem: Identifiable, Equatable {
     var subtitle: String {
         switch kind {
         case .accountLink(let issue):
-            if isMuted { return "Reminder muted for \(issue.minerName)." }
+            if isMuted { return "Game account isn't linked · reminder muted for \(issue.minerName)." }
             let names = issue.campaignNames.prefix(2).joined(separator: ", ")
             if issue.campaignNames.count > 2 {
                 return "\(names), and more need a linked account."

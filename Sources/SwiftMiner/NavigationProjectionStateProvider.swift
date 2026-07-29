@@ -64,6 +64,13 @@ final class NavigationProjectionStateProvider: ProjectionStateProvider, @uncheck
         }
     }
 
+    func priorityGameArtwork(for discordUserId: String) async -> [String: String] {
+        await MainActor.run {
+            guard let model, let miner = model.minerForDiscordUser(discordUserId) else { return [:] }
+            return Self.priorityGameArtwork(for: miner)
+        }
+    }
+
     func personalPriorityGames(for discordUserId: String) async -> [String] {
         await MainActor.run {
             guard let model, let miner = model.minerForDiscordUser(discordUserId) else { return [] }
@@ -75,6 +82,13 @@ final class NavigationProjectionStateProvider: ProjectionStateProvider, @uncheck
         await MainActor.run {
             guard let model, let miner = model.minerForDiscordUser(discordUserId) else { return true }
             return Settings.shared.includesGlobalPriorityGames(forAccountId: miner.accountId)
+        }
+    }
+
+    func prioritySource(for discordUserId: String) async -> String {
+        await MainActor.run {
+            guard let model, let miner = model.minerForDiscordUser(discordUserId) else { return "global" }
+            return Settings.shared.prioritySource(forAccountId: miner.accountId).rawValue
         }
     }
 
@@ -139,6 +153,13 @@ final class NavigationProjectionStateProvider: ProjectionStateProvider, @uncheck
         }
     }
 
+    func priorityGameArtwork(forTwitchAccount accountId: String) async -> [String: String] {
+        await MainActor.run {
+            guard let model, let miner = model.minerForAccount(accountId) else { return [:] }
+            return Self.priorityGameArtwork(for: miner)
+        }
+    }
+
     func personalPriorityGames(forTwitchAccount accountId: String) async -> [String] {
         await MainActor.run {
             guard let model, model.minerForAccount(accountId) != nil else { return [] }
@@ -153,6 +174,13 @@ final class NavigationProjectionStateProvider: ProjectionStateProvider, @uncheck
         }
     }
 
+    func prioritySource(forTwitchAccount accountId: String) async -> String {
+        await MainActor.run {
+            guard let model, model.minerForAccount(accountId) != nil else { return "global" }
+            return Settings.shared.prioritySource(forAccountId: accountId).rawValue
+        }
+    }
+
     func diagnostics(forTwitchAccount accountId: String) async -> DiscordUserProjection.Diagnostics? {
         let optionalMiner = await MainActor.run { model?.minerForAccount(accountId) }
         guard let miner = optionalMiner else { return nil }
@@ -160,6 +188,30 @@ final class NavigationProjectionStateProvider: ProjectionStateProvider, @uncheck
         return await MainActor.run {
             Self.diagnosticsProjection(from: miner, summary: summary)
         }
+    }
+
+    @MainActor
+    private static func priorityGameArtwork(for miner: MinerManager.ManagedMiner) -> [String: String] {
+        var artworkByGame = [String: String]()
+
+        func addArtwork(_ url: URL?, for gameName: String) {
+            let key = gameName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard !key.isEmpty,
+                  let url,
+                  url.scheme?.lowercased() == "https" else { return }
+            artworkByGame[key] = url.absoluteString
+        }
+
+        for preference in Settings.shared.gamePreferences where preference.state == .preferred {
+            addArtwork(preference.resolvedBoxArtURL, for: preference.gameName)
+        }
+        for campaign in miner.allCampaigns {
+            let key = campaign.game.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if artworkByGame[key] == nil {
+                addArtwork(campaign.game.boxArtURL, for: campaign.game.name)
+            }
+        }
+        return artworkByGame
     }
 
     // Progress must come from the same reconciliation the native GUI uses:

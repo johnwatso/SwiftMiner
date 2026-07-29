@@ -64,6 +64,20 @@ final class AccountPriorityGamesTests: XCTestCase {
         XCTAssertTrue(settings.personalPriorityGames(forAccountId: account).isEmpty)
     }
 
+    func testGlobalSourcePreservesPersonalPrioritiesForLaterUse() {
+        settings.addGamePreference(Game(id: "g-global", name: "Global Game"), state: .preferred)
+        settings.setPersonalPriorityGames(accountId: account, games: ["Personal Game"])
+
+        settings.setPrioritySource(.global, forAccountId: account)
+        XCTAssertEqual(settings.prioritySource(forAccountId: account), .global)
+        XCTAssertEqual(settings.priorityGames(forAccountId: account), ["Global Game"])
+        XCTAssertEqual(settings.personalPriorityGames(forAccountId: account), ["Personal Game"])
+
+        settings.setPrioritySource(.globalAndPersonal, forAccountId: account)
+        XCTAssertEqual(settings.priorityGames(forAccountId: account), ["Personal Game", "Global Game"])
+        XCTAssertEqual(settings.personalPriorityGames(forAccountId: account), ["Personal Game"])
+    }
+
     func testGameFailoverStreamerPersistsByGame() {
         let game = Game(id: "g-finals", name: "THE FINALS")
         settings.addGamePreference(game, state: .preferred)

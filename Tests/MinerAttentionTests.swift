@@ -32,6 +32,18 @@ final class MinerAttentionTests: XCTestCase {
         XCTAssertNil(MinerAttentionIssue.resolve(miner: makeMiner(), events: []))
     }
 
+    func testNotEarningMinerExplainsMissingProgress() {
+        var miner = makeMiner()
+        miner.lastDropProgressAt = Date().addingTimeInterval(-25 * 60)
+        miner.workerStartedAt = Date().addingTimeInterval(-2 * 60 * 60)
+
+        let attention = MinerAttentionIssue.resolve(miner: miner, events: [])
+
+        XCTAssertEqual(attention?.title, "This miner is not earning drop progress")
+        XCTAssertEqual(attention?.action, .restart)
+        XCTAssertTrue(attention?.detail.contains("25 minutes") == true)
+    }
+
     private func makeMiner(
         status: MinerManager.MinerStatus = .watching,
         needsAuth: Bool = false,

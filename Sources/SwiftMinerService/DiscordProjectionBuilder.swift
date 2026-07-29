@@ -15,11 +15,15 @@ public protocol ProjectionStateProvider: Sendable {
     func projectionState(for discordUserId: String) async -> DiscordUserProjection.ProjectionState?
     /// Returns the current app-level priority games, in mining order.
     func priorityGames(for discordUserId: String) async -> [String]
+    /// Canonical remote box-art URLs keyed by normalized game name.
+    func priorityGameArtwork(for discordUserId: String) async -> [String: String]
     /// Returns the games prioritised specifically for this user's miner, excluding the
     /// global priority list. Used by the Discord "edit games" modal.
     func personalPriorityGames(for discordUserId: String) async -> [String]
     /// Whether global priorities are appended after this user's personal list.
     func includesGlobalPriorityGames(for discordUserId: String) async -> Bool
+    /// Source selection shown in the WebUI's priority control.
+    func prioritySource(for discordUserId: String) async -> String
     /// Returns live health details for a Discord user's miner, if available.
     func diagnostics(for discordUserId: String) async -> DiscordUserProjection.Diagnostics?
     /// Returns the active campaign for a mined Twitch account, if any.
@@ -30,23 +34,31 @@ public protocol ProjectionStateProvider: Sendable {
     func projectionState(forTwitchAccount accountId: String) async -> DiscordUserProjection.ProjectionState?
     /// Returns the current app-level priority games for a mined Twitch account.
     func priorityGames(forTwitchAccount accountId: String) async -> [String]
+    /// Canonical remote box-art URLs keyed by normalized game name.
+    func priorityGameArtwork(forTwitchAccount accountId: String) async -> [String: String]
     /// Returns games prioritised specifically for this mined Twitch account.
     func personalPriorityGames(forTwitchAccount accountId: String) async -> [String]
     /// Whether global priorities are appended after this mined Twitch account's personal list.
     func includesGlobalPriorityGames(forTwitchAccount accountId: String) async -> Bool
+    /// Source selection shown in the WebUI's priority control.
+    func prioritySource(forTwitchAccount accountId: String) async -> String
     /// Returns live health details for a mined Twitch account, if available.
     func diagnostics(forTwitchAccount accountId: String) async -> DiscordUserProjection.Diagnostics?
 }
 
 public extension ProjectionStateProvider {
     func personalPriorityGames(for discordUserId: String) async -> [String] { [] }
+    func priorityGameArtwork(for discordUserId: String) async -> [String: String] { [:] }
     func includesGlobalPriorityGames(for discordUserId: String) async -> Bool { true }
+    func prioritySource(for discordUserId: String) async -> String { "global" }
     func activeCampaign(forTwitchAccount accountId: String) async -> DiscordUserProjection.ActiveCampaign? { nil }
     func recentCompletedCampaigns(forTwitchAccount accountId: String, limit: Int) async -> [DiscordUserProjection.RecentCampaign] { [] }
     func projectionState(forTwitchAccount accountId: String) async -> DiscordUserProjection.ProjectionState? { nil }
     func priorityGames(forTwitchAccount accountId: String) async -> [String] { [] }
+    func priorityGameArtwork(forTwitchAccount accountId: String) async -> [String: String] { [:] }
     func personalPriorityGames(forTwitchAccount accountId: String) async -> [String] { [] }
     func includesGlobalPriorityGames(forTwitchAccount accountId: String) async -> Bool { true }
+    func prioritySource(forTwitchAccount accountId: String) async -> String { "global" }
     func diagnostics(for discordUserId: String) async -> DiscordUserProjection.Diagnostics? { nil }
     func diagnostics(forTwitchAccount accountId: String) async -> DiscordUserProjection.Diagnostics? { nil }
 }
@@ -58,7 +70,9 @@ public struct DefaultProjectionStateProvider: ProjectionStateProvider {
     public func recentCompletedCampaigns(for discordUserId: String, limit: Int) async -> [DiscordUserProjection.RecentCampaign] { [] }
     public func projectionState(for discordUserId: String) async -> DiscordUserProjection.ProjectionState? { nil }
     public func priorityGames(for discordUserId: String) async -> [String] { [] }
+    public func priorityGameArtwork(for discordUserId: String) async -> [String: String] { [:] }
     public func includesGlobalPriorityGames(for discordUserId: String) async -> Bool { true }
+    public func prioritySource(for discordUserId: String) async -> String { "global" }
     public func diagnostics(for discordUserId: String) async -> DiscordUserProjection.Diagnostics? { nil }
 }
 
@@ -68,10 +82,18 @@ public struct DefaultProjectionStateProvider: ProjectionStateProvider {
 public actor DiscordProjectionBuilder {
     private let manager: SQLiteManager
     private let stateProvider: ProjectionStateProvider
+    /// The app supplies its authenticated, cached Twitch profile URLs. Keeping
+    /// this optional means the standalone service remains network-independent.
+    private let twitchProfileImageURL: @Sendable (String) async -> URL?
 
-    public init(manager: SQLiteManager, stateProvider: ProjectionStateProvider = DefaultProjectionStateProvider()) {
+    public init(
+        manager: SQLiteManager,
+        stateProvider: ProjectionStateProvider = DefaultProjectionStateProvider(),
+        twitchProfileImageURL: @escaping @Sendable (String) async -> URL? = { _ in nil }
+    ) {
         self.manager = manager
         self.stateProvider = stateProvider
+        self.twitchProfileImageURL = twitchProfileImageURL
     }
 
     /// Build a projection for the given Discord user ID.
@@ -88,8 +110,10 @@ public actor DiscordProjectionBuilder {
         let recentCompletedCampaigns: [DiscordUserProjection.RecentCampaign]
         let providerState: DiscordUserProjection.ProjectionState?
         let priorityGames: [String]
+        let priorityGameArtwork: [String: String]
         let personalPriorityGames: [String]
         let includesGlobalPriorityGames: Bool
+        let prioritySource: String
         let diagnostics: DiscordUserProjection.Diagnostics?
         let dropsClaimedThisWeek: Int
         if let account {
@@ -106,8 +130,10 @@ public actor DiscordProjectionBuilder {
                 providerState = await stateProvider.projectionState(for: discordUserId)
             }
             priorityGames = await stateProvider.priorityGames(forTwitchAccount: account.twitchAccountId)
+            priorityGameArtwork = await stateProvider.priorityGameArtwork(forTwitchAccount: account.twitchAccountId)
             personalPriorityGames = await stateProvider.personalPriorityGames(forTwitchAccount: account.twitchAccountId)
             includesGlobalPriorityGames = await stateProvider.includesGlobalPriorityGames(forTwitchAccount: account.twitchAccountId)
+            prioritySource = await stateProvider.prioritySource(forTwitchAccount: account.twitchAccountId)
             diagnostics = await stateProvider.diagnostics(forTwitchAccount: account.twitchAccountId)
         } else {
             activeCampaign = await stateProvider.activeCampaign(for: discordUserId)
@@ -115,8 +141,10 @@ public actor DiscordProjectionBuilder {
             dropsClaimedThisWeek = 0
             providerState = await stateProvider.projectionState(for: discordUserId)
             priorityGames = await stateProvider.priorityGames(for: discordUserId)
+            priorityGameArtwork = await stateProvider.priorityGameArtwork(for: discordUserId)
             personalPriorityGames = await stateProvider.personalPriorityGames(for: discordUserId)
             includesGlobalPriorityGames = await stateProvider.includesGlobalPriorityGames(for: discordUserId)
+            prioritySource = await stateProvider.prioritySource(for: discordUserId)
             diagnostics = await stateProvider.diagnostics(for: discordUserId)
         }
         let dmState = await fetchDMState(discordUserId: discordUserId)
@@ -144,8 +172,10 @@ public actor DiscordProjectionBuilder {
             issues: issues,
             dmState: dmState,
             priorityGames: priorityGames,
+            priorityGameArtwork: priorityGameArtwork,
             personalPriorityGames: personalPriorityGames,
             includesGlobalPriorityGames: includesGlobalPriorityGames,
+            prioritySource: prioritySource,
             configuredMinerCount: configuredMinerCount,
             diagnostics: diagnostics
         )
@@ -161,7 +191,11 @@ public actor DiscordProjectionBuilder {
         let configuredMinerCount = await manager.allTwitchAccountIds().count
         let ownerDiscordId = acct.ownerDiscordId
 
-        let account = DiscordUserProjection.Account(twitchAccountId: twitchId, username: acct.username)
+        let account = DiscordUserProjection.Account(
+            twitchAccountId: twitchId,
+            username: acct.username,
+            profileImageURL: await twitchProfileImageURL(twitchId)
+        )
         // Issues / DM state are Discord-keyed; only present if the account is linked.
         let issues = ownerDiscordId != nil ? await fetchIssues(discordUserId: ownerDiscordId!) : []
         let dmState = ownerDiscordId != nil ? await fetchDMState(discordUserId: ownerDiscordId!) : DiscordDMState()
@@ -170,8 +204,10 @@ public actor DiscordProjectionBuilder {
         let recentCompletedCampaigns = await stateProvider.recentCompletedCampaigns(forTwitchAccount: twitchId, limit: 3)
         let dropsClaimedThisWeek = await manager.fetchClaimsCount(twitchId: twitchId, withinDays: 7)
         let priorityGames = await stateProvider.priorityGames(forTwitchAccount: twitchId)
+        let priorityGameArtwork = await stateProvider.priorityGameArtwork(forTwitchAccount: twitchId)
         let personalPriorityGames = await stateProvider.personalPriorityGames(forTwitchAccount: twitchId)
         let includesGlobalPriorityGames = await stateProvider.includesGlobalPriorityGames(forTwitchAccount: twitchId)
+        let prioritySource = await stateProvider.prioritySource(forTwitchAccount: twitchId)
         let diagnostics = await stateProvider.diagnostics(forTwitchAccount: twitchId)
 
         let state: DiscordUserProjection.ProjectionState
@@ -195,8 +231,10 @@ public actor DiscordProjectionBuilder {
             issues: issues,
             dmState: dmState,
             priorityGames: priorityGames,
+            priorityGameArtwork: priorityGameArtwork,
             personalPriorityGames: personalPriorityGames,
             includesGlobalPriorityGames: includesGlobalPriorityGames,
+            prioritySource: prioritySource,
             configuredMinerCount: configuredMinerCount,
             diagnostics: diagnostics
         )
@@ -221,7 +259,7 @@ public actor DiscordProjectionBuilder {
 
     private func fetchAccount(discordUserId: String) async -> DiscordUserProjection.Account? {
         do {
-            return try await manager.query { db in
+            let record: (twitchId: String, username: String)? = try await manager.query { db in
                 let sql = "SELECT twitch_id, username FROM twitch_accounts WHERE owner_discord_id = ? LIMIT 1;"
                 var stmt: OpaquePointer?
                 guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
@@ -230,8 +268,14 @@ public actor DiscordProjectionBuilder {
                 guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
                 let twitchId = String(cString: sqlite3_column_text(stmt, 0))
                 let username = String(cString: sqlite3_column_text(stmt, 1))
-                return DiscordUserProjection.Account(twitchAccountId: twitchId, username: username)
+                return (twitchId, username)
             }
+            guard let record else { return nil }
+            return DiscordUserProjection.Account(
+                twitchAccountId: record.twitchId,
+                username: record.username,
+                profileImageURL: await twitchProfileImageURL(record.twitchId)
+            )
         } catch {
             return nil
         }

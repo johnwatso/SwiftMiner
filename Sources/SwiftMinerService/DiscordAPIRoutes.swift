@@ -102,10 +102,12 @@ private struct UpdatePriorityRequest: Codable, Sendable {
 private struct SetPrioritiesRequest: Codable, Sendable {
     let games: [String]
     let includeGlobalPriorities: Bool?
+    let prioritySource: String?
 
     enum CodingKeys: String, CodingKey {
         case games
         case includeGlobalPriorities = "include_global_priorities"
+        case prioritySource = "priority_source"
     }
 }
 
@@ -211,12 +213,12 @@ public actor DiscordAPIRoutes {
     /// Args: (discordUserId, accountId, gameName).
     public var onPrioritiseGame: (@Sendable (String, String, String) async -> [String]?)?
     /// Replaces a Discord-owned miner's personal priority games with the given list.
-    /// Args: (discordUserId, accountId, games, include globals). Returns the resulting effective list.
-    public var onSetPriorities: (@Sendable (String, String, [String], Bool?) async -> [String]?)?
+    /// Args: (discordUserId, accountId, games, include globals, source). Returns the resulting effective list.
+    public var onSetPriorities: (@Sendable (String, String, [String], Bool?, String?) async -> [String]?)?
     /// Replaces a miner's personal priority games, identified by Twitch account
     /// id alone (no Discord owner needed). Used by Twitch-authenticated web
-    /// sessions. Args: (accountId, games, include globals). Returns the resulting effective list.
-    public var onSetPrioritiesByAccount: (@Sendable (String, [String], Bool?) async -> [String]?)?
+    /// sessions. Args: (accountId, games, include globals, source). Returns the resulting effective list.
+    public var onSetPrioritiesByAccount: (@Sendable (String, [String], Bool?, String?) async -> [String]?)?
     /// Controls a miner, identified by Twitch account id alone (no Discord owner needed).
     /// Used by Twitch-authenticated or operator web sessions. Args: (accountId, action).
     public var onMinerControlByAccount: (@Sendable (String, MinerControlAction) async -> MinerControlResponse)?
@@ -259,11 +261,11 @@ public actor DiscordAPIRoutes {
         self.onPrioritiseGame = handler
     }
 
-    public func setOnSetPriorities(_ handler: @escaping @Sendable (String, String, [String], Bool?) async -> [String]?) {
+    public func setOnSetPriorities(_ handler: @escaping @Sendable (String, String, [String], Bool?, String?) async -> [String]?) {
         self.onSetPriorities = handler
     }
 
-    public func setOnSetPrioritiesByAccount(_ handler: @escaping @Sendable (String, [String], Bool?) async -> [String]?) {
+    public func setOnSetPrioritiesByAccount(_ handler: @escaping @Sendable (String, [String], Bool?, String?) async -> [String]?) {
         self.onSetPrioritiesByAccount = handler
     }
 
@@ -776,7 +778,7 @@ public actor DiscordAPIRoutes {
         guard let handler = onSetPriorities else {
             return .error(code: "unavailable", message: "Priority controls are not available.", statusCode: 503)
         }
-        guard let priorities = await handler(discordUserId, accountId, body.games, body.includeGlobalPriorities) else {
+        guard let priorities = await handler(discordUserId, accountId, body.games, body.includeGlobalPriorities, body.prioritySource) else {
             return .error(code: "account_not_found", message: "No linked miner account was found for this Discord user.", statusCode: 404)
         }
         return HTTPResponse.json(PrioritiesResponse(accountId: accountId, priorityGames: priorities, includeGlobalPriorities: body.includeGlobalPriorities ?? true))
@@ -927,7 +929,7 @@ public actor DiscordAPIRoutes {
         guard let handler = onSetPrioritiesByAccount else {
             return .error(code: "unavailable", message: "Priority controls are not available.", statusCode: 503)
         }
-        guard let priorities = await handler(twitchId, decoded.games, decoded.includeGlobalPriorities) else {
+        guard let priorities = await handler(twitchId, decoded.games, decoded.includeGlobalPriorities, decoded.prioritySource) else {
             return .error(code: "account_not_found", message: "No miner was found for this Twitch account.", statusCode: 404)
         }
         return HTTPResponse.json(PrioritiesResponse(accountId: twitchId, priorityGames: priorities, includeGlobalPriorities: decoded.includeGlobalPriorities ?? true))

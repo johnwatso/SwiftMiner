@@ -97,7 +97,7 @@
 <body>
   <main>
     <h1>SwiftMiner 1.36.2</h1>
-    <p class="meta">Version 1.36.2 &middot; Build 2026072914</p>
+    <p class="meta">Version 1.36.2 &middot; Build 2026073009</p>
     <p class="intro">Structural work on the mining loop rather than new behaviour. A miner now describes itself from a single source of truth, waiting no longer drifts, and there are proper profiling hooks for the idle CPU use that has not yet been explained.</p>
 
     <section class="teal">
@@ -129,9 +129,11 @@
         <li>Uses macOS network-path signals to resume queued Twitch requests immediately after connectivity returns, rather than repeatedly polling while offline.</li>
         <li>Keeps a real watch session responsive under App Nap without preventing normal system sleep, and exports safe DNS, connection, TLS, response, and connection-reuse timings for Twitch requests.</li>
         <li>Registers for macOS MetricKit reports, so system-observed hangs, excessive energy use, and crashes can be identified alongside the live mining diagnostics.</li>
-        <li>Shows a prioritised game in Up Next even when its game account still needs linking, matching the miner's scheduling rules and preserving the link warning.</li>
+        <li>Prioritised games remain mineable even when their game account still needs linking. Link warnings stay in Pending rather than the actionable queue; Up Next now omits ended and fully-earned campaigns until they are truly schedulable.</li>
+        <li>Miner headers now follow the resolved health verdict, so an idle miner no longer shows a vague Attention label because of a stale raw-health flag. Muted Pending rows still explicitly say when a game account is not linked.</li>
         <li>Adds a clear Needs Attention panel to each miner's detail view, explaining the latest failure and offering the right restart or reconnect action. Overview cards are now read-only status summaries, the Miners toolbar can refresh just the selected miner, and priority queues keep a stable layout when global priorities are enabled or disabled.</li>
-        <li>Prepared as SwiftMiner <strong>1.36.2</strong>, build <strong>2026072914</strong>.</li>
+        <li>Prevents refreshes from overlapping a new watch session, ignores intentionally cancelled heartbeats, and explains a watching-but-not-earning Attention state directly in the miner tab.</li>
+        <li>Prepared as SwiftMiner <strong>1.36.2</strong>, build <strong>2026073009</strong>.</li>
       </ul>
     </section>
   </main>

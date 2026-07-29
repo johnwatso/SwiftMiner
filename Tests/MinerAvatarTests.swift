@@ -58,6 +58,19 @@ final class MinerAvatarTests: XCTestCase {
         XCTAssertTrue(TwitchAvatarStore.decode("{}").isEmpty)
     }
 
+    func testGenericTwitchProfileImageIsNotUsedAsAnAvatar() {
+        let generic = URL(string: "https://static-cdn.jtvnw.net/jtv_user_pictures/xarth/404_user_300x300.png")!
+        XCTAssertTrue(TwitchAvatarStore.isGenericTwitchProfileImage(generic))
+
+        let settings = Settings.shared
+        settings.twitchAvatarsData = TwitchAvatarStore.encode([
+            "generic": TwitchAvatarStore.Entry(url: generic, fetchedAt: Date())
+        ])
+        let store = TwitchAvatarStore(settings: settings)
+        XCTAssertNil(store.url(forAccountId: "generic"))
+        settings.twitchAvatarsData = "{}"
+    }
+
     func testPruningDropsAccountsThatAreNoLongerMined() {
         let settings = Settings.shared
         settings.twitchAvatarsData = TwitchAvatarStore.encode([

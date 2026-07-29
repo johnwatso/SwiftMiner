@@ -56,9 +56,11 @@
       <li>Preserves every critical Twitch mining signal in delivery order, including claims and stream-offline notices, while reconciling silent real-time progress safely.</li>
       <li>Uses macOS network notifications for immediate recovery, protects active watch heartbeats from App Nap, and records safe per-host request timings for support diagnostics.</li>
       <li>Registers for MetricKit reports to surface system-observed hangs, energy issues, and crashes.</li>
-      <li>Shows prioritised games in Up Next even when their account-link warning is still active.</li>
+      <li>Keeps prioritised games mineable while placing link warnings in Pending instead of the actionable queue; Up Next omits ended and fully-earned campaigns.</li>
+      <li>Prevents idle miners from showing a vague Attention label and makes muted link reminders name the unlinked game account.</li>
       <li>Explains miner failures directly in the miner tab, keeps overview cards focused on status, adds a selected-miner-only refresh action to the Miners toolbar, and gives priority queues a stable global-priorities layout.</li>
-      <li>Updates SwiftMiner to version 1.36.2 build 2026072914.</li>
+      <li>Prevents refreshes from overlapping a new watch session, ignores intentionally cancelled heartbeats, and explains attention caused by missing drop progress.</li>
+      <li>Updates SwiftMiner to version 1.36.2 build 2026073009.</li>
     </ul>
 
     <h2>⚡ <a href="./1.36.1.html">Version 1.36.1</a></h2>

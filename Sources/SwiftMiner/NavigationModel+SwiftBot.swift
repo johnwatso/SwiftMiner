@@ -86,15 +86,29 @@ extension NavigationModel {
 
     /// Replace a miner's personal priority games with `games` (the Discord "edit games"
     /// modal submits the whole personal list at once). Returns the resulting effective list.
-    public func handleDiscordSetPriorities(discordUserId: String, accountId: String, games: [String], includeGlobalPriorities: Bool? = nil) async -> [String]? {
+    public func handleDiscordSetPriorities(
+        discordUserId: String,
+        accountId: String,
+        games: [String],
+        includeGlobalPriorities: Bool? = nil,
+        prioritySource: String? = nil
+    ) async -> [String]? {
         guard let miner = minerManager.miners.first(where: { $0.ownerDiscordId == discordUserId && $0.accountId == accountId }) else {
             return nil
         }
         let previous = Settings.shared.personalPriorityGames(forAccountId: accountId)
-        if let includeGlobalPriorities {
+        if let prioritySource,
+           let source = Settings.AccountPrioritySource(rawValue: prioritySource) {
+            Settings.shared.setPrioritySource(source, forAccountId: accountId)
+        } else if let includeGlobalPriorities {
             Settings.shared.setIncludesGlobalPriorityGames(includeGlobalPriorities, forAccountId: accountId)
         }
-        let priorities = Settings.shared.setPersonalPriorityGames(accountId: accountId, games: games)
+        let priorities: [String]
+        if Settings.shared.prioritySource(forAccountId: accountId) == .global {
+            priorities = Settings.shared.priorityGames(forAccountId: accountId)
+        } else {
+            priorities = Settings.shared.setPersonalPriorityGames(accountId: accountId, games: games)
+        }
         auditPriorityChange(actor: miner.username, old: previous, new: games)
         minerManager.updatePriorityGames(priorities, forMinerId: miner.id)
         if miner.isRunning {
@@ -105,15 +119,28 @@ extension NavigationModel {
 
     /// As above, but identified by Twitch account id alone — used by a
     /// Twitch-authenticated web session, whose principal *is* the account.
-    public func handleSetPrioritiesByAccount(accountId: String, games: [String], includeGlobalPriorities: Bool? = nil) async -> [String]? {
+    public func handleSetPrioritiesByAccount(
+        accountId: String,
+        games: [String],
+        includeGlobalPriorities: Bool? = nil,
+        prioritySource: String? = nil
+    ) async -> [String]? {
         guard let miner = minerManager.miners.first(where: { $0.accountId == accountId }) else {
             return nil
         }
         let previous = Settings.shared.personalPriorityGames(forAccountId: accountId)
-        if let includeGlobalPriorities {
+        if let prioritySource,
+           let source = Settings.AccountPrioritySource(rawValue: prioritySource) {
+            Settings.shared.setPrioritySource(source, forAccountId: accountId)
+        } else if let includeGlobalPriorities {
             Settings.shared.setIncludesGlobalPriorityGames(includeGlobalPriorities, forAccountId: accountId)
         }
-        let priorities = Settings.shared.setPersonalPriorityGames(accountId: accountId, games: games)
+        let priorities: [String]
+        if Settings.shared.prioritySource(forAccountId: accountId) == .global {
+            priorities = Settings.shared.priorityGames(forAccountId: accountId)
+        } else {
+            priorities = Settings.shared.setPersonalPriorityGames(accountId: accountId, games: games)
+        }
         auditPriorityChange(actor: miner.username, old: previous, new: games)
         minerManager.updatePriorityGames(priorities, forMinerId: miner.id)
         if miner.isRunning {

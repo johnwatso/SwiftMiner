@@ -169,6 +169,34 @@ enum WebDashboardAssets {
           border: 1px solid var(--glass-stroke); box-shadow: 0 8px 20px rgba(0,0,0,0.30);
           background: linear-gradient(135deg, var(--bg-c), var(--bg-b));
         }
+        .global-priorities-link {
+          display: flex; align-items: center; width: 100%; gap: 12px; padding: 0;
+          color: inherit; text-align: left; cursor: pointer; border: none; background: transparent;
+        }
+        .global-priority-artwork { display: flex; flex: none; }
+        .global-priority-artwork img {
+          width: 38px; height: 52px; margin-left: -10px; border-radius: 8px; object-fit: cover;
+          border: 2px solid var(--glass-stroke); background: var(--field);
+        }
+        .global-priority-artwork img:first-child { margin-left: 0; }
+        .global-priority-copy { min-width: 0; flex: 1; }
+        .global-priority-title { color: var(--text); font-size: 14px; font-weight: 650; }
+        .global-priority-detail { margin-top: 3px; color: var(--muted); font-size: 12px; }
+        .global-priority-chevron { color: var(--muted); font-size: 20px; line-height: 1; }
+        .modal-backdrop {
+          position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 24px;
+          background: rgba(0,0,0,0.52); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+        }
+        .modal-card {
+          width: min(560px, 100%); max-height: min(700px, calc(100dvh - 48px)); overflow: auto;
+          padding: 20px; border: 1px solid var(--glass-stroke); border-radius: 20px;
+          background: linear-gradient(180deg, var(--glass-top), var(--glass-bottom));
+          box-shadow: 0 24px 72px rgba(0,0,0,0.46);
+        }
+        .modal-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
+        .modal-header .copy { flex: 1; min-width: 0; }
+        .modal-title { color: var(--text); font-size: 18px; font-weight: 700; }
+        .modal-subtitle { margin-top: 3px; color: var(--muted); font-size: 13px; }
         .mining .info { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
         .game { font-size: 16px; font-weight: 650; }
         .bar { height: 9px; border-radius: 999px; background: rgba(127,127,127,0.18); overflow: hidden; margin: 9px 0 5px; }
@@ -264,6 +292,8 @@ enum WebDashboardAssets {
           color: var(--text); border-color: rgba(86,188,255,0.38);
           background: rgba(86,188,255,0.13);
         }
+        .priority-source .segmented { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .priority-source .segmented button { min-width: 0; }
         .diagnostic-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
         .diagnostic-stat {
           padding: 10px; border-radius: 11px; border: 1px solid var(--glass-stroke); background: var(--field);
@@ -403,6 +433,18 @@ enum WebDashboardAssets {
         .hero-progress .progress-meta {
           display: flex; justify-content: space-between; font-size: 11px; color: var(--muted);
         }
+        .up-to-date-state {
+          display: flex; align-items: center; gap: 12px; padding: 14px;
+          border: 1px solid rgba(52,199,89,0.28); border-radius: 12px;
+          background: rgba(52,199,89,0.10);
+        }
+        .up-to-date-icon {
+          width: 28px; height: 28px; flex: none; display: grid; place-items: center;
+          color: var(--green); border-radius: 50%; background: rgba(52,199,89,0.16);
+        }
+        .up-to-date-icon svg { width: 18px; height: 18px; }
+        .up-to-date-title { color: var(--text); font-size: 14px; font-weight: 700; }
+        .up-to-date-detail { margin-top: 2px; color: var(--muted); font-size: 12px; }
         .stats-row {
           display: grid;
           grid-template-columns: 1fr 1fr;
@@ -428,6 +470,9 @@ enum WebDashboardAssets {
         }
         .stat-icon-wrapper svg {
           width: 20px; height: 20px;
+        }
+        .stat-icon-wrapper img {
+          width: 100%; height: 100%; border-radius: inherit; object-fit: cover;
         }
         .stat-value {
           font-size: 16px; font-weight: 700; color: var(--text);
@@ -517,6 +562,8 @@ enum WebDashboardAssets {
     let activationTimer = null;
     let personal = [];        // editable personal priority list (working copy)
     let includeGlobalPriorities = true;
+    let prioritySource = 'global';
+    let globalPrioritiesModalOpen = false;
     let OPERATOR_MINERS = [];
     let OPERATOR_STATE = { selectedMinerId: null, query: '', filter: 'all' };
 
@@ -698,10 +745,25 @@ enum WebDashboardAssets {
         `;
       }
 
-      const title = p.state === 'idle' ? 'Idle - no campaigns' : cfg.headline;
-      const meta = p.state === 'idle'
-        ? 'No active drop campaigns are available right now.'
-        : (cfg.subtitle || 'Waiting for the next campaign update.');
+      if (p.state === 'idle') {
+        return `
+          <div class="up-to-date-state"${styleAttr}>
+            <span class="up-to-date-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="9"></circle>
+                <path d="m8 12 2.5 2.5L16.5 8.5"></path>
+              </svg>
+            </span>
+            <div>
+              <div class="up-to-date-title">Up to Date</div>
+              <div class="up-to-date-detail">All currently available drops are completed.</div>
+            </div>
+          </div>
+        `;
+      }
+
+      const title = cfg.headline;
+      const meta = cfg.subtitle || 'Waiting for the next campaign update.';
       return `
         <div class="hero-progress"${styleAttr}>
           <div class="progress-header">
@@ -743,7 +805,8 @@ enum WebDashboardAssets {
 
     function progressCard(p) {
       const cfg = getStatusConfig(p);
-      return `<div class="card"><div class="label" style="margin-bottom:12px">Progress</div>${progressStateCard(p, cfg, 'background:transparent;border:none;padding:0')}</div>`;
+      const label = p.state === 'idle' ? 'Status' : 'Progress';
+      return `<div class="card"><div class="label" style="margin-bottom:12px">${label}</div>${progressStateCard(p, cfg, 'background:transparent;border:none;padding:0')}</div>`;
     }
 
     function statsRow(p) {
@@ -754,6 +817,9 @@ enum WebDashboardAssets {
       const twitchLabel = acc.twitchAccountId ? 'Twitch Linked' : 'Twitch Account';
       
       const twitchIcon = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M11.571 4.714h1.715v5.143h-1.715Zm4.715 0H18v5.143h-1.714ZM6 0 1.714 4.286V19.714H6.857V24l4.286-4.286h3.428L22.286 12V0Zm14.571 11.143-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714ZM11.571 4.714h1.715v5.143h-1.715Zm4.715 0H18v5.143h-1.714Z"/></svg>`;
+      const twitchAvatar = typeof acc.profileImageURL === 'string' && acc.profileImageURL.toLowerCase().startsWith('https://')
+        ? `<img src="${esc(acc.profileImageURL)}" alt="" referrerpolicy="no-referrer">`
+        : twitchIcon;
       
       const giftIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"></polyline><rect x="2" y="7" width="20" height="5"></rect><line x1="12" y1="22" x2="12" y2="7"></line><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"></path><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"></path></svg>`;
 
@@ -761,7 +827,7 @@ enum WebDashboardAssets {
         <div class="stats-row">
           <div class="stat-card">
             <div class="stat-icon-wrapper" style="background-color: rgba(145, 70, 255, 0.12); color: #9146FF; --tint-rgb: 145, 70, 255;">
-              ${twitchIcon}
+              ${twitchAvatar}
             </div>
             <div class="stat-value">${twitchVal}</div>
             <div class="stat-label">${twitchLabel}</div>
@@ -873,19 +939,87 @@ enum WebDashboardAssets {
       return `<div class="card"><div class="label">Needs attention</div>${rows}</div>`;
     }
 
+    function globalPriorityGames(p) {
+      const source = p.prioritySource || (p.includesGlobalPriorityGames === false ? 'personal' : 'global');
+      const personalSet = source === 'globalAndPersonal'
+        ? new Set((p.personalPriorityGames || []).map(g => g.toLowerCase()))
+        : new Set();
+      return (p.priorityGames || []).filter(g => !personalSet.has(g.toLowerCase()));
+    }
+
+    function priorityArtworkURL(p, game) {
+      const key = String(game || '').trim().toLowerCase();
+      const url = p && p.priorityGameArtwork ? p.priorityGameArtwork[key] : '';
+      return typeof url === 'string' && url.toLowerCase().startsWith('https://') ? url : '';
+    }
+
     function globalCard(p) {
-      if (p.includesGlobalPriorityGames === false) {
+      const source = p.prioritySource || (p.includesGlobalPriorityGames === false ? 'personal' : 'global');
+      if (source === 'personal') {
         return `<div class="card"><div class="label">Global priorities</div>
-          <div class="muted" style="font-size:13px">Off for this miner. Only your own list will be used.</div></div>`;
+          <div class="muted" style="font-size:13px">This miner uses only its personal priorities.</div></div>`;
       }
-      const personalSet = new Set((p.personalPriorityGames || []).map(g => g.toLowerCase()));
-      const global = (p.priorityGames || []).filter(g => !personalSet.has(g.toLowerCase()));
+      const global = globalPriorityGames(p);
       if (!global.length) return '';
-      let chips = '';
-      global.forEach((g, i) => { chips += `<span class="chip"><span class="n">${i + 1}</span>${esc(g)}</span>`; });
+      let artwork = '';
+      global.slice(0, 4).forEach(g => { artwork += `<img alt="" data-game="${esc(g)}" data-art="${esc(priorityArtworkURL(p, g))}">`; });
+      const detail = source === 'global'
+        ? 'Used by this miner.'
+        : 'Set by the operator for every miner. Personal priorities run first.';
       return `<div class="card"><div class="label">Global priorities</div>
-        <div class="chips">${chips}</div>
-        <div class="muted" style="font-size:12px;margin-top:10px">Set by the operator for every miner. Your own list below runs first.</div></div>`;
+        <button class="global-priorities-link" id="viewglobalpriorities" type="button" aria-label="View global priorities">
+          <div class="global-priority-artwork">${artwork}</div>
+          <div class="global-priority-copy">
+            <div class="global-priority-title">View Global Priorities</div>
+            <div class="global-priority-detail">${global.length} ${global.length === 1 ? 'game' : 'games'} · ${detail}</div>
+          </div>
+          <span class="global-priority-chevron" aria-hidden="true">›</span>
+        </button></div>`;
+    }
+
+    function globalPrioritiesModal(p) {
+      const games = globalPriorityGames(p);
+      let rows = '';
+      games.forEach((game, index) => {
+        rows += `<div class="campaign-row">
+          <img class="boxart" alt="" data-game="${esc(game)}" data-art="${esc(priorityArtworkURL(p, game))}">
+          <div class="copy">
+            <div class="title">${esc(game)}</div>
+            <div class="details">Global priority ${index + 1}</div>
+          </div>
+        </div>`;
+      });
+      return `<div class="modal-backdrop" id="globalprioritiesmodal">
+          <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="globalprioritiestitle" tabindex="-1">
+            <div class="modal-header">
+              <div class="copy">
+                <div class="modal-title" id="globalprioritiestitle">Global Priorities</div>
+                <div class="modal-subtitle">Shared by miners that use global priorities.</div>
+              </div>
+              <button class="btn-secondary" id="closeglobalpriorities" type="button">Close</button>
+            </div>
+            <div class="campaign-list">${rows || '<div class="muted">No global priorities have been selected.</div>'}</div>
+          </section>
+        </div>`;
+    }
+
+    function closeGlobalPrioritiesModal() {
+      globalPrioritiesModalOpen = false;
+      render(PROJ);
+    }
+
+    function wireGlobalPrioritiesModal() {
+      const modal = $('globalprioritiesmodal');
+      if (!modal) return;
+      const dialog = modal.querySelector('[role="dialog"]');
+      if (dialog) dialog.focus();
+      $('closeglobalpriorities').addEventListener('click', closeGlobalPrioritiesModal);
+      modal.addEventListener('click', (event) => {
+        if (event.target === modal) closeGlobalPrioritiesModal();
+      });
+      modal.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') closeGlobalPrioritiesModal();
+      });
     }
 
     function hasMultipleConfiguredMiners(p) {
@@ -893,18 +1027,22 @@ enum WebDashboardAssets {
     }
 
     function personalCard(p) {
-      const globalChecked = includeGlobalPriorities ? 'checked' : '';
-      const helper = includeGlobalPriorities
-        ? 'Your list runs first, then the operator list fills in behind it.'
-        : "Only this miner's list will be used.";
-      const globalToggle = hasMultipleConfiguredMiners(p) ? `
-        <label class="toggle-row">
-          <span class="toggle-copy">
-            <span class="toggle-title">Use global priorities</span>
-            <span class="muted" style="display:block;font-size:12px;margin-top:2px">${helper}</span>
-          </span>
-          <input id="globaltoggle" type="checkbox" ${globalChecked}>
-        </label>` : '';
+      const source = prioritySource || 'global';
+      const helper = source === 'global'
+        ? 'Use the operator’s shared priority list.'
+        : source === 'globalAndPersonal'
+          ? 'Use your priorities first, then the shared list.'
+          : 'Use only the priorities for this miner.';
+      const sourcePicker = hasMultipleConfiguredMiners(p) ? `
+        <div class="priority-source toggle-copy" style="margin-bottom:12px">
+          <span class="toggle-title">Priority Source</span>
+          <div class="segmented" role="radiogroup" aria-label="Priority source" style="margin-top:8px">
+            <button type="button" data-priority-source="global" class="${source === 'global' ? 'active' : ''}" role="radio" aria-checked="${source === 'global'}" title="Use global priorities">Global</button>
+            <button type="button" data-priority-source="globalAndPersonal" class="${source === 'globalAndPersonal' ? 'active' : ''}" role="radio" aria-checked="${source === 'globalAndPersonal'}" title="Use global and personal priorities">Global + Personal</button>
+            <button type="button" data-priority-source="personal" class="${source === 'personal' ? 'active' : ''}" role="radio" aria-checked="${source === 'personal'}" title="Use personal priorities">Personal</button>
+          </div>
+          <span class="muted" style="display:block;font-size:12px;margin-top:8px">${helper}</span>
+        </div>` : '';
       let items = '';
       personal.forEach((g, i) => {
         items += `
@@ -915,17 +1053,20 @@ enum WebDashboardAssets {
           </span>
         `;
       });
+      const personalEditor = source === 'global' && hasMultipleConfiguredMiners(p)
+        ? '<div class="muted" style="font-size:13px">Choose Global + Personal or Personal to edit this miner’s priorities.</div>'
+        : `<div class="priorities-flow" id="priorities-flow">
+            ${items || '<span class="muted" style="font-size:13px">No personal priorities yet — add a game below.</span>'}
+          </div>
+          <div class="addrow">
+            <input id="addgame" placeholder="Add a game…" autocapitalize="words" autocomplete="off" list="gamesuggest">
+            <button class="btn-primary" id="addbtn">Add</button>
+          </div>
+          <datalist id="gamesuggest"></datalist>`;
       return `<div class="card">
         <div class="label">Your priorities</div>
-        ${globalToggle}
-        <div class="priorities-flow" id="priorities-flow">
-          ${items || '<span class="muted" style="font-size:13px">No personal priorities yet — add a game below.</span>'}
-        </div>
-        <div class="addrow">
-          <input id="addgame" placeholder="Add a game…" autocapitalize="words" autocomplete="off" list="gamesuggest">
-          <button class="btn-primary" id="addbtn">Add</button>
-        </div>
-        <datalist id="gamesuggest"></datalist>
+        ${sourcePicker}
+        ${personalEditor}
         <div class="savemsg" id="savemsg"></div>
       </div>`;
     }
@@ -1007,14 +1148,21 @@ enum WebDashboardAssets {
         return;
       }
       personal = (p.personalPriorityGames || []).slice();
-      includeGlobalPriorities = p.includesGlobalPriorityGames !== false;
-      $('app').innerHTML = operatorBackCard(p) + heroStateCard(p) + statsRow(p) + progressCard(p) + activationCard(p) + issuesCard(p) + subscriptionRequiredCard() + upNextCard(p) + globalCard(p) + personalCard(p) + dropsCard(p);
+      prioritySource = p.prioritySource || (p.includesGlobalPriorityGames === false ? 'personal' : 'global');
+      includeGlobalPriorities = prioritySource !== 'personal';
+      $('app').innerHTML = operatorBackCard(p) + heroStateCard(p) + statsRow(p) + progressCard(p) + activationCard(p) + issuesCard(p) + subscriptionRequiredCard() + upNextCard(p) + globalCard(p) + personalCard(p) + dropsCard(p) + (globalPrioritiesModalOpen ? globalPrioritiesModal(p) : '');
       hydrateArt();
       wireActivation();
       wireOperatorBack();
       wireIssues();
       wireCampaigns();
       wirePersonal();
+      const viewGlobalPriorities = $('viewglobalpriorities');
+      if (viewGlobalPriorities) viewGlobalPriorities.addEventListener('click', () => {
+        globalPrioritiesModalOpen = true;
+        render(PROJ);
+      });
+      wireGlobalPrioritiesModal();
       fillGameOptions();
     }
 
@@ -1033,22 +1181,27 @@ enum WebDashboardAssets {
 
     function wirePersonal() {
       const flow = $('priorities-flow');
-      const globalToggle = $('globaltoggle');
-      if (globalToggle) globalToggle.addEventListener('change', () => {
-        includeGlobalPriorities = globalToggle.checked;
-        commit();
+      document.querySelectorAll('[data-priority-source]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          prioritySource = btn.dataset.prioritySource || 'global';
+          includeGlobalPriorities = prioritySource !== 'personal';
+          commit();
+        });
       });
-      if (flow) flow.addEventListener('click', (e) => {
+      if (!flow) return;
+      flow.addEventListener('click', (e) => {
         const item = e.target.closest('.priority-chip'); if (!item) return;
         const i = Number(item.dataset.i);
         if (e.target.closest('.del')) { personal.splice(i, 1); commit(); }
       });
       const input = $('addgame');
+      if (!input) return;
       const add = () => {
         const name = input.value.trim();
         if (!name) return;
         if (personal.some(g => g.toLowerCase() === name.toLowerCase())) { input.value = ''; return; }
         personal.push(name); input.value = '';
+        if (prioritySource === 'global') prioritySource = 'globalAndPersonal';
         commit();
       };
       $('addbtn').addEventListener('click', add);
@@ -1059,6 +1212,7 @@ enum WebDashboardAssets {
       name = String(name || '').trim();
       if (!name) return;
       if (!personal.some(g => g.toLowerCase() === name.toLowerCase())) personal.unshift(name);
+      if (prioritySource === 'global') prioritySource = 'globalAndPersonal';
       commit();
     }
 
@@ -1135,7 +1289,7 @@ enum WebDashboardAssets {
       const r = await api('/me/miners/' + encodeURIComponent(accountId) + '/priorities', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ games: personal, include_global_priorities: includeGlobalPriorities })
+        body: JSON.stringify({ games: personal, include_global_priorities: includeGlobalPriorities, priority_source: prioritySource })
       });
       if (!r) return;
       if (r.ok) {
@@ -1191,14 +1345,11 @@ enum WebDashboardAssets {
           m.state,
           d.statusLabel,
           d.currentChannelName,
-          ...(m.priorityGames || []),
-          ...(m.personalPriorityGames || []),
           ...((m.issues || []).map(is => is.message || is.type || ''))
         ].join(' ').toLowerCase();
         return haystack.includes(query);
       });
 
-      const pcIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="18" height="12" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="15" x2="12" y2="21"></line></svg>`;
       const playIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`;
       const giftIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"></polyline><rect x="2" y="7" width="20" height="5"></rect><line x1="12" y1="22" x2="12" y2="7"></line><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"></path><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"></path></svg>`;
 
@@ -1221,13 +1372,6 @@ enum WebDashboardAssets {
       html += `
         <div class="stats-row" style="margin-bottom: 24px;">
           <div class="stat-card">
-            <div class="stat-icon-wrapper" style="background-color: rgba(86, 188, 255, 0.12); color: var(--blue-a); --tint-rgb: 86, 188, 255;">
-              ${pcIcon}
-            </div>
-            <div class="stat-value">${totalMiners}</div>
-            <div class="stat-label">Total Miners</div>
-          </div>
-          <div class="stat-card">
             <div class="stat-icon-wrapper" style="background-color: rgba(52, 199, 89, 0.12); color: #34C759; --tint-rgb: 52, 199, 89;">
               ${playIcon}
             </div>
@@ -1245,12 +1389,12 @@ enum WebDashboardAssets {
       `;
       html += `
         <div class="triage-toolbar">
-          <input class="triage-search" id="operatorsearch" placeholder="Search miners, channels, games…" value="${esc(OPERATOR_STATE.query || '')}" autocomplete="off">
+          <input class="triage-search" id="operatorsearch" placeholder="Search miners or channels…" value="${esc(OPERATOR_STATE.query || '')}" autocomplete="off">
           <div class="segmented" role="group" aria-label="Filter miners">
             <button type="button" data-filter="all" class="${filter === 'all' ? 'active' : ''}">All ${totalMiners}</button>
             <button type="button" data-filter="active" class="${filter === 'active' ? 'active' : ''}">Active ${activeMiners}</button>
             <button type="button" data-filter="attention" class="${filter === 'attention' ? 'active' : ''}">Attention ${attentionCount}</button>
-            <button type="button" data-filter="idle" class="${filter === 'idle' ? 'active' : ''}">Idle ${idleCount}</button>
+            <button type="button" data-filter="idle" class="${filter === 'idle' ? 'active' : ''}">Up to Date ${idleCount}</button>
           </div>
         </div>
       `;
@@ -1274,26 +1418,6 @@ enum WebDashboardAssets {
         
         const progressHTML = progressStateCard(p, cfg, 'margin-top: 14px;');
 
-        let prioHTML = '';
-        const prio = p.priorityGames || [];
-        if (prio.length) {
-          let chips = '';
-          prio.forEach((g) => {
-            chips += `
-              <span class="priority-chip" style="background: rgba(86, 188, 255, 0.10); border-color: rgba(86, 188, 255, 0.25);">
-                <span class="star" style="background: var(--blue-a); box-shadow: 0 0 0 3px rgba(86, 188, 255, 0.12);" aria-hidden="true"></span>
-                <span>${esc(g)}</span>
-              </span>
-            `;
-          });
-          prioHTML = `
-            <div style="margin-top: 14px;">
-              <div class="label" style="margin-bottom: 6px;">Priorities</div>
-              <div class="priorities-flow" style="margin: 0;">${chips}</div>
-            </div>
-          `;
-        }
-
         html += `
           <div class="card miner-card" style="padding: 20px;" data-miner-id="${esc(id)}" role="button" tabindex="0" aria-label="Open ${esc(acc.username || 'miner')}">
             <div class="hero-header" style="gap: 14px; align-items: center; justify-content: space-between; width: 100%;">
@@ -1311,7 +1435,6 @@ enum WebDashboardAssets {
               </div>
             </div>
             ${progressHTML}
-            ${prioHTML}
           </div>
         `;
       }

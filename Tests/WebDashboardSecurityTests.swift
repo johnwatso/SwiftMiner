@@ -184,11 +184,30 @@ final class WebDashboardSecurityTests: XCTestCase {
         XCTAssertTrue(WebDashboardAssets.appJS.contains("subscriptionRequiredCard() + upNextCard(p)"))
     }
 
-    func testDashboardHidesGlobalPriorityToggleForSingleMiner() {
+    func testDashboardUsesPrioritySourcePickerForMultipleMiners() {
         XCTAssertTrue(WebDashboardAssets.appJS.contains("function hasMultipleConfiguredMiners(p)"))
         XCTAssertTrue(WebDashboardAssets.appJS.contains("Number(p && p.configuredMinerCount || 0) > 1"))
-        XCTAssertTrue(WebDashboardAssets.appJS.contains("hasMultipleConfiguredMiners(p) ?"))
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("Priority Source"))
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("data-priority-source=\"global\""))
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("data-priority-source=\"globalAndPersonal\""))
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("data-priority-source=\"personal\""))
         XCTAssertTrue(WebDashboardAssets.appJS.contains("personalCard(p)"))
+    }
+
+    func testIdleDashboardUsesUpToDateStateInsteadOfAnEmptyProgressBar() {
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("class=\"up-to-date-state\""))
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("Up to Date"))
+        XCTAssertFalse(WebDashboardAssets.appJS.contains("Idle - no campaigns"))
+    }
+
+    func testDashboardShowsArtworkPreviewForGlobalPriorities() {
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("function globalPriorityGames(p)"))
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("function priorityArtworkURL(p, game)"))
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("priorityGameArtwork"))
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("global-priority-artwork"))
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("View Global Priorities"))
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("function globalPrioritiesModal(p)"))
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("aria-modal=\"true\""))
     }
 
     func testLocalLoginPageShowsOnlyUsernamePasswordForm() async throws {

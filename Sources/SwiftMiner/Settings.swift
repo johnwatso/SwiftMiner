@@ -10,6 +10,14 @@ import SwiftMinerCore
 @Observable
 @MainActor
 public final class Settings {
+
+    /// Selects which priority list a miner uses. Kept separately from the
+    /// personal list so choosing Global does not discard someone’s own list.
+    public enum AccountPrioritySource: String, Codable, Sendable {
+        case global
+        case globalAndPersonal
+        case personal
+    }
     
     // MARK: - Shared Instance
 
@@ -1311,6 +1319,19 @@ public final class Settings {
         }
     }
 
+    /// JSON-backed per-account source selection for priority games.
+    public var accountPrioritySourcesData: String {
+        get {
+            access(keyPath: \.accountPrioritySourcesData)
+            return Self.read("accountPrioritySourcesData", default: "{}")
+        }
+        set {
+            withMutation(keyPath: \.accountPrioritySourcesData) {
+                Self.write("accountPrioritySourcesData", newValue)
+            }
+        }
+    }
+
     /// Mining strategy selection
     public var miningStrategy: MiningStrategy {
         get {
@@ -1415,9 +1436,14 @@ public final class Settings {
     public func priorityGames(forAccountId accountId: String) -> [String] {
         let key = accountId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return priorityGames }
-        let personal = personalPriorityGames(forAccountId: key)
-        guard includesGlobalPriorityGames(forAccountId: key) else { return personal }
-        return Self.normalizedPriorityGameNames(personal + priorityGames)
+        switch prioritySource(forAccountId: key) {
+        case .global:
+            return priorityGames
+        case .globalAndPersonal:
+            return Self.normalizedPriorityGameNames(personalPriorityGames(forAccountId: key) + priorityGames)
+        case .personal:
+            return personalPriorityGames(forAccountId: key)
+        }
     }
 
     public var accountIncludesGlobalPriorityGames: [String: Bool] {
@@ -1448,17 +1474,65 @@ public final class Settings {
     }
 
     public func includesGlobalPriorityGames(forAccountId accountId: String) -> Bool {
+        switch prioritySource(forAccountId: accountId) {
+        case .global, .globalAndPersonal: return true
+        case .personal: return false
+        }
+    }
+
+    public var accountPrioritySources: [String: AccountPrioritySource] {
+        get {
+            guard let data = accountPrioritySourcesData.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode([String: AccountPrioritySource].self, from: data) else {
+                return [:]
+            }
+            return decoded.reduce(into: [String: AccountPrioritySource]()) { result, entry in
+                let key = entry.key.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !key.isEmpty { result[key] = entry.value }
+            }
+        }
+        set {
+            let normalized = newValue.reduce(into: [String: AccountPrioritySource]()) { result, entry in
+                let key = entry.key.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !key.isEmpty { result[key] = entry.value }
+            }
+            if let data = try? JSONEncoder().encode(normalized),
+               let string = String(data: data, encoding: .utf8) {
+                accountPrioritySourcesData = string
+            }
+        }
+    }
+
+    public func prioritySource(forAccountId accountId: String) -> AccountPrioritySource {
         let key = accountId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !key.isEmpty else { return true }
-        return accountIncludesGlobalPriorityGames[key] ?? true
+        guard !key.isEmpty else { return .global }
+        if let source = accountPrioritySources[key] { return source }
+        if accountIncludesGlobalPriorityGames[key] == false { return .personal }
+        return accountPriorityGames[key, default: []].isEmpty ? .global : .globalAndPersonal
+    }
+
+    public func setPrioritySource(_ source: AccountPrioritySource, forAccountId accountId: String) {
+        let key = accountId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return }
+        var sources = accountPrioritySources
+        sources[key] = source
+        accountPrioritySources = sources
+
+        // Keep the legacy value aligned for callers that have not yet migrated.
+        var includeGlobals = accountIncludesGlobalPriorityGames
+        includeGlobals[key] = source != .personal
+        accountIncludesGlobalPriorityGames = includeGlobals
     }
 
     public func setIncludesGlobalPriorityGames(_ include: Bool, forAccountId accountId: String) {
         let key = accountId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return }
-        var map = accountIncludesGlobalPriorityGames
-        map[key] = include
-        accountIncludesGlobalPriorityGames = map
+        if include {
+            let hasPersonalPriorities = !accountPriorityGames[key, default: []].isEmpty
+            setPrioritySource(hasPersonalPriorities ? .globalAndPersonal : .global, forAccountId: key)
+        } else {
+            setPrioritySource(.personal, forAccountId: key)
+        }
     }
 
     @discardableResult
@@ -1467,6 +1541,9 @@ public final class Settings {
         let game = gameName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty, !game.isEmpty else { return priorityGames(forAccountId: accountId) }
 
+        if prioritySource(forAccountId: key) == .global {
+            setPrioritySource(.globalAndPersonal, forAccountId: key)
+        }
         var map = accountPriorityGames
         let existing = priorityGames(forAccountId: key)
         let remaining = existing.filter { $0.localizedCaseInsensitiveCompare(game) != .orderedSame }
@@ -1508,11 +1585,16 @@ public final class Settings {
         var map = accountPriorityGames
         map[key] = combined
         accountPriorityGames = map
+        if !combined.isEmpty, prioritySource(forAccountId: key) == .global {
+            setPrioritySource(.globalAndPersonal, forAccountId: key)
+        }
         return priorityGames(forAccountId: key)
     }
 
-    /// The games prioritised specifically for one miner, excluding those already in
-    /// the global priority list. Empty when the miner has no personal override.
+    /// The games prioritised specifically for one miner. When global priorities
+    /// also apply, games that duplicate the global list are omitted from the
+    /// returned list. Stored personal priorities remain available while the
+    /// global-only source is selected, so changing sources never discards them.
     public func personalPriorityGames(forAccountId accountId: String) -> [String] {
         let key = accountId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty, let override = accountPriorityGames[key] else { return [] }
@@ -1521,7 +1603,7 @@ public final class Settings {
         // global priorities, a personally-added game must stand on its own even
         // if it also appears globally; filtering it here made adding such a
         // game silently do nothing.
-        guard includesGlobalPriorityGames(forAccountId: key) else { return override }
+        guard prioritySource(forAccountId: key) == .globalAndPersonal else { return override }
         let globalKeys = Set(priorityGames.map { $0.lowercased() })
         return override.filter { !globalKeys.contains($0.lowercased()) }
     }
@@ -2153,6 +2235,7 @@ public final class Settings {
         gameFailoverStreamersData = "[]"
         accountPriorityGamesData = "{}"
         accountIncludesGlobalPriorityGamesData = "{}"
+        accountPrioritySourcesData = "{}"
         selectedDropsFiltersData = "[\"active\"]"
         miningStrategy = .mineAll
         preferSteamArtwork = false
