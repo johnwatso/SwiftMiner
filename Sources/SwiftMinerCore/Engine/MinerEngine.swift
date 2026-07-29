@@ -253,6 +253,10 @@ public actor MinerEngine {
     /// `ChannelLivenessCache.ttl` must stay strictly below this so a cached miss has always
     /// expired by the next probe, and the cache can never delay noticing a channel go live.
     static let aclProbeInterval: TimeInterval = 60
+    /// How long Twitch may stay silent while a miner is watching before the ordered event stream
+    /// reconciles against inventory. Real-time events are authoritative when they arrive; this
+    /// only spends a request when they stop, so a healthy miner never pays for it.
+    static let progressReconcileInterval: TimeInterval = 5 * 60
     static let failoverCooldown: TimeInterval = 10 * 60
     private static let subscriptionWarningRepeatInterval: TimeInterval = 6 * 60 * 60
     static let noCandidateBackoffBaseInterval: UInt64 = 300 * 1_000_000_000
@@ -529,47 +533,147 @@ public actor MinerEngine {
         }
     }
 
+    /// A drop event as it arrives from Twitch's real-time channel.
+    ///
+    /// Modelled as one type so every event flows through a single ordered consumer. Each
+    /// callback previously spawned its own unstructured `Task`, so events raced one another:
+    /// `handleDropProgress` reads current progress, decides whether Twitch advanced, then
+    /// refreshes — a read-modify-write that two concurrent events for the same drop could
+    /// interleave, double-acknowledging or applying out of order.
+    enum MiningEvent: Sendable {
+        case dropProgress(DropProgressEvent)
+        case dropClaim(DropClaimEvent)
+        case streamDown(channelId: String)
+        /// Current-session GQL samples share the same consumer as PubSub observations. This
+        /// prevents a fresh poll and an event-triggered inventory refresh from updating the
+        /// progress ledger along independent paths.
+        case gqlProgress(DropProgressObservation)
+        /// Periodic nudge to reconcile against Twitch's inventory, routed through the same
+        /// consumer as real-time and current-session GQL progress.
+        case reconcileTick
+    }
+
+    /// Serialises every drop event through one consumer.
+    private var eventConsumerTask: Task<Void, Never>?
+    private var eventTickTask: Task<Void, Never>?
+    private var eventContinuation: AsyncStream<MiningEvent>.Continuation?
+
+    /// Builds the ordered event stream and starts its single consumer.
+    ///
+    /// Real-time events, current-session GQL samples, and reconciliation ticks all use this
+    /// stream rather than separate paths that have to agree. One consumer means one ordering,
+    /// and cancellation is structural.
+    private func startEventConsumer() {
+        stopEventConsumer()
+
+        // Mining signals must never be discarded. A dropped claim or stream-down event can
+        // leave a miner watching the wrong channel or delay claiming an earned reward. The
+        // producer is ordered at the PubSub receive loop, and this lossless stream keeps that
+        // order until the single consumer handles each event.
+        let (stream, continuation) = AsyncStream<MiningEvent>.makeStream(bufferingPolicy: .unbounded)
+        eventContinuation = continuation
+
+        eventConsumerTask = Task { [weak self] in
+            for await event in stream {
+                if Task.isCancelled { return }
+                guard let self else { return }
+                await self.handle(event)
+            }
+        }
+
+        let clock = runtimeClock
+        eventTickTask = Task { [weak self] in
+            let ticks = AsyncTimerSequence(
+                interval: .seconds(Self.progressReconcileInterval),
+                clock: clock
+            )
+            for await _ in ticks {
+                guard !Task.isCancelled, let self else { return }
+                await self.enqueueMiningEvent(.reconcileTick)
+            }
+        }
+    }
+
+    /// Adds an event from an ordered producer. This actor hop is intentionally short: the
+    /// PubSub receive loop must be able to continue reading PONGs while slow network work is
+    /// performed by the separate consumer task.
+    private func enqueueMiningEvent(_ event: MiningEvent) {
+        eventContinuation?.yield(event)
+    }
+
+    /// Handles one event. Called only from the single consumer, so these never overlap.
+    private func handle(_ event: MiningEvent) async {
+        switch event {
+        case .dropProgress(let progress):
+            await handleDropProgress(progress)
+        case .dropClaim(let claim):
+            await handleDropClaim(claim)
+        case .streamDown(let channelId):
+            await handleStreamDown(channelId)
+        case .gqlProgress(let observation):
+            await handleGQLProgress(observation)
+        case .reconcileTick:
+            // A safety net, not a poll. When PubSub is healthy this costs nothing: real-time
+            // progress keeps resetting the stall clock, and the guard below never fires. It only
+            // spends a request when the miner is watching and Twitch has gone quiet for longer
+            // than an interval — the exact signature of the silent-PubSub failure that left the
+            // whole fleet earning nothing while appearing healthy.
+            guard isRunning,
+                  session?.status == .watching,
+                  let campaignId = session?.currentCampaignId,
+                  progressStallElapsedSeconds() >= Self.progressReconcileInterval else { return }
+
+            log("No drop progress from Twitch for \(Int(progressStallElapsedSeconds()))s while watching — reconciling against inventory.")
+            await refreshCampaignProgress(campaignId: campaignId, context: "silent-progress reconcile")
+        }
+    }
+
+    /// Stream-state logging. Kept off the ordered path — see `configureDropEventsService`.
+    private func logStreamState(_ event: StreamStateEvent) {
+        switch event.kind {
+        case .up:
+            log("Stream \(event.channelId) is LIVE")
+        case .down:
+            log("Stream \(event.channelId) went OFFLINE")
+        case .viewcount(let count):
+            log("Stream \(event.channelId) viewers: \(count)")
+        case .commercial(let duration):
+            log("Stream \(event.channelId) commercial: \(duration)s")
+        }
+    }
+
+    private func stopEventConsumer() {
+        eventContinuation?.finish()
+        eventContinuation = nil
+        eventConsumerTask?.cancel()
+        eventConsumerTask = nil
+        eventTickTask?.cancel()
+        eventTickTask = nil
+    }
+
     /// Configure DropEventsService callbacks. Call this after init but before start().
     private func configureDropEventsService() async {
-        // Set up drop progress handler
+        // `DropEventsService` awaits these short actor hops from its ordered receive loop. This
+        // maintains Twitch's delivery order without making socket reading wait for a claim or
+        // inventory refresh.
         await dropEventsService.setDropProgressHandler { [weak self] event in
-            guard let self = self else { return }
-            Task {
-                await self.handleDropProgress(event)
-            }
+            await self?.enqueueMiningEvent(.dropProgress(event))
         }
 
-        // Set up drop claim handler
         await dropEventsService.setDropClaimHandler { [weak self] event in
-            guard let self = self else { return }
-            Task {
-                await self.handleDropClaim(event)
-            }
+            await self?.enqueueMiningEvent(.dropClaim(event))
         }
 
-        // Set up stream down handler
         await dropEventsService.setStreamDownHandler { [weak self] channelId in
-            guard let self = self else { return }
-            Task {
-                await self.handleStreamDown(channelId)
-            }
+            await self?.enqueueMiningEvent(.streamDown(channelId: channelId))
         }
 
-        // Set up stream state handler for logging
+        // Deliberately NOT routed through the event stream. `viewcount` fires repeatedly for
+        // every watched channel, and this handler only logs — it touches no shared state and
+        // needs no ordering. Keeping it off the mining queue prevents logging bursts from
+        // delaying a claim, stream-down, or progress event.
         await dropEventsService.setStreamStateHandler { [weak self] event in
-            guard let self = self else { return }
-            Task {
-                switch event.kind {
-                case .up:
-                    await self.log("Stream \(event.channelId) is LIVE")
-                case .down:
-                    await self.log("Stream \(event.channelId) went OFFLINE")
-                case .viewcount(let count):
-                    await self.log("Stream \(event.channelId) viewers: \(count)")
-                case .commercial(let duration):
-                    await self.log("Stream \(event.channelId) commercial: \(duration)s")
-                }
-            }
+            Task { await self?.logStreamState(event) }
         }
 
         // Configure the service to receive messages
@@ -604,6 +708,7 @@ public actor MinerEngine {
         progressEventTracker = DropProgressEventTracker()
         resetProgressStallClock()
         warnedUnlinkedPriorityGames.removeAll()
+        startEventConsumer()
         onOperationalEvent?(.workerStarted(taskID: workerTaskID))
 
         onStatusChange?(.authenticating)
@@ -619,6 +724,7 @@ public actor MinerEngine {
         guard let account = currentAccount else {
             log("No valid authentication found. Please authenticate first.")
             isRunning = false
+            stopEventConsumer()
             throw TwitchMinerError.authenticationFailed("No valid credentials. Please call authenticate() first.")
         }
         log("Authenticated as \(account.username)")
@@ -692,6 +798,7 @@ public actor MinerEngine {
         log("Stopping miner...")
         isRunning = false
         progressEventTracker = DropProgressEventTracker()
+        stopEventConsumer()
         mainTask?.cancel()
         mainTask = nil
         maintenanceTask?.cancel()
@@ -856,6 +963,31 @@ public actor MinerEngine {
         await refreshCampaignProgress(
             campaignId: campaignId,
             context: "PubSub progress"
+        )
+    }
+
+    /// Applies a current-session GQL sample on the same ordered consumer as PubSub. The network
+    /// request that obtained it may run concurrently with watching, but the stateful observation
+    /// and campaign-wide refresh must not.
+    private func handleGQLProgress(_ observation: DropProgressObservation) async {
+        let result = observeDropProgress(observation)
+        traceGQL(
+            "DropCurrentSessionContext drop=\(observation.dropId) parsedCurrent=\(observation.currentMinutes) " +
+            "previous=\(result.previousMinutes.map(String.init) ?? "nil") transition=\(result.transition.traceDescription)"
+        )
+
+        guard result.shouldAcknowledgeServerProgress else { return }
+
+        if let message = formatProgressTransition(result.transition) {
+            log(message)
+        }
+
+        extraMinutesWatched = 0
+        resetProgressStallClock()
+        noteCampaignProgress(observation.campaignId)
+        await refreshCampaignProgress(
+            campaignId: observation.campaignId,
+            context: "current-session progress"
         )
     }
 
@@ -1423,27 +1555,7 @@ public actor MinerEngine {
                                     requiredMinutes: requiredMinutes(for: current.dropId, campaignId: campaignId),
                                     source: .gqlPoll
                                 )
-                                let result = observeDropProgress(observation)
-                                traceGQL(
-                                    "DropCurrentSessionContext drop=\(current.dropId) parsedCurrent=\(current.currentMinutes) " +
-                                    "previous=\(result.previousMinutes.map(String.init) ?? "nil") transition=\(result.transition.traceDescription)"
-                                )
-
-                                if result.shouldAcknowledgeServerProgress {
-                                    if let message = formatProgressTransition(result.transition) {
-                                        log(message)
-                                    }
-
-                                    // Only treat changed server state as verified progress.
-                                    extraMinutesWatched = 0
-                                    resetProgressStallClock()
-                                    noteCampaignProgress(campaignId)
-
-                                    await refreshCampaignProgress(
-                                        campaignId: campaignId,
-                                        context: "current-session progress"
-                                    )
-                                }
+                                enqueueMiningEvent(.gqlProgress(observation))
                             } else {
                                 let inventoryService = await dropsService.getInventoryService()
                                 let snapshot = try await inventoryService.fetchInventory(forceRefresh: true)

@@ -232,4 +232,30 @@ struct MinerStateConsistencyTests {
         #expect(!card.now.id.hasPrefix("subscription-"))
         #expect(!card.statusText.localizedCaseInsensitiveContains("Subscription Required"))
     }
+
+    /// Before the state model was consolidated, `statusLabel` had no `needsAuth` check on the
+    /// running path at all — it fell through to per-game state, so a miner whose Twitch token was
+    /// dead could report itself finished. Consolidation changed that; this pins it deliberately
+    /// rather than leaving it as an unasserted side effect.
+    @Test("A miner needing re-authentication is never reported as finished")
+    func needsAuthIsNeverReportedFinished() {
+        let done = Self.campaign(id: "done", drops: [Self.drop(id: "d1", isClaimed: true)])
+        let miner = MinerManager.ManagedMiner(
+            id: "miner-1",
+            accountId: "account-1",
+            username: "tester",
+            status: .idle,
+            needsAuth: true,
+            currentCampaignId: nil,
+            allCampaigns: [done],
+            isRunning: true,
+            priorityGames: ["Test Game"]
+        )
+
+        #expect(MinerPresentedState.resolve(for: miner) == .needsAttention)
+        #expect(
+            !Self.claimsCompletion(miner.statusLabel),
+            "A miner with a dead token reported '\(miner.statusLabel)', hiding that it needs reconnecting"
+        )
+    }
 }

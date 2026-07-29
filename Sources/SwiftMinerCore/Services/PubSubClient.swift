@@ -169,7 +169,9 @@ public actor PubSubClient: NSObject {
     private var connectionGeneration: UInt64 = 0
     
     /// Delegate for handling received messages
-    public var onMessage: (@Sendable (String, AnyJSONValue) -> Void)?
+    /// Awaited so a consumer can preserve WebSocket delivery order without spawning one
+    /// unstructured task per message.
+    public var onMessage: (@Sendable (String, AnyJSONValue) async -> Void)?
     
     /// Callback for connection state changes
     public var onConnectionStateChange: (@Sendable (Bool) -> Void)?
@@ -178,7 +180,7 @@ public actor PubSubClient: NSObject {
     public var onDebugLog: (@Sendable (String) -> Void)?
 
     /// Actor-safe setter for the message handler (use this from other actors).
-    public func setMessageHandler(_ handler: @Sendable @escaping (String, AnyJSONValue) -> Void) {
+    public func setMessageHandler(_ handler: @Sendable @escaping (String, AnyJSONValue) async -> Void) {
         onMessage = handler
     }
     
@@ -474,7 +476,7 @@ public actor PubSubClient: NSObject {
                    case .string(let topic) = data["topic"],
                    let payload = data["message"] {
                     // Forward message to listener
-                    onMessage?(topic, payload)
+                    await onMessage?(topic, payload)
                 }
             case .response:
                 // A server response proves the replacement socket completed a real round trip.
