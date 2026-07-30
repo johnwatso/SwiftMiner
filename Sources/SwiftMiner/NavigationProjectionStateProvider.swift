@@ -34,14 +34,11 @@ final class NavigationProjectionStateProvider: ProjectionStateProvider, @uncheck
         for discordUserId: String,
         limit: Int
     ) async -> [DiscordUserProjection.RecentCampaign] {
-        await MainActor.run {
-            guard let miner = model?.minerForDiscordUser(discordUserId) else { return [] }
-            return miner.allCampaigns
-                .filter { !$0.drops.isEmpty && $0.drops.allSatisfy(\.isClaimed) }
-                .sorted { Self.completedSortDate($0) > Self.completedSortDate($1) }
-                .prefix(max(limit, 0))
-                .map(Self.recentCampaignProjection)
+        let accountId = await MainActor.run {
+            model?.minerForDiscordUser(discordUserId)?.accountId
         }
+        guard let accountId else { return [] }
+        return await completedCampaigns(forAccountId: accountId, limit: limit)
     }
 
     func projectionState(for discordUserId: String) async -> DiscordUserProjection.ProjectionState? {
@@ -65,10 +62,11 @@ final class NavigationProjectionStateProvider: ProjectionStateProvider, @uncheck
     }
 
     func priorityGameArtwork(for discordUserId: String) async -> [String: String] {
-        await MainActor.run {
-            guard let model, let miner = model.minerForDiscordUser(discordUserId) else { return [:] }
-            return Self.priorityGameArtwork(for: miner)
+        let accountId = await MainActor.run {
+            model?.minerForDiscordUser(discordUserId)?.accountId
         }
+        guard let accountId else { return [:] }
+        return await resolvedPriorityGameArtwork(forAccountId: accountId)
     }
 
     func personalPriorityGames(for discordUserId: String) async -> [String] {
@@ -123,14 +121,7 @@ final class NavigationProjectionStateProvider: ProjectionStateProvider, @uncheck
     }
 
     func recentCompletedCampaigns(forTwitchAccount accountId: String, limit: Int) async -> [DiscordUserProjection.RecentCampaign] {
-        await MainActor.run {
-            guard let miner = model?.minerForAccount(accountId) else { return [] }
-            return miner.allCampaigns
-                .filter { !$0.drops.isEmpty && $0.drops.allSatisfy(\.isClaimed) }
-                .sorted { Self.completedSortDate($0) > Self.completedSortDate($1) }
-                .prefix(max(limit, 0))
-                .map(Self.recentCampaignProjection)
-        }
+        await completedCampaigns(forAccountId: accountId, limit: limit)
     }
 
     func projectionState(forTwitchAccount accountId: String) async -> DiscordUserProjection.ProjectionState? {
@@ -154,10 +145,7 @@ final class NavigationProjectionStateProvider: ProjectionStateProvider, @uncheck
     }
 
     func priorityGameArtwork(forTwitchAccount accountId: String) async -> [String: String] {
-        await MainActor.run {
-            guard let model, let miner = model.minerForAccount(accountId) else { return [:] }
-            return Self.priorityGameArtwork(for: miner)
-        }
+        await resolvedPriorityGameArtwork(forAccountId: accountId)
     }
 
     func personalPriorityGames(forTwitchAccount accountId: String) async -> [String] {
@@ -214,6 +202,79 @@ final class NavigationProjectionStateProvider: ProjectionStateProvider, @uncheck
         return artworkByGame
     }
 
+    /// Older preferences stored only a display name. Fill those gaps from Twitch's
+    /// category search once, then persist the canonical box art with the existing
+    /// preference so dashboard refreshes never have to infer a CDN URL from a name.
+    private func resolvedPriorityGameArtwork(forAccountId accountId: String) async -> [String: String] {
+        let snapshot = await MainActor.run { priorityArtworkSnapshot(forAccountId: accountId) }
+        guard !snapshot.unresolvedGames.isEmpty else { return snapshot.artwork }
+
+        for gameName in snapshot.unresolvedGames {
+            guard let match = await matchingTwitchCategory(for: gameName) else { continue }
+            await MainActor.run {
+                persistArtwork(match, forPreferredGameNamed: gameName)
+            }
+        }
+
+        return await MainActor.run {
+            priorityArtworkSnapshot(forAccountId: accountId).artwork
+        }
+    }
+
+    @MainActor
+    private func priorityArtworkSnapshot(forAccountId accountId: String) -> (
+        artwork: [String: String],
+        unresolvedGames: [String]
+    ) {
+        guard let model, let miner = model.minerForAccount(accountId) else { return ([:], []) }
+        let artwork = Self.priorityGameArtwork(for: miner)
+        let preferredNames = Set(
+            Settings.shared.gamePreferences
+                .filter { $0.state == .preferred }
+                .map { Self.normalizedGameName($0.gameName) }
+        )
+        let unresolvedGames = model.priorityGames(for: miner).filter { gameName in
+            let normalized = Self.normalizedGameName(gameName)
+            let artworkKey = gameName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return !normalized.isEmpty && preferredNames.contains(normalized) && artwork[artworkKey] == nil
+        }
+        return (artwork, unresolvedGames)
+    }
+
+    @MainActor
+    private func matchingTwitchCategory(for gameName: String) async -> Game? {
+        guard let model else { return nil }
+        guard let categories = try? await model.minerManager.dataCoordinator.searchCategories(query: gameName) else {
+            return nil
+        }
+        let requested = Self.normalizedGameName(gameName)
+        return categories.first { Self.normalizedGameName($0.name) == requested }
+    }
+
+    @MainActor
+    private func persistArtwork(_ game: Game, forPreferredGameNamed gameName: String) {
+        guard game.boxArtURL?.scheme?.lowercased() == "https" else { return }
+        let requested = Self.normalizedGameName(gameName)
+        guard Settings.shared.gamePreferences.contains(where: {
+            $0.state == .preferred && Self.normalizedGameName($0.gameName) == requested
+        }) else { return }
+
+        // Preserve the user's displayed priority name while adding Twitch's ID and
+        // durable artwork URL to the existing preference.
+        Settings.shared.setGamePreference(
+            Game(id: game.id, name: gameName, boxArtURL: game.boxArtURL),
+            state: .preferred
+        )
+    }
+
+    private static func normalizedGameName(_ value: String) -> String {
+        value
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .joined()
+            .lowercased()
+    }
+
     // Progress must come from the same reconciliation the native GUI uses:
     // Twitch's inventory payload alone (`drop.progress`) is absent for drops the
     // API isn't currently reporting, so the web showed 0 for minutes the miner's
@@ -245,19 +306,54 @@ final class NavigationProjectionStateProvider: ProjectionStateProvider, @uncheck
         )
     }
 
-    private static func recentCampaignProjection(from campaign: Campaign) -> DiscordUserProjection.RecentCampaign {
+    /// Mirrors the native Drops > Completed filter, including completed campaigns
+    /// outside the normal curated mining feed, then groups them by game.
+    @MainActor
+    private func completedCampaigns(
+        forAccountId accountId: String,
+        limit: Int
+    ) async -> [DiscordUserProjection.RecentCampaign] {
+        guard let model, model.minerForAccount(accountId) != nil else { return [] }
+        let campaigns = await model.minerManager.dataCoordinator.allCampaigns(
+            preferSteamArtwork: Settings.shared.preferSteamArtwork
+        )
+        let now = Date()
+        let completed = campaigns.filter {
+            // This is the same completion predicate the native Drops filter
+            // uses. Some campaigns (such as THE FINALS) reach complete reward
+            // progress while their raw inventory flag still lags behind.
+            shouldIncludeInCompletedCampaigns($0)
+                && !$0.isExpired(now: now)
+                && ($0.combinedProgressFraction >= 0.995 || $0.isCompleted)
+        }
+        return GameAggregateBuilder.buildDrops(from: completed, now: now)
+            .sorted {
+                $0.gameName.localizedCaseInsensitiveCompare($1.gameName) == .orderedAscending
+            }
+            .compactMap { $0.campaigns.first?.campaign }
+            .prefix(max(limit, 0))
+            .map(Self.recentCampaignProjection)
+    }
+
+    /// A user's exclusions remain authoritative, but a completed campaign is
+    /// intentionally not limited to the normal curated mining feed.
+    @MainActor
+    private func shouldIncludeInCompletedCampaigns(_ campaign: CampaignViewData) -> Bool {
+        let excludedGames = Settings.shared.excludedGames
+        return !excludedGames.contains(where: {
+            $0.localizedCaseInsensitiveCompare(campaign.gameName) == .orderedSame
+        })
+    }
+
+    private static func recentCampaignProjection(from campaign: CampaignViewData) -> DiscordUserProjection.RecentCampaign {
         DiscordUserProjection.RecentCampaign(
             campaignId: campaign.id,
-            campaignName: campaign.name,
-            game: campaign.game.name,
-            // Only report a completion time we actually know: the campaign's
-            // end. For campaigns finished early (all drops claimed while the
-            // window is still open) min(endDate, now) would just be "now" on
-            // every refresh — the web showed a perpetual "1m ago".
-            completedAt: campaign.endDate <= Date() ? campaign.endDate : nil,
-            claimedDrops: campaign.drops.filter(\.isClaimed).count,
-            totalDrops: campaign.drops.count,
-            boxArtURL: campaign.game.boxArtURL?.absoluteString
+            campaignName: campaign.campaignName,
+            game: campaign.gameName,
+            completedAt: nil,
+            claimedDrops: campaign.dropsClaimed,
+            totalDrops: campaign.totalDrops,
+            boxArtURL: campaign.artworkURL?.absoluteString
         )
     }
 
@@ -294,9 +390,6 @@ final class NavigationProjectionStateProvider: ProjectionStateProvider, @uncheck
         )
     }
 
-    private static func completedSortDate(_ campaign: Campaign) -> Date {
-        min(campaign.endDate, Date())
-    }
 }
 
 extension NavigationModel {

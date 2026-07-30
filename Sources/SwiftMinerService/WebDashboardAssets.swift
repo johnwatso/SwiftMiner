@@ -510,10 +510,86 @@ enum WebDashboardAssets {
           background: rgba(255,255,255,0.15); color: #fff;
         }
 
+        /* Miner detail: a quiet, single-column account view rather than a dashboard. */
+        .miner-detail { display: flex; flex-direction: column; gap: 18px; padding-bottom: 18px; }
+        .miner-detail > * { margin: 0; }
+        .detail-back {
+          align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; min-height: 34px;
+          padding: 6px 2px; border: 0; border-radius: 8px; color: var(--muted); background: transparent;
+          font: 600 13px/1 inherit; font-family: inherit; cursor: pointer;
+        }
+        .detail-back:hover { color: var(--text); }
+        .detail-back:focus-visible, .text-action:focus-visible, .action-link:focus-visible,
+        .status-refresh:focus-visible, .priority-summary:focus-visible { outline: 3px solid rgba(145,70,255,0.42); outline-offset: 3px; }
+        .miner-identity { text-align: center; padding: 8px 0 10px; }
+        .miner-avatar {
+          width: 92px; height: 92px; margin: 0 auto 12px; overflow: hidden; border-radius: 50%;
+          display: grid; place-items: center; color: #d9cffb; background: rgba(145,70,255,0.16);
+          border: 1px solid rgba(145,70,255,0.28); font-size: 28px; font-weight: 700;
+        }
+        .miner-avatar img { width: 100%; height: 100%; object-fit: cover; }
+        .miner-identity h2 { margin: 0; font-size: 30px; letter-spacing: -0.04em; }
+        .miner-linked { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
+        .miner-linked::before { content: ""; display: inline-block; width: 7px; height: 7px; margin: 0 6px 1px 0; border-radius: 50%; background: var(--green); }
+        .miner-linked.unlinked::before { background: var(--orange); }
+        .status-panel {
+          display: flex; align-items: flex-start; gap: 14px; padding: 17px 18px; border-radius: 16px;
+          background: rgba(255,255,255,0.055); border: 1px solid var(--glass-stroke);
+          border-left: 3px solid var(--status-color, var(--green)); box-shadow: 0 12px 28px rgba(0,0,0,0.16);
+        }
+        .status-panel .status-icon-container { width: 40px; height: 40px; background: color-mix(in srgb, var(--status-color) 14%, transparent) !important; box-shadow: none; }
+        .status-panel-copy { flex: 1; min-width: 0; }
+        .status-panel h3 { margin: 1px 0 4px; font-size: 17px; letter-spacing: -0.015em; }
+        .status-panel p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.4; }
+        .status-progress { margin-top: 12px; }
+        .status-refresh { flex: none; min-height: 34px; padding: 0 11px; }
+        .miner-details {
+          display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--glass-stroke);
+          border-radius: 14px; background: rgba(255,255,255,0.025); overflow: hidden;
+        }
+        .miner-detail-item { padding: 12px 15px; min-width: 0; }
+        .miner-detail-item + .miner-detail-item { border-left: 1px solid var(--glass-stroke); }
+        .miner-detail-key { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+        .miner-detail-value { margin-top: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; }
+        .detail-section { border-top: 1px solid var(--glass-stroke); padding-top: 17px; }
+        .detail-section-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 9px; }
+        .detail-section-title { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 15px; letter-spacing: -0.01em; }
+        .detail-section-icon { display: inline-grid; width: 25px; height: 25px; place-items: center; border-radius: 8px; color: #c8b4ff; background: rgba(145,70,255,.13); }
+        .detail-section-icon svg { width: 15px; height: 15px; }
+        .text-action { border: 0; padding: 7px 2px; border-radius: 7px; color: #c8b4ff; background: transparent; cursor: pointer; font: 600 13px/1 inherit; font-family: inherit; }
+        .text-action:hover { color: #e3d9ff; }
+        .priority-summary { width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px 0 0; border: 0; color: inherit; text-align: left; background: transparent; cursor: pointer; }
+        .priority-summary-copy { flex: 1; min-width: 0; }
+        .priority-mode { font-size: 13px; font-weight: 650; }
+        .priority-description { margin-top: 3px; color: var(--muted); font-size: 12px; line-height: 1.35; }
+        .activity-list { border-top: 1px solid var(--glass-stroke); }
+        .activity-row { display: flex; align-items: center; gap: 10px; padding: 11px 0; border-bottom: 1px solid var(--glass-stroke); }
+        .activity-art, .activity-state { flex: none; display: grid; place-items: center; }
+        .activity-art { width: 34px; height: 44px; overflow: hidden; border: 1px solid var(--glass-stroke); border-radius: 8px; background: var(--field); }
+        .activity-art img { width: 100%; height: 100%; object-fit: cover; }
+        .activity-state { width: 22px; height: 22px; margin-left: -19px; margin-top: 25px; color: var(--green); border: 2px solid var(--bg-b); border-radius: 50%; background: rgba(52,199,89,.18); }
+        .activity-state svg { width: 12px; height: 12px; }
+        .activity-copy { flex: 1; min-width: 0; }
+        .activity-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 650; }
+        .activity-subtitle { overflow: hidden; margin-top: 2px; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+        .activity-time { flex: none; color: var(--muted); font-size: 11px; }
+        .empty-activity { padding: 7px 0 1px; color: var(--muted); font-size: 13px; }
+        .completed-count { color: var(--muted); font-size: 12px; font-weight: 600; white-space: nowrap; }
+        .operator-miner-avatar { width: 42px; height: 42px; flex: none; overflow: hidden; display: grid; place-items: center; border: 1px solid rgba(145,70,255,.30); border-radius: 50%; color: #d9cffb; background: rgba(145,70,255,.16); }
+        .operator-miner-avatar img { width: 100%; height: 100%; object-fit: cover; }
+        .operator-miner-avatar svg { width: 20px; height: 20px; }
+        .account-actions { display: flex; justify-content: center; padding: 4px 0 0; }
+        .action-link { border: 0; padding: 9px; border-radius: 8px; color: var(--muted); background: transparent; cursor: pointer; font: 600 13px/1 inherit; font-family: inherit; }
+        .action-link:hover { color: var(--text); }
+
         @media (max-width: 420px) {
           .boxart { width: 54px; height: 72px; }
           .card { padding: 14px; border-radius: 16px; }
           .stats-row { grid-template-columns: 1fr; }
+          .status-panel { flex-wrap: wrap; }
+          .status-refresh { margin-left: 54px; }
+          .miner-details { grid-template-columns: 1fr; }
+          .miner-detail-item + .miner-detail-item { border-top: 1px solid var(--glass-stroke); border-left: 0; }
         }
       </style>
     </head>
@@ -564,6 +640,8 @@ enum WebDashboardAssets {
     let includeGlobalPriorities = true;
     let prioritySource = 'global';
     let globalPrioritiesModalOpen = false;
+    let prioritiesModalOpen = false;
+    let activityModalOpen = false;
     let OPERATOR_MINERS = [];
     let OPERATOR_STATE = { selectedMinerId: null, query: '', filter: 'all' };
 
@@ -660,12 +738,26 @@ enum WebDashboardAssets {
     // ---------- user dashboard ----------
 
     function getStatusConfig(p) {
+      const diagnostics = p.diagnostics || {};
+      const hasAuthenticationIssue = (p.issues || []).some(is => /auth|link_account|account_not_linked/i.test(String(is.type || '') + ' ' + String(is.action || '')));
+      if (diagnostics.isRunning === false && p.state !== 'notConfigured') {
+        return {
+          headline: 'Offline', subtitle: 'SwiftMiner is not currently running for this account.', color: '#8e8e93',
+          icon: `<svg class="status-svg" viewBox="0 0 24 24" fill="none" stroke="#8e8e93" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v10"></path><path d="M5.64 5.64a9 9 0 1 0 12.73 0"></path></svg>`
+        };
+      }
+      if (diagnostics.isStalled || diagnostics.health === 'stalled') {
+        return {
+          headline: 'Error', subtitle: diagnostics.statusLabel || 'Mining has stopped making progress and needs attention.', color: '#ff453a',
+          icon: `<svg class="status-svg" viewBox="0 0 24 24" fill="none" stroke="#ff453a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4"></path><path d="M12 16h.01"></path></svg>`
+        };
+      }
       if (p.state === 'active') {
         if (p.activeCampaign) {
           const streamer = p.activeCampaign.currentChannelName;
           return {
-            headline: 'Watching ' + p.activeCampaign.game,
-            subtitle: streamer ? 'Watching ' + streamer : 'Mining active drops',
+            headline: 'Mining',
+            subtitle: streamer ? 'Watching ' + streamer + ' for ' + p.activeCampaign.game : 'Earning drops for ' + p.activeCampaign.game,
             color: '#34c759',
             icon: `<svg class="status-svg" viewBox="0 0 24 24" fill="none" stroke="#34c759" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="2"></circle>
@@ -674,7 +766,7 @@ enum WebDashboardAssets {
           };
         } else {
           return {
-            headline: 'Looking for Streams',
+            headline: 'Waiting for stream',
             subtitle: 'No participating channels are live right now.',
             color: '#56bcff',
             icon: `<svg class="status-svg" viewBox="0 0 24 24" fill="none" stroke="#56bcff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -685,9 +777,9 @@ enum WebDashboardAssets {
           };
         }
       } else if (p.state === 'blocked') {
-        const hasUnlinked = p.issues && p.issues.some(is => is.type === 'accountNotLinked' || is.type === 'account_not_linked');
+        const hasUnlinked = hasAuthenticationIssue;
         return {
-          headline: hasUnlinked ? 'Blocked — Account not linked' : 'Needs attention',
+          headline: hasUnlinked ? 'Authentication required' : 'Needs attention',
           subtitle: p.issues && p.issues.length ? p.issues[0].message : 'Link your account to earn drops.',
           color: '#ff9f0a',
           icon: `<svg class="status-svg" viewBox="0 0 24 24" fill="none" stroke="#ff9f0a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -707,7 +799,7 @@ enum WebDashboardAssets {
         };
       } else {
         return {
-          headline: 'Not Configured',
+          headline: 'Authentication required',
           subtitle: SESSION && SESSION.provider === 'discord' ? 'Link Twitch to start mining.' : 'Ask the operator to finish setup.',
           color: '#8e8e93',
           icon: `<svg class="status-svg" viewBox="0 0 24 24" fill="none" stroke="#8e8e93" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -804,42 +896,25 @@ enum WebDashboardAssets {
     }
 
     function progressCard(p) {
+      // The primary status panel already communicates the completed state and
+      // offers Refresh. Repeating it below adds no new information.
+      if (p.state === 'idle') return '';
       const cfg = getStatusConfig(p);
-      const label = p.state === 'idle' ? 'Status' : 'Progress';
-      return `<div class="card"><div class="label" style="margin-bottom:12px">${label}</div>${progressStateCard(p, cfg, 'background:transparent;border:none;padding:0')}</div>`;
+      return `<div class="card"><div class="label" style="margin-bottom:12px">Progress</div>${progressStateCard(p, cfg, 'background:transparent;border:none;padding:0')}</div>`;
     }
 
-    function statsRow(p) {
+    function minerIdentity(p) {
       const acc = p.account || {};
-      const dropsThisWeek = Number(p.dropsClaimedThisWeek || 0);
-
-      const twitchVal = acc.username ? esc(acc.username) : 'Not Linked';
-      const twitchLabel = acc.twitchAccountId ? 'Twitch Linked' : 'Twitch Account';
-      
       const twitchIcon = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M11.571 4.714h1.715v5.143h-1.715Zm4.715 0H18v5.143h-1.714ZM6 0 1.714 4.286V19.714H6.857V24l4.286-4.286h3.428L22.286 12V0Zm14.571 11.143-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714ZM11.571 4.714h1.715v5.143h-1.715Zm4.715 0H18v5.143h-1.714Z"/></svg>`;
       const twitchAvatar = typeof acc.profileImageURL === 'string' && acc.profileImageURL.toLowerCase().startsWith('https://')
         ? `<img src="${esc(acc.profileImageURL)}" alt="" referrerpolicy="no-referrer">`
         : twitchIcon;
-      
-      const giftIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"></polyline><rect x="2" y="7" width="20" height="5"></rect><line x1="12" y1="22" x2="12" y2="7"></line><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"></path><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"></path></svg>`;
-
       return `
-        <div class="stats-row">
-          <div class="stat-card">
-            <div class="stat-icon-wrapper" style="background-color: rgba(145, 70, 255, 0.12); color: #9146FF; --tint-rgb: 145, 70, 255;">
-              ${twitchAvatar}
-            </div>
-            <div class="stat-value">${twitchVal}</div>
-            <div class="stat-label">${twitchLabel}</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-icon-wrapper" style="background-color: rgba(52, 199, 89, 0.12); color: #34C759; --tint-rgb: 52, 199, 89;">
-              ${giftIcon}
-            </div>
-            <div class="stat-value">${dropsThisWeek}</div>
-            <div class="stat-label">Drops Claimed This Week</div>
-          </div>
-        </div>
+        <section class="miner-identity" aria-label="Twitch account">
+          <div class="miner-avatar">${twitchAvatar}</div>
+          <h2>${esc(acc.username || 'Twitch account')}</h2>
+          <p class="miner-linked${acc.twitchAccountId ? '' : ' unlinked'}">${acc.twitchAccountId ? 'Twitch connected' : 'Twitch not connected'}</p>
+        </section>
       `;
     }
 
@@ -1115,7 +1190,8 @@ enum WebDashboardAssets {
 
     function dropsCard(p) {
       const recents = p.recentCompletedCampaigns || [];
-      if (!recents.length) return '';
+      const dropsThisWeek = Number(p.dropsClaimedThisWeek || 0);
+      if (!recents.length && !dropsThisWeek) return '';
       let rows = '';
       for (const c of recents) {
         const title = c.campaignName && c.campaignName.toLowerCase() !== c.game.toLowerCase()
@@ -1124,21 +1200,20 @@ enum WebDashboardAssets {
           <div class="t"><div class="reward">${title}</div>
           <div class="muted" style="font-size:12px">${esc(c.claimedDrops)} / ${esc(c.totalDrops)} drops claimed${agoText(c.completedAt) ? ' · ' + agoText(c.completedAt) : ''}</div></div></div>`;
       }
-      return `<div class="card"><div class="label">Recently completed</div>${rows}</div>`;
+      const count = `${dropsThisWeek} ${dropsThisWeek === 1 ? 'drop' : 'drops'} this week`;
+      const empty = rows ? '' : '<div class="empty-activity">No campaign completions to show yet.</div>';
+      return `<section class="card" aria-label="Completed drops">
+        <div class="detail-section-header">
+          <div class="label">Completed Drops</div>
+          <div class="completed-count">${count}</div>
+        </div>
+        ${rows || empty}
+      </section>`;
     }
 
     function operatorBackCard(p) {
       if (!(SESSION && SESSION.provider === 'local') || OPERATOR_MINERS.length <= 1) return '';
-      const acc = p.account || {};
-      return `<div class="card detail-nav">
-        <div class="back-row">
-          <button class="btn-secondary" id="backoverview" type="button">All miners</button>
-          <div class="hero-info">
-            <div class="label" style="margin:0 0 3px">Viewing miner</div>
-            <div class="name">${esc(acc.username || 'Account')}</div>
-          </div>
-        </div>
-      </div>`;
+      return `<button class="detail-back" id="backoverview" type="button" aria-label="Back to all miners">‹ All Miners</button>`;
     }
 
     function render(p) {
@@ -1150,7 +1225,7 @@ enum WebDashboardAssets {
       personal = (p.personalPriorityGames || []).slice();
       prioritySource = p.prioritySource || (p.includesGlobalPriorityGames === false ? 'personal' : 'global');
       includeGlobalPriorities = prioritySource !== 'personal';
-      $('app').innerHTML = operatorBackCard(p) + heroStateCard(p) + statsRow(p) + progressCard(p) + activationCard(p) + issuesCard(p) + subscriptionRequiredCard() + upNextCard(p) + globalCard(p) + personalCard(p) + dropsCard(p) + (globalPrioritiesModalOpen ? globalPrioritiesModal(p) : '');
+      $('app').innerHTML = `<main class="miner-detail">${operatorBackCard(p)}${minerIdentity(p)}${heroStateCard(p)}${progressCard(p)}${activationCard(p)}${issuesCard(p)}${subscriptionRequiredCard()}${upNextCard(p)}${globalCard(p)}${personalCard(p)}${dropsCard(p)}${globalPrioritiesModalOpen ? globalPrioritiesModal(p) : ''}</main>`;
       hydrateArt();
       wireActivation();
       wireOperatorBack();
@@ -1352,6 +1427,7 @@ enum WebDashboardAssets {
 
       const playIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`;
       const giftIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"></polyline><rect x="2" y="7" width="20" height="5"></rect><line x1="12" y1="22" x2="12" y2="7"></line><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"></path><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"></path></svg>`;
+      const twitchIcon = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M11.571 4.714h1.715v5.143h-1.715Zm4.715 0H18v5.143h-1.714ZM6 0 1.714 4.286V19.714H6.857V24l4.286-4.286h3.428L22.286 12V0Zm14.571 11.143-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714ZM11.571 4.714h1.715v5.143h-1.715Zm4.715 0H18v5.143h-1.714Z"/></svg>`;
 
       let html = `<div class="hero-card">
         <div class="hero-header">
@@ -1409,25 +1485,18 @@ enum WebDashboardAssets {
         const acc = p.account || {};
         const cfg = getStatusConfig(p);
         const id = minerId(p);
-        const diag = p.diagnostics || {};
-        
-        let watchingHTML = '';
-        if (diag.currentChannelName || (p.activeCampaign && p.activeCampaign.currentChannelName)) {
-          watchingHTML = ` · watching ${esc(diag.currentChannelName || p.activeCampaign.currentChannelName)}`;
-        }
-        
+        const avatar = typeof acc.profileImageURL === 'string' && acc.profileImageURL.toLowerCase().startsWith('https://')
+          ? `<img src="${esc(acc.profileImageURL)}" alt="" referrerpolicy="no-referrer">`
+          : twitchIcon;
         const progressHTML = progressStateCard(p, cfg, 'margin-top: 14px;');
 
         html += `
           <div class="card miner-card" style="padding: 20px;" data-miner-id="${esc(id)}" role="button" tabindex="0" aria-label="Open ${esc(acc.username || 'miner')}">
             <div class="hero-header" style="gap: 14px; align-items: center; justify-content: space-between; width: 100%;">
               <div style="display: flex; align-items: center; gap: 14px;">
-                <div class="status-icon-container" style="width: 38px; height: 38px; background-color: ${cfg.color}1e; --icon-bg: ${cfg.color}1a;">
-                  ${cfg.icon.replace('class="status-svg"', 'class="status-svg" style="width: 18px; height: 18px;"')}
-                </div>
+                <div class="operator-miner-avatar">${avatar}</div>
                 <div class="hero-info">
-                  <h3 class="hero-headline" style="font-size: 16px; margin-bottom: 2px;">${esc(acc.username || 'Account')}</h3>
-                  <p class="hero-subtitle" style="font-size: 12px; color: ${cfg.color}">${esc(cfg.headline)}${watchingHTML}</p>
+                  <h3 class="hero-headline" style="font-size: 16px; margin: 0;">${esc(acc.username || 'Account')}</h3>
                 </div>
               </div>
               <div style="display:flex;align-items:center;gap:8px;margin-left:auto;flex-shrink:0">

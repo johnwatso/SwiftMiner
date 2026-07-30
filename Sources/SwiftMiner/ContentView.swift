@@ -550,18 +550,11 @@ struct OverviewView: View {
                     items: items,
                     prominence: .standard,
                     showsEditButton: true,
-                    onMoveItem: movePrioritisedItem
+                    layout: .grid
                 )
-                .minerTip(DragToReorderTip())
             } else {
                 addPrioritisedGameSection
             }
-        }
-        .onAppear {
-            DragToReorderTip.prioritisedCount = items.count
-        }
-        .onChange(of: items.count) { _, newValue in
-            DragToReorderTip.prioritisedCount = newValue
         }
         .padding(.vertical, 2)
     }
@@ -645,6 +638,32 @@ struct OverviewView: View {
                     onSetSteamId: presentSteamIdSheet(for:),
                     onUploadCustomArtwork: presentCustomArtworkImporter(for:)
                 )
+                .padding(.horizontal, 2)
+                .padding(.vertical, 6)
+            case .grid:
+                LazyVGrid(
+                    columns: [
+                        GridItem(
+                            .adaptive(
+                                minimum: prominence.size.width,
+                                maximum: prominence.size.width
+                            ),
+                            spacing: prominence.spacing,
+                            alignment: .top
+                        )
+                    ],
+                    alignment: .leading,
+                    spacing: prominence.spacing
+                ) {
+                    ForEach(items) { item in
+                        CampaignFeedCard(
+                            item: item,
+                            prominence: prominence,
+                            onSetSteamId: presentSteamIdSheet(for:),
+                            onUploadCustomArtwork: presentCustomArtworkImporter(for:)
+                        )
+                    }
+                }
                 .padding(.horizontal, 2)
                 .padding(.vertical, 6)
             }
