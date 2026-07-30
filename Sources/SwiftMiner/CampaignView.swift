@@ -378,6 +378,17 @@ struct DropsListView: View {
             return true
         }
 
+        // Completed is a history view. Once a campaign has completed during
+        // its current window, retain it here even when it has fallen outside
+        // the curated mining feed. This keeps the native and web dashboards
+        // consistent and lets people see every campaign their account has
+        // completed, not only games currently selected for mining.
+        if selectedFilters.contains(.completed),
+           !campaign.isExpired(now: now),
+           (campaign.combinedProgressFraction >= 0.995 || campaign.isCompleted) {
+            return true
+        }
+
         if DropsCampaignFilterRules.preservesCampaignOutsideCuratedFeed(
             campaign,
             selectedFilters: selectedFilters,
