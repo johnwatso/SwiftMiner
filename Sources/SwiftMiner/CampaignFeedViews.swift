@@ -12,6 +12,7 @@ enum CampaignFeedSection: String {
 enum CampaignRailLayout {
     case horizontal
     case staggered
+    case grid
 }
 
 enum CampaignCardProminence {

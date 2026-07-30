@@ -229,7 +229,7 @@ final class CampaignStateTests: XCTestCase {
         XCTAssertEqual(campaign.relevance, CampaignRelevance.recent)
     }
 
-    func testMergePreservesCompletedCachedCampaignOnlyWhenMissingFromTwitch() {
+    func testMergePreservesCachedDropsForEndedFreshShell() {
         let cachedDrop = Drop(
             id: "d1",
             name: "Cached Reward",
@@ -258,10 +258,10 @@ final class CampaignStateTests: XCTestCase {
             isAccountConnected: true
         )
 
-        let freshWins = CampaignMergeEngine.merge(fresh: [freshShell], cached: [cached], inventory: nil)
+        let endedCampaignKeepsCachedArtwork = CampaignMergeEngine.merge(fresh: [freshShell], cached: [cached], inventory: nil)
 
-        XCTAssertEqual(freshWins.count, 1)
-        XCTAssertTrue(freshWins.first?.drops.isEmpty == true)
+        XCTAssertEqual(endedCampaignKeepsCachedArtwork.count, 1)
+        XCTAssertEqual(endedCampaignKeepsCachedArtwork.first?.drops.map(\.name), ["Cached Reward"])
 
         let otherFreshCampaign = Campaign(
             id: "c2",
