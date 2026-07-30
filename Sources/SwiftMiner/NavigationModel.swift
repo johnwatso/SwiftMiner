@@ -670,10 +670,6 @@ public final class NavigationModel {
 
         await wireDMActivityLogging()
 
-        if !SwiftMinerRuntime.isRunningTests {
-            await startSwiftMinerHTTPServerIfNeeded()
-        }
-
         if !SwiftMinerRuntime.isRunningTests, Settings.shared.swiftBotEnabled {
             await checkSwiftBotConnection()
             await eventOutboxService.updateConfig(
@@ -872,7 +868,18 @@ public final class NavigationModel {
                 settings.priorityGames(forAccountId: miner.accountId)
             }
         )
+
+        // Mirror saved identities before serving the dashboard. This also makes
+        // a Discord operator's role available with the first web request.
         await syncMinersToSQLite()
+
+        // The dashboard's startup avatar warm-up needs the persisted accounts
+        // that `minerManager.setup` has just loaded. Starting it before this
+        // point works only when a prior run happened to leave an avatar cache,
+        // which made Release builds show the Twitch placeholder on first load.
+        if !SwiftMinerRuntime.isRunningTests {
+            await startSwiftMinerHTTPServerIfNeeded()
+        }
         preloadDropsTab()
     }
 
