@@ -24,6 +24,25 @@ public enum CampaignMergeEngine {
         
         var merged = fresh
         let freshIds = Set(fresh.map { $0.id })
+
+        // ViewerDropsDashboard deliberately contains no time-based drop details.
+        // While a campaign is active, Twitch follows it with a details lookup. Once
+        // it ends, that lookup is not made and the fresh record becomes an empty
+        // shell. Preserve the cached reward metadata so Ended can still show the
+        // drop artwork. It lives in the normal per-account campaign cache and is
+        // therefore removed along with the campaign by the usual retention cleanup.
+        let cachedByID = Dictionary(cached.map { ($0.id, $0) }, uniquingKeysWith: {
+            $0.drops.count >= $1.drops.count ? $0 : $1
+        })
+        merged = fresh.map { freshCampaign in
+            guard let cachedCampaign = cachedByID[freshCampaign.id] else {
+                return freshCampaign
+            }
+            return preserveCachedDropsIfNeeded(
+                forEndedCampaign: freshCampaign,
+                cached: cachedCampaign
+            )
+        }
         
         // Preserve campaigns NOT in the fresh response if they meet preservation rules.
         for cachedCampaign in cached {
@@ -38,6 +57,33 @@ public enum CampaignMergeEngine {
         }
         
         return merged
+    }
+
+    private static func preserveCachedDropsIfNeeded(
+        forEndedCampaign fresh: Campaign,
+        cached: Campaign
+    ) -> Campaign {
+        guard fresh.endDate <= Date(),
+              fresh.drops.isEmpty,
+              !cached.drops.isEmpty
+        else {
+            return fresh
+        }
+
+        Logger.campaigns.info("Preserving \(cached.drops.count) cached reward(s) for ended campaign: \(fresh.name)")
+        return Campaign(
+            id: fresh.id,
+            name: fresh.name,
+            game: fresh.game,
+            status: fresh.status,
+            startDate: fresh.startDate,
+            endDate: fresh.endDate,
+            drops: cached.drops,
+            channels: fresh.channels,
+            isAccountConnected: fresh.isAccountConnected,
+            allowIsEnabled: fresh.allowIsEnabled,
+            isPrioritised: fresh.isPrioritised
+        )
     }
     
     /// Determines if a campaign missing from the fresh API response should be preserved.

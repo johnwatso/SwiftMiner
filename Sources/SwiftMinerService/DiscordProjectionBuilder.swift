@@ -122,7 +122,7 @@ public actor DiscordProjectionBuilder {
             } else {
                 activeCampaign = await stateProvider.activeCampaign(for: discordUserId)
             }
-            recentCompletedCampaigns = await stateProvider.recentCompletedCampaigns(forTwitchAccount: account.twitchAccountId, limit: 3)
+            recentCompletedCampaigns = await stateProvider.recentCompletedCampaigns(forTwitchAccount: account.twitchAccountId, limit: .max)
             dropsClaimedThisWeek = await manager.fetchClaimsCount(twitchId: account.twitchAccountId, withinDays: 7)
             if let accountState = await stateProvider.projectionState(forTwitchAccount: account.twitchAccountId) {
                 providerState = accountState
@@ -137,7 +137,7 @@ public actor DiscordProjectionBuilder {
             diagnostics = await stateProvider.diagnostics(forTwitchAccount: account.twitchAccountId)
         } else {
             activeCampaign = await stateProvider.activeCampaign(for: discordUserId)
-            recentCompletedCampaigns = await stateProvider.recentCompletedCampaigns(for: discordUserId, limit: 3)
+            recentCompletedCampaigns = await stateProvider.recentCompletedCampaigns(for: discordUserId, limit: .max)
             dropsClaimedThisWeek = 0
             providerState = await stateProvider.projectionState(for: discordUserId)
             priorityGames = await stateProvider.priorityGames(for: discordUserId)
@@ -201,7 +201,7 @@ public actor DiscordProjectionBuilder {
         let dmState = ownerDiscordId != nil ? await fetchDMState(discordUserId: ownerDiscordId!) : DiscordDMState()
 
         let activeCampaign = await stateProvider.activeCampaign(forTwitchAccount: twitchId)
-        let recentCompletedCampaigns = await stateProvider.recentCompletedCampaigns(forTwitchAccount: twitchId, limit: 3)
+        let recentCompletedCampaigns = await stateProvider.recentCompletedCampaigns(forTwitchAccount: twitchId, limit: .max)
         let dropsClaimedThisWeek = await manager.fetchClaimsCount(twitchId: twitchId, withinDays: 7)
         let priorityGames = await stateProvider.priorityGames(forTwitchAccount: twitchId)
         let priorityGameArtwork = await stateProvider.priorityGameArtwork(forTwitchAccount: twitchId)

@@ -181,7 +181,7 @@ final class WebDashboardSecurityTests: XCTestCase {
         XCTAssertTrue(WebDashboardAssets.appJS.contains("CAMPAIGNS.filter(c => !c.requiresSubscription)"))
         XCTAssertTrue(WebDashboardAssets.appJS.contains("CAMPAIGNS.filter(c => c.requiresSubscription)"))
         XCTAssertTrue(WebDashboardAssets.appJS.contains("Paid Twitch sub required"))
-        XCTAssertTrue(WebDashboardAssets.appJS.contains("subscriptionRequiredCard() + upNextCard(p)"))
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("${subscriptionRequiredCard()}${upNextCard(p)}"))
     }
 
     func testDashboardUsesPrioritySourcePickerForMultipleMiners() {
@@ -197,6 +197,7 @@ final class WebDashboardSecurityTests: XCTestCase {
     func testIdleDashboardUsesUpToDateStateInsteadOfAnEmptyProgressBar() {
         XCTAssertTrue(WebDashboardAssets.appJS.contains("class=\"up-to-date-state\""))
         XCTAssertTrue(WebDashboardAssets.appJS.contains("Up to Date"))
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("if (p.state === 'idle') return '';"))
         XCTAssertFalse(WebDashboardAssets.appJS.contains("Idle - no campaigns"))
     }
 
@@ -208,6 +209,20 @@ final class WebDashboardSecurityTests: XCTestCase {
         XCTAssertTrue(WebDashboardAssets.appJS.contains("View Global Priorities"))
         XCTAssertTrue(WebDashboardAssets.appJS.contains("function globalPrioritiesModal(p)"))
         XCTAssertTrue(WebDashboardAssets.appJS.contains("aria-modal=\"true\""))
+    }
+
+    func testDashboardElevatesTwitchIdentityAndGroupsCompletedDrops() {
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("function minerIdentity(p)"))
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("class=\"miner-avatar\""))
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("Completed Drops"))
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("dropsThisWeek === 1 ? 'drop' : 'drops'"))
+        XCTAssertFalse(WebDashboardAssets.appJS.contains("Drops Claimed This Week"))
+    }
+
+    func testOperatorOverviewUsesTwitchAvatarWithoutRepeatingStatus() {
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("operator-miner-avatar"))
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("referrerpolicy=\"no-referrer\""))
+        XCTAssertFalse(WebDashboardAssets.appJS.contains("${esc(cfg.headline)}${watchingHTML}"))
     }
 
     func testLocalLoginPageShowsOnlyUsernamePasswordForm() async throws {
