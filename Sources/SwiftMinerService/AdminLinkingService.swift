@@ -370,23 +370,26 @@ public actor SQLiteAdminLinkingService: AdminLinkingService {
         }
     }
 
-    public func upsertAccountIdentity(twitchId: String, username: String) async {
+    public func upsertAccountIdentity(twitchId: String, username: String, isOperator: Bool) async {
         do {
             try await manager.execute { db in
                 // Provide empty-string placeholders for required columns so the INSERT satisfies
-                // NOT NULL constraints. ON CONFLICT only refreshes the username; tokens and
-                // owner_discord_id are left untouched if the row already exists.
+                // NOT NULL constraints. ON CONFLICT refreshes the native identity and
+                // operator designation; tokens and owner_discord_id stay untouched.
                 let sql = """
                 INSERT INTO twitch_accounts
-                    (twitch_id, username, access_token, refresh_token, token_expiry, scopes, link_state)
-                VALUES (?, ?, '', '', datetime('now'), '', 'unowned')
-                ON CONFLICT(twitch_id) DO UPDATE SET username = excluded.username;
+                    (twitch_id, username, access_token, refresh_token, token_expiry, scopes, link_state, is_operator)
+                VALUES (?, ?, '', '', datetime('now'), '', 'unowned', ?)
+                ON CONFLICT(twitch_id) DO UPDATE SET
+                    username = excluded.username,
+                    is_operator = excluded.is_operator;
                 """
                 var stmt: OpaquePointer?
                 guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
                 defer { sqlite3_finalize(stmt) }
                 sqlite3_bind_text(stmt, 1, twitchId, -1, SQLITE_TRANSIENT)
                 sqlite3_bind_text(stmt, 2, username, -1, SQLITE_TRANSIENT)
+                sqlite3_bind_int(stmt, 3, isOperator ? 1 : 0)
                 sqlite3_step(stmt)
             }
         } catch {}

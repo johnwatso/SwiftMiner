@@ -140,14 +140,13 @@ public final class NavigationModel {
         let endpoint = Settings.shared.swiftMinerAPIEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
         let port = URL(string: endpoint)?.port.flatMap { UInt16(exactly: $0) } ?? 8080
 
-        // The WebUI can draw a miner's custom Twitch picture immediately after
-        // startup, even if the native Miners screen has not been opened yet.
-        Task {
-            await TwitchAvatarStore.shared.refreshIfNeeded(
-                miners: minerManager.miners,
-                manager: minerManager
-            )
-        }
+        // Populate the WebUI's avatar data before registering its routes. This
+        // avoids serving the first authenticated projection with the Twitch
+        // glyph while the asynchronous profile-image lookup is still running.
+        await TwitchAvatarStore.shared.refreshIfNeeded(
+            miners: minerManager.miners,
+            manager: minerManager
+        )
 
         let projectionBuilder = DiscordProjectionBuilder(
             manager: sqliteManager,
@@ -523,9 +522,10 @@ public final class NavigationModel {
         // Public URL is optional; bare hostnames are treated as https.
         let baseURL = Settings.normalizedWebDashboardURL(from: s.webDashboardBaseURL)
 
-        // Discord identity is SwiftBot's job; the web dashboard offers Twitch + local only.
+        // Provider switches let the operator turn either public OAuth flow off
+        // without deleting its credentials or SwiftBot pairing details.
         var twitch: WebProviderCredentials?
-        if s.webDashboardTwitchConfigured {
+        if s.webDashboardOAuthConfigured {
             twitch = WebProviderCredentials(clientID: clean(s.webDashboardTwitchClientID),
                                             clientSecret: clean(s.webDashboardTwitchClientSecret))
         }
@@ -540,7 +540,7 @@ public final class NavigationModel {
         var swiftBotSSO: WebSwiftBotSSO?
         let botHost = clean(s.webDashboardSwiftBotHostname).lowercased()
         let pairingSecret = clean(s.swiftBotHmacSecret)
-        if s.swiftBotEnabled, !botHost.isEmpty, !pairingSecret.isEmpty {
+        if s.webDashboardDiscordOAuthConfigured, !botHost.isEmpty, !pairingSecret.isEmpty {
             swiftBotSSO = WebSwiftBotSSO(origin: "https://\(botHost)", hmacSecret: pairingSecret)
         }
 
@@ -552,7 +552,11 @@ public final class NavigationModel {
     /// Only touches twitch_id and username — never overwrites owner_discord_id or tokens.
     func syncMinersToSQLite() async {
         for miner in minerManager.miners {
-            await adminLinkingService.upsertAccountIdentity(twitchId: miner.accountId, username: miner.username)
+            await adminLinkingService.upsertAccountIdentity(
+                twitchId: miner.accountId,
+                username: miner.username,
+                isOperator: miner.isOperator
+            )
         }
     }
 

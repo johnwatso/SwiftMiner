@@ -619,6 +619,40 @@ final class WebDashboardSecurityTests: XCTestCase {
         XCTAssertEqual(body["error"] as? String, "miner_not_found")
     }
 
+    func testDiscordOperatorSessionReceivesOperatorOverview() async throws {
+        let mgr = try await openTempManager()
+        defer { Task { await mgr.close() } }
+        let discordId = "123456789012345678"
+        try await mgr.execute("""
+        INSERT INTO miner_users (discord_id, status) VALUES ('\(discordId)', 'registered');
+        INSERT INTO twitch_accounts (
+            twitch_id, owner_discord_id, username, access_token, refresh_token, token_expiry, scopes, link_state, is_operator
+        ) VALUES (
+            'operator-twitch', '\(discordId)', 'Operator', 'access', 'refresh', '2099-01-01T00:00:00Z', '', 'linked', 1
+        );
+        """)
+        try await mgr.createWebSession(
+            id: "discord-operator-session",
+            principalType: WebProvider.discord.rawValue,
+            principalId: discordId,
+            csrfToken: "csrf",
+            createdAt: Date().timeIntervalSince1970,
+            expiresAt: Date().addingTimeInterval(60).timeIntervalSince1970
+        )
+        let router = try await configuredWebRouter(manager: mgr)
+
+        let response = await router.handle(HTTPRequest(
+            method: "GET",
+            path: "/me/projection",
+            headers: ["host": "swiftminer.example.com", "cookie": "\(WebDashboardConfig.sessionCookieName)=discord-operator-session"],
+            body: Data()
+        ))
+
+        XCTAssertEqual(response.statusCode, 200)
+        let payload = try decodeJSON(response.body)
+        XCTAssertNotNil(payload["miners"] as? [[String: Any]])
+    }
+
     func testDirectDiscordOAuthIsRejectedBecauseServerMembershipIsUnverified() async throws {
         let mgr = try await openTempManager()
         defer { Task { await mgr.close() } }

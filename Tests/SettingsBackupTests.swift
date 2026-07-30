@@ -45,6 +45,16 @@ final class SettingsBackupTests: XCTestCase {
         XCTAssertEqual(settings.swiftBotEndpoint, "http://127.0.0.1:9000")
     }
 
+    func testWebDashboardOAuthProviderSwitchesResetToEnabled() {
+        settings.webDashboardTwitchOAuthEnabled = false
+        settings.webDashboardDiscordOAuthEnabled = false
+
+        settings.resetToDefaults()
+
+        XCTAssertTrue(settings.webDashboardTwitchOAuthEnabled)
+        XCTAssertTrue(settings.webDashboardDiscordOAuthEnabled)
+    }
+
     private func date(hour: Int) -> Date {
         Calendar.current.date(from: DateComponents(year: 2026, month: 5, day: 24, hour: hour))!
     }

@@ -271,31 +271,39 @@ struct WebDashboardSettingsView: View {
         .onChange(of: settings.webDashboardSubdomain) { _, _ in syncComposedBaseURL() }
 
         Section {
-            if settings.webDashboardTwitchConfigured {
-                HStack {
-                    Label("Twitch sign-in configured", systemImage: "checkmark.circle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.green)
-                    Spacer()
+            Toggle("Allow Twitch OAuth sign-in", isOn: $settings.webDashboardTwitchOAuthEnabled)
+
+            if settings.webDashboardTwitchOAuthEnabled {
+                if settings.webDashboardTwitchConfigured {
+                    HStack {
+                        Label("Twitch sign-in configured", systemImage: "checkmark.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.green)
+                        Spacer()
+                        Button {
+                            openTwitchOAuthSetup()
+                        } label: {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                                .font(.system(size: 12, weight: .medium))
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Replace Twitch OAuth details")
+                        .accessibilityLabel("Replace Twitch OAuth details")
+                    }
+                } else {
                     Button {
                         openTwitchOAuthSetup()
                     } label: {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                            .font(.system(size: 12, weight: .medium))
+                        Label("Set Up Twitch OAuth", systemImage: "key.fill")
                     }
-                    .buttonStyle(.borderless)
-                    .help("Replace Twitch OAuth details")
-                    .accessibilityLabel("Replace Twitch OAuth details")
+                    Label("Twitch sign-in is not configured yet.", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
                 }
             } else {
-                Button {
-                    openTwitchOAuthSetup()
-                } label: {
-                    Label("Set Up Twitch OAuth", systemImage: "key.fill")
-                }
-                Label("Twitch sign-in is not configured yet.", systemImage: "exclamationmark.triangle.fill")
+                Label("Twitch OAuth is off. Saved details will be kept.", systemImage: "pause.circle.fill")
                     .font(.caption)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(.secondary)
             }
             SettingsSecondaryText("From your Twitch application (dev.twitch.tv/console → register an app with the redirect URL below). Enables “Sign in with Twitch”, letting users reach their own miner over the web.")
         } header: {
@@ -304,6 +312,34 @@ struct WebDashboardSettingsView: View {
                     .frame(width: 13, height: 14)
                     .accessibilityHidden(true)
                 Text("Twitch Sign-In")
+            }
+        }
+
+        Section {
+            Toggle("Allow Discord OAuth sign-in", isOn: $settings.webDashboardDiscordOAuthEnabled)
+
+            if settings.webDashboardDiscordOAuthEnabled {
+                if settings.webDashboardDiscordOAuthConfigured {
+                    Label("Discord sign-in is available through SwiftBot", systemImage: "checkmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                } else {
+                    Label("Pair SwiftBot and finish Internet Access setup to use Discord sign-in.", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+            } else {
+                Label("Discord OAuth is off.", systemImage: "pause.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            SettingsSecondaryText("Discord OAuth is completed by your paired SwiftBot, which verifies server membership before returning to the dashboard. No Discord application credentials are stored in SwiftMiner.")
+        } header: {
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark.message.fill")
+                    .foregroundStyle(.indigo)
+                    .accessibilityHidden(true)
+                Text("Discord Sign-In")
             }
         }
 
