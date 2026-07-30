@@ -88,9 +88,9 @@ public protocol AdminLinkingService: Sendable {
     /// Remove the Discord owner from a Twitch account.
     func unlinkAccount(twitchAccountId: String, operatorIdentity: OperatorIdentity) async -> AdminUnlinkResult
 
-    /// Ensure a Twitch account row exists in the DB. Only creates/updates identity columns;
-    /// never overwrites owner_discord_id or token data.
-    func upsertAccountIdentity(twitchId: String, username: String) async
+    /// Ensure a Twitch account row exists in the DB. Keeps the native operator
+    /// designation in sync without overwriting owner_discord_id or token data.
+    func upsertAccountIdentity(twitchId: String, username: String, isOperator: Bool) async
 
     /// Delete a Twitch account row entirely from the DB. Used when the user removes
     /// the account locally so re-adding starts with a clean slate.

@@ -536,7 +536,7 @@ public actor DiscordAPIRoutes {
     private func handleActivationSuccess(sessionId: String, account: Account, discordUserId: String) async {
         // Make sure the row exists in twitch_accounts (the auth service persisted to the
         // token store, but assignAccount queries SQLite).
-        await adminLinkingService.upsertAccountIdentity(twitchId: account.id, username: account.username)
+        await adminLinkingService.upsertAccountIdentity(twitchId: account.id, username: account.username, isOperator: false)
         let assignment = AdminAccountAssignment(
             twitchAccountId: account.id,
             discordId: discordUserId,

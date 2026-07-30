@@ -983,8 +983,35 @@ public final class Settings {
         }
     }
 
-    // Discord identity is handled by SwiftBot (DMs/linking), so the web
-    // dashboard intentionally offers only Twitch and local sign-in.
+    /// Whether users may sign in to the web dashboard with Twitch OAuth.
+    /// Credentials stay saved when this is off, so the provider can be
+    /// temporarily disabled without reconfiguring the Twitch application.
+    public var webDashboardTwitchOAuthEnabled: Bool {
+        get {
+            access(keyPath: \.webDashboardTwitchOAuthEnabled)
+            return Self.read("webDashboardTwitchOAuthEnabled", default: true)
+        }
+        set {
+            withMutation(keyPath: \.webDashboardTwitchOAuthEnabled) {
+                Self.write("webDashboardTwitchOAuthEnabled", newValue)
+            }
+        }
+    }
+
+    /// Whether users may sign in to the web dashboard with Discord OAuth.
+    /// Discord OAuth is completed by a paired SwiftBot, which also verifies
+    /// server membership before it returns an identity assertion.
+    public var webDashboardDiscordOAuthEnabled: Bool {
+        get {
+            access(keyPath: \.webDashboardDiscordOAuthEnabled)
+            return Self.read("webDashboardDiscordOAuthEnabled", default: true)
+        }
+        set {
+            withMutation(keyPath: \.webDashboardDiscordOAuthEnabled) {
+                Self.write("webDashboardDiscordOAuthEnabled", newValue)
+            }
+        }
+    }
 
     /// Twitch OAuth application client ID used for web sign-in
     public var webDashboardTwitchClientID: String {
@@ -1108,7 +1135,7 @@ public final class Settings {
 
     /// Whether Twitch OAuth sign-in is fully configured (needs the public URL).
     public var webDashboardOAuthConfigured: Bool {
-        !isBlank(webDashboardBaseURL) && webDashboardTwitchConfigured
+        webDashboardTwitchOAuthEnabled && !isBlank(webDashboardBaseURL) && webDashboardTwitchConfigured
     }
 
     public var webDashboardSwiftBotSSOConfigured: Bool {
@@ -1117,11 +1144,16 @@ public final class Settings {
             && !isBlank(webDashboardSwiftBotHostname)
     }
 
+    /// Whether Discord OAuth can be offered by the paired SwiftBot.
+    public var webDashboardDiscordOAuthConfigured: Bool {
+        webDashboardDiscordOAuthEnabled && webDashboardSwiftBotSSOConfigured
+    }
+
     /// Whether the dashboard is usable: enabled, and at least one sign-in method
     /// available — local username/password, Twitch OAuth, or Discord via SwiftBot.
     public var webDashboardConfigured: Bool {
         webDashboardEnabled
-            && (webDashboardLocalConfigured || webDashboardOAuthConfigured || webDashboardSwiftBotSSOConfigured)
+            && (webDashboardLocalConfigured || webDashboardOAuthConfigured || webDashboardDiscordOAuthConfigured)
     }
 
     // MARK: - Discord DM Notification Preferences
@@ -2218,6 +2250,8 @@ public final class Settings {
         swiftBotHmacSecret = ""
         swiftMinerAPIKey = ""
         webDashboardLocalEnabled = true
+        webDashboardTwitchOAuthEnabled = true
+        webDashboardDiscordOAuthEnabled = true
         webDashboardLocalUsername = "admin"
         webDashboardLocalPasswordHash = ""
         deleteWebDashboardLocalPassword(username: previousLocalUsername)
