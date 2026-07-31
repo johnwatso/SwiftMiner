@@ -143,6 +143,7 @@ public final class NavigationModel {
         // Populate the WebUI's avatar data before registering its routes. This
         // avoids serving the first authenticated projection with the Twitch
         // glyph while the asynchronous profile-image lookup is still running.
+        await refreshDiscordDisplayNames()
         await TwitchAvatarStore.shared.refreshIfNeeded(
             miners: minerManager.miners,
             manager: minerManager
@@ -154,6 +155,11 @@ public final class NavigationModel {
             twitchProfileImageURL: { accountId in
                 await MainActor.run {
                     TwitchAvatarStore.shared.url(forAccountId: accountId)
+                }
+            },
+            discordProfileImageURL: { [weak self] discordUserId in
+                await MainActor.run {
+                    self?.discordUsersById[discordUserId]?.avatarURL
                 }
             }
         )
