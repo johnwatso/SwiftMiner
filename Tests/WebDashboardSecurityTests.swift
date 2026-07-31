@@ -219,9 +219,10 @@ final class WebDashboardSecurityTests: XCTestCase {
         XCTAssertFalse(WebDashboardAssets.appJS.contains("Drops Claimed This Week"))
     }
 
-    func testOperatorOverviewUsesTwitchAvatarWithoutRepeatingStatus() {
+    func testOperatorOverviewUsesDiscordAvatarWhenTwitchHasNoCustomPicture() {
         XCTAssertTrue(WebDashboardAssets.appJS.contains("operator-miner-avatar"))
         XCTAssertTrue(WebDashboardAssets.appJS.contains("referrerpolicy=\"no-referrer\""))
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("[acc.profileImageURL, acc.discordProfileImageURL]"))
         XCTAssertFalse(WebDashboardAssets.appJS.contains("${esc(cfg.headline)}${watchingHTML}"))
     }
 
