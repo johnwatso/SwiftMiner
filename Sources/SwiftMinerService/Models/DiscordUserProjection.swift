@@ -75,11 +75,20 @@ public struct DiscordUserProjection: Codable, Sendable {
         /// Twitch placeholder is deliberately omitted so clients can use their
         /// own fallback artwork.
         public let profileImageURL: URL?
+        /// The linked Discord user's profile picture. Web clients use this when
+        /// Twitch has no custom picture of its own.
+        public let discordProfileImageURL: URL?
 
-        public init(twitchAccountId: String, username: String, profileImageURL: URL? = nil) {
+        public init(
+            twitchAccountId: String,
+            username: String,
+            profileImageURL: URL? = nil,
+            discordProfileImageURL: URL? = nil
+        ) {
             self.twitchAccountId = twitchAccountId
             self.username = username
             self.profileImageURL = profileImageURL
+            self.discordProfileImageURL = discordProfileImageURL
         }
     }
 

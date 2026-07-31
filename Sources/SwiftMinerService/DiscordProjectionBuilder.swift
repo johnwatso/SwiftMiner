@@ -85,15 +85,20 @@ public actor DiscordProjectionBuilder {
     /// The app supplies its authenticated, cached Twitch profile URLs. Keeping
     /// this optional means the standalone service remains network-independent.
     private let twitchProfileImageURL: @Sendable (String) async -> URL?
+    /// The app supplies the cached Discord profile URL for a linked user. This
+    /// remains optional so the standalone service has no SwiftBot dependency.
+    private let discordProfileImageURL: @Sendable (String) async -> URL?
 
     public init(
         manager: SQLiteManager,
         stateProvider: ProjectionStateProvider = DefaultProjectionStateProvider(),
-        twitchProfileImageURL: @escaping @Sendable (String) async -> URL? = { _ in nil }
+        twitchProfileImageURL: @escaping @Sendable (String) async -> URL? = { _ in nil },
+        discordProfileImageURL: @escaping @Sendable (String) async -> URL? = { _ in nil }
     ) {
         self.manager = manager
         self.stateProvider = stateProvider
         self.twitchProfileImageURL = twitchProfileImageURL
+        self.discordProfileImageURL = discordProfileImageURL
     }
 
     /// Build a projection for the given Discord user ID.
@@ -191,10 +196,16 @@ public actor DiscordProjectionBuilder {
         let configuredMinerCount = await manager.allTwitchAccountIds().count
         let ownerDiscordId = acct.ownerDiscordId
 
+        let discordProfileURL: URL? = if let ownerDiscordId {
+            await discordProfileImageURL(ownerDiscordId)
+        } else {
+            nil
+        }
         let account = DiscordUserProjection.Account(
             twitchAccountId: twitchId,
             username: acct.username,
-            profileImageURL: await twitchProfileImageURL(twitchId)
+            profileImageURL: await twitchProfileImageURL(twitchId),
+            discordProfileImageURL: discordProfileURL
         )
         // Issues / DM state are Discord-keyed; only present if the account is linked.
         let issues = ownerDiscordId != nil ? await fetchIssues(discordUserId: ownerDiscordId!) : []
@@ -274,7 +285,8 @@ public actor DiscordProjectionBuilder {
             return DiscordUserProjection.Account(
                 twitchAccountId: record.twitchId,
                 username: record.username,
-                profileImageURL: await twitchProfileImageURL(record.twitchId)
+                profileImageURL: await twitchProfileImageURL(record.twitchId),
+                discordProfileImageURL: await discordProfileImageURL(discordUserId)
             )
         } catch {
             return nil

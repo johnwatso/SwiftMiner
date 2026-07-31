@@ -246,11 +246,15 @@ final class DiscordAPIRoutesTests: XCTestCase {
             }
         }
 
+        let expectedDiscordId = discordUserId
         let builder = DiscordProjectionBuilder(
             manager: harness.manager,
             stateProvider: LinkedTwitchProjectionStateProvider(),
             twitchProfileImageURL: { accountId in
                 accountId == twitchAccountId ? URL(string: "https://example.com/twitch-avatar.png") : nil
+            },
+            discordProfileImageURL: { discordId in
+                discordId == expectedDiscordId ? URL(string: "https://cdn.discordapp.com/avatars/123/avatar.png") : nil
             }
         )
 
@@ -262,6 +266,8 @@ final class DiscordAPIRoutesTests: XCTestCase {
         XCTAssertEqual(discordProjection.account?.twitchAccountId, twitchAccountId)
         XCTAssertEqual(discordProjection.account?.profileImageURL, URL(string: "https://example.com/twitch-avatar.png"))
         XCTAssertEqual(twitchProjection.account?.profileImageURL, URL(string: "https://example.com/twitch-avatar.png"))
+        XCTAssertEqual(discordProjection.account?.discordProfileImageURL, URL(string: "https://cdn.discordapp.com/avatars/123/avatar.png"))
+        XCTAssertEqual(twitchProjection.account?.discordProfileImageURL, URL(string: "https://cdn.discordapp.com/avatars/123/avatar.png"))
         XCTAssertEqual(discordProjection.state, twitchProjection.state)
         XCTAssertEqual(discordProjection.activeCampaign?.campaignId, twitchProjection.activeCampaign?.campaignId)
         XCTAssertEqual(discordProjection.activeCampaign?.game, "Linked Twitch Game")
