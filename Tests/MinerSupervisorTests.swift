@@ -18,6 +18,15 @@ final class MinerSupervisorTests: XCTestCase {
         XCTAssertTrue(MinerEngine.shouldReportFatalError(.authenticationFailed("Forbidden")))
     }
 
+    func testCompatibilityErrorsRemainFatalAndAreClassifiedAsTwitchAPIProblems() {
+        let error = TwitchMinerError.twitchAPICompatibility(
+            operation: "Inventory",
+            reason: "Twitch no longer recognises this persisted query."
+        )
+        XCTAssertTrue(MinerEngine.shouldReportFatalError(error))
+        XCTAssertEqual(MinerEngine.classifyIssue(error).0, .twitchAPIFailure)
+    }
+
     @MainActor
     func testRecoveryStagesHaveBoundedDeadlines() {
         XCTAssertEqual(MinerManager.recoveryTimeoutSeconds(for: .refresh), 90)

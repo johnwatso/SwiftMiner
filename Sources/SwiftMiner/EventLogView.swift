@@ -4,6 +4,7 @@ import SwiftMinerCore
 /// Dense, flat event log focused on chronological scanning.
 struct EventLogView: View {
     @Environment(NavigationModel.self) private var navigation
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var settings: Settings { .shared }
     @State private var searchText = ""
     @State private var selectedMinerFilterId = Self.allMinersFilterId
@@ -48,9 +49,7 @@ struct EventLogView: View {
             } else {
                 eventList(
                     page,
-                    minerNamesByID: minerNames,
-                    showIcons: settings.showActivityLogIcons,
-                    animateRows: settings.animateActivityLogRows
+                    minerNamesByID: minerNames
                 )
             }
         }
@@ -94,9 +93,7 @@ struct EventLogView: View {
 
     private func eventList(
         _ page: ActivityLogPage,
-        minerNamesByID: [String: String],
-        showIcons: Bool,
-        animateRows: Bool
+        minerNamesByID: [String: String]
     ) -> some View {
         List {
             ForEach(page.entries) { event in
@@ -105,8 +102,7 @@ struct EventLogView: View {
                     event: event,
                     minerName: event.minerId.flatMap { minerNamesByID[$0] },
                     isNew: isNew,
-                    showIcon: showIcons,
-                    animateAppearance: animateRows
+                    animateAppearance: !reduceMotion
                 )
                 .listRowInsets(EdgeInsets(top: 3, leading: 12, bottom: 3, trailing: 12))
                 .listRowSeparator(.visible, edges: .bottom)
@@ -448,7 +444,6 @@ private struct EventLogRow: View {
     let event: EventEntry
     let minerName: String?
     let isNew: Bool
-    let showIcon: Bool
     let animateAppearance: Bool
     @State private var appeared = false
 
@@ -503,15 +498,11 @@ private struct EventLogRow: View {
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(stall.color)
                     .frame(width: 16, alignment: .center)
-            } else if showIcon {
+            } else {
                 Image(systemName: eventFilter.symbol)
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(eventColor)
                     .frame(width: 16, alignment: .center)
-            } else {
-                Circle()
-                    .fill(eventColor)
-                    .frame(width: 7, height: 7)
             }
 
             VStack(alignment: .leading, spacing: 1) {

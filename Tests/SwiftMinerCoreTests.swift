@@ -117,6 +117,17 @@ final class SwiftMinerCoreTests: XCTestCase {
         )
     }
 
+    func testDropsDashboardHashesMatchCurrentTwitchQueries() {
+        XCTAssertEqual(
+            GQLHashes.viewerDropsDashboard,
+            "d9cae7761dafab85908c85e6683cb4201b449e66ac3bb5e894f15ff12aeafaa7"
+        )
+        XCTAssertEqual(
+            GQLHashes.inventory,
+            "8337eb8541b314040b0edde0c09c5c7a2783ba1960aa9edfbf3bac16d0fec404"
+        )
+    }
+
     func testPubSubTopicsAreSplitIntoBoundedBatches() {
         let topics = (0..<45).map { "topic.\($0)" }
         let batches = PubSubClient.topicBatches(topics)

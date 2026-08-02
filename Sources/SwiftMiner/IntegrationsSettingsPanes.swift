@@ -2,7 +2,6 @@
 import SwiftUI
 import SwiftMinerCore
 import SwiftMinerService
-import TipKit
 import AppKit
 import UniformTypeIdentifiers
 
@@ -31,6 +30,23 @@ struct WebDashboardSettingsView: View {
     /// the cases where letting friends self-serve actually matters.
     private var internetEligible: Bool {
         settings.swiftBotEnabled || navigation.configuredMinerCount > 1
+    }
+
+    private var swiftBotIsConnected: Bool {
+        settings.swiftBotEnabled && navigation.swiftBotState == .connected
+    }
+
+    private var swiftBotUnavailableReason: String {
+        switch navigation.swiftBotState {
+        case .connected:
+            return "SwiftBot is connected"
+        case .disconnected:
+            return "SwiftBot is offline"
+        case .unpaired:
+            return "SwiftBot is reachable but not paired"
+        case .notConfigured:
+            return "SwiftBot has no valid endpoint"
+        }
     }
 
     var body: some View {
@@ -70,6 +86,11 @@ struct WebDashboardSettingsView: View {
         .sheet(isPresented: $showingLocalSetup) {
             localAccessSetupSheet
         }
+        .task(id: settings.swiftBotEnabled) {
+            guard settings.swiftBotEnabled else { return }
+            await navigation.checkSwiftBotConnection()
+            await loadSwiftBotTunnelInfo()
+        }
     }
 
     // MARK: - Local Access
@@ -82,10 +103,10 @@ struct WebDashboardSettingsView: View {
                 if settings.webDashboardLocalConfigured {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
-                            Label("Local sign-in configured", systemImage: "checkmark.circle.fill")
+                            Label("Local sign-in ready", systemImage: "checkmark.circle.fill")
                                 .font(.caption)
                                 .foregroundStyle(.green)
-                            Text(settings.webDashboardLocalUsername)
+                            Text("Sign in as \(settings.webDashboardLocalUsername)")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -102,25 +123,25 @@ struct WebDashboardSettingsView: View {
                         Button {
                             openLocalSetup()
                         } label: {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                                .font(.system(size: 12, weight: .medium))
+                            Label("Change Credentials", systemImage: "key.fill")
                         }
                         .buttonStyle(.borderless)
-                        .help("Change local sign-in details")
-                        .accessibilityLabel("Change local sign-in details")
+                        .controlSize(.small)
+                        .help("Change the local dashboard username or password")
+                        .accessibilityLabel("Change local dashboard credentials")
                     }
                 } else {
                     Button {
                         openLocalSetup()
                     } label: {
-                        Label("Set Up Local Sign-In", systemImage: "person.badge.key.fill")
+                        Label("Set Username and Password", systemImage: "person.badge.key.fill")
                     }
                     Label("Local sign-in is not configured yet.", systemImage: "exclamationmark.triangle.fill")
                         .font(.caption)
                         .foregroundStyle(.orange)
                 }
             }
-            SettingsSecondaryText("Sign in with a username and password from this machine or your local network. Never accepted over your public domain, so it stays off the internet. The operator view shows all miners.")
+            SettingsSecondaryText("These credentials sign you in from this Mac or your local network. They are never accepted on your public dashboard, so they stay off the internet. The operator view shows all miners.")
         } header: {
             Text("Local Access")
         }
@@ -136,31 +157,49 @@ struct WebDashboardSettingsView: View {
                     .font(.headline)
             }
 
-            SettingsSecondaryText("The operator account for local and LAN access. The password is saved in Keychain and is never accepted over your public domain.")
+            SettingsSecondaryText("Use these details at the local dashboard sign-in page. Your password stays in Keychain and is never accepted over your public dashboard.")
+            if settings.webDashboardLocalConfigured {
+                SettingsSecondaryText("Leave New password blank to keep your current password.")
+            }
 
-            Form {
-                TextField("Username", text: $draftLocalUsername)
-                    .textContentType(.username)
-                HStack {
-                    Group {
-                        if showLocalPassword {
-                            TextField(localPasswordPrompt, text: $draftLocalPassword)
-                        } else {
-                            SecureField(localPasswordPrompt, text: $draftLocalPassword)
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Username")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    TextField("Username", text: $draftLocalUsername)
+                        .textFieldStyle(.roundedBorder)
+                        .textContentType(.username)
+                }
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(settings.webDashboardLocalConfigured ? "New password (optional)" : "Password")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    HStack(spacing: 8) {
+                        Group {
+                            if showLocalPassword {
+                                TextField(localPasswordPrompt, text: $draftLocalPassword)
+                            } else {
+                                SecureField(localPasswordPrompt, text: $draftLocalPassword)
+                            }
                         }
+                        .textFieldStyle(.roundedBorder)
+                        .textContentType(.password)
+                        Button {
+                            showLocalPassword.toggle()
+                        } label: {
+                            Image(systemName: showLocalPassword ? "eye.slash" : "eye")
+                                .font(.system(size: 12))
+                        }
+                        .buttonStyle(.borderless)
+                        .help(showLocalPassword ? "Hide password" : "Show password")
+                        .accessibilityLabel(showLocalPassword ? "Hide password" : "Show password")
                     }
-                    .textContentType(.password)
-                    Button {
-                        showLocalPassword.toggle()
-                    } label: {
-                        Image(systemName: showLocalPassword ? "eye.slash" : "eye")
-                            .font(.system(size: 12))
-                    }
-                    .buttonStyle(.borderless)
-                    .help(showLocalPassword ? "Hide password" : "Show password")
                 }
             }
-            .formStyle(.grouped)
+            .padding(14)
+            .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: 12))
 
             if let localAccessErrorMessage {
                 Label(localAccessErrorMessage, systemImage: "exclamationmark.triangle.fill")
@@ -173,7 +212,7 @@ struct WebDashboardSettingsView: View {
                 Button("Cancel", role: .cancel) {
                     showingLocalSetup = false
                 }
-                Button("Save") {
+                Button(settings.webDashboardLocalConfigured ? "Save Changes" : "Save Credentials") {
                     saveLocalAccessDetails()
                 }
                 .keyboardShortcut(.defaultAction)
@@ -186,16 +225,22 @@ struct WebDashboardSettingsView: View {
 
     private var draftLocalIsValid: Bool {
         let usernameOK = !draftLocalUsername.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        return usernameOK && draftLocalPassword.count >= 6
+        let passwordOK = settings.webDashboardLocalConfigured
+            ? draftLocalPassword.isEmpty || draftLocalPassword.count >= 6
+            : draftLocalPassword.count >= 6
+        return usernameOK && passwordOK
     }
 
     private var localPasswordPrompt: String {
-        "Password (6+ characters)"
+        settings.webDashboardLocalConfigured
+            ? "New password (optional, 6+ characters)"
+            : "Password (6+ characters)"
     }
 
     private func openLocalSetup() {
         draftLocalUsername = settings.webDashboardLocalUsername
-        draftLocalPassword = settings.webDashboardLocalPassword() ?? ""
+        // Never show or require the saved password to make a small change.
+        draftLocalPassword = ""
         showLocalPassword = false
         localAccessErrorMessage = nil
         showingLocalSetup = true
@@ -204,9 +249,19 @@ struct WebDashboardSettingsView: View {
     private func saveLocalAccessDetails() {
         let username = draftLocalUsername.trimmingCharacters(in: .whitespacesAndNewlines)
         do {
-            try settings.saveWebDashboardLocalPassword(draftLocalPassword, username: username)
+            if draftLocalPassword.isEmpty {
+                if username != settings.webDashboardLocalUsername {
+                    guard let savedPassword = settings.webDashboardLocalPassword(), !savedPassword.isEmpty else {
+                        localAccessErrorMessage = "Enter a new password to change the username."
+                        return
+                    }
+                    try settings.saveWebDashboardLocalPassword(savedPassword, username: username)
+                }
+            } else {
+                try settings.saveWebDashboardLocalPassword(draftLocalPassword, username: username)
+                settings.webDashboardLocalPasswordHash = WebSecurity.hashLocalPassword(draftLocalPassword)
+            }
             settings.webDashboardLocalUsername = username
-            settings.webDashboardLocalPasswordHash = WebSecurity.hashLocalPassword(draftLocalPassword)
             draftLocalPassword = ""
             localAccessErrorMessage = nil
             showingLocalSetup = false
@@ -222,9 +277,16 @@ struct WebDashboardSettingsView: View {
             if let origin = webDashboardOrigin {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Label("Internet access configured", systemImage: "checkmark.circle.fill")
+                        Label(
+                            swiftBotIsConnected || !settings.swiftBotEnabled
+                                ? "Internet access configured"
+                                : "Internet access configured, but \(swiftBotUnavailableReason)",
+                            systemImage: swiftBotIsConnected || !settings.swiftBotEnabled
+                                ? "checkmark.circle.fill"
+                                : "exclamationmark.triangle.fill"
+                        )
                             .font(.caption)
-                            .foregroundStyle(.green)
+                            .foregroundStyle(swiftBotIsConnected || !settings.swiftBotEnabled ? .green : .orange)
                         // At-a-glance: just the domain in the UI font. The full
                         // copy-exact URL (mono) lives in the setup sheet.
                         Text(Settings.normalizedWebDashboardURL(from: settings.webDashboardBaseURL)?.host ?? origin)
@@ -239,10 +301,11 @@ struct WebDashboardSettingsView: View {
                     } label: {
                         Label("Open Webpage", systemImage: "safari")
                     }
-                    .buttonStyle(.borderless)
-                    .controlSize(.small)
-                    .help("Open web dashboard")
-                    .accessibilityLabel("Open web dashboard")
+                        .buttonStyle(.borderless)
+                        .controlSize(.small)
+                        .help("Open web dashboard")
+                        .accessibilityLabel("Open web dashboard")
+                        .disabled(settings.swiftBotEnabled && !swiftBotIsConnected)
                     Button {
                         showingInternetSetup = true
                     } label: {
@@ -319,10 +382,14 @@ struct WebDashboardSettingsView: View {
             Toggle("Allow Discord OAuth sign-in", isOn: $settings.webDashboardDiscordOAuthEnabled)
 
             if settings.webDashboardDiscordOAuthEnabled {
-                if settings.webDashboardDiscordOAuthConfigured {
+                if settings.webDashboardDiscordOAuthConfigured, swiftBotIsConnected {
                     Label("Discord sign-in is available through SwiftBot", systemImage: "checkmark.circle.fill")
                         .font(.caption)
                         .foregroundStyle(.green)
+                } else if settings.webDashboardDiscordOAuthConfigured {
+                    Label("Discord sign-in is unavailable — \(swiftBotUnavailableReason).", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
                 } else {
                     Label("Pair SwiftBot and finish Internet Access setup to use Discord sign-in.", systemImage: "exclamationmark.triangle.fill")
                         .font(.caption)
@@ -336,8 +403,8 @@ struct WebDashboardSettingsView: View {
             SettingsSecondaryText("Discord OAuth is completed by your paired SwiftBot, which verifies server membership before returning to the dashboard. No Discord application credentials are stored in SwiftMiner.")
         } header: {
             HStack(spacing: 6) {
-                Image(systemName: "checkmark.message.fill")
-                    .foregroundStyle(.indigo)
+                DiscordLogo()
+                    .frame(width: 15, height: 15)
                     .accessibilityHidden(true)
                 Text("Discord Sign-In")
             }
@@ -545,7 +612,7 @@ struct WebDashboardSettingsView: View {
     }
 
     private func loadSwiftBotTunnelInfo() async {
-        guard settings.swiftBotEnabled, !isFetchingTunnelInfo else { return }
+        guard settings.swiftBotEnabled, swiftBotIsConnected, !isFetchingTunnelInfo else { return }
         isFetchingTunnelInfo = true
         swiftBotTunnelInfo = await navigation.fetchSwiftBotTunnelInfo()
         isFetchingTunnelInfo = false
@@ -609,6 +676,26 @@ struct TwitchLogo: View {
     var body: some View {
         TwitchGlyphShape()
             .fill(color, style: FillStyle(eoFill: true))
+    }
+}
+
+/// Discord's official mark, packaged with the app as an SVG rather than
+/// approximated with an SF Symbol.
+struct DiscordLogo: View {
+    private static let officialMark = Bundle.main
+        .url(forResource: "DiscordMarkOfficial", withExtension: "svg")
+        .flatMap(NSImage.init(contentsOf:))
+
+    private let discordBlurple = Color(red: 0.345, green: 0.396, blue: 0.949)
+
+    var body: some View {
+        if let officialMark = Self.officialMark {
+            Image(nsImage: officialMark)
+                .resizable()
+                .renderingMode(.template)
+                .foregroundStyle(discordBlurple)
+                .scaledToFit()
+        }
     }
 }
 

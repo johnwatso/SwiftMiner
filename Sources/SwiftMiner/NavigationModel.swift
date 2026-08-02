@@ -303,7 +303,7 @@ public final class NavigationModel {
                         let s = Settings.shared
                         let host = s.webDashboardSwiftBotHostname.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
                         let secret = s.swiftBotHmacSecret.trimmingCharacters(in: .whitespacesAndNewlines)
-                        guard s.swiftBotEnabled, !host.isEmpty, !secret.isEmpty else { return nil }
+                        guard s.swiftBotEnabled, self.swiftBotState == .connected, !host.isEmpty, !secret.isEmpty else { return nil }
                         return WebSwiftBotSSO(origin: "https://\(host)", hmacSecret: secret)
                     }
                 },

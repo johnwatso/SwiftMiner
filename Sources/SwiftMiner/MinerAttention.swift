@@ -138,6 +138,15 @@ struct MinerAttentionIssue: Equatable {
             let latestError = events.first { event in
                 event.minerId == miner.id && event.level == .error
             }?.message
+            if let latestError,
+               latestError.localizedCaseInsensitiveContains("Twitch compatibility update required") {
+                return MinerAttentionIssue(
+                    title: "SwiftMiner needs a Twitch update",
+                    detail: latestError,
+                    recommendation: "Update SwiftMiner, then restart this miner.",
+                    action: .restart
+                )
+            }
             return MinerAttentionIssue(
                 title: "The mining worker stopped",
                 detail: latestError ?? "SwiftMiner stopped this worker after an unexpected mining error.",

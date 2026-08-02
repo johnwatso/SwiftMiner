@@ -1,7 +1,6 @@
 // Rows, sheets, banners, and chips supporting MinersOverviewView.
 import SwiftUI
 import SwiftMinerCore
-import TipKit
 
 struct MinerDiagnosticTimelineRow: View {
     let title: String
@@ -195,6 +194,7 @@ struct MinerStreamOverridePresentation: Identifiable {
 
 struct MinerSourceListRow: View {
     let miner: MinerManager.ManagedMiner
+    let avatarURL: URL?
     let compact: Bool
     let isSelected: Bool
     let onEditNickname: () -> Void
@@ -243,11 +243,15 @@ struct MinerSourceListRow: View {
         let snapshot = resolvedSnapshot
 
         return HStack(spacing: 9) {
-            Image(systemName: statusSymbol(for: snapshot))
-                .font(.system(size: 12, weight: .semibold))
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(snapshot.statusColor)
-                .frame(width: 18, height: 18)
+            CachedAvatarImage(url: avatarURL) {
+                Image(systemName: statusSymbol(for: snapshot))
+                    .font(.system(size: 12, weight: .semibold))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(snapshot.statusColor)
+            }
+            .frame(width: 28, height: 28)
+            .background(.quaternary, in: Circle())
+            .clipShape(Circle())
 
             VStack(alignment: .leading, spacing: compact ? 1 : 2) {
                 Text(miner.displayName)
@@ -598,7 +602,6 @@ struct EmptyMinersStateView: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
-            .minerTip(AddMinerTip())
         }
         .frame(maxWidth: .infinity, minHeight: 300)
         .padding(24)
@@ -648,16 +651,4 @@ struct RankedPriorityChip: View {
 #Preview {
     MinersOverviewView()
         .environment(NavigationModel(clientId: "preview"))
-}
-
-struct NicknameTipAttachment: ViewModifier {
-    let isFirstRow: Bool
-
-    func body(content: Content) -> some View {
-        if isFirstRow {
-            content.minerTip(NicknameMinerTip())
-        } else {
-            content
-        }
-    }
 }

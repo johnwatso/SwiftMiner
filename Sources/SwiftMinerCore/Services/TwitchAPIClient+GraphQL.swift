@@ -48,7 +48,10 @@ extension TwitchAPIClient {
 
         guard let responseData = json?["data"] as? [String: Any] else {
             await traceGQLDebug { "[TwitchAPIClient] fetchDropCampaigns: missing data object" }
-            return []
+            throw TwitchMinerError.twitchAPICompatibility(
+                operation: "ViewerDropsDashboard",
+                reason: "Twitch returned no data object."
+            )
         }
 
         // Twitch GQL response can have dropCampaigns either under currentUser or directly under root
@@ -58,7 +61,10 @@ extension TwitchAPIClient {
         guard let drops = drops else {
             let hasCurrentUser = currentUser != nil
             await traceGQLDebug { "[TwitchAPIClient] fetchDropCampaigns: unexpected shape — currentUser=\(hasCurrentUser), drops=nil" }
-            return []
+            throw TwitchMinerError.twitchAPICompatibility(
+                operation: "ViewerDropsDashboard",
+                reason: "The response no longer contains drop campaigns."
+            )
         }
 
         let dropsCount = drops.count
@@ -404,13 +410,19 @@ extension TwitchAPIClient {
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
 
         guard let responseData = json?["data"] as? [String: Any] else {
-            return ([], [])
+            throw TwitchMinerError.twitchAPICompatibility(
+                operation: "Inventory",
+                reason: "Twitch returned no data object."
+            )
         }
 
         guard let currentUser = responseData["currentUser"] as? [String: Any],
               let inventory = currentUser["inventory"] as? [String: Any] else {
             await traceGQLDebug { "[TwitchAPIClient] fetchInventory: missing currentUser/inventory" }
-            return ([], [])
+            throw TwitchMinerError.twitchAPICompatibility(
+                operation: "Inventory",
+                reason: "The response no longer contains the account inventory."
+            )
         }
 
         // Parse gameEventDrops — maps benefit ID → ClaimedBenefit.

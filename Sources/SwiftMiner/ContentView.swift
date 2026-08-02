@@ -1,7 +1,6 @@
 import SwiftUI
 import SwiftMinerCore
 import AppKit
-import TipKit
 import UniformTypeIdentifiers
 
 /// Root view — 2-column NavigationSplitView (Sidebar | Detail)
@@ -574,7 +573,6 @@ struct OverviewView: View {
                     Label("Add Prioritised Game", systemImage: "plus")
                 }
                 .buttonStyle(.borderedProminent)
-                .minerTip(PrioritiseGameTip())
             }
             .frame(maxWidth: .infinity, minHeight: 180)
         }
@@ -1246,14 +1244,14 @@ private struct MinerStatusLegendPopover: View {
             ),
             StatusEntry(
                 symbol: "calendar.badge.checkmark",
-                paletteColors: settings.coloredStatusIcons ? (.green, .red) : nil,
+                paletteColors: (.green, .red),
                 monoColor: .green,
                 title: "Up to Date",
                 description: "No drops left to earn right now. The miner is standing by."
             ),
             StatusEntry(
                 symbol: "clock.badge.exclamationmark",
-                paletteColors: settings.coloredStatusIcons ? (.red, Color(nsColor: .labelColor)) : nil,
+                paletteColors: (.red, Color(nsColor: .labelColor)),
                 monoColor: .yellow,
                 title: "No Recent Activity",
                 description: "Worker is running but hasn't reported a liveness signal yet."

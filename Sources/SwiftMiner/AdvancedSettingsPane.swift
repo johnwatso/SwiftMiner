@@ -2,7 +2,6 @@
 import SwiftUI
 import SwiftMinerCore
 import SwiftMinerService
-import TipKit
 import AppKit
 import UniformTypeIdentifiers
 
@@ -396,9 +395,6 @@ struct AdvancedSettingsView: View {
             Toggle("Bypass link requirement", isOn: $settings.debugBypassLinkRequirement)
             SettingsSecondaryText("Mines a random live channel for any time-active campaign, ignoring account linkage. Drops won't actually credit — for exercising the watch pipeline only.")
 
-            Toggle("Force Show Tips", isOn: .constant(false))
-                .disabled(true)
-            SettingsSecondaryText("Force Show ignores rules so every tip renders immediately. State resets on relaunch.")
         } header: {
             Text("Debug Testing")
         }

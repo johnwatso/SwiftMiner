@@ -1,8 +1,7 @@
-// General, Appearance, and Updates panes of the Settings window.
+// General and Updates panes of the Settings window.
 import SwiftUI
 import SwiftMinerCore
 import SwiftMinerService
-import TipKit
 import AppKit
 import UniformTypeIdentifiers
 
@@ -13,6 +12,13 @@ struct GeneralSettingsView: View {
     @EnvironmentObject private var updater: AppUpdater
     @Environment(NavigationModel.self) private var navigation
     @State private var loginItemSettings = LoginItemSettings()
+    @State private var artworkRefreshState: ArtworkRefreshState = .idle
+
+    private enum ArtworkRefreshState: Equatable {
+        case idle
+        case refreshing
+        case finished
+    }
 
     var body: some View {
         Form {
@@ -78,6 +84,8 @@ struct GeneralSettingsView: View {
                 Text("Notifications")
             }
 
+            artworkSettings
+            minerPictureSettings
         }
         .formStyle(.grouped)
         .padding(.horizontal, 24)
@@ -113,101 +121,54 @@ struct GeneralSettingsView: View {
         let date = Calendar.current.date(from: DateComponents(hour: hour, minute: 0)) ?? Date()
         return date.formatted(date: .omitted, time: .shortened)
     }
-}
 
-// MARK: - Appearance Settings
+    private var artworkSettings: some View {
+        Section {
+            Toggle("Use Steam artwork for game images", isOn: $settings.preferSteamArtwork)
+            SettingsSecondaryText("Falls back to Twitch artwork when a game is not found on Steam.")
 
-struct AppearanceSettingsView: View {
-    @Bindable var settings: Settings
-    @Environment(NavigationModel.self) private var navigation
-    @State private var artworkRefreshState: ArtworkRefreshState = .idle
+            LabeledContent("Cached Artwork") {
+                HStack(spacing: 8) {
+                    Button("Clear and Redownload") {
+                        Task { await refreshArtwork() }
+                    }
+                    .disabled(artworkRefreshState == .refreshing)
 
-    private enum ArtworkRefreshState: Equatable {
-        case idle
-        case refreshing
-        case finished
-    }
-
-    var body: some View {
-        Form {
-            Section {
-                Toggle("Use Steam artwork for game images", isOn: $settings.preferSteamArtwork)
-                    .minerTip(SteamArtworkTip())
-                SettingsSecondaryText("Falls back to Twitch artwork when a game is not found on Steam.")
-
-                LabeledContent("Cached Artwork") {
-                    HStack(spacing: 8) {
-                        Button("Clear and Redownload") {
-                            Task { await refreshArtwork() }
-                        }
-                        .disabled(artworkRefreshState == .refreshing)
-
-                        switch artworkRefreshState {
-                        case .refreshing:
-                            ProgressView()
-                                .controlSize(.small)
-                                .accessibilityLabel("Redownloading artwork")
-                        case .finished:
-                            // Transient confirmation rather than an alert: the action
-                            // is recoverable and interrupting the user to acknowledge
-                            // a cache refresh would be disproportionate.
-                            Label("Updated", systemImage: "checkmark.circle.fill")
-                                .foregroundStyle(.secondary)
-                                .font(.callout)
-                                .transition(.opacity)
-                        case .idle:
-                            EmptyView()
-                        }
+                    switch artworkRefreshState {
+                    case .refreshing:
+                        ProgressView()
+                            .controlSize(.small)
+                            .accessibilityLabel("Redownloading artwork")
+                    case .finished:
+                        Label("Updated", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                            .font(.callout)
+                            .transition(.opacity)
+                    case .idle:
+                        EmptyView()
                     }
                 }
-                SettingsSecondaryText("Discards downloaded game images and fetches them again. Artwork you uploaded yourself is kept.")
-            } header: {
-                Text("Artwork")
             }
-
-            Section {
-                Picker("Take pictures from", selection: $settings.minerAvatarSource) {
-                    ForEach(MinerAvatarSource.allCases) { source in
-                        Text(source.label).tag(source)
-                    }
-                }
-                .frame(maxWidth: 320)
-                SettingsSecondaryText(settings.minerAvatarSource.detail)
-            } header: {
-                Text("Miner Pictures")
-            }
-
-            Section {
-                Toggle("Show in-app tips", isOn: $settings.tipsEnabled)
-                SettingsSecondaryText("Show occasional hints for features like game rules and filtering drops.")
-            } header: {
-                Text("Tips")
-            }
-
-            Section {
-                Toggle("Show icons in Activity Log", isOn: $settings.showActivityLogIcons)
-                SettingsSecondaryText("Display category icons next to Activity Log rows.")
-            } header: {
-                Text("Activity Log")
-            }
-
-            Section {
-                Toggle("Use simpler visual effects", isOn: simplerVisualEffectsBinding)
-                SettingsSecondaryText("Turns off row animations and animated or multi-colour status badges.")
-            } header: {
-                Text("Motion & Status")
-            }
+            SettingsSecondaryText("Discards downloaded game images and fetches them again. Artwork you uploaded yourself is kept.")
+        } header: {
+            Text("Artwork")
         }
-        .formStyle(.grouped)
-        .padding(.horizontal, 24)
-        .padding(.bottom, 20)
-        .padding(.top, 10)
     }
 
-    /// Clears every derived artwork cache and pulls fresh images.
-    ///
-    /// Order matters: the stale preference links go first, so nothing re-reads a
-    /// dead cache path while the images are being refetched.
+    private var minerPictureSettings: some View {
+        Section {
+            Picker("Take pictures from", selection: $settings.minerAvatarSource) {
+                ForEach(MinerAvatarSource.allCases) { source in
+                    Text(source.label).tag(source)
+                }
+            }
+            .frame(maxWidth: 320)
+            SettingsSecondaryText(settings.minerAvatarSource.detail)
+        } header: {
+            Text("Miner Pictures")
+        }
+    }
+
     private func refreshArtwork() async {
         withAnimation { artworkRefreshState = .refreshing }
 
@@ -226,16 +187,6 @@ struct AppearanceSettingsView: View {
         // rest so it doesn't imply a permanent state.
         try? await Task.sleep(for: .seconds(3))
         withAnimation { artworkRefreshState = .idle }
-    }
-
-    private var simplerVisualEffectsBinding: Binding<Bool> {
-        Binding {
-            !settings.animateActivityLogRows || !settings.animatedStatusIcons || !settings.coloredStatusIcons
-        } set: { useSimplerEffects in
-            settings.animateActivityLogRows = !useSimplerEffects
-            settings.animatedStatusIcons = !useSimplerEffects
-            settings.coloredStatusIcons = !useSimplerEffects
-        }
     }
 }
 

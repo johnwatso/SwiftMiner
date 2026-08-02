@@ -1,6 +1,5 @@
 import SwiftUI
 import SwiftMinerCore
-import TipKit
 
 /// Execution layer overview - scalable multi-miner workspace.
 struct MinersOverviewView: View {
@@ -67,8 +66,6 @@ struct MinersOverviewView: View {
         .task {
             syncSelection()
             captureInitialLinkIssuesIfNeeded()
-            NicknameMinerTip.minerCount = miners.count
-            await NicknameMinerTip.viewedMinersList.donate()
             // Populates the Discord user cache the header avatar reads from.
             // Only worth a request when a miner is actually Discord-linked, and
             // detached so an unreachable SwiftBot burns its 5s timeout off to
@@ -86,7 +83,6 @@ struct MinersOverviewView: View {
         }
         .onChange(of: miners.map(\.id)) { _, _ in
             syncSelection()
-            NicknameMinerTip.minerCount = miners.count
         }
         .onChange(of: rawLinkIssueSignature) { oldValue, newValue in
             handleLinkIssueSignatureChange(from: oldValue, to: newValue)
@@ -110,12 +106,13 @@ struct MinersOverviewView: View {
     private var minerListPane: some View {
         ScrollView {
             LazyVStack(spacing: 2) {
-                ForEach(Array(miners.enumerated()), id: \.element.id) { index, miner in
+                ForEach(miners) { miner in
                     Button {
                         navigation.selectedMinerId = miner.id
                     } label: {
                         MinerSourceListRow(
                             miner: miner,
+                            avatarURL: avatarURL(for: miner),
                             compact: !hasMultipleMiners,
                             isSelected: selectionBinding.wrappedValue == miner.id,
                             onEditNickname: { presentNicknameEditor(for: miner) },
@@ -128,7 +125,6 @@ struct MinersOverviewView: View {
                     .contextMenu {
                         minerContextMenu(for: miner)
                     }
-                    .modifier(NicknameTipAttachment(isFirstRow: index == 0))
                 }
             }
             .padding(.horizontal, 6)
@@ -162,6 +158,17 @@ struct MinersOverviewView: View {
                         avatarURL: avatarURL(for: miner),
                         menu: AnyView(
                             HStack(spacing: 8) {
+                                Button {
+                                    withAnimation(.easeInOut(duration: 0.18)) {
+                                        navigation.selectedItem = .overview
+                                    }
+                                } label: {
+                                    Label("Overview", systemImage: "chevron.left")
+                                }
+                                .tahoeButtonStyle()
+                                .controlSize(.small)
+                                .help("Return to Overview")
+
                                 if miner.needsAuth || miner.status == .blockedAccountNotLinked {
                                     Button {
                                         startLinkAccountFlow(for: miner)

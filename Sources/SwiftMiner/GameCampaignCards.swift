@@ -2,7 +2,6 @@
 import SwiftUI
 import SwiftMinerCore
 import CoreImage
-import TipKit
 
 // MARK: - Grouped Game Card
 struct GameCampaignDeckCard: View {

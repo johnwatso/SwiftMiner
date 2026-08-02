@@ -29,6 +29,35 @@ final class ServiceTests: XCTestCase {
     
     // MARK: - TwitchAPIClient Tests
 
+    func testStalePersistedQueryIsFlaggedAsTwitchCompatibilityIssue() async throws {
+        MockURLProtocol.stubResponseData = #"{"errors":[{"message":"PersistedQueryNotFound"}]}"#.data(using: .utf8)
+
+        do {
+            _ = try await apiClient.fetchDropCampaigns()
+            XCTFail("A stale persisted query must not look like an empty campaign list")
+        } catch let error as TwitchMinerError {
+            guard case .twitchAPICompatibility(let operation, _) = error else {
+                return XCTFail("Expected a compatibility issue, got \(error)")
+            }
+            XCTAssertEqual(operation, "ViewerDropsDashboard")
+            XCTAssertTrue(error.isTwitchAPICompatibilityIssue)
+        }
+    }
+
+    func testMissingInventoryShapeIsFlaggedAsTwitchCompatibilityIssue() async throws {
+        MockURLProtocol.stubResponseData = #"{"data":{"currentUser":{}}}"#.data(using: .utf8)
+
+        do {
+            _ = try await apiClient.fetchInventory()
+            XCTFail("A changed inventory response must not look like an empty inventory")
+        } catch let error as TwitchMinerError {
+            guard case .twitchAPICompatibility(let operation, _) = error else {
+                return XCTFail("Expected a compatibility issue, got \(error)")
+            }
+            XCTAssertEqual(operation, "Inventory")
+        }
+    }
+
     func testInventoryFetchReportsCacheAndForcedRefreshNeverMasqueradesAsFresh() async throws {
         let accountId = "inventory-source-\(UUID().uuidString)"
         let snapshot = InventorySnapshot(

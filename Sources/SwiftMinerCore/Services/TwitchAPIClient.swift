@@ -1052,9 +1052,9 @@ public actor TwitchAPIClient {
                             if let msg = gqlError["message"] as? String {
                                 if msg.contains("PersistedQueryNotFound") {
                                     Logger.api.error("[GQL] PersistedQueryNotFound for \(operationName)")
-                                    throw TwitchMinerError.apiError(
-                                        statusCode: 200,
-                                        message: "PersistedQueryNotFound: \(operationName) - sha256 hash may be stale"
+                                    throw TwitchMinerError.twitchAPICompatibility(
+                                        operation: operationName,
+                                        reason: "Twitch no longer recognises this persisted query."
                                     )
                                 }
                                 // Log other GQL errors too

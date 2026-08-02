@@ -1,7 +1,6 @@
 import SwiftUI
 import SwiftMinerCore
 import CoreImage
-import TipKit
 
 // MARK: - Drops List View
 
@@ -108,11 +107,6 @@ struct DropsListView: View {
             await loadCampaignFeed()
             hasLoadedInitialCampaignFeed = true
             isRefreshing = navigation.refreshDropsInBackground()
-            await MinerFilterTip.viewedDropsList.donate()
-            await DropFilterChipsTip.viewedDropsList.donate()
-            if !preferSteamArtwork {
-                await SteamArtworkTip.viewedCampaigns.donate()
-            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .dropsCampaignsDidUpdate)) { _ in
             Task { @MainActor in
@@ -189,7 +183,6 @@ struct DropsListView: View {
                 .labelsHidden()
                 .frame(width: 180)
                 .help("Show campaigns for a specific miner")
-                .minerTip(MinerFilterTip())
             }
 
             Spacer(minLength: 0)
@@ -267,7 +260,6 @@ struct DropsListView: View {
                 ForEach(DropFilter.allCases) { option in
                     let isSelected = selectedFilters.contains(option)
                     Button {
-                        DropFilterChipsTip().invalidate(reason: .actionPerformed)
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
                             var current = selectedFilters
                             if isSelected {
@@ -312,7 +304,6 @@ struct DropsListView: View {
         .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Campaign filters")
-        .minerTip(DropFilterChipsTip())
     }
 
     // MARK: - Data

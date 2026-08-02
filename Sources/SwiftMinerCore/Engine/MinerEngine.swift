@@ -72,6 +72,8 @@ public actor MinerEngine {
                     return (.authIssue, "HTTP \(status) — \(message)")
                 }
                 return (.twitchAPIFailure, "HTTP \(status) — \(message)")
+            case .twitchAPICompatibility(let operation, let reason):
+                return (.twitchAPIFailure, "Compatibility update required for \(operation) — \(reason)")
             case .authenticationFailed(let message), .keychainError(let message):
                 return (.authIssue, message)
             case .tokenExpired:

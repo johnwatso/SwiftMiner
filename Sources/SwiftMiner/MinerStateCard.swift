@@ -343,10 +343,8 @@ struct MinerActivityCard: View {
         prominence == .expanded
     }
 
-    /// Returns the accent colour only when coloured icons/status are enabled,
-    /// otherwise falls back to `.secondary` for a monochrome look.
     private func effectiveAccent(_ color: Color) -> Color {
-        settings.coloredStatusIcons ? color : .secondary
+        color
     }
 
     var body: some View {

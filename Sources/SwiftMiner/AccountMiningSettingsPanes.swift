@@ -2,7 +2,6 @@
 import SwiftUI
 import SwiftMinerCore
 import SwiftMinerService
-import TipKit
 import AppKit
 import UniformTypeIdentifiers
 
