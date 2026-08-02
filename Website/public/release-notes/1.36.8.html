@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SwiftMiner 1.36.8 - Release Notes</title>
+  <meta name="description" content="Release notes for SwiftMiner 1.36.8: settings, web dashboard, and Twitch Drops reliability updates.">
+  <link rel="canonical" href="https://swiftminer.app/release-notes/1.36.8.html">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <style>
+    :root { color-scheme: light dark; }
+    body { margin: 0; padding: 32px 20px 48px; font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f4f6f8; color: #0f1720; }
+    main { max-width: 760px; margin: 0 auto; padding: 28px; border-radius: 22px; background: rgba(255, 255, 255, .86); box-shadow: 0 20px 60px rgba(15, 23, 32, .10); border: 1px solid rgba(82, 96, 109, .12); }
+    h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
+    .meta, .summary { color: #52606d; font-size: 14px; }
+    .intro { margin: 0 0 24px; color: #384454; }
+    section { margin: 18px 0 0; padding: 18px 18px 14px; border: 1px solid rgba(82, 96, 109, .18); border-radius: 16px; border-left: 5px solid #7b4bd9; background: rgba(255, 255, 255, .42); }
+    h2 { margin: 0 0 4px; color: #7b4bd9; font-size: 18px; }
+    ul { margin: 12px 0 0; padding-left: 22px; }
+    li { margin: 0 0 8px; }
+    li:last-child { margin-bottom: 0; }
+    @media (prefers-color-scheme: dark) { body { background: #0b1015; color: #edf2f7; } main { background: rgba(15, 23, 32, .88); border-color: rgba(159, 176, 194, .14); } .meta, .summary { color: #9fb0c2; } .intro { color: #c8d3df; } section { border-color: rgba(159, 176, 194, .18); background: rgba(255, 255, 255, .04); } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>SwiftMiner 1.36.8</h1>
+    <p class="meta">Version 1.36.8 &middot; Build 2026080214</p>
+    <p class="intro">Settings, web dashboard, and Twitch Drops reliability updates.</p>
+
+    <section>
+      <h2>Twitch Drops reliability</h2>
+      <p class="summary">Updates Twitch's persisted GraphQL queries for campaign discovery and drop inventory refreshes, and clearly flags future query or response changes that need a SwiftMiner update.</p>
+      <ul>
+        <li>Safely coalesces duplicate progress records returned by Twitch instead of crashing during inventory refresh.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Dashboard identity</h2>
+      <p class="summary">The dashboard now uses the linked Discord picture when Twitch has no custom profile image.</p>
+      <ul>
+        <li>Replaces the generic Twitch silhouette with the linked Discord display picture when available.</li>
+        <li>Loads the Discord user cache before the dashboard begins serving account data.</li>
+        <li>Shows the same profile pictures in the macOS miner list, with the miner status symbol retained when no picture is available.</li>
+        <li>Adds a direct Overview button to each native miner operator header.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Cleaner settings</h2>
+      <p class="summary">General now contains the artwork and miner-picture choices, removing the separate Appearance tab and controls that did not need user configuration.</p>
+      <ul>
+        <li>Removes unused in-app tips.</li>
+        <li>Keeps Activity Log category icons and rich status presentation consistent, while continuing to respect macOS Reduce Motion.</li>
+        <li>Leaves IRL campaigns off by default.</li>
+        <li>Uses Discord's official mark for Discord sign-in.</li>
+        <li>Reports public dashboard and Discord sign-in availability from the live SwiftBot connection, rather than stale saved setup details.</li>
+        <li>Makes local dashboard credentials easy to set or change, without requiring the current password to be re-entered.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>
