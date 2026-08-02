@@ -141,6 +141,40 @@ final class WebDashboardSecurityTests: XCTestCase {
         XCTAssertTrue(cfg.useSecureCookies)
     }
 
+    func testLiveSwiftBotProviderCanDisableCachedDiscordSignIn() async throws {
+        let mgr = try await openTempManager()
+        defer { Task { await mgr.close() } }
+        let apiRoutes = DiscordAPIRoutes(
+            manager: mgr,
+            projectionBuilder: DiscordProjectionBuilder(manager: mgr),
+            apiKey: "test-api-key"
+        )
+        let webRoutes = WebDashboardRoutes(
+            config: WebDashboardConfig(
+                baseURL: URL(string: "https://swiftminer.example.com")!,
+                discord: nil,
+                twitch: nil,
+                swiftBotSSO: WebSwiftBotSSO(origin: "https://swiftbot.example.com", hmacSecret: "secret")
+            ),
+            manager: mgr,
+            apiRoutes: apiRoutes,
+            swiftBotSSOProvider: { nil }
+        )
+        let router = HTTPRouter()
+        await webRoutes.configure(router)
+
+        let response = await router.handle(HTTPRequest(
+            method: "GET",
+            path: WebDashboardConfig.loginPath,
+            headers: ["host": "swiftminer.example.com"],
+            body: Data()
+        ))
+        let html = String(decoding: response.body, as: UTF8.self)
+
+        XCTAssertEqual(response.statusCode, 200)
+        XCTAssertFalse(html.contains("Sign in with Discord"))
+    }
+
     func testRootIsNeverAPublicPrefix() {
         // hasPrefix("/") matches everything — the root must only ever be an
         // *exact* public path, never a prefix, or the Bot-key API would leak.
@@ -224,6 +258,12 @@ final class WebDashboardSecurityTests: XCTestCase {
         XCTAssertTrue(WebDashboardAssets.appJS.contains("referrerpolicy=\"no-referrer\""))
         XCTAssertTrue(WebDashboardAssets.appJS.contains("[acc.profileImageURL, acc.discordProfileImageURL]"))
         XCTAssertFalse(WebDashboardAssets.appJS.contains("${esc(cfg.headline)}${watchingHTML}"))
+    }
+
+    func testOperatorDetailShowsBackNavigationForDiscordAndLocalSessions() {
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("if (OPERATOR_MINERS.length <= 1) return '';"))
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("id=\"backoverview\""))
+        XCTAssertFalse(WebDashboardAssets.appJS.contains("SESSION.provider === 'local') || OPERATOR_MINERS.length"))
     }
 
     func testLocalLoginPageShowsOnlyUsernamePasswordForm() async throws {

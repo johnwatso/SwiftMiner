@@ -14,6 +14,9 @@ public enum TwitchMinerError: LocalizedError {
     case campaignNotFound
     case dropNotFound
     case watchSessionFailed(String)
+    /// Twitch's private web API no longer recognises a persisted query or has
+    /// changed the response shape SwiftMiner depends on.
+    case twitchAPICompatibility(operation: String, reason: String)
     case claimFailed(String)
     case keychainError(String)
     case rateLimited(retryAfter: TimeInterval)
@@ -47,6 +50,8 @@ public enum TwitchMinerError: LocalizedError {
             return "Drop not found"
         case .watchSessionFailed(let message):
             return "Watch session failed: \(message)"
+        case .twitchAPICompatibility(let operation, _):
+            return "Twitch compatibility update required for \(operation). Update SwiftMiner, then try again."
         case .claimFailed(let message):
             return "Claim failed: \(message)"
         case .keychainError(let message):
@@ -60,5 +65,12 @@ public enum TwitchMinerError: LocalizedError {
         case .unknown(let message):
             return "Unknown error: \(message)"
         }
+    }
+
+    /// These failures are deterministic product compatibility issues, not
+    /// account, network, or rate-limit problems that a miner can recover from.
+    public var isTwitchAPICompatibilityIssue: Bool {
+        if case .twitchAPICompatibility = self { return true }
+        return false
     }
 }

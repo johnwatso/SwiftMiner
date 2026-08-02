@@ -58,7 +58,15 @@ public actor WebDashboardRoutes {
     /// base URL (the assertion returns to our https callback) and a secret.
     private func currentSwiftBotSSO() async -> WebSwiftBotSSO? {
         guard config.baseURL != nil else { return nil }
-        let sso = await swiftBotSSOProvider?() ?? config.swiftBotSSO
+        // A live provider is authoritative: returning nil means SwiftBot is
+        // offline or no longer paired, so don't fall back to stale settings
+        // and advertise a Discord sign-in that cannot complete.
+        let sso: WebSwiftBotSSO?
+        if let swiftBotSSOProvider {
+            sso = await swiftBotSSOProvider()
+        } else {
+            sso = config.swiftBotSSO
+        }
         guard let sso, !sso.hmacSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         return sso
     }

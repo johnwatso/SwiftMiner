@@ -37,7 +37,6 @@
 		2D011D07DA750AF66BFC2C25 /* CampaignTabRoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 573073692F55774FD9E03776 /* CampaignTabRoutingTests.swift */; };
 		30704DD10179C2F6AAADF346 /* SQLiteManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E44ED181DA58551D0CCB1FE5 /* SQLiteManager.swift */; };
 		31030DA6BAC0FB3432822E7A /* AccountMiningSettingsPanes.swift in Sources */ = {isa = PBXBuildFile; fileRef = E844D3FBA9C31BB2D919C364 /* AccountMiningSettingsPanes.swift */; };
-		3229F5F5C7C910E35220482E /* MinerTips.swift in Sources */ = {isa = PBXBuildFile; fileRef = 848496CCF8568D1769A1F40B /* MinerTips.swift */; };
 		322C9F247EF405AA35F78463 /* MiningStrategy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 248215279F2CC9C25F8BC4EC /* MiningStrategy.swift */; };
 		340860B0B9B8241392636C41 /* SwiftBotConnectionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B997AFB7DED86FF821143CD /* SwiftBotConnectionService.swift */; };
 		3409B039878F5812CE36AFB7 /* GamePreferenceManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0374A8D7AF4EC4089222CA3B /* GamePreferenceManagementView.swift */; };
@@ -370,7 +369,6 @@
 		7CE5B3372E6DE02DFFFB7CDE /* Logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logger.swift; sourceTree = "<group>"; };
 		7D575B68B3F4BC9BD40DAD39 /* NetworkGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkGuardTests.swift; sourceTree = "<group>"; };
 		82BF51F236A3CA9B372DC12D /* DropsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropsService.swift; sourceTree = "<group>"; };
-		848496CCF8568D1769A1F40B /* MinerTips.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinerTips.swift; sourceTree = "<group>"; };
 		856A69CE754F0C1084D4A93A /* AdvancedSettingsPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedSettingsPane.swift; sourceTree = "<group>"; };
 		8602894B99CE1D0D592B2767 /* ClaimService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaimService.swift; sourceTree = "<group>"; };
 		86D07A296E9BF5FA7E1E8C59 /* CampaignDetailsDiskCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignDetailsDiskCache.swift; sourceTree = "<group>"; };
@@ -644,7 +642,6 @@
 				65FB3E563B38E973DD424620 /* MinersOverviewView.swift */,
 				0EA664151CCCAF2FE4D6598B /* MinerStateCard.swift */,
 				E783D8A8E6145DE8BED34EED /* MinerTableView.swift */,
-				848496CCF8568D1769A1F40B /* MinerTips.swift */,
 				26908E3B6B9716D33FD72B00 /* NavigationModel.swift */,
 				61C22A768FC196ECD172584E /* NavigationModel+SwiftBot.swift */,
 				7559E3ABB6B9BA9EDAFCA012 /* NavigationProjectionStateProvider.swift */,
@@ -1222,7 +1219,6 @@
 				BD0BB11FA94E009CB12F20D8 /* MinerOverviewView.swift in Sources */,
 				376FF02FE674B1336C3FDC7B /* MinerStateCard.swift in Sources */,
 				156A8D4734DACD633E3CC8BB /* MinerTableView.swift in Sources */,
-				3229F5F5C7C910E35220482E /* MinerTips.swift in Sources */,
 				379BA5DE09E4AC728F2A8730 /* MinersOverviewComponents.swift in Sources */,
 				C0C4E5F34012E0CAAE27792A /* MinersOverviewView.swift in Sources */,
 				F911704C0B398E14BBBE40A5 /* NavigationModel+SwiftBot.swift in Sources */,
@@ -1393,7 +1389,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026073112;
+				CURRENT_PROJECT_VERSION = 2026080212;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;
@@ -1404,7 +1400,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.36.6;
+				MARKETING_VERSION = 1.36.7;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -1554,7 +1550,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026073112;
+				CURRENT_PROJECT_VERSION = 2026080212;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;
@@ -1565,7 +1561,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.36.6;
+				MARKETING_VERSION = 1.36.7;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",

@@ -1214,7 +1214,7 @@ enum WebDashboardAssets {
     }
 
     function operatorBackCard(p) {
-      if (!(SESSION && SESSION.provider === 'local') || OPERATOR_MINERS.length <= 1) return '';
+      if (OPERATOR_MINERS.length <= 1) return '';
       return `<button class="detail-back" id="backoverview" type="button" aria-label="Back to all miners">‹ All Miners</button>`;
     }
 

@@ -121,7 +121,13 @@ public actor DropsService {
         _ snapshot: InventorySnapshot,
         into campaigns: [Campaign]
     ) -> [Campaign] {
-        let progressByDropId = Dictionary(uniqueKeysWithValues: snapshot.progress.map { ($0.dropId, $0) })
+        // Twitch can return more than one progress record for a drop. Preserve
+        // the most useful record instead of allowing a duplicate response to
+        // abort the entire inventory refresh.
+        let progressByDropId = Dictionary(
+            snapshot.progress.map { ($0.dropId, $0) },
+            uniquingKeysWith: Self.preferredProgress
+        )
 
         return campaigns.map { campaign in
             var updated = campaign
@@ -168,6 +174,16 @@ public actor DropsService {
             }
             return updated
         }
+    }
+
+    private static func preferredProgress(_ current: Progress, _ candidate: Progress) -> Progress {
+        if current.isClaimed != candidate.isClaimed {
+            return candidate.isClaimed ? candidate : current
+        }
+        if current.currentMinutes != candidate.currentMinutes {
+            return candidate.currentMinutes > current.currentMinutes ? candidate : current
+        }
+        return candidate.lastUpdated > current.lastUpdated ? candidate : current
     }
 
     /// Fetch current inventory (drops in progress)

@@ -5,40 +5,33 @@ import SwiftUI
 /// A centralized, HIG-aligned SF Symbol component that applies modern symbol animations.
 /// Continuous looping animation only runs for active/live states ("Looking for Streams", "Mining Active", "Reconnecting").
 /// Completed or static transitions ("Up to Date", "Claiming Rewards") animate once on transition and then remain static.
-/// Automatically respects system reduced motion and the user's "Animated Status Icons" setting.
+/// Automatically respects the system Reduced Motion setting.
 struct AnimatedStatusIcon: View {
     let symbol: String
     var color: Color = .primary
     var size: CGFloat = 11
     var weight: Font.Weight = .semibold
 
-    private var settings: Settings { .shared }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var triggerBounce = false
 
-    /// Resolves to `.secondary` when the user has turned off coloured icons,
-    /// stripping all accent tints so everything renders in a neutral grey/black.
-    private var effectiveColor: Color {
-        settings.coloredStatusIcons ? color : .secondary
-    }
-
     var body: some View {
-        let isAnimated = settings.animatedStatusIcons && !reduceMotion
+        let isAnimated = !reduceMotion
         
         Group {
             if symbol == "checkmark.circle.fill" {
                 if isAnimated {
-                    AnimatedCheckmarkCircleView(color: effectiveColor, size: size)
+                    AnimatedCheckmarkCircleView(color: color, size: size)
                 } else {
                     Image(systemName: symbol)
                         .font(.system(size: size, weight: weight))
-                        .foregroundStyle(effectiveColor)
+                        .foregroundStyle(color)
                 }
             } else if symbol == "calendar.badge.checkmark" {
                 AnimatedCalendarCheckmarkIcon(
-                    calendarColor: settings.coloredStatusIcons ? .red : effectiveColor,
-                    checkmarkColor: settings.coloredStatusIcons ? .green : effectiveColor,
+                    calendarColor: .red,
+                    checkmarkColor: .green,
                     size: size,
                     weight: weight,
                     isAnimated: isAnimated
@@ -46,41 +39,26 @@ struct AnimatedStatusIcon: View {
             } else if symbol == "checkmark.circle.badge.questionmark.fill" {
                 Image(systemName: symbol)
                     .font(.system(size: size, weight: weight))
-                    .symbolRenderingMode(settings.coloredStatusIcons ? .palette : .monochrome)
-                    .foregroundStyle(settings.coloredStatusIcons ? .orange : effectiveColor, settings.coloredStatusIcons ? .green : effectiveColor)
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.orange, .green)
             } else if symbol == "clock.badge.exclamationmark" {
-                if settings.coloredStatusIcons {
-                    let base = Image(systemName: symbol)
-                        .font(.system(size: size, weight: weight))
-                        .symbolRenderingMode(.palette)
-                        .foregroundStyle(Color.red, Color(nsColor: .labelColor))
-                    
-                    if isAnimated {
-                        base
-                            .symbolEffect(.bounce.down, value: triggerBounce)
-                            .onAppear { triggerBounce.toggle() }
-                            .onChange(of: symbol) { _, _ in triggerBounce.toggle() }
-                    } else {
-                        base
-                    }
+                let base = Image(systemName: symbol)
+                    .font(.system(size: size, weight: weight))
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(Color.red, Color(nsColor: .labelColor))
+
+                if isAnimated {
+                    base
+                        .symbolEffect(.bounce.down, value: triggerBounce)
+                        .onAppear { triggerBounce.toggle() }
+                        .onChange(of: symbol) { _, _ in triggerBounce.toggle() }
                 } else {
-                    let base = Image(systemName: symbol)
-                        .font(.system(size: size, weight: weight))
-                        .foregroundStyle(effectiveColor)
-                    
-                    if isAnimated {
-                        base
-                            .symbolEffect(.bounce.down, value: triggerBounce)
-                            .onAppear { triggerBounce.toggle() }
-                            .onChange(of: symbol) { _, _ in triggerBounce.toggle() }
-                    } else {
-                        base
-                    }
+                    base
                 }
             } else if symbol == "checkmark.seal.fill" {
                 let base = Image(systemName: symbol)
                     .font(.system(size: size, weight: weight))
-                    .foregroundStyle(effectiveColor)
+                    .foregroundStyle(color)
                 
                 if isAnimated {
                     base
@@ -93,7 +71,7 @@ struct AnimatedStatusIcon: View {
             } else if symbol == "antenna.radiowaves.left.and.right" {
                 let base = Image(systemName: symbol)
                     .font(.system(size: size, weight: weight))
-                    .foregroundStyle(effectiveColor)
+                    .foregroundStyle(color)
                 
                 if isAnimated {
                     // Mirror the macOS "searching for Wi-Fi" feel: the radio bands fill
@@ -106,7 +84,7 @@ struct AnimatedStatusIcon: View {
             } else if symbol == "dot.radiowaves.left.and.right" {
                 let base = Image(systemName: symbol)
                     .font(.system(size: size, weight: weight))
-                    .foregroundStyle(effectiveColor)
+                    .foregroundStyle(color)
                 
                 if isAnimated {
                     base.symbolEffect(.pulse, options: .repeating)
@@ -116,7 +94,7 @@ struct AnimatedStatusIcon: View {
             } else if symbol == "gift.fill" {
                 let base = Image(systemName: symbol)
                     .font(.system(size: size, weight: weight))
-                    .foregroundStyle(effectiveColor)
+                    .foregroundStyle(color)
                 
                 if isAnimated {
                     base
@@ -128,16 +106,16 @@ struct AnimatedStatusIcon: View {
                 }
             } else if symbol == "arrow.triangle.2.circlepath" || symbol == "arrow.clockwise" {
                 if isAnimated {
-                    ReconnectingSpinnerView(symbol: symbol, size: size, weight: weight, color: effectiveColor)
+                    ReconnectingSpinnerView(symbol: symbol, size: size, weight: weight, color: color)
                 } else {
                     Image(systemName: symbol)
                         .font(.system(size: size, weight: weight))
-                        .foregroundStyle(effectiveColor)
+                        .foregroundStyle(color)
                 }
             } else {
                 Image(systemName: symbol)
                     .font(.system(size: size, weight: weight))
-                    .foregroundStyle(effectiveColor)
+                    .foregroundStyle(color)
             }
         }
     }

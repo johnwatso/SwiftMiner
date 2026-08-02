@@ -4,7 +4,6 @@ import SwiftMinerCore
 import AppKit
 import CoreImage
 import CryptoKit
-import TipKit
 
 enum CampaignCardState: String {
     case blocked

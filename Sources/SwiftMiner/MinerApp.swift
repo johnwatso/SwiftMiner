@@ -2,7 +2,6 @@ import AppKit
 import ServiceManagement
 import SwiftUI
 import SwiftMinerCore
-import TipKit
 import UserNotifications
 import WebKit
 
@@ -155,10 +154,6 @@ struct MinerApp: App {
                     }
                     presentationController.configure(mode: settings.appPresenceMode)
                     applyLaunchWindowPreferenceIfNeeded()
-                    try? Tips.configure([
-                        .displayFrequency(.immediate),
-                        .datastoreLocation(.applicationDefault)
-                    ])
                 }
                 .onChange(of: settings.appPresenceMode) { _, newValue in
                     presentationController.configure(mode: newValue)

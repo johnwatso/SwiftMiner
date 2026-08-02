@@ -55,6 +55,14 @@ final class SettingsBackupTests: XCTestCase {
         XCTAssertTrue(settings.webDashboardDiscordOAuthEnabled)
     }
 
+    func testIRLCampaignsResetToDisabled() {
+        settings.mineIRLCampaigns = true
+
+        settings.resetToDefaults()
+
+        XCTAssertFalse(settings.mineIRLCampaigns)
+    }
+
     private func date(hour: Int) -> Date {
         Calendar.current.date(from: DateComponents(year: 2026, month: 5, day: 24, hour: hour))!
     }

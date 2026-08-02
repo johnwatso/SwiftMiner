@@ -176,7 +176,7 @@ final class ClaimServiceTests: XCTestCase {
 
         XCTAssertFalse(result.success)
         let error = result.error ?? ""
-        XCTAssertTrue(error.contains("PersistedQueryNotFound"), "Expected the GraphQL message to surface, got: \(error)")
+        XCTAssertTrue(error.contains("Twitch compatibility update required"), "Expected the compatibility message to surface, got: \(error)")
     }
 
     func testClaimDropAlreadyClaimedFails() async throws {

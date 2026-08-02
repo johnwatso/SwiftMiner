@@ -28,6 +28,20 @@ final class MinerAttentionTests: XCTestCase {
         XCTAssertEqual(attention?.action, .reconnect)
     }
 
+    func testCompatibilityFailureExplainsThatSwiftMinerNeedsAnUpdate() {
+        let miner = makeMiner(status: .error, workerState: .failed)
+        let error = EventEntry(
+            message: "Error: Twitch compatibility update required for Inventory. Update SwiftMiner, then try again.",
+            level: .error,
+            minerId: miner.id
+        )
+
+        let attention = MinerAttentionIssue.resolve(miner: miner, events: [error])
+
+        XCTAssertEqual(attention?.title, "SwiftMiner needs a Twitch update")
+        XCTAssertEqual(attention?.action, .restart)
+    }
+
     func testHealthyMinerHasNoAttentionPanel() {
         XCTAssertNil(MinerAttentionIssue.resolve(miner: makeMiner(), events: []))
     }

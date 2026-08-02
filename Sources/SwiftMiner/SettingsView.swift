@@ -1,7 +1,6 @@
 import SwiftUI
 import SwiftMinerCore
 import SwiftMinerService
-import TipKit
 import AppKit
 import UniformTypeIdentifiers
 
@@ -18,12 +17,6 @@ struct SettingsView: View {
                     SettingsTabItem(tab: .general)
                 }
                 .tag(SettingsTab.general)
-
-            AppearanceSettingsView(settings: settings)
-                .tabItem {
-                    SettingsTabItem(tab: .appearance)
-                }
-                .tag(SettingsTab.appearance)
 
             AccountSettingsView(navigation: navigation)
                 .tabItem {
@@ -77,7 +70,6 @@ struct SettingsView: View {
 
 enum SettingsTab: String, CaseIterable, Hashable, Identifiable {
     case general
-    case appearance
     case accounts
     case mining
     case integrations
@@ -90,7 +82,6 @@ enum SettingsTab: String, CaseIterable, Hashable, Identifiable {
     var title: String {
         switch self {
         case .general: return "General"
-        case .appearance: return "Appearance"
         case .accounts: return "Accounts"
         case .mining: return "Mining"
         case .integrations: return "Integrations"
@@ -103,7 +94,6 @@ enum SettingsTab: String, CaseIterable, Hashable, Identifiable {
     var systemImage: String {
         switch self {
         case .general: return "gearshape"
-        case .appearance: return "paintbrush"
         case .accounts: return "person.2"
         case .mining: return "cpu"
         case .integrations: return "app.connected.to.app.below.fill"

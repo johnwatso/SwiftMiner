@@ -2,6 +2,31 @@ import XCTest
 @testable import SwiftMinerCore
 
 final class DropsServiceTests: XCTestCase {
+
+    func testMergeInventoryCoalescesDuplicateProgressRecords() {
+        let drop = Drop(id: "drop", name: "Drop", requiredMinutes: 60, benefitID: "benefit")
+        let campaign = Campaign(
+            id: "campaign",
+            name: "Campaign",
+            game: Game(id: "game", name: "Game"),
+            status: .active,
+            startDate: Date().addingTimeInterval(-60),
+            endDate: Date().addingTimeInterval(3600),
+            drops: [drop]
+        )
+        let snapshot = InventorySnapshot(
+            accountId: "account",
+            benefitIDs: [],
+            progress: [
+                Progress(id: "first", dropId: "drop", dropName: "Drop", campaignId: "campaign", currentMinutes: 15, requiredMinutes: 60),
+                Progress(id: "second", dropId: "drop", dropName: "Drop", campaignId: "campaign", currentMinutes: 45, requiredMinutes: 60)
+            ]
+        )
+
+        let merged = DropsService.mergeInventory(snapshot, into: [campaign])
+
+        XCTAssertEqual(merged[0].drops[0].progress?.currentMinutes, 45)
+    }
     
     func testMergeInventoryClaimedFallback_BenefitIdMatch() async throws {
         let campaignId = "c1"

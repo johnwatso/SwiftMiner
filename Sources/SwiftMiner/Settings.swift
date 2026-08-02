@@ -227,7 +227,7 @@ public final class Settings {
     public var mineIRLCampaigns: Bool {
         get {
             access(keyPath: \.mineIRLCampaigns)
-            return Self.read("mineIRLCampaigns", default: true)
+            return Self.read("mineIRLCampaigns", default: false)
         }
         set {
             withMutation(keyPath: \.mineIRLCampaigns) {
@@ -338,19 +338,6 @@ public final class Settings {
         }
     }
 
-    /// Whether in-app TipKit hints are shown.
-    public var tipsEnabled: Bool {
-        get {
-            access(keyPath: \.tipsEnabled)
-            return Self.read("tipsEnabled", default: true)
-        }
-        set {
-            withMutation(keyPath: \.tipsEnabled) {
-                Self.write("tipsEnabled", newValue)
-            }
-        }
-    }
-
     /// Whether to run in background when window is closed
     public var runInBackground: Bool {
         get {
@@ -360,58 +347,6 @@ public final class Settings {
         set {
             withMutation(keyPath: \.runInBackground) {
                 Self.write("runInBackground", newValue)
-            }
-        }
-    }
-
-    /// Whether to show category icons next to each row in the Activity Log.
-    public var showActivityLogIcons: Bool {
-        get {
-            access(keyPath: \.showActivityLogIcons)
-            return Self.read("showActivityLogIcons", default: true)
-        }
-        set {
-            withMutation(keyPath: \.showActivityLogIcons) {
-                Self.write("showActivityLogIcons", newValue)
-            }
-        }
-    }
-
-    /// Whether to animate new rows sliding into the Activity Log.
-    public var animateActivityLogRows: Bool {
-        get {
-            access(keyPath: \.animateActivityLogRows)
-            return Self.read("animateActivityLogRows", default: true)
-        }
-        set {
-            withMutation(keyPath: \.animateActivityLogRows) {
-                Self.write("animateActivityLogRows", newValue)
-            }
-        }
-    }
-
-    /// Whether to animate status icons with Apple-style transitions and drawing effects.
-    public var animatedStatusIcons: Bool {
-        get {
-            access(keyPath: \.animatedStatusIcons)
-            return Self.read("animatedStatusIcons", default: true)
-        }
-        set {
-            withMutation(keyPath: \.animatedStatusIcons) {
-                Self.write("animatedStatusIcons", newValue)
-            }
-        }
-    }
-
-    /// Whether to use colour in palette-rendered status icons (e.g. the clock badge exclamation icon).
-    public var coloredStatusIcons: Bool {
-        get {
-            access(keyPath: \.coloredStatusIcons)
-            return Self.read("coloredStatusIcons", default: true)
-        }
-        set {
-            withMutation(keyPath: \.coloredStatusIcons) {
-                Self.write("coloredStatusIcons", newValue)
             }
         }
     }
@@ -2228,16 +2163,12 @@ public final class Settings {
         appPresenceMode = .dockOnly
         autoStartOnLaunch = false
         enableBadgesEmotes = false
-        mineIRLCampaigns = true
+        mineIRLCampaigns = false
         avoidDuplicateStreams = true
         antiStallRecoveryEnabled = true
         prioritiseFollowedStreamers = false
         syncMinersState = true
         runInBackground = true
-        showActivityLogIcons = true
-        animateActivityLogRows = true
-        animatedStatusIcons = true
-        coloredStatusIcons = true
         preferredQuality = .auto
         showClaimNotifications = false
         lastSelectedGameId = ""
@@ -2312,10 +2243,7 @@ public final class Settings {
             syncMinersState: syncMinersState,
             preferSteamArtwork: preferSteamArtwork,
             minerAvatarSource: minerAvatarSource.rawValue,
-            tipsEnabled: tipsEnabled,
             runInBackground: runInBackground,
-            showActivityLogIcons: showActivityLogIcons,
-            animateActivityLogRows: animateActivityLogRows,
             selectedDropsFiltersData: selectedDropsFiltersData,
             selectedEventFiltersData: selectedEventFiltersData,
             preferredQuality: preferredQuality.rawValue,
@@ -2359,17 +2287,14 @@ public final class Settings {
         autoStartOnLaunch = backup.autoStartOnLaunch
         startMinimized = backup.startMinimized
         enableBadgesEmotes = backup.enableBadgesEmotes
-        mineIRLCampaigns = backup.mineIRLCampaigns ?? true
+        mineIRLCampaigns = backup.mineIRLCampaigns ?? false
         avoidDuplicateStreams = backup.avoidDuplicateStreams
         antiStallRecoveryEnabled = backup.antiStallRecoveryEnabled
         prioritiseFollowedStreamers = backup.prioritiseFollowedStreamers
         syncMinersState = backup.syncMinersState
         preferSteamArtwork = backup.preferSteamArtwork
         minerAvatarSource = backup.minerAvatarSource.flatMap(MinerAvatarSource.init(rawValue:)) ?? .discord
-        tipsEnabled = backup.tipsEnabled
         runInBackground = backup.runInBackground
-        showActivityLogIcons = backup.showActivityLogIcons
-        animateActivityLogRows = backup.animateActivityLogRows
         selectedDropsFiltersData = backup.selectedDropsFiltersData
         selectedEventFiltersData = backup.selectedEventFiltersData
         preferredQuality = Settings.StreamQuality(rawValue: backup.preferredQuality) ?? .auto
@@ -2439,10 +2364,7 @@ public struct SettingsBackup: Codable, Sendable {
     public let preferSteamArtwork: Bool
     /// Optional: backups written before miner avatars were selectable have no value.
     public let minerAvatarSource: String?
-    public let tipsEnabled: Bool
     public let runInBackground: Bool
-    public let showActivityLogIcons: Bool
-    public let animateActivityLogRows: Bool
     public let selectedDropsFiltersData: String
     public let selectedEventFiltersData: String
     public let preferredQuality: String
@@ -2478,17 +2400,14 @@ public struct SettingsBackup: Codable, Sendable {
         autoStartOnLaunch: Bool,
         startMinimized: Bool,
         enableBadgesEmotes: Bool,
-        mineIRLCampaigns: Bool? = true,
+        mineIRLCampaigns: Bool? = false,
         avoidDuplicateStreams: Bool,
         antiStallRecoveryEnabled: Bool,
         prioritiseFollowedStreamers: Bool,
         syncMinersState: Bool,
         preferSteamArtwork: Bool,
         minerAvatarSource: String? = nil,
-        tipsEnabled: Bool,
         runInBackground: Bool,
-        showActivityLogIcons: Bool,
-        animateActivityLogRows: Bool,
         selectedDropsFiltersData: String,
         selectedEventFiltersData: String,
         preferredQuality: String,
@@ -2530,10 +2449,7 @@ public struct SettingsBackup: Codable, Sendable {
         self.syncMinersState = syncMinersState
         self.preferSteamArtwork = preferSteamArtwork
         self.minerAvatarSource = minerAvatarSource
-        self.tipsEnabled = tipsEnabled
         self.runInBackground = runInBackground
-        self.showActivityLogIcons = showActivityLogIcons
-        self.animateActivityLogRows = animateActivityLogRows
         self.selectedDropsFiltersData = selectedDropsFiltersData
         self.selectedEventFiltersData = selectedEventFiltersData
         self.preferredQuality = preferredQuality
