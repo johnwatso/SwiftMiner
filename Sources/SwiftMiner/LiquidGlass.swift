@@ -2,109 +2,15 @@ import AppKit
 import SwiftUI
 
 struct LiquidGlassBackdrop: View {
-    @State private var animationPhase = false
-    @State private var isAnimating = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     var body: some View {
-        ZStack {
-            VisualEffectMaterialView(material: .windowBackground, blendingMode: .behindWindow)
-
-            if #available(macOS 15, *) {
-                MeshGradient(
-                    width: 3,
-                    height: 3,
-                    points: [
-                        [0.0, 0.0], [0.5, 0.0], [1.0, 0.0],
-                        [0.0, 0.5], animationPhase ? [0.6, 0.4] : [0.4, 0.6], [1.0, 0.5],
-                        [0.0, 1.0], [0.5, 1.0], [1.0, 1.0]
-                    ],
-                    colors: [
-                        .white.opacity(0.05), .clear,              .white.opacity(0.03),
-                        .clear, animationPhase ? Color.blue.opacity(0.10) : Color.cyan.opacity(0.07), .blue.opacity(0.03),
-                        .clear,              .purple.opacity(0.04), .clear
-                    ]
-                )
-                .ignoresSafeArea()
-                // Conditional animation modifier: only runs when isAnimating is true.
-                // Setting isAnimating=false removes the animation entirely so the
-                // SwiftUI animation engine produces zero compositor frames.
-                .animation(
-                    isAnimating ? .easeInOut(duration: 8).repeatForever(autoreverses: true) : nil,
-                    value: animationPhase
-                )
-                .onAppear {
-                    if !reduceMotion {
-                        startMeshAnimation()
-                    }
-                }
-                .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
-                    stopMeshAnimation()
-                }
-                .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-                    if !reduceMotion {
-                        startMeshAnimation()
-                    }
-                }
-            } else {
-                LinearGradient(
-                    colors: [
-                        Color.white.opacity(0.08),
-                        Color.white.opacity(0.02),
-                        Color.blue.opacity(0.04)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-
-                Circle()
-                    .fill(Color.white.opacity(0.16))
-                    .frame(width: 360, height: 360)
-                    .blur(radius: 90)
-                    .offset(x: -220, y: -180)
-
-                Circle()
-                    .fill(Color.cyan.opacity(0.10))
-                    .frame(width: 420, height: 420)
-                    .blur(radius: 120)
-                    .offset(x: 260, y: 220)
-            }
-        }
-        .ignoresSafeArea()
-    }
-
-    private func startMeshAnimation() {
-        isAnimating = true
-        animationPhase.toggle() // value change triggers the conditional .animation modifier above
-    }
-
-    private func stopMeshAnimation() {
-        // Disable animations in this transaction so the snap is hard and immediate —
-        // no interpolation runs, no compositor frames are generated.
-        var t = Transaction()
-        t.disablesAnimations = true
-        withTransaction(t) {
-            isAnimating = false
-            animationPhase = false
-        }
+        VisualEffectMaterialView(material: .windowBackground, blendingMode: .behindWindow)
+            .ignoresSafeArea()
     }
 }
 
 struct SidebarMaterialBackground: View {
     var body: some View {
         VisualEffectMaterialView(material: .sidebar)
-            .overlay {
-                // Keep sidebar treatment flat and column-like (Apple Music style),
-                // instead of a rounded floating glass slab.
-                LinearGradient(
-                    colors: [
-                        Color.white.opacity(0.10),
-                        Color.clear
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            }
             .overlay(alignment: .trailing) {
                 Rectangle()
                     .fill(Color.black.opacity(0.10))

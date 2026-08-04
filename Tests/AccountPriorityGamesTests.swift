@@ -78,6 +78,22 @@ final class AccountPriorityGamesTests: XCTestCase {
         XCTAssertEqual(settings.personalPriorityGames(forAccountId: account), ["Personal Game"])
     }
 
+    func testPriorityAuditIncludesModeChanges() {
+        let messages = NavigationModel.priorityAuditMessages(
+            actor: "sorbertman",
+            old: ["Old Game"],
+            new: ["New Game"],
+            oldSource: .global,
+            newSource: .globalAndPersonal
+        )
+
+        XCTAssertEqual(messages, [
+            "sorbertman changed priority mode from Global to Mixed",
+            "sorbertman added New Game to their priority list",
+            "sorbertman removed Old Game from their priority list"
+        ])
+    }
+
     func testGameFailoverStreamerPersistsByGame() {
         let game = Game(id: "g-finals", name: "THE FINALS")
         settings.addGamePreference(game, state: .preferred)

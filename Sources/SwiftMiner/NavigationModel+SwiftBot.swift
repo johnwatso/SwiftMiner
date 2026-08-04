@@ -76,7 +76,16 @@ extension NavigationModel {
         guard let miner = minerManager.miners.first(where: { $0.ownerDiscordId == discordUserId && $0.accountId == accountId }) else {
             return nil
         }
+        let previous = Settings.shared.personalPriorityGames(forAccountId: accountId)
+        let previousSource = Settings.shared.prioritySource(forAccountId: accountId)
         let priorities = Settings.shared.prioritiseGameForAccount(accountId: accountId, gameName: gameName)
+        auditPriorityChange(
+            actor: miner.username,
+            old: previous,
+            new: Settings.shared.personalPriorityGames(forAccountId: accountId),
+            oldSource: previousSource,
+            newSource: Settings.shared.prioritySource(forAccountId: accountId)
+        )
         minerManager.updatePriorityGames(priorities, forMinerId: miner.id)
         if miner.isRunning {
             await minerManager.forceRefreshMiner(minerId: miner.id)
@@ -97,6 +106,7 @@ extension NavigationModel {
             return nil
         }
         let previous = Settings.shared.personalPriorityGames(forAccountId: accountId)
+        let previousSource = Settings.shared.prioritySource(forAccountId: accountId)
         if let prioritySource,
            let source = Settings.AccountPrioritySource(rawValue: prioritySource) {
             Settings.shared.setPrioritySource(source, forAccountId: accountId)
@@ -109,7 +119,13 @@ extension NavigationModel {
         } else {
             priorities = Settings.shared.setPersonalPriorityGames(accountId: accountId, games: games)
         }
-        auditPriorityChange(actor: miner.username, old: previous, new: games)
+        auditPriorityChange(
+            actor: miner.username,
+            old: previous,
+            new: Settings.shared.personalPriorityGames(forAccountId: accountId),
+            oldSource: previousSource,
+            newSource: Settings.shared.prioritySource(forAccountId: accountId)
+        )
         minerManager.updatePriorityGames(priorities, forMinerId: miner.id)
         if miner.isRunning {
             await minerManager.forceRefreshMiner(minerId: miner.id)
@@ -129,6 +145,7 @@ extension NavigationModel {
             return nil
         }
         let previous = Settings.shared.personalPriorityGames(forAccountId: accountId)
+        let previousSource = Settings.shared.prioritySource(forAccountId: accountId)
         if let prioritySource,
            let source = Settings.AccountPrioritySource(rawValue: prioritySource) {
             Settings.shared.setPrioritySource(source, forAccountId: accountId)
@@ -141,7 +158,13 @@ extension NavigationModel {
         } else {
             priorities = Settings.shared.setPersonalPriorityGames(accountId: accountId, games: games)
         }
-        auditPriorityChange(actor: miner.username, old: previous, new: games)
+        auditPriorityChange(
+            actor: miner.username,
+            old: previous,
+            new: Settings.shared.personalPriorityGames(forAccountId: accountId),
+            oldSource: previousSource,
+            newSource: Settings.shared.prioritySource(forAccountId: accountId)
+        )
         minerManager.updatePriorityGames(priorities, forMinerId: miner.id)
         if miner.isRunning {
             await minerManager.forceRefreshMiner(minerId: miner.id)

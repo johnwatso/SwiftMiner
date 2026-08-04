@@ -459,6 +459,10 @@ private struct EventLogRow: View {
         eventFilter.eventColor
     }
 
+    private var usesSubscriptionIcon: Bool {
+        isSubscriptionRequiredEvent(eventSearchText(for: event))
+    }
+
     private var messageText: String {
         displayText.title
     }
@@ -499,10 +503,10 @@ private struct EventLogRow: View {
                     .foregroundStyle(stall.color)
                     .frame(width: 16, alignment: .center)
             } else {
-                Image(systemName: eventFilter.symbol)
+                Image(systemName: usesSubscriptionIcon ? "creditcard" : eventFilter.symbol)
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(eventColor)
-                    .frame(width: 16, alignment: .center)
+                    .frame(width: 16, height: 16, alignment: .center)
             }
 
             VStack(alignment: .leading, spacing: 1) {
@@ -646,6 +650,10 @@ private func eventDisplayText(for event: EventEntry) -> EventDisplayText {
         return EventDisplayText(title: "Drop progress updated", detail: progress)
     }
 
+    if let subscription = subscriptionRequiredDetail(from: cleaned) {
+        return subscription
+    }
+
     if lowercased.contains("account linking is required")
         || lowercased.contains("may need linking")
         || lowercased.contains("account not linked")
@@ -712,6 +720,10 @@ private func eventFilters(for event: EventEntry) -> Set<EventFilter> {
 
     if isHeartbeatEvent(text) {
         return [.heartbeats]
+    }
+
+    if isSubscriptionRequiredEvent(text) {
+        return [.mining]
     }
 
     if isAccountLinkEvent(text) {
@@ -792,6 +804,10 @@ private let webAuditTag = "[web-audit]"
 
 private func isWebAuditEvent(_ text: String) -> Bool {
     text.contains(webAuditTag)
+}
+
+private func isSubscriptionRequiredEvent(_ text: String) -> Bool {
+    text.contains("subscription required:")
 }
 
 private let updateEventTag = "[update]"
@@ -1045,6 +1061,20 @@ private func progressUpdate(from text: String) -> String? {
     return nil
 }
 
+private func subscriptionRequiredDetail(from text: String) -> EventDisplayText? {
+    guard let groups = matchGroups(
+        #"Subscription required:\s*(.+?)\s+has drops that require purchasing Twitch subscriptions:\s*(.+?)\.\s*These drops are being skipped\.?$"#,
+        in: text
+    ), groups.count == 2 else {
+        return nil
+    }
+
+    return EventDisplayText(
+        title: "Subscription required for \(groups[0])",
+        detail: "\(groups[1]) • Skipping subscription-only drops"
+    )
+}
+
 private func accountLinkDetail(from text: String) -> String? {
     if let groups = matchGroups(#"Priority game blocked:\s+(.+?)\s+is prioritised"#, in: text),
        let game = groups.first {
@@ -1066,6 +1096,9 @@ private func inventoryCounts(from text: String) -> String? {
 
 private func failureTitle(from text: String) -> String {
     let lowercased = text.lowercased()
+    if lowercased.contains("web dashboard") && lowercased.contains("swiftbot") {
+        return "Web dashboard connection failed"
+    }
     if lowercased.contains("pubsub") {
         return "Drop notifications failed"
     }
@@ -1088,7 +1121,10 @@ private func failureDetail(from text: String) -> String? {
     if let detail = matchGroups(#"(?:failed to|could not)\s+.+?:\s+(.+)$"#, in: text)?.first {
         return trimmedSentence(detail)
     }
-    return nil
+    if let detail = text.split(separator: ":").last, detail != Substring(text) {
+        return trimmedSentence(String(detail))
+    }
+    return trimmedSentence(text)
 }
 
 private func warningDetail(from text: String) -> String? {

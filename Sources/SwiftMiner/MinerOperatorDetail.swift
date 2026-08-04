@@ -216,7 +216,8 @@ struct MinerOperatorHeader: View {
     /// resolved it to. Falls back to the initial when neither service has one — an
     /// unlinked miner whose Twitch picture hasn't been fetched yet, say.
     var avatarURL: URL?
-    let menu: AnyView
+    let priorityTitle: String
+    let prioritySymbol: String
 
     var body: some View {
         HStack(spacing: 14) {
@@ -243,8 +244,6 @@ struct MinerOperatorHeader: View {
                 statusCluster(showsLabels: true)
                 statusCluster(showsLabels: false)
             }
-
-            menu
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 16)
@@ -254,7 +253,7 @@ struct MinerOperatorHeader: View {
 
     private var initialAvatar: some View {
         Circle()
-            .fill(Color.accentColor.gradient)
+            .fill(Color.accentColor)
             .overlay {
                 Text(initial)
                     .font(.title2.weight(.semibold))
@@ -276,6 +275,8 @@ struct MinerOperatorHeader: View {
             healthTitle: healthTitle,
             healthSymbol: healthSymbol,
             healthTint: healthTint,
+            priorityTitle: priorityTitle,
+            prioritySymbol: prioritySymbol,
             showsLabels: showsLabels
         )
     }
@@ -360,7 +361,7 @@ struct MinerOperatorHeader: View {
     }
 }
 
-/// Uptime / Last Poll / Health as one grouped cluster of equal-width cells.
+/// Uptime / Last Poll / Health / Priorities as one grouped cluster of equal-width cells.
 ///
 /// Shared between a single miner's header and the Overview's fleet banner, so
 /// the two read identically — the Overview simply passes aggregated values.
@@ -373,6 +374,8 @@ struct MinerStatusCluster: View {
     var healthTitle: String
     var healthSymbol: String
     var healthTint: Color
+    var priorityTitle: String? = nil
+    var prioritySymbol: String = "target"
     var uptimeLabel: String = "Uptime"
     var lastPollLabel: String = "Last Poll"
     var healthLabel: String = "Health"
@@ -421,6 +424,20 @@ struct MinerStatusCluster: View {
             ) {
                 Text(healthTitle)
                     .foregroundStyle(healthTint)
+            }
+
+            if let priorityTitle {
+                cellDivider
+
+                MinerStatusCell(
+                    label: "Priorities",
+                    systemImage: prioritySymbol,
+                    showsLabel: showsLabels,
+                    width: cellWidth
+                ) {
+                    Text(priorityTitle)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .frame(height: showsLabels ? 44 : 34)
@@ -679,7 +696,8 @@ struct MinerMiningSequenceView: View {
                     url: presentation.currentCampaign?.game.boxArtURL,
                     symbol: presentation.snapshot.now.symbol,
                     size: Self.leadArtworkWidth,
-                    fillsHeight: true
+                    fillsHeight: true,
+                    tint: presentation.snapshot.now.accent
                 )
                 VStack(alignment: .leading, spacing: 5) {
                     Text(presentation.snapshot.now.title)
@@ -729,7 +747,8 @@ struct MinerMiningSequenceView: View {
                         url: presentation.nextCampaign?.game.boxArtURL,
                         symbol: item.symbol,
                         size: Self.leadArtworkWidth,
-                        fillsHeight: true
+                        fillsHeight: true,
+                        tint: item.accent
                     )
                     VStack(alignment: .leading, spacing: 4) {
                         // Matches "Currently mining" — the two are peer columns
@@ -807,21 +826,27 @@ struct CampaignArtworkThumbnail: View {
     /// staying square, so the text beside it doesn't overhang the image.
     /// `size` then means width only, and `size` is the floor on height.
     var fillsHeight: Bool = false
+    /// Uses the same resolved state tint as the Overview presentation whenever
+    /// no campaign artwork is available.
+    var tint: Color = .secondary
 
     private var cornerRadius: CGFloat {
         min(14, size * 0.24)
     }
 
     var body: some View {
-        CampaignCardArtwork(url: url, tint: .accentColor)
+        CampaignCardArtwork(url: url)
             .frame(width: size)
             .frame(minHeight: size, maxHeight: fillsHeight ? .infinity : size)
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .overlay {
                 if url == nil {
-                    Image(systemName: symbol)
-                        .font(.system(size: size * 0.3, weight: .semibold))
-                        .foregroundStyle(.secondary)
+                    AnimatedStatusIcon(
+                        symbol: symbol,
+                        color: tint,
+                        size: size * 0.3,
+                        weight: .semibold
+                    )
                 }
             }
     }
