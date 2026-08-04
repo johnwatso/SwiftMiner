@@ -220,11 +220,6 @@ struct MinerSourceListRow: View {
         settings.priorityGames(forAccountId: miner.accountId)
     }
 
-    private var hasMinerPriorityOverride: Bool {
-        let accountId = miner.accountId.trimmingCharacters(in: .whitespacesAndNewlines)
-        return settings.accountPriorityGames[accountId] != nil || !settings.includesGlobalPriorityGames(forAccountId: accountId)
-    }
-
     private var hasBlockingIssues: Bool {
         miner.status == .blockedAccountNotLinked || miner.status == .error || miner.needsAuth
     }
@@ -285,16 +280,6 @@ struct MinerSourceListRow: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
-
-                    HStack(spacing: 4) {
-                        Image(systemName: hasMinerPriorityOverride ? "person.crop.square.badge.checkmark" : "target")
-                            .font(.system(size: 9, weight: .semibold))
-
-                        Text(priorityLabel)
-                            .lineLimit(1)
-                    }
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
                 }
             }
 
@@ -326,11 +311,6 @@ struct MinerSourceListRow: View {
         snapshot.sourceListActivityLabel
     }
 
-    private var priorityLabel: String {
-        let count = displayedPriorityGames.count
-        guard count > 0 else { return "No priorities" }
-        return count == 1 ? "1 priority" : "\(count) priorities"
-    }
 }
 
 struct MinerNicknameEditorSheet: View {
