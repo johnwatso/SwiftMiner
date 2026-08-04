@@ -16,8 +16,6 @@ struct MinersOverviewView: View {
     @State private var streamOverrideEditor: MinerStreamOverridePresentation?
     @State private var isRefreshingSelectedMiner = false
 
-    private static let operatorSummaryCardHeight: CGFloat = 130
-
     private var miners: [MinerManager.ManagedMiner] {
         navigation.minerManager.miners
     }
@@ -214,19 +212,7 @@ struct MinersOverviewView: View {
 
                     minerCampaignQueueSection(for: miner, presentation: presentation)
 
-                    ViewThatFits(in: .horizontal) {
-                        HStack(alignment: .top, spacing: 16) {
-                            minerHealthSummarySection(for: miner)
-                                .frame(minWidth: 300, maxWidth: .infinity, alignment: .topLeading)
-                            minerPrioritiesSection(for: miner)
-                                .frame(minWidth: 300, maxWidth: .infinity, alignment: .topLeading)
-                        }
-
-                        VStack(alignment: .leading, spacing: TahoeMetrics.sectionSpacing) {
-                            minerHealthSummarySection(for: miner)
-                            minerPrioritiesSection(for: miner)
-                        }
-                    }
+                    minerHealthSummarySection(for: miner)
 
                     minerRecoveryHistorySection(for: miner)
                 }
@@ -432,6 +418,7 @@ struct MinersOverviewView: View {
 
     private func minerHealthSummarySection(for miner: MinerManager.ManagedMiner) -> some View {
         let snapshot = MinerHealthSnapshot.make(miner: miner)
+        let miningType = miningType(for: miner)
 
         return TahoeSection("Miner health") {
             VStack(spacing: 0) {
@@ -455,9 +442,10 @@ struct MinersOverviewView: View {
                     date: snapshot.lastDropProgressAt ?? snapshot.lastSuccessfulPollAt,
                     isHealthy: !miner.isNotEarning()
                 )
+                TahoeRowDivider(leadingInset: 39)
+                prioritySourceRow(miningType)
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
-            .frame(height: Self.operatorSummaryCardHeight, alignment: .topLeading)
         }
     }
 
@@ -555,6 +543,35 @@ struct MinersOverviewView: View {
         .padding(.vertical, 10)
     }
 
+    private func prioritySourceRow(_ miningType: (title: String, detail: String, symbol: String)) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: miningType.symbol)
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(.tint)
+                .font(.system(size: 13, weight: .semibold))
+                .frame(width: 15)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Priorities")
+                    .font(.subheadline)
+                Text(miningType.detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            Text(miningType.title)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .accessibilityElement(children: .combine)
+    }
+
     private func minerRecoveryHistorySection(for miner: MinerManager.ManagedMiner) -> some View {
         let logEvents = navigation.events.filter { $0.minerId == miner.id }.prefix(5)
         let recentEventCount = (selectedActivitySummary?.recentEvents.count ?? 0) + logEvents.count
@@ -614,34 +631,6 @@ struct MinersOverviewView: View {
     }
 
     // MARK: - Priorities
-
-    private func minerPrioritiesSection(for miner: MinerManager.ManagedMiner) -> some View {
-        let miningType = miningType(for: miner)
-
-        return TahoeSection("Mining Type") {
-            HStack(alignment: .center, spacing: 12) {
-                Image(systemName: miningType.symbol)
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(.tint)
-                    .frame(width: 30, height: 30)
-                    .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(miningType.title)
-                        .font(.subheadline.weight(.semibold))
-                    Text(miningType.detail)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer(minLength: 0)
-            }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-            .frame(height: Self.operatorSummaryCardHeight, alignment: .topLeading)
-            .accessibilityElement(children: .combine)
-        }
-    }
 
     private func miningType(for miner: MinerManager.ManagedMiner) -> (title: String, detail: String, symbol: String) {
         switch settings.prioritySource(forAccountId: miner.accountId) {
