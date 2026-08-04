@@ -1,4 +1,5 @@
 import Foundation
+import SwiftMinerCore
 
 // MARK: - Connection State
 
@@ -21,7 +22,7 @@ public struct SwiftBotDiscordUser: Codable, Sendable, Identifiable, Equatable {
         self.id = id
         self.displayName = displayName
         self.username = username
-        self.avatarURL = avatarURL
+        self.avatarURL = MinerAvatarURL.usable(avatarURL)
     }
 
     enum CodingKeys: String, CodingKey {
@@ -43,10 +44,10 @@ public struct SwiftBotDiscordUser: Codable, Sendable, Identifiable, Equatable {
         id = try container.decode(String.self, forKey: .id)
         displayName = try container.decode(String.self, forKey: .displayName)
         username = try container.decodeIfPresent(String.self, forKey: .username)
-        avatarURL = try container.decodeIfPresent(URL.self, forKey: .avatarURL)
+        avatarURL = MinerAvatarURL.usable(try container.decodeIfPresent(URL.self, forKey: .avatarURL)
             ?? alternate.decodeIfPresent(URL.self, forKey: .avatarUrl)
             ?? alternate.decodeIfPresent(URL.self, forKey: .displayAvatarURL)
-            ?? alternate.decodeIfPresent(URL.self, forKey: .avatar)
+            ?? alternate.decodeIfPresent(URL.self, forKey: .avatar))
     }
 
     public func encode(to encoder: Encoder) throws {

@@ -327,17 +327,9 @@ struct MinerSourceListRow: View {
     }
 
     private var priorityLabel: String {
-        guard !displayedPriorityGames.isEmpty else {
-            return "No priority games set"
-        }
-
-        let visibleGames = displayedPriorityGames.prefix(2).joined(separator: ", ")
-        let remainingCount = displayedPriorityGames.count - 2
-        let summary = remainingCount > 0 ? "\(visibleGames) +\(remainingCount)" : visibleGames
-        if !settings.includesGlobalPriorityGames(forAccountId: miner.accountId) {
-            return "Miner only: \(summary)"
-        }
-        return "\(hasMinerPriorityOverride ? "Miner" : "Global"): \(summary)"
+        let count = displayedPriorityGames.count
+        guard count > 0 else { return "No priorities" }
+        return count == 1 ? "1 priority" : "\(count) priorities"
     }
 }
 

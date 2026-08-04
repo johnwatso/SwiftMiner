@@ -903,11 +903,18 @@ enum WebDashboardAssets {
       return `<div class="card"><div class="label" style="margin-bottom:12px">Progress</div>${progressStateCard(p, cfg, 'background:transparent;border:none;padding:0')}</div>`;
     }
 
+    function customProfileImageURL(...urls) {
+      return urls.find((url) => {
+        if (typeof url !== 'string' || !url.toLowerCase().startsWith('https://')) return false;
+        const value = url.toLowerCase();
+        return !value.includes('/xarth/404_user_') && !value.includes('discordapp.com/embed/avatars/');
+      });
+    }
+
     function minerIdentity(p) {
       const acc = p.account || {};
       const twitchIcon = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M11.571 4.714h1.715v5.143h-1.715Zm4.715 0H18v5.143h-1.714ZM6 0 1.714 4.286V19.714H6.857V24l4.286-4.286h3.428L22.286 12V0Zm14.571 11.143-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714ZM11.571 4.714h1.715v5.143h-1.715Zm4.715 0H18v5.143h-1.714Z"/></svg>`;
-      const profileImageURL = [acc.profileImageURL, acc.discordProfileImageURL]
-        .find((url) => typeof url === 'string' && url.toLowerCase().startsWith('https://'));
+      const profileImageURL = customProfileImageURL(acc.profileImageURL, acc.discordProfileImageURL);
       const twitchAvatar = profileImageURL
         ? `<img src="${esc(profileImageURL)}" alt="" referrerpolicy="no-referrer">`
         : twitchIcon;
@@ -1487,8 +1494,7 @@ enum WebDashboardAssets {
         const acc = p.account || {};
         const cfg = getStatusConfig(p);
         const id = minerId(p);
-        const profileImageURL = [acc.profileImageURL, acc.discordProfileImageURL]
-          .find((url) => typeof url === 'string' && url.toLowerCase().startsWith('https://'));
+        const profileImageURL = customProfileImageURL(acc.profileImageURL, acc.discordProfileImageURL);
         const avatar = profileImageURL
           ? `<img src="${esc(profileImageURL)}" alt="" referrerpolicy="no-referrer">`
           : twitchIcon;
