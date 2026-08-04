@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SwiftMiner 1.36.9 - Release Notes</title>
-  <meta name="description" content="Release notes for SwiftMiner 1.36.9: reliable miner profile pictures and a cleaner miner list.">
+  <meta name="description" content="Release notes for SwiftMiner 1.36.9: clearer miner operations and precise Twitch Drop scheduling.">
   <link rel="canonical" href="https://swiftminer.app/release-notes/1.36.9.html">
   <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
@@ -27,8 +27,8 @@
 <body>
   <main>
     <h1>SwiftMiner 1.36.9</h1>
-    <p class="meta">Version 1.36.9 &middot; Build 2026080517</p>
-    <p class="intro">Reliable miner profile pictures and a cleaner miner list.</p>
+    <p class="meta">Version 1.36.9 &middot; Build 2026080519</p>
+    <p class="intro">Clearer miner operations, calmer macOS surfaces, and more precise Twitch Drop scheduling.</p>
 
     <section>
       <h2>Real profile pictures</h2>
@@ -57,8 +57,27 @@
         <li>Removes the decorative blue and purple window, sidebar, and campaign-placeholder gradients.</li>
         <li>Uses flat system surfaces for missing campaign artwork and a flat accent fill for fallback miner initials.</li>
         <li>Keeps semantic colour for status symbols, progress, and actionable controls; missing-artwork symbols now reuse Overview's SF Symbol treatment.</li>
-        <li>Logs WebUI priority-mode changes, shows the reason for dashboard connection failures, and gives Activity Log symbols enough room to avoid clipping.</li>
-        <li>Shows subscription-only priority campaigns as Mining decisions with a credit-card symbol, while leaving non-priority campaigns out of the Activity Log.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Clearer activity and priorities</h2>
+      <p class="summary">The Activity Log now describes actual miner decisions instead of treating expected conditions as generic warnings.</p>
+      <ul>
+        <li>Logs WebUI priority changes, including a switch between Global, Mixed, and Personal priority modes.</li>
+        <li>Explains dashboard connection failures instead of showing a generic &ldquo;Action failed&rdquo; entry, and gives event symbols enough room to avoid clipping.</li>
+        <li>Shows subscription-only priority campaigns under Mining with a credit-card symbol; non-priority campaigns no longer create these entries.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Precise Drop scheduling</h2>
+      <p class="summary">SwiftMiner now evaluates a reward's own schedule as well as the parent campaign schedule before it watches a stream.</p>
+      <ul>
+        <li>Does not start watching early when a campaign is live but its next individual reward has not started.</li>
+        <li>Stops treating a campaign as mineable once its remaining individual rewards have ended, even if the parent campaign remains visible.</li>
+        <li>Keeps staggered campaigns mineable when at least one reward is currently active.</li>
+        <li>Preserves existing behaviour for campaigns where Twitch does not provide per-reward dates.</li>
       </ul>
     </section>
   </main>
