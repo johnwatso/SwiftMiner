@@ -235,6 +235,77 @@ final class ModelTests: XCTestCase {
         XCTAssertFalse(campaign.isMiningEligible)
     }
 
+    func testCampaignSkipsDropsOutsideTheirOwnActiveWindow() {
+        let now = Date()
+        let game = Game(id: "g1", name: "Test Game")
+        let futureDrop = Drop(
+            id: "future",
+            name: "Future reward",
+            requiredMinutes: 60,
+            dropStartDate: now.addingTimeInterval(60),
+            dropEndDate: now.addingTimeInterval(3_600)
+        )
+        let expiredDrop = Drop(
+            id: "expired",
+            name: "Expired reward",
+            requiredMinutes: 60,
+            dropStartDate: now.addingTimeInterval(-3_600),
+            dropEndDate: now.addingTimeInterval(-60)
+        )
+        let campaign = Campaign(
+            id: "c1",
+            name: "Staggered rewards",
+            game: game,
+            status: .active,
+            startDate: now.addingTimeInterval(-3_600),
+            endDate: now.addingTimeInterval(3_600),
+            drops: [futureDrop, expiredDrop],
+            isAccountConnected: true
+        )
+
+        XCTAssertFalse(futureDrop.isTimeActive(at: now))
+        XCTAssertFalse(expiredDrop.isTimeActive(at: now))
+        XCTAssertTrue(Drop(id: "unbounded", name: "Always active", requiredMinutes: 60).isTimeActive(at: now))
+        XCTAssertTrue(campaign.eligibleDrops.isEmpty)
+        XCTAssertTrue(campaign.earnableDrops.isEmpty)
+        XCTAssertFalse(campaign.hasWatchableWorkRemaining)
+        XCTAssertFalse(campaign.canAttemptMining)
+    }
+
+    func testCampaignMinesTheActiveDropInAStaggeredCampaign() {
+        let now = Date()
+        let game = Game(id: "g1", name: "Test Game")
+        let activeDrop = Drop(
+            id: "active",
+            name: "Available reward",
+            requiredMinutes: 60,
+            dropStartDate: now.addingTimeInterval(-60),
+            dropEndDate: now.addingTimeInterval(60)
+        )
+        let futureDrop = Drop(
+            id: "future",
+            name: "Future reward",
+            requiredMinutes: 60,
+            dropStartDate: now.addingTimeInterval(60),
+            dropEndDate: now.addingTimeInterval(3_600)
+        )
+        let campaign = Campaign(
+            id: "c1",
+            name: "Staggered rewards",
+            game: game,
+            status: .active,
+            startDate: now.addingTimeInterval(-3_600),
+            endDate: now.addingTimeInterval(3_600),
+            drops: [activeDrop, futureDrop],
+            isAccountConnected: true
+        )
+
+        XCTAssertEqual(campaign.eligibleDrops.map(\.id), ["active"])
+        XCTAssertEqual(campaign.earnableDrops.map(\.id), ["active"])
+        XCTAssertTrue(campaign.hasWatchableWorkRemaining)
+        XCTAssertTrue(campaign.canAttemptMining)
+    }
+
     func testVerificationCandidatesForRestrictedCampaignSkipsNonACLChannels() {
         let game = Game(id: "g1", name: "THE FINALS")
         let now = Date()

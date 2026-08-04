@@ -216,6 +216,15 @@ public struct Drop: Codable, Sendable, Identifiable, Equatable {
     /// Whether this drop requires purchasing Twitch subscriptions.
     public var isSubscriptionRequired: Bool { requiredSubs > 0 }
 
+    /// Whether this individual drop is within its active window. Twitch may schedule
+    /// a reward for a shorter window than the campaign that contains it; missing
+    /// bounds mean the campaign window remains the authority for that side.
+    public func isTimeActive(at date: Date = Date()) -> Bool {
+        if let dropStartDate, date < dropStartDate { return false }
+        if let dropEndDate, date > dropEndDate { return false }
+        return true
+    }
+
     /// Alias for requiredMinutes (backward compat)
     public var requiredMinutesWatched: Int { requiredMinutes }
 
@@ -485,7 +494,12 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
     /// Drops that require purchasing subscriptions and have no progress yet.
     /// These cannot be earned by watching alone.
     public var subscriptionRequiredDrops: [Drop] {
-        drops.filter { $0.isSubscriptionRequired && !$0.isClaimed && ($0.progress?.currentMinutes ?? 0) == 0 }
+        drops.filter {
+            $0.isTimeActive()
+                && $0.isSubscriptionRequired
+                && !$0.isClaimed
+                && ($0.progress?.currentMinutes ?? 0) == 0
+        }
     }
 
     /// Whether watching can still earn anything here.
@@ -493,7 +507,7 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
     /// only unclaimed drops are gated counts as finished for scheduling and status.
     public var hasWatchableWorkRemaining: Bool {
         drops.contains { drop in
-            guard !drop.isClaimed else { return false }
+            guard !drop.isClaimed, drop.isTimeActive() else { return false }
             return !(drop.isSubscriptionRequired && (drop.progress?.currentMinutes ?? 0) == 0)
         }
     }
@@ -502,7 +516,7 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
     public var earnableDrops: [Drop] {
         drops.filter { drop in
             // Must be unclaimed, NOT already at 100% (claimable), and linked
-            guard !drop.isClaimed && !drop.isClaimable else { return false }
+            guard !drop.isClaimed && !drop.isClaimable && drop.isTimeActive() else { return false }
 
             // Subscription-required drops without progress can't be earned by watching
             if drop.isSubscriptionRequired, (drop.progress?.currentMinutes ?? 0) == 0 {
@@ -519,7 +533,7 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
     /// Returns drops that can be claimed now or earned soon (not claimed and all preconditions met).
     public var eligibleDrops: [Drop] {
         drops.filter { drop in
-            guard !drop.isClaimed else { return false }
+            guard !drop.isClaimed, drop.isTimeActive() else { return false }
 
             // Subscription-required drops without progress can't be earned by watching
             if drop.isSubscriptionRequired, (drop.progress?.currentMinutes ?? 0) == 0 {
