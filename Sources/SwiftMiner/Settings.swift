@@ -313,7 +313,7 @@ public final class Settings {
     public var minerAvatarSource: MinerAvatarSource {
         get {
             access(keyPath: \.minerAvatarSource)
-            return Self.read("minerAvatarSource", default: .discord)
+            return Self.read("minerAvatarSource", default: .automatic)
         }
         set {
             withMutation(keyPath: \.minerAvatarSource) {
@@ -2204,7 +2204,7 @@ public final class Settings {
         selectedDropsFiltersData = "[\"active\"]"
         miningStrategy = .mineAll
         preferSteamArtwork = false
-        minerAvatarSource = .discord
+        minerAvatarSource = .automatic
         twitchAvatarsData = "{}"
         ignoredWarningsData = "[]"
 #if DEBUG
@@ -2293,7 +2293,7 @@ public final class Settings {
         prioritiseFollowedStreamers = backup.prioritiseFollowedStreamers
         syncMinersState = backup.syncMinersState
         preferSteamArtwork = backup.preferSteamArtwork
-        minerAvatarSource = backup.minerAvatarSource.flatMap(MinerAvatarSource.init(rawValue:)) ?? .discord
+        minerAvatarSource = backup.minerAvatarSource.flatMap(MinerAvatarSource.init(rawValue:)) ?? .automatic
         runInBackground = backup.runInBackground
         selectedDropsFiltersData = backup.selectedDropsFiltersData
         selectedEventFiltersData = backup.selectedEventFiltersData
@@ -2566,6 +2566,9 @@ extension Settings.LogLevel {
 
 /// Which service a miner's header picture comes from.
 public enum MinerAvatarSource: String, CaseIterable, Identifiable, Sendable {
+    /// Use the miner's own custom Twitch picture, then a custom linked Discord
+    /// picture. Provider-default images never count as a picture.
+    case automatic
     /// The Discord account the miner is linked to, resolved through SwiftBot.
     case discord
     /// The miner's own Twitch account.
@@ -2575,6 +2578,7 @@ public enum MinerAvatarSource: String, CaseIterable, Identifiable, Sendable {
 
     public var label: String {
         switch self {
+        case .automatic: return "Automatic"
         case .discord: return "Discord"
         case .twitch: return "Twitch"
         }
@@ -2582,6 +2586,8 @@ public enum MinerAvatarSource: String, CaseIterable, Identifiable, Sendable {
 
     public var detail: String {
         switch self {
+        case .automatic:
+            return "Use the miner's custom Twitch picture when it has one, otherwise its linked Discord picture. Generic Twitch and Discord images are skipped."
         case .discord:
             return "Use the picture from the Discord account a miner is linked to. Miners with no linked Discord fall back to their Twitch picture."
         case .twitch:
@@ -2589,10 +2595,13 @@ public enum MinerAvatarSource: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    /// Picks the preferred picture, then the other service's, then nothing — the
-    /// caller draws the initial when this returns `nil`.
+    /// Picks a custom preferred picture, then the other service's, then nothing
+    /// — the caller draws the initial when this returns `nil`.
     public func resolve(discord: URL?, twitch: URL?) -> URL? {
+        let discord = MinerAvatarURL.usable(discord)
+        let twitch = MinerAvatarURL.usable(twitch)
         switch self {
+        case .automatic: return twitch ?? discord
         case .discord: return discord ?? twitch
         case .twitch: return twitch ?? discord
         }

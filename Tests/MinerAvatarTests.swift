@@ -1,5 +1,6 @@
 import XCTest
 @testable import SwiftMiner
+import SwiftMinerCore
 
 @MainActor
 final class MinerAvatarTests: XCTestCase {
@@ -10,6 +11,10 @@ final class MinerAvatarTests: XCTestCase {
 
     func testDiscordSourcePrefersDiscordPicture() {
         XCTAssertEqual(MinerAvatarSource.discord.resolve(discord: discord, twitch: twitch), discord)
+    }
+
+    func testAutomaticSourcePrefersTwitchPicture() {
+        XCTAssertEqual(MinerAvatarSource.automatic.resolve(discord: discord, twitch: twitch), twitch)
     }
 
     func testTwitchSourcePrefersTwitchPicture() {
@@ -69,6 +74,14 @@ final class MinerAvatarTests: XCTestCase {
         let store = TwitchAvatarStore(settings: settings)
         XCTAssertNil(store.url(forAccountId: "generic"))
         settings.twitchAvatarsData = "{}"
+    }
+
+    func testGenericDiscordProfileImageIsNotUsedAsAnAvatar() {
+        let generic = URL(string: "https://cdn.discordapp.com/embed/avatars/3.png")!
+
+        XCTAssertTrue(MinerAvatarURL.isGenericDiscordProfileImage(generic))
+        XCTAssertNil(MinerAvatarSource.automatic.resolve(discord: generic, twitch: nil))
+        XCTAssertEqual(MinerAvatarSource.automatic.resolve(discord: generic, twitch: twitch), twitch)
     }
 
     func testPruningDropsAccountsThatAreNoLongerMined() {

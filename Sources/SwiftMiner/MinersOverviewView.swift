@@ -286,9 +286,9 @@ struct MinersOverviewView: View {
         return navigation.discordUsersById[discordId]?.avatarURL
     }
 
-    /// Miners whose Twitch picture is worth a lookup: all of them when Twitch is
-    /// the chosen source, otherwise only the ones with no Discord picture to show,
-    /// so an all-Discord setup spends nothing on requests it will never draw.
+    /// Miners whose Twitch picture is worth a lookup: all of them when Automatic
+    /// or Twitch is selected, otherwise only those with no custom Discord picture
+    /// to show, so an all-Discord setup spends nothing on requests it will never draw.
     private var minersNeedingTwitchAvatar: [MinerManager.ManagedMiner] {
         guard settings.minerAvatarSource == .discord else { return miners }
         return miners.filter { discordAvatarURL(for: $0) == nil }

@@ -197,14 +197,14 @@ public actor DiscordProjectionBuilder {
         let ownerDiscordId = acct.ownerDiscordId
 
         let discordProfileURL: URL? = if let ownerDiscordId {
-            await discordProfileImageURL(ownerDiscordId)
+            MinerAvatarURL.usable(await discordProfileImageURL(ownerDiscordId))
         } else {
             nil
         }
         let account = DiscordUserProjection.Account(
             twitchAccountId: twitchId,
             username: acct.username,
-            profileImageURL: await twitchProfileImageURL(twitchId),
+            profileImageURL: MinerAvatarURL.usable(await twitchProfileImageURL(twitchId)),
             discordProfileImageURL: discordProfileURL
         )
         // Issues / DM state are Discord-keyed; only present if the account is linked.
@@ -285,8 +285,8 @@ public actor DiscordProjectionBuilder {
             return DiscordUserProjection.Account(
                 twitchAccountId: record.twitchId,
                 username: record.username,
-                profileImageURL: await twitchProfileImageURL(record.twitchId),
-                discordProfileImageURL: await discordProfileImageURL(discordUserId)
+                profileImageURL: MinerAvatarURL.usable(await twitchProfileImageURL(record.twitchId)),
+                discordProfileImageURL: MinerAvatarURL.usable(await discordProfileImageURL(discordUserId))
             )
         } catch {
             return nil
