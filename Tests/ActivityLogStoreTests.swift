@@ -157,6 +157,33 @@ final class ActivityLogStoreTests: XCTestCase {
         XCTAssertFalse(page.hasMore)
     }
 
+    func testSubscriptionRequiredActivityUsesMiningFilter() {
+        let entry = EventEntry(
+            message: "Subscription required: Example Game has drops that require purchasing Twitch subscriptions: Example reward. These drops are being skipped.",
+            level: .warning
+        )
+
+        let miningPage = activityLogPage(
+            events: [entry],
+            selectedFilters: [.mining],
+            selectedMinerID: nil,
+            searchText: "",
+            minerNamesByID: [:],
+            limit: 10
+        )
+        let warningPage = activityLogPage(
+            events: [entry],
+            selectedFilters: [.warnings],
+            selectedMinerID: nil,
+            searchText: "",
+            minerNamesByID: [:],
+            limit: 10
+        )
+
+        XCTAssertEqual(miningPage.entries, [entry])
+        XCTAssertTrue(warningPage.entries.isEmpty)
+    }
+
     func testUpdateCompletionNotificationUsesIndependentCategory() {
         let update = NavigationModel.CompletedUpdate(
             previousVersion: "1.31",

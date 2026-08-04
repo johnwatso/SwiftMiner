@@ -2062,13 +2062,20 @@ public actor MinerEngine {
         }
     }
 
-    /// Detects campaigns with subscription-required drops and logs warnings.
-    /// These drops are filtered from eligibleDrops, so they won't cause endless retry loops,
-    /// but we want to inform the user why some drops are unavailable.
+    /// Reports subscription-only campaigns in the miner's own priority list.
+    /// These drops are filtered from eligibleDrops, so they won't cause endless retry loops.
+    /// Unrelated campaigns must stay quiet: surfacing every subscription-gated game
+    /// Twitch returns made the Activity Log look like the miner was considering
+    /// work outside the operator's configured priorities.
     private func warnForSubscriptionRequiredCampaigns(in campaigns: [Campaign]) async {
+        let priorityKeys = Set(priorityGames.map { normalizedGameKey($0) }.filter { !$0.isEmpty })
+        guard !priorityKeys.isEmpty else { return }
+
         let subscriptionCampaigns = campaigns.filter { campaign in
             campaign.isTimeActive
                 && !campaign.isLikelyInternalTestCampaign
+                && (priorityKeys.contains(normalizedGameKey(campaign.gameName))
+                    || priorityKeys.contains(normalizedGameKey(campaign.game.id)))
                 && campaign.subscriptionRequiredDrops.contains(where: { !$0.isClaimed })
         }
 

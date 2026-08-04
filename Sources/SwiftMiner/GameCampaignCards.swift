@@ -257,7 +257,7 @@ struct GameCampaignDeckCard: View {
 
         HStack(alignment: .center, spacing: 16) {
             // LEFT ARTWORK (Anchors the cluster, prominent 120x160 size)
-            GameArtworkCard(url: group.artworkURL, tint: group.aggregateState.tint)
+            GameArtworkCard(url: group.artworkURL)
 
             // CONTENT CLUSTER (titles, metadata, and reward shelf sit together)
             VStack(alignment: .leading, spacing: 10) {
@@ -430,29 +430,14 @@ struct GameCampaignDeckCard: View {
     private var cardBackground: some View {
         RoundedRectangle(cornerRadius: 20, style: .continuous)
             .fill(.thinMaterial.opacity(isActive ? 0.98 : 0.94))
-            .overlay {
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                cardState.tint.opacity(isActive ? 0.11 : (isFinishedOrEnded ? 0.025 : 0.055)),
-                                Color.white.opacity(isActive ? 0.055 : 0.025),
-                                Color.clear
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-            }
     }
 }
 
 struct GameArtworkCard: View {
     let url: URL?
-    let tint: Color
 
     var body: some View {
-        CampaignCardArtwork(url: url, tint: tint)
+        CampaignCardArtwork(url: url)
             .frame(width: 120, height: 160)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay {

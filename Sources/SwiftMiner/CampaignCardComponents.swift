@@ -357,7 +357,6 @@ struct LoadedCampaignArtwork {
 
 struct CampaignCardArtwork: View {
     let url: URL?
-    let tint: Color
     @State private var loadedArtwork: LoadedCampaignArtwork?
 
     private var resolvedURL: URL? {
@@ -405,20 +404,15 @@ struct CampaignCardArtwork: View {
     }
 
     private var placeholder: some View {
-        LinearGradient(
-            colors: [tint.opacity(0.82), tint.opacity(0.38), Color.black.opacity(0.52)],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
+        Color(nsColor: .controlBackgroundColor)
     }
 }
 
 struct CampaignArtworkIcon: View {
     let url: URL?
-    let tint: Color
 
     var body: some View {
-        CampaignCardArtwork(url: url, tint: tint)
+        CampaignCardArtwork(url: url)
             .frame(width: 48, height: 64)
             .clipShape(RoundedRectangle(cornerRadius: GlassRadius.artwork, style: .continuous))
             .overlay {

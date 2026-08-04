@@ -385,17 +385,55 @@ public final class NavigationModel {
 
     /// Audits the difference between two priority lists as plain sentences,
     /// e.g. "Gabe added Titanfall to their priority list".
-    func auditPriorityChange(actor: String, old: [String], new: [String]) {
+    func auditPriorityChange(
+        actor: String,
+        old: [String],
+        new: [String],
+        oldSource: Settings.AccountPrioritySource,
+        newSource: Settings.AccountPrioritySource
+    ) {
+        for message in Self.priorityAuditMessages(
+            actor: actor,
+            old: old,
+            new: new,
+            oldSource: oldSource,
+            newSource: newSource
+        ) {
+            logWebAudit(message)
+        }
+    }
+
+    static func priorityAuditMessages(
+        actor: String,
+        old: [String],
+        new: [String],
+        oldSource: Settings.AccountPrioritySource,
+        newSource: Settings.AccountPrioritySource
+    ) -> [String] {
+        var messages: [String] = []
+        if oldSource != newSource {
+            messages.append("\(actor) changed priority mode from \(prioritySourceTitle(oldSource)) to \(prioritySourceTitle(newSource))")
+        }
+
         let added = new.filter { !old.contains($0) }
         let removed = old.filter { !new.contains($0) }
         for game in added {
-            logWebAudit("\(actor) added \(game) to their priority list")
+            messages.append("\(actor) added \(game) to their priority list")
         }
         for game in removed {
-            logWebAudit("\(actor) removed \(game) from their priority list")
+            messages.append("\(actor) removed \(game) from their priority list")
         }
         if added.isEmpty, removed.isEmpty, old != new {
-            logWebAudit("\(actor) reordered their priority list")
+            messages.append("\(actor) reordered their priority list")
+        }
+        return messages
+    }
+
+    private static func prioritySourceTitle(_ source: Settings.AccountPrioritySource) -> String {
+        switch source {
+        case .global: return "Global"
+        case .globalAndPersonal: return "Mixed"
+        case .personal: return "Personal"
         }
     }
 

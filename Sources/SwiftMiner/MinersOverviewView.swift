@@ -144,6 +144,7 @@ struct MinersOverviewView: View {
         if let miner = selectedMiner {
             let presentation = operatorPresentation(for: miner)
             let health = MinerHealthSnapshot.make(miner: miner)
+            let miningType = miningType(for: miner)
 
             ScrollView {
                 // Lazy, matching the Drops feed: sections below the fold (the
@@ -154,41 +155,12 @@ struct MinersOverviewView: View {
                         miner: miner,
                         health: health,
                         avatarURL: avatarURL(for: miner),
-                        menu: AnyView(
-                            HStack(spacing: 8) {
-                                Button {
-                                    withAnimation(.easeInOut(duration: 0.18)) {
-                                        navigation.selectedItem = .overview
-                                    }
-                                } label: {
-                                    Label("Overview", systemImage: "chevron.left")
-                                }
-                                .tahoeButtonStyle()
-                                .controlSize(.small)
-                                .help("Return to Overview")
-
-                                if miner.needsAuth || miner.status == .blockedAccountNotLinked {
-                                    Button {
-                                        startLinkAccountFlow(for: miner)
-                                    } label: {
-                                        Label("Reconnect", systemImage: "personalhotspot")
-                                    }
-                                    .tahoeButtonStyle()
-                                    .controlSize(.small)
-                                }
-
-                                Menu {
-                                    minerContextMenu(for: miner)
-                                } label: {
-                                    Image(systemName: "ellipsis")
-                                        .frame(width: 26, height: 22)
-                                }
-                                .menuStyle(.borderlessButton)
-                                .help("Miner actions")
-                                .accessibilityLabel("Miner actions")
-                            }
-                        )
+                        priorityTitle: miningType.title,
+                        prioritySymbol: miningType.symbol
                     )
+                    .contextMenu {
+                        minerContextMenu(for: miner)
+                    }
 
                     if let attention = MinerAttentionIssue.resolve(miner: miner, events: navigation.events) {
                         minerAttentionSection(for: miner, attention: attention)
@@ -418,7 +390,6 @@ struct MinersOverviewView: View {
 
     private func minerHealthSummarySection(for miner: MinerManager.ManagedMiner) -> some View {
         let snapshot = MinerHealthSnapshot.make(miner: miner)
-        let miningType = miningType(for: miner)
 
         return TahoeSection("Miner health") {
             VStack(spacing: 0) {
@@ -442,8 +413,6 @@ struct MinersOverviewView: View {
                     date: snapshot.lastDropProgressAt ?? snapshot.lastSuccessfulPollAt,
                     isHealthy: !miner.isNotEarning()
                 )
-                TahoeRowDivider(leadingInset: 39)
-                prioritySourceRow(miningType)
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
@@ -543,35 +512,6 @@ struct MinersOverviewView: View {
         .padding(.vertical, 10)
     }
 
-    private func prioritySourceRow(_ miningType: (title: String, detail: String, symbol: String)) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: miningType.symbol)
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(.tint)
-                .font(.system(size: 13, weight: .semibold))
-                .frame(width: 15)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Priorities")
-                    .font(.subheadline)
-                Text(miningType.detail)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: 8)
-
-            Text(miningType.title)
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .accessibilityElement(children: .combine)
-    }
-
     private func minerRecoveryHistorySection(for miner: MinerManager.ManagedMiner) -> some View {
         let logEvents = navigation.events.filter { $0.minerId == miner.id }.prefix(5)
         let recentEventCount = (selectedActivitySummary?.recentEvents.count ?? 0) + logEvents.count
@@ -632,14 +572,14 @@ struct MinersOverviewView: View {
 
     // MARK: - Priorities
 
-    private func miningType(for miner: MinerManager.ManagedMiner) -> (title: String, detail: String, symbol: String) {
+    private func miningType(for miner: MinerManager.ManagedMiner) -> (title: String, symbol: String) {
         switch settings.prioritySource(forAccountId: miner.accountId) {
         case .global:
-            return ("Global", "Uses priorities shared by all miners.", "globe")
+            return ("Global", "globe")
         case .globalAndPersonal:
-            return ("Global + Personal", "Uses this miner’s priorities first, then shared priorities.", "point.3.connected.trianglepath.dotted")
+            return ("Mixed", "point.3.connected.trianglepath.dotted")
         case .personal:
-            return ("Personal", "Uses only this miner’s priorities.", "person")
+            return ("Personal", "person")
         }
     }
 
