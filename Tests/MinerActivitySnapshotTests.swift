@@ -262,13 +262,14 @@ final class MinerActivitySnapshotTests: XCTestCase {
         gameName: String = "Test Game",
         isAccountConnected: Bool,
         drops: [Drop] = [Drop(id: "drop-1", name: "Drop 1", requiredMinutes: 60)],
-        endDate: Date? = nil
+        endDate: Date? = nil,
+        boxArtURL: URL? = nil
     ) -> Campaign {
         let now = Date()
         return Campaign(
             id: id,
             name: "Campaign \(id)",
-            game: Game(id: gameId, name: gameName),
+            game: Game(id: gameId, name: gameName, boxArtURL: boxArtURL),
             startDate: now.addingTimeInterval(-3600),
             endDate: endDate ?? now.addingTimeInterval(3600),
             drops: drops,
@@ -310,6 +311,28 @@ final class MinerActivitySnapshotTests: XCTestCase {
         XCTAssertEqual(snapshot.upNext?.campaignId, campaign.id)
         XCTAssertTrue(snapshot.upNext?.requiresAccountLink ?? false)
         XCTAssertEqual(snapshot.blockedPriority.map(\.campaignId), [campaign.id])
+    }
+
+    func testUpNextRetainsArtworkForUnlinkedPrioritisedCampaign() {
+        let artworkURL = URL(string: "https://example.com/black-ops-7-600x800.jpg")!
+        let campaign = makeCampaign(
+            id: "unlinked",
+            isAccountConnected: false,
+            boxArtURL: artworkURL
+        )
+        let miner = makeMiner(campaigns: [campaign])
+
+        let presentation = MinerOperatorPresentation.resolve(
+            for: miner,
+            priorityGames: ["Test Game"],
+            excludedGames: [],
+            strategy: .prioritiseSelected,
+            includesBadgeAndEmoteCampaigns: false
+        )
+
+        XCTAssertTrue(presentation.queue.isEmpty)
+        XCTAssertEqual(presentation.snapshot.upNext?.campaignId, campaign.id)
+        XCTAssertEqual(presentation.nextCampaign?.game.boxArtURL, artworkURL)
     }
 
     func testPrioritisedUnlinkedCampaignOnlyAppearsAsMiningAfterActualWatchStarts() {

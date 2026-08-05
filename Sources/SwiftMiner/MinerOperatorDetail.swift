@@ -28,6 +28,10 @@ struct MinerCampaignQueueEntry: Identifiable {
 struct MinerOperatorPresentation {
     let snapshot: MinerActivitySnapshot
     let queue: [MinerCampaignQueueEntry]
+    /// The full inventory is retained alongside the actionable queue. A
+    /// prioritised campaign that still needs a game-account link is deliberately
+    /// excluded from the queue, but can legitimately be the item shown Up next.
+    private let allCampaigns: [Campaign]
 
     var currentCampaign: Campaign? {
         guard let campaignId = snapshot.now.campaignId else { return nil }
@@ -42,6 +46,7 @@ struct MinerOperatorPresentation {
     var nextCampaign: Campaign? {
         guard let campaignId = snapshot.upNext?.campaignId else { return nil }
         return queue.first(where: { $0.campaign.id == campaignId })?.campaign
+            ?? allCampaigns.first(where: { $0.id == campaignId })
     }
 
     var thenCampaigns: [Campaign] {
@@ -155,7 +160,11 @@ struct MinerOperatorPresentation {
             )
         }
 
-        return MinerOperatorPresentation(snapshot: snapshot, queue: queue)
+        return MinerOperatorPresentation(
+            snapshot: snapshot,
+            queue: queue,
+            allCampaigns: miner.allCampaigns
+        )
     }
 
     @MainActor

@@ -94,6 +94,10 @@ final class ActivityLogStoreTests: XCTestCase {
             "[ChannelSelect]     None of our candidates active here. Channel drops:",
             level: .info
         ))
+        XCTAssertTrue(NavigationModel.shouldRecordActivityLogMessage(
+            "[ChannelSelect]   Verification summary: checked=4, noMatch=4, noMatchEvidence=[Example: Twitch reports no active Drops campaigns]",
+            level: .info
+        ))
         XCTAssertFalse(NavigationModel.shouldRecordActivityLogMessage(
             "No claimable drops found in inventory",
             level: .info
