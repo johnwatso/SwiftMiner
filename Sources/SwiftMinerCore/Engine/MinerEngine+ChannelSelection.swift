@@ -319,7 +319,8 @@ extension MinerEngine {
     ) async -> MiningChannelSelection? {
         guard let primary = candidates.first else { return nil }
         let gameName = primary.gameName
-        log("[ChannelSelect] Game: \(gameName) — candidates: \(candidates.map(\.name).joined(separator: ", "))")
+        let candidateDescription = candidates.map { "\($0.name) [\($0.id)]" }.joined(separator: ", ")
+        log("[ChannelSelect] Game: \(gameName) — candidates: \(candidateDescription)")
 
         for candidate in candidates where candidate.hasUnresolvedChannelRestrictions {
             log("[ChannelSelect]   Warning: \(candidate.name) is restricted, but Twitch returned no usable approved-channel list; directory verification is best-effort.")
@@ -431,6 +432,7 @@ extension MinerEngine {
         var verificationErrorCount = 0
         var aclProbeCount = 0
         var attemptedChannelIdentities: Set<String> = []
+        var noCandidateMatchEvidence: [String] = []
 
         for ch in channelsToVerify {
             let eligibleForChannel = candidates.filter { candidate in
@@ -481,6 +483,9 @@ extension MinerEngine {
                     let subscriptionBlocked = activeCampaignIds.compactMap { subscriptionBlockedCampaigns[$0] }
                     if subscriptionBlocked.isEmpty {
                         noCandidateMatchCount += 1
+                        noCandidateMatchEvidence.append(
+                            "\(channel.displayName): \(Self.activeCampaignEvidence(activeCampaignIds))"
+                        )
                     } else {
                         subscriptionOnlyMatchCount += 1
                         subscriptionBlocked.forEach { liveSubscriptionBlockedCampaignIds.insert($0.id) }
@@ -551,6 +556,9 @@ extension MinerEngine {
         let verificationSummary = [
             "checked=\(verifiedChannelCount)",
             noCandidateMatchCount > 0 ? "noMatch=\(noCandidateMatchCount)" : nil,
+            noCandidateMatchEvidence.isEmpty
+                ? nil
+                : "noMatchEvidence=[\(noCandidateMatchEvidence.joined(separator: "; "))]",
             aclBlockedMatchCount > 0 ? "aclBlocked=\(aclBlockedMatchCount)" : nil,
             subscriptionOnlyMatchCount > 0 ? "subscriptionOnly=\(subscriptionOnlyMatchCount)" : nil,
             aclProbeCount > 0 ? "aclProbes=\(aclProbeCount)" : nil,
@@ -586,6 +594,20 @@ extension MinerEngine {
         }
 
         return nil
+    }
+
+    /// Keeps exported channel-verification evidence useful without dumping an
+    /// unbounded list of unrelated campaigns into every mining-cycle entry.
+    private static func activeCampaignEvidence(_ campaignIDs: [String], limit: Int = 3) -> String {
+        let uniqueIDs = Array(Set(campaignIDs)).sorted()
+        guard !uniqueIDs.isEmpty else { return "Twitch reports no active Drops campaigns" }
+
+        let visibleIDs = uniqueIDs.prefix(limit).joined(separator: ", ")
+        let remainingCount = uniqueIDs.count - min(uniqueIDs.count, limit)
+        if remainingCount > 0 {
+            return "Twitch active campaign IDs=\(visibleIDs), +\(remainingCount) more"
+        }
+        return "Twitch active campaign IDs=\(visibleIDs)"
     }
 
     static func unverifiedChannelKey(campaignId: String, channel: Channel) -> String {

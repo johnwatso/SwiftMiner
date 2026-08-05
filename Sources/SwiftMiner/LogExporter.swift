@@ -631,7 +631,7 @@ enum LogExporter {
         panel.canCreateDirectories = true
         panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
 
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard await present(panel) == .OK, let url = panel.url else { return }
 
         do {
             try report.write(to: url, atomically: true, encoding: .utf8)
@@ -642,6 +642,22 @@ enum LogExporter {
             alert.messageText = "Couldn't save diagnostic logs"
             alert.informativeText = error.localizedDescription
             alert.runModal()
+        }
+    }
+
+    /// A save panel started from a SwiftUI command needs a window-attached sheet
+    /// on current macOS releases. `runModal()` can return without presenting in
+    /// that context, which made Export Diagnostic Logs appear to do nothing.
+    @MainActor
+    private static func present(_ panel: NSSavePanel) async -> NSApplication.ModalResponse {
+        guard let window = NSApp.keyWindow ?? NSApp.mainWindow else {
+            return panel.runModal()
+        }
+
+        return await withCheckedContinuation { continuation in
+            panel.beginSheetModal(for: window) { response in
+                continuation.resume(returning: response)
+            }
         }
     }
 
