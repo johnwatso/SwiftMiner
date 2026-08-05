@@ -42,7 +42,7 @@ It is written in Swift using SwiftUI and standard macOS frameworks. Each account
 It can be used for a single account or multiple accounts.
 
 ## Acknowledgements
-Special thanks to [DevilXD](https://github.com/DevilXD) for creating [TwitchDropsMiner](https://github.com/DevilXD/TwitchDropsMiner), which provided the initial inspiration for SwiftMiner.
+Special thanks to [DevilXD](https://github.com/DevilXD) for creating [TwitchDropsMiner](https://github.com/DevilXD/TwitchDropsMiner), SwiftMiner was originally inspired by that project, and it continues to be a valuable reference as Twitch evolves. Many changes made to TwitchDropsMiner help inform updates and improvements to SwiftMiner, ensuring it remains compatible with Twitch’s platform.
 
 Special thanks to [Max Hewett](https://github.com/maxhewett) for creating [ShipHook](https://github.com/maxhewett/ShipHook) and for his help throughout the project. ShipHook powers SwiftMiner's build, signing, notarization, update, and release pipeline.
 
