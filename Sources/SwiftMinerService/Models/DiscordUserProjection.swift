@@ -78,17 +78,24 @@ public struct DiscordUserProjection: Codable, Sendable {
         /// The linked Discord user's profile picture. Web clients use this when
         /// Twitch has no custom picture of its own.
         public let discordProfileImageURL: URL?
+        /// The picture service this account is set to in the app. Clients try
+        /// the preferred service first and the other one as a fallback, so the
+        /// dashboard shows what the app shows. False when the service runs
+        /// standalone, which leaves clients on the Twitch-first order.
+        public let prefersDiscordProfileImage: Bool
 
         public init(
             twitchAccountId: String,
             username: String,
             profileImageURL: URL? = nil,
-            discordProfileImageURL: URL? = nil
+            discordProfileImageURL: URL? = nil,
+            prefersDiscordProfileImage: Bool = false
         ) {
             self.twitchAccountId = twitchAccountId
             self.username = username
             self.profileImageURL = profileImageURL
             self.discordProfileImageURL = discordProfileImageURL
+            self.prefersDiscordProfileImage = prefersDiscordProfileImage
         }
     }
 

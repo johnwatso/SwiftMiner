@@ -276,6 +276,25 @@ final class DiscordAPIRoutesTests: XCTestCase {
         XCTAssertEqual(discordProjection.personalPriorityGames, twitchProjection.personalPriorityGames)
         XCTAssertEqual(discordProjection.configuredMinerCount, 1)
         XCTAssertEqual(twitchProjection.configuredMinerCount, 1)
+
+        // Without the app supplying a choice — a standalone service — clients
+        // keep the Twitch-first order.
+        XCTAssertEqual(discordProjection.account?.prefersDiscordProfileImage, false)
+        XCTAssertEqual(twitchProjection.account?.prefersDiscordProfileImage, false)
+
+        // With it, both projection paths carry the account's choice so the
+        // dashboard resolves the same picture the app does.
+        let discordPreferringBuilder = DiscordProjectionBuilder(
+            manager: harness.manager,
+            stateProvider: LinkedTwitchProjectionStateProvider(),
+            twitchProfileImageURL: { _ in URL(string: "https://example.com/twitch-avatar.png") },
+            discordProfileImageURL: { _ in URL(string: "https://cdn.discordapp.com/avatars/123/avatar.png") },
+            prefersDiscordProfileImage: { $0 == twitchAccountId }
+        )
+        let preferredByDiscordId = await discordPreferringBuilder.buildProjection(discordUserId: discordUserId)
+        let preferredByTwitchId = await discordPreferringBuilder.buildProjection(twitchId: twitchAccountId)
+        XCTAssertEqual(preferredByDiscordId?.account?.prefersDiscordProfileImage, true)
+        XCTAssertEqual(preferredByTwitchId?.account?.prefersDiscordProfileImage, true)
     }
 }
 

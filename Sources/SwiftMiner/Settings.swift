@@ -307,9 +307,9 @@ public final class Settings {
         }
     }
 
-    /// Which service the miner header picture is pulled from. Whichever source is
-    /// picked, the other one is used when it has nothing, and the initial is drawn
-    /// when neither does.
+    /// Legacy global miner-picture preference, retained so older settings backups
+    /// still import cleanly. New avatar choices are stored per account in
+    /// `accountAvatarSourcesData`.
     public var minerAvatarSource: MinerAvatarSource {
         get {
             access(keyPath: \.minerAvatarSource)
@@ -336,6 +336,85 @@ public final class Settings {
                 Self.write("twitchAvatarsData", newValue)
             }
         }
+    }
+
+    /// JSON-backed source selection for each Twitch account's profile picture.
+    /// Accounts with no entry fall back to `defaultAvatarSource`, so a setup that
+    /// never opens the picker keeps drawing the picture it drew before the
+    /// preference became per-account.
+    public var accountAvatarSourcesData: String {
+        get {
+            access(keyPath: \.accountAvatarSourcesData)
+            return Self.read("accountAvatarSourcesData", default: "{}")
+        }
+        set {
+            withMutation(keyPath: \.accountAvatarSourcesData) {
+                Self.write("accountAvatarSourcesData", newValue)
+            }
+        }
+    }
+
+    public var accountAvatarSources: [String: AccountAvatarSource] {
+        get {
+            guard let data = accountAvatarSourcesData.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode([String: AccountAvatarSource].self, from: data) else {
+                return [:]
+            }
+            return decoded.reduce(into: [String: AccountAvatarSource]()) { result, entry in
+                let accountId = entry.key.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !accountId.isEmpty {
+                    result[accountId] = entry.value
+                }
+            }
+        }
+        set {
+            let normalized = newValue.reduce(into: [String: AccountAvatarSource]()) { result, entry in
+                let accountId = entry.key.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !accountId.isEmpty {
+                    result[accountId] = entry.value
+                }
+            }
+            // Sorted keys keep the stored string stable for an unchanged mapping,
+            // so the guard below actually suppresses no-op writes — and the
+            // observers hanging off `accountAvatarSourcesData` with them.
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            guard let data = try? encoder.encode(normalized),
+                  let encoded = String(data: data, encoding: .utf8),
+                  accountAvatarSourcesData != encoded else {
+                return
+            }
+            accountAvatarSourcesData = encoded
+        }
+    }
+
+    /// What an account with no explicit choice uses. Derived from the retired
+    /// global preference so a setup that had picked Discord before 1.37 keeps
+    /// Discord pictures instead of silently reverting to Twitch.
+    public var defaultAvatarSource: AccountAvatarSource {
+        minerAvatarSource == .discord ? .discord : .twitch
+    }
+
+    public func avatarSource(forAccountId accountId: String) -> AccountAvatarSource {
+        let key = accountId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return defaultAvatarSource }
+        return accountAvatarSources[key] ?? defaultAvatarSource
+    }
+
+    public func setAvatarSource(_ source: AccountAvatarSource, forAccountId accountId: String) {
+        let key = accountId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return }
+        var sources = accountAvatarSources
+        sources[key] = source
+        accountAvatarSources = sources
+    }
+
+    public func removeAvatarSource(forAccountId accountId: String) {
+        let key = accountId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return }
+        var sources = accountAvatarSources
+        guard sources.removeValue(forKey: key) != nil else { return }
+        accountAvatarSources = sources
     }
 
     /// Whether to run in background when window is closed
@@ -2206,6 +2285,7 @@ public final class Settings {
         preferSteamArtwork = false
         minerAvatarSource = .automatic
         twitchAvatarsData = "{}"
+        accountAvatarSourcesData = "{}"
         ignoredWarningsData = "[]"
 #if DEBUG
         debugBypassLinkRequirement = false
@@ -2243,6 +2323,7 @@ public final class Settings {
             syncMinersState: syncMinersState,
             preferSteamArtwork: preferSteamArtwork,
             minerAvatarSource: minerAvatarSource.rawValue,
+            accountAvatarSourcesData: accountAvatarSourcesData,
             runInBackground: runInBackground,
             selectedDropsFiltersData: selectedDropsFiltersData,
             selectedEventFiltersData: selectedEventFiltersData,
@@ -2294,6 +2375,10 @@ public final class Settings {
         syncMinersState = backup.syncMinersState
         preferSteamArtwork = backup.preferSteamArtwork
         minerAvatarSource = backup.minerAvatarSource.flatMap(MinerAvatarSource.init(rawValue:)) ?? .automatic
+        // A backup from before per-account pictures carries none; leaving the map
+        // empty lets every account inherit `defaultAvatarSource`, which the
+        // legacy value just above still drives.
+        accountAvatarSourcesData = backup.accountAvatarSourcesData ?? "{}"
         runInBackground = backup.runInBackground
         selectedDropsFiltersData = backup.selectedDropsFiltersData
         selectedEventFiltersData = backup.selectedEventFiltersData
@@ -2364,6 +2449,9 @@ public struct SettingsBackup: Codable, Sendable {
     public let preferSteamArtwork: Bool
     /// Optional: backups written before miner avatars were selectable have no value.
     public let minerAvatarSource: String?
+    /// Optional: backups written before the picture choice became per-account have
+    /// no value, and fall back to `minerAvatarSource` on import.
+    public let accountAvatarSourcesData: String?
     public let runInBackground: Bool
     public let selectedDropsFiltersData: String
     public let selectedEventFiltersData: String
@@ -2407,6 +2495,7 @@ public struct SettingsBackup: Codable, Sendable {
         syncMinersState: Bool,
         preferSteamArtwork: Bool,
         minerAvatarSource: String? = nil,
+        accountAvatarSourcesData: String? = nil,
         runInBackground: Bool,
         selectedDropsFiltersData: String,
         selectedEventFiltersData: String,
@@ -2449,6 +2538,7 @@ public struct SettingsBackup: Codable, Sendable {
         self.syncMinersState = syncMinersState
         self.preferSteamArtwork = preferSteamArtwork
         self.minerAvatarSource = minerAvatarSource
+        self.accountAvatarSourcesData = accountAvatarSourcesData
         self.runInBackground = runInBackground
         self.selectedDropsFiltersData = selectedDropsFiltersData
         self.selectedEventFiltersData = selectedEventFiltersData
@@ -2564,8 +2654,11 @@ extension Settings.LogLevel {
 }
 
 
-/// Which service a miner's header picture comes from.
-public enum MinerAvatarSource: String, CaseIterable, Identifiable, Sendable {
+/// The retired global picture preference, kept only so stored preferences and
+/// settings backups written before `AccountAvatarSource` still decode. Its one
+/// remaining job is seeding `Settings.defaultAvatarSource` for accounts that
+/// never made an explicit choice.
+public enum MinerAvatarSource: String, Sendable {
     /// Use the miner's own custom Twitch picture, then a custom linked Discord
     /// picture. Provider-default images never count as a picture.
     case automatic
@@ -2573,37 +2666,41 @@ public enum MinerAvatarSource: String, CaseIterable, Identifiable, Sendable {
     case discord
     /// The miner's own Twitch account.
     case twitch
+}
+
+/// The preferred profile-picture service for one Twitch account. Either choice
+/// keeps the other as its automatic fallback: a linked Discord user may have no
+/// custom avatar, and a Twitch account may still be on the stock 404-user image.
+public enum AccountAvatarSource: String, CaseIterable, Identifiable, Codable, Sendable {
+    case twitch
+    case discord
 
     public var id: String { rawValue }
 
     public var label: String {
         switch self {
-        case .automatic: return "Automatic"
-        case .discord: return "Discord"
         case .twitch: return "Twitch"
+        case .discord: return "Discord"
         }
     }
 
     public var detail: String {
         switch self {
-        case .automatic:
-            return "Use the miner's custom Twitch picture when it has one, otherwise its linked Discord picture. Generic Twitch and Discord images are skipped."
-        case .discord:
-            return "Use the picture from the Discord account a miner is linked to. Miners with no linked Discord fall back to their Twitch picture."
         case .twitch:
-            return "Use the picture from the miner's own Twitch account. Falls back to the linked Discord picture when Twitch has none."
+            return "Uses this Twitch account's picture, or the linked Discord one when Twitch has none."
+        case .discord:
+            return "Uses the linked Discord avatar, or Twitch when unavailable."
         }
     }
 
-    /// Picks a custom preferred picture, then the other service's, then nothing
-    /// — the caller draws the initial when this returns `nil`.
+    /// Resolves the requested service while filtering generic provider images,
+    /// falling back to the other service rather than dropping to the initial.
     public func resolve(discord: URL?, twitch: URL?) -> URL? {
         let discord = MinerAvatarURL.usable(discord)
         let twitch = MinerAvatarURL.usable(twitch)
         switch self {
-        case .automatic: return twitch ?? discord
-        case .discord: return discord ?? twitch
         case .twitch: return twitch ?? discord
+        case .discord: return discord ?? twitch
         }
     }
 }

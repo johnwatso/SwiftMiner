@@ -73,10 +73,11 @@ struct MinersOverviewView: View {
             }
             // Twitch pictures come from a per-account lookup, so this is detached
             // for the same reason and re-checked at most once a day per miner.
+            // Every account is eligible because Twitch backs up a Discord choice
+            // that has no custom avatar.
             Task { await refreshTwitchAvatars() }
         }
-        .onChange(of: settings.minerAvatarSource) { _, _ in
-            // Switching to Twitch can need pictures the Discord-only pass skipped.
+        .onChange(of: settings.accountAvatarSourcesData) { _, _ in
             Task { await refreshTwitchAvatars() }
         }
         .onChange(of: miners.map(\.id)) { _, _ in
@@ -226,11 +227,11 @@ struct MinersOverviewView: View {
         )
     }
 
-    /// The picture shown in the miner header, from whichever service the
-    /// Appearance setting prefers — falling back to the other one, and to the
-    /// initial when neither has anything yet.
+    /// The picture shown in the miner header, from that account's selected
+    /// service. Discord selections automatically fall back to Twitch; callers
+    /// draw the initial when neither provider has a usable picture yet.
     private func avatarURL(for miner: MinerManager.ManagedMiner) -> URL? {
-        settings.minerAvatarSource.resolve(
+        settings.avatarSource(forAccountId: miner.accountId).resolve(
             discord: discordAvatarURL(for: miner),
             twitch: twitchAvatars.url(forAccountId: miner.accountId)
         )
@@ -244,18 +245,10 @@ struct MinersOverviewView: View {
         return navigation.discordUsersById[discordId]?.avatarURL
     }
 
-    /// Miners whose Twitch picture is worth a lookup: all of them when Automatic
-    /// or Twitch is selected, otherwise only those with no custom Discord picture
-    /// to show, so an all-Discord setup spends nothing on requests it will never draw.
-    private var minersNeedingTwitchAvatar: [MinerManager.ManagedMiner] {
-        guard settings.minerAvatarSource == .discord else { return miners }
-        return miners.filter { discordAvatarURL(for: $0) == nil }
-    }
-
     private func refreshTwitchAvatars() async {
         twitchAvatars.pruneEntries(keepingAccountIds: Set(miners.map(\.accountId)))
         await twitchAvatars.refreshIfNeeded(
-            miners: minersNeedingTwitchAvatar,
+            miners: miners,
             manager: navigation.minerManager
         )
     }

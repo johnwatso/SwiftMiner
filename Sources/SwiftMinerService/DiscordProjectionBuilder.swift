@@ -88,17 +88,23 @@ public actor DiscordProjectionBuilder {
     /// The app supplies the cached Discord profile URL for a linked user. This
     /// remains optional so the standalone service has no SwiftBot dependency.
     private let discordProfileImageURL: @Sendable (String) async -> URL?
+    /// The app supplies each account's picture-source choice. Optional for the
+    /// same reason as the URLs above: the preference lives in the app's
+    /// settings, so a standalone service keeps the Twitch-first default.
+    private let prefersDiscordProfileImage: @Sendable (String) async -> Bool
 
     public init(
         manager: SQLiteManager,
         stateProvider: ProjectionStateProvider = DefaultProjectionStateProvider(),
         twitchProfileImageURL: @escaping @Sendable (String) async -> URL? = { _ in nil },
-        discordProfileImageURL: @escaping @Sendable (String) async -> URL? = { _ in nil }
+        discordProfileImageURL: @escaping @Sendable (String) async -> URL? = { _ in nil },
+        prefersDiscordProfileImage: @escaping @Sendable (String) async -> Bool = { _ in false }
     ) {
         self.manager = manager
         self.stateProvider = stateProvider
         self.twitchProfileImageURL = twitchProfileImageURL
         self.discordProfileImageURL = discordProfileImageURL
+        self.prefersDiscordProfileImage = prefersDiscordProfileImage
     }
 
     /// Build a projection for the given Discord user ID.
@@ -205,7 +211,8 @@ public actor DiscordProjectionBuilder {
             twitchAccountId: twitchId,
             username: acct.username,
             profileImageURL: MinerAvatarURL.usable(await twitchProfileImageURL(twitchId)),
-            discordProfileImageURL: discordProfileURL
+            discordProfileImageURL: discordProfileURL,
+            prefersDiscordProfileImage: await prefersDiscordProfileImage(twitchId)
         )
         // Issues / DM state are Discord-keyed; only present if the account is linked.
         let issues = ownerDiscordId != nil ? await fetchIssues(discordUserId: ownerDiscordId!) : []
@@ -286,7 +293,8 @@ public actor DiscordProjectionBuilder {
                 twitchAccountId: record.twitchId,
                 username: record.username,
                 profileImageURL: MinerAvatarURL.usable(await twitchProfileImageURL(record.twitchId)),
-                discordProfileImageURL: MinerAvatarURL.usable(await discordProfileImageURL(discordUserId))
+                discordProfileImageURL: MinerAvatarURL.usable(await discordProfileImageURL(discordUserId)),
+                prefersDiscordProfileImage: await prefersDiscordProfileImage(record.twitchId)
             )
         } catch {
             return nil

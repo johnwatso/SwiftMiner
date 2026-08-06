@@ -161,6 +161,11 @@ public final class NavigationModel {
                 await MainActor.run {
                     self?.discordUsersById[discordUserId]?.avatarURL
                 }
+            },
+            prefersDiscordProfileImage: { accountId in
+                await MainActor.run {
+                    Settings.shared.avatarSource(forAccountId: accountId) == .discord
+                }
             }
         )
         let clientId = Settings.shared.resolvedClientId
@@ -298,13 +303,27 @@ public final class NavigationModel {
                 apiRoutes: routes,
                 swiftBotSSOProvider: {
                     // Resolved per-request so pairing or tunnel info that
-                    // arrives after launch enables Discord sign-in immediately.
+                    // arrives after launch enables Discord sign-in immediately —
+                    // and so turning the switch off hides it just as promptly.
                     await MainActor.run {
                         let s = Settings.shared
                         let host = s.webDashboardSwiftBotHostname.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
                         let secret = s.swiftBotHmacSecret.trimmingCharacters(in: .whitespacesAndNewlines)
-                        guard s.swiftBotEnabled, self.swiftBotState == .connected, !host.isEmpty, !secret.isEmpty else { return nil }
+                        guard s.webDashboardDiscordOAuthEnabled, s.swiftBotEnabled,
+                              self.swiftBotState == .connected, !host.isEmpty, !secret.isEmpty else { return nil }
                         return WebSwiftBotSSO(origin: "https://\(host)", hmacSecret: secret)
+                    }
+                },
+                twitchCredentialsProvider: {
+                    // Likewise per-request: the "Allow Twitch OAuth sign-in"
+                    // switch takes effect without restarting the app.
+                    await MainActor.run {
+                        let s = Settings.shared
+                        guard s.webDashboardOAuthConfigured else { return nil }
+                        return WebProviderCredentials(
+                            clientID: s.webDashboardTwitchClientID.trimmingCharacters(in: .whitespacesAndNewlines),
+                            clientSecret: s.webDashboardTwitchClientSecret.trimmingCharacters(in: .whitespacesAndNewlines)
+                        )
                     }
                 },
                 logoDarkPNG: Self.webLogoPNGData(named: "web-logo-dark"),
@@ -892,7 +911,8 @@ public final class NavigationModel {
             }
         }
         minerManager.onAccountRemoved = { [weak self] twitchAccountId in
-            Task { [weak self] in
+            Task { @MainActor [weak self] in
+                Settings.shared.removeAvatarSource(forAccountId: twitchAccountId)
                 await self?.adminLinkingService.deleteAccountRow(twitchId: twitchAccountId)
             }
         }

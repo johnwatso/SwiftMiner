@@ -85,7 +85,6 @@ struct GeneralSettingsView: View {
             }
 
             artworkSettings
-            minerPictureSettings
         }
         .formStyle(.grouped)
         .padding(.horizontal, 24)
@@ -152,20 +151,6 @@ struct GeneralSettingsView: View {
             SettingsSecondaryText("Discards downloaded game images and fetches them again. Artwork you uploaded yourself is kept.")
         } header: {
             Text("Artwork")
-        }
-    }
-
-    private var minerPictureSettings: some View {
-        Section {
-            Picker("Take pictures from", selection: $settings.minerAvatarSource) {
-                ForEach(MinerAvatarSource.allCases) { source in
-                    Text(source.label).tag(source)
-                }
-            }
-            .frame(maxWidth: 320)
-            SettingsSecondaryText(settings.minerAvatarSource.detail)
-        } header: {
-            Text("Miner Pictures")
         }
     }
 
