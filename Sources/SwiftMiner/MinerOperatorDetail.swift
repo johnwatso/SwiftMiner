@@ -221,9 +221,9 @@ struct MinerOperatorPresentation {
 struct MinerOperatorHeader: View {
     let miner: MinerManager.ManagedMiner
     let health: MinerHealthSnapshot
-    /// Profile picture for this miner, from whichever service `Settings.minerAvatarSource`
-    /// resolved it to. Falls back to the initial when neither service has one — an
-    /// unlinked miner whose Twitch picture hasn't been fetched yet, say.
+    /// Profile picture for this miner, resolved from its account-specific source.
+    /// Falls back to the initial when neither service has one — an unlinked miner
+    /// whose Twitch picture hasn't been fetched yet, say.
     var avatarURL: URL?
     let priorityTitle: String
     let prioritySymbol: String

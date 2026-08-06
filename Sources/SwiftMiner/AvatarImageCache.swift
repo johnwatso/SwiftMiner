@@ -113,6 +113,9 @@ struct CachedAvatarImage<Fallback: View>: View {
     @ViewBuilder var fallback: () -> Fallback
 
     @State private var image: NSImage?
+    /// The URL `image` was loaded from, so a re-run of the task for the same URL
+    /// can keep drawing it.
+    @State private var loadedURL: URL?
 
     var body: some View {
         Group {
@@ -126,11 +129,23 @@ struct CachedAvatarImage<Fallback: View>: View {
             }
         }
         .task(id: url) {
-            guard let url else {
+            // Drop the former service's image before loading the new one, so an
+            // avatar-source switch doesn't briefly show a stale picture. The task
+            // also re-runs on every re-appearance, though, and clearing there
+            // would flash the fallback for a picture that is already in hand —
+            // hence only clearing when the URL genuinely changed.
+            if loadedURL != url {
                 image = nil
+                loadedURL = nil
+            }
+            guard let url else {
                 return
             }
-            image = await AvatarImageCache.shared.image(for: url)
+            guard image == nil else { return }
+            let resolvedImage = await AvatarImageCache.shared.image(for: url)
+            guard !Task.isCancelled else { return }
+            image = resolvedImage
+            loadedURL = resolvedImage == nil ? nil : url
         }
     }
 }
