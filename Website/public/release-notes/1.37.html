@@ -27,13 +27,15 @@
 <body>
   <main>
     <h1>SwiftMiner 1.37</h1>
-    <p class="meta">Version 1.37 &middot; Build 2026080612</p>
+    <p class="meta">Version 1.37 &middot; Build 2026080613</p>
     <p class="intro">Each Twitch account now chooses where its profile picture comes from, on a rebuilt Accounts list.</p>
 
     <section>
       <h2>🐛 Bug fixes</h2>
       <p class="summary">Small reliability and clarity fixes for everyday miner operation.</p>
       <ul>
+        <li>Stops a &ldquo;re-authenticate your Twitch account&rdquo; message arriving on every launch for an account that is working perfectly. Twitch&rsquo;s token-check endpoint rejects logins imported from web cookies even while mining continues normally, and that rejection was being treated as proof the login had died.</li>
+        <li>A rate limit or Twitch outage during a token refresh no longer asks you to sign in again; only an outright refusal of the login does.</li>
         <li>Restores the Export Diagnostic Logs save panel when invoked from the app menu or Activity Log.</li>
         <li>Restores the artwork in Up next when a prioritised campaign is awaiting a game-account link.</li>
         <li>Includes the channels checked and Twitch&rsquo;s returned campaign IDs when a live-stream verification has no matching Drop.</li>

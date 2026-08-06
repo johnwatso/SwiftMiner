@@ -232,8 +232,20 @@ public actor TwitchAuthService {
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+        guard let httpResponse = response as? HTTPURLResponse else {
+            Logger.auth.info("No HTTP response refreshing \(account.username); keeping the existing token")
+            return account.accessToken
+        }
+
+        switch Self.refreshOutcome(forStatusCode: httpResponse.statusCode) {
+        case .proceed:
+            break
+        case .requiresReauthentication:
+            Logger.auth.warning("Refresh grant for \(account.username) rejected by Twitch (HTTP \(httpResponse.statusCode)); re-authentication required")
             throw TwitchMinerError.tokenExpired
+        case .keepExistingToken:
+            Logger.auth.info("Token refresh for \(account.username) failed with HTTP \(httpResponse.statusCode); keeping the existing token")
+            return account.accessToken
         }
 
         let tokenResponse = try JSONDecoder().decode(TokenResponse.self, from: data)
@@ -259,18 +271,28 @@ public actor TwitchAuthService {
 
     /// Re-establishes the real lifetime of a token that has no refresh grant.
     ///
-    /// Twitch's validate endpoint is the only authority on whether such a token is still good.
-    /// A transport failure deliberately leaves the existing token in place: a network blip must
-    /// not be able to take a working account offline, and the request layer will surface a real
-    /// rejection on its own.
+    /// Nothing this endpoint says is allowed to retire the token. A transport failure leaves it
+    /// in place because a network blip must not take a working account offline, and even an
+    /// outright rejection only shortens the local window — see below for why. GraphQL, the API
+    /// the miner actually runs on, is what decides a token is finished.
     private func revalidateWithoutRefreshGrant(account: Account) async throws -> String {
         let info: TokenValidationResponse
         do {
             info = try await validateTokenInternal(account.accessToken)
         } catch let error as TwitchMinerError {
             if case .authenticationFailed = error {
-                Logger.auth.warning("Token for \(account.username) rejected by Twitch and no refresh grant is available; re-authentication required")
-                throw TwitchMinerError.tokenExpired
+                // `/oauth2/validate` speaks for Helix OAuth tokens. A token imported from web
+                // cookies is not one, so Twitch rejects it here while GraphQL keeps accepting it
+                // happily. Treating that 401 as proof of death sent a "re-authenticate" DM on
+                // every single launch for an account that went on to mine perfectly, because the
+                // throw also skipped the re-arm below and left the account in this path forever.
+                // Keep the token, re-arm a short window, and let a real GraphQL rejection be the
+                // thing that asks the user for a new login.
+                Logger.auth.warning("Token for \(account.username) was rejected by /validate, which is not authoritative for cookie-imported tokens; keeping it and letting GraphQL decide")
+                return await rearmingWindow(
+                    for: account,
+                    lifetime: Self.unverifiedTokenRecheckInterval
+                )
             }
             Logger.auth.info("Could not reach Twitch to revalidate \(account.username); keeping the existing token")
             return account.accessToken
@@ -282,6 +304,22 @@ public actor TwitchAuthService {
         // expires_in = 0 means Twitch advertises no expiry for this token. Re-arm the local
         // window so the account does not fall back into this path on every single request.
         let remaining = info.expiresIn > 0 ? TimeInterval(info.expiresIn) : Self.assumedTokenLifetime
+        let renewed = await rearmingWindow(
+            for: account,
+            lifetime: remaining,
+            scopes: info.scopes.isEmpty ? account.scopes : info.scopes
+        )
+        Logger.auth.info("Revalidated \(account.username) with Twitch; token is still live")
+        return renewed
+    }
+
+    /// Pushes the local expiry out so the account stops re-entering the refresh path on every
+    /// request, without touching the token itself.
+    private func rearmingWindow(
+        for account: Account,
+        lifetime: TimeInterval,
+        scopes: [String]? = nil
+    ) async -> String {
         let renewed = Account(
             id: account.id,
             username: account.username,
@@ -289,18 +327,42 @@ public actor TwitchAuthService {
             ownerDiscordId: account.ownerDiscordId,
             accessToken: account.accessToken,
             refreshToken: account.refreshToken,
-            tokenExpiry: Date().addingTimeInterval(remaining),
-            scopes: info.scopes.isEmpty ? account.scopes : info.scopes
+            tokenExpiry: Date().addingTimeInterval(lifetime),
+            scopes: scopes ?? account.scopes
         )
 
         try? await tokenStore.save(account: renewed)
         self.currentAccount = renewed
-        Logger.auth.info("Revalidated \(account.username) with Twitch; token is still live")
         return renewed.accessToken
+    }
+
+    /// What a refresh-grant response status means for the account.
+    enum RefreshOutcome: Equatable {
+        /// Twitch returned new credentials; decode and store them.
+        case proceed
+        /// Twitch refused the grant itself. The only answer that retires an account.
+        case requiresReauthentication
+        /// A rate limit or Twitch-side fault, which says nothing about the token.
+        case keepExistingToken
+    }
+
+    /// Only an outright refusal of the grant means the user has to sign in again. Everything
+    /// else — 429, 5xx, a gateway error — is Twitch having a bad minute, and used to be mapped
+    /// to `tokenExpired`, which asked the user to re-authenticate over a transient blip.
+    static func refreshOutcome(forStatusCode statusCode: Int) -> RefreshOutcome {
+        switch statusCode {
+        case 200: return .proceed
+        case 400, 401: return .requiresReauthentication
+        default: return .keepExistingToken
+        }
     }
 
     /// Fallback window applied when Twitch reports no expiry for a token.
     static let assumedTokenLifetime: TimeInterval = 30 * 24 * 3600
+
+    /// Window applied to a token Twitch would not confirm. Long enough that relaunching does not
+    /// re-probe every time, short enough that it never claims health nothing has verified.
+    static let unverifiedTokenRecheckInterval: TimeInterval = 6 * 3600
 
     /// Validates an OAuth token and returns user info.
     public func validateToken(_ token: String) async throws -> (userId: String, login: String) {
