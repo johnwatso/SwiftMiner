@@ -24,6 +24,10 @@ public actor WebDashboardRoutes {
     /// after server start (e.g. SwiftBot launched later) still lights up the
     /// Discord button without a relaunch. Falls back to `config.swiftBotSSO`.
     private let swiftBotSSOProvider: (@Sendable () async -> WebSwiftBotSSO?)?
+    /// Resolves Twitch sign-in live for the same reason: the operator's
+    /// "Allow Twitch OAuth sign-in" switch must take effect immediately rather
+    /// than at the next launch. Falls back to `config.twitch`.
+    private let twitchCredentialsProvider: (@Sendable () async -> WebProviderCredentials?)?
     /// Login-page logo PNGs, served at /app/logo-dark.png and
     /// /app/logo-light.png; the page picks per color scheme. When nil the page
     /// falls back to a drawn gem mark.
@@ -38,6 +42,7 @@ public actor WebDashboardRoutes {
         manager: SQLiteManager,
         apiRoutes: DiscordAPIRoutes,
         swiftBotSSOProvider: (@Sendable () async -> WebSwiftBotSSO?)? = nil,
+        twitchCredentialsProvider: (@Sendable () async -> WebProviderCredentials?)? = nil,
         logoDarkPNG: Data? = nil,
         logoLightPNG: Data? = nil,
         audit: (@Sendable (String) async -> Void)? = nil
@@ -46,6 +51,7 @@ public actor WebDashboardRoutes {
         self.manager = manager
         self.apiRoutes = apiRoutes
         self.swiftBotSSOProvider = swiftBotSSOProvider
+        self.twitchCredentialsProvider = twitchCredentialsProvider
         self.logoDarkPNG = logoDarkPNG
         self.logoLightPNG = logoLightPNG
         self.audit = audit
@@ -69,6 +75,33 @@ public actor WebDashboardRoutes {
         }
         guard let sso, !sso.hmacSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         return sso
+    }
+
+    /// Current Twitch OAuth credentials, or nil when Twitch sign-in is off.
+    /// Requires a public base URL (Twitch redirects back to our https callback).
+    private func currentTwitchCredentials() async -> WebProviderCredentials? {
+        guard config.baseURL != nil else { return nil }
+        // As with SwiftBot SSO, a live provider is authoritative: nil means the
+        // operator switched Twitch sign-in off, so don't fall back to the
+        // credentials captured at start-up and keep advertising the button.
+        let creds: WebProviderCredentials?
+        if let twitchCredentialsProvider {
+            creds = await twitchCredentialsProvider()
+        } else {
+            creds = config.twitch
+        }
+        guard let creds,
+              !creds.clientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !creds.clientSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return creds
+    }
+
+    /// Credentials for `provider`, resolved live where a provider closure exists.
+    private func currentCredentials(for provider: WebProvider) async -> WebProviderCredentials? {
+        switch provider {
+        case .twitch: return await currentTwitchCredentials()
+        case .discord: return config.credentials(for: .discord)
+        }
     }
 
     // MARK: - Registration
@@ -339,7 +372,7 @@ public actor WebDashboardRoutes {
         }
         return .html(WebDashboardAssets.loginPage(
             discordSSOURL: await swiftBotSSOStartURL(),
-            twitch: config.twitchEnabled,
+            twitch: await currentTwitchCredentials() != nil,
             local: false,
             appIcon: logoDarkPNG != nil && logoLightPNG != nil
         ))
@@ -392,7 +425,7 @@ public actor WebDashboardRoutes {
 
     private func handleProviderLogin(_ req: HTTPRequest, providerRaw: String?) async -> HTTPResponse {
         guard let raw = providerRaw, let provider = WebProvider(rawValue: raw),
-              let creds = config.credentials(for: provider) else {
+              let creds = await currentCredentials(for: provider) else {
             return .html(WebDashboardAssets.message("That sign-in method isn't available.", linkToLogin: true), statusCode: 404)
         }
         if isLocalRequest(req) {
@@ -423,7 +456,7 @@ public actor WebDashboardRoutes {
         // One-time state consumption returns the provider it was minted for.
         guard let providerRaw = await manager.consumeOAuthState(state, now: Date().timeIntervalSince1970),
               let provider = WebProvider(rawValue: providerRaw),
-              let creds = config.credentials(for: provider) else {
+              let creds = await currentCredentials(for: provider) else {
             return .html(WebDashboardAssets.message("Login session expired. Please try again.", linkToLogin: true), statusCode: 400)
         }
 
