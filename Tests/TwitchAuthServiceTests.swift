@@ -157,6 +157,39 @@ final class TwitchAuthServiceTests: XCTestCase {
         // Callback fires only during performRefresh (network path — not exercised here)
     }
 
+    // MARK: - Refresh outcome classification
+
+    func testOnlyAnOutrightRefusalRetiresTheAccount() {
+        XCTAssertEqual(TwitchAuthService.refreshOutcome(forStatusCode: 400), .requiresReauthentication)
+        XCTAssertEqual(TwitchAuthService.refreshOutcome(forStatusCode: 401), .requiresReauthentication)
+    }
+
+    func testTransientTwitchFailuresKeepTheExistingToken() {
+        // Every one of these used to map to tokenExpired, which asked the user to
+        // re-authenticate over a rate limit or a bad minute at Twitch.
+        for status in [403, 429, 500, 502, 503, 504] {
+            XCTAssertEqual(
+                TwitchAuthService.refreshOutcome(forStatusCode: status),
+                .keepExistingToken,
+                "HTTP \(status) says nothing about whether the token is still good"
+            )
+        }
+    }
+
+    func testSuccessfulRefreshProceeds() {
+        XCTAssertEqual(TwitchAuthService.refreshOutcome(forStatusCode: 200), .proceed)
+    }
+
+    func testUnverifiedTokenWindowIsShorterThanAConfirmedOne() {
+        // A token Twitch would not confirm gets a window only long enough to stop it
+        // re-probing on every launch — it must never claim the confirmed lifetime.
+        XCTAssertLessThan(
+            TwitchAuthService.unverifiedTokenRecheckInterval,
+            TwitchAuthService.assumedTokenLifetime
+        )
+        XCTAssertGreaterThan(TwitchAuthService.unverifiedTokenRecheckInterval, 300)
+    }
+
     // MARK: - Account Model
 
     func testAccountIsTokenValidRespects5MinuteBuffer() {
