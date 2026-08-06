@@ -175,6 +175,81 @@ final class WebDashboardSecurityTests: XCTestCase {
         XCTAssertFalse(html.contains("Sign in with Discord"))
     }
 
+    func testLiveTwitchProviderCanDisableCachedTwitchSignIn() async throws {
+        let mgr = try await openTempManager()
+        defer { Task { await mgr.close() } }
+        let apiRoutes = DiscordAPIRoutes(
+            manager: mgr,
+            projectionBuilder: DiscordProjectionBuilder(manager: mgr),
+            apiKey: "test-api-key"
+        )
+        // Credentials captured at start-up, but the operator has since turned
+        // "Allow Twitch OAuth sign-in" off — the live provider wins.
+        let webRoutes = WebDashboardRoutes(
+            config: WebDashboardConfig(
+                baseURL: URL(string: "https://swiftminer.example.com")!,
+                discord: nil,
+                twitch: WebProviderCredentials(clientID: "client", clientSecret: "secret")
+            ),
+            manager: mgr,
+            apiRoutes: apiRoutes,
+            twitchCredentialsProvider: { nil }
+        )
+        let router = HTTPRouter()
+        await webRoutes.configure(router)
+
+        let publicHeaders = ["host": "swiftminer.example.com"]
+        let login = await router.handle(HTTPRequest(
+            method: "GET",
+            path: WebDashboardConfig.loginPath,
+            headers: publicHeaders,
+            body: Data()
+        ))
+        let html = String(decoding: login.body, as: UTF8.self)
+        XCTAssertEqual(login.statusCode, 200)
+        XCTAssertFalse(html.contains("Sign in with Twitch"))
+
+        // A bookmarked/hand-typed start URL must be refused too.
+        let start = await router.handle(HTTPRequest(
+            method: "GET",
+            path: "/login/twitch",
+            headers: publicHeaders,
+            body: Data()
+        ))
+        XCTAssertEqual(start.statusCode, 404)
+    }
+
+    func testTwitchSignInStillOfferedWithoutALiveProvider() async throws {
+        let mgr = try await openTempManager()
+        defer { Task { await mgr.close() } }
+        let apiRoutes = DiscordAPIRoutes(
+            manager: mgr,
+            projectionBuilder: DiscordProjectionBuilder(manager: mgr),
+            apiKey: "test-api-key"
+        )
+        let webRoutes = WebDashboardRoutes(
+            config: WebDashboardConfig(
+                baseURL: URL(string: "https://swiftminer.example.com")!,
+                discord: nil,
+                twitch: WebProviderCredentials(clientID: "client", clientSecret: "secret")
+            ),
+            manager: mgr,
+            apiRoutes: apiRoutes
+        )
+        let router = HTTPRouter()
+        await webRoutes.configure(router)
+
+        let login = await router.handle(HTTPRequest(
+            method: "GET",
+            path: WebDashboardConfig.loginPath,
+            headers: ["host": "swiftminer.example.com"],
+            body: Data()
+        ))
+        let html = String(decoding: login.body, as: UTF8.self)
+        XCTAssertEqual(login.statusCode, 200)
+        XCTAssertTrue(html.contains("Sign in with Twitch"))
+    }
+
     func testRootIsNeverAPublicPrefix() {
         // hasPrefix("/") matches everything — the root must only ever be an
         // *exact* public path, never a prefix, or the Bot-key API would leak.
