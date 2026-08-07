@@ -300,6 +300,18 @@ struct AdvancedSettingsView: View {
 
     private var diagnosticsSection: some View {
         Section {
+            Picker("Activity Log history", selection: $settings.maxLogEntries) {
+                ForEach(Settings.logEntryChoices, id: \.self) { count in
+                    Text(count.formatted(.number.grouping(.automatic)) + " entries").tag(count)
+                }
+            }
+            .frame(maxWidth: 320)
+            .onChange(of: settings.maxLogEntries) { _, newValue in
+                navigation.setActivityLogRetention(newValue)
+            }
+
+            SettingsSecondaryText("Kept for each kind of activity separately, so narrowing the Activity Log to one filter fills it rather than running dry — a busy fleet cannot bury audit entries, warnings, or errors under routine chatter. Five miners produce roughly 65 entries a minute, so 5,000 is about 75 minutes of unfiltered history.")
+
             Toggle("Monitor resource usage", isOn: $settings.monitorResourceUsage)
                 .onChange(of: settings.monitorResourceUsage) { _, newValue in
                     navigation.setResourceUsageMonitoring(enabled: newValue)

@@ -635,7 +635,9 @@ public final class NavigationModel {
 
     /// Human-readable event entries.
     public var events: [EventEntry] = []
-    private let maxEvents = 5000
+    /// Retention size, from Settings. Read on each use so changing it in Advanced
+    /// takes effect without a relaunch.
+    private var maxEvents: Int { Settings.shared.maxLogEntries }
     private var completedUpdateAwaitingNotification: CompletedUpdate?
     private static let lastLaunchedVersionKey = "SwiftMinerLastLaunchedVersion"
     private static let lastLaunchedBuildKey = "SwiftMinerLastLaunchedBuild"
@@ -692,7 +694,14 @@ public final class NavigationModel {
         let dbURL = folderURL.appendingPathComponent(databaseName)
         let manager = SQLiteManager(databaseURL: dbURL)
         self.sqliteManager = manager
-        self.activityLogStore = ActivityLogStore(manager: manager)
+        // The floor matches the overall size, so narrowing to one filter can fill the
+        // Activity Log to its configured capacity instead of running out after a few
+        // hundred rows. Rare categories never approach it; busy ones are what grow.
+        self.activityLogStore = ActivityLogStore(
+            manager: manager,
+            maxEntries: Settings.shared.maxLogEntries,
+            perCategoryFloor: Settings.shared.maxLogEntries
+        )
         self.adminLinkingService = SQLiteAdminLinkingService(manager: manager)
         self.eventEmitter = EventEmitterService(manager: manager)
         let dmLogStore = DMLogStore(manager: manager)
@@ -1133,14 +1142,50 @@ public final class NavigationModel {
     }
 
     public func logEvent(message: String, level: EventLevel = .info, minerId: String? = nil, rawMessage: String? = nil) {
-        let entry = EventEntry(message: message, level: level, minerId: minerId, rawMessage: rawMessage)
+        let base = EventEntry(message: message, level: level, minerId: minerId, rawMessage: rawMessage)
+        let entry = base.withCategory(primaryEventFilter(for: base).rawValue)
         events.insert(entry, at: 0)
-        if events.count > maxEvents {
-            events.removeLast()
-        }
+        events = Self.applyRetention(to: events, maxEntries: maxEvents, perCategoryFloor: maxEvents)
         Task { [activityLogStore] in
             await activityLogStore.save(entry)
         }
+    }
+
+    /// Applies a changed Activity Log retention size to the live in-memory list and the
+    /// store, so Advanced settings takes effect without a relaunch. Growing it also
+    /// reloads, since the extra history is on disk but not yet in `events`.
+    public func setActivityLogRetention(_ maxEntries: Int) {
+        events = Self.applyRetention(to: events, maxEntries: maxEntries, perCategoryFloor: maxEntries)
+        Task { [activityLogStore] in
+            await activityLogStore.setRetention(maxEntries: maxEntries, perCategoryFloor: maxEntries)
+            await loadPersistentEvents()
+        }
+    }
+
+    /// Keeps the newest `maxEvents` overall, plus a floor of the newest entries in each
+    /// category. Trimming by recency alone means routine chatter — 99.9% of the volume on
+    /// a multi-miner instance — evicts every audit entry and warning within the hour, so
+    /// selecting a single filter showed almost nothing. Mirrors `ActivityLogStore`'s prune.
+    static func applyRetention(
+        to entries: [EventEntry],
+        maxEntries: Int = 5000,
+        perCategoryFloor: Int = 500
+    ) -> [EventEntry] {
+        guard entries.count > maxEntries else { return entries }
+
+        let ordered = entries.sorted { $0.timestamp > $1.timestamp }
+        var keep = Set(ordered.prefix(maxEntries).map(\.id))
+
+        var seenPerCategory: [String: Int] = [:]
+        for entry in ordered {
+            let category = entry.category ?? EventFilter.system.rawValue
+            let seen = seenPerCategory[category, default: 0]
+            guard seen < perCategoryFloor else { continue }
+            seenPerCategory[category] = seen + 1
+            keep.insert(entry.id)
+        }
+
+        return ordered.filter { keep.contains($0.id) }
     }
 
     private func loadPersistentEvents() async {
@@ -1152,10 +1197,7 @@ public final class NavigationModel {
             entriesById[entry.id] = entry
         }
 
-        events = entriesById.values
-            .sorted { $0.timestamp > $1.timestamp }
-            .prefix(maxEvents)
-            .map(\.self)
+        events = Self.applyRetention(to: Array(entriesById.values), maxEntries: maxEvents, perCategoryFloor: maxEvents)
     }
 
     public func recordPendingUpdate(to version: String) {
@@ -1392,6 +1434,10 @@ public struct EventEntry: Identifiable, Sendable, Equatable {
     public let level: EventLevel
     public let minerId: String?
     public let rawMessage: String?
+    /// Which filter this event is filed under, resolved when it is logged and stored
+    /// with it. Retention protects the rare categories, so this has to be known
+    /// without re-reading the message text. Nil on rows written before 1.37.
+    public let category: String?
 
     public init(
         id: UUID = UUID(),
@@ -1399,7 +1445,8 @@ public struct EventEntry: Identifiable, Sendable, Equatable {
         message: String,
         level: EventLevel,
         minerId: String? = nil,
-        rawMessage: String? = nil
+        rawMessage: String? = nil,
+        category: String? = nil
     ) {
         self.id = id
         self.timestamp = timestamp
@@ -1407,5 +1454,18 @@ public struct EventEntry: Identifiable, Sendable, Equatable {
         self.level = level
         self.minerId = minerId
         self.rawMessage = rawMessage
+        self.category = category
+    }
+
+    func withCategory(_ category: String) -> EventEntry {
+        EventEntry(
+            id: id,
+            timestamp: timestamp,
+            message: message,
+            level: level,
+            minerId: minerId,
+            rawMessage: rawMessage,
+            category: category
+        )
     }
 }

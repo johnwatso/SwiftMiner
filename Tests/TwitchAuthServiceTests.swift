@@ -159,9 +159,12 @@ final class TwitchAuthServiceTests: XCTestCase {
 
     // MARK: - Refresh outcome classification
 
-    func testOnlyAnOutrightRefusalRetiresTheAccount() {
-        XCTAssertEqual(TwitchAuthService.refreshOutcome(forStatusCode: 400), .requiresReauthentication)
-        XCTAssertEqual(TwitchAuthService.refreshOutcome(forStatusCode: 401), .requiresReauthentication)
+    func testARefusedGrantSendsUsToRevalidateRatherThanRetiringTheAccount() {
+        // Twitch refusing the grant retires the refresh token, not the access token.
+        // A web-client login (expires_in = 0, invented expiry) hits this on every launch
+        // once the invented window lapses, while mining continues perfectly.
+        XCTAssertEqual(TwitchAuthService.refreshOutcome(forStatusCode: 400), .grantRefused)
+        XCTAssertEqual(TwitchAuthService.refreshOutcome(forStatusCode: 401), .grantRefused)
     }
 
     func testTransientTwitchFailuresKeepTheExistingToken() {
@@ -170,7 +173,7 @@ final class TwitchAuthServiceTests: XCTestCase {
         for status in [403, 429, 500, 502, 503, 504] {
             XCTAssertEqual(
                 TwitchAuthService.refreshOutcome(forStatusCode: status),
-                .keepExistingToken,
+                .transientFailure,
                 "HTTP \(status) says nothing about whether the token is still good"
             )
         }

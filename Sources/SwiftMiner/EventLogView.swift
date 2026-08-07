@@ -694,7 +694,7 @@ private func eventDisplayText(for event: EventEntry) -> EventDisplayText {
     return EventDisplayText(title: humanReadableFallback(cleaned), detail: nil)
 }
 
-private func eventFilters(for event: EventEntry) -> Set<EventFilter> {
+func eventFilters(for event: EventEntry) -> Set<EventFilter> {
     let text = eventSearchText(for: event)
 
     if isStallRecoveryEvent(text) {
@@ -753,7 +753,9 @@ private func eventFilters(for event: EventEntry) -> Set<EventFilter> {
     return [.system]
 }
 
-private func primaryEventFilter(for event: EventEntry) -> EventFilter {
+/// The single category an event is filed under. Computed once when the event is
+/// logged and stored with it, so retention can protect the rare categories.
+func primaryEventFilter(for event: EventEntry) -> EventFilter {
     let filters = eventFilters(for: event)
     let displayOrder: [EventFilter] = [
         .errors,
