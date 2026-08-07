@@ -271,17 +271,6 @@ enum WebDashboardAssets {
         }
         .issue-body { flex: 1; min-width: 0; font-size: 14px; line-height: 1.35; }
         .issue-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 9px; }
-        .triage-toolbar {
-          display: flex; flex-wrap: wrap; gap: 9px; align-items: center;
-          margin: 0 0 14px; padding: 10px;
-          border: 1px solid var(--glass-stroke); border-radius: 18px;
-          background: rgba(255,255,255,0.045);
-        }
-        .triage-search {
-          flex: 1 1 180px; min-width: 0; font: 14px inherit; font-family: inherit; color: var(--text);
-          padding: 10px 12px; border-radius: 11px; background: var(--field); border: 1px solid var(--field-stroke); outline: none;
-        }
-        .triage-search:focus { border-color: var(--blue-a); box-shadow: 0 0 0 3px rgba(86,188,255,0.18); }
         .segmented { display: flex; flex-wrap: wrap; gap: 6px; }
         .segmented button {
           font: 650 12px/1 inherit; font-family: inherit; color: var(--muted); cursor: pointer;
@@ -445,43 +434,6 @@ enum WebDashboardAssets {
         .up-to-date-icon svg { width: 18px; height: 18px; }
         .up-to-date-title { color: var(--text); font-size: 14px; font-weight: 700; }
         .up-to-date-detail { margin-top: 2px; color: var(--muted); font-size: 12px; }
-        .stats-row {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 12px;
-          margin-bottom: 14px;
-        }
-        .stat-card {
-          background: linear-gradient(180deg, var(--glass-top), var(--glass-bottom));
-          border: 1px solid var(--glass-stroke); border-radius: 18px;
-          backdrop-filter: blur(24px) saturate(1.4); -webkit-backdrop-filter: blur(24px) saturate(1.4);
-          padding: 16px 12px;
-          text-align: center;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 12px;
-          min-width: 0;
-        }
-        .stat-icon-wrapper {
-          width: 40px; height: 40px; border-radius: 50%;
-          display: grid; place-items: center;
-          box-shadow: inset 0 1px 0 rgba(255,255,255,0.1);
-        }
-        .stat-icon-wrapper svg {
-          width: 20px; height: 20px;
-        }
-        .stat-icon-wrapper img {
-          width: 100%; height: 100%; border-radius: inherit; object-fit: cover;
-        }
-        .stat-value {
-          font-size: 16px; font-weight: 700; color: var(--text);
-          margin-top: -2px;
-          overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;
-        }
-        .stat-label {
-          font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted);
-        }
         .priorities-flow {
           display: flex;
           flex-wrap: wrap;
@@ -585,7 +537,6 @@ enum WebDashboardAssets {
         @media (max-width: 420px) {
           .boxart { width: 54px; height: 72px; }
           .card { padding: 14px; border-radius: 16px; }
-          .stats-row { grid-template-columns: 1fr; }
           .status-panel { flex-wrap: wrap; }
           .status-refresh { margin-left: 54px; }
           .miner-details { grid-template-columns: 1fr; }
@@ -643,7 +594,7 @@ enum WebDashboardAssets {
     let prioritiesModalOpen = false;
     let activityModalOpen = false;
     let OPERATOR_MINERS = [];
-    let OPERATOR_STATE = { selectedMinerId: null, query: '', filter: 'all' };
+    let OPERATOR_STATE = { selectedMinerId: null };
 
     function startLoadingCopy() {
       const target = $('loading-copy');
@@ -913,6 +864,20 @@ enum WebDashboardAssets {
 
     // Honours the account's picture source from the app, trying the other
     // service second so the dashboard resolves exactly as the app does.
+    // One sentence covering the whole fleet, so the header answers "is everything OK?"
+    // on its own rather than leaving the reader to add up stat tiles.
+    function fleetSummary(total, active, attention, idle) {
+      if (!total) return 'No miners configured yet';
+      const miners = total === 1 ? 'miner' : 'miners';
+      if (attention > 0) {
+        const needs = attention === 1 ? 'needs' : 'need';
+        return `${attention} of ${total} ${miners} ${needs} attention`;
+      }
+      if (active === total) return `All ${total} ${miners} operational`;
+      if (active > 0) return `${active} of ${total} ${miners} mining, ${idle} waiting`;
+      return `All ${total} ${miners} up to date, none mining right now`;
+    }
+
     function accountProfileImageURL(acc) {
       return acc.prefersDiscordProfileImage
         ? customProfileImageURL(acc.discordProfileImageURL, acc.profileImageURL)
@@ -1418,32 +1383,13 @@ enum WebDashboardAssets {
       const totalMiners = data.totalMiners || miners.length;
       const activeMiners = data.activeMiners || miners.filter(m => m.state === 'active').length;
       const claimsToday = data.claimsToday || 0;
-      const query = String(OPERATOR_STATE.query || '').trim().toLowerCase();
-      const filter = OPERATOR_STATE.filter || 'all';
       const attentionCount = miners.filter(m => m.state === 'blocked' || (m.diagnostics && ['blocked','needsAuth','stalled','attention'].includes(String(m.diagnostics.health || '')))).length;
       const idleCount = miners.filter(m => m.state !== 'active' && m.state !== 'blocked').length;
-      const visibleMiners = miners.filter(m => {
-        const d = m.diagnostics || {};
-        const health = String(d.health || '');
-        const isAttention = m.state === 'blocked' || ['blocked','needsAuth','stalled','attention'].includes(health);
-        if (filter === 'active' && m.state !== 'active') return false;
-        if (filter === 'attention' && !isAttention) return false;
-        if (filter === 'idle' && (m.state === 'active' || isAttention)) return false;
-        if (!query) return true;
-        const acc = m.account || {};
-        const haystack = [
-          acc.username,
-          acc.twitchAccountId,
-          m.state,
-          d.statusLabel,
-          d.currentChannelName,
-          ...((m.issues || []).map(is => is.message || is.type || ''))
-        ].join(' ').toLowerCase();
-        return haystack.includes(query);
-      });
+      // Every miner is listed. The counts live in the headline sentence instead of a
+      // stats row and a filter bar, which cost a third of the first screen to say what
+      // the cards below already show.
+      const visibleMiners = miners;
 
-      const playIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`;
-      const giftIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"></polyline><rect x="2" y="7" width="20" height="5"></rect><line x1="12" y1="22" x2="12" y2="7"></line><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"></path><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"></path></svg>`;
       const twitchIcon = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M11.571 4.714h1.715v5.143h-1.715Zm4.715 0H18v5.143h-1.714ZM6 0 1.714 4.286V19.714H6.857V24l4.286-4.286h3.428L22.286 12V0Zm14.571 11.143-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714ZM11.571 4.714h1.715v5.143h-1.715Zm4.715 0H18v5.143h-1.714Z"/></svg>`;
 
       let html = `<div class="hero-card">
@@ -1456,46 +1402,13 @@ enum WebDashboardAssets {
           </div>
           <div class="hero-info">
             <h2 class="hero-headline">Operator Overview</h2>
-            <p class="hero-subtitle">${totalMiners} configured miner${totalMiners === 1 ? '' : 's'}</p>
+            <p class="hero-subtitle">${esc(fleetSummary(totalMiners, activeMiners, attentionCount, idleCount))}</p>
           </div>
         </div>
       </div>`;
 
-      // Render the stats row
-      html += `
-        <div class="stats-row" style="margin-bottom: 24px;">
-          <div class="stat-card">
-            <div class="stat-icon-wrapper" style="background-color: rgba(52, 199, 89, 0.12); color: #34C759; --tint-rgb: 52, 199, 89;">
-              ${playIcon}
-            </div>
-            <div class="stat-value">${activeMiners}</div>
-            <div class="stat-label">Active Miners</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-icon-wrapper" style="background-color: rgba(255, 149, 0, 0.12); color: #FF9500; --tint-rgb: 255, 149, 0;">
-              ${giftIcon}
-            </div>
-            <div class="stat-value">${attentionCount}</div>
-            <div class="stat-label">Need Attention</div>
-          </div>
-        </div>
-      `;
-      html += `
-        <div class="triage-toolbar">
-          <input class="triage-search" id="operatorsearch" placeholder="Search miners or channels…" value="${esc(OPERATOR_STATE.query || '')}" autocomplete="off">
-          <div class="segmented" role="group" aria-label="Filter miners">
-            <button type="button" data-filter="all" class="${filter === 'all' ? 'active' : ''}">All ${totalMiners}</button>
-            <button type="button" data-filter="active" class="${filter === 'active' ? 'active' : ''}">Active ${activeMiners}</button>
-            <button type="button" data-filter="attention" class="${filter === 'attention' ? 'active' : ''}">Attention ${attentionCount}</button>
-            <button type="button" data-filter="idle" class="${filter === 'idle' ? 'active' : ''}">Up to Date ${idleCount}</button>
-          </div>
-        </div>
-      `;
-
       if (!miners.length) {
         html += '<div class="card muted">No miners configured yet.</div>';
-      } else if (!visibleMiners.length) {
-        html += '<div class="card muted">No miners match the current filter.</div>';
       }
 
       for (const p of visibleMiners) {
@@ -1540,25 +1453,6 @@ enum WebDashboardAssets {
     }
 
     function wireOperatorOverview() {
-      const search = $('operatorsearch');
-      if (search) {
-        search.addEventListener('input', () => {
-          OPERATOR_STATE.query = search.value;
-          renderOverview(OPERATOR_MINERS);
-          const fresh = $('operatorsearch');
-          if (fresh) {
-            fresh.focus();
-            const end = fresh.value.length;
-            fresh.setSelectionRange(end, end);
-          }
-        });
-      }
-      document.querySelectorAll('[data-filter]').forEach(btn => {
-        btn.addEventListener('click', () => {
-          OPERATOR_STATE.filter = btn.dataset.filter || 'all';
-          renderOverview(OPERATOR_MINERS);
-        });
-      });
       document.querySelectorAll('.miner-card').forEach(card => {
         const open = () => showOperatorMiner(card.dataset.minerId);
         card.addEventListener('click', (e) => {

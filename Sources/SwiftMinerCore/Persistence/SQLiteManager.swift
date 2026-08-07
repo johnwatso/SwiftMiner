@@ -152,10 +152,12 @@ public actor SQLiteManager {
             level TEXT NOT NULL CHECK(level IN ('info', 'warning', 'error')),
             miner_id TEXT,
             raw_message TEXT,
+            category TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_activity_log_timestamp ON activity_log_entries(timestamp DESC);
         CREATE INDEX IF NOT EXISTS idx_activity_log_raw_message ON activity_log_entries(raw_message);
+        CREATE INDEX IF NOT EXISTS idx_activity_log_category_timestamp ON activity_log_entries(category, timestamp DESC);
 
         -- 11. user_campaign_decisions
         CREATE TABLE IF NOT EXISTS user_campaign_decisions (
@@ -371,10 +373,12 @@ public actor SQLiteManager {
                 level TEXT NOT NULL CHECK(level IN ('info', 'warning', 'error')),
                 miner_id TEXT,
                 raw_message TEXT,
+                category TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
             CREATE INDEX IF NOT EXISTS idx_activity_log_timestamp ON activity_log_entries(timestamp DESC);
             CREATE INDEX IF NOT EXISTS idx_activity_log_raw_message ON activity_log_entries(raw_message);
+            CREATE INDEX IF NOT EXISTS idx_activity_log_category_timestamp ON activity_log_entries(category, timestamp DESC);
             """)
             try execute("INSERT OR IGNORE INTO _schema_migrations (version) VALUES (11);")
         }
@@ -384,6 +388,29 @@ public actor SQLiteManager {
                 try execute("ALTER TABLE twitch_accounts ADD COLUMN is_operator INTEGER DEFAULT 0;")
             }
             try execute("INSERT OR IGNORE INTO _schema_migrations (version) VALUES (12);")
+        }
+
+        // Records what kind of event each Activity Log row is, so retention can
+        // protect the rare ones. Pruning by recency alone deleted every audit
+        // entry and every warning within about an hour on a 5-miner instance,
+        // because routine cycle chatter is ~99.9% of the volume.
+        if !isMigrationApplied(13) {
+            if !columnExists("category", in: "activity_log_entries") {
+                try execute("ALTER TABLE activity_log_entries ADD COLUMN category TEXT;")
+            }
+            // Backfill the one category identifiable from the stored text alone,
+            // so existing audit rows are protected from the next prune.
+            try execute("""
+            UPDATE activity_log_entries
+            SET category = 'audit'
+            WHERE category IS NULL
+              AND (message LIKE '%[web-audit]%' OR raw_message LIKE '%[web-audit]%');
+            """)
+            try execute("""
+            CREATE INDEX IF NOT EXISTS idx_activity_log_category_timestamp
+                ON activity_log_entries(category, timestamp DESC);
+            """)
+            try execute("INSERT OR IGNORE INTO _schema_migrations (version) VALUES (13);")
         }
     }
 

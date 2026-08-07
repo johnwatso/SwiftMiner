@@ -130,18 +130,31 @@ public final class Settings {
         }
     }
     
-    /// Maximum number of log entries to keep in memory
+    /// How many Activity Log entries to keep, in memory and on disk.
+    ///
+    /// Rare categories are retained on top of this figure — see
+    /// `NavigationModel.applyRetention` — so lowering it thins routine chatter
+    /// without throwing away audit entries, warnings, or errors.
+    ///
+    /// Stored values below `Self.minLogEntries` are legacy: this setting was written
+    /// but never read before 1.37, so a saved 500 reflects an old default rather than
+    /// a choice anyone made, and honouring it would cut retention tenfold.
     public var maxLogEntries: Int {
         get {
             access(keyPath: \.maxLogEntries)
-            return Self.read("maxLogEntries", default: 500)
+            return max(Self.minLogEntries, Self.read("maxLogEntries", default: Self.defaultLogEntries))
         }
         set {
             withMutation(keyPath: \.maxLogEntries) {
-                Self.write("maxLogEntries", newValue)
+                Self.write("maxLogEntries", max(Self.minLogEntries, newValue))
             }
         }
     }
+
+    /// Retention sizes offered in Advanced settings.
+    public static let logEntryChoices = [5_000, 20_000, 50_000, 100_000]
+    public static let defaultLogEntries = 5_000
+    public static let minLogEntries = 1_000
 
     /// Diagnostic: when on, SwiftMiner samples its own CPU/memory usage so the
     /// Advanced "Resource Usage" popup can show averages. Off by default; nothing
@@ -2236,7 +2249,7 @@ public final class Settings {
         autoClaimPointsEnabled = true
         logLevel = .info
         showLogConsole = true
-        maxLogEntries = 500
+        maxLogEntries = Self.defaultLogEntries
         monitorResourceUsage = false
         minimizeToMenuBar = false
         appPresenceMode = .dockOnly

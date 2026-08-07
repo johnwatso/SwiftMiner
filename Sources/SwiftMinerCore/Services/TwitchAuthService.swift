@@ -240,10 +240,15 @@ public actor TwitchAuthService {
         switch Self.refreshOutcome(forStatusCode: httpResponse.statusCode) {
         case .proceed:
             break
-        case .requiresReauthentication:
-            Logger.auth.warning("Refresh grant for \(account.username) rejected by Twitch (HTTP \(httpResponse.statusCode)); re-authentication required")
-            throw TwitchMinerError.tokenExpired
-        case .keepExistingToken:
+        case .grantRefused:
+            // Twitch refused the grant, which retires the *refresh token* — it says nothing
+            // about the access token in hand. A web-client login reports expires_in = 0, so the
+            // 30-day expiry above is invented; once it lapses this refresh runs, gets a 400 it
+            // was never going to survive, and used to be reported as a dead login while the
+            // account carried on mining. Fall back to asking about the access token itself.
+            Logger.auth.warning("Refresh grant for \(account.username) refused by Twitch (HTTP \(httpResponse.statusCode)); falling back to revalidating the access token")
+            return try await revalidateWithoutRefreshGrant(account: account)
+        case .transientFailure:
             Logger.auth.info("Token refresh for \(account.username) failed with HTTP \(httpResponse.statusCode); keeping the existing token")
             return account.accessToken
         }
@@ -337,23 +342,25 @@ public actor TwitchAuthService {
     }
 
     /// What a refresh-grant response status means for the account.
+    ///
+    /// Note that no case retires the account. Refusing a refresh grant retires the refresh
+    /// token, not the access token, and those come apart routinely for web-client logins whose
+    /// expiry SwiftMiner had to invent. Only the API the miner actually runs on can say a login
+    /// is finished.
     enum RefreshOutcome: Equatable {
         /// Twitch returned new credentials; decode and store them.
         case proceed
-        /// Twitch refused the grant itself. The only answer that retires an account.
-        case requiresReauthentication
-        /// A rate limit or Twitch-side fault, which says nothing about the token.
-        case keepExistingToken
+        /// Twitch refused the grant. Revalidate the access token before believing anything.
+        case grantRefused
+        /// A rate limit or Twitch-side fault, which says nothing about either token.
+        case transientFailure
     }
 
-    /// Only an outright refusal of the grant means the user has to sign in again. Everything
-    /// else — 429, 5xx, a gateway error — is Twitch having a bad minute, and used to be mapped
-    /// to `tokenExpired`, which asked the user to re-authenticate over a transient blip.
     static func refreshOutcome(forStatusCode statusCode: Int) -> RefreshOutcome {
         switch statusCode {
         case 200: return .proceed
-        case 400, 401: return .requiresReauthentication
-        default: return .keepExistingToken
+        case 400, 401: return .grantRefused
+        default: return .transientFailure
         }
     }
 

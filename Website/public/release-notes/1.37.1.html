@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SwiftMiner 1.37.1 - Release Notes</title>
+  <meta name="description" content="Release notes for SwiftMiner 1.37.1: a fix for spurious re-authentication messages, Activity Log history that survives, and a simpler dashboard overview.">
+  <link rel="canonical" href="https://swiftminer.app/release-notes/1.37.1.html">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <style>
+    :root { color-scheme: light dark; }
+    body { margin: 0; padding: 32px 20px 48px; font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f4f6f8; color: #0f1720; }
+    main { max-width: 760px; margin: 0 auto; padding: 28px; border-radius: 22px; background: rgba(255, 255, 255, .86); box-shadow: 0 20px 60px rgba(15, 23, 32, .10); border: 1px solid rgba(82, 96, 109, .12); }
+    h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
+    .meta, .summary { color: #52606d; font-size: 14px; }
+    .intro { margin: 0 0 24px; color: #384454; }
+    section { margin: 18px 0 0; padding: 18px 18px 14px; border: 1px solid rgba(82, 96, 109, .18); border-radius: 16px; border-left: 5px solid #7b4bd9; background: rgba(255, 255, 255, .42); }
+    h2 { margin: 0 0 4px; color: #7b4bd9; font-size: 18px; }
+    ul { margin: 12px 0 0; padding-left: 22px; }
+    li { margin: 0 0 8px; }
+    li:last-child { margin-bottom: 0; }
+    @media (prefers-color-scheme: dark) { body { background: #0b1015; color: #edf2f7; } main { background: rgba(15, 23, 32, .88); border-color: rgba(159, 176, 194, .14); } .meta, .summary { color: #9fb0c2; } .intro { color: #c8d3df; } section { border-color: rgba(159, 176, 194, .18); background: rgba(255, 255, 255, .04); } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>SwiftMiner 1.37.1</h1>
+    <p class="meta">Version 1.37.1 &middot; Build 2026080709</p>
+    <p class="intro">Finishes the re-authentication fix started in 1.37, keeps Activity Log history from vanishing, and simplifies the web dashboard overview.</p>
+
+    <section>
+      <h2>&#128029; Bug fixes</h2>
+      <p class="summary">Follow-ups to 1.37 from a full session on a five-account instance.</p>
+      <ul>
+        <li>Finishes the fix for a &ldquo;re-authenticate your Twitch account&rdquo; message arriving on every launch. 1.37 stopped Twitch&rsquo;s token-check endpoint retiring a working login, but accounts whose stored refresh grant is refused outright took a different path and kept reporting a dead login while mining normally. A refused grant now retires only the refresh token, never the working access token.</li>
+        <li>No token-refresh outcome retires an account on its own any more. Only a rejection from the Twitch API SwiftMiner actually mines with asks you to sign in again.</li>
+        <li>Activity Log history no longer disappears within the hour. History is kept for each kind of activity separately, so routine mining chatter &mdash; about 99.9% of what a busy fleet logs &mdash; can no longer bury audit entries, warnings, or errors.</li>
+        <li>Narrowing the Activity Log to a single filter now fills the list instead of returning a handful of rows.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#128290; Activity Log history size</h2>
+      <p class="summary">Advanced settings gains a real control over how much history is kept.</p>
+      <ul>
+        <li>Choose 5,000, 20,000, 50,000, or 100,000 entries per kind of activity. Five miners produce roughly 65 entries a minute, so 5,000 is about 75 minutes of unfiltered history.</li>
+        <li>The setting applies immediately rather than at the next launch, and growing it brings history already on disk back into view.</li>
+        <li>This preference existed before but was stored and never read; it now does what it says.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#129517; Simpler dashboard overview</h2>
+      <p class="summary">The web dashboard&rsquo;s Operator Overview leads with the answer instead of a wall of counters.</p>
+      <ul>
+        <li>The heading now states the fleet&rsquo;s condition in a sentence &mdash; &ldquo;All 5 miners operational&rdquo;, or how many need attention &mdash; in place of the Active Miners and Need Attention tiles.</li>
+        <li>Removes the search box and the All / Active / Attention / Up to Date filter row, which took roughly a third of the first screen to describe the cards immediately below them.</li>
+      </ul>
+    </section>
+
+  </main>
+</body>
+</html>
