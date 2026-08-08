@@ -166,6 +166,11 @@ public final class NavigationModel {
                 await MainActor.run {
                     Settings.shared.avatarSource(forAccountId: accountId) == .discord
                 }
+            },
+            accountNickname: { [weak self] accountId in
+                await MainActor.run {
+                    self?.minerManager.miners.first { $0.accountId == accountId }?.nickname
+                }
             }
         )
         let clientId = Settings.shared.resolvedClientId
@@ -611,6 +616,29 @@ public final class NavigationModel {
         return config.anyEnabled ? config : nil
     }
 
+    /// Restores a miner's Discord owner from the database when the stored
+    /// account has lost it.
+    ///
+    /// Signing in again used to save an account built purely from Twitch's
+    /// response, which erased the Discord owner from the Keychain record while
+    /// the `twitch_accounts` row kept it. The two disagreed from then on: the
+    /// web dashboard reads the row and still resolved Discord profile pictures,
+    /// the app read the account and could not. Re-auth now preserves the owner,
+    /// so this only repairs accounts an earlier build already unlinked.
+    func restoreDiscordOwnersFromDatabase() async {
+        for miner in minerManager.miners where miner.ownerDiscordId == nil {
+            guard let ownerDiscordId = await sqliteManager.ownerDiscordId(forTwitchAccount: miner.accountId) else {
+                continue
+            }
+            minerManager.setOwnerDiscordId(forAccountId: miner.accountId, to: ownerDiscordId)
+            logEvent(
+                message: "Restored the Discord link for \(miner.displayName)",
+                level: .info,
+                minerId: miner.id
+            )
+        }
+    }
+
     /// Upserts every MinerManager account into SQLite so AdminLinkingService can find them.
     /// Only touches twitch_id and username — never overwrites owner_discord_id or tokens.
     func syncMinersToSQLite() async {
@@ -941,6 +969,10 @@ public final class NavigationModel {
                 settings.priorityGames(forAccountId: miner.accountId)
             }
         )
+
+        // Re-adopt Discord owners that an older build's re-auth dropped from the
+        // stored accounts, before anything reads `ownerDiscordId`.
+        await restoreDiscordOwnersFromDatabase()
 
         // Mirror saved identities before serving the dashboard. This also makes
         // a Discord operator's role available with the first web request.

@@ -308,6 +308,53 @@ final class TwitchAuthServiceTests: XCTestCase {
     // - refreshTokenIfNeeded() with expired token — POST /oauth2/token
     //   Tests: concurrent calls deduplicated (single refresh task), successful refresh
     //          fires onTokenRefresh callback, failure throws .tokenExpired
+
+    // MARK: - Re-authentication
+
+    /// Signing in again must not cost the account its Discord owner: the app
+    /// resolves profile pictures and the Discord picture source through
+    /// `ownerDiscordId`, so losing it silently unlinks the miner.
+    func testReAuthenticationKeepsTheStoredDiscordOwnerNicknameAndOperatorFlag() async throws {
+        let store = TestTokenStore()
+        try await store.save(account: Account(
+            id: "user123",
+            username: "testuser",
+            nickname: "Ruff",
+            ownerDiscordId: "412378964087275541",
+            accessToken: "old_token",
+            refreshToken: "old_refresh",
+            tokenExpiry: Date().addingTimeInterval(-60),
+            scopes: ["user:read:email"],
+            isOperator: true
+        ))
+        let service = TwitchAuthService(clientId: "test_client_id", tokenStore: store)
+
+        // What a fresh sign-in produces: only what Twitch returned.
+        let merged = await service.mergingStoredIdentity(into: makeAccount(
+            accessToken: "new_token",
+            refreshToken: "new_refresh",
+            expiresIn: 3600
+        ))
+
+        XCTAssertEqual(merged.ownerDiscordId, "412378964087275541")
+        XCTAssertEqual(merged.nickname, "Ruff")
+        XCTAssertTrue(merged.isOperator)
+        XCTAssertEqual(merged.accessToken, "new_token")
+        XCTAssertEqual(merged.refreshToken, "new_refresh")
+    }
+
+    /// A first-time sign-in has nothing stored to merge with.
+    func testFirstSignInKeepsTheAccountAsAuthenticated() async {
+        let service = TwitchAuthService(clientId: "test_client_id", tokenStore: TestTokenStore())
+        let fresh = makeAccount(expiresIn: 3600)
+
+        let merged = await service.mergingStoredIdentity(into: fresh)
+
+        XCTAssertNil(merged.ownerDiscordId)
+        XCTAssertNil(merged.nickname)
+        XCTAssertFalse(merged.isOperator)
+        XCTAssertEqual(merged.accessToken, fresh.accessToken)
+    }
 }
 
 // MARK: - Helpers

@@ -369,7 +369,8 @@ extension MinerManager {
                 accessToken: existing.accessToken,
                 refreshToken: existing.refreshToken,
                 tokenExpiry: existing.tokenExpiry,
-                scopes: existing.scopes
+                scopes: existing.scopes,
+                isOperator: existing.isOperator
             )
             try? await tokenStore.save(account: updated)
         }

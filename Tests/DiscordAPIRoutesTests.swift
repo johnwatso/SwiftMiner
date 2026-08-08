@@ -295,6 +295,25 @@ final class DiscordAPIRoutesTests: XCTestCase {
         let preferredByTwitchId = await discordPreferringBuilder.buildProjection(twitchId: twitchAccountId)
         XCTAssertEqual(preferredByDiscordId?.account?.prefersDiscordProfileImage, true)
         XCTAssertEqual(preferredByTwitchId?.account?.prefersDiscordProfileImage, true)
+
+        // Nicknames live with the account in the app, so a standalone service
+        // has none to offer and the dashboard shows Twitch usernames.
+        XCTAssertNil(discordProjection.account?.nickname)
+        XCTAssertNil(twitchProjection.account?.nickname)
+
+        // With the app supplying them, both projection paths carry the nickname
+        // so the dashboard can lead with the same name the app's miner list does.
+        let nicknamingBuilder = DiscordProjectionBuilder(
+            manager: harness.manager,
+            stateProvider: LinkedTwitchProjectionStateProvider(),
+            accountNickname: { $0 == twitchAccountId ? "Living Room Mac" : nil }
+        )
+        let nicknamedByDiscordId = await nicknamingBuilder.buildProjection(discordUserId: discordUserId)
+        let nicknamedByTwitchId = await nicknamingBuilder.buildProjection(twitchId: twitchAccountId)
+        XCTAssertEqual(nicknamedByDiscordId?.account?.nickname, "Living Room Mac")
+        XCTAssertEqual(nicknamedByTwitchId?.account?.nickname, "Living Room Mac")
+        // The Twitch identity stays alongside it — the dashboard shows both.
+        XCTAssertEqual(nicknamedByTwitchId?.account?.username, "linkedminer")
     }
 }
 

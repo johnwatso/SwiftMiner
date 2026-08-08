@@ -99,8 +99,9 @@ public actor TwitchAuthService {
             Logger.auth.debug("Polling for token...")
 
             do {
-                let account = try await requestToken(deviceCode: deviceCode)
-                Logger.auth.info("Token received! User: \(account.username)")
+                let fresh = try await requestToken(deviceCode: deviceCode)
+                Logger.auth.info("Token received! User: \(fresh.username)")
+                let account = await mergingStoredIdentity(into: fresh)
                 try await tokenStore.save(account: account)
                 self.currentAccount = account
                 return account
@@ -387,19 +388,44 @@ public actor TwitchAuthService {
         Logger.auth.info("Token validated for \(userInfo.login)")
 
         // 2. Create account (TDM sessions don't have refresh tokens, so we default to 30d expiry)
-        let account = Account(
+        let account = await mergingStoredIdentity(into: Account(
             id: userInfo.userId,
             username: userInfo.login,
             accessToken: token,
             refreshToken: "", // TDM cookies usually don't have this
             tokenExpiry: Date().addingTimeInterval(30 * 24 * 3600),
             scopes: userInfo.scopes
-        )
+        ))
 
         // 3. Save to secure storage
         try await tokenStore.save(account: account)
         self.currentAccount = account
         return account
+    }
+
+    /// Carries the fields SwiftMiner owns onto a freshly authenticated account.
+    ///
+    /// A sign-in only knows what Twitch returned, so saving it as-is overwrites
+    /// the stored record's nickname, Discord owner, and operator flag with
+    /// nothing. Re-authenticating an existing account then silently unlinks it
+    /// from its Discord user — the app stops resolving that user's profile
+    /// picture and greys out the Discord picture source, while the SQLite copy
+    /// of the link (which the web dashboard reads) still shows it as linked.
+    func mergingStoredIdentity(into account: Account) async -> Account {
+        guard let existing = try? await tokenStore.loadAccount(twitchUserId: account.id) else {
+            return account
+        }
+        return Account(
+            id: account.id,
+            username: account.username,
+            nickname: existing.nickname,
+            ownerDiscordId: existing.ownerDiscordId,
+            accessToken: account.accessToken,
+            refreshToken: account.refreshToken,
+            tokenExpiry: account.tokenExpiry,
+            scopes: account.scopes,
+            isOperator: existing.isOperator
+        )
     }
 
     // MARK: - Token Validation

@@ -72,6 +72,28 @@ final class MinerAvatarTests: XCTestCase {
         XCTAssertEqual(settings.avatarSource(forAccountId: "john"), .twitch)
     }
 
+    /// The settings row and the miner header redraw off observation of the
+    /// stored selection, so a change has to reach observers that only read
+    /// through `avatarSource(forAccountId:)`.
+    func testChangingAnAccountSourceNotifiesObservers() {
+        final class Box: @unchecked Sendable { var fired = false }
+        let box = Box()
+
+        let settings = Settings.shared
+        let previousData = settings.accountAvatarSourcesData
+        defer { settings.accountAvatarSourcesData = previousData }
+        settings.accountAvatarSourcesData = "{}"
+
+        withObservationTracking {
+            _ = settings.avatarSource(forAccountId: "john")
+        } onChange: {
+            box.fired = true
+        }
+
+        settings.setAvatarSource(.discord, forAccountId: "john")
+        XCTAssertTrue(box.fired)
+    }
+
     func testAccountAvatarSourcesSurviveABackupRoundTrip() throws {
         let settings = Settings.shared
         let previousData = settings.accountAvatarSourcesData

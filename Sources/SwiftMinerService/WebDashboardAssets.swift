@@ -481,6 +481,7 @@ enum WebDashboardAssets {
         }
         .miner-avatar img { width: 100%; height: 100%; object-fit: cover; }
         .miner-identity h2 { margin: 0; font-size: 30px; letter-spacing: -0.04em; }
+        .miner-handle { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
         .miner-linked { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
         .miner-linked::before { content: ""; display: inline-block; width: 7px; height: 7px; margin: 0 6px 1px 0; border-radius: 50%; background: var(--green); }
         .miner-linked.unlinked::before { background: var(--orange); }
@@ -878,6 +879,20 @@ enum WebDashboardAssets {
       return `All ${total} ${miners} up to date, none mining right now`;
     }
 
+    // The app's miner list leads with the nickname and keeps the Twitch login
+    // as the secondary line. The dashboard reads the same way, so a fleet named
+    // in the app is recognisable here.
+    function accountDisplayName(acc) {
+      const nickname = typeof acc.nickname === 'string' ? acc.nickname.trim() : '';
+      return nickname || acc.username || '';
+    }
+
+    // The Twitch login, but only when it isn't already the headline.
+    function accountSecondaryName(acc) {
+      const nickname = typeof acc.nickname === 'string' ? acc.nickname.trim() : '';
+      return nickname && acc.username && nickname !== acc.username ? acc.username : '';
+    }
+
     function accountProfileImageURL(acc) {
       return acc.prefersDiscordProfileImage
         ? customProfileImageURL(acc.discordProfileImageURL, acc.profileImageURL)
@@ -894,7 +909,8 @@ enum WebDashboardAssets {
       return `
         <section class="miner-identity" aria-label="Twitch account">
           <div class="miner-avatar">${twitchAvatar}</div>
-          <h2>${esc(acc.username || 'Twitch account')}</h2>
+          <h2>${esc(accountDisplayName(acc) || 'Twitch account')}</h2>
+          ${accountSecondaryName(acc) ? `<p class="miner-handle">${esc(accountSecondaryName(acc))}</p>` : ''}
           <p class="miner-linked${acc.twitchAccountId ? '' : ' unlinked'}">${acc.twitchAccountId ? 'Twitch connected' : 'Twitch not connected'}</p>
         </section>
       `;
@@ -1422,12 +1438,13 @@ enum WebDashboardAssets {
         const progressHTML = progressStateCard(p, cfg, 'margin-top: 14px;');
 
         html += `
-          <div class="card miner-card" style="padding: 20px;" data-miner-id="${esc(id)}" role="button" tabindex="0" aria-label="Open ${esc(acc.username || 'miner')}">
+          <div class="card miner-card" style="padding: 20px;" data-miner-id="${esc(id)}" role="button" tabindex="0" aria-label="Open ${esc(accountDisplayName(acc) || 'miner')}">
             <div class="hero-header" style="gap: 14px; align-items: center; justify-content: space-between; width: 100%;">
               <div style="display: flex; align-items: center; gap: 14px;">
                 <div class="operator-miner-avatar">${avatar}</div>
                 <div class="hero-info">
-                  <h3 class="hero-headline" style="font-size: 16px; margin: 0;">${esc(acc.username || 'Account')}</h3>
+                  <h3 class="hero-headline" style="font-size: 16px; margin: 0;">${esc(accountDisplayName(acc) || 'Account')}</h3>
+                  ${accountSecondaryName(acc) ? `<p class="hero-subtitle" style="font-size: 12px;">${esc(accountSecondaryName(acc))}</p>` : ''}
                 </div>
               </div>
               <div style="display:flex;align-items:center;gap:8px;margin-left:auto;flex-shrink:0">
