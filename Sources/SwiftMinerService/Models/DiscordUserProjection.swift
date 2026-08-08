@@ -71,6 +71,11 @@ public struct DiscordUserProjection: Codable, Sendable {
     public struct Account: Codable, Sendable {
         public let twitchAccountId: String
         public let username: String
+        /// The name this account was given in the app, when it has one. Clients
+        /// lead with it and keep `username` as the Twitch identity underneath,
+        /// the way the app's miner list does. Nil when the service runs
+        /// standalone, since nicknames live in the app's account store.
+        public let nickname: String?
         /// A custom Twitch profile picture, when one is available. The generic
         /// Twitch placeholder is deliberately omitted so clients can use their
         /// own fallback artwork.
@@ -87,12 +92,14 @@ public struct DiscordUserProjection: Codable, Sendable {
         public init(
             twitchAccountId: String,
             username: String,
+            nickname: String? = nil,
             profileImageURL: URL? = nil,
             discordProfileImageURL: URL? = nil,
             prefersDiscordProfileImage: Bool = false
         ) {
             self.twitchAccountId = twitchAccountId
             self.username = username
+            self.nickname = nickname
             self.profileImageURL = profileImageURL
             self.discordProfileImageURL = discordProfileImageURL
             self.prefersDiscordProfileImage = prefersDiscordProfileImage

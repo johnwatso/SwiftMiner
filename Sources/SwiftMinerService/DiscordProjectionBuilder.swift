@@ -92,19 +92,25 @@ public actor DiscordProjectionBuilder {
     /// same reason as the URLs above: the preference lives in the app's
     /// settings, so a standalone service keeps the Twitch-first default.
     private let prefersDiscordProfileImage: @Sendable (String) async -> Bool
+    /// The app supplies each account's nickname. Optional like the values above:
+    /// nicknames are stored with the account in the app, not in SQLite, so a
+    /// standalone service simply shows Twitch usernames.
+    private let accountNickname: @Sendable (String) async -> String?
 
     public init(
         manager: SQLiteManager,
         stateProvider: ProjectionStateProvider = DefaultProjectionStateProvider(),
         twitchProfileImageURL: @escaping @Sendable (String) async -> URL? = { _ in nil },
         discordProfileImageURL: @escaping @Sendable (String) async -> URL? = { _ in nil },
-        prefersDiscordProfileImage: @escaping @Sendable (String) async -> Bool = { _ in false }
+        prefersDiscordProfileImage: @escaping @Sendable (String) async -> Bool = { _ in false },
+        accountNickname: @escaping @Sendable (String) async -> String? = { _ in nil }
     ) {
         self.manager = manager
         self.stateProvider = stateProvider
         self.twitchProfileImageURL = twitchProfileImageURL
         self.discordProfileImageURL = discordProfileImageURL
         self.prefersDiscordProfileImage = prefersDiscordProfileImage
+        self.accountNickname = accountNickname
     }
 
     /// Build a projection for the given Discord user ID.
@@ -210,6 +216,7 @@ public actor DiscordProjectionBuilder {
         let account = DiscordUserProjection.Account(
             twitchAccountId: twitchId,
             username: acct.username,
+            nickname: await accountNickname(twitchId),
             profileImageURL: MinerAvatarURL.usable(await twitchProfileImageURL(twitchId)),
             discordProfileImageURL: discordProfileURL,
             prefersDiscordProfileImage: await prefersDiscordProfileImage(twitchId)
@@ -292,6 +299,7 @@ public actor DiscordProjectionBuilder {
             return DiscordUserProjection.Account(
                 twitchAccountId: record.twitchId,
                 username: record.username,
+                nickname: await accountNickname(record.twitchId),
                 profileImageURL: MinerAvatarURL.usable(await twitchProfileImageURL(record.twitchId)),
                 discordProfileImageURL: MinerAvatarURL.usable(await discordProfileImageURL(discordUserId)),
                 prefersDiscordProfileImage: await prefersDiscordProfileImage(record.twitchId)
