@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -114,6 +115,18 @@ class UpstreamDriftMonitorTests(unittest.TestCase):
         }
         with self.assertRaises(MONITOR.CheckError):
             MONITOR.validate_config(config)
+
+    def test_checked_in_config_covers_campaign_inventory_and_directory_probes(self) -> None:
+        config_path = Path(__file__).parents[2] / ".github/upstream/twitchdropsminer.json"
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        mappings = {
+            mapping["upstreamKey"]: mapping["swiftConstant"]
+            for mapping in config["hashMappings"]
+        }
+
+        self.assertEqual(mappings["Campaigns"], "viewerDropsDashboard")
+        self.assertEqual(mappings["Inventory"], "inventory")
+        self.assertEqual(mappings["GameDirectory"], "directoryPage_Game")
 
 
 if __name__ == "__main__":

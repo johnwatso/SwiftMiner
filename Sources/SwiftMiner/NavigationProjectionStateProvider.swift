@@ -318,11 +318,12 @@ final class NavigationProjectionStateProvider: ProjectionStateProvider, @uncheck
             preferSteamArtwork: Settings.shared.preferSteamArtwork
         )
         let now = Date()
+        let excludedGames = Settings.shared.excludedGames
         let completed = campaigns.filter {
             // This is the same completion predicate the native Drops filter
             // uses. Some campaigns (such as THE FINALS) reach complete reward
             // progress while their raw inventory flag still lags behind.
-            shouldIncludeInCompletedCampaigns($0)
+            Self.shouldIncludeInCompletedCampaigns($0, excludedGames: excludedGames)
                 && !$0.isExpired(now: now)
                 && ($0.combinedProgressFraction >= 0.995 || $0.isCompleted)
         }
@@ -335,14 +336,23 @@ final class NavigationProjectionStateProvider: ProjectionStateProvider, @uncheck
             .map(Self.recentCampaignProjection)
     }
 
-    /// A user's exclusions remain authoritative, but a completed campaign is
+    /// Completed-drop history must be backed by an actual successful claim.
+    /// A campaign with completed watch progress but no claim is still pending
+    /// work, and should not appear as a completion in the web dashboard.
+    ///
+    /// A user's exclusions remain authoritative, but claimed campaigns are
     /// intentionally not limited to the normal curated mining feed.
     @MainActor
-    private func shouldIncludeInCompletedCampaigns(_ campaign: CampaignViewData) -> Bool {
-        let excludedGames = Settings.shared.excludedGames
-        return !excludedGames.contains(where: {
-            $0.localizedCaseInsensitiveCompare(campaign.gameName) == .orderedSame
-        })
+    static func shouldIncludeInCompletedCampaigns(
+        _ campaign: CampaignViewData,
+        excludedGames: [String]
+    ) -> Bool {
+        guard campaign.dropsClaimed > 0 else { return false }
+
+        return !excludedGames.contains { excludedGame in
+            excludedGame.localizedCaseInsensitiveCompare(campaign.gameName) == .orderedSame
+                || excludedGame.localizedCaseInsensitiveCompare(campaign.gameId ?? "") == .orderedSame
+        }
     }
 
     private static func recentCampaignProjection(from campaign: CampaignViewData) -> DiscordUserProjection.RecentCampaign {

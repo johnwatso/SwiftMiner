@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>SwiftMiner 1.37.1 - Release Notes</title>
-  <meta name="description" content="Release notes for SwiftMiner 1.37.1: a fix for spurious re-authentication messages, Activity Log history that survives, and a simpler dashboard overview.">
-  <link rel="canonical" href="https://swiftminer.app/release-notes/1.37.1.html">
+  <title>SwiftMiner 1.37.2 - Release Notes</title>
+  <meta name="description" content="Release notes for SwiftMiner 1.37.2: Twitch reconnect, completed-drop accuracy, IRL safety, and release-pipeline maintenance.">
+  <link rel="canonical" href="https://swiftminer.app/release-notes/1.37.2.html">
   <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
@@ -26,18 +26,23 @@
 </head>
 <body>
   <main>
-    <h1>SwiftMiner 1.37.1</h1>
-    <p class="meta">Version 1.37.1 &middot; Build 2026080709</p>
-    <p class="intro">Finishes the re-authentication fix started in 1.37, keeps Activity Log history from vanishing, and simplifies the web dashboard overview.</p>
+    <h1>SwiftMiner 1.37.2</h1>
+    <p class="meta">Version 1.37.2 &middot; Build 2026081215</p>
+    <p class="intro">Fixes Twitch reconnect, completes the web dashboard and IRL-safety follow-ups, and keeps release checks aligned with their source files.</p>
 
     <section>
       <h2>&#128029; Bug fixes</h2>
-      <p class="summary">Follow-ups to 1.37 from a full session on a five-account instance.</p>
+      <p class="summary">Follow-ups to 1.37 from live miner and dashboard use.</p>
       <ul>
         <li>Finishes the fix for a &ldquo;re-authenticate your Twitch account&rdquo; message arriving on every launch. 1.37 stopped Twitch&rsquo;s token-check endpoint retiring a working login, but accounts whose stored refresh grant is refused outright took a different path and kept reporting a dead login while mining normally. A refused grant now retires only the refresh token, never the working access token.</li>
         <li>No token-refresh outcome retires an account on its own any more. Only a rejection from the Twitch API SwiftMiner actually mines with asks you to sign in again.</li>
         <li>Activity Log history no longer disappears within the hour. History is kept for each kind of activity separately, so routine mining chatter &mdash; about 99.9% of what a busy fleet logs &mdash; can no longer bury audit entries, warnings, or errors.</li>
         <li>Narrowing the Activity Log to a single filter now fills the list instead of returning a handful of rows.</li>
+        <li>The web dashboard&rsquo;s Completed Drops list no longer treats an unclaimed, 100%-watched campaign as completed. It now shows a campaign only after Twitch has actually claimed at least one reward, and it respects category-ID exclusions such as IRL and Special Events. The Mine IRL campaigns option now also excludes Special Events campaigns.</li>
+        <li>Audits SwiftMiner&rsquo;s campaign discovery, inventory, and game-directory persisted queries against the current TwitchDropsMiner upstream and keeps the scheduled compatibility monitor aligned with that review.</li>
+        <li>Updates Sparkle to 2.9.5.</li>
+        <li>Sparkle release validation and publishing now use ShipHook&rsquo;s authored <code>docs/</code> appcasts instead of stale generated website copies.</li>
+        <li>Reconnect Twitch now opens the browser authorization flow, refreshes the selected miner&rsquo;s credentials, and resumes mining after approval.</li>
       </ul>
     </section>
 

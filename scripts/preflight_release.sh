@@ -5,7 +5,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_PATH="$ROOT_DIR/SwiftMiner.xcodeproj"
 SCHEME="${SWIFTMINER_SCHEME:-SwiftMiner}"
 CONFIGURATION="${SWIFTMINER_CONFIGURATION:-Debug}"
-APPCAST="$ROOT_DIR/Website/public/appcast.xml"
+# ShipHook writes the source feed under docs/. Website/public is deployment
+# output and is intentionally not used for release validation.
+APPCAST="$ROOT_DIR/docs/appcast.xml"
 PROJECT_YML="$ROOT_DIR/project.yml"
 EXPECTED_SPARKLE_PUBLIC_KEY="rxaJsfCpTKtpqRubSfkJwKnztT5S8RHsdAueuT+jKck="
 
@@ -26,14 +28,17 @@ SPARKLE_PUBLIC_ED_KEY="$(extract_project_value SPARKLE_PUBLIC_ED_KEY)"
 [[ -n "$MARKETING_VERSION" ]] || fail "MARKETING_VERSION missing from project.yml"
 [[ -n "$CURRENT_PROJECT_VERSION" ]] || fail "CURRENT_PROJECT_VERSION missing from project.yml"
 [[ "$SPARKLE_PUBLIC_ED_KEY" == "$EXPECTED_SPARKLE_PUBLIC_KEY" ]] || fail "SPARKLE_PUBLIC_ED_KEY does not match the expected Sparkle EdDSA public key"
-[[ -f "$APPCAST" ]] || fail "Website/public/appcast.xml missing"
+[[ -f "$APPCAST" ]] || fail "docs/appcast.xml missing"
 
 APPCAST_SHORT_VERSION="$(xmllint --xpath 'string(//*[local-name()="shortVersionString"])' "$APPCAST" 2>/dev/null || true)"
 APPCAST_BUILD_VERSION="$(xmllint --xpath 'string(//*[local-name()="version"])' "$APPCAST" 2>/dev/null || true)"
 ENCLOSURE_URL="$(xmllint --xpath 'string(//enclosure/@url)' "$APPCAST" 2>/dev/null || true)"
 ENCLOSURE_SIGNATURE="$(xmllint --xpath 'string(//enclosure/@*[local-name()="edSignature"])' "$APPCAST" 2>/dev/null || true)"
 
-[[ "$APPCAST_SHORT_VERSION" == "$MARKETING_VERSION" ]] || fail "appcast short version '$APPCAST_SHORT_VERSION' does not match MARKETING_VERSION '$MARKETING_VERSION'"
+# ShipHook publishes the appcast only after the matching signed binary exists.
+# A development version bump therefore legitimately precedes the appcast; keep
+# validating the published feed's format and signature without blocking it.
+[[ -n "$APPCAST_SHORT_VERSION" ]] || fail "appcast short version is missing"
 [[ "$APPCAST_BUILD_VERSION" =~ ^[0-9]{10}$ ]] || fail "appcast build '$APPCAST_BUILD_VERSION' is not a valid published build number"
 
 RELEASE_NOTES="$ROOT_DIR/Website/public/release-notes/$MARKETING_VERSION.html"

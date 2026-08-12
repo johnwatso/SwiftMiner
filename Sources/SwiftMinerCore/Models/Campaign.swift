@@ -29,6 +29,7 @@ enum TwitchDropSafetyClassifier {
 /// A Twitch game / category
 public struct Game: Codable, Sendable, Identifiable, Equatable {
     public static let specialIRLCategoryId = "509672"
+    public static let specialEventsCategoryId = "509663"
 
     public let id: String
     public let name: String
@@ -68,7 +69,7 @@ public struct Game: Codable, Sendable, Identifiable, Equatable {
         // 509659: Travel & Outdoors
         // 509663: Special Events
         // 509672: IRL
-        ["509658", "26936", "509659", "509663", Self.specialIRLCategoryId].contains(id)
+        ["509658", "26936", "509659", Self.specialEventsCategoryId, Self.specialIRLCategoryId].contains(id)
     }
 }
 

@@ -10,8 +10,10 @@ INFO_PLIST="$ROOT_DIR/Sources/SwiftMiner/Info.plist"
 PROJECT_PATH="$ROOT_DIR/SwiftMiner.xcodeproj"
 SCHEME="SwiftMiner"
 CONFIGURATION="${SPARKLE_VALIDATION_CONFIGURATION:-Release}"
-APPCAST_STABLE="$ROOT_DIR/Website/public/appcast.xml"
-APPCAST_BETA="$ROOT_DIR/Website/public/beta/appcast.xml"
+# ShipHook owns these source feeds. The website deployment copies them into
+# Website/public, which is generated output and may be stale locally.
+APPCAST_STABLE="$ROOT_DIR/docs/appcast.xml"
+APPCAST_BETA="$ROOT_DIR/docs/beta/appcast.xml"
 PROJECT_YML="$ROOT_DIR/project.yml"
 
 BUILD_SETTINGS_CACHE=""
@@ -103,7 +105,7 @@ else
 fi
 
 if [[ ! -f "$APPCAST_STABLE" ]]; then
-    echo "Error: Stable appcast missing at $APPCAST_STABLE"
+    echo "Error: Stable source appcast missing at $APPCAST_STABLE"
     exit 1
 fi
 
@@ -114,6 +116,18 @@ elif grep -q "sparkle:edSignature" "$APPCAST_STABLE"; then
     echo "Stable appcast includes edSignature"
 else
     echo "Stable appcast has no published enclosure yet"
+fi
+
+RELEASE_NOTES_LINK=$(xmllint --xpath 'string(//*[local-name()="releaseNotesLink"])' "$APPCAST_STABLE" 2>/dev/null || true)
+if [[ -n "$RELEASE_NOTES_LINK" ]]; then
+    RELEASE_NOTES_FILE="${RELEASE_NOTES_LINK%%\?*}"
+    RELEASE_NOTES_FILE="${RELEASE_NOTES_FILE##*/}"
+    RELEASE_NOTES_PATH="$ROOT_DIR/Website/public/release-notes/$RELEASE_NOTES_FILE"
+    if [[ ! -f "$RELEASE_NOTES_PATH" ]]; then
+        echo "Error: Stable appcast release notes link does not resolve to a published release note: $RELEASE_NOTES_LINK"
+        exit 1
+    fi
+    echo "Stable appcast release notes link is backed by $RELEASE_NOTES_PATH"
 fi
 
 STABLE_URL=$(grep -oE 'url="https://github.com/[^"]+"' "$APPCAST_STABLE" | head -n 1 | cut -d'"' -f2 || true)

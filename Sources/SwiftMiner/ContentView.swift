@@ -18,8 +18,14 @@ struct ContentView: View {
         .background(WindowZoomConfigurator())
         .frame(minWidth: 800, minHeight: 600)
         .sheet(isPresented: $nav.showAddAccountSheet) {
-            AuthRequiredSheet(isPresented: $nav.showAddAccountSheet)
+            AuthRequiredSheet(
+                isPresented: $nav.showAddAccountSheet,
+                reconnectingMinerId: nav.reconnectingMinerId
+            )
                 .environment(navigation)
+                .onDisappear {
+                    navigation.reconnectingMinerId = nil
+                }
         }
         .onAppear {
             navigation.columnVisibility = .all
@@ -789,18 +795,7 @@ struct OverviewView: View {
     }
 
     private func startLinkAccountFlow(for miner: MinerManager.ManagedMiner) {
-        Task {
-            try? await navigation.minerManager.startMiner(
-                minerId: miner.id,
-                priorityGames: [],
-                excludedGames: [],
-                strategy: .mineAll,
-                avoidDuplicateStreams: Settings.shared.avoidDuplicateStreams,
-                antiStallRecoveryEnabled: Settings.shared.antiStallRecoveryEnabled,
-                prioritiseFollowedStreamers: Settings.shared.prioritiseFollowedStreamers,
-                failoverStreamers: Settings.shared.gameFailoverStreamers
-            )
-        }
+        navigation.reconnectTwitchAccount(for: miner.id)
     }
 
     private func isGameExcluded(_ gameName: String) -> Bool {
@@ -1429,7 +1424,7 @@ private enum OverviewSystemState: Equatable {
         case .blockedAuthenticationExpired:
             return "Account authentication expired. Please re-connect."
         case .blockedNeedsAttention:
-            return "Check Events for the latest issue before mining can continue."
+            return "Check Activity Log for the latest issue before mining can continue."
         case .mining(let activeMinerCount, let totalMinerCount):
             if totalMinerCount <= 1 {
                 return "Miner is currently active."

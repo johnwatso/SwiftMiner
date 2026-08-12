@@ -39,6 +39,12 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen
 
+      - name: Validate Sparkle release source
+        run: scripts/validate_sparkle.sh
+
+      - name: Test release-maintenance scripts
+        run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+
       - name: Build
         run: |
           set -o pipefail

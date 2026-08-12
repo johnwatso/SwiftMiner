@@ -7,6 +7,7 @@ import SwiftMinerCore
 /// macOS List selection never interferes with sheet presentation.
 struct AuthRequiredSheet: View {
     @Binding var isPresented: Bool
+    let reconnectingMinerId: String?
     @Environment(NavigationModel.self) private var navigation
 
     @State private var loginService = MinerLoginService()
@@ -94,11 +95,13 @@ struct AuthRequiredSheet: View {
             .shadow(color: Color.purple.opacity(0.24), radius: 10, y: 5)
 
             VStack(alignment: .leading, spacing: 7) {
-                Text("Add Twitch Account")
+                Text(reconnectingMinerId == nil ? "Add Twitch Account" : "Reconnect Twitch Account")
                     .font(.title2.weight(.semibold))
                     .foregroundStyle(.primary)
 
-                Text("SwiftMiner opens Twitch in your browser, then finishes here as soon as the account is approved.")
+                Text(reconnectingMinerId == nil
+                    ? "SwiftMiner opens Twitch in your browser, then finishes here as soon as the account is approved."
+                    : "SwiftMiner opens Twitch in your browser, then resumes this miner as soon as the account is approved.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -304,9 +307,11 @@ struct AuthRequiredSheet: View {
     private var successView: some View {
         VStack(spacing: 16) {
             AnimatedStatusIcon(symbol: "checkmark.circle.fill", color: .green, size: 48)
-            Text("Account Added!")
+            Text(reconnectingMinerId == nil ? "Account Added!" : "Twitch Reconnected!")
                 .font(.title3.weight(.semibold))
-            Text("Your Twitch account has been connected.")
+            Text(reconnectingMinerId == nil
+                ? "Your Twitch account has been connected."
+                : "Your Twitch credentials have been refreshed and mining will resume.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -417,6 +422,34 @@ struct AuthRequiredSheet: View {
         // This matters when the client ID was supplied via Settings rather than env var.
         navigation.minerManager.updateClientId(Settings.shared.resolvedClientId)
 
+        if let reconnectingMinerId {
+            Task {
+                do {
+                    try await navigation.minerManager.replaceAuthentication(
+                        for: reconnectingMinerId,
+                        with: account
+                    )
+                    let settings = Settings.shared
+                    try await navigation.minerManager.startMiner(
+                        minerId: reconnectingMinerId,
+                        priorityGames: settings.priorityGames(forAccountId: account.id),
+                        excludedGames: settings.excludedGames,
+                        strategy: settings.miningStrategy,
+                        enableBadgesEmotes: settings.enableBadgesEmotes,
+                        showClaimNotifications: settings.showClaimNotifications && settings.allowsOperatorNotifications(),
+                        avoidDuplicateStreams: settings.avoidDuplicateStreams,
+                        antiStallRecoveryEnabled: settings.antiStallRecoveryEnabled,
+                        prioritiseFollowedStreamers: settings.prioritiseFollowedStreamers,
+                        failoverStreamers: settings.gameFailoverStreamers
+                    )
+                    scheduleSuccessDismissal()
+                } catch {
+                    loginService.fail(message: error.localizedDescription)
+                }
+            }
+            return
+        }
+
         let minerId: String
         do {
             minerId = try navigation.minerManager.addAccount(account)
@@ -441,6 +474,10 @@ struct AuthRequiredSheet: View {
             )
         }
 
+        scheduleSuccessDismissal()
+    }
+
+    private func scheduleSuccessDismissal() {
         successDismissTask = Task {
             // Brief pause so the user sees the success state.
             try? await Task.sleep(nanoseconds: 1_200_000_000)
@@ -455,6 +492,6 @@ struct AuthRequiredSheet: View {
 // MARK: - Preview
 
 #Preview {
-    AuthRequiredSheet(isPresented: .constant(true))
+    AuthRequiredSheet(isPresented: .constant(true), reconnectingMinerId: nil)
         .environment(NavigationModel(clientId: "preview"))
 }
