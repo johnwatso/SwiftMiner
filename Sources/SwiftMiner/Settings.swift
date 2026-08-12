@@ -1667,11 +1667,16 @@ public final class Settings {
         return override.filter { !globalKeys.contains($0.lowercased()) }
     }
 
-    /// Excluded game names derived from preferences (backward compat for MinerEngine)
+    /// Excluded game names and category IDs derived from preferences (backward
+    /// compat for MinerEngine). Special Events is treated as IRL-adjacent for
+    /// the mining safety option because it can host real-world event campaigns.
     public var excludedGames: [String] {
         var games = gameNames(for: .excluded)
         if !mineIRLCampaigns {
-            games.append(Game.specialIRLCategoryId)
+            games.append(contentsOf: [
+                Game.specialIRLCategoryId,
+                Game.specialEventsCategoryId
+            ])
         }
         return games
     }

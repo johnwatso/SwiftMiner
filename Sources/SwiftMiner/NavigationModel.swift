@@ -93,6 +93,14 @@ public final class NavigationModel {
 
     /// Present the Add Account sheet from any view by setting this to true.
     public var showAddAccountSheet = false
+    /// The existing miner whose Twitch credentials are being refreshed. `nil`
+    /// means the account sheet is adding a separate account.
+    public var reconnectingMinerId: String?
+
+    public func reconnectTwitchAccount(for minerId: String) {
+        reconnectingMinerId = minerId
+        showAddAccountSheet = true
+    }
 
     // MARK: - Content State
 

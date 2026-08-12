@@ -1,5 +1,6 @@
 import XCTest
 @testable import SwiftMiner
+import SwiftMinerCore
 
 @MainActor
 final class SettingsBackupTests: XCTestCase {
@@ -61,6 +62,18 @@ final class SettingsBackupTests: XCTestCase {
         settings.resetToDefaults()
 
         XCTAssertFalse(settings.mineIRLCampaigns)
+    }
+
+    func testDisablingIRLCampaignsAlsoExcludesSpecialEvents() {
+        settings.mineIRLCampaigns = false
+
+        XCTAssertTrue(settings.excludedGames.contains(Game.specialIRLCategoryId))
+        XCTAssertTrue(settings.excludedGames.contains(Game.specialEventsCategoryId))
+
+        settings.mineIRLCampaigns = true
+
+        XCTAssertFalse(settings.excludedGames.contains(Game.specialIRLCategoryId))
+        XCTAssertFalse(settings.excludedGames.contains(Game.specialEventsCategoryId))
     }
 
     private func date(hour: Int) -> Date {

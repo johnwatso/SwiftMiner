@@ -31,7 +31,7 @@ func usage() {
       SparklePublisher --version <version> --artifact <exported-app-or-zip> [--release-notes <release-notes-html>] [--channel stable|beta]
 
     Example:
-      ./scripts/publish_sparkle_release.sh 1.0.1 ~/Desktop/SwiftMiner.app Website/public/release-notes/1.0.1.html --channel beta
+      ./scripts/publish_sparkle_release.sh 1.0.1 ~/Desktop/SwiftMiner.app docs/release-notes/1.0.1.html --channel beta
 
     Environment:
       SPARKLE_GENERATE_APPCAST   Optional absolute path to generate_appcast
@@ -468,10 +468,10 @@ func main() throws {
     }
 
     let rootDir = try resolveRepoRoot()
-    let websitePublicDir = rootDir.appendingPathComponent("Website/public", isDirectory: true)
+    let appcastSourceDir = rootDir.appendingPathComponent("docs", isDirectory: true)
     let appcastDir = channel == .beta
-        ? websitePublicDir.appendingPathComponent("beta", isDirectory: true)
-        : websitePublicDir
+        ? appcastSourceDir.appendingPathComponent("beta", isDirectory: true)
+        : appcastSourceDir
     let appcastPath = appcastDir.appendingPathComponent("appcast.xml")
     let releaseArtifactsDir = rootDir.appendingPathComponent("release-artifacts", isDirectory: true)
 
@@ -488,7 +488,6 @@ func main() throws {
     let tag = "v\(version)\(channelSuffix)"
     let releaseTitle = channel == .beta ? "\(appName) \(version) Beta" : "\(appName) \(version)"
     let pagesBaseURL = "https://\(owner).github.io/\(repo)"
-    let channelPagesBaseURL = channel == .beta ? "\(pagesBaseURL)/beta" : pagesBaseURL
 
     let archiveURL = try makeArchiveIfNeeded(
         inputURL: inputURL,
@@ -514,15 +513,13 @@ func main() throws {
     var releaseNotesPublishedURL: String?
     var releaseNotesCopiedURL: URL?
     if let releaseNotesInputURL {
-        let releaseNotesDir = channel == .beta
-            ? websitePublicDir.appendingPathComponent("beta/release-notes", isDirectory: true)
-            : websitePublicDir.appendingPathComponent("release-notes", isDirectory: true)
+        let releaseNotesDir = appcastSourceDir.appendingPathComponent("release-notes", isDirectory: true)
         try FileManager.default.createDirectory(at: releaseNotesDir, withIntermediateDirectories: true)
         let targetName = "\(version).html"
         let releaseNotesOutputURL = releaseNotesDir.appendingPathComponent(targetName)
         try copyReplacingIfNeeded(from: releaseNotesInputURL, to: releaseNotesOutputURL)
         releaseNotesCopiedURL = releaseNotesInputURL
-        releaseNotesPublishedURL = "\(channelPagesBaseURL)/release-notes/\(targetName)"
+        releaseNotesPublishedURL = "\(pagesBaseURL)/release-notes/\(targetName)"
     }
 
     var generateArgs = [tempDir.path]
@@ -580,8 +577,8 @@ func main() throws {
     print()
     print("Next:")
     print("1. Verify GitHub Release \(tag) exists and contains \(archiveURL.lastPathComponent)")
-    let notesPath = channel == .beta ? "Website/public/beta/release-notes/*.html" : "Website/public/release-notes/*.html"
-    let appcastRelativePath = channel == .beta ? "Website/public/beta/appcast.xml" : "Website/public/appcast.xml"
+    let notesPath = "docs/release-notes/*.html"
+    let appcastRelativePath = channel == .beta ? "docs/beta/appcast.xml" : "docs/appcast.xml"
     print("2. Commit \(appcastRelativePath) and any \(notesPath) changes")
     print("3. Push main so GitHub Pages publishes the updated appcast")
 }

@@ -9,7 +9,7 @@ options:
 packages:
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle
-    majorVersion: 2.8.0
+    from: 2.9.5
   AsyncAlgorithms:
     url: https://github.com/apple/swift-async-algorithms
     from: 1.0.0
@@ -74,8 +74,8 @@ targets:
         SWIFT_STRICT_CONCURRENCY: complete
         PRODUCT_BUNDLE_IDENTIFIER: com.swiftminer.app
         MACOSX_DEPLOYMENT_TARGET: "14.0"
-        MARKETING_VERSION: "1.37.1"
-        CURRENT_PROJECT_VERSION: "2026080910"
+        MARKETING_VERSION: "1.37.2"
+        CURRENT_PROJECT_VERSION: "2026081215"
         INFOPLIST_KEY_CFBundleDisplayName: SwiftMiner
         INFOPLIST_KEY_CFBundleName: SwiftMiner
         CODE_SIGN_STYLE: Automatic

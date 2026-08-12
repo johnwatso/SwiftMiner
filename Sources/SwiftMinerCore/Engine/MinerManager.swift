@@ -10,11 +10,14 @@ public final class MinerManager {
 
     public enum AccountError: LocalizedError, Equatable {
         case duplicateAccount(username: String)
+        case reauthenticationAccountMismatch(expectedUsername: String, actualUsername: String)
 
         public var errorDescription: String? {
             switch self {
             case .duplicateAccount(let username):
                 return "\(username) is already added to SwiftMiner."
+            case .reauthenticationAccountMismatch(let expectedUsername, let actualUsername):
+                return "Reconnect \(expectedUsername)'s Twitch account, not \(actualUsername)'s."
             }
         }
     }
@@ -767,6 +770,41 @@ public final class MinerManager {
         }
         engineSetupTasks[minerId] = setupTask
         return minerId
+    }
+
+    /// Applies freshly-authorised credentials to an existing miner without creating
+    /// a duplicate account. The device flow has already persisted the account in
+    /// the token store by the time this is called.
+    public func replaceAuthentication(for minerId: String, with account: Account) async throws {
+        guard let miner = getMiner(id: minerId), let engine = engines[minerId] else {
+            throw TwitchMinerError.sessionNotStarted
+        }
+        guard miner.accountId == account.id else {
+            throw AccountError.reauthenticationAccountMismatch(
+                expectedUsername: miner.displayName,
+                actualUsername: account.displayName
+            )
+        }
+
+        // `addAccount` wires an engine asynchronously. Finish that work before
+        // applying the fresh credentials so its initial account assignment cannot
+        // overwrite a just-completed reauthentication.
+        if let setupTask = engineSetupTasks[minerId] {
+            await setupTask.value
+            engineSetupTasks.removeValue(forKey: minerId)
+        }
+
+        await engine.stop()
+        await supervisor.recordWorkerStop(minerId: minerId)
+        await engine.setAccount(account)
+        await dataCoordinator.updateAccountNeedsAuth(accountId: miner.accountId, needsAuth: false)
+        updateMinerStatus(
+            minerId: minerId,
+            status: .idle,
+            currentCampaignId: .some(nil),
+            isRunning: false,
+            needsAuth: false
+        )
     }
 
     /// Paints the miner's campaign list from disk at launch so the Miners tab,

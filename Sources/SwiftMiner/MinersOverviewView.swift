@@ -279,18 +279,7 @@ struct MinersOverviewView: View {
     }
 
     private func startLinkAccountFlow(for miner: MinerManager.ManagedMiner) {
-        Task {
-            try? await navigation.minerManager.startMiner(
-                minerId: miner.id,
-                priorityGames: [],
-                excludedGames: [],
-                strategy: .mineAll,
-                avoidDuplicateStreams: Settings.shared.avoidDuplicateStreams,
-                antiStallRecoveryEnabled: Settings.shared.antiStallRecoveryEnabled,
-                prioritiseFollowedStreamers: Settings.shared.prioritiseFollowedStreamers,
-                failoverStreamers: Settings.shared.gameFailoverStreamers
-            )
-        }
+        navigation.reconnectTwitchAccount(for: miner.id)
     }
 
     private func restartMiner(for miner: MinerManager.ManagedMiner) {

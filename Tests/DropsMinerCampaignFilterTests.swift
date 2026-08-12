@@ -148,6 +148,58 @@ final class DropsMinerCampaignFilterTests: XCTestCase {
         )
     }
 
+    @MainActor
+    func testCompletedDashboardHistoryExcludesUnclaimedCampaigns() {
+        let pendingClaim = CampaignViewData(
+            id: "ewc-2026",
+            gameId: "509663",
+            gameName: "Special Events",
+            campaignName: "EWC 2026",
+            artworkURL: nil,
+            progress: 1,
+            isClaimed: false,
+            dropsClaimed: 0,
+            totalDrops: 6,
+            miningStatus: .claimable,
+            isAccountConnected: true,
+            startDate: now.addingTimeInterval(-3600),
+            endDate: now.addingTimeInterval(3600)
+        )
+
+        XCTAssertFalse(
+            NavigationProjectionStateProvider.shouldIncludeInCompletedCampaigns(
+                pendingClaim,
+                excludedGames: []
+            )
+        )
+    }
+
+    @MainActor
+    func testCompletedDashboardHistoryHonorsCategoryIDExclusions() {
+        let irlClaim = CampaignViewData(
+            id: "irl-claim",
+            gameId: Game.specialIRLCategoryId,
+            gameName: "IRL",
+            campaignName: "Claimed IRL Campaign",
+            artworkURL: nil,
+            progress: 1,
+            isClaimed: true,
+            dropsClaimed: 1,
+            totalDrops: 1,
+            miningStatus: .claimed,
+            isAccountConnected: true,
+            startDate: now.addingTimeInterval(-3600),
+            endDate: now.addingTimeInterval(3600)
+        )
+
+        XCTAssertFalse(
+            NavigationProjectionStateProvider.shouldIncludeInCompletedCampaigns(
+                irlClaim,
+                excludedGames: [Game.specialIRLCategoryId]
+            )
+        )
+    }
+
     private func makeCampaign(
         id: String,
         gameName: String,

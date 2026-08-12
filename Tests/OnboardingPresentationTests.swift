@@ -80,6 +80,39 @@ final class OnboardingPresentationTests: XCTestCase {
         XCTAssertEqual(minerManager.miners.count, 1)
     }
 
+    func test_ReauthenticationRejectsADifferentTwitchAccount() async throws {
+        let connectedAccount = Account(id: "1", username: "connected", accessToken: "old", refreshToken: "old", tokenExpiry: .distantPast, scopes: [])
+        let otherAccount = Account(id: "2", username: "other", accessToken: "new", refreshToken: "new", tokenExpiry: Date().addingTimeInterval(3600), scopes: [])
+        let minerId = try minerManager.addAccount(connectedAccount)
+
+        do {
+            try await minerManager.replaceAuthentication(for: minerId, with: otherAccount)
+            XCTFail("Reauthentication must not replace a miner with a different Twitch account")
+        } catch let error as MinerManager.AccountError {
+            XCTAssertEqual(
+                error,
+                .reauthenticationAccountMismatch(expectedUsername: "connected", actualUsername: "other")
+            )
+        }
+
+        XCTAssertEqual(minerManager.miners.count, 1)
+        XCTAssertEqual(minerManager.miners.first?.accountId, connectedAccount.id)
+    }
+
+    func test_ReauthenticationClearsTheAuthBlockForTheSameAccount() async throws {
+        let expiredAccount = Account(id: "1", username: "connected", accessToken: "old", refreshToken: "old", tokenExpiry: .distantPast, scopes: [])
+        let refreshedAccount = Account(id: "1", username: "connected", accessToken: "new", refreshToken: "new", tokenExpiry: Date().addingTimeInterval(3600), scopes: [])
+        let minerId = try minerManager.addAccount(expiredAccount)
+        minerManager.miners[0].needsAuth = true
+        minerManager.miners[0].status = .error
+
+        try await minerManager.replaceAuthentication(for: minerId, with: refreshedAccount)
+
+        XCTAssertFalse(minerManager.miners[0].needsAuth)
+        XCTAssertFalse(minerManager.miners[0].isRunning)
+        XCTAssertEqual(minerManager.miners[0].status, .idle)
+    }
+
     func test_Dismissed_PanelHidden() {
         // Given
         settings.hasDismissedOnboarding = true
