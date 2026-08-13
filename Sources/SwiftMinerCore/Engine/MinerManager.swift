@@ -900,6 +900,9 @@ public final class MinerManager {
         
         // Remove from persistent store
         let authService = TwitchAuthService(clientId: clientId, tokenStore: tokenStore)
+        // Best effort: removal must still complete when Twitch is offline, but
+        // revoke the OAuth grant immediately whenever the service is reachable.
+        try? await authService.revokeAccess(for: miner.accountId)
         try? await authService.logout(accountId: miner.accountId)
         
         // Remove from collections

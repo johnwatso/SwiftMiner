@@ -546,6 +546,67 @@ final class WebDashboardSecurityTests: XCTestCase {
         XCTAssertFalse(messages.joined(separator: "\n").contains(discordId))
     }
 
+    func testAccountRemovalRequiresCSRFAndExactTypedConfirmation() async throws {
+        let mgr = try await openTempManager()
+        defer { Task { await mgr.close() } }
+        try await mgr.execute("""
+        INSERT INTO twitch_accounts (
+            twitch_id, username, access_token, refresh_token, token_expiry, scopes, link_state
+        ) VALUES (
+            'twitch-1', 'Jonwatso', 'access', 'refresh', '2099-01-01T00:00:00Z', '', 'linked'
+        );
+        """)
+        try await mgr.createWebSession(
+            id: "remove-session",
+            principalType: "twitch",
+            principalId: "twitch-1",
+            csrfToken: "csrf",
+            createdAt: Date().timeIntervalSince1970,
+            expiresAt: Date().addingTimeInterval(60).timeIntervalSince1970
+        )
+
+        let removed = AccountRemovalRecorder()
+        let apiRoutes = DiscordAPIRoutes(
+            manager: mgr,
+            projectionBuilder: DiscordProjectionBuilder(manager: mgr),
+            apiKey: "test-api-key"
+        )
+        await apiRoutes.setOnRemoveMinerByAccount { accountId in
+            await removed.record(accountId)
+            return true
+        }
+        let webRoutes = WebDashboardRoutes(
+            config: WebDashboardConfig(baseURL: URL(string: "https://swiftminer.example.com")!, discord: nil, twitch: WebProviderCredentials(clientID: "id", clientSecret: "secret")),
+            manager: mgr,
+            apiRoutes: apiRoutes
+        )
+        let router = HTTPRouter()
+        await webRoutes.configure(router)
+        let cookie = "\(WebDashboardConfig.sessionCookieName)=remove-session"
+
+        let noCSRF = await router.handle(HTTPRequest(
+            method: "POST", path: "/me/account/remove", headers: ["cookie": cookie],
+            body: Data("{\"confirmation\":\"swiftminer\"}".utf8)
+        ))
+        XCTAssertEqual(noCSRF.statusCode, 403)
+
+        let wrongConfirmation = await router.handle(HTTPRequest(
+            method: "POST", path: "/me/account/remove", headers: ["cookie": cookie, "x-sm-csrf": "csrf"],
+            body: Data("{\"confirmation\":\"SwiftMiner\"}".utf8)
+        ))
+        XCTAssertEqual(wrongConfirmation.statusCode, 400)
+        let accountIdsAfterWrongConfirmation = await removed.accountIds
+        XCTAssertTrue(accountIdsAfterWrongConfirmation.isEmpty)
+
+        let confirmed = await router.handle(HTTPRequest(
+            method: "POST", path: "/me/account/remove", headers: ["cookie": cookie, "x-sm-csrf": "csrf"],
+            body: Data("{\"confirmation\":\"swiftminer\"}".utf8)
+        ))
+        XCTAssertEqual(confirmed.statusCode, 200)
+        let removedAccountIds = await removed.accountIds
+        XCTAssertEqual(removedAccountIds, ["twitch-1"])
+    }
+
     // MARK: - Session & OAuth-state persistence
 
     func testWebSessionLifecycleAndExpiry() async throws {
@@ -897,5 +958,13 @@ private actor AuditRecorder {
 
     func record(_ message: String) {
         messages.append(message)
+    }
+}
+
+private actor AccountRemovalRecorder {
+    private(set) var accountIds: [String] = []
+
+    func record(_ accountId: String) {
+        accountIds.append(accountId)
     }
 }

@@ -43,6 +43,8 @@
         <li>Updates Sparkle to 2.9.5.</li>
         <li>Sparkle release validation and publishing now use ShipHook&rsquo;s authored <code>docs/</code> appcasts instead of stale generated website copies.</li>
         <li>Reconnect Twitch now opens the browser authorization flow, refreshes the selected miner&rsquo;s credentials, and resumes mining after approval.</li>
+        <li>The web dashboard now lets a signed-in user remove their own mined account behind an explicit <code>swiftminer</code> typed confirmation. Removal stops mining, deletes the local account, and revokes its Twitch authorization; it never deletes the user&rsquo;s Twitch account.</li>
+        <li>Audit Activity Log entries now survive noisy routine activity up to the selected history limit, including recovery from an interrupted database upgrade.</li>
       </ul>
     </section>
 

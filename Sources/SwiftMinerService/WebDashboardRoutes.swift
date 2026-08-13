@@ -183,6 +183,11 @@ public actor WebDashboardRoutes {
         await router.register(HTTPRoute(method: "POST", pattern: WebDashboardConfig.logoutPath) { req, _ in
             await me.handleLogout(req)
         })
+        await router.register(HTTPRoute(method: "POST", pattern: "/me/account/remove") { req, _ in
+            await me.withSession(req, requireCSRF: true) { s in
+                await me.removeAccount(for: s, body: req.body)
+            }
+        })
         await router.register(HTTPRoute(method: "POST", pattern: "/me/campaigns/:campaignId/:action") { req, params in
             await me.withSession(req, requireCSRF: true) { s in
                 guard let campaignId = params["campaignId"], let action = params["action"] else { return .badRequest }
@@ -286,6 +291,60 @@ public actor WebDashboardRoutes {
         return HTTPResponse.json(response, statusCode: response.ok ? 200 : 409)
     }
 
+    /// Deletes only the Twitch miner represented by the signed-in principal.
+    /// The typed confirmation is validated here as well as in the browser so a
+    /// crafted request cannot bypass the destructive-action safeguard.
+    private func removeAccount(for s: WebSessionRecord, body: Data) async -> HTTPResponse {
+        struct Confirmation: Decodable {
+            let confirmation: String
+            let accountId: String?
+
+            enum CodingKeys: String, CodingKey {
+                case confirmation
+                case accountId = "account_id"
+            }
+        }
+        guard let request = try? JSONDecoder().decode(Confirmation.self, from: body),
+              request.confirmation == "swiftminer" else {
+            return .error(code: "confirmation_required", message: "Type swiftminer exactly to remove your account.", statusCode: 400)
+        }
+
+        let accountId: String
+        switch s.principalType {
+        case WebProvider.twitch.rawValue:
+            accountId = s.principalId
+        case WebProvider.discord.rawValue:
+            guard let ownedAccountId = await manager.firstTwitchAccountId(ownerDiscordId: s.principalId) else {
+                return .error(code: "account_not_found", message: "No linked Twitch account was found to remove.", statusCode: 404)
+            }
+            accountId = ownedAccountId
+        case Self.localPrincipal:
+            #if DEBUG
+            guard let requestedAccountId = request.accountId, !requestedAccountId.isEmpty else {
+                return .error(code: "account_required", message: "Choose an account to remove.", statusCode: 400)
+            }
+            accountId = requestedAccountId
+            #else
+            return .error(code: "not_supported", message: "Account removal is not available from the local operator dashboard.", statusCode: 409)
+            #endif
+        default:
+            return .error(code: "not_supported", message: "Account removal is not available for this session.", statusCode: 409)
+        }
+
+        guard let account = await manager.twitchAccount(twitchId: accountId) else {
+            return .error(code: "account_not_found", message: "This Twitch account is no longer managed by SwiftMiner.", statusCode: 404)
+        }
+        if s.principalType == WebProvider.discord.rawValue, account.ownerDiscordId != s.principalId {
+            return .error(code: "forbidden", message: "You can only remove your own account.", statusCode: 403)
+        }
+        guard await apiRoutes.removeMinerByAccount(accountId: accountId) else {
+            return .error(code: "removal_failed", message: "SwiftMiner could not remove this account. Please try again.", statusCode: 409)
+        }
+
+        await audit?("\(account.username) removed their SwiftMiner account and revoked its Twitch authorization")
+        return .json(["ok": true])
+    }
+
     private func campaignAction(for s: WebSessionRecord, campaignId: String, action: String, body: Data) async -> HTTPResponse {
         // Campaign ignore/prioritise decisions are Discord-keyed.
         let discordId: String
@@ -359,6 +418,7 @@ public actor WebDashboardRoutes {
 
     private func handleLoginChooser(_ req: HTTPRequest) async -> HTTPResponse {
         if await currentSession(req) != nil { return .redirect(to: WebDashboardConfig.appPath) }
+        let accountWasRemoved = req.queryParams["account_removed"] == "1"
         // Only offer the local form when this request is local (not the public
         // domain), so the password box never appears over the tunnel.
         let localAvailable = config.localEnabled && isLocalRequest(req)
@@ -367,14 +427,16 @@ public actor WebDashboardRoutes {
                 discordSSOURL: nil,
                 twitch: false,
                 local: true,
-                appIcon: logoDarkPNG != nil && logoLightPNG != nil
+                appIcon: logoDarkPNG != nil && logoLightPNG != nil,
+                accountRemoved: accountWasRemoved
             ))
         }
         return .html(WebDashboardAssets.loginPage(
             discordSSOURL: await swiftBotSSOStartURL(),
             twitch: await currentTwitchCredentials() != nil,
             local: false,
-            appIcon: logoDarkPNG != nil && logoLightPNG != nil
+            appIcon: logoDarkPNG != nil && logoLightPNG != nil,
+            accountRemoved: accountWasRemoved
         ))
     }
 
@@ -613,8 +675,27 @@ public actor WebDashboardRoutes {
     }
 
     private func handleSessionInfo(_ s: WebSessionRecord) async -> HTTPResponse {
-        struct Info: Encodable { let provider: String; let csrfToken: String }
-        return .json(Info(provider: s.principalType, csrfToken: s.csrfToken))
+        struct Info: Encodable {
+            let provider: String
+            let csrfToken: String
+            let allowsOperatorAccountRemoval: Bool
+
+            enum CodingKeys: String, CodingKey {
+                case provider
+                case csrfToken
+                case allowsOperatorAccountRemoval = "allows_operator_account_removal"
+            }
+        }
+        #if DEBUG
+        let allowsOperatorAccountRemoval = s.principalType == Self.localPrincipal
+        #else
+        let allowsOperatorAccountRemoval = false
+        #endif
+        return .json(Info(
+            provider: s.principalType,
+            csrfToken: s.csrfToken,
+            allowsOperatorAccountRemoval: allowsOperatorAccountRemoval
+        ))
     }
 
     /// Human-readable name for a session's principal, for audit entries.
