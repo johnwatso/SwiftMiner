@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Priorities for Operators - SwiftMiner Help</title>
+    <meta name="description" content="How game priorities work when you run SwiftMiner for other people: global and personal lists, priority modes, instance-wide strategy, ranking order, and an operator FAQ.">
+    <link rel="canonical" href="https://swiftminer.app/help/operator-priorities/">
+    <meta property="og:type" content="article">
+    <meta property="og:site_name" content="SwiftMiner">
+    <meta property="og:url" content="https://swiftminer.app/help/operator-priorities/">
+    <meta property="og:title" content="SwiftMiner Priorities for Operators">
+    <meta property="og:description" content="Global vs personal priority lists, priority modes, strategy, and the exact order SwiftMiner picks campaigns in when you host miners for other people.">
+    <meta property="og:image" content="https://swiftminer.app/assets/landing/og-image.jpg">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="SwiftMiner Priorities for Operators">
+    <meta name="twitter:description" content="Understand exactly whose priority list wins when you run miners for other people.">
+    <meta name="twitter:image" content="https://swiftminer.app/assets/landing/og-image.jpg">
+    <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"SwiftMiner","item":"https://swiftminer.app/"},{"@type":"ListItem","position":2,"name":"Help","item":"https://swiftminer.app/help/"},{"@type":"ListItem","position":3,"name":"Priorities for Operators","item":"https://swiftminer.app/help/operator-priorities/"}]}
+    </script>
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#f5f5f7">
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <link rel="stylesheet" href="../../assets/css/tailwind.css">
+    <link rel="stylesheet" href="../assets/css/kbase.css">
+    <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
+    <script src="../assets/js/search-index.js" defer></script>
+    <script src="../assets/js/search.js" defer></script>
+    <script src="../assets/js/kbase.js" defer></script>
+</head>
+<body>
+    <nav class="nav" aria-label="Main">
+        <div class="shell nav-inner">
+            <a class="brand" href="../">
+                <img src="../../assets/landing/swiftminer-icon.webp" alt="">
+                <span>SwiftMiner Help</span>
+            </a>
+            <div class="nav-actions">
+                <a class="nav-link" href="../">Help Home</a>
+                <a class="nav-link optional" href="../../">Overview</a>
+                <a class="nav-link" href="https://github.com/johnwatso/SwiftMiner/issues">Raise an Issue</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="shell">
+        <div class="breadcrumbs" aria-label="Breadcrumbs">
+            <a href="../">Help Home</a>
+            <span class="sep">/</span>
+            <span class="current">Priorities for Operators</span>
+        </div>
+
+        <header class="article-header">
+            <h1>Priorities for Operators</h1>
+            <p class="article-intro">If you run SwiftMiner on your Mac and host miners for other people through the Web Dashboard or SwiftBot, two priority lists are in play for every miner: yours and theirs. This article explains how they combine, what only you can change, and what to check when someone says their game is not being mined.</p>
+            <div class="search-wrap" style="margin-top: 1.5rem; max-width: 100%;">
+                <i class="ph-bold ph-magnifying-glass" style="position: absolute; top: 50%; left: 1.1rem; transform: translateY(-50%); color: var(--muted);"></i>
+                <input id="help-search" class="search" type="search" placeholder="Search help topics" aria-label="Search help topics" style="width: 100%; height: 48px; padding: 0 1.2rem 0 3rem; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-solid); color: var(--ink); font: inherit; outline: none; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);">
+            </div>
+        </header>
+
+        <div class="kb-grid">
+            <main class="kb-content">
+                <p>This is the operator's view of the same system described in <a href="../game-rules/">Game Rules &amp; Failover Streamers</a>. Read that first if you only run your own accounts; come back here when other people's miners are attached to your instance.</p>
+
+                <div class="callout info">
+                    <strong>The short version</strong>
+                    <p>Each miner mines from one ordered list of games. That list is built from your global list, the miner's personal list, or both, depending on the miner's priority mode. Exclusions and the mining strategy are yours alone and apply to every miner on the instance.</p>
+                </div>
+
+                <h2 id="operator-model">What You Control, What They Control</h2>
+                <p>Priorities are stored per Twitch account, not per Discord user. Someone who has two accounts linked to your instance has two independent personal lists, and each of those miners can be in a different priority mode.</p>
+
+                <div class="kb-table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 34%;">Setting</th>
+                                <th style="width: 22%;">Scope</th>
+                                <th>Who can change it</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Global priority list</strong></td>
+                                <td>Whole instance</td>
+                                <td>Operator only, in <strong>Settings &gt; Mining &gt; Manage Game Rules</strong>.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Excluded games</strong></td>
+                                <td>Whole instance</td>
+                                <td>Operator only. Hosted users cannot exclude games, and cannot mine around your exclusions.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Mining strategy</strong></td>
+                                <td>Whole instance</td>
+                                <td>Operator only. There is one strategy for every miner.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Personal priority list</strong></td>
+                                <td>One Twitch account</td>
+                                <td>The account's owner, from the Web Dashboard or SwiftBot. You can also edit it from the Miners view.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Priority mode</strong></td>
+                                <td>One Twitch account</td>
+                                <td>Both. The owner sets it on the dashboard; you can override it per miner in the Miners view.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Failover streamer</strong></td>
+                                <td>One game rule</td>
+                                <td>Operator only, attached to a game in Game Rules.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="screenshot-wrap">
+                    <picture>
+                        <source srcset="../assets/img/miners-dark.webp" media="(prefers-color-scheme: dark)">
+                        <img src="../assets/img/miners-light.webp" alt="SwiftMiner Miners view showing each hosted miner" loading="lazy" decoding="async">
+                    </picture>
+                    <div class="screenshot-caption">The Miners view is the operator console: one row per hosted miner, with its priority mode and current target.</div>
+                </div>
+
+                <h2 id="priority-modes">The Three Priority Modes</h2>
+                <p>Every miner is in exactly one mode. The mode decides which lists are used to build that miner's effective priority order.</p>
+
+                <div class="kb-table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 28%;">Mode</th>
+                                <th>Effective priority list</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Global</strong></td>
+                                <td>Your global list only. The miner follows the house queue and ignores anything in its own personal list.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Global + Personal</strong></td>
+                                <td>The miner's personal games first, in their order, then your global games appended after them. Duplicates are collapsed to their earliest position.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Personal</strong></td>
+                                <td>The miner's personal games only. Your global list is not used for that miner.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <p>A new miner starts in <strong>Global</strong>. The first time its owner prioritises a game, it moves to <strong>Global + Personal</strong> automatically, so their pick goes to the front without silently dropping your house list. Nobody has to understand the modes to get a sensible result.</p>
+
+                <p>Worked example. Your global list is <em>Rust, Sea of Thieves, ARK</em>. A hosted miner's personal list is <em>ARK, Rust Legacy</em>.</p>
+                <ul>
+                    <li><strong>Global:</strong> Rust → Sea of Thieves → ARK</li>
+                    <li><strong>Global + Personal:</strong> ARK → Rust Legacy → Rust → Sea of Thieves <em>(ARK appears once, at its earliest position)</em></li>
+                    <li><strong>Personal:</strong> ARK → Rust Legacy</li>
+                </ul>
+
+                <h2 id="strategy">Strategy Is Instance-Wide</h2>
+                <p>The mining strategy in <strong>Settings &gt; Mining</strong> is a single setting shared by every miner you host. It does not change what is on a list; it changes how much the list matters against campaign end dates.</p>
+
+                <div class="kb-table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 30%;">Strategy</th>
+                                <th>Effect across hosted miners</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Smart</strong></td>
+                                <td>Campaigns ending soonest go first for everyone; priority order only breaks ties. Fewest expired campaigns overall, and the mode that surprises hosted users most often.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Prefer prioritised games</strong></td>
+                                <td>Each miner works its own effective list from the top, then falls back to anything else eligible. The best default when people expect their pick to be honoured.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Only prioritised games</strong></td>
+                                <td>Anything not on the miner's effective list is discarded. Predictable, but miners idle whenever their listed games have no eligible live campaign.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="callout warning">
+                    <strong>The combination that silently idles a miner</strong>
+                    <p><strong>Only prioritised games</strong> plus a miner in <strong>Personal</strong> mode with an empty personal list leaves that miner with nothing to mine at all. It reports no eligible campaigns and waits indefinitely. Check for this first when one hosted account earns nothing while the rest are fine.</p>
+                </div>
+
+                <h2 id="ranking">How a Miner Picks Its Next Campaign</h2>
+                <p>Once a miner's effective list exists, SwiftMiner filters its campaigns to those that can actually be attempted, then sorts what is left. The sort applies these rules in order:</p>
+
+                <ol class="steps-list">
+                    <li><strong>Live games beat dead games.</strong> A game with no verifiable live channel is demoted below games that have one, in every strategy. Priority position never rescues a game nobody is streaming.</li>
+                    <li><strong>Strategy decides the main key.</strong> Under Smart, the earliest end date wins and priority only breaks ties. Under the two priority strategies, being on the list wins first, then list position, then end date.</li>
+                    <li><strong>Partly earned drops finish first.</strong> When everything above ties, the campaign whose next drop is closest to completing is chosen, because banked minutes are per campaign and are lost if its streams dry up.</li>
+                    <li><strong>Otherwise the existing order is kept</strong>, so selection stays stable between scans.</li>
+                </ol>
+
+                <p>The miner then verifies a live channel is genuinely advertising that exact campaign before it starts watching. A channel playing the right game is not enough.</p>
+
+                <h2 id="limits">What a Priority Cannot Do</h2>
+                <p>Most operator support questions land here. Prioritising changes preference and ordering only. It does not override Twitch.</p>
+                <ul>
+                    <li>It cannot mine a campaign that has ended, is disabled, or has no remaining drop that can still be earned by watching.</li>
+                    <li>It cannot turn a subscriber-only reward into a watch-time reward.</li>
+                    <li>It cannot invent a live channel, or bypass a campaign restricted to specific channels.</li>
+                    <li>It cannot beat an exclusion. An excluded game is removed before ordering, for every miner, whatever their personal list says.</li>
+                    <li>It cannot deliver a reward that needs a publisher account link (EA, Ubisoft, Riot, and similar) until the owner links it.</li>
+                </ul>
+
+                <div class="callout info">
+                    <strong>One place priority genuinely unlocks mining</strong>
+                    <p>A campaign whose publisher account is not linked is only attempted when its game is prioritised <em>for that specific miner</em>. Twitch will still track the watch progress, so the drop is waiting once the owner links their account. This is per miner: a game sitting in your global list does not unlock it for a miner in <strong>Personal</strong> mode.</p>
+                </div>
+
+                <h2 id="timing">When a Change Takes Effect</h2>
+                <p>Priority edits made from the Web Dashboard, SwiftBot, or the Miners view are applied to the running miner immediately and force a refresh of that miner. What follows is not always an instant stream switch.</p>
+                <ul>
+                    <li><strong>An idle or waiting miner</strong> re-selects on the next scan, normally within seconds of the refresh.</li>
+                    <li><strong>A miner mid-drop</strong> keeps its current campaign if the active drop is within ten minutes of completing, rather than throwing away banked minutes. The exception is a preempting campaign whose own window closes within the hour, which is allowed to take over.</li>
+                    <li><strong>Otherwise</strong> the active watch loop re-evaluates campaigns about every five minutes, so a new top priority that is live is usually picked up inside that window.</li>
+                    <li><strong>A global list edit</strong> reaches every miner in Global or Global + Personal mode at once; miners in Personal mode are untouched.</li>
+                </ul>
+                <p>Tell people to expect "within a few minutes", not "instantly". A miner that is happily earning is deliberately reluctant to move.</p>
+
+                <h2 id="audit">Seeing Who Changed What</h2>
+                <p>Changes made by hosted users are written to the activity log with the Twitch username that made them, so remote edits are never invisible to you. You will see entries for a priority mode change, and for games added to or removed from a personal list.</p>
+                <div class="screenshot-wrap">
+                    <picture>
+                        <source srcset="../assets/img/activity-log-dark.webp" media="(prefers-color-scheme: dark)">
+                        <img src="../assets/img/activity-log-light.webp" alt="SwiftMiner Activity Log" loading="lazy" decoding="async">
+                    </picture>
+                    <div class="screenshot-caption">Remote priority edits appear in the Activity Log, attributed to the account that made them.</div>
+                </div>
+                <p>When a miner is doing something unexpected, read the log before changing settings: it usually shows either a remote edit you did not make, or a channel-verification message explaining why a higher game was skipped.</p>
+
+                <h2 id="playbooks">Operator Setups That Work</h2>
+
+                <h3>A shared house queue</h3>
+                <p>Leave every miner in <strong>Global</strong> and use <strong>Prefer prioritised games</strong>. You curate one list, everyone gets the same rewards, and support questions collapse to one place. Best for a small group farming the same games.</p>
+
+                <h3>House queue with personal picks</h3>
+                <p>Keep <strong>Prefer prioritised games</strong> and let people move themselves to <strong>Global + Personal</strong> by prioritising anything on the dashboard. Their picks lead, your list catches everything after. This is the setup most groups end up in.</p>
+
+                <h3>Everyone farms their own thing</h3>
+                <p>Put miners in <strong>Personal</strong> mode and keep the global list short, for exclusions and failovers rather than ordering. Expect to answer "why is my miner idle" more often, and avoid <strong>Only prioritised games</strong> here unless every list is well maintained.</p>
+
+                <h3>Pushing a limited-time campaign</h3>
+                <p>Put the game at the top of the global list. Remember it will not reach miners in <strong>Personal</strong> mode: either message those owners, or temporarily switch them to <strong>Global + Personal</strong> from the Miners view, which preserves their personal list underneath.</p>
+
+                <h3>Several miners on one game</h3>
+                <p>Enable <strong>Spread miners across streams</strong> in Settings &gt; Mining. Twitch counts one watch session per account, so separate accounts on the same campaign are fine; spreading them across channels simply reduces the blast radius when one stream ends.</p>
+
+                <h2 id="faq">Operator FAQ</h2>
+
+                <h3>Someone prioritised a game and it is still mining something else. Why?</h3>
+                <p>Almost always the strategy. Under <strong>Smart</strong>, the campaign ending soonest wins and their pick is only a tiebreaker. If you want picks honoured, use <strong>Prefer prioritised games</strong>. If the strategy is already that, check whether their game has a live channel advertising that exact campaign right now.</p>
+
+                <h3>Can a hosted user mine a game I excluded?</h3>
+                <p>No. Exclusions are applied before ordering and cover every miner on the instance, including games on someone's personal list.</p>
+
+                <h3>Can I set different strategies for different people?</h3>
+                <p>No. The strategy is instance-wide. Per-person differences are expressed through priority modes and lists instead.</p>
+
+                <h3>Do I have to approve someone's priority changes?</h3>
+                <p>No, and there is no approval queue. Owners manage their own personal list and mode; the changes are logged, and you can override the mode or edit the list from the Miners view at any time.</p>
+
+                <h3>Someone's miner shows "Global" but they swear they set games. What happened?</h3>
+                <p>Either you moved that miner to Global from the Miners view, which parks their personal list without deleting it, or they set the games against a different Twitch account. Priorities follow the Twitch account, so a second account of theirs has its own separate list.</p>
+
+                <h3>Why is one miner idle while the others are working?</h3>
+                <p>Work down this order: the strategy is <strong>Only prioritised games</strong> and that miner's effective list is empty or entirely offline; every listed game needs a publisher link that is missing; the campaigns they want are subscriber-only or channel-restricted; the account needs re-authentication and shows <strong>Needs Auth</strong>.</p>
+
+                <h3>Does prioritising a game guarantee it gets mined first?</h3>
+                <p>No. A game with no verifiable live channel is demoted below games that have one, regardless of position or strategy. Priority is preference, not force.</p>
+
+                <h3>Two people want the same game. Do their miners fight?</h3>
+                <p>No. Each Twitch account earns its own drop progress independently. They can watch the same channel or different ones; <strong>Spread miners across streams</strong> only affects channel choice, not eligibility.</p>
+
+                <h3>Someone left. What happens to their priorities?</h3>
+                <p>Removing their account removes its miner and its personal list along with it. Your global list, exclusions, and strategy are unaffected, and other miners keep running.</p>
+
+                <h3>How fast should I expect a priority change to take?</h3>
+                <p>Seconds for a waiting miner, up to about five minutes for one that is actively watching, and longer if its current drop is within ten minutes of completing. See <a href="#timing">When a change takes effect</a>.</p>
+
+                <div class="callout warning">
+                    <strong>Twitch remains the source of truth</strong>
+                    <p>Campaign availability, channel eligibility, and progress all come from Twitch. Temporary or inconsistent Twitch data can delay selection or cause a valid-looking channel to be rejected until the next scan, on any priority setup.</p>
+                </div>
+            </main>
+
+            <aside class="kb-sidebar" aria-label="Sidebar">
+                <div class="sidebar-section">
+                    <h2 class="sidebar-title">On this page</h2>
+                    <ul class="toc-list">
+                        <li><a href="#operator-model" class="toc-link">What you control</a></li>
+                        <li><a href="#priority-modes" class="toc-link">The three priority modes</a></li>
+                        <li><a href="#strategy" class="toc-link">Strategy is instance-wide</a></li>
+                        <li><a href="#ranking" class="toc-link">How a miner picks</a></li>
+                        <li><a href="#limits" class="toc-link">What priority cannot do</a></li>
+                        <li><a href="#timing" class="toc-link">When a change takes effect</a></li>
+                        <li><a href="#audit" class="toc-link">Seeing who changed what</a></li>
+                        <li><a href="#playbooks" class="toc-link">Operator setups</a></li>
+                        <li><a href="#faq" class="toc-link">Operator FAQ</a></li>
+                    </ul>
+                </div>
+
+                <div class="sidebar-section">
+                    <h2 class="sidebar-title">Related Articles</h2>
+                    <ul class="related-links">
+                        <li><a href="../game-rules/"><i class="ph-bold ph-list-numbers"></i> Game Rules &amp; Failover</a></li>
+                        <li><a href="../web-dashboard/"><i class="ph-bold ph-browser"></i> Web Dashboard Setup</a></li>
+                        <li><a href="../discord/"><i class="ph-bold ph-discord-logo"></i> SwiftBot for Discord</a></li>
+                        <li><a href="../multi-account-twitch-drops/"><i class="ph-bold ph-users"></i> Multi-Account Mining</a></li>
+                        <li><a href="../troubleshooting/"><i class="ph-bold ph-wrench"></i> Troubleshooting Guide</a></li>
+                    </ul>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="shell">
+            <span>SwiftMiner Help · Published August 14, 2026</span>
+            <span><a class="nav-link" href="../../release-notes/">Release Notes</a> · <a class="nav-link" href="https://github.com/johnwatso/SwiftMiner">GitHub</a></span>
+        </div>
+    </footer>
+</body>
+</html>
