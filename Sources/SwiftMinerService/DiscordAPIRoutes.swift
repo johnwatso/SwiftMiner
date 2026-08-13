@@ -222,6 +222,9 @@ public actor DiscordAPIRoutes {
     /// Controls a miner, identified by Twitch account id alone (no Discord owner needed).
     /// Used by Twitch-authenticated or operator web sessions. Args: (accountId, action).
     public var onMinerControlByAccount: (@Sendable (String, MinerControlAction) async -> MinerControlResponse)?
+    /// Removes a miner by its Twitch account id. The host is responsible for
+    /// stopping the miner, revoking its Twitch token, and deleting local data.
+    public var onRemoveMinerByAccount: (@Sendable (String) async -> Bool)?
 
     // In-memory activation session store (ephemeral; DB retains audit rows)
     private var activationSessions: [String: ActivationSession] = [:]
@@ -271,6 +274,10 @@ public actor DiscordAPIRoutes {
 
     public func setOnMinerControlByAccount(_ handler: @escaping @Sendable (String, MinerControlAction) async -> MinerControlResponse) {
         self.onMinerControlByAccount = handler
+    }
+
+    public func setOnRemoveMinerByAccount(_ handler: @escaping @Sendable (String) async -> Bool) {
+        self.onRemoveMinerByAccount = handler
     }
 
     /// Known campaign game names, for the web dashboard's add-game autocomplete.
@@ -870,6 +877,11 @@ public actor DiscordAPIRoutes {
             return MinerControlResponse(ok: false, action: action.rawValue, state: "unavailable", twitchUsername: nil, message: "Miner controls are not available.")
         }
         return await onMinerControlByAccount(accountId, action)
+    }
+
+    public func removeMinerByAccount(accountId: String) async -> Bool {
+        guard let onRemoveMinerByAccount else { return false }
+        return await onRemoveMinerByAccount(accountId)
     }
 
     // MARK: - Web Dashboard Delegation (Twitch principal)

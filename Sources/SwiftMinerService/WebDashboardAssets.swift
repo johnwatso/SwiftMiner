@@ -247,6 +247,22 @@ enum WebDashboardAssets {
           background: linear-gradient(180deg, var(--glass-top), var(--glass-bottom));
         }
         .btn-secondary:disabled, .btn-primary:disabled { opacity: 0.45; cursor: default; }
+        .btn-danger {
+          min-height: 40px; padding: 0 17px; color: #fff; border: 1px solid #ff716a;
+          background: linear-gradient(180deg, #ef5149, #c92d27);
+          box-shadow: 0 8px 18px rgba(201,45,39,0.28);
+        }
+        .btn-danger:not(:disabled):hover { filter: brightness(1.08); }
+        .btn-danger-outline { color: #ff9b95; border-color: rgba(255,100,92,0.38); background: rgba(201,45,39,0.16); }
+        .btn-danger-outline:hover { color: #fff; border-color: rgba(255,113,106,0.72); background: rgba(201,45,39,0.30); }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+        .modal-actions .btn-secondary { min-height: 40px; padding: 0 16px; }
+        .removal-notice {
+          display: flex; align-items: flex-start; gap: 10px; margin: 0 0 14px; padding: 13px 15px;
+          color: #baf6ca; font-size: 13px; line-height: 1.4; border: 1px solid rgba(52,199,89,0.34);
+          border-radius: 14px; background: rgba(52,199,89,0.13); box-shadow: inset 0 1px rgba(255,255,255,0.08);
+        }
+        .removal-notice strong { color: #e6ffec; }
         .detail-nav { margin: 0 0 14px; }
         .back-row { display: flex; align-items: center; gap: 10px; }
         .back-row .hero-info { min-width: 0; }
@@ -594,6 +610,10 @@ enum WebDashboardAssets {
     let globalPrioritiesModalOpen = false;
     let prioritiesModalOpen = false;
     let activityModalOpen = false;
+    var accountRemovalModalOpen = false;
+    var accountRemovalAccountId = null;
+    var accountRemovalReturnToOverview = false;
+    var accountRemovalNotice = '';
     let OPERATOR_MINERS = [];
     let OPERATOR_STATE = { selectedMinerId: null };
 
@@ -1214,6 +1234,103 @@ enum WebDashboardAssets {
       return `<button class="detail-back" id="backoverview" type="button" aria-label="Back to all miners">‹ All Miners</button>`;
     }
 
+    function accountRemovalCard(p) {
+      if (!SESSION || !(p && p.account && p.account.twitchAccountId)) return '';
+      if (SESSION.provider === 'local' && !SESSION.allows_operator_account_removal) return '';
+      return `<section class="card">
+        <div class="label">Account</div>
+        <div class="row" style="align-items:flex-start;justify-content:space-between;gap:16px">
+          <div style="flex:1;min-width:0">
+            <div class="name">Remove account</div>
+            <div class="muted" style="font-size:13px;margin-top:4px">Stops mining, removes this account from SwiftMiner, and revokes its Twitch authorization.</div>
+          </div>
+          <button class="btn-secondary btn-danger-outline" id="removeaccount" data-remove-account-id="${esc(p.account.twitchAccountId)}" type="button">Remove</button>
+        </div>
+      </section>`;
+    }
+
+    function accountRemovalModal() {
+      return `<div class="modal-backdrop" id="accountremovalmodal">
+        <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="accountremovaltitle" tabindex="-1">
+          <div class="modal-header">
+            <div class="copy">
+              <div class="modal-title" id="accountremovaltitle">Remove your SwiftMiner account?</div>
+              <div class="modal-subtitle">This stops mining, removes this account from SwiftMiner, and revokes its Twitch authorization. It does not delete your Twitch account.</div>
+            </div>
+          </div>
+          <label class="muted" for="removalconfirmation" style="display:block;font-size:13px;margin:0 0 8px">Type <strong style="color:var(--text)">swiftminer</strong> to confirm.</label>
+          <input id="removalconfirmation" autocomplete="off" autocapitalize="none" spellcheck="false" style="width:100%;font:15px inherit;font-family:inherit;color:var(--text);padding:11px 13px;border-radius:12px;background:var(--field);border:1px solid var(--field-stroke);outline:none" aria-describedby="removalerror">
+          <div class="savemsg err" id="removalerror" role="alert"></div>
+          <div class="modal-actions">
+            <button class="btn-secondary" id="cancelaccountremoval" type="button">Cancel</button>
+            <button class="btn-primary btn-danger" id="confirmaccountremoval" type="button" disabled>Remove account</button>
+          </div>
+        </section>
+      </div>`;
+    }
+
+    function closeAccountRemovalModal() {
+      accountRemovalModalOpen = false;
+      if (accountRemovalReturnToOverview) renderOverview(OPERATOR_MINERS);
+      else render(PROJ);
+    }
+
+    function wireAccountRemoval() {
+      const open = $('removeaccount');
+      if (open) open.addEventListener('click', () => {
+        accountRemovalAccountId = open.dataset.removeAccountId || null;
+        accountRemovalReturnToOverview = false;
+        accountRemovalModalOpen = true;
+        render(PROJ);
+      });
+      document.querySelectorAll('[data-overview-remove-account-id]').forEach(button => {
+        button.addEventListener('click', (event) => {
+          event.stopPropagation();
+          accountRemovalAccountId = button.dataset.overviewRemoveAccountId || null;
+          accountRemovalReturnToOverview = true;
+          accountRemovalModalOpen = true;
+          renderOverview(OPERATOR_MINERS);
+        });
+      });
+      const modal = $('accountremovalmodal');
+      if (!modal) return;
+      const dialog = modal.querySelector('[role="dialog"]');
+      const input = $('removalconfirmation');
+      const confirm = $('confirmaccountremoval');
+      const error = $('removalerror');
+      if (dialog) dialog.focus();
+      if (input) {
+        input.focus();
+        input.addEventListener('input', () => { confirm.disabled = input.value !== 'swiftminer'; });
+      }
+      $('cancelaccountremoval').addEventListener('click', closeAccountRemovalModal);
+      modal.addEventListener('click', (event) => { if (event.target === modal) closeAccountRemovalModal(); });
+      modal.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeAccountRemovalModal(); });
+      confirm.addEventListener('click', async () => {
+        confirm.disabled = true;
+        const r = await api('/me/account/remove', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ confirmation: input.value, account_id: accountRemovalAccountId })
+        });
+        if (r && r.ok) {
+          if (SESSION && SESSION.provider === 'local') {
+            const removed = OPERATOR_MINERS.find(m => minerId(m) === String(accountRemovalAccountId));
+            const name = removed ? accountDisplayName(removed.account || {}) : 'Account';
+            accountRemovalNotice = `${name} was removed from SwiftMiner. A Twitch authorization revocation was requested.`;
+            accountRemovalModalOpen = false;
+            accountRemovalAccountId = null;
+            await load(false);
+          } else {
+            await doLogout(true);
+          }
+          return;
+        }
+        let detail = 'Could not remove your account.';
+        try { detail = (await r.json()).message || detail; } catch {}
+        error.textContent = detail;
+        confirm.disabled = input.value !== 'swiftminer';
+      });
+    }
+
     function render(p) {
       PROJ = p;
       if (needsOnboarding(p)) {
@@ -1223,7 +1340,7 @@ enum WebDashboardAssets {
       personal = (p.personalPriorityGames || []).slice();
       prioritySource = p.prioritySource || (p.includesGlobalPriorityGames === false ? 'personal' : 'global');
       includeGlobalPriorities = prioritySource !== 'personal';
-      $('app').innerHTML = `<main class="miner-detail">${operatorBackCard(p)}${minerIdentity(p)}${heroStateCard(p)}${progressCard(p)}${activationCard(p)}${issuesCard(p)}${subscriptionRequiredCard()}${upNextCard(p)}${globalCard(p)}${personalCard(p)}${dropsCard(p)}${globalPrioritiesModalOpen ? globalPrioritiesModal(p) : ''}</main>`;
+      $('app').innerHTML = `<main class="miner-detail">${operatorBackCard(p)}${minerIdentity(p)}${heroStateCard(p)}${progressCard(p)}${activationCard(p)}${issuesCard(p)}${subscriptionRequiredCard()}${upNextCard(p)}${globalCard(p)}${personalCard(p)}${dropsCard(p)}${accountRemovalCard(p)}${globalPrioritiesModalOpen ? globalPrioritiesModal(p) : ''}${accountRemovalModalOpen ? accountRemovalModal() : ''}</main>`;
       hydrateArt();
       wireActivation();
       wireOperatorBack();
@@ -1236,6 +1353,7 @@ enum WebDashboardAssets {
         render(PROJ);
       });
       wireGlobalPrioritiesModal();
+      wireAccountRemoval();
       fillGameOptions();
     }
 
@@ -1423,6 +1541,10 @@ enum WebDashboardAssets {
         </div>
       </div>`;
 
+      if (accountRemovalNotice) {
+        html += `<div class="removal-notice" role="status"><span aria-hidden="true">✓</span><div><strong>Account removed</strong><br>${esc(accountRemovalNotice)}</div></div>`;
+      }
+
       if (!miners.length) {
         html += '<div class="card muted">No miners configured yet.</div>';
       }
@@ -1449,6 +1571,7 @@ enum WebDashboardAssets {
               </div>
               <div style="display:flex;align-items:center;gap:8px;margin-left:auto;flex-shrink:0">
                 <button class="btn-secondary refresh-btn" data-account-id="${esc(acc.twitchAccountId)}" style="padding: 6px 12px; font-size: 12px; height: 28px; line-height: 1; flex-shrink: 0;">Refresh</button>
+                ${SESSION && SESSION.provider === 'local' && SESSION.allows_operator_account_removal ? `<button class="btn-secondary btn-danger-outline" data-overview-remove-account-id="${esc(acc.twitchAccountId)}" style="padding: 6px 12px; font-size: 12px; height: 28px; line-height: 1; flex-shrink: 0;">Remove</button>` : ''}
               </div>
             </div>
             ${progressHTML}
@@ -1456,9 +1579,11 @@ enum WebDashboardAssets {
         `;
       }
 
+      if (accountRemovalModalOpen) html += accountRemovalModal();
       $('app').innerHTML = html;
       hydrateArt();
       wireOperatorOverview();
+      wireAccountRemoval();
     }
 
     function showOperatorMiner(id) {
@@ -1497,9 +1622,9 @@ enum WebDashboardAssets {
 
     // ---------- bootstrap ----------
 
-    async function doLogout() {
+    async function doLogout(accountRemoved = false) {
       await api('/logout', { method: 'POST' });
-      location.href = '/login';
+      location.href = accountRemoved ? '/login?account_removed=1' : '/login';
     }
 
     let lastPayload = null;
@@ -1839,7 +1964,13 @@ enum WebDashboardAssets {
     /// username/password form when local sign-in is available on this request.
     /// `discordSSOURL` is SwiftBot's companion-SSO entry point (Discord
     /// sign-in brokered by the paired SwiftBot).
-    static func loginPage(discordSSOURL: String?, twitch: Bool, local: Bool, appIcon: Bool = false) -> String {
+    static func loginPage(
+        discordSSOURL: String?,
+        twitch: Bool,
+        local: Bool,
+        appIcon: Bool = false,
+        accountRemoved: Bool = false
+    ) -> String {
         // Prefer the bundled artwork (mode-specific shadows baked in, picked by
         // prefers-color-scheme); fall back to the drawn gem mark.
         let logoBlock = appIcon
@@ -1855,9 +1986,13 @@ enum WebDashboardAssets {
             let href = discordSSOURL
                 .replacingOccurrences(of: "&", with: "&amp;")
                 .replacingOccurrences(of: "\"", with: "&quot;")
-            blocks += #"<a class="btn discord" href="\#(href)">\#(discordMark)Sign in with Discord</a>"#
+            let label = accountRemoved ? "Add a Twitch account" : "Sign in with Discord"
+            blocks += #"<a class="btn discord" href="\#(href)">\#(discordMark)\#(label)</a>"#
         }
-        if twitch {
+        // A removed account no longer has a stored miner record, so a Twitch
+        // OAuth login alone cannot restore it. Discord sign-in starts the
+        // existing account-linking flow instead.
+        if twitch && !accountRemoved {
             blocks += #"<a class="btn twitch" href="/login/twitch">\#(twitchMark)Sign in with Twitch</a>"#
         }
         if local {
@@ -1871,9 +2006,14 @@ enum WebDashboardAssets {
             """
         }
         if blocks.isEmpty {
-            blocks = #"<p class="hint">No sign-in methods are configured yet. Ask the operator to finish setup in SwiftMiner's Web settings.</p>"#
+            blocks = accountRemoved
+                ? #"<p class="hint">Ask the SwiftMiner operator to add this Twitch account again.</p>"#
+                : #"<p class="hint">No sign-in methods are configured yet. Ask the operator to finish setup in SwiftMiner's Web settings.</p>"#
         }
-        let subtitle = local && discordSSOURL == nil && !twitch
+        let title = accountRemoved ? "Account removed" : "SwiftMiner"
+        let subtitle = accountRemoved
+            ? "Your miner was removed and its Twitch authorization was revoked."
+            : local && discordSSOURL == nil && !twitch
             ? "Sign in locally with your operator account"
             : "Sign in to manage your miner"
         let tagline = loginTaglines.randomElement() ?? "Twitch Drops, handled in the background"
@@ -2008,7 +2148,7 @@ enum WebDashboardAssets {
           <div class="salute-layer" aria-hidden="true"></div>
           <main class="card">
             \(logoBlock)
-            <h1>SwiftMiner</h1>
+            <h1>\(title)</h1>
             <p class="sub">\(subtitle)</p>
             <div class="stack">\(blocks)</div>
             <p class="foot">\(tagline)</p>

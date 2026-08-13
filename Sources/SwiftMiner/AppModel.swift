@@ -101,8 +101,13 @@ public final class AppModel {
             manager.updateFailoverStreamers(Settings.shared.gameFailoverStreamers)
 
             // Keep app-level state (auth + badge) in sync whenever miners or
-            // account-link warning preferences change.
+            // account-link warning preferences change. NavigationModel also
+            // observes this callback to mirror newly added miners into SQLite
+            // for the web dashboard, so preserve that observer rather than
+            // replacing it.
+            let existingOnMinersChanged = manager.onMinersChanged
             manager.onMinersChanged = { [weak self] in
+                existingOnMinersChanged?()
                 Task { @MainActor [weak self] in
                     guard let self,
                           let manager = self.minerManager else { return }

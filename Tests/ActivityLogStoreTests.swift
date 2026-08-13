@@ -1,9 +1,77 @@
 import XCTest
 import UserNotifications
+import SQLite3
 @testable import SwiftMiner
 @testable import SwiftMinerCore
 
 final class ActivityLogStoreTests: XCTestCase {
+    func testOpenRepairsMissingAuditCategorySchemaWhenMigrationIsRecorded() async throws {
+        let databaseURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftMinerActivityLogMigration-\(UUID().uuidString).sqlite")
+        defer { try? FileManager.default.removeItem(at: databaseURL) }
+
+        var rawDatabase: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(databaseURL.path, &rawDatabase), SQLITE_OK)
+        defer {
+            if let rawDatabase {
+                sqlite3_close(rawDatabase)
+            }
+        }
+        guard let database = rawDatabase else {
+            return XCTFail("Expected a temporary SQLite database")
+        }
+
+        XCTAssertEqual(sqlite3_exec(database, """
+        CREATE TABLE _schema_migrations (version INTEGER PRIMARY KEY);
+        INSERT INTO _schema_migrations (version) VALUES (13);
+        CREATE TABLE admin_audit_log (
+            id TEXT PRIMARY KEY,
+            action_type TEXT NOT NULL DEFAULT 'account_assigned',
+            operator_id TEXT NOT NULL,
+            twitch_id TEXT,
+            from_discord_id TEXT,
+            to_discord_id TEXT,
+            metadata_json TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE activity_log_entries (
+            id TEXT PRIMARY KEY,
+            timestamp REAL NOT NULL,
+            message TEXT NOT NULL,
+            level TEXT NOT NULL,
+            miner_id TEXT,
+            raw_message TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        INSERT INTO activity_log_entries (id, timestamp, message, level, raw_message)
+        VALUES ('audit-entry', 1, 'Gabe signed in', 'info', '[web-audit] Gabe signed in');
+        """, nil, nil, nil), SQLITE_OK)
+        sqlite3_close(database)
+        rawDatabase = nil
+
+        let manager = SQLiteManager(databaseURL: databaseURL)
+        try await manager.open()
+
+        let migrated = try await manager.query { database in
+            var statement: OpaquePointer?
+            defer { sqlite3_finalize(statement) }
+            guard sqlite3_prepare_v2(
+                database,
+                "SELECT category FROM activity_log_entries WHERE id = 'audit-entry';",
+                -1,
+                &statement,
+                nil
+            ) == SQLITE_OK,
+            sqlite3_step(statement) == SQLITE_ROW,
+            let category = sqlite3_column_text(statement, 0)
+            else { return false }
+            return String(cString: category) == "audit"
+        }
+        await manager.close()
+
+        XCTAssertTrue(migrated, "Audit rows must be protected even after a partial migration")
+    }
+
     func testEntriesRoundTripAcrossStoreInstances() async throws {
         let databaseURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftMinerActivityLog-\(UUID().uuidString).sqlite")

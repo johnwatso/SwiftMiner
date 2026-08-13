@@ -11,6 +11,7 @@ public actor TwitchAuthService {
     private let tokenURL = URL(string: "https://id.twitch.tv/oauth2/token")!
     private let deviceCodeURL = URL(string: "https://id.twitch.tv/oauth2/device")!
     private let validateURL = URL(string: "https://id.twitch.tv/oauth2/validate")!
+    private let revokeURL = URL(string: "https://id.twitch.tv/oauth2/revoke")!
 
     /// Android User-Agent that matches the Android client ID. Starts as a
     /// random pick (device-code flow has no account yet); swapped to a
@@ -474,6 +475,26 @@ public actor TwitchAuthService {
     /// Loads all accounts saved in the persistent store.
     public func loadAllAccounts() async throws -> [Account] {
         return try await tokenStore.loadAllAccounts()
+    }
+
+    /// Revokes the currently stored OAuth access token at Twitch. This is
+    /// intentionally separate from local deletion: callers can still remove an
+    /// account if the device is offline or Twitch is temporarily unavailable.
+    public func revokeAccess(for accountId: String) async throws {
+        guard let account = try await tokenStore.loadAccount(twitchUserId: accountId) else { return }
+        var components = URLComponents(url: revokeURL, resolvingAgainstBaseURL: false)!
+        components.queryItems = [
+            URLQueryItem(name: "client_id", value: clientId),
+            URLQueryItem(name: "token", value: account.accessToken)
+        ]
+        guard let url = components.url else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            throw TwitchMinerError.authenticationFailed("Twitch token revocation failed")
+        }
     }
 
     public func logout(accountId: String? = nil) async throws {

@@ -218,6 +218,15 @@ public final class NavigationModel {
             }
             return await self.handleAccountMinerControl(accountId: accountId, action: action)
         }
+        await routes.setOnRemoveMinerByAccount { [weak self] accountId in
+            guard let self else { return false }
+            let manager = await MainActor.run { self.minerManager }
+            guard let miner = await MainActor.run(body: { manager.miners.first(where: { $0.accountId == accountId }) }) else {
+                return false
+            }
+            await manager.removeAccount(minerId: miner.id)
+            return true
+        }
         await routes.setOnIgnoreLinkWarning { [weak self] discordUserId, gameName in
             guard let self else { return false }
             return await self.handleDiscordIgnoreLinkWarning(discordUserId: discordUserId, gameName: gameName)
