@@ -159,6 +159,27 @@ const searchIndex = [
     snippet: "Understand how each miner combines its personal game order with the global priority list."
   },
   {
+    title: "Priorities for Operators",
+    url: "operator-priorities/",
+    category: "Settings",
+    keywords: "operator priorities hosting miners for others global personal priority mode strategy instance wide web dashboard swiftbot discord who controls exclusions faq idle miner",
+    snippet: "How global and personal priority lists combine when you host miners for other people, plus an operator FAQ."
+  },
+  {
+    title: "Global, Global + Personal, and Personal modes",
+    url: "operator-priorities/#priority-modes",
+    category: "Settings",
+    keywords: "priority mode global personal combined segmented control miners view dashboard default first prioritise duplicates order",
+    snippet: "What each priority mode does to a hosted miner's effective game order, with a worked example."
+  },
+  {
+    title: "Why a hosted miner is idle or ignoring a priority",
+    url: "operator-priorities/#faq",
+    category: "Settings",
+    keywords: "operator faq miner idle not mining priority ignored only prioritised empty list needs auth publisher link subscriber only strategy smart",
+    snippet: "Operator answers for miners that idle, ignore a priority, or take minutes to switch."
+  },
+  {
     title: "Excluded Games",
     url: "game-rules/#excluded-games",
     category: "Settings",
