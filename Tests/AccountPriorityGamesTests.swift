@@ -78,6 +78,20 @@ final class AccountPriorityGamesTests: XCTestCase {
         XCTAssertEqual(settings.personalPriorityGames(forAccountId: account), ["Personal Game"])
     }
 
+    func testResettingCustomPrioritiesRestoresGlobalPriorities() {
+        settings.addGamePreference(Game(id: "g-global", name: "Global Game"), state: .preferred)
+        settings.setPersonalPriorityGames(accountId: account, games: ["Personal Game"])
+        settings.setPrioritySource(.personal, forAccountId: account)
+        XCTAssertTrue(settings.hasCustomPriorityGames(forAccountId: account))
+
+        let reset = settings.resetPriorityGamesToGlobal(forAccountId: account)
+
+        XCTAssertEqual(reset, ["Global Game"])
+        XCTAssertEqual(settings.prioritySource(forAccountId: account), .global)
+        XCTAssertFalse(settings.hasCustomPriorityGames(forAccountId: account))
+        XCTAssertTrue(settings.personalPriorityGames(forAccountId: account).isEmpty)
+    }
+
     func testPriorityAuditIncludesModeChanges() {
         let messages = NavigationModel.priorityAuditMessages(
             actor: "sorbertman",

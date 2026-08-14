@@ -24,6 +24,8 @@ public protocol ProjectionStateProvider: Sendable {
     func includesGlobalPriorityGames(for discordUserId: String) async -> Bool
     /// Source selection shown in the WebUI's priority control.
     func prioritySource(for discordUserId: String) async -> String
+    /// Returns games excluded specifically for this miner.
+    func excludedGames(for discordUserId: String) async -> [String]
     /// Returns live health details for a Discord user's miner, if available.
     func diagnostics(for discordUserId: String) async -> DiscordUserProjection.Diagnostics?
     /// Returns the active campaign for a mined Twitch account, if any.
@@ -42,6 +44,8 @@ public protocol ProjectionStateProvider: Sendable {
     func includesGlobalPriorityGames(forTwitchAccount accountId: String) async -> Bool
     /// Source selection shown in the WebUI's priority control.
     func prioritySource(forTwitchAccount accountId: String) async -> String
+    /// Returns games excluded specifically for this miner.
+    func excludedGames(forTwitchAccount accountId: String) async -> [String]
     /// Returns live health details for a mined Twitch account, if available.
     func diagnostics(forTwitchAccount accountId: String) async -> DiscordUserProjection.Diagnostics?
 }
@@ -51,6 +55,7 @@ public extension ProjectionStateProvider {
     func priorityGameArtwork(for discordUserId: String) async -> [String: String] { [:] }
     func includesGlobalPriorityGames(for discordUserId: String) async -> Bool { true }
     func prioritySource(for discordUserId: String) async -> String { "global" }
+    func excludedGames(for discordUserId: String) async -> [String] { [] }
     func activeCampaign(forTwitchAccount accountId: String) async -> DiscordUserProjection.ActiveCampaign? { nil }
     func recentCompletedCampaigns(forTwitchAccount accountId: String, limit: Int) async -> [DiscordUserProjection.RecentCampaign] { [] }
     func projectionState(forTwitchAccount accountId: String) async -> DiscordUserProjection.ProjectionState? { nil }
@@ -59,6 +64,7 @@ public extension ProjectionStateProvider {
     func personalPriorityGames(forTwitchAccount accountId: String) async -> [String] { [] }
     func includesGlobalPriorityGames(forTwitchAccount accountId: String) async -> Bool { true }
     func prioritySource(forTwitchAccount accountId: String) async -> String { "global" }
+    func excludedGames(forTwitchAccount accountId: String) async -> [String] { [] }
     func diagnostics(for discordUserId: String) async -> DiscordUserProjection.Diagnostics? { nil }
     func diagnostics(forTwitchAccount accountId: String) async -> DiscordUserProjection.Diagnostics? { nil }
 }
@@ -73,6 +79,7 @@ public struct DefaultProjectionStateProvider: ProjectionStateProvider {
     public func priorityGameArtwork(for discordUserId: String) async -> [String: String] { [:] }
     public func includesGlobalPriorityGames(for discordUserId: String) async -> Bool { true }
     public func prioritySource(for discordUserId: String) async -> String { "global" }
+    public func excludedGames(for discordUserId: String) async -> [String] { [] }
     public func diagnostics(for discordUserId: String) async -> DiscordUserProjection.Diagnostics? { nil }
 }
 
@@ -131,6 +138,7 @@ public actor DiscordProjectionBuilder {
         let personalPriorityGames: [String]
         let includesGlobalPriorityGames: Bool
         let prioritySource: String
+        let excludedGames: [String]
         let diagnostics: DiscordUserProjection.Diagnostics?
         let dropsClaimedThisWeek: Int
         if let account {
@@ -151,6 +159,7 @@ public actor DiscordProjectionBuilder {
             personalPriorityGames = await stateProvider.personalPriorityGames(forTwitchAccount: account.twitchAccountId)
             includesGlobalPriorityGames = await stateProvider.includesGlobalPriorityGames(forTwitchAccount: account.twitchAccountId)
             prioritySource = await stateProvider.prioritySource(forTwitchAccount: account.twitchAccountId)
+            excludedGames = await stateProvider.excludedGames(forTwitchAccount: account.twitchAccountId)
             diagnostics = await stateProvider.diagnostics(forTwitchAccount: account.twitchAccountId)
         } else {
             activeCampaign = await stateProvider.activeCampaign(for: discordUserId)
@@ -162,6 +171,7 @@ public actor DiscordProjectionBuilder {
             personalPriorityGames = await stateProvider.personalPriorityGames(for: discordUserId)
             includesGlobalPriorityGames = await stateProvider.includesGlobalPriorityGames(for: discordUserId)
             prioritySource = await stateProvider.prioritySource(for: discordUserId)
+            excludedGames = await stateProvider.excludedGames(for: discordUserId)
             diagnostics = await stateProvider.diagnostics(for: discordUserId)
         }
         let dmState = await fetchDMState(discordUserId: discordUserId)
@@ -193,6 +203,7 @@ public actor DiscordProjectionBuilder {
             personalPriorityGames: personalPriorityGames,
             includesGlobalPriorityGames: includesGlobalPriorityGames,
             prioritySource: prioritySource,
+            excludedGames: excludedGames,
             configuredMinerCount: configuredMinerCount,
             diagnostics: diagnostics
         )
@@ -233,6 +244,7 @@ public actor DiscordProjectionBuilder {
         let personalPriorityGames = await stateProvider.personalPriorityGames(forTwitchAccount: twitchId)
         let includesGlobalPriorityGames = await stateProvider.includesGlobalPriorityGames(forTwitchAccount: twitchId)
         let prioritySource = await stateProvider.prioritySource(forTwitchAccount: twitchId)
+        let excludedGames = await stateProvider.excludedGames(forTwitchAccount: twitchId)
         let diagnostics = await stateProvider.diagnostics(forTwitchAccount: twitchId)
 
         let state: DiscordUserProjection.ProjectionState
@@ -260,6 +272,7 @@ public actor DiscordProjectionBuilder {
             personalPriorityGames: personalPriorityGames,
             includesGlobalPriorityGames: includesGlobalPriorityGames,
             prioritySource: prioritySource,
+            excludedGames: excludedGames,
             configuredMinerCount: configuredMinerCount,
             diagnostics: diagnostics
         )

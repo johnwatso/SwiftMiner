@@ -200,6 +200,12 @@ public actor WebDashboardRoutes {
                 return await me.setPriorities(for: s, accountId: accountId, body: req.body)
             }
         })
+        await router.register(HTTPRoute(method: "PUT", pattern: "/me/miners/:accountId/exclusions") { req, params in
+            await me.withSession(req, requireCSRF: true) { s in
+                guard let accountId = params["accountId"] else { return .badRequest }
+                return await me.setExclusions(for: s, accountId: accountId, body: req.body)
+            }
+        })
         await router.register(HTTPRoute(method: "POST", pattern: "/me/miners/:accountId/control/:action") { req, params in
             await me.withSession(req, requireCSRF: true) { s in
                 guard let accountId = params["accountId"], let actionStr = params["action"],
@@ -263,6 +269,22 @@ public actor WebDashboardRoutes {
             }
             return await apiRoutes.webSetPrioritiesTwitch(twitchId: accountId, body: body)
         }
+    }
+
+    private func setExclusions(for s: WebSessionRecord, accountId: String, body: Data) async -> HTTPResponse {
+        switch s.principalType {
+        case Self.localPrincipal:
+            return await apiRoutes.webSetExcludedGamesTwitch(twitchId: accountId, body: body)
+        case WebProvider.twitch.rawValue:
+            guard accountId == s.principalId else {
+                return .error(code: "forbidden", message: "You can only manage your own miner.", statusCode: 403)
+            }
+        default:
+            guard await apiRoutes.webVerifiesDiscordOwnership(discordId: s.principalId, accountId: accountId) else {
+                return .error(code: "forbidden", message: "You can only manage your own miner.", statusCode: 403)
+            }
+        }
+        return await apiRoutes.webSetExcludedGamesTwitch(twitchId: accountId, body: body)
     }
 
     private func controlMiner(for s: WebSessionRecord, accountId: String, action: MinerControlAction) async -> HTTPResponse {

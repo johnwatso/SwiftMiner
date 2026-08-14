@@ -227,6 +227,16 @@ public final class NavigationModel {
             await manager.removeAccount(minerId: miner.id)
             return true
         }
+        await routes.setOnSetExcludedGamesByAccount { [weak self] accountId, games in
+            guard let self else { return nil }
+            return await MainActor.run {
+                guard let miner = self.minerManager.miners.first(where: { $0.accountId == accountId }) else { return nil }
+                let settings = Settings.shared
+                let excluded = settings.setExcludedGames(accountId: accountId, games: games)
+                self.minerManager.updateExcludedGames(excluded, forMinerId: miner.id)
+                return settings.accountExcludedGames[accountId, default: []]
+            }
+        }
         await routes.setOnIgnoreLinkWarning { [weak self] discordUserId, gameName in
             guard let self else { return false }
             return await self.handleDiscordIgnoreLinkWarning(discordUserId: discordUserId, gameName: gameName)
@@ -967,6 +977,7 @@ public final class NavigationModel {
         minerManager.onAccountRemoved = { [weak self] twitchAccountId in
             Task { @MainActor [weak self] in
                 Settings.shared.removeAvatarSource(forAccountId: twitchAccountId)
+                Settings.shared.removeExcludedGames(forAccountId: twitchAccountId)
                 await self?.adminLinkingService.deleteAccountRow(twitchId: twitchAccountId)
             }
         }
@@ -984,6 +995,9 @@ public final class NavigationModel {
             ignoredWarnings: settings.activeIgnoredWarnings,
             priorityGamesForMiner: { miner in
                 settings.priorityGames(forAccountId: miner.accountId)
+            },
+            excludedGamesForMiner: { miner in
+                settings.excludedGames(forAccountId: miner.accountId)
             }
         )
 
@@ -1403,7 +1417,7 @@ public final class NavigationModel {
             try? await minerManager.startMiner(
                 minerId: miner.id,
                 priorityGames: priorityGames(for: miner),
-                excludedGames: settings.excludedGames,
+                excludedGames: settings.excludedGames(forAccountId: miner.accountId),
                 strategy: settings.miningStrategy,
                 enableBadgesEmotes: settings.enableBadgesEmotes,
                 showClaimNotifications: settings.showClaimNotifications,
@@ -1426,6 +1440,9 @@ public final class NavigationModel {
                 self?.priorityGames(for: miner) ?? settings.priorityGames(forAccountId: miner.accountId)
             },
             excludedGames: settings.excludedGames,
+            excludedGamesForMiner: { miner in
+                settings.excludedGames(forAccountId: miner.accountId)
+            },
             strategy: settings.miningStrategy,
             enableBadgesEmotes: settings.enableBadgesEmotes,
             showClaimNotifications: settings.showClaimNotifications && settings.allowsOperatorNotifications(),

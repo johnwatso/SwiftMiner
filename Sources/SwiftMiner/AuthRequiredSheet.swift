@@ -433,7 +433,7 @@ struct AuthRequiredSheet: View {
                     try await navigation.minerManager.startMiner(
                         minerId: reconnectingMinerId,
                         priorityGames: settings.priorityGames(forAccountId: account.id),
-                        excludedGames: settings.excludedGames,
+                        excludedGames: settings.excludedGames(forAccountId: account.id),
                         strategy: settings.miningStrategy,
                         enableBadgesEmotes: settings.enableBadgesEmotes,
                         showClaimNotifications: settings.showClaimNotifications && settings.allowsOperatorNotifications(),
@@ -463,7 +463,7 @@ struct AuthRequiredSheet: View {
             try? await navigation.minerManager.startMiner(
                 minerId: minerId,
                 priorityGames: settings.priorityGames(forAccountId: account.id),
-                excludedGames: settings.excludedGames,
+                excludedGames: settings.excludedGames(forAccountId: account.id),
                 strategy: settings.miningStrategy,
                 enableBadgesEmotes: settings.enableBadgesEmotes,
                 showClaimNotifications: settings.showClaimNotifications && settings.allowsOperatorNotifications(),

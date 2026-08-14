@@ -27,7 +27,7 @@
 <body>
   <main>
     <h1>SwiftMiner 1.37.2</h1>
-    <p class="meta">Version 1.37.2 &middot; Build 2026081215</p>
+    <p class="meta">Version 1.37.2 &middot; Build 2026081413</p>
     <p class="intro">Fixes Twitch reconnect, completes the web dashboard and IRL-safety follow-ups, and keeps release checks aligned with their source files.</p>
 
     <section>
@@ -44,6 +44,8 @@
         <li>Sparkle release validation and publishing now use ShipHook&rsquo;s authored <code>docs/</code> appcasts instead of stale generated website copies.</li>
         <li>Reconnect Twitch now opens the browser authorization flow, refreshes the selected miner&rsquo;s credentials, and resumes mining after approval.</li>
         <li>The web dashboard now lets a signed-in user remove their own mined account behind an explicit <code>swiftminer</code> typed confirmation. Removal stops mining, deletes the local account, and revokes its Twitch authorization; it never deletes the user&rsquo;s Twitch account.</li>
+        <li>Each miner can now exclude individual games from the web dashboard. An excluded game is neither watched nor claimed by that miner, while every other miner keeps its own list.</li>
+        <li>The native miner-detail header now remains on Global unless a custom priority list was set in the Web UI. When one exists, its only local action is Reset to Global, which discards the override and restores the operator&rsquo;s shared order.</li>
         <li>Audit Activity Log entries now survive noisy routine activity up to the selected history limit, including recovery from an interrupted database upgrade.</li>
       </ul>
     </section>

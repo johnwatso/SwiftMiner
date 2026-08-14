@@ -13,7 +13,7 @@ public final class Settings {
 
     /// Selects which priority list a miner uses. Kept separately from the
     /// personal list so choosing Global does not discard someone’s own list.
-    public enum AccountPrioritySource: String, Codable, Sendable {
+    public enum AccountPrioritySource: String, Codable, Sendable, CaseIterable {
         case global
         case globalAndPersonal
         case personal
@@ -1391,6 +1391,20 @@ public final class Settings {
         }
     }
 
+    /// JSON-encoded map of Twitch account ID -> games excluded only for that
+    /// miner. Global exclusions still apply to every miner.
+    public var accountExcludedGamesData: String {
+        get {
+            access(keyPath: \.accountExcludedGamesData)
+            return Self.read("accountExcludedGamesData", default: "{}")
+        }
+        set {
+            withMutation(keyPath: \.accountExcludedGamesData) {
+                Self.write("accountExcludedGamesData", newValue)
+            }
+        }
+    }
+
     /// Mining strategy selection
     public var miningStrategy: MiningStrategy {
         get {
@@ -1594,6 +1608,28 @@ public final class Settings {
         }
     }
 
+    /// Whether this account has an explicitly configured, per-account priority
+    /// list. The native UI uses this to expose only the reset action; creating
+    /// and editing the list belongs in the Web UI.
+    public func hasCustomPriorityGames(forAccountId accountId: String) -> Bool {
+        let key = accountId.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !key.isEmpty && !accountPriorityGames[key, default: []].isEmpty
+    }
+
+    /// Removes an account's custom priority list and restores the shared global
+    /// priority order.
+    @discardableResult
+    public func resetPriorityGamesToGlobal(forAccountId accountId: String) -> [String] {
+        let key = accountId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return priorityGames }
+
+        var priorities = accountPriorityGames
+        priorities.removeValue(forKey: key)
+        accountPriorityGames = priorities
+        setPrioritySource(.global, forAccountId: key)
+        return priorityGames(forAccountId: key)
+    }
+
     @discardableResult
     public func prioritiseGameForAccount(accountId: String, gameName: String) -> [String] {
         let key = accountId.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1665,6 +1701,51 @@ public final class Settings {
         guard prioritySource(forAccountId: key) == .globalAndPersonal else { return override }
         let globalKeys = Set(priorityGames.map { $0.lowercased() })
         return override.filter { !globalKeys.contains($0.lowercased()) }
+    }
+
+    public var accountExcludedGames: [String: [String]] {
+        get {
+            guard let data = accountExcludedGamesData.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode([String: [String]].self, from: data) else { return [:] }
+            return decoded.reduce(into: [String: [String]]()) { result, entry in
+                let key = entry.key.trimmingCharacters(in: .whitespacesAndNewlines)
+                let games = Self.normalizedPriorityGameNames(entry.value)
+                if !key.isEmpty, !games.isEmpty { result[key] = games }
+            }
+        }
+        set {
+            let normalized = newValue.reduce(into: [String: [String]]()) { result, entry in
+                let key = entry.key.trimmingCharacters(in: .whitespacesAndNewlines)
+                let games = Self.normalizedPriorityGameNames(entry.value)
+                if !key.isEmpty, !games.isEmpty { result[key] = games }
+            }
+            if let data = try? JSONEncoder().encode(normalized),
+               let string = String(data: data, encoding: .utf8) {
+                accountExcludedGamesData = string
+            }
+        }
+    }
+
+    public func excludedGames(forAccountId accountId: String) -> [String] {
+        Self.normalizedPriorityGameNames(excludedGames + accountExcludedGames[accountId, default: []])
+    }
+
+    @discardableResult
+    public func setExcludedGames(accountId: String, games: [String]) -> [String] {
+        let key = accountId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return excludedGames }
+        var values = accountExcludedGames
+        values[key] = Self.normalizedPriorityGameNames(games)
+        accountExcludedGames = values
+        return excludedGames(forAccountId: key)
+    }
+
+    public func removeExcludedGames(forAccountId accountId: String) {
+        let key = accountId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return }
+        var values = accountExcludedGames
+        values.removeValue(forKey: key)
+        accountExcludedGames = values
     }
 
     /// Excluded game names and category IDs derived from preferences (backward

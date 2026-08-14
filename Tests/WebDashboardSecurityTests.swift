@@ -607,6 +607,58 @@ final class WebDashboardSecurityTests: XCTestCase {
         XCTAssertEqual(removedAccountIds, ["twitch-1"])
     }
 
+    func testMinerExclusionsRequireCSRFAndAreScopedToTheSignedInMiner() async throws {
+        let mgr = try await openTempManager()
+        defer { Task { await mgr.close() } }
+        try await mgr.createWebSession(
+            id: "exclusions-session",
+            principalType: "twitch",
+            principalId: "twitch-1",
+            csrfToken: "csrf",
+            createdAt: Date().timeIntervalSince1970,
+            expiresAt: Date().addingTimeInterval(60).timeIntervalSince1970
+        )
+
+        let updated = ExclusionsRecorder()
+        let apiRoutes = DiscordAPIRoutes(
+            manager: mgr,
+            projectionBuilder: DiscordProjectionBuilder(manager: mgr),
+            apiKey: "test-api-key"
+        )
+        await apiRoutes.setOnSetExcludedGamesByAccount { accountId, games in
+            await updated.record(accountId: accountId, games: games)
+            return games
+        }
+        let webRoutes = WebDashboardRoutes(
+            config: WebDashboardConfig(baseURL: URL(string: "https://swiftminer.example.com")!, discord: nil, twitch: WebProviderCredentials(clientID: "id", clientSecret: "secret")),
+            manager: mgr,
+            apiRoutes: apiRoutes
+        )
+        let router = HTTPRouter()
+        await webRoutes.configure(router)
+        let cookie = "\(WebDashboardConfig.sessionCookieName)=exclusions-session"
+        let body = Data("{\"games\":[\"Game One\"]}".utf8)
+
+        let noCSRF = await router.handle(HTTPRequest(
+            method: "PUT", path: "/me/miners/twitch-1/exclusions", headers: ["cookie": cookie], body: body
+        ))
+        XCTAssertEqual(noCSRF.statusCode, 403)
+
+        let otherAccount = await router.handle(HTTPRequest(
+            method: "PUT", path: "/me/miners/twitch-2/exclusions", headers: ["cookie": cookie, "x-sm-csrf": "csrf"], body: body
+        ))
+        XCTAssertEqual(otherAccount.statusCode, 403)
+
+        let confirmed = await router.handle(HTTPRequest(
+            method: "PUT", path: "/me/miners/twitch-1/exclusions", headers: ["cookie": cookie, "x-sm-csrf": "csrf"], body: body
+        ))
+        XCTAssertEqual(confirmed.statusCode, 200)
+        let updates = await updated.updates
+        XCTAssertEqual(updates.count, 1)
+        XCTAssertEqual(updates.first?.0, "twitch-1")
+        XCTAssertEqual(updates.first?.1, ["Game One"])
+    }
+
     // MARK: - Session & OAuth-state persistence
 
     func testWebSessionLifecycleAndExpiry() async throws {
@@ -966,5 +1018,13 @@ private actor AccountRemovalRecorder {
 
     func record(_ accountId: String) {
         accountIds.append(accountId)
+    }
+}
+
+private actor ExclusionsRecorder {
+    private(set) var updates: [(String, [String])] = []
+
+    func record(accountId: String, games: [String]) {
+        updates.append((accountId, games))
     }
 }

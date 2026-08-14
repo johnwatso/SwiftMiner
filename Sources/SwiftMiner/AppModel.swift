@@ -193,7 +193,10 @@ public final class AppModel {
                 avoidDuplicateStreams: settings.avoidDuplicateStreams,
                 antiStallRecoveryEnabled: settings.antiStallRecoveryEnabled,
                 prioritiseFollowedStreamers: settings.prioritiseFollowedStreamers,
-                failoverStreamers: settings.gameFailoverStreamers
+                failoverStreamers: settings.gameFailoverStreamers,
+                excludedGamesForMiner: { miner in
+                    settings.excludedGames(forAccountId: miner.accountId)
+                }
             )
             return
         }

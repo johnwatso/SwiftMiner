@@ -330,6 +330,30 @@ extension MinerManager {
         onMinersChanged?()
     }
 
+    /// Update one miner's effective exclusion list without affecting anyone else.
+    public func updateExcludedGames(_ excludedGames: [String], forMinerId minerId: String) {
+        guard let index = miners.firstIndex(where: { $0.id == minerId }) else { return }
+        let miner = miners[index]
+        currentExcludedGamesByAccount[miner.accountId] = excludedGames
+        if let engine = engines[minerId] {
+            let ignoredGames = Array(ignoredAccountLinkWarnings[miner.accountId] ?? [])
+            Task {
+                await engine.updateMiningPreferences(
+                    priorityGames: miner.priorityGames,
+                    excludedGames: excludedGames,
+                    enableBadgesEmotes: currentEnableBadgesEmotes,
+                    showClaimNotifications: showClaimNotifications,
+                    avoidDuplicateStreams: avoidDuplicateStreams,
+                    prioritiseFollowedStreamers: prioritiseFollowedStreamers,
+                    failoverStreamers: currentFailoverStreamers,
+                    ignoredAccountLinkWarningGames: ignoredGames
+                )
+                await engine.forceRefresh()
+            }
+        }
+        onMinersChanged?()
+    }
+
     public func updateFailoverStreamers(_ streamers: [GameFailoverStreamer]) {
         failoverStreamers = streamers
         currentFailoverStreamers = streamers
@@ -584,7 +608,8 @@ extension MinerManager {
             try await startMiner(
                 minerId: action.minerId,
                 priorityGames: currentPriorityGames,
-                excludedGames: currentExcludedGames,
+                excludedGames: miners.first(where: { $0.id == action.minerId })
+                    .flatMap { currentExcludedGamesByAccount[$0.accountId] } ?? currentExcludedGames,
                 strategy: currentStrategy,
                 enableBadgesEmotes: currentEnableBadgesEmotes,
                 showClaimNotifications: showClaimNotifications,
