@@ -433,6 +433,7 @@ public final class MinerManager {
     /// Last start options, used when anti-stall recovery restarts an individual miner.
     var currentPriorityGames: [String] = []
     var currentExcludedGames: [String] = []
+    var currentExcludedGamesByAccount: [String: [String]] = [:]
     var currentStrategy: MiningStrategy = .mineAll
     var currentEnableBadgesEmotes: Bool = false
     var currentFailoverStreamers: [GameFailoverStreamer] = []
@@ -508,6 +509,7 @@ public final class MinerManager {
     public func updateMiningPreferences(
         priorityGamesForMiner: (ManagedMiner) -> [String],
         excludedGames: [String],
+        excludedGamesForMiner: ((ManagedMiner) -> [String])? = nil,
         strategy: MiningStrategy,
         enableBadgesEmotes: Bool,
         showClaimNotifications: Bool,
@@ -529,11 +531,13 @@ public final class MinerManager {
             if miner.id == miners.first?.id {
                 self.currentPriorityGames = priorityGames
             }
+            let effectiveExcludedGames = excludedGamesForMiner?(miner) ?? excludedGames
+            currentExcludedGamesByAccount[miner.accountId] = effectiveExcludedGames
             guard let engine = engines[miner.id] else { continue }
             let ignoredGames = Array(ignoredAccountLinkWarnings[miner.accountId] ?? [])
             await engine.updateMiningPreferences(
                 priorityGames: priorityGames,
-                excludedGames: excludedGames,
+                excludedGames: effectiveExcludedGames,
                 enableBadgesEmotes: enableBadgesEmotes,
                 showClaimNotifications: showClaimNotifications,
                 avoidDuplicateStreams: avoidDuplicateStreams,
@@ -659,7 +663,8 @@ public final class MinerManager {
         prioritiseFollowedStreamers: Bool = false,
         failoverStreamers: [GameFailoverStreamer] = [],
         ignoredWarnings: [String] = [],
-        priorityGamesForMiner: ((ManagedMiner) -> [String])? = nil
+        priorityGamesForMiner: ((ManagedMiner) -> [String])? = nil,
+        excludedGamesForMiner: ((ManagedMiner) -> [String])? = nil
     ) async {
         await updateIgnoredAccountLinkWarnings(ignoredWarnings)
         self.currentPriorityGames = priorityGames
@@ -679,7 +684,7 @@ public final class MinerManager {
                 try? await startMiner(
                     minerId: miner.id,
                     priorityGames: priorityGamesForMiner?(miner) ?? priorityGames,
-                    excludedGames: excludedGames,
+                    excludedGames: excludedGamesForMiner?(miner) ?? excludedGames,
                     strategy: strategy,
                     enableBadgesEmotes: enableBadgesEmotes,
                     avoidDuplicateStreams: avoidDuplicateStreams,
@@ -908,6 +913,7 @@ public final class MinerManager {
         // Remove from collections
         engines.removeValue(forKey: minerId)
         let removedAccountId = miner.accountId
+        currentExcludedGamesByAccount.removeValue(forKey: removedAccountId)
         miners.removeAll { $0.id == minerId }
         await supervisor.unregisterMiner(minerId)
         onMinersChanged?()
@@ -1064,6 +1070,7 @@ public final class MinerManager {
         // Update notification preference if provided
         self.currentPriorityGames = priorityGames
         self.currentExcludedGames = excludedGames
+        self.currentExcludedGamesByAccount[miner.accountId] = excludedGames
         self.currentStrategy = strategy
         self.currentEnableBadgesEmotes = enableBadgesEmotes
         self.showClaimNotifications = showClaimNotifications
@@ -1125,7 +1132,7 @@ public final class MinerManager {
     }
     
     /// Start all miners with staggered delays to avoid API rate limiting
-    public func startAll(priorityGames: [String], excludedGames: [String], strategy: MiningStrategy, enableBadgesEmotes: Bool = false, showClaimNotifications: Bool = false, avoidDuplicateStreams: Bool = true, antiStallRecoveryEnabled: Bool = true, prioritiseFollowedStreamers: Bool = false, failoverStreamers: [GameFailoverStreamer] = []) async {
+    public func startAll(priorityGames: [String], excludedGames: [String], strategy: MiningStrategy, enableBadgesEmotes: Bool = false, showClaimNotifications: Bool = false, avoidDuplicateStreams: Bool = true, antiStallRecoveryEnabled: Bool = true, prioritiseFollowedStreamers: Bool = false, failoverStreamers: [GameFailoverStreamer] = [], excludedGamesForMiner: ((ManagedMiner) -> [String])? = nil) async {
         self.currentPriorityGames = priorityGames
         self.currentExcludedGames = excludedGames
         self.currentStrategy = strategy
@@ -1154,7 +1161,7 @@ public final class MinerManager {
             try? await startMiner(
                 minerId: miner.id, 
                 priorityGames: priorityGames, 
-                excludedGames: excludedGames, 
+                excludedGames: excludedGamesForMiner?(miner) ?? excludedGames,
                 strategy: strategy,
                 enableBadgesEmotes: enableBadgesEmotes,
                 showClaimNotifications: showClaimNotifications,

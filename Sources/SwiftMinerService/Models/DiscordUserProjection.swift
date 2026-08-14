@@ -22,6 +22,8 @@ public struct DiscordUserProjection: Codable, Sendable {
     public let includesGlobalPriorityGames: Bool
     /// The user-facing source selection for this miner's priority queue.
     public let prioritySource: String
+    /// Games excluded only for this miner (global exclusions are not repeated).
+    public let excludedGames: [String]
     /// Total configured miners on this SwiftMiner host. Used to hide multi-miner-only controls.
     public let configuredMinerCount: Int
     /// Live health details for browser triage. Nil when the miner is not available.
@@ -41,6 +43,7 @@ public struct DiscordUserProjection: Codable, Sendable {
         personalPriorityGames: [String] = [],
         includesGlobalPriorityGames: Bool = true,
         prioritySource: String = "global",
+        excludedGames: [String] = [],
         configuredMinerCount: Int = 1,
         diagnostics: Diagnostics? = nil
     ) {
@@ -57,6 +60,7 @@ public struct DiscordUserProjection: Codable, Sendable {
         self.personalPriorityGames = personalPriorityGames
         self.includesGlobalPriorityGames = includesGlobalPriorityGames
         self.prioritySource = prioritySource
+        self.excludedGames = excludedGames
         self.configuredMinerCount = configuredMinerCount
         self.diagnostics = diagnostics
     }

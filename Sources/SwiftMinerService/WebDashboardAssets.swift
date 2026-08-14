@@ -216,12 +216,15 @@ enum WebDashboardAssets {
         .plist { list-style: none; margin: 0; padding: 0; }
         .pitem {
           display: flex; align-items: center; gap: 9px; padding: 9px 10px; margin: 7px 0;
+          width: 100%; color: var(--text); text-align: left; cursor: pointer; font: inherit; font-family: inherit;
           border: 1px solid var(--glass-stroke); border-radius: 12px; background: var(--field);
         }
         .pitem .rank { width: 22px; height: 22px; flex: none; border-radius: 7px; font-size: 11px; font-weight: 700;
                        display: grid; place-items: center; color: #fff;
                        background: linear-gradient(135deg, var(--blue-a), var(--blue-c)); }
         .pitem .pname { font-weight: 550; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .exclusion-art { width: 30px; height: 40px; flex: none; border-radius: 7px; object-fit: cover;
+                         border: 1px solid var(--glass-stroke); background: var(--bg-c); }
         .icon-btn {
           width: 34px; height: 34px; flex: none; border-radius: 9px; cursor: pointer;
           font: 600 15px/1 inherit; font-family: inherit; color: var(--text);
@@ -610,6 +613,8 @@ enum WebDashboardAssets {
     let globalPrioritiesModalOpen = false;
     let prioritiesModalOpen = false;
     let activityModalOpen = false;
+    var exclusionsModalOpen = false;
+    var excludedGames = [];
     var accountRemovalModalOpen = false;
     var accountRemovalAccountId = null;
     var accountRemovalReturnToOverview = false;
@@ -1121,8 +1126,11 @@ enum WebDashboardAssets {
 
     function personalCard(p) {
       const source = prioritySource || 'global';
+      // With a single miner using global priorities, there is no per-account
+      // choice or personal list to edit, so showing an empty editor is noise.
+      if (!hasMultipleConfiguredMiners(p) && source === 'global') return '';
       const helper = source === 'global'
-        ? 'Use the operator’s shared priority list.'
+        ? 'Use the operator’s shared priority list. Your miner will still claim every drop linked to this account.'
         : source === 'globalAndPersonal'
           ? 'Use your priorities first, then the shared list.'
           : 'Use only the priorities for this miner.';
@@ -1147,7 +1155,7 @@ enum WebDashboardAssets {
         `;
       });
       const personalEditor = source === 'global' && hasMultipleConfiguredMiners(p)
-        ? '<div class="muted" style="font-size:13px">Choose Global + Personal or Personal to edit this miner’s priorities.</div>'
+        ? '<div class="muted" style="font-size:13px">Choose Global + Personal or Personal to edit this miner’s priorities. Your miner will still claim every drop linked to this account.</div>'
         : `<div class="priorities-flow" id="priorities-flow">
             ${items || '<span class="muted" style="font-size:13px">No personal priorities yet — add a game below.</span>'}
           </div>
@@ -1162,6 +1170,124 @@ enum WebDashboardAssets {
         ${personalEditor}
         <div class="savemsg" id="savemsg"></div>
       </div>`;
+    }
+
+    function exclusionsCard(p) {
+      if (!(p && p.account && p.account.twitchAccountId)) return '';
+      const source = p.prioritySource || (p.includesGlobalPriorityGames === false ? 'personal' : 'global');
+      // Exclusions are a per-miner rule. When this miner follows the shared
+      // Global configuration, there is no local configuration to inspect or edit.
+      if (source === 'global') return '';
+      const games = p.excludedGames || [];
+      const summary = games.length
+        ? games.map(esc).join(', ')
+        : 'No games excluded for this miner.';
+      return `<div class="card">
+        <div class="label">Excluded games</div>
+        <div class="row" style="align-items:flex-start;justify-content:space-between;gap:16px">
+          <div style="flex:1;min-width:0">
+            <div class="name">Skip selected games</div>
+            <div class="muted" style="font-size:13px;margin-top:4px">${summary}</div>
+          </div>
+          <button class="btn-secondary" id="manageexclusions" type="button">Manage</button>
+        </div>
+      </div>`;
+    }
+
+    function campaignArtworkURL(game) {
+      const needle = String(game || '').trim().toLowerCase();
+      const campaign = CAMPAIGNS.find(item => String(item.game || '').trim().toLowerCase() === needle);
+      const url = campaign && campaign.boxArtURL;
+      return typeof url === 'string' && url.toLowerCase().startsWith('https://') ? url : '';
+    }
+
+    function exclusionOption(game) {
+      const selected = excludedGames.some(item => item.toLowerCase() === String(game).toLowerCase());
+      return `<button class="pitem exclusion-option${selected ? ' selected' : ''}" data-exclusion-game="${esc(game)}" type="button">
+        <img class="exclusion-art" alt="" data-game="${esc(game)}" data-art="${esc(campaignArtworkURL(game))}">
+        <span class="rank" style="background:${selected ? 'linear-gradient(135deg,#ef5149,#c92d27)' : 'linear-gradient(135deg,var(--blue-a),var(--blue-c))'}">${selected ? '−' : '+'}</span>
+        <span class="pname">${esc(game)}</span>
+        <span class="muted" style="font-size:12px">${selected ? 'Excluded' : 'Exclude'}</span>
+      </button>`;
+    }
+
+    function exclusionsModal(p) {
+      const filter = String($('exclusionsearch') ? $('exclusionsearch').value : '').trim().toLowerCase();
+      const matches = filter ? GAMES.filter(game => String(game).toLowerCase().includes(filter)).slice(0, 60) : [];
+      const rows = matches.map(exclusionOption).join('');
+      return `<div class="modal-backdrop" id="exclusionsmodal">
+        <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="exclusionstitle" tabindex="-1">
+          <div class="modal-header">
+            <div class="copy">
+              <div class="modal-title" id="exclusionstitle">Excluded games</div>
+              <div class="modal-subtitle">This miner will not watch or claim drops for these games. Other miners are unaffected.</div>
+            </div>
+          </div>
+          <div class="chips" style="margin-bottom:12px">${excludedGames.length ? excludedGames.map(game => `<span class="chip">${esc(game)} <button class="remove-btn" data-remove-exclusion="${esc(game)}" aria-label="Include ${esc(game)} again">×</button></span>`).join('') : '<span class="muted" style="font-size:13px">No games excluded.</span>'}</div>
+          <div class="addrow" style="margin:0"><input id="exclusionsearch" placeholder="Search active games…" autocomplete="off"><button class="btn-secondary" id="closeexclusions" type="button">Done</button></div>
+          <div class="campaign-list" id="exclusionoptions" style="margin-top:12px">${rows || `<div class="muted" style="font-size:13px">${filter ? 'No matching active games.' : 'Search for a game to exclude.'}</div>`}</div>
+          <div class="savemsg" id="exclusionsmsg"></div>
+        </section>
+      </div>`;
+    }
+
+    function closeExclusionsModal() {
+      exclusionsModalOpen = false;
+      render(PROJ);
+    }
+
+    function wireExclusions() {
+      const open = $('manageexclusions');
+      if (open) open.addEventListener('click', () => {
+        excludedGames = ((PROJ && PROJ.excludedGames) || []).slice();
+        exclusionsModalOpen = true;
+        render(PROJ);
+      });
+      const modal = $('exclusionsmodal');
+      if (!modal) return;
+      const dialog = modal.querySelector('[role="dialog"]');
+      if (dialog) dialog.focus();
+      $('closeexclusions').addEventListener('click', closeExclusionsModal);
+      modal.addEventListener('click', event => { if (event.target === modal) closeExclusionsModal(); });
+      modal.addEventListener('keydown', event => { if (event.key === 'Escape') closeExclusionsModal(); });
+      const toggle = game => {
+        const index = excludedGames.findIndex(item => item.toLowerCase() === String(game).toLowerCase());
+        if (index >= 0) excludedGames.splice(index, 1); else excludedGames.push(game);
+        saveExclusions();
+      };
+      document.querySelectorAll('[data-exclusion-game]').forEach(button => button.addEventListener('click', () => toggle(button.dataset.exclusionGame)));
+      document.querySelectorAll('[data-remove-exclusion]').forEach(button => button.addEventListener('click', () => toggle(button.dataset.removeExclusion)));
+      const search = $('exclusionsearch');
+      search.addEventListener('input', () => {
+        const query = search.value;
+        const options = query.trim()
+          ? GAMES.filter(game => String(game).toLowerCase().includes(query.toLowerCase())).slice(0, 60)
+          : [];
+        $('exclusionoptions').innerHTML = options.map(exclusionOption).join('') || `<div class="muted" style="font-size:13px">${query.trim() ? 'No matching active games.' : 'Search for a game to exclude.'}</div>`;
+        hydrateArt($('exclusionoptions'));
+        document.querySelectorAll('[data-exclusion-game]').forEach(button => button.addEventListener('click', () => toggle(button.dataset.exclusionGame)));
+      });
+    }
+
+    async function saveExclusions() {
+      const accountId = PROJ && PROJ.account && PROJ.account.twitchAccountId;
+      if (!accountId) return;
+      const message = $('exclusionsmsg');
+      if (message) { message.textContent = 'Saving…'; message.className = 'savemsg'; }
+      const r = await api('/me/miners/' + encodeURIComponent(accountId) + '/exclusions', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ games: excludedGames })
+      });
+      if (r && r.ok) {
+        const data = await r.json();
+        excludedGames = data.excluded_games || excludedGames;
+        PROJ.excludedGames = excludedGames;
+        exclusionsModalOpen = true;
+        render(PROJ);
+      } else if (message) {
+        let detail = 'Could not save exclusions.';
+        try { detail = (await r.json()).message || detail; } catch {}
+        message.textContent = detail; message.className = 'savemsg err';
+      }
     }
 
     function upNextCard(p) {
@@ -1340,7 +1466,7 @@ enum WebDashboardAssets {
       personal = (p.personalPriorityGames || []).slice();
       prioritySource = p.prioritySource || (p.includesGlobalPriorityGames === false ? 'personal' : 'global');
       includeGlobalPriorities = prioritySource !== 'personal';
-      $('app').innerHTML = `<main class="miner-detail">${operatorBackCard(p)}${minerIdentity(p)}${heroStateCard(p)}${progressCard(p)}${activationCard(p)}${issuesCard(p)}${subscriptionRequiredCard()}${upNextCard(p)}${globalCard(p)}${personalCard(p)}${dropsCard(p)}${accountRemovalCard(p)}${globalPrioritiesModalOpen ? globalPrioritiesModal(p) : ''}${accountRemovalModalOpen ? accountRemovalModal() : ''}</main>`;
+      $('app').innerHTML = `<main class="miner-detail">${operatorBackCard(p)}${minerIdentity(p)}${heroStateCard(p)}${progressCard(p)}${activationCard(p)}${issuesCard(p)}${subscriptionRequiredCard()}${upNextCard(p)}${globalCard(p)}${personalCard(p)}${exclusionsCard(p)}${dropsCard(p)}${accountRemovalCard(p)}${globalPrioritiesModalOpen ? globalPrioritiesModal(p) : ''}${exclusionsModalOpen ? exclusionsModal(p) : ''}${accountRemovalModalOpen ? accountRemovalModal() : ''}</main>`;
       hydrateArt();
       wireActivation();
       wireOperatorBack();
@@ -1353,12 +1479,13 @@ enum WebDashboardAssets {
         render(PROJ);
       });
       wireGlobalPrioritiesModal();
+      wireExclusions();
       wireAccountRemoval();
       fillGameOptions();
     }
 
-    function hydrateArt() {
-      document.querySelectorAll('img[data-game]').forEach(img => {
+    function hydrateArt(root = document) {
+      root.querySelectorAll('img[data-game]').forEach(img => {
         const real = img.dataset.art;
         const guess = boxart(img.dataset.game);
         img.addEventListener('error', () => {

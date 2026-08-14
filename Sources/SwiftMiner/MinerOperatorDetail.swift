@@ -227,6 +227,8 @@ struct MinerOperatorHeader: View {
     var avatarURL: URL?
     let priorityTitle: String
     let prioritySymbol: String
+    let hasCustomPriorityGames: Bool
+    let onResetPrioritiesToGlobal: () -> Void
 
     var body: some View {
         HStack(spacing: 14) {
@@ -286,6 +288,7 @@ struct MinerOperatorHeader: View {
             healthTint: healthTint,
             priorityTitle: priorityTitle,
             prioritySymbol: prioritySymbol,
+            onResetPrioritiesToGlobal: hasCustomPriorityGames ? onResetPrioritiesToGlobal : nil,
             showsLabels: showsLabels
         )
     }
@@ -385,6 +388,7 @@ struct MinerStatusCluster: View {
     var healthTint: Color
     var priorityTitle: String? = nil
     var prioritySymbol: String = "target"
+    var onResetPrioritiesToGlobal: (() -> Void)? = nil
     var uptimeLabel: String = "Uptime"
     var lastPollLabel: String = "Last Poll"
     var healthLabel: String = "Health"
@@ -438,14 +442,24 @@ struct MinerStatusCluster: View {
             if let priorityTitle {
                 cellDivider
 
-                MinerStatusCell(
-                    label: "Priorities",
-                    systemImage: prioritySymbol,
-                    showsLabel: showsLabels,
-                    width: cellWidth
-                ) {
-                    Text(priorityTitle)
-                        .foregroundStyle(.secondary)
+                if let onResetPrioritiesToGlobal {
+                    MinerPriorityResetMenu(
+                        title: priorityTitle,
+                        symbol: prioritySymbol,
+                        showsLabel: showsLabels,
+                        width: cellWidth,
+                        onResetPrioritiesToGlobal: onResetPrioritiesToGlobal
+                    )
+                } else {
+                    MinerStatusCell(
+                        label: "Priorities",
+                        systemImage: prioritySymbol,
+                        showsLabel: showsLabels,
+                        width: cellWidth
+                    ) {
+                        Text(priorityTitle)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
         }
@@ -464,6 +478,43 @@ struct MinerStatusCluster: View {
 
     private var cellDivider: some View {
         Divider().frame(height: 22)
+    }
+}
+
+/// Custom priority lists are created and edited in the Web UI. The native
+/// header only offers a way to discard that override and return to the shared
+/// global order.
+private struct MinerPriorityResetMenu: View {
+    let title: String
+    let symbol: String
+    let showsLabel: Bool
+    let width: CGFloat
+    let onResetPrioritiesToGlobal: () -> Void
+
+    var body: some View {
+        Menu {
+            Button(role: .destructive) {
+                onResetPrioritiesToGlobal()
+            } label: {
+                Label("Reset to Global", systemImage: "arrow.counterclockwise")
+            }
+        } label: {
+            MinerStatusCell(
+                label: "Priorities",
+                systemImage: symbol,
+                showsLabel: showsLabel,
+                width: width
+            ) {
+                HStack(spacing: 3) {
+                    Text(title)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .menuStyle(.borderlessButton)
+        .contentShape(Rectangle())
+        .accessibilityLabel("Priority mode: \(title)")
+        .accessibilityHint("Reset this miner's custom priorities to the global list")
     }
 }
 

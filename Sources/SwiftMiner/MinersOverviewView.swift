@@ -157,7 +157,11 @@ struct MinersOverviewView: View {
                         health: health,
                         avatarURL: avatarURL(for: miner),
                         priorityTitle: miningType.title,
-                        prioritySymbol: miningType.symbol
+                        prioritySymbol: miningType.symbol,
+                        hasCustomPriorityGames: settings.hasCustomPriorityGames(forAccountId: miner.accountId),
+                        onResetPrioritiesToGlobal: {
+                            resetPrioritiesToGlobal(for: miner)
+                        }
                     )
                     .contextMenu {
                         minerContextMenu(for: miner)
@@ -218,7 +222,7 @@ struct MinersOverviewView: View {
         MinerOperatorPresentation.resolve(
             for: miner,
             priorityGames: settings.priorityGames(forAccountId: miner.accountId),
-            excludedGames: settings.excludedGames,
+            excludedGames: settings.excludedGames(forAccountId: miner.accountId),
             strategy: settings.miningStrategy,
             includesBadgeAndEmoteCampaigns: settings.enableBadgesEmotes,
             ignoredAccountLinkGameIds: settings.activeIgnoredWarnings
@@ -288,7 +292,7 @@ struct MinersOverviewView: View {
             try? await navigation.minerManager.startMiner(
                 minerId: miner.id,
                 priorityGames: settings.priorityGames(forAccountId: miner.accountId),
-                excludedGames: settings.excludedGames,
+                excludedGames: settings.excludedGames(forAccountId: miner.accountId),
                 strategy: settings.miningStrategy,
                 enableBadgesEmotes: settings.enableBadgesEmotes,
                 showClaimNotifications: settings.showClaimNotifications,
@@ -559,9 +563,15 @@ struct MinersOverviewView: View {
         case .global:
             return ("Global", "globe")
         case .globalAndPersonal:
-            return ("Mixed", "point.3.connected.trianglepath.dotted")
+            return ("Global + Personal", "point.3.connected.trianglepath.dotted")
         case .personal:
             return ("Personal", "person")
+        }
+    }
+
+    private func resetPrioritiesToGlobal(for miner: MinerManager.ManagedMiner) {
+        Task {
+            _ = await navigation.resetPrioritiesToGlobal(forAccountId: miner.accountId)
         }
     }
 
@@ -837,15 +847,13 @@ struct MinersOverviewView: View {
 
     private func captureInitialLinkIssuesIfNeeded() {
         guard !hasCapturedInitialLinkIssues else { return }
-        previousLinkIssuesById = Dictionary(
-            uniqueKeysWithValues: prioritisedLinkIssues(includeIgnored: true).map { ($0.id, $0) }
-        )
+        previousLinkIssuesById = linkIssuesById(prioritisedLinkIssues(includeIgnored: true))
         hasCapturedInitialLinkIssues = true
     }
 
     private func handleLinkIssueSignatureChange(from oldValue: String, to newValue: String) {
         let currentIssues = prioritisedLinkIssues(includeIgnored: true)
-        let currentById = Dictionary(uniqueKeysWithValues: currentIssues.map { ($0.id, $0) })
+        let currentById = linkIssuesById(currentIssues)
 
         guard hasCapturedInitialLinkIssues else {
             previousLinkIssuesById = currentById
@@ -889,7 +897,24 @@ struct MinersOverviewView: View {
     }
 
     private func prioritisedLinkIssues(includeIgnored: Bool) -> [PrioritisedLinkIssue] {
-        miners.flatMap { prioritisedLinkIssues(for: $0, includeIgnored: includeIgnored) }
+        // An account that was removed and re-added can briefly be represented by
+        // two miner snapshots during startup. Keep one issue per stable issue ID;
+        // Dictionary(uniqueKeysWithValues:) traps on this otherwise recoverable
+        // duplicate and prevents the app from launching.
+        let issues = miners.flatMap { prioritisedLinkIssues(for: $0, includeIgnored: includeIgnored) }
+        return linkIssuesById(issues)
+            .values
+            .sorted {
+                if $0.isIgnored != $1.isIgnored { return !$0.isIgnored }
+                if $0.minerName != $1.minerName {
+                    return $0.minerName.localizedCaseInsensitiveCompare($1.minerName) == .orderedAscending
+                }
+                return $0.gameName.localizedCaseInsensitiveCompare($1.gameName) == .orderedAscending
+            }
+    }
+
+    private func linkIssuesById(_ issues: [PrioritisedLinkIssue]) -> [String: PrioritisedLinkIssue] {
+        Dictionary(issues.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
     }
 
     private func prioritisedLinkIssues(for miner: MinerManager.ManagedMiner, includeIgnored: Bool) -> [PrioritisedLinkIssue] {

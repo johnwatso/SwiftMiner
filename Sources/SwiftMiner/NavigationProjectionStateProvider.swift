@@ -90,6 +90,13 @@ final class NavigationProjectionStateProvider: ProjectionStateProvider, @uncheck
         }
     }
 
+    func excludedGames(for discordUserId: String) async -> [String] {
+        await MainActor.run {
+            guard let model, let miner = model.minerForDiscordUser(discordUserId) else { return [] }
+            return Settings.shared.accountExcludedGames[miner.accountId, default: []]
+        }
+    }
+
     func diagnostics(for discordUserId: String) async -> DiscordUserProjection.Diagnostics? {
         let optionalMiner = await MainActor.run { model?.minerForDiscordUser(discordUserId) }
         guard let miner = optionalMiner else { return nil }
@@ -166,6 +173,13 @@ final class NavigationProjectionStateProvider: ProjectionStateProvider, @uncheck
         await MainActor.run {
             guard let model, model.minerForAccount(accountId) != nil else { return "global" }
             return Settings.shared.prioritySource(forAccountId: accountId).rawValue
+        }
+    }
+
+    func excludedGames(forTwitchAccount accountId: String) async -> [String] {
+        await MainActor.run {
+            guard let model, model.minerForAccount(accountId) != nil else { return [] }
+            return Settings.shared.accountExcludedGames[accountId, default: []]
         }
     }
 

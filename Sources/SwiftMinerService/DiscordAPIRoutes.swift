@@ -111,6 +111,10 @@ private struct SetPrioritiesRequest: Codable, Sendable {
     }
 }
 
+private struct SetExclusionsRequest: Codable, Sendable {
+    let games: [String]
+}
+
 public struct PrioritiesResponse: Codable, Sendable {
     public let accountId: String
     public let priorityGames: [String]
@@ -219,6 +223,8 @@ public actor DiscordAPIRoutes {
     /// id alone (no Discord owner needed). Used by Twitch-authenticated web
     /// sessions. Args: (accountId, games, include globals, source). Returns the resulting effective list.
     public var onSetPrioritiesByAccount: (@Sendable (String, [String], Bool?, String?) async -> [String]?)?
+    /// Replaces one miner's game exclusions. Used by the self-service WebUI.
+    public var onSetExcludedGamesByAccount: (@Sendable (String, [String]) async -> [String]?)?
     /// Controls a miner, identified by Twitch account id alone (no Discord owner needed).
     /// Used by Twitch-authenticated or operator web sessions. Args: (accountId, action).
     public var onMinerControlByAccount: (@Sendable (String, MinerControlAction) async -> MinerControlResponse)?
@@ -270,6 +276,10 @@ public actor DiscordAPIRoutes {
 
     public func setOnSetPrioritiesByAccount(_ handler: @escaping @Sendable (String, [String], Bool?, String?) async -> [String]?) {
         self.onSetPrioritiesByAccount = handler
+    }
+
+    public func setOnSetExcludedGamesByAccount(_ handler: @escaping @Sendable (String, [String]) async -> [String]?) {
+        self.onSetExcludedGamesByAccount = handler
     }
 
     public func setOnMinerControlByAccount(_ handler: @escaping @Sendable (String, MinerControlAction) async -> MinerControlResponse) {
@@ -945,6 +955,17 @@ public actor DiscordAPIRoutes {
             return .error(code: "account_not_found", message: "No miner was found for this Twitch account.", statusCode: 404)
         }
         return HTTPResponse.json(PrioritiesResponse(accountId: twitchId, priorityGames: priorities, includeGlobalPriorities: decoded.includeGlobalPriorities ?? true))
+    }
+
+    public func webSetExcludedGamesTwitch(twitchId: String, body: Data) async -> HTTPResponse {
+        guard let request = try? JSONDecoder().decode(SetExclusionsRequest.self, from: body) else {
+            return .error(code: "invalid_payload", message: "Body must include a games list.", statusCode: 400)
+        }
+        guard let handler = onSetExcludedGamesByAccount,
+              let games = await handler(twitchId, request.games) else {
+            return .error(code: "update_unavailable", message: "Game exclusions are not available.", statusCode: 503)
+        }
+        return .json(["excluded_games": games])
     }
 
     private func emptyRequest(body: Data = Data()) -> HTTPRequest {

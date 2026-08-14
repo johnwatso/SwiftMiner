@@ -172,6 +172,30 @@ extension NavigationModel {
         return priorities
     }
 
+    /// Discards a Web UI-created per-account priority list and returns the
+    /// miner to the operator's shared global priority order.
+    public func resetPrioritiesToGlobal(forAccountId accountId: String) async -> [String]? {
+        guard let miner = minerManager.miners.first(where: { $0.accountId == accountId }) else {
+            return nil
+        }
+
+        let previous = Settings.shared.personalPriorityGames(forAccountId: accountId)
+        let previousSource = Settings.shared.prioritySource(forAccountId: accountId)
+        let priorities = Settings.shared.resetPriorityGamesToGlobal(forAccountId: accountId)
+        auditPriorityChange(
+            actor: miner.username,
+            old: previous,
+            new: Settings.shared.personalPriorityGames(forAccountId: accountId),
+            oldSource: previousSource,
+            newSource: Settings.shared.prioritySource(forAccountId: accountId)
+        )
+        minerManager.updatePriorityGames(priorities, forMinerId: miner.id)
+        if miner.isRunning {
+            await minerManager.forceRefreshMiner(minerId: miner.id)
+        }
+        return priorities
+    }
+
     func accountLinkWarningGameKey(for gameName: String) -> String {
         let target = gameName.lowercased()
         return minerManager.campaignStore.campaigns
@@ -213,7 +237,7 @@ extension NavigationModel {
                 try await minerManager.startMiner(
                     minerId: miner.id,
                     priorityGames: priorityGames(for: miner),
-                    excludedGames: settings.excludedGames,
+                    excludedGames: settings.excludedGames(forAccountId: miner.accountId),
                     strategy: settings.miningStrategy,
                     enableBadgesEmotes: settings.enableBadgesEmotes,
                     showClaimNotifications: settings.showClaimNotifications && settings.allowsOperatorNotifications(),
@@ -285,7 +309,7 @@ extension NavigationModel {
                 try await minerManager.startMiner(
                     minerId: miner.id,
                     priorityGames: priorityGames(for: miner),
-                    excludedGames: settings.excludedGames,
+                    excludedGames: settings.excludedGames(forAccountId: miner.accountId),
                     strategy: settings.miningStrategy,
                     enableBadgesEmotes: settings.enableBadgesEmotes,
                     showClaimNotifications: settings.showClaimNotifications && settings.allowsOperatorNotifications(),
