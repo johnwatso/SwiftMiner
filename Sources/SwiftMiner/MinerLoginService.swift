@@ -68,7 +68,9 @@ public final class MinerLoginService {
         Task {
             do {
                 let authService = TwitchAuthService(clientId: clientId, tokenStore: TokenStoreFactory.makeDefault())
-                let response = try await authService.initiateDeviceFlow()
+                let response = try await authService.initiateDeviceFlow(
+                    includeFollowedChannels: Settings.shared.prioritiseFollowedStreamers
+                )
 
                 // Auto-open browser for user convenience
                 NSWorkspace.shared.open(response.verificationURI)

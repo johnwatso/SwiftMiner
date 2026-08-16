@@ -1184,6 +1184,8 @@ public actor TwitchAPIClient {
                 body: body,
                 allowRefreshRetry: false
             )
+        } catch TwitchMinerError.tokenExpired {
+            throw Self.rejectedSavedSessionError(operation: operationName)
         }
     }
 
@@ -1238,6 +1240,8 @@ public actor TwitchAPIClient {
             await traceGQLDebug { "[TwitchAPIClient] \(operationName): token expired, forcing refresh and retrying once" }
             _ = try await refreshAccessTokenAfterExpiry()
             return try await makeGraphQLRequest(request: request, allowRefreshRetry: false)
+        } catch TwitchMinerError.tokenExpired {
+            throw Self.rejectedSavedSessionError(operation: operationName)
         }
     }
 
@@ -1284,7 +1288,18 @@ public actor TwitchAPIClient {
                 operationName: operationName,
                 allowRefreshRetry: false
             )
+        } catch TwitchMinerError.tokenExpired {
+            throw Self.rejectedSavedSessionError(operation: operationName)
         }
+    }
+
+    /// Used only after the one permitted token-refresh retry has also received
+    /// HTTP 401.  At that point Twitch has rejected the saved session itself,
+    /// rather than a stale expiry timestamp on the device.
+    static func rejectedSavedSessionError(operation: String) -> TwitchMinerError {
+        TwitchMinerError.authenticationFailed(
+            "Twitch rejected the saved session while \(operation) (HTTP 401), even after a refresh attempt."
+        )
     }
 
     func gzipCompress(_ data: Data) throws -> Data {

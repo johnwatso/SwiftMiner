@@ -28,6 +28,28 @@ final class MinerAttentionTests: XCTestCase {
         XCTAssertEqual(attention?.action, .reconnect)
     }
 
+    func testBlockedAccountLinkShowsTwitchDropsAction() {
+        let miner = makeMiner(status: .blockedAccountNotLinked)
+
+        let attention = MinerAttentionIssue.resolve(miner: miner, events: [])
+
+        XCTAssertEqual(attention?.title, "Link a game account to Twitch")
+        XCTAssertEqual(attention?.action, .openTwitchDrops)
+        XCTAssertTrue(attention?.recommendation.contains("Open Twitch Drops") == true)
+    }
+
+#if DEBUG
+    func testDebugAccountLinkPreviewShowsTheSameActionableWarning() {
+        var miner = makeMiner()
+        miner.debugAttention = .accountLink(gameName: "Halo")
+
+        let attention = MinerAttentionIssue.resolve(miner: miner, events: [])
+
+        XCTAssertEqual(attention?.title, "Link Halo to Twitch")
+        XCTAssertEqual(attention?.action, .openTwitchDrops)
+    }
+#endif
+
     func testCompatibilityFailureExplainsThatSwiftMinerNeedsAnUpdate() {
         let miner = makeMiner(status: .error, workerState: .failed)
         let error = EventEntry(
@@ -56,6 +78,41 @@ final class MinerAttentionTests: XCTestCase {
         XCTAssertEqual(attention?.title, "This miner is not earning drop progress")
         XCTAssertEqual(attention?.action, .restart)
         XCTAssertTrue(attention?.detail.contains("25 minutes") == true)
+    }
+
+    func testAccountLinkReminderExplainsHowToResolveIt() {
+        let issue = PrioritisedLinkIssue(
+            minerId: "miner-1",
+            accountId: "account-1",
+            minerName: "tester",
+            gameId: "halo",
+            gameName: "Halo",
+            campaignNames: ["Campaign Evolved"],
+            isIgnored: false
+        )
+        let item = PendingItem(kind: .accountLink(issue), isMuted: false)
+
+        XCTAssertEqual(item.title, "Link Halo to Twitch")
+        XCTAssertEqual(item.resolutionTitle, "Open Twitch Drops")
+        XCTAssertTrue(item.subtitle.contains("open Twitch Drops"))
+        XCTAssertTrue(item.subtitle.contains("link your game account"))
+    }
+
+    func testMutedAccountLinkReminderStillOffersTheResolution() {
+        let issue = PrioritisedLinkIssue(
+            minerId: "miner-1",
+            accountId: "account-1",
+            minerName: "tester",
+            gameId: "overwatch",
+            gameName: "Overwatch",
+            campaignNames: ["Overwatch Drops"],
+            isIgnored: true
+        )
+        let item = PendingItem(kind: .accountLink(issue), isMuted: true)
+
+        XCTAssertEqual(item.resolutionTitle, "Open Twitch Drops")
+        XCTAssertEqual(item.actionTitle, "Remind me")
+        XCTAssertTrue(item.subtitle.contains("Reminder muted"))
     }
 
     private func makeMiner(

@@ -60,6 +60,10 @@ struct DropsListView: View {
                         searchAndMinerControls
                         filterChipsRow
 
+                        if !waitingForStreamTargets.isEmpty {
+                            waitingForStreamBanner(waitingForStreamTargets)
+                        }
+
                         if let message = contextualBannerMessage {
                             fallbackBanner(message)
                         }
@@ -252,6 +256,88 @@ struct DropsListView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(.ultraThinMaterial.opacity(0.75), in: RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
+    }
+
+    private struct WaitingForStreamTarget: Identifiable {
+        let minerID: String
+        let minerName: String
+        let campaignID: String
+        let campaignName: String
+        let gameName: String
+        let checkedAt: Date
+
+        var id: String { "\(minerID):\(campaignID)" }
+    }
+
+    /// The engine deliberately clears its watch session while it waits for a suitable channel.
+    /// Keep the last verified no-channel probe visible here so a completed campaign for the
+    /// same game cannot conceal the campaign the miner is actually trying to resume.
+    private var waitingForStreamTargets: [WaitingForStreamTarget] {
+        let now = Date()
+
+        return miners.compactMap { miner in
+            guard miner.isRunning,
+                  miner.status == .waitingForStream,
+                  selectedMinerAccountId == nil || miner.accountId == selectedMinerAccountId,
+                  let availability = miner.gameChannelAvailability.values
+                    .filter({ !$0.hasEligibleChannel && $0.isFresh(at: now) && $0.campaignId != nil })
+                    .max(by: { $0.checkedAt < $1.checkedAt }),
+                  let campaignID = availability.campaignId,
+                  let campaign = miner.allCampaigns.first(where: { $0.id == campaignID })
+            else {
+                return nil
+            }
+
+            return WaitingForStreamTarget(
+                minerID: miner.id,
+                minerName: miner.displayName,
+                campaignID: campaignID,
+                campaignName: campaign.name,
+                gameName: campaign.game.name,
+                checkedAt: availability.checkedAt
+            )
+        }
+        .sorted { $0.checkedAt > $1.checkedAt }
+    }
+
+    @ViewBuilder
+    private func waitingForStreamBanner(_ targets: [WaitingForStreamTarget]) -> some View {
+        let primary = targets[0]
+
+        HStack(alignment: .center, spacing: 11) {
+            Image(systemName: "antenna.radiowaves.left.and.right")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.orange)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Waiting on \(primary.campaignName)")
+                    .font(.subheadline.weight(.semibold))
+
+                Text(waitingForStreamDetail(for: targets))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
+                .stroke(Color.orange.opacity(0.20), lineWidth: 1)
+        )
+        .accessibilityElement(children: .combine)
+    }
+
+    private func waitingForStreamDetail(for targets: [WaitingForStreamTarget]) -> String {
+        guard let primary = targets.first else { return "" }
+
+        if targets.count == 1 {
+            return "\(primary.minerName) is checking live \(primary.gameName) streams for this campaign."
+        }
+
+        return "\(primary.minerName) and \(targets.count - 1) other \(targets.count == 2 ? "miner" : "miners") are checking live streams for their current campaigns."
     }
 
     private var filterChipsRow: some View {

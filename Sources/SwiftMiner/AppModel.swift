@@ -325,46 +325,12 @@ public final class AppModel {
             return
         }
 
-        setDockBadgeCount(unresolvedMinerIssueCount(using: manager))
-    }
-
-    private func unresolvedMinerIssueCount(using manager: MinerManager) -> Int {
-        let settings = Settings.shared
-        let priorityGames = Set(
-            settings.priorityGames
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
-                .filter { !$0.isEmpty }
+        setDockBadgeCount(
+            MinerAttention.attentionCount(
+                miners: manager.miners,
+                settings: Settings.shared
+            )
         )
-
-        guard !priorityGames.isEmpty else {
-            return 0
-        }
-
-        return manager.miners.filter { miner in
-            miner.allCampaigns.contains { campaign in
-                let gameId = warningGameId(for: campaign)
-                guard campaign.isTimeActive,
-                      campaign.status != .disabled,
-                      campaign.activityStatus(for: miner) == .requiresLink,
-                      campaign.drops.contains(where: { !$0.isClaimed }),
-                      priorityGames.contains(campaign.gameName.lowercased())
-                        || priorityGames.contains(campaign.game.id.lowercased()) else {
-                    return false
-                }
-
-                return !settings.isIgnoringAccountLinkWarnings(for: miner.accountId, gameId: gameId)
-            }
-        }.count
-    }
-
-    private func warningGameId(for campaign: Campaign) -> String {
-        let id = campaign.game.id.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !id.isEmpty { return id }
-        return campaign.game.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    }
-
-    private func normalizedGameKey(_ value: String) -> String {
-        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
     private func setDockBadgeCount(_ count: Int) {

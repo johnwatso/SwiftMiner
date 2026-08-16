@@ -54,6 +54,7 @@ struct MinerApp: App {
                 .environmentObject(unattendedHealth)
                 .task {
                     if !SwiftMinerRuntime.isRunningTests {
+                        ApplicationsFolderInstaller.promptToMoveIfNecessary()
                         // Migrate any legacy hardware-UUID account file into the real Keychain
                         // BEFORE accounts are loaded below. No-op on DEBUG and after the first run.
                         await LegacyAccountMigrator.migrateIfNeeded()

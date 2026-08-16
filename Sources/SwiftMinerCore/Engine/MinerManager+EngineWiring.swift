@@ -206,7 +206,12 @@ extension MinerManager {
                     self.onAuthRequiredEvent?(minerId)
                 }
                 await self.dataCoordinator.updateAccountNeedsAuth(accountId: miner.accountId, needsAuth: needsAuth)
-                self.updateMinerStatus(minerId: minerId, status: .error, needsAuth: needsAuth)
+                self.updateMinerStatus(
+                    minerId: minerId,
+                    status: .error,
+                    isRunning: needsAuth ? false : nil,
+                    needsAuth: needsAuth
+                )
                 await self.applySupervisorSnapshot(for: minerId)
             }
         }
@@ -703,12 +708,7 @@ extension MinerManager {
     static func requiresManualReauth(for error: Error) -> Bool {
         guard let minerError = error as? TwitchMinerError else { return false }
 
-        switch minerError {
-        case .authenticationFailed, .tokenExpired:
-            return true
-        default:
-            return false
-        }
+        return MinerEngine.requiresManualReauthentication(minerError)
     }
     
     func incrementDropsClaimed(minerId: String) {

@@ -71,13 +71,13 @@ final class ResourceUsageMonitor {
     }
 
     /// One recorded reading, retained so the accumulated series can be exported.
-    struct Sample: Equatable {
+    nonisolated struct Sample: Sendable, Equatable {
         let timestamp: Date
         let cpuPercent: Double
         let memoryBytes: UInt64
     }
 
-    struct Diagnostics: Equatable {
+    nonisolated struct Diagnostics: Sendable, Equatable {
         let isRunning: Bool
         let startedAt: Date?
         let durationSeconds: TimeInterval?

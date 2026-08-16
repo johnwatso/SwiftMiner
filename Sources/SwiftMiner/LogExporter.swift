@@ -10,8 +10,8 @@ enum LogExporter {
 
     /// Snapshot inputs are kept primitive so `buildReport` can be unit-tested
     /// without standing up SwiftUI / NavigationModel.
-    struct Snapshot {
-        struct Miner {
+    struct Snapshot: Sendable {
+        struct Miner: Sendable {
             let id: String
             let username: String
             let nickname: String?
@@ -93,7 +93,7 @@ enum LogExporter {
             }
         }
 
-        struct Event {
+        struct Event: Sendable {
             let timestamp: Date
             let level: String
             let minerId: String?
@@ -620,8 +620,17 @@ enum LogExporter {
 
     @MainActor
     static func presentSavePanel(navigation: NavigationModel) async {
+        let progressSheet = presentProgressSheet()
+        defer { dismiss(progressSheet) }
+
+        // Let AppKit present the sheet before snapshotting a potentially large activity log.
+        // The report itself is built off the main actor below, so the Activity Log symbol
+        // remains animated while redaction and string formatting run.
+        await Task.yield()
         let snapshot = await makeSnapshot(navigation: navigation)
-        let report = buildReport(snapshot)
+        let report = await Task.detached(priority: .userInitiated) {
+            buildReport(snapshot)
+        }.value
 
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.plainText]
@@ -661,11 +670,149 @@ enum LogExporter {
         }
     }
 
+    private struct ProgressSheet {
+        let panel: NSPanel
+        let parentWindow: NSWindow?
+        let symbolCycler: ActivityLogSymbolCycler
+    }
+
+    /// Displays immediately while a potentially large diagnostics export is snapshotted,
+    /// redacted, and formatted. This avoids the appearance that the export action was ignored.
+    @MainActor
+    private static func presentProgressSheet() -> ProgressSheet {
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 380, height: 154),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        panel.title = "Export Diagnostic Logs"
+        panel.isReleasedWhenClosed = false
+        panel.isMovable = false
+        panel.standardWindowButton(.closeButton)?.isHidden = true
+        panel.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        panel.standardWindowButton(.zoomButton)?.isHidden = true
+
+        let content = NSView(frame: panel.contentView?.bounds ?? .zero)
+
+        let symbolCycler = ActivityLogSymbolCycler(frame: NSRect(x: 27, y: 71, width: 30, height: 30))
+        content.addSubview(symbolCycler)
+
+        let title = NSTextField(labelWithString: "Preparing diagnostics…")
+        title.font = .systemFont(ofSize: 16, weight: .semibold)
+        title.frame = NSRect(x: 74, y: 90, width: 272, height: 22)
+        content.addSubview(title)
+
+        let detail = NSTextField(wrappingLabelWithString: "Collecting and redacting activity data. This can take a moment for a large log.")
+        detail.font = .systemFont(ofSize: 13)
+        detail.textColor = .secondaryLabelColor
+        detail.maximumNumberOfLines = 2
+        detail.frame = NSRect(x: 74, y: 42, width: 272, height: 40)
+        content.addSubview(detail)
+
+        panel.contentView = content
+        symbolCycler.start()
+
+        if let parentWindow = NSApp.keyWindow ?? NSApp.mainWindow {
+            parentWindow.beginSheet(panel)
+            return ProgressSheet(panel: panel, parentWindow: parentWindow, symbolCycler: symbolCycler)
+        }
+
+        panel.center()
+        panel.level = .floating
+        panel.makeKeyAndOrderFront(nil)
+        return ProgressSheet(panel: panel, parentWindow: nil, symbolCycler: symbolCycler)
+    }
+
+    @MainActor
+    private static func dismiss(_ progressSheet: ProgressSheet) {
+        progressSheet.symbolCycler.stop()
+        if let parentWindow = progressSheet.parentWindow {
+            parentWindow.endSheet(progressSheet.panel)
+        } else {
+            progressSheet.panel.orderOut(nil)
+        }
+    }
+
     static func defaultFilename(for date: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = TimeZone(secondsFromGMT: 0)
         formatter.dateFormat = "yyyy-MM-dd-HHmmss"
         return "SwiftMiner-logs-\(formatter.string(from: date)).txt"
+    }
+}
+
+/// Cycles through the same category symbols used by Activity Log rows while a
+/// diagnostics report is prepared, making long exports feel visibly active.
+private final class ActivityLogSymbolCycler: NSImageView {
+    private let symbols = EventFilter.allCases.map { (symbol: $0.symbol, color: $0.diagnosticSymbolColor) }
+    private var symbolIndex = 0
+    private var timer: Timer?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        imageScaling = .scaleProportionallyUpOrDown
+        contentTintColor = .secondaryLabelColor
+        setAccessibilityLabel("Preparing diagnostics")
+        updateSymbol()
+    }
+
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    func start() {
+        guard timer == nil else { return }
+
+        let timer = Timer(
+            timeInterval: 0.65,
+            target: self,
+            selector: #selector(advanceSymbol),
+            userInfo: nil,
+            repeats: true
+        )
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
+    }
+
+    func stop() {
+        timer?.invalidate()
+        timer = nil
+    }
+
+    @objc private func advanceSymbol() {
+        symbolIndex = (symbolIndex + 1) % symbols.count
+        updateSymbol()
+    }
+
+    private func updateSymbol() {
+        guard !symbols.isEmpty else { return }
+        let symbol = symbols[symbolIndex]
+        contentTintColor = symbol.color
+        image = NSImage(systemSymbolName: symbol.symbol, accessibilityDescription: "Preparing diagnostics")
+    }
+
+    deinit {
+        stop()
+    }
+}
+
+private extension EventFilter {
+    /// Matches the category colours used by Activity Log rows in SwiftUI.
+    var diagnosticSymbolColor: NSColor {
+        switch self {
+        case .mining: return .systemBlue
+        case .heartbeats: return .systemPink
+        case .drops: return .systemGreen
+        case .warnings: return .systemOrange
+        case .errors: return .systemRed
+        case .accountLink: return .systemPurple
+        case .scan: return .systemTeal
+        case .discord: return .systemIndigo
+        case .audit: return .systemBrown
+        case .updates: return .systemCyan
+        case .system: return .systemGray
+        }
     }
 }

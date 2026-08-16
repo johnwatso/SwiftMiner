@@ -15,10 +15,16 @@ The following versions of SwiftMiner are currently being supported with security
 
 ### Security Guarantees
 - **No Password Storage:** SwiftMiner uses the official **Twitch OAuth Device Flow**. Your Twitch password is never entered, handled, or stored by the application.
+- **Least-Privilege Approval (1.37.3+):** New accounts, re-added accounts, and accounts manually reconnected through Twitch request no OAuth scopes by default. The only optional scope is `user:read:follows`, requested solely when Followed Streamer Prioritisation is enabled. Existing saved authorizations are not changed, revoked, or forced to sign in again; they keep their current Twitch grant until the account is manually reconnected, removed, or re-added.
 - **Keychain Token Storage:** OAuth tokens are stored in the native **macOS Keychain** via Keychain Services (`SecItem`). Each account is held as its own generic-password item under the `com.swiftminer.accounts` service, keyed by its stable Twitch user ID. The OS manages the encryption keys, so SwiftMiner never handles raw key material.
 - **Device-Only Access:** Keychain items are written with `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`, so tokens are never synced to iCloud Keychain and never leave the device — they are not included in encrypted backups that could be restored elsewhere.
 - **Direct Connection:** All mining activity and API calls are made directly to Twitch from your local machine. No account data, tokens, or watch history are proxied through or stored on external servers.
 - **Revocation on Removal:** Removing an account revokes its OAuth grant at Twitch (`https://id.twitch.tv/oauth2/revoke`), then deletes its Keychain item and its local records. Revocation is best effort by design: if the device is offline or Twitch is unreachable, the local deletion still completes, and the grant can be removed from Twitch's [Connections](https://www.twitch.tv/settings/connections) page.
+
+### Update Security
+- **Signed Updates:** Sparkle downloads updates only from SwiftMiner&rsquo;s configured HTTPS appcast and requires the embedded EdDSA signature to verify before installation.
+- **Prompted by Default (1.37.3+):** New installations check for updates in the background, then present an update prompt. They do not download, install, or relaunch unattended by default.
+- **Unattended Updates Are Opt-In:** In **Settings &rarr; Updates**, enable **Allow unattended updates** to permit eligible signed updates to download and install in the background. Turn off **Prompt for available updates** to stop background checks entirely; manual checks remain available from the app menu. Existing users&rsquo; saved update preferences are preserved.
 
 ### Storage Migration
 - **One-Time Import:** Older releases stored tokens in a hardware-UUID–derived, AES-256-GCM encrypted file (`accounts.enc`) in your Application Support directory. On first launch of a Keychain-enabled release, accounts are migrated into the Keychain automatically. The migration is idempotent, non-clobbering (it only imports when the Keychain is empty), and verified before being marked complete.
