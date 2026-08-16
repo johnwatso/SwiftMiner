@@ -47,6 +47,21 @@
   <main>
     <h1>SwiftMiner Release Notes</h1>
     <p class="meta">Recent Sparkle update history</p>
+    <h2>🧭 <a href="./1.37.3.html">Version 1.37.3</a></h2>
+    <ul>
+      <li>📋 Exporting diagnostics now shows a coloured, rotating Activity Log symbol while SwiftMiner prepares and redacts a large report without freezing the app.</li>
+      <li>📡 Drops identifies the exact campaign a waiting miner is checking, rather than letting a completed campaign for the same game obscure it.</li>
+      <li>🧭 Every unmuted miner badge has a matching Needs attention panel with the next step. Account-link warnings identify the game and open Twitch Drops; subscription blockers explain the requirement; muted reminders stay out of Dock and sidebar badges.</li>
+      <li>📜 Audit Activity Log entries are retained independently of routine activity, including after recovery from an interrupted database upgrade.</li>
+      <li>🔑 A Twitch session rejected after its refresh retry now pauses the miner for reconnection instead of retrying the same rejected request every five minutes; the Activity Log identifies the HTTP 401 response.</li>
+      <li>&#128230; Opening SwiftMiner from Downloads offers to move it into Applications and relaunch.</li>
+      <li>&#128274; New Twitch device logins request no account scopes by default. Followed-channel access is requested only when Followed Streamer Prioritisation is enabled.</li>
+      <li>🔐 New installs prompt for signed updates by default; unattended download and install are opt-in in Settings.</li>
+      <li>🗑️ The web dashboard can remove its own mined account behind a typed confirmation, stopping mining and revoking its Twitch authorization without deleting the Twitch account.</li>
+      <li>🚫 Each miner can exclude individual games in the web dashboard, while the native app keeps Global priorities until a web-created custom list is reset.</li>
+      <li>Updates SwiftMiner to version 1.37.3 build 2026081709.</li>
+    </ul>
+
     <h2>🧭 <a href="./1.37.2.html">Version 1.37.2</a></h2>
     <ul>
       <li>🔑 Finishes the re-authentication fix from 1.37: a refused refresh grant now retires only the refresh token, never a working login, so the message stops arriving on every launch.</li>
@@ -57,11 +72,7 @@
       <li>🛠️ Audits the three essential Twitch persisted queries against upstream and updates Sparkle to 2.9.5.</li>
       <li>🔒 Uses ShipHook&rsquo;s source appcast files for Sparkle release validation and publishing, avoiding stale website-output checks.</li>
       <li>🔐 Reconnect Twitch now opens the browser authorization flow, refreshes the selected miner&rsquo;s credentials, and resumes mining after approval.</li>
-      <li>🗑️ Lets web-dashboard users remove their own mined account only after typing <code>swiftminer</code>, stopping mining and revoking the Twitch authorization without deleting their Twitch account.</li>
-      <li>🚫 Adds per-miner game exclusions in the web dashboard, so one miner can skip a game without changing what the others watch or claim.</li>
-      <li>🧭 Keeps native miner priorities Global by default; Web UI-created custom lists offer only Reset to Global in the app.</li>
-      <li>📋 Retains Audit Activity Log entries independently of routine activity, recovering audit categorisation after interrupted database upgrades.</li>
-      <li>Updates SwiftMiner to version 1.37.2 build 2026081413.</li>
+      <li>Updates SwiftMiner to version 1.37.2 build 2026081215.</li>
     </ul>
 
     <h2>🧭 <a href="./1.37.html">Version 1.37</a></h2>

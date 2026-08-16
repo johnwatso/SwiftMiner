@@ -4,6 +4,7 @@ import SwiftMinerCore
 /// Execution layer overview - scalable multi-miner workspace.
 struct MinersOverviewView: View {
     @Environment(NavigationModel.self) private var navigation
+    @Environment(\.openURL) private var openURL
     private var settings: Settings { .shared }
     private var twitchAvatars: TwitchAvatarStore { .shared }
     @AppStorage("minersRecoveryHistoryExpanded", store: Settings.appStorageStore)
@@ -441,6 +442,8 @@ struct MinersOverviewView: View {
                         startLinkAccountFlow(for: miner)
                     case .restart:
                         restartMiner(for: miner)
+                    case .openTwitchDrops:
+                        openTwitchDropsInventory()
                     }
                 }
                 .tahoeButtonStyle()
@@ -586,7 +589,10 @@ struct MinersOverviewView: View {
             TahoeSection("Pending", count: activeCount > 0 ? activeCount : nil) {
                 VStack(spacing: 0) {
                     ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                        PendingItemRow(item: item) {
+                        PendingItemRow(
+                            item: item,
+                            onResolve: { openTwitchDropsInventory() }
+                        ) {
                             togglePendingMute(item)
                         }
 
@@ -708,6 +714,11 @@ struct MinersOverviewView: View {
         }
     }
 
+    private func openTwitchDropsInventory() {
+        guard let url = URL(string: "https://www.twitch.tv/drops/inventory") else { return }
+        openURL(url)
+    }
+
     @ViewBuilder
     private func minerCampaignQueueSection(
         for miner: MinerManager.ManagedMiner,
@@ -759,7 +770,7 @@ struct MinersOverviewView: View {
     }
 
     private func activePrioritisedCampaigns(for miner: MinerManager.ManagedMiner) -> [Campaign] {
-        let configuredPriorityGames = miner.priorityGames.isEmpty ? settings.priorityGames : miner.priorityGames
+        let configuredPriorityGames = settings.priorityGames(forAccountId: miner.accountId)
         let priorityKeys = configuredPriorityGames
             .map { normalizedGameKey($0) }
             .filter { !$0.isEmpty }

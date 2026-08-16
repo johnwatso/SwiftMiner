@@ -15,6 +15,15 @@ final class TwitchAuthServiceTests: XCTestCase {
 
     var service: TwitchAuthService!
 
+    func testRejectedSavedSessionErrorNamesTheRejectedOperation() {
+        let error = TwitchAPIClient.rejectedSavedSessionError(operation: "ViewerDropCampaigns")
+        guard case .authenticationFailed(let detail) = error else {
+            return XCTFail("Expected an authentication failure")
+        }
+        XCTAssertTrue(detail.contains("ViewerDropCampaigns"))
+        XCTAssertTrue(detail.contains("HTTP 401"))
+    }
+
     override func setUp() {
         super.setUp()
         service = TwitchAuthService(clientId: "test_client_id", tokenStore: TestTokenStore())
@@ -275,6 +284,22 @@ final class TwitchAuthServiceTests: XCTestCase {
         let response = try JSONDecoder().decode(TokenResponse.self, from: json)
         XCTAssertEqual(response.expiresIn, 0,
                        "Zero expiresIn must decode correctly — service handles 30d default separately")
+    }
+
+    // MARK: - Device authorisation scopes
+
+    func testDeviceAuthorisationRequestsNoScopesByDefault() {
+        XCTAssertEqual(
+            TwitchAuthService.deviceAuthorizationScopes(includeFollowedChannels: false),
+            []
+        )
+    }
+
+    func testDeviceAuthorisationRequestsOnlyFollowScopeWhenOptedIn() {
+        XCTAssertEqual(
+            TwitchAuthService.deviceAuthorizationScopes(includeFollowedChannels: true),
+            ["user:read:follows"]
+        )
     }
 
     // MARK: - Client ID

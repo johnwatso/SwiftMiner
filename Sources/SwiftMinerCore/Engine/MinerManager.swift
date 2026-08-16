@@ -22,6 +22,15 @@ public final class MinerManager {
         }
     }
     
+    #if DEBUG
+    /// Synthetic campaign blockers used only by the Developer menu to exercise
+    /// the user-facing badge and attention panel without changing a real account.
+    public enum DebugAttention: Equatable, Sendable {
+        case accountLink(gameName: String)
+        case subscriptionRequired
+    }
+    #endif
+
     /// Represents a managed miner instance
     public struct ManagedMiner: Identifiable, Sendable {
         public let id: String
@@ -59,6 +68,9 @@ public final class MinerManager {
         public var isHealthy: Bool = true
         public var isStalled: Bool = false
         public var isOperator: Bool = false
+#if DEBUG
+        public var debugAttention: DebugAttention?
+#endif
         
         /// Resolved "Primary State" for the user-facing activity UI (Phase 4).
         @MainActor
@@ -248,6 +260,9 @@ public final class MinerManager {
             self.isHealthy = isHealthy
             self.isStalled = isStalled
             self.isOperator = isOperator
+#if DEBUG
+            self.debugAttention = nil
+#endif
         }
 
         public var displayName: String {

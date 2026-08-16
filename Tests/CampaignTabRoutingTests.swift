@@ -173,6 +173,17 @@ final class CampaignTabRoutingTests: XCTestCase {
         )
     }
 
+    func test_ManualReauthenticationPausesOnlyForRejectedCredentials() {
+        XCTAssertTrue(
+            MinerEngine.requiresManualReauthentication(
+                .authenticationFailed("Twitch rejected the saved session")
+            )
+        )
+        XCTAssertTrue(MinerEngine.requiresManualReauthentication(.tokenExpired))
+        XCTAssertFalse(MinerEngine.requiresManualReauthentication(.rateLimited(retryAfter: 60)))
+        XCTAssertFalse(MinerEngine.requiresManualReauthentication(.apiError(statusCode: 503, message: "Unavailable")))
+    }
+
     // MARK: - Helpers
 
     private func createCampaign(

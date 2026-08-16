@@ -60,7 +60,10 @@ targets:
         CFBundleIconFile: SwiftMiner
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
-        SUAutomaticallyUpdate: true
+        # New installs check in the background and prompt before downloading.
+        # An operator can opt in to unattended download/install in Settings → Updates.
+        SUEnableAutomaticChecks: true
+        SUAutomaticallyUpdate: false
         SUFeedURL: $(SPARKLE_FEED_URL)
         SUPublicEDKey: $(SPARKLE_PUBLIC_ED_KEY)
         CFBundleURLTypes:
@@ -74,8 +77,8 @@ targets:
         SWIFT_STRICT_CONCURRENCY: complete
         PRODUCT_BUNDLE_IDENTIFIER: com.swiftminer.app
         MACOSX_DEPLOYMENT_TARGET: "14.0"
-        MARKETING_VERSION: "1.37.2"
-        CURRENT_PROJECT_VERSION: "2026081413"
+        MARKETING_VERSION: "1.37.3"
+        CURRENT_PROJECT_VERSION: "2026081709"
         INFOPLIST_KEY_CFBundleDisplayName: SwiftMiner
         INFOPLIST_KEY_CFBundleName: SwiftMiner
         CODE_SIGN_STYLE: Automatic

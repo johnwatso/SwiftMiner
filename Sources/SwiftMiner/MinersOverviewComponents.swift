@@ -87,7 +87,7 @@ struct PendingItem: Identifiable, Equatable {
 
     var title: String {
         switch kind {
-        case .accountLink(let issue): return issue.gameName
+        case .accountLink(let issue): return "Link \(issue.gameName) to Twitch"
         case .subscriptionRequired(_, _, _, let gameName, _, _): return gameName
         }
     }
@@ -95,12 +95,14 @@ struct PendingItem: Identifiable, Equatable {
     var subtitle: String {
         switch kind {
         case .accountLink(let issue):
-            if isMuted { return "Game account isn't linked · reminder muted for \(issue.minerName)." }
             let names = issue.campaignNames.prefix(2).joined(separator: ", ")
-            if issue.campaignNames.count > 2 {
-                return "\(names), and more need a linked account."
+            let campaignDescription = issue.campaignNames.count > 2
+                ? "\(names), and more"
+                : names
+            if isMuted {
+                return "Reminder muted. Open Twitch Drops whenever you’re ready to link the game account."
             }
-            return "\(names) needs a linked account."
+            return "To earn \(campaignDescription), open Twitch Drops and link your game account."
         case .subscriptionRequired(_, _, _, _, let campaignName, let dropNames):
             if isMuted { return "\(campaignName) is muted." }
             let names = dropNames.prefix(2).joined(separator: ", ")
@@ -130,10 +132,21 @@ struct PendingItem: Identifiable, Equatable {
 
     var actionTitle: String { isMuted ? "Remind me" : "Dismiss" }
     var actionSystemImage: String { isMuted ? "bell" : "bell.slash" }
+
+    var resolutionTitle: String? {
+        guard case .accountLink = kind else { return nil }
+        return "Open Twitch Drops"
+    }
+
+    var resolutionSystemImage: String? {
+        guard resolutionTitle != nil else { return nil }
+        return "arrow.up.right.square"
+    }
 }
 
 struct PendingItemRow: View {
     let item: PendingItem
+    let onResolve: (() -> Void)?
     let onAction: () -> Void
 
     var body: some View {
@@ -157,12 +170,25 @@ struct PendingItemRow: View {
 
             Spacer(minLength: 12)
 
-            Button(action: onAction) {
-                Label(item.actionTitle, systemImage: item.actionSystemImage)
-                    .labelStyle(.titleAndIcon)
+            HStack(spacing: 8) {
+                if let resolutionTitle = item.resolutionTitle,
+                   let resolutionSystemImage = item.resolutionSystemImage,
+                   let onResolve {
+                    Button(action: onResolve) {
+                        Label(resolutionTitle, systemImage: resolutionSystemImage)
+                            .labelStyle(.titleAndIcon)
+                    }
+                    .tahoeButtonStyle()
+                    .controlSize(.small)
+                }
+
+                Button(action: onAction) {
+                    Label(item.actionTitle, systemImage: item.actionSystemImage)
+                        .labelStyle(.titleAndIcon)
+                }
+                .tahoeButtonStyle()
+                .controlSize(.small)
             }
-            .tahoeButtonStyle()
-            .controlSize(.small)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)

@@ -45,9 +45,20 @@ public actor TwitchAuthService {
 
     // MARK: - Device Code Flow
 
+    /// The only optional device-authorisation scope SwiftMiner currently uses.
+    ///
+    /// Followed-channel prioritisation is disabled by default, so a normal login
+    /// must not grant access to a user's followed channels.
+    public static func deviceAuthorizationScopes(includeFollowedChannels: Bool) -> [String] {
+        includeFollowedChannels ? ["user:read:follows"] : []
+    }
+
     /// Initiates device code flow and returns the device code info for user to authorize.
-    /// Uses empty scopes — Twitch's web client ID works without any OAuth scopes.
-    public func initiateDeviceFlow() async throws -> DeviceCodeResponse {
+    ///
+    /// Device login intentionally requests no scopes by default. The optional
+    /// followed-channel preference is the sole feature with a documented scope
+    /// requirement, and it is requested only when that preference is enabled.
+    public func initiateDeviceFlow(includeFollowedChannels: Bool = false) async throws -> DeviceCodeResponse {
         var request = URLRequest(url: deviceCodeURL)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
@@ -57,14 +68,9 @@ public actor TwitchAuthService {
         // Random 32-char hex device ID (same as Twitch web app's "unique_id" cookie)
         request.setValue(Self.randomDeviceId(), forHTTPHeaderField: "X-Device-Id")
 
-        // Use standard scopes from reference miner
-        let scopes = [
-            "user:read:email",
-            "user:read:follows",
-            "chat:read",
-            "chat:edit",
-            "channel:read:subscriptions"
-        ].joined(separator: " ")
+        let scopes = Self.deviceAuthorizationScopes(
+            includeFollowedChannels: includeFollowedChannels
+        ).joined(separator: " ")
 
         let bodyParams = [
             "client_id": clientId,
@@ -82,7 +88,7 @@ public actor TwitchAuthService {
             let message = String(data: data, encoding: .utf8) ?? "Unknown error"
             // Debug logging
             Logger.auth.error("ERROR: status=\(httpResponse.statusCode)")
-            Logger.auth.debug("Request body: client_id=\(clientId.prefix(6))... scopes=''")
+            Logger.auth.debug("Request body: client_id=\(clientId.prefix(6))... scopes='\(scopes)'")
             Logger.auth.error("Response: \(message)")
             throw TwitchMinerError.apiError(statusCode: httpResponse.statusCode, message: message)
         }

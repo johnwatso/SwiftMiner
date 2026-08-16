@@ -111,6 +111,18 @@ public actor MinerEngine {
         }
     }
 
+    /// Authentication failures are different from ordinary fatal request failures:
+    /// retrying the same saved credentials cannot repair them.  The miner must
+    /// pause until the user completes the reconnect flow.
+    static func requiresManualReauthentication(_ error: TwitchMinerError) -> Bool {
+        switch error {
+        case .authenticationFailed, .tokenExpired:
+            return true
+        default:
+            return false
+        }
+    }
+
     // MARK: - Properties
 
     private let clientId: String
@@ -763,11 +775,10 @@ public actor MinerEngine {
             log("Could not load access token: \(error.localizedDescription)")
             // A rejected token cannot be recovered by retrying the watch loop; it needs the user.
             if let minerError = error as? TwitchMinerError {
-                switch minerError {
-                case .authenticationFailed, .tokenExpired:
+                if Self.requiresManualReauthentication(minerError) {
                     onError?(minerError)
-                default:
-                    break
+                    await pauseForManualReauthentication()
+                    throw minerError
                 }
             }
         }
@@ -1835,6 +1846,10 @@ public actor MinerEngine {
                 await cleanupActiveWatchSession(clearTarget: true)
                 emitIssue(error)
                 handleError(error)
+                if Self.requiresManualReauthentication(error) {
+                    await pauseForManualReauthentication()
+                    return
+                }
                 do {
                     try await runtimeClock.sleep(nanoseconds: campaignCheckInterval)
                 } catch {
@@ -2163,6 +2178,27 @@ public actor MinerEngine {
         default:
             break
         }
+    }
+
+    /// Stops background work after Twitch has rejected the saved session.  This
+    /// deliberately does not discard the credentials: the reconnect sheet needs
+    /// the existing account identity to replace them safely.  It does, however,
+    /// prevent the five-minute campaign loop from repeatedly issuing the same
+    /// rejected request while the app is waiting for the user.
+    private func pauseForManualReauthentication() async {
+        guard isRunning else { return }
+
+        isRunning = false
+        progressEventTracker = DropProgressEventTracker()
+        stopEventConsumer()
+        maintenanceTask?.cancel()
+        maintenanceTask = nil
+        try? await dropEventsService.stopWatching()
+        await watchSessionManager.stopWatching()
+        endActiveWatchActivity()
+        session?.status = .error
+        session?.endedAt = Date()
+        log("Twitch rejected the saved session. Mining is paused until this account is reconnected.")
     }
 
     func log(_ message: String) {

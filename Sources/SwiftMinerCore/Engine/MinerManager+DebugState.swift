@@ -10,6 +10,8 @@ extension MinerManager {
         case stalled = "Stalled"
         case quiet = "No Recent Activity"
         case blockedNotLinked = "Blocked — Account Not Linked"
+        case accountLinkReminder = "Link Halo to Twitch"
+        case subscriptionRequired = "Twitch Subscription Required"
         case authExpired = "Blocked — Auth Expired"
     }
 
@@ -17,6 +19,7 @@ extension MinerManager {
     public func setDebugState(for minerId: String, state: DebugState) {
         guard let index = miners.firstIndex(where: { $0.id == minerId }) else { return }
         var miner = miners[index]
+        miner.debugAttention = nil
         
         switch state {
         case .recovering:
@@ -50,6 +53,24 @@ extension MinerManager {
             miner.isHealthy = true
             miner.needsAuth = false
             miner.status = .blockedAccountNotLinked
+
+        case .accountLinkReminder:
+            miner.workerState = .idle
+            miner.isStalled = false
+            miner.isRunning = true
+            miner.isHealthy = true
+            miner.needsAuth = false
+            miner.status = .idle
+            miner.debugAttention = .accountLink(gameName: "Halo")
+
+        case .subscriptionRequired:
+            miner.workerState = .idle
+            miner.isStalled = false
+            miner.isRunning = true
+            miner.isHealthy = true
+            miner.needsAuth = false
+            miner.status = .idle
+            miner.debugAttention = .subscriptionRequired
             
         case .authExpired:
             miner.workerState = .idle
@@ -77,6 +98,17 @@ extension MinerManager {
     public func cycleDebugState(for minerId: String) {
         guard let index = miners.firstIndex(where: { $0.id == minerId }) else { return }
         var miner = miners[index]
+
+        if let attention = miner.debugAttention {
+            switch attention {
+            case .accountLink:
+                setDebugState(for: minerId, state: .subscriptionRequired)
+            case .subscriptionRequired:
+                setDebugState(for: minerId, state: .authExpired)
+            }
+            return
+        }
+
         let currentStatus = miner.status
         
         switch currentStatus {
@@ -117,13 +149,9 @@ extension MinerManager {
             miner.status = .blockedAccountNotLinked
 
         case .blockedAccountNotLinked:
-            // State 5: Blocked — Authentication Expired
-            miner.workerState = .idle
-            miner.isStalled = false
-            miner.isRunning = true
-            miner.isHealthy = true
-            miner.needsAuth = true
-            miner.status = .error
+            // State 5: campaign-specific account link reminder
+            setDebugState(for: minerId, state: .accountLinkReminder)
+            return
 
         default:
             // Reset back to normal Idle

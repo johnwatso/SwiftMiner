@@ -12,6 +12,10 @@ enum MinerAttention {
         for miner: MinerManager.ManagedMiner,
         settings: Settings
     ) -> Bool {
+#if DEBUG
+        if miner.debugAttention != nil { return true }
+#endif
+
         if miner.status == .blockedAccountNotLinked || miner.status == .error || miner.needsAuth {
             return true
         }
@@ -23,43 +27,8 @@ enum MinerAttention {
         // they still surface immediately.
         guard !miner.campaignsAreProvisional else { return false }
 
-        let priorityKeys = Set(
-            settings.priorityGames
-                .map(normalizedGameKey)
-                .filter { !$0.isEmpty }
-        )
-
-        // Account-link reminders are only surfaced for prioritised games.
-        if !priorityKeys.isEmpty {
-            let hasLinkReminder = miner.allCampaigns.contains { campaign in
-                guard campaign.isTimeActive,
-                      campaign.status != .disabled,
-                      campaign.activityStatus(for: miner) == .requiresLink,
-                      campaign.drops.contains(where: { !$0.isClaimed }),
-                      priorityKeys.contains(normalizedGameKey(campaign.game.name))
-                        || priorityKeys.contains(normalizedGameKey(campaign.game.id)) else {
-                    return false
-                }
-                let gameId = warningGameId(for: campaign)
-                return !settings.isIgnoringAccountLinkWarnings(for: miner.accountId, gameId: gameId)
-            }
-            if hasLinkReminder { return true }
-        }
-
-        // Sub-gated campaigns surface across all of this miner's campaigns,
-        // not just prioritised ones — they're a hard reason a miner can't proceed.
-        let hasSubReminder = miner.allCampaigns.contains { campaign in
-            guard campaign.isTimeActive,
-                  campaign.status != .disabled,
-                  campaign.activityStatus(for: miner) == .requiresSubscription else {
-                return false
-            }
-            return !settings.isIgnoringSubscriptionRequiredWarnings(
-                for: miner.accountId,
-                campaignId: campaign.id
-            )
-        }
-        if hasSubReminder { return true }
+        if accountLinkReminderCampaign(for: miner, settings: settings) != nil { return true }
+        if subscriptionReminderCampaign(for: miner, settings: settings) != nil { return true }
 
         #if DEBUG
         if ProcessInfo.processInfo.environment["SWIFTMINER_FAKE_PENDING"] == "1" {
@@ -90,6 +59,58 @@ enum MinerAttention {
         miners.filter { hasPendingAttention(for: $0, settings: settings) }.count
     }
 
+    /// The first non-muted account-link blocker, if any. Shared with the
+    /// attention panel so a badge always has a matching explanation and next step.
+    static func accountLinkReminderCampaign(
+        for miner: MinerManager.ManagedMiner,
+        settings: Settings
+    ) -> Campaign? {
+        guard !miner.campaignsAreProvisional else { return nil }
+
+        let priorityKeys = Set(
+            settings.priorityGames(forAccountId: miner.accountId)
+                .map(normalizedGameKey)
+                .filter { !$0.isEmpty }
+        )
+        guard !priorityKeys.isEmpty else { return nil }
+
+        return miner.allCampaigns.first { campaign in
+            guard campaign.isTimeActive,
+                  campaign.status != .disabled,
+                  campaign.activityStatus(for: miner) == .requiresLink,
+                  campaign.drops.contains(where: { !$0.isClaimed }),
+                  priorityKeys.contains(normalizedGameKey(campaign.game.name))
+                    || priorityKeys.contains(normalizedGameKey(campaign.game.id)) else {
+                return false
+            }
+            return !settings.isIgnoringAccountLinkWarnings(
+                for: miner.accountId,
+                gameId: warningGameId(for: campaign)
+            )
+        }
+    }
+
+    /// The first non-muted subscription blocker. These apply even when the game
+    /// is not prioritised, because watching alone cannot earn its remaining drops.
+    static func subscriptionReminderCampaign(
+        for miner: MinerManager.ManagedMiner,
+        settings: Settings
+    ) -> Campaign? {
+        guard !miner.campaignsAreProvisional else { return nil }
+
+        return miner.allCampaigns.first { campaign in
+            guard campaign.isTimeActive,
+                  campaign.status != .disabled,
+                  campaign.activityStatus(for: miner) == .requiresSubscription else {
+                return false
+            }
+            return !settings.isIgnoringSubscriptionRequiredWarnings(
+                for: miner.accountId,
+                campaignId: campaign.id
+            )
+        }
+    }
+
     private static func warningGameId(for campaign: Campaign) -> String {
         let id = campaign.game.id.trimmingCharacters(in: .whitespacesAndNewlines)
         if !id.isEmpty { return id }
@@ -103,15 +124,18 @@ enum MinerAttention {
 
 /// A concise explanation of a miner problem, plus the one next step SwiftMiner recommends.
 /// This keeps the miner tab actionable without requiring people to interpret raw event logs.
+@MainActor
 struct MinerAttentionIssue: Equatable {
     enum Action: Equatable {
         case reconnect
         case restart
+        case openTwitchDrops
 
         var title: String {
             switch self {
             case .reconnect: return "Reconnect Twitch"
             case .restart: return "Restart Miner"
+            case .openTwitchDrops: return "Open Twitch Drops"
             }
         }
     }
@@ -125,6 +149,27 @@ struct MinerAttentionIssue: Equatable {
         miner: MinerManager.ManagedMiner,
         events: [EventEntry]
     ) -> MinerAttentionIssue? {
+#if DEBUG
+        if let attention = miner.debugAttention {
+            switch attention {
+            case .accountLink(let gameName):
+                return MinerAttentionIssue(
+                    title: "Link \(gameName) to Twitch",
+                    detail: "This is a Developer-menu preview of a game account link blocker.",
+                    recommendation: "Open Twitch Drops, link the game account, then return here. SwiftMiner will retry automatically.",
+                    action: .openTwitchDrops
+                )
+            case .subscriptionRequired:
+                return MinerAttentionIssue(
+                    title: "A Twitch subscription is required",
+                    detail: "This is a Developer-menu preview of a subscription-only campaign.",
+                    recommendation: "Subscribe to an eligible Twitch channel for this campaign, then refresh the miner to check the drops again.",
+                    action: nil
+                )
+            }
+        }
+#endif
+
         if miner.needsAuth {
             return MinerAttentionIssue(
                 title: "Twitch needs to be reconnected",
@@ -155,6 +200,28 @@ struct MinerAttentionIssue: Equatable {
             )
         }
 
+        let settings = Settings.shared
+        if let campaign = MinerAttention.accountLinkReminderCampaign(for: miner, settings: settings) {
+            return MinerAttentionIssue(
+                title: "Link \(campaign.game.name) to Twitch",
+                detail: "\(campaign.name) has unclaimed drops, but the \(campaign.game.name) account is not linked.",
+                recommendation: "Open Twitch Drops, link the game account, then return here. SwiftMiner will retry automatically.",
+                action: .openTwitchDrops
+            )
+        }
+
+        // The engine can know mining is blocked before a campaign refresh tells
+        // us which game needs linking. Keep this as a wording fallback, not a
+        // second kind of warning alongside the game-specific version above.
+        if miner.status == .blockedAccountNotLinked {
+            return MinerAttentionIssue(
+                title: "Link a game account to Twitch",
+                detail: "Twitch cannot award this miner's pending drops until its game account is linked.",
+                recommendation: "Open Twitch Drops, link the game account, then return here. SwiftMiner will retry automatically.",
+                action: .openTwitchDrops
+            )
+        }
+
         if miner.isStalled {
             return MinerAttentionIssue(
                 title: "The miner is no longer responding",
@@ -181,6 +248,15 @@ struct MinerAttentionIssue: Equatable {
                 detail: "It has been watching for \(minutes) minutes since the last confirmed drop progress.",
                 recommendation: "SwiftMiner will keep checking Twitch. Restart the miner if progress does not resume after the next campaign check.",
                 action: .restart
+            )
+        }
+
+        if let campaign = MinerAttention.subscriptionReminderCampaign(for: miner, settings: settings) {
+            return MinerAttentionIssue(
+                title: "A Twitch subscription is required",
+                detail: "\(campaign.name) has drops that cannot be earned by watching without a paid Twitch subscription.",
+                recommendation: "Subscribe to an eligible Twitch channel for this campaign, then refresh the miner to check the drops again.",
+                action: nil
             )
         }
 

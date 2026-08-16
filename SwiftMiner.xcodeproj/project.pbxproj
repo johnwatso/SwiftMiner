@@ -10,6 +10,7 @@
 		0043CF0EC5029EC739BE5F7F /* GamePreferenceComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = F52F9551C4B18A1F7A3D4173 /* GamePreferenceComponents.swift */; };
 		0052FB020B77AA5B929EE0A3 /* TwitchBoxArt.swift in Sources */ = {isa = PBXBuildFile; fileRef = C02547A88A4BAB2F7A7DABA7 /* TwitchBoxArt.swift */; };
 		03BB858FF57F2BEAF2560EC3 /* MinerHealthSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B780942F75249CF195C9244 /* MinerHealthSnapshot.swift */; };
+		043246205DB44F3ABA4EAB5A /* ApplicationsFolderInstallerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC3AF853EB52A31B632D0B30 /* ApplicationsFolderInstallerTests.swift */; };
 		0527D2AA5B1A268EFE44380C /* SwiftMinerDMEventService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF94C5B6274D4250D2A5F940 /* SwiftMinerDMEventService.swift */; };
 		05EDE4B6BDADF449C9F36B96 /* libSwiftMinerService.a in Frameworks */ = {isa = PBXBuildFile; fileRef = F79E8CD76AF45B0FC7080868 /* libSwiftMinerService.a */; };
 		064EB439ADCF0287B83056CA /* NetworkGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D575B68B3F4BC9BD40DAD39 /* NetworkGuardTests.swift */; };
@@ -19,6 +20,7 @@
 		0D995C679C6A69A7987358F5 /* AvatarColorPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1C3BBE23D89A6B89C33602 /* AvatarColorPalette.swift */; };
 		0DA97EF00308C1F2837F3394 /* LogExporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 637C207EE3AF4206DA9F2C8F /* LogExporterTests.swift */; };
 		0F4C7F2D087B2AFAEBDBE260 /* PrimaryStateResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD5023EC681D53196C9F4350 /* PrimaryStateResolverTests.swift */; };
+		128800EABBA91C7AB6A9650D /* ApplicationsFolderInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0867B1993E51420263F10E5 /* ApplicationsFolderInstaller.swift */; };
 		156A8D4734DACD633E3CC8BB /* MinerTableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E783D8A8E6145DE8BED34EED /* MinerTableView.swift */; };
 		1717B695ABFDB06BDEC06317 /* KeychainAccountStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F769E922F54C3EE8703F4F5 /* KeychainAccountStore.swift */; };
 		1843A5CE760FEA47E6E4BAA8 /* AsyncAlgorithms in Frameworks */ = {isa = PBXBuildFile; productRef = D556FD2F54AFA29EBC58E523 /* AsyncAlgorithms */; };
@@ -402,6 +404,7 @@
 		AB70D19F15611C8382E9BB5B /* PubSubClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PubSubClientTests.swift; sourceTree = "<group>"; };
 		AC1C3BBE23D89A6B89C33602 /* AvatarColorPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarColorPalette.swift; sourceTree = "<group>"; };
 		AC39C0659C5D0936EE467992 /* WatchSessionManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchSessionManagerTests.swift; sourceTree = "<group>"; };
+		AC3AF853EB52A31B632D0B30 /* ApplicationsFolderInstallerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationsFolderInstallerTests.swift; sourceTree = "<group>"; };
 		AC4FE8F11BCE3CE9715F5CB2 /* MinerManager+EngineWiring.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MinerManager+EngineWiring.swift"; sourceTree = "<group>"; };
 		AC5FB969FDB3C8049A2145DB /* TwitchAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwitchAPIClient.swift; sourceTree = "<group>"; };
 		AF13F08E80FAC638D0E25E6B /* MiningReliabilityChaosTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiningReliabilityChaosTests.swift; sourceTree = "<group>"; };
@@ -419,6 +422,7 @@
 		BD604060A32F79AEC14A26B9 /* AvatarImageCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarImageCache.swift; sourceTree = "<group>"; };
 		BD8985A46BE58B3140B0E681 /* MinerAttentionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinerAttentionTests.swift; sourceTree = "<group>"; };
 		C02547A88A4BAB2F7A7DABA7 /* TwitchBoxArt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwitchBoxArt.swift; sourceTree = "<group>"; };
+		C0867B1993E51420263F10E5 /* ApplicationsFolderInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationsFolderInstaller.swift; sourceTree = "<group>"; };
 		C2B4D16DB9BC1EB556FF491F /* SwiftMinerRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftMinerRuntime.swift; sourceTree = "<group>"; };
 		C67E7250E0A8C61154B61CBB /* CampaignViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignViews.swift; sourceTree = "<group>"; };
 		CA4CEDB6297B13DCF0FDD8A7 /* DropEventsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropEventsService.swift; sourceTree = "<group>"; };
@@ -610,6 +614,7 @@
 				A0D7BDAE584D407975194C00 /* AdminView.swift */,
 				856A69CE754F0C1084D4A93A /* AdvancedSettingsPane.swift */,
 				D0B9958B06AA9508022FD2BC /* AnimatedStatusIcon.swift */,
+				C0867B1993E51420263F10E5 /* ApplicationsFolderInstaller.swift */,
 				D63DD2453DBBB48ACAC9F2A8 /* AppMetrics.swift */,
 				E3A2FBA44CD9AACB785D4CAB /* AppModel.swift */,
 				02ED514E82ADDE29F84D41CF /* AppUpdater.swift */,
@@ -775,6 +780,7 @@
 				1AA7279BA84C285A25A44F58 /* AccountPriorityGamesTests.swift */,
 				52BB3B5489AED17CA1BCF0EF /* ActivityLogStoreTests.swift */,
 				5F534FC0C4A706694C2C7007 /* AggregatedCampaignDataServiceTests.swift */,
+				AC3AF853EB52A31B632D0B30 /* ApplicationsFolderInstallerTests.swift */,
 				4435A45FA7AE10B8E9CA2F04 /* BoxArtResolutionTests.swift */,
 				7BBB8613168AE0A29515BD3E /* CampaignDetailsPersistenceTests.swift */,
 				B2CF7310267C5DADE83E23CE /* CampaignMetadataSharingTests.swift */,
@@ -1194,6 +1200,7 @@
 				C9DA012CD40DBFE33EE05C0A /* AppMetrics.swift in Sources */,
 				EBEB8868D3D1E4685C396895 /* AppModel.swift in Sources */,
 				9551176F3A3C6FE59C2C7267 /* AppUpdater.swift in Sources */,
+				128800EABBA91C7AB6A9650D /* ApplicationsFolderInstaller.swift in Sources */,
 				57C5F6196151CAB546E6CBFF /* AuthRequiredSheet.swift in Sources */,
 				0D995C679C6A69A7987358F5 /* AvatarColorPalette.swift in Sources */,
 				F4D00C1C2CE11DA1854A65DB /* AvatarImageCache.swift in Sources */,
@@ -1254,6 +1261,7 @@
 				3E8DEDF477B16AF4F892C943 /* AccountPriorityGamesTests.swift in Sources */,
 				4C618AB672E8CC49AE54E634 /* ActivityLogStoreTests.swift in Sources */,
 				E64A2E73C87D520DDF9B7BDB /* AggregatedCampaignDataServiceTests.swift in Sources */,
+				043246205DB44F3ABA4EAB5A /* ApplicationsFolderInstallerTests.swift in Sources */,
 				B119C62B1833183E1EBDBB68 /* BoxArtResolutionTests.swift in Sources */,
 				0661C62BF5A351F3FDA14A1B /* CampaignDetailsPersistenceTests.swift in Sources */,
 				7E402CB3D782A91832915A52 /* CampaignMetadataSharingTests.swift in Sources */,
@@ -1393,7 +1401,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026081413;
+				CURRENT_PROJECT_VERSION = 2026081709;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;
@@ -1404,7 +1412,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.37.2;
+				MARKETING_VERSION = 1.37.3;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -1554,7 +1562,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026081413;
+				CURRENT_PROJECT_VERSION = 2026081709;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;
@@ -1565,7 +1573,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.37.2;
+				MARKETING_VERSION = 1.37.3;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
