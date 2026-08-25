@@ -2,28 +2,587 @@
 import SwiftUI
 import SwiftMinerCore
 
-struct MinerDiagnosticTimelineRow: View {
+struct MinerDiagnosticEvent: Identifiable {
+    let id: String
     let title: String
     let detail: String
     let date: Date
+    let category: String
+    let symbol: String
+    let tint: Color
 
-    var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Circle()
-                .fill(Color.secondary.opacity(0.45))
-                .frame(width: 6, height: 6)
-                .padding(.top, 6)
+    init(event: MinerManager.MinerEvent) {
+        id = "structured:\(event.timestamp.timeIntervalSinceReferenceDate):\(event.type.rawValue):\(event.summary)"
+        title = event.summary
+        date = event.timestamp
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.caption.weight(.medium))
-                    .lineLimit(2)
+        switch event.type {
+        case .channelSwitched:
+            detail = "Mining"
+            category = "Mining"
+            symbol = "arrow.left.arrow.right.circle.fill"
+            tint = .blue
+        case .campaignSelected:
+            detail = "Campaign selected"
+            category = "Mining"
+            symbol = "flag.checkered"
+            tint = .indigo
+        case .stallDetected:
+            detail = "Stall recovery"
+            category = "Stall recovery"
+            symbol = "exclamationmark.arrow.trianglehead.counterclockwise.rotate.90"
+            tint = .yellow
+        case .inventoryRefreshed:
+            detail = "Campaign scan"
+            category = "Scan"
+            symbol = "arrow.clockwise.circle"
+            tint = .teal
+        case .dropClaimed:
+            detail = "Drop claimed"
+            category = "Drops"
+            symbol = "gift.fill"
+            tint = .green
+        case .error:
+            detail = "Error"
+            category = "Errors"
+            symbol = "xmark.octagon"
+            tint = .red
+        case .recoveryComplete:
+            detail = "Recovery complete"
+            category = "Stall recovery"
+            symbol = "checkmark.circle.fill"
+            tint = .green
+        }
+    }
 
-                Text("\(detail) · \(date.formatted(date: .omitted, time: .shortened))")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+    init(event: EventEntry) {
+        let presentation = ActivityEventPresentation(event: event)
+
+        id = "log:\(event.id.uuidString)"
+        title = presentation.title
+        detail = presentation.detail ?? presentation.category
+        date = event.timestamp
+        category = presentation.category
+        symbol = presentation.symbol
+        tint = presentation.color
+    }
+}
+
+struct MinerRecoveryDiagnosticsPresentation {
+    enum Tone: Equatable {
+        case healthy
+        case active
+        case warning
+        case critical
+        case inactive
+
+        var tint: Color {
+            switch self {
+            case .healthy: return .green
+            case .active: return .blue
+            case .warning: return .orange
+            case .critical: return .red
+            case .inactive: return .secondary
             }
         }
+    }
+
+    struct Signal: Identifiable {
+        let id: String
+        let title: String
+        let value: String
+        let symbol: String
+        let date: Date?
+        let dateLabel: String
+        let missingDateLabel: String
+        let tone: Tone
+    }
+
+    let title: String
+    let detail: String
+    let badge: String
+    let symbol: String
+    let tone: Tone
+    let signals: [Signal]
+    let isCompact: Bool
+
+    @MainActor
+    static func make(
+        miner: MinerManager.ManagedMiner,
+        snapshot: MinerHealthSnapshot
+    ) -> MinerRecoveryDiagnosticsPresentation {
+        let status: (String, String, String, String, Tone)
+        switch snapshot.health {
+        case .mining:
+            status = (
+                "Healthy",
+                "Twitch, campaign inventory, and progress checks are reporting normally.",
+                "Healthy",
+                "checkmark.circle.fill",
+                .healthy
+            )
+        case .recovering:
+            status = (
+                "Automatic recovery in progress",
+                "SwiftMiner is checking the session and will resume mining when it is ready.",
+                "Recovering",
+                "arrow.triangle.2.circlepath",
+                .active
+            )
+        case .needsAuth:
+            status = (
+                "Reconnect Twitch",
+                "This miner cannot recover until its Twitch sign-in is renewed.",
+                "Action needed",
+                "person.badge.key.fill",
+                .critical
+            )
+        case .stalled:
+            status = (
+                "Recovery needed",
+                "The miner stopped responding and needs attention before it can continue.",
+                "Stalled",
+                "exclamationmark.triangle.fill",
+                .critical
+            )
+        case .blocked:
+            status = (
+                "Action needed",
+                "A blocking issue is preventing this miner from continuing.",
+                "Blocked",
+                "exclamationmark.octagon.fill",
+                .critical
+            )
+        case .attention:
+            status = (
+                "Keep an eye on this miner",
+                "One or more live signals are outside their normal range.",
+                "Attention",
+                "exclamationmark.triangle.fill",
+                .warning
+            )
+        case .idle where !miner.isRunning:
+            status = (
+                "Miner is stopped",
+                "Live checks and automatic recovery will resume when the miner starts.",
+                "Stopped",
+                "pause.circle.fill",
+                .inactive
+            )
+        case .idle:
+            status = (
+                "Healthy",
+                "The miner is connected and waiting for eligible work.",
+                "Healthy",
+                "checkmark.circle.fill",
+                .healthy
+            )
+        }
+
+        let twitchTone: Tone = !miner.isRunning ? .inactive : (miner.needsAuth ? .critical : .healthy)
+        let inventoryTone: Tone = !miner.isRunning
+            ? .inactive
+            : (snapshot.lastCampaignRefreshAt == nil ? .warning : .healthy)
+        let progressTone: Tone = !miner.isRunning
+            ? .inactive
+            : (miner.isNotEarning() ? .warning : .healthy)
+
+        let signals = [
+            Signal(
+                id: "twitch",
+                title: "Twitch",
+                value: !miner.isRunning ? "Inactive" : (miner.needsAuth ? "Reconnect" : "Connected"),
+                symbol: "network",
+                date: snapshot.lastEventAt,
+                dateLabel: "Last activity",
+                missingDateLabel: "No activity yet",
+                tone: twitchTone
+            ),
+            Signal(
+                id: "inventory",
+                title: "Campaigns",
+                value: !miner.isRunning ? "Inactive" : (snapshot.lastCampaignRefreshAt == nil ? "Waiting" : "Current"),
+                symbol: "shippingbox.fill",
+                date: snapshot.lastCampaignRefreshAt,
+                dateLabel: "Updated",
+                missingDateLabel: "Not updated yet",
+                tone: inventoryTone
+            ),
+            Signal(
+                id: "progress",
+                title: "Drop progress",
+                value: !miner.isRunning ? "Inactive" : (miner.isNotEarning() ? "No progress" : "Tracking"),
+                symbol: "chart.line.uptrend.xyaxis",
+                date: snapshot.lastDropProgressAt ?? snapshot.lastSuccessfulPollAt,
+                dateLabel: "Last checked",
+                missingDateLabel: "Not checked yet",
+                tone: progressTone
+            ),
+        ]
+
+        return MinerRecoveryDiagnosticsPresentation(
+            title: status.0,
+            detail: status.1,
+            badge: status.2,
+            symbol: status.3,
+            tone: status.4,
+            signals: signals,
+            isCompact: status.4 == .healthy && signals.allSatisfy { $0.tone == .healthy }
+        )
+    }
+}
+
+/// The normal operating state is intentionally terse. It keeps the same live
+/// readings and expandable activity history without presenting them as a
+/// troubleshooting surface.
+struct CompactMinerStatusView: View {
+    let presentation: MinerRecoveryDiagnosticsPresentation
+    let events: [MinerDiagnosticEvent]
+    @Binding var isExpanded: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Label(presentation.badge, systemImage: presentation.symbol)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(presentation.tone.tint)
+                .padding(.horizontal, 14)
+                .padding(.top, 12)
+                .padding(.bottom, 9)
+
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: 0) {
+                    ForEach(Array(presentation.signals.enumerated()), id: \.element.id) { index, signal in
+                        compactSignal(signal)
+
+                        if index < presentation.signals.count - 1 {
+                            Divider()
+                                .frame(height: 34)
+                                .padding(.vertical, 8)
+                        }
+                    }
+
+                    Divider()
+                        .frame(height: 34)
+                        .padding(.vertical, 8)
+
+                    recentActivityButton
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                VStack(spacing: 0) {
+                    ForEach(Array(presentation.signals.enumerated()), id: \.element.id) { index, signal in
+                        compactSignal(signal)
+
+                        if index < presentation.signals.count - 1 {
+                            Divider().padding(.horizontal, 14)
+                        }
+                    }
+
+                    Divider().padding(.horizontal, 14)
+                    recentActivityButton
+                }
+            }
+
+            if isExpanded {
+                Divider().padding(.horizontal, 14)
+                RecoveryDiagnosticsEventList(events: events)
+            }
+        }
+    }
+
+    private func compactSignal(_ signal: MinerRecoveryDiagnosticsPresentation.Signal) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: signal.symbol)
+                .symbolRenderingMode(.hierarchical)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(signal.tone.tint)
+                .frame(width: 16, height: 16)
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
+                    Text(signal.title)
+                        .foregroundStyle(.secondary)
+                    Text(signal.value)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(signal.tone.tint)
+                }
+                .font(.caption)
+                .lineLimit(1)
+
+                signalDate(signal)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private func signalDate(_ signal: MinerRecoveryDiagnosticsPresentation.Signal) -> some View {
+        if let date = signal.date {
+            HStack(spacing: 3) {
+                Text(signal.dateLabel)
+                Text(date, style: .relative)
+            }
+            .font(.caption2.monospacedDigit())
+            .foregroundStyle(.tertiary)
+            .lineLimit(1)
+        } else {
+            Text(signal.missingDateLabel)
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+        }
+    }
+
+    private var recentActivityButton: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                isExpanded.toggle()
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                Text("Recent activity")
+                    .font(.caption)
+                Text(events.count.formatted())
+                    .font(.caption.weight(.semibold).monospacedDigit())
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
+            }
+            .foregroundStyle(.primary)
+            .contentShape(Rectangle())
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isExpanded ? "Hide recent activity" : "Show recent activity")
+    }
+}
+
+struct RecoveryDiagnosticsStatusHeader: View {
+    let presentation: MinerRecoveryDiagnosticsPresentation
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 13) {
+            Image(systemName: presentation.symbol)
+                .symbolRenderingMode(.hierarchical)
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(presentation.tone.tint)
+                .frame(width: 34, height: 34)
+                .background(
+                    presentation.tone.tint.opacity(0.12),
+                    in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+                )
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(presentation.title)
+                    .font(.subheadline.weight(.semibold))
+
+                Text(presentation.detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 12)
+
+            Text(presentation.badge)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(presentation.tone.tint)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 5)
+                .background(
+                    presentation.tone.tint.opacity(0.10),
+                    in: Capsule()
+                )
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 13)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+struct RecoveryDiagnosticsSignalStrip: View {
+    let signals: [MinerRecoveryDiagnosticsPresentation.Signal]
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 0) {
+            ForEach(Array(signals.enumerated()), id: \.element.id) { index, signal in
+                signalView(signal)
+
+                if index < signals.count - 1 {
+                    Divider()
+                        .frame(height: 44)
+                        .padding(.vertical, 11)
+                }
+            }
+        }
+        .padding(.horizontal, 2)
+    }
+
+    private func signalView(_ signal: MinerRecoveryDiagnosticsPresentation.Signal) -> some View {
+        HStack(alignment: .top, spacing: 9) {
+            Image(systemName: signal.symbol)
+                .symbolRenderingMode(.hierarchical)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(signal.tone.tint)
+                .frame(width: 17, height: 17)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(signal.title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+
+                Text(signal.value)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(signal.tone.tint)
+                    .lineLimit(1)
+
+                if let date = signal.date {
+                    HStack(spacing: 3) {
+                        Text(signal.dateLabel)
+                        Text(date, style: .relative)
+                    }
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                } else {
+                    Text(signal.missingDateLabel)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: 2)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+struct RecoveryDiagnosticsHistory: View {
+    let events: [MinerDiagnosticEvent]
+    @Binding var isExpanded: Bool
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 9) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 17)
+
+                    Text("Recent activity")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.primary)
+
+                    Text(events.isEmpty ? "None recorded" : "\(events.count)")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+
+                    Spacer(minLength: 8)
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                }
+                .contentShape(Rectangle())
+                .padding(.horizontal, 14)
+                .padding(.vertical, 11)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(isExpanded ? "Hide recent activity" : "Show recent activity")
+
+            if isExpanded {
+                Divider()
+                    .padding(.horizontal, 14)
+                RecoveryDiagnosticsEventList(events: events)
+            }
+        }
+    }
+}
+
+struct RecoveryDiagnosticsEventList: View {
+    let events: [MinerDiagnosticEvent]
+
+    var body: some View {
+        if events.isEmpty {
+            ContentUnavailableView(
+                "No recent events",
+                systemImage: "clock.badge.checkmark",
+                description: Text("Miner activity will appear here when there is something to review.")
+            )
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 20)
+        } else {
+            VStack(spacing: 0) {
+                ForEach(Array(events.enumerated()), id: \.element.id) { index, event in
+                    MinerDiagnosticTimelineRow(event: event)
+
+                    if index < events.count - 1 {
+                        Divider()
+                            .padding(.leading, 48)
+                            .padding(.trailing, 14)
+                    }
+                }
+            }
+            .padding(.vertical, 4)
+        }
+    }
+}
+
+struct MinerDiagnosticTimelineRow: View {
+    let event: MinerDiagnosticEvent
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: event.symbol)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(event.tint)
+                .symbolRenderingMode(.hierarchical)
+                .frame(width: 24, height: 24)
+                .help(event.category)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(event.title)
+                    .font(.system(size: 13, weight: .medium))
+                    .lineLimit(2)
+
+                Text(event.detail)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 12)
+
+            Text(event.date.formatted(date: .omitted, time: .standard))
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 7)
+        .accessibilityElement(children: .combine)
     }
 }
 

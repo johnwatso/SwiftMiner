@@ -549,6 +549,37 @@ private struct EventDisplayText {
     let detail: String?
 }
 
+/// Shared visual language for compact activity surfaces outside the full log.
+/// Keeping this mapping here means miner diagnostics use the same parsed copy,
+/// category symbol, and colour as Activity Log instead of interpreting raw
+/// messages a second time.
+struct ActivityEventPresentation {
+    let title: String
+    let detail: String?
+    let category: String
+    let symbol: String
+    let color: Color
+
+    init(event: EventEntry) {
+        let displayText = eventDisplayText(for: event)
+        let searchText = eventSearchText(for: event)
+        let eventFilter = primaryEventFilter(for: event)
+
+        title = displayText.title
+        detail = displayText.detail
+
+        if isStallRecoveryEvent(searchText) {
+            category = "Stall recovery"
+            symbol = "exclamationmark.arrow.trianglehead.counterclockwise.rotate.90"
+            color = .yellow
+        } else {
+            category = eventFilter.title
+            symbol = isSubscriptionRequiredEvent(searchText) ? "creditcard" : eventFilter.symbol
+            color = eventFilter.eventColor
+        }
+    }
+}
+
 private func eventDisplayText(for event: EventEntry) -> EventDisplayText {
     // Discord DM events tag the raw message with a sentinel for filter routing,
     // but the friendly text on `event.message` is what should actually render.
