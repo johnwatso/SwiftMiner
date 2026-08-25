@@ -24,14 +24,18 @@ final class SparkleConfigTests: XCTestCase {
         XCTAssertEqual(feedURL, expectedFeedURL, "SUFeedURL must keep using the stable SwiftMiner appcast")
         XCTAssertEqual(publicKey, expectedPublicKey, "SUPublicEDKey must match the current Sparkle EdDSA public key")
         XCTAssertNotEqual(publicKey, previousPublicKey, "SUPublicEDKey must not regress to the retired Sparkle public key")
-        XCTAssertNil(
-            info["SUEnableAutomaticChecks"],
-            "SUEnableAutomaticChecks must remain absent so Sparkle can ask for update-check permission"
+        // New installs check for updates in the background but prompt before
+        // downloading. Unattended download/install is opt-in in Settings → Updates,
+        // so it must not be the shipped default.
+        XCTAssertEqual(
+            info["SUEnableAutomaticChecks"] as? Bool,
+            true,
+            "SUEnableAutomaticChecks must stay enabled so new installs check for updates"
         )
         XCTAssertEqual(
             info["SUAutomaticallyUpdate"] as? Bool,
-            true,
-            "Sparkle's permission prompt should initially select unattended updates"
+            false,
+            "Unattended download and install must stay opt-in rather than the shipped default"
         )
     }
 
@@ -43,8 +47,8 @@ final class SparkleConfigTests: XCTestCase {
         // rewrites them into Sources/SwiftMiner/Info.plist on every generate.
         XCTAssertTrue(yaml.contains("SUFeedURL"), "project.yml must reference SUFeedURL in info.properties")
         XCTAssertTrue(yaml.contains("SUPublicEDKey"), "project.yml must reference SUPublicEDKey in info.properties")
-        XCTAssertFalse(yaml.contains("SUEnableAutomaticChecks"), "project.yml must allow Sparkle to show its permission prompt")
-        XCTAssertTrue(yaml.contains("SUAutomaticallyUpdate: true"), "project.yml must offer unattended updates in Sparkle's permission prompt")
+        XCTAssertTrue(yaml.contains("SUEnableAutomaticChecks: true"), "project.yml must keep background update checks enabled")
+        XCTAssertTrue(yaml.contains("SUAutomaticallyUpdate: false"), "project.yml must keep unattended updates opt-in")
         XCTAssertTrue(yaml.contains("SPARKLE_PUBLIC_ED_KEY: \"\(expectedPublicKey)\""), "project.yml must preserve the current Sparkle public key")
         XCTAssertFalse(yaml.contains(previousPublicKey), "project.yml must not contain the retired Sparkle public key")
     }

@@ -28,10 +28,6 @@ struct MinerCampaignQueueEntry: Identifiable {
 struct MinerOperatorPresentation {
     let snapshot: MinerActivitySnapshot
     let queue: [MinerCampaignQueueEntry]
-    /// The full inventory is retained alongside the actionable queue. A
-    /// prioritised campaign that still needs a game-account link is deliberately
-    /// excluded from the queue, but can legitimately be the item shown Up next.
-    private let allCampaigns: [Campaign]
 
     var currentCampaign: Campaign? {
         guard let campaignId = snapshot.now.campaignId else { return nil }
@@ -46,7 +42,6 @@ struct MinerOperatorPresentation {
     var nextCampaign: Campaign? {
         guard let campaignId = snapshot.upNext?.campaignId else { return nil }
         return queue.first(where: { $0.campaign.id == campaignId })?.campaign
-            ?? allCampaigns.first(where: { $0.id == campaignId })
     }
 
     var thenCampaigns: [Campaign] {
@@ -80,66 +75,14 @@ struct MinerOperatorPresentation {
             ignoredAccountLinkGameIds: ignoredAccountLinkGameIds
         )
 
-        let effectivePriorities = miner.priorityGames.isEmpty ? priorityGames : miner.priorityGames
-        let priorityKeys = effectivePriorities.map(normalizedKey).filter { !$0.isEmpty }
-        let prioritySet = Set(priorityKeys)
-        let excludedSet = Set(excludedGames.map(normalizedKey).filter { !$0.isEmpty })
-
-        var campaigns = miner.allCampaigns.filter { campaign in
-            guard campaign.status != .disabled, !campaign.isLikelyInternalTestCampaign else { return false }
-            let gameId = normalizedKey(campaign.game.id)
-            let gameName = normalizedKey(campaign.game.name)
-            let isPriority = prioritySet.contains(gameId) || prioritySet.contains(gameName)
-            let isCurrentWatch = miner.status == .watching && campaign.id == snapshot.now.campaignId
-
-            // This is the actionable campaign queue, not a list of possible link
-            // reminders. An unlinked campaign remains visible in Pending and may still
-            // be attempted by the engine when prioritised, but it must not be presented
-            // as an already queued campaign before a watch session actually starts.
-            guard isCurrentWatch || campaign.isAccountConnected else { return false }
-            if !isCurrentWatch {
-                guard !excludedSet.contains(gameId), !excludedSet.contains(gameName) else { return false }
-                guard includesBadgeAndEmoteCampaigns || !campaign.hasOnlyBadgesOrEmotes else { return false }
-                guard campaign.isTimeActive,
-                      campaign.canAttemptMining,
-                      !campaign.earnableDrops.isEmpty else { return false }
-
-                if strategy == .onlyPriority {
-                    guard isPriority else { return false }
-                }
-            }
-
-            return true
-        }
-
-        campaigns.sort { lhs, rhs in
-            let leftCurrent = lhs.id == snapshot.now.campaignId
-            let rightCurrent = rhs.id == snapshot.now.campaignId
-            if leftCurrent != rightCurrent { return leftCurrent }
-
-            let leftNext = lhs.id == snapshot.upNext?.campaignId
-            let rightNext = rhs.id == snapshot.upNext?.campaignId
-            if leftNext != rightNext { return leftNext }
-
-            let leftStatus = statusRank(lhs.activityStatus(for: miner))
-            let rightStatus = statusRank(rhs.activityStatus(for: miner))
-            if leftStatus != rightStatus { return leftStatus < rightStatus }
-
-            let leftPriority = priorityIndex(for: lhs, keys: priorityKeys)
-            let rightPriority = priorityIndex(for: rhs, keys: priorityKeys)
-            switch strategy {
-            case .mineAll:
-                if lhs.endDate != rhs.endDate { return lhs.endDate < rhs.endDate }
-                if leftPriority != rightPriority { return leftPriority < rightPriority }
-            case .prioritiseSelected, .onlyPriority:
-                let leftIsPriority = leftPriority != Int.max
-                let rightIsPriority = rightPriority != Int.max
-                if leftIsPriority != rightIsPriority { return leftIsPriority }
-                if leftPriority != rightPriority { return leftPriority < rightPriority }
-                if lhs.endDate != rhs.endDate { return lhs.endDate < rhs.endDate }
-            }
-            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
-        }
+        // Campaign IDs come off the Twitch dashboard fetch merged with inventory,
+        // and nothing upstream guarantees the dashboard list is unique. Keeping the
+        // first entry is enough here; trapping on a duplicate would take down the app.
+        let campaignsById = Dictionary(
+            miner.allCampaigns.map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        let campaigns = snapshot.orderedCampaignIds.compactMap { campaignsById[$0] }
 
         let queue = campaigns.enumerated().map { index, campaign in
             let gameAvailability = miner.gameChannelAvailability[normalizedKey(campaign.game.name)]
@@ -154,7 +97,12 @@ struct MinerOperatorPresentation {
             return MinerCampaignQueueEntry(
                 campaign: campaign,
                 position: index + 1,
-                status: campaign.activityStatus(for: miner),
+                // Queue status describes scheduling, while account-link and
+                // subscription warnings remain in Pending. Every resolved future
+                // candidate is waiting for its turn, even when delivery setup is pending.
+                status: campaign.id == snapshot.now.campaignId && snapshot.isActivelyWatching
+                    ? .watching
+                    : .waitingForStream,
                 progress: aggregateProgress(for: campaign, miner: miner),
                 channelAvailability: campaignAvailability
             )
@@ -162,8 +110,7 @@ struct MinerOperatorPresentation {
 
         return MinerOperatorPresentation(
             snapshot: snapshot,
-            queue: queue,
-            allCampaigns: miner.allCampaigns
+            queue: queue
         )
     }
 
@@ -199,23 +146,6 @@ struct MinerOperatorPresentation {
         value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
-    private static func priorityIndex(for campaign: Campaign, keys: [String]) -> Int {
-        let gameId = normalizedKey(campaign.game.id)
-        let gameName = normalizedKey(campaign.game.name)
-        return keys.firstIndex { $0 == gameId || $0 == gameName } ?? Int.max
-    }
-
-    private static func statusRank(_ status: CampaignActivityStatus) -> Int {
-        switch status {
-        case .watching: return 0
-        case .waitingForStream: return 1
-        case .requiresLink: return 2
-        case .requiresSubscription: return 3
-        case .upcoming: return 4
-        case .completed: return 5
-        case .expired: return 6
-        }
-    }
 }
 
 struct MinerOperatorHeader: View {

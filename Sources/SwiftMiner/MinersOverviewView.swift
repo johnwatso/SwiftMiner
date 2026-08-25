@@ -190,9 +190,7 @@ struct MinersOverviewView: View {
 
                     minerCampaignQueueSection(for: miner, presentation: presentation)
 
-                    minerHealthSummarySection(for: miner)
-
-                    minerRecoveryHistorySection(for: miner)
+                    minerRecoveryDiagnosticsSection(for: miner)
                 }
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .padding(.horizontal, 24)
@@ -375,31 +373,38 @@ struct MinersOverviewView: View {
         }
     }
 
-    private func minerHealthSummarySection(for miner: MinerManager.ManagedMiner) -> some View {
+    private func minerRecoveryDiagnosticsSection(for miner: MinerManager.ManagedMiner) -> some View {
         let snapshot = MinerHealthSnapshot.make(miner: miner)
+        let presentation = MinerRecoveryDiagnosticsPresentation.make(
+            miner: miner,
+            snapshot: snapshot
+        )
+        let events = diagnosticEvents(for: miner)
 
-        return TahoeSection("Miner health") {
+        return TahoeSection("Status") {
             VStack(spacing: 0) {
-                healthCheckRow(
-                    title: "Connected to Twitch",
-                    status: miner.needsAuth ? "Reconnect" : (miner.isRunning ? "OK" : "Stopped"),
-                    date: snapshot.lastEventAt,
-                    isHealthy: miner.isRunning && !miner.needsAuth
-                )
-                TahoeRowDivider(leadingInset: 39)
-                healthCheckRow(
-                    title: "Campaign inventory",
-                    status: snapshot.lastCampaignRefreshAt == nil ? "Waiting" : "OK",
-                    date: snapshot.lastCampaignRefreshAt,
-                    isHealthy: snapshot.lastCampaignRefreshAt != nil
-                )
-                TahoeRowDivider(leadingInset: 39)
-                healthCheckRow(
-                    title: "Progress detection",
-                    status: miner.isNotEarning() ? "No progress" : "OK",
-                    date: snapshot.lastDropProgressAt ?? snapshot.lastSuccessfulPollAt,
-                    isHealthy: !miner.isNotEarning()
-                )
+                if presentation.isCompact {
+                    CompactMinerStatusView(
+                        presentation: presentation,
+                        events: events,
+                        isExpanded: $recoveryHistoryExpanded
+                    )
+                } else {
+                    RecoveryDiagnosticsStatusHeader(presentation: presentation)
+
+                    Divider()
+                        .padding(.horizontal, 14)
+
+                    RecoveryDiagnosticsSignalStrip(signals: presentation.signals)
+
+                    Divider()
+                        .padding(.horizontal, 14)
+
+                    RecoveryDiagnosticsHistory(
+                        events: events,
+                        isExpanded: $recoveryHistoryExpanded
+                    )
+                }
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
@@ -454,103 +459,21 @@ struct MinersOverviewView: View {
         .accessibilityElement(children: .combine)
     }
 
-    private func healthCheckRow(
-        title: String,
-        status: String,
-        date: Date?,
-        isHealthy: Bool
-    ) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: isHealthy ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(isHealthy ? .green : .orange)
-                .font(.system(size: 13, weight: .semibold))
-                .frame(width: 15)
+    private func diagnosticEvents(for miner: MinerManager.ManagedMiner) -> [MinerDiagnosticEvent] {
+        let structuredEvents = (selectedActivitySummary?.minerId == miner.id
+            ? selectedActivitySummary?.recentEvents
+            : nil
+        )?.map {
+            MinerDiagnosticEvent(event: $0)
+        } ?? []
+        let logEvents = navigation.events
+            .lazy
+            .filter { $0.minerId == miner.id }
+            .prefix(5)
+            .map { MinerDiagnosticEvent(event: $0) }
 
-            Text(title)
-                .font(.subheadline)
-                .lineLimit(1)
-
-            Spacer(minLength: 8)
-
-            // Both trailing values sit in fixed columns. Previously the status
-            // was free-width, so it slid sideways whenever the relative time
-            // grew ("29 secs" vs "1 min, 33 secs"), and rows carrying no
-            // timestamp pushed their status out to the row edge.
-            Text(status)
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(isHealthy ? .green : .orange)
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
-                .frame(width: 96, alignment: .trailing)
-
-            Group {
-                if let date {
-                    Text(date, style: .relative)
-                } else {
-                    Text("—")
-                }
-            }
-            .font(.caption.monospacedDigit())
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-            .minimumScaleFactor(0.85)
-            .frame(width: 92, alignment: .trailing)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-    }
-
-    private func minerRecoveryHistorySection(for miner: MinerManager.ManagedMiner) -> some View {
-        let logEvents = navigation.events.filter { $0.minerId == miner.id }.prefix(5)
-        let recentEventCount = (selectedActivitySummary?.recentEvents.count ?? 0) + logEvents.count
-
-        return DisclosureGroup(isExpanded: $recoveryHistoryExpanded) {
-            VStack(alignment: .leading, spacing: 8) {
-                if selectedActivitySummary?.recentEvents.isEmpty != false && logEvents.isEmpty {
-                    Text("No recent recovery or diagnostic events for this miner.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(selectedActivitySummary?.recentEvents.indices ?? 0..<0, id: \.self) { index in
-                        if let event = selectedActivitySummary?.recentEvents[index] {
-                            MinerDiagnosticTimelineRow(
-                                title: event.summary,
-                                detail: event.type.rawValue,
-                                date: event.timestamp
-                            )
-                        }
-                    }
-
-                    ForEach(Array(logEvents)) { event in
-                        MinerDiagnosticTimelineRow(
-                            title: event.message,
-                            detail: event.level.rawValue.capitalized,
-                            date: event.timestamp
-                        )
-                    }
-                }
-            }
-            .padding(.top, 12)
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "clock.arrow.circlepath")
-                    .foregroundStyle(.secondary)
-
-                Text("Recovery & diagnostics")
-                    .font(.subheadline.weight(.semibold))
-
-                Text(recentEventCount == 0 ? "No recent events" : "\(recentEventCount) recent")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-
-                Spacer(minLength: 4)
-            }
-            .contentShape(Rectangle())
-        }
-        .padding(14)
-        .tahoeCard()
+        return (structuredEvents + logEvents)
+            .sorted { $0.date > $1.date }
     }
 
     private func liveActivityAnchor(for miner: MinerManager.ManagedMiner) -> Date? {

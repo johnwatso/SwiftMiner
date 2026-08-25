@@ -77,7 +77,7 @@ final class MinerActivitySnapshotTests: XCTestCase {
         XCTAssertEqual(presentation.thenCampaigns.map(\.id), [later.id])
     }
 
-    func testOperatorQueueExcludesUnlinkedCampaignsUntilTheyAreActuallyWatched() {
+    func testOperatorQueueIncludesPrioritisedUnlinkedCampaignsTheMinerCanSchedule() {
         let prioritised = makeCampaign(
             id: "priority",
             gameId: "priority-game",
@@ -109,10 +109,54 @@ final class MinerActivitySnapshotTests: XCTestCase {
             includesBadgeAndEmoteCampaigns: false
         )
 
-        XCTAssertFalse(presentation.queue.contains { $0.campaign.id == prioritised.id })
+        XCTAssertTrue(presentation.queue.contains { $0.campaign.id == prioritised.id })
         XCTAssertTrue(presentation.queue.contains { $0.campaign.id == linkedSmartCandidate.id })
         XCTAssertFalse(presentation.queue.contains { $0.campaign.id == unrelatedUnlinked.id })
+        XCTAssertEqual(
+            presentation.queue.first { $0.campaign.id == prioritised.id }?.status,
+            .waitingForStream
+        )
         XCTAssertEqual(presentation.snapshot.blockedPriority.map(\.campaignId), [prioritised.id])
+    }
+
+    func testSummaryAndQueueShareTheResolvedCampaignDecisionOrder() {
+        let halo = makeCampaign(
+            id: "halo",
+            gameId: "halo",
+            gameName: "Halo Infinite",
+            isAccountConnected: true
+        )
+        let battlefield = makeCampaign(
+            id: "battlefield",
+            gameId: "battlefield",
+            gameName: "Battlefield 6",
+            isAccountConnected: false
+        )
+        let finals = makeCampaign(
+            id: "finals",
+            gameId: "finals",
+            gameName: "THE FINALS",
+            isAccountConnected: true
+        )
+        let miner = makeMiner(
+            status: .watching,
+            campaigns: [finals, battlefield, halo],
+            currentCampaignId: halo.id,
+            priorityGames: ["Halo Infinite", "Battlefield 6", "THE FINALS"]
+        )
+
+        let presentation = MinerOperatorPresentation.resolve(
+            for: miner,
+            priorityGames: miner.priorityGames,
+            excludedGames: [],
+            strategy: .prioritiseSelected,
+            includesBadgeAndEmoteCampaigns: false
+        )
+
+        XCTAssertEqual(presentation.snapshot.upNext?.campaignId, battlefield.id)
+        XCTAssertEqual(presentation.thenCampaigns.map(\.id), [finals.id])
+        XCTAssertEqual(presentation.queue.map(\.campaign.id), [halo.id, battlefield.id, finals.id])
+        XCTAssertEqual(presentation.queue.map(\.status), [.watching, .waitingForStream, .waitingForStream])
     }
 
     func testUpNextAndQueueExcludeEndedOrClaimableCampaigns() {
@@ -330,9 +374,75 @@ final class MinerActivitySnapshotTests: XCTestCase {
             includesBadgeAndEmoteCampaigns: false
         )
 
-        XCTAssertTrue(presentation.queue.isEmpty)
+        XCTAssertEqual(presentation.queue.map(\.campaign.id), [campaign.id])
         XCTAssertEqual(presentation.snapshot.upNext?.campaignId, campaign.id)
         XCTAssertEqual(presentation.nextCampaign?.game.boxArtURL, artworkURL)
+    }
+
+    func testHealthyStatusPresentationIsCompactAndKeepsAllSignals() {
+        let campaign = makeCampaign(id: "active", isAccountConnected: true)
+        var miner = makeMiner(
+            status: .watching,
+            campaigns: [campaign],
+            currentCampaignId: campaign.id
+        )
+        miner.lastEventAt = Date().addingTimeInterval(-14)
+        miner.lastCampaignRefreshAt = Date().addingTimeInterval(-29)
+        miner.lastSuccessfulPollAt = Date().addingTimeInterval(-32)
+        let snapshot = MinerHealthSnapshot.make(miner: miner)
+
+        let presentation = MinerRecoveryDiagnosticsPresentation.make(
+            miner: miner,
+            snapshot: snapshot
+        )
+
+        XCTAssertTrue(presentation.isCompact)
+        XCTAssertEqual(presentation.title, "Healthy")
+        XCTAssertEqual(presentation.badge, "Healthy")
+        XCTAssertEqual(presentation.signals.map(\.title), ["Twitch", "Campaigns", "Drop progress"])
+        XCTAssertEqual(presentation.signals.map(\.value), ["Connected", "Current", "Tracking"])
+        XCTAssertEqual(presentation.signals.map(\.symbol), ["network", "shippingbox.fill", "chart.line.uptrend.xyaxis"])
+        XCTAssertEqual(presentation.signals.map(\.dateLabel), ["Last activity", "Updated", "Last checked"])
+        XCTAssertTrue(presentation.signals.allSatisfy { $0.tone == .healthy })
+    }
+
+    func testActionRequiredStatusPresentationRemainsExpanded() {
+        let miner = makeMiner(
+            status: .error,
+            campaigns: [],
+            priorityGames: []
+        )
+        let snapshot = MinerHealthSnapshot.make(miner: miner)
+
+        let presentation = MinerRecoveryDiagnosticsPresentation.make(
+            miner: miner,
+            snapshot: snapshot
+        )
+
+        XCTAssertFalse(presentation.isCompact)
+        XCTAssertEqual(presentation.badge, "Blocked")
+        XCTAssertEqual(presentation.tone, .critical)
+    }
+
+    func testDegradedSignalKeepsStatusPresentationExpanded() {
+        let campaign = makeCampaign(id: "active", isAccountConnected: true)
+        let miner = makeMiner(
+            status: .watching,
+            campaigns: [campaign],
+            currentCampaignId: campaign.id
+        )
+        let snapshot = MinerHealthSnapshot.make(miner: miner)
+
+        let presentation = MinerRecoveryDiagnosticsPresentation.make(
+            miner: miner,
+            snapshot: snapshot
+        )
+
+        XCTAssertFalse(presentation.isCompact)
+        XCTAssertEqual(
+            presentation.signals.first { $0.id == "inventory" }?.tone,
+            .warning
+        )
     }
 
     func testPrioritisedUnlinkedCampaignOnlyAppearsAsMiningAfterActualWatchStarts() {
@@ -639,8 +749,46 @@ final class MinerActivitySnapshotTests: XCTestCase {
         )
 
         XCTAssertEqual(snapshot.statusText, "Looking for Streams")
-        XCTAssertEqual(snapshot.now.title, "Looking for Streams")
+        XCTAssertEqual(snapshot.now.title, "No eligible stream live")
+        XCTAssertEqual(snapshot.now.campaignId, creators.id)
         XCTAssertFalse(snapshot.now.id.hasPrefix("subscription-"))
+    }
+
+    func testWaitingForStreamExplainsTheSpecificCampaignOnTheMinerCard() {
+        let campaign = makeCampaign(
+            id: "skull-and-bones",
+            gameId: "skull-and-bones",
+            gameName: "Skull and Bones",
+            isAccountConnected: true
+        )
+        let availability = GameChannelAvailability(
+            gameKey: "skull and bones",
+            hasEligibleChannel: false,
+            campaignId: campaign.id,
+            checkedAt: Date()
+        )
+        let miner = makeMiner(
+            status: .waitingForStream,
+            campaigns: [campaign],
+            priorityGames: ["Skull and Bones"],
+            gameChannelAvailability: ["skull and bones": availability]
+        )
+
+        let snapshot = MinerActivitySnapshot.resolve(
+            for: miner,
+            priorityGames: ["Skull and Bones"],
+            excludedGames: [],
+            strategy: .prioritiseSelected,
+            includesBadgeAndEmoteCampaigns: false
+        )
+
+        XCTAssertEqual(snapshot.now.title, "No eligible stream live")
+        XCTAssertEqual(snapshot.now.subtitle, campaign.name)
+        XCTAssertEqual(
+            snapshot.now.detail,
+            "SwiftMiner will automatically start earning when an eligible Skull and Bones stream goes live."
+        )
+        XCTAssertEqual(snapshot.now.campaignId, campaign.id)
     }
 
     func testSubscriptionRequiredCampaignDoesNotSuppressSameGameUpNext() {

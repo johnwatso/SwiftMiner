@@ -662,6 +662,9 @@ struct AnimatedLinearProgressView: View {
 struct MinerActivitySnapshot {
     let now: MinerActivityItem
     let upNext: MinerActivityItem?
+    /// Campaign IDs in the miner's resolved scheduling order. This is the
+    /// authoritative order for both the sequence summary and Campaign Queue.
+    let orderedCampaignIds: [String]
     let blockedPriority: [MinerActivityItem]
     let statusText: String
     let statusColor: Color
@@ -703,7 +706,7 @@ struct MinerActivitySnapshot {
         includesBadgeAndEmoteCampaigns: Bool,
         ignoredAccountLinkGameIds: [String] = []
     ) -> MinerActivitySnapshot {
-        let currentCampaign = currentCampaign(for: miner)
+        let currentCampaign = currentCampaign(for: miner) ?? waitingCampaign(for: miner)
         
         let activePriorityGames = miner.priorityGames.isEmpty ? priorityGames : miner.priorityGames
         let now = currentActivityItem(
@@ -715,7 +718,7 @@ struct MinerActivitySnapshot {
             includesBadgeAndEmoteCampaigns: includesBadgeAndEmoteCampaigns
         )
 
-        let next = likelyNextItem(
+        let orderedCandidates = orderedCampaignCandidates(
             for: miner,
             excludingCampaignId: currentCampaign?.id ?? miner.currentCampaignId,
             priorityGames: activePriorityGames,
@@ -723,6 +726,22 @@ struct MinerActivitySnapshot {
             strategy: strategy,
             includesBadgeAndEmoteCampaigns: includesBadgeAndEmoteCampaigns
         )
+        let next = likelyNextItem(
+            from: orderedCandidates,
+            priorityGames: activePriorityGames,
+            strategy: strategy
+        )
+
+        // The candidate list is filtered against the miner's watch target, but the
+        // current item can name a different campaign — the priority resolver's blocked
+        // campaign, for one — so that ID can still be among the candidates. Dedupe here
+        // or the Campaign Queue renders it twice under the same ForEach identity.
+        var seenCampaignIds: Set<String> = []
+        var orderedCampaignIds: [String] = []
+        for campaignId in [now.campaignId].compactMap({ $0 }) + orderedCandidates.map(\.id)
+        where seenCampaignIds.insert(campaignId).inserted {
+            orderedCampaignIds.append(campaignId)
+        }
         
         let blocked = blockedPriorityItems(
             for: miner,
@@ -741,6 +760,7 @@ struct MinerActivitySnapshot {
         return MinerActivitySnapshot(
             now: now,
             upNext: next,
+            orderedCampaignIds: orderedCampaignIds,
             blockedPriority: blocked,
             statusText: statusText(for: miner, now: now),
             statusColor: statusColor(for: miner, now: now),
@@ -762,6 +782,22 @@ struct MinerActivitySnapshot {
         return miner.allCampaigns.first { campaign in
             campaign.name == campaignName
         }
+    }
+
+    /// A waiting miner clears its watch target before its next channel probe, so recover the
+    /// campaign from that probe to explain the wait on this miner's own status card.
+    @MainActor
+    private static func waitingCampaign(for miner: MinerManager.ManagedMiner) -> Campaign? {
+        guard miner.status == .waitingForStream,
+              let campaignID = miner.gameChannelAvailability.values
+                .filter({ !$0.hasEligibleChannel && $0.campaignId != nil })
+                .max(by: { $0.checkedAt < $1.checkedAt })?
+                .campaignId
+        else {
+            return nil
+        }
+
+        return miner.allCampaigns.first { $0.id == campaignID }
     }
 
     @MainActor
@@ -913,7 +949,7 @@ struct MinerActivitySnapshot {
                 if resolved.reason == .notLinked {
                     return unlinkedPriorityItem(id: "unlinked-\(miner.id)-\(resolved.gameId)")
                 }
-                return blockedCurrentItem(for: miner, resolved: resolved)
+                return blockedCurrentItem(for: miner, resolved: resolved, campaign: campaign)
             case .idle:
                 if resolved.reason == .noDropsAvailable {
                     // The resolver only inspects prioritised games. If the engine
@@ -954,9 +990,18 @@ struct MinerActivitySnapshot {
                 accent: .blue
             )
         case .waitingForStream:
-            // Subscription-gated campaigns are never scheduled, so they must not
-            // stand in for the miner's real state here. They stay visible as a
-            // mutable Pending item on the miner instead.
+            if let campaign {
+                return MinerActivityItem(
+                    id: "stream-\(miner.id)-\(campaign.id)",
+                    title: "No eligible stream live",
+                    subtitle: campaign.name,
+                    detail: "SwiftMiner will automatically start earning when an eligible \(campaign.game.name) stream goes live.",
+                    symbol: "antenna.radiowaves.left.and.right",
+                    accent: .cyan,
+                    campaignId: campaign.id
+                )
+            }
+
             return waitingItem(
                 id: "stream-\(miner.id)",
                 title: "Looking for Streams",
@@ -1041,16 +1086,20 @@ struct MinerActivitySnapshot {
         )
     }
 
-    private static func blockedCurrentItem(for miner: MinerManager.ManagedMiner, resolved: MinerGameState) -> MinerActivityItem {
+    private static func blockedCurrentItem(
+        for miner: MinerManager.ManagedMiner,
+        resolved: MinerGameState,
+        campaign: Campaign?
+    ) -> MinerActivityItem {
         switch resolved.reason {
         case .notLinked:
             return unlinkedPriorityItem(id: "unlinked-\(miner.id)-\(resolved.gameId)")
         case .noLiveStreams:
             return MinerActivityItem(
                 id: "blocked-stream-\(miner.id)-\(resolved.gameId)",
-                title: "Looking for Streams",
-                subtitle: resolved.gameName,
-                detail: "Waiting for an eligible live stream.",
+                title: "No eligible stream live",
+                subtitle: campaign?.name ?? resolved.gameName,
+                detail: "SwiftMiner will automatically start earning when an eligible \(resolved.gameName) stream goes live.",
                 symbol: "antenna.radiowaves.left.and.right",
                 accent: .cyan,
                 campaignId: resolved.campaignId
@@ -1117,14 +1166,14 @@ struct MinerActivitySnapshot {
         return "\(progress.dropName) · \(watchedMinutes) / \(progress.requiredMinutes) min watched"
     }
 
-    private static func likelyNextItem(
+    private static func orderedCampaignCandidates(
         for miner: MinerManager.ManagedMiner,
         excludingCampaignId activeCampaignId: String?,
         priorityGames: [String],
         excludedGames: [String],
         strategy: MiningStrategy,
         includesBadgeAndEmoteCampaigns: Bool
-    ) -> MinerActivityItem? {
+    ) -> [Campaign] {
         let priorityKeys = priorityGames.map(normalizedGameKey).filter { !$0.isEmpty }
         let prioritySet = Set(priorityKeys)
         let excludedSet = Set(excludedGames.map(normalizedGameKey).filter { !$0.isEmpty })
@@ -1161,9 +1210,18 @@ struct MinerActivitySnapshot {
             return true
         }
 
-        guard let campaign = sortedCandidates(eligible, priorityKeys: priorityKeys, strategy: strategy).first else {
+        return sortedCandidates(eligible, priorityKeys: priorityKeys, strategy: strategy)
+    }
+
+    private static func likelyNextItem(
+        from orderedCandidates: [Campaign],
+        priorityGames: [String],
+        strategy: MiningStrategy
+    ) -> MinerActivityItem? {
+        guard let campaign = orderedCandidates.first else {
             return nil
         }
+        let priorityKeys = priorityGames.map(normalizedGameKey).filter { !$0.isEmpty }
 
         return MinerActivityItem(
             id: "next-\(campaign.id)",
@@ -1171,7 +1229,7 @@ struct MinerActivitySnapshot {
             subtitle: campaign.name,
             detail: likelyNextDetail(
                 for: campaign,
-                among: eligible,
+                among: orderedCandidates,
                 priorityKeys: priorityKeys,
                 strategy: strategy
             ),
