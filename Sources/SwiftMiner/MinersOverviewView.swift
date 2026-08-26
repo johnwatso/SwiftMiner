@@ -842,7 +842,12 @@ struct MinersOverviewView: View {
         }
 
         return grouped.compactMap { gameId, campaigns in
-            let blockedCampaigns = campaigns.filter { $0.activityStatus(for: miner) == .requiresLink }
+            // Tests the link directly rather than going through `activityStatus`.
+            // That status is single-valued and returns `.watching` for the miner's
+            // current campaign before it ever reaches the link check, so filtering
+            // on `.requiresLink` silently dropped the warning for the one campaign
+            // actively accruing watch time toward an undeliverable reward.
+            let blockedCampaigns = campaigns.filter { !$0.isAccountConnected }
             guard !blockedCampaigns.isEmpty, let first = blockedCampaigns.first else { return nil }
 
             let isIgnored = settings.isIgnoringAccountLinkWarnings(for: miner.accountId, gameId: gameId)

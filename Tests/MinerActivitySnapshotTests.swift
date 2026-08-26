@@ -369,6 +369,28 @@ final class MinerActivitySnapshotTests: XCTestCase {
         )
     }
 
+    /// Pins the trap that hid the link warning for the campaign being mined.
+    /// `activityStatus` is single-valued and resolves the miner's current campaign
+    /// to `.watching` before it reaches the link check, so `== .requiresLink` is not
+    /// a safe test for "this game needs linking" — Pending and the sidebar/Dock badge
+    /// must ask `isAccountConnected` directly.
+    func testActivityStatusHidesTheLinkRequirementForTheCampaignBeingWatched() {
+        let campaign = makeCampaign(id: "unlinked", isAccountConnected: false)
+        let watching = makeMiner(
+            status: .watching,
+            campaigns: [campaign],
+            currentCampaignId: campaign.id
+        )
+        let queued = makeMiner(status: .waitingForStream, campaigns: [campaign])
+
+        XCTAssertEqual(campaign.activityStatus(for: watching), .watching)
+        XCTAssertEqual(campaign.activityStatus(for: queued), .requiresLink)
+
+        // The underlying fact is unchanged in both cases, which is why the warning
+        // surfaces filter on this instead.
+        XCTAssertFalse(campaign.isAccountConnected)
+    }
+
     func testCurrentUnlinkedPrioritisedCampaignIsNotRepeatedAsUpNext() {
         let campaign = makeCampaign(id: "unlinked", isAccountConnected: false)
         let miner = makeMiner(campaigns: [campaign], currentCampaignId: campaign.id)
