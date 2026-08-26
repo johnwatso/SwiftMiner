@@ -859,11 +859,22 @@ struct MinerCampaignQueueRow: View {
                 .frame(width: 24, height: 24)
                 .background(.quaternary, in: Circle())
 
-            Image(systemName: statusSymbol)
-                .font(.system(size: 12, weight: .semibold))
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(statusTint)
-                .frame(width: 18)
+            Group {
+                if entry.status == .watching {
+                    AnimatedStatusIcon(
+                        symbol: statusSymbol,
+                        color: statusTint,
+                        size: 12,
+                        weight: .semibold
+                    )
+                } else {
+                    Image(systemName: statusSymbol)
+                        .font(.system(size: 12, weight: .semibold))
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(statusTint)
+                }
+            }
+            .frame(width: 18)
 
             CampaignArtworkThumbnail(url: entry.campaign.game.boxArtURL, symbol: "gamecontroller.fill", size: 36)
 
@@ -990,7 +1001,7 @@ struct MinerCampaignQueueRow: View {
     }
 
     private var statusSymbol: String {
-        entry.status == .watching ? "play.fill" : "antenna.radiowaves.left.and.right"
+        entry.status == .watching ? "bolt.fill" : "antenna.radiowaves.left.and.right"
     }
 
     private var statusTint: Color {

@@ -162,8 +162,12 @@ struct CampaignMinerInspectorPopover: View {
                                         .symbolRenderingMode(.palette)
                                         .foregroundStyle(.orange, .green)
                                 } else {
-                                    Image(systemName: statusIcon(for: account.miningStatus))
-                                        .foregroundStyle(statusColor(for: account.miningStatus))
+                                    AnimatedStatusIcon(
+                                        symbol: statusIcon(for: account.miningStatus),
+                                        color: statusColor(for: account.miningStatus),
+                                        size: 13,
+                                        weight: .bold
+                                    )
                                 }
                             }
                             .font(.system(size: 13, weight: .bold))
@@ -206,7 +210,7 @@ struct CampaignMinerInspectorPopover: View {
 
     private func statusIcon(for status: AccountMiningStatus) -> String {
         switch status {
-        case .mining: return "play.circle.fill"
+        case .mining: return "bolt.circle.fill"
         case .claimed: return "checkmark.circle.fill"
         case .claimedUnlinked: return "checkmark.circle.badge.questionmark.fill"
         case .ready, .idle: return "pause.circle.fill"

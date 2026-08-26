@@ -817,7 +817,7 @@ struct MenuBarContent: View {
         }
 
         switch appModel.overallStatus {
-        case .watching:          return "play.fill"
+        case .watching:          return "bolt.fill"
         case .authenticating:    return "key.fill"
         case .fetchingCampaigns: return "arrow.clockwise"
         case .claiming:          return "gift.fill"

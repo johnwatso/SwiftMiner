@@ -5,6 +5,83 @@ import XCTest
 final class DropsMinerCampaignFilterTests: XCTestCase {
     private let now = Date()
 
+    func testEmptyFilterSelectionRepresentsAllCampaigns() {
+        XCTAssertTrue(
+            DropsCampaignFilterRules.matchesSelectedFilters(
+                campaignFilters: [.active],
+                selectedFilters: []
+            )
+        )
+        XCTAssertTrue(
+            DropsCampaignFilterRules.matchesSelectedFilters(
+                campaignFilters: [.completed],
+                selectedFilters: []
+            )
+        )
+    }
+
+    func testSpecificFilterSelectionKeepsAdditiveMatching() {
+        XCTAssertTrue(
+            DropsCampaignFilterRules.matchesSelectedFilters(
+                campaignFilters: [.active, .prioritised],
+                selectedFilters: [.prioritised]
+            )
+        )
+        XCTAssertFalse(
+            DropsCampaignFilterRules.matchesSelectedFilters(
+                campaignFilters: [.active],
+                selectedFilters: [.completed, .prioritised]
+            )
+        )
+    }
+
+    func testPrioritisedFilterMatchesNormalizedGameName() {
+        let campaign = makeCampaign(
+            id: "campaign-prioritised-name",
+            gameName: "Tom Clancy's Rainbow Six Siege",
+            accountStates: []
+        )
+
+        XCTAssertTrue(
+            DropsCampaignFilterRules.matchesPrioritised(
+                campaign,
+                priorityGameNames: ["tom clancys rainbow-six siege"]
+            )
+        )
+    }
+
+    func testPrioritisedFilterMatchesCanonicalGameID() {
+        let campaign = makeCampaign(
+            id: "campaign-prioritised-id",
+            gameName: "Renamed Game",
+            accountStates: []
+        )
+
+        XCTAssertTrue(
+            DropsCampaignFilterRules.matchesPrioritised(
+                campaign,
+                priorityGameNames: [],
+                priorityGameIDs: ["game-campaign-prioritised-id"]
+            )
+        )
+    }
+
+    func testPrioritisedFilterRejectsUnrelatedGame() {
+        let campaign = makeCampaign(
+            id: "campaign-not-prioritised",
+            gameName: "Other Game",
+            accountStates: []
+        )
+
+        XCTAssertFalse(
+            DropsCampaignFilterRules.matchesPrioritised(
+                campaign,
+                priorityGameNames: ["Priority Game"],
+                priorityGameIDs: ["different-game-id"]
+            )
+        )
+    }
+
     func testSelectedMinerFilterRejectsIdleCampaignMentionedByMergedFeed() {
         let campaign = makeCampaign(
             id: "campaign-other",
