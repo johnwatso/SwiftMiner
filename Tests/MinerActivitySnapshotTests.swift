@@ -119,6 +119,44 @@ final class MinerActivitySnapshotTests: XCTestCase {
         XCTAssertEqual(presentation.snapshot.blockedPriority.map(\.campaignId), [prioritised.id])
     }
 
+    /// A missing game-account link never blocks mining — `canAttemptMining` leaves
+    /// linkage out on purpose — so the queue keeps the campaign's real scheduling
+    /// status and carries the link as a separate advisory flag.
+    func testUnlinkedQueueEntryKeepsSchedulingStatusAndFlagsTheLinkSeparately() {
+        let unlinked = makeCampaign(
+            id: "unlinked-priority",
+            gameId: "priority-game",
+            gameName: "Priority Game",
+            isAccountConnected: false
+        )
+        let linked = makeCampaign(
+            id: "linked",
+            gameId: "linked-game",
+            gameName: "Linked Game",
+            isAccountConnected: true
+        )
+        let miner = makeMiner(
+            campaigns: [unlinked, linked],
+            priorityGames: ["Priority Game"]
+        )
+
+        let presentation = MinerOperatorPresentation.resolve(
+            for: miner,
+            priorityGames: ["Priority Game"],
+            excludedGames: [],
+            strategy: .mineAll,
+            includesBadgeAndEmoteCampaigns: false
+        )
+
+        let unlinkedEntry = presentation.queue.first { $0.campaign.id == unlinked.id }
+        XCTAssertEqual(unlinkedEntry?.status, .waitingForStream)
+        XCTAssertEqual(unlinkedEntry?.requiresAccountLink, true)
+
+        let linkedEntry = presentation.queue.first { $0.campaign.id == linked.id }
+        XCTAssertEqual(linkedEntry?.status, .waitingForStream)
+        XCTAssertEqual(linkedEntry?.requiresAccountLink, false)
+    }
+
     func testSummaryAndQueueShareTheResolvedCampaignDecisionOrder() {
         let halo = makeCampaign(
             id: "halo",
