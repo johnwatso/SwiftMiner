@@ -31,6 +31,17 @@
     <p class="intro">Each miner now explains itself in one place: a single operator panel, a queue that matches the summary above it, and a plain answer when there is no stream to watch.</p>
 
     <section>
+      <h2>&#128029; Bug fixes</h2>
+      <p class="summary">Fixes to queue rendering and timestamp clarity.</p>
+      <ul>
+        <li>A campaign can no longer appear twice in Campaign Queue when the miner&rsquo;s current item and its scheduled candidates name it differently.</li>
+        <li>Recent activity timestamps include AM/PM again, so an evening event is no longer indistinguishable from a morning one.</li>
+        <li>Hardens campaign lookup against duplicate campaign IDs returned by Twitch.</li>
+        <li>The game-account link reminder no longer disappears for the campaign a miner is currently mining. The reminder was keyed off a status that resolves to &ldquo;watching&rdquo; the moment a campaign becomes the active target, so the warning went quiet for exactly the campaign accruing watch time toward a reward that needs the link to be delivered. It now appears in Needs attention and in the sidebar and Dock badges whether the campaign is queued or being watched.</li>
+      </ul>
+    </section>
+
+    <section>
       <h2>&#129658; One operator panel per miner</h2>
       <p class="summary">Miner health and recovery history are no longer two separate cards to cross-reference.</p>
       <ul>
@@ -56,17 +67,6 @@
       <ul>
         <li>A miner with no eligible stream live now says so on its card, names the campaign it is waiting on, and states that earning resumes automatically when a stream goes live.</li>
         <li>Drops goes back to being about campaigns. The waiting-for-stream banner has moved onto the miner it describes, which is where the answer was actually needed.</li>
-      </ul>
-    </section>
-
-    <section>
-      <h2>&#128029; Bug fixes</h2>
-      <p class="summary">Fixes to queue rendering and timestamp clarity.</p>
-      <ul>
-        <li>A campaign can no longer appear twice in Campaign Queue when the miner&rsquo;s current item and its scheduled candidates name it differently.</li>
-        <li>Recent activity timestamps include AM/PM again, so an evening event is no longer indistinguishable from a morning one.</li>
-        <li>Hardens campaign lookup against duplicate campaign IDs returned by Twitch.</li>
-        <li>The game-account link reminder no longer disappears for the campaign a miner is currently mining. The reminder was keyed off a status that resolves to &ldquo;watching&rdquo; the moment a campaign becomes the active target, so the warning went quiet for exactly the campaign accruing watch time toward a reward that needs the link to be delivered. It now appears in Needs attention and in the sidebar and Dock badges whether the campaign is queued or being watched.</li>
       </ul>
     </section>
 
