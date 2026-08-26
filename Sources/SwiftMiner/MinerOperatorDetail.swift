@@ -21,6 +21,11 @@ struct MinerCampaignQueueEntry: Identifiable {
     let status: CampaignActivityStatus
     let progress: MinerCampaignProgress?
     let channelAvailability: GameChannelAvailability?
+    /// Advisory only. A missing game-account link never stops the miner from
+    /// watching and claiming — `Campaign.canAttemptMining` deliberately leaves
+    /// linkage out — it only risks in-game delivery. The queue flags it without
+    /// overriding the campaign's real scheduling status.
+    let requiresAccountLink: Bool
 
     var id: String { campaign.id }
 }
@@ -104,7 +109,8 @@ struct MinerOperatorPresentation {
                     ? .watching
                     : .waitingForStream,
                 progress: aggregateProgress(for: campaign, miner: miner),
-                channelAvailability: campaignAvailability
+                channelAvailability: campaignAvailability,
+                requiresAccountLink: !campaign.isAccountConnected
             )
         }
 
@@ -844,9 +850,6 @@ struct CampaignArtworkThumbnail: View {
 
 struct MinerCampaignQueueRow: View {
     let entry: MinerCampaignQueueEntry
-    let isWarningIgnored: Bool
-    let onDismissWarning: () -> Void
-    let onRemindWarning: () -> Void
 
     var body: some View {
         HStack(spacing: 10) {
@@ -865,9 +868,19 @@ struct MinerCampaignQueueRow: View {
             CampaignArtworkThumbnail(url: entry.campaign.game.boxArtURL, symbol: "gamecontroller.fill", size: 36)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(entry.campaign.game.name)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
+                HStack(spacing: 5) {
+                    Text(entry.campaign.game.name)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+
+                    if entry.requiresAccountLink {
+                        Image(systemName: "link.badge.plus")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.orange)
+                            .help(Self.accountLinkAdvisory)
+                            .accessibilityLabel(Self.accountLinkAdvisory)
+                    }
+                }
                 Text(entry.campaign.name)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -886,55 +899,33 @@ struct MinerCampaignQueueRow: View {
         .accessibilityElement(children: .combine)
     }
 
-    @ViewBuilder private var statusView: some View {
-        if entry.status == .requiresLink {
-            Button {
-                isWarningIgnored ? onRemindWarning() : onDismissWarning()
-            } label: {
-                Label(isWarningIgnored ? "Remind me" : "Dismiss", systemImage: isWarningIgnored ? "bell" : "bell.slash")
-            }
-            .tahoeButtonStyle()
-            .controlSize(.small)
-        } else {
-            Text(statusLabel)
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(statusTint)
-                .lineLimit(1)
-        }
+    private var statusView: some View {
+        Text(statusLabel)
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(statusTint)
+            .lineLimit(1)
     }
 
+    /// Only `.watching` and `.waitingForStream` can reach the queue: the candidate
+    /// filter already requires `canAttemptMining`, `isTimeActive` and a non-empty
+    /// `earnableDrops`, which rules out the upcoming, expired, completed and
+    /// subscription-gated statuses.
     @ViewBuilder private var infoView: some View {
-        switch entry.status {
-        case .watching:
-            progressView
-        case .completed:
-            Text("All timed drops completed")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        case .upcoming:
-            VStack(alignment: .leading, spacing: 2) {
-                Text(relativeStartLabel)
-                    .font(.caption.weight(.medium))
-                Text(entry.campaign.startDate, format: .dateTime.weekday(.abbreviated).hour().minute())
-                    .font(.caption2)
+        VStack(alignment: .leading, spacing: 3) {
+            if entry.status == .watching {
+                progressView
+            } else {
+                Text(channelAvailabilityDetail)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
             }
-        case .expired:
-            Text("Ended \(entry.campaign.endDate.formatted(.relative(presentation: .named)))")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        case .waitingForStream:
-            Text(channelAvailabilityDetail)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        case .requiresLink:
-            Text("Link the game account on Twitch")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        case .requiresSubscription:
-            Text("A paid Twitch subscription is required")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+
+            if entry.requiresAccountLink {
+                Text(Self.accountLinkAdvisory)
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                    .lineLimit(2)
+            }
         }
     }
 
@@ -957,10 +948,6 @@ struct MinerCampaignQueueRow: View {
         }
     }
 
-    private var relativeStartLabel: String {
-        "Starts \(entry.campaign.startDate.formatted(.relative(presentation: .numeric)))"
-    }
-
     private var statusLabel: String {
         if entry.status == .waitingForStream,
            let availability = entry.channelAvailability {
@@ -968,16 +955,13 @@ struct MinerCampaignQueueRow: View {
             return availability.hasEligibleChannel ? "Ready" : "Waiting"
         }
 
-        switch entry.status {
-        case .watching: return "Watching"
-        case .waitingForStream: return "Waiting"
-        case .requiresLink: return "Needs setup"
-        case .requiresSubscription: return "Subscription"
-        case .completed: return "Completed"
-        case .upcoming: return "Upcoming"
-        case .expired: return "Ended"
-        }
+        return entry.status == .watching ? "Watching" : "Waiting"
     }
+
+    /// Deliberately advisory wording. The miner still watches and claims here; only
+    /// in-game delivery depends on the link, and Needs attention owns the mute
+    /// control so the queue does not repeat it once per campaign.
+    static let accountLinkAdvisory = "Link the game account for in-game delivery"
 
     private var channelAvailabilityDetail: String {
         guard let availability = entry.channelAvailability else {
@@ -1006,15 +990,7 @@ struct MinerCampaignQueueRow: View {
     }
 
     private var statusSymbol: String {
-        switch entry.status {
-        case .watching: return "play.fill"
-        case .waitingForStream: return "antenna.radiowaves.left.and.right"
-        case .requiresLink: return "personalhotspot.slash"
-        case .requiresSubscription: return "creditcard"
-        case .completed: return "checkmark"
-        case .upcoming: return "calendar"
-        case .expired: return "clock.badge.xmark"
-        }
+        entry.status == .watching ? "play.fill" : "antenna.radiowaves.left.and.right"
     }
 
     private var statusTint: Color {
@@ -1024,12 +1000,6 @@ struct MinerCampaignQueueRow: View {
             return availability.hasEligibleChannel ? .green : .cyan
         }
 
-        switch entry.status {
-        case .watching, .completed: return .green
-        case .waitingForStream: return .cyan
-        case .requiresLink, .upcoming: return .orange
-        case .requiresSubscription: return .pink
-        case .expired: return .secondary
-        }
+        return entry.status == .watching ? .green : .cyan
     }
 }

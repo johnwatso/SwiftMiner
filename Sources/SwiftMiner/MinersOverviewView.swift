@@ -665,22 +665,7 @@ struct MinersOverviewView: View {
                     .padding(.bottom, 8)
 
                     ForEach(Array(presentation.queue.enumerated()), id: \.element.id) { index, entry in
-                        let gameId = warningGameId(for: entry.campaign)
-                        let isIgnored = settings.isIgnoringAccountLinkWarnings(
-                            for: miner.accountId,
-                            gameId: gameId
-                        )
-
-                        MinerCampaignQueueRow(
-                            entry: entry,
-                            isWarningIgnored: isIgnored,
-                            onDismissWarning: {
-                                setLinkReminder(false, for: miner, gameId: gameId, gameName: entry.campaign.game.name)
-                            },
-                            onRemindWarning: {
-                                setLinkReminder(true, for: miner, gameId: gameId, gameName: entry.campaign.game.name)
-                            }
-                        )
+                        MinerCampaignQueueRow(entry: entry)
 
                         if index < presentation.queue.count - 1 {
                             TahoeRowDivider(leadingInset: 76)
