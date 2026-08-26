@@ -91,6 +91,16 @@ struct AnimatedStatusIcon: View {
                 } else {
                     base
                 }
+            } else if symbol == "bolt.fill" || symbol == "bolt.circle.fill" {
+                let base = Image(systemName: symbol)
+                    .font(.system(size: size, weight: weight))
+                    .foregroundStyle(color)
+
+                if isAnimated {
+                    base.symbolEffect(.pulse, options: .repeating.speed(0.7))
+                } else {
+                    base
+                }
             } else if symbol == "gift.fill" {
                 let base = Image(systemName: symbol)
                     .font(.system(size: size, weight: weight))

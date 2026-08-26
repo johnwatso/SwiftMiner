@@ -4,7 +4,10 @@ import Foundation
 
 #if DEBUG
 extension MinerManager {
+    private static let debugFakeMiningCampaignID = "swiftminer-debug-fake-mining-campaign"
+
     public enum DebugState: String, CaseIterable, Sendable {
+        case fakeMiningCampaign = "Mining — Fake Campaign"
         case idle = "Idle"
         case recovering = "Recovering"
         case stalled = "Stalled"
@@ -20,8 +23,33 @@ extension MinerManager {
         guard let index = miners.firstIndex(where: { $0.id == minerId }) else { return }
         var miner = miners[index]
         miner.debugAttention = nil
+        let wasShowingFakeCampaign = miner.currentCampaignId == Self.debugFakeMiningCampaignID
+        miner.allCampaigns.removeAll { $0.id == Self.debugFakeMiningCampaignID }
+        if wasShowingFakeCampaign {
+            miner.currentCampaign = nil
+            miner.currentCampaignId = nil
+        }
         
         switch state {
+        case .fakeMiningCampaign:
+            let now = Date()
+            let campaign = Self.makeDebugFakeMiningCampaign(now: now)
+            miner.allCampaigns.insert(campaign, at: 0)
+            miner.currentCampaign = campaign.name
+            miner.currentCampaignId = campaign.id
+            miner.streamOverrideLogin = nil
+            miner.workerState = .running
+            miner.isStalled = false
+            miner.isRunning = true
+            miner.isHealthy = true
+            miner.needsAuth = false
+            miner.status = .watching
+            miner.lastEventAt = now
+            miner.lastSuccessfulPollAt = now
+            miner.lastCampaignRefreshAt = now
+            miner.lastDropProgressAt = now
+            miner.workerStartedAt = now.addingTimeInterval(-15 * 60)
+
         case .recovering:
             miner.workerState = .recovering
             miner.isStalled = false
@@ -99,6 +127,11 @@ extension MinerManager {
         guard let index = miners.firstIndex(where: { $0.id == minerId }) else { return }
         var miner = miners[index]
 
+        if miner.currentCampaignId == Self.debugFakeMiningCampaignID {
+            setDebugState(for: minerId, state: .idle)
+            return
+        }
+
         if let attention = miner.debugAttention {
             switch attention {
             case .accountLink:
@@ -166,6 +199,47 @@ extension MinerManager {
         miners[index] = miner
         onMinersChanged?()
         onMinerStatusChange?(miner)
+    }
+
+    private static func makeDebugFakeMiningCampaign(now: Date) -> Campaign {
+        let dropID = "swiftminer-debug-fake-mining-drop"
+        let progress = Progress(
+            id: "swiftminer-debug-fake-mining-progress",
+            dropId: dropID,
+            dropName: "Developer Preview Drop",
+            campaignId: debugFakeMiningCampaignID,
+            currentMinutes: 24,
+            requiredMinutes: 60,
+            lastUpdated: now
+        )
+        let reward = Reward(
+            id: "swiftminer-debug-fake-mining-reward",
+            type: .inGame,
+            name: "Developer Preview Reward",
+            description: "Synthetic reward data shown only by the Developer menu."
+        )
+        let drop = Drop(
+            id: dropID,
+            name: "Developer Preview Drop",
+            description: "Synthetic progress for checking the active mining UI.",
+            requiredMinutes: 60,
+            benefitID: "swiftminer-debug-fake-benefit",
+            reward: reward,
+            progress: progress,
+            dropStartDate: now.addingTimeInterval(-60 * 60),
+            dropEndDate: now.addingTimeInterval(7 * 24 * 60 * 60)
+        )
+
+        return Campaign(
+            id: debugFakeMiningCampaignID,
+            name: "Developer Preview Campaign",
+            game: Game(id: "swiftminer-debug-sandbox", name: "SwiftMiner Sandbox"),
+            startDate: now.addingTimeInterval(-60 * 60),
+            endDate: now.addingTimeInterval(7 * 24 * 60 * 60),
+            drops: [drop],
+            isAccountConnected: true,
+            isPrioritised: true
+        )
     }
 
     /// Reverts a miner's mocked state back to real live data from the engine and supervisor.

@@ -251,3 +251,56 @@ final class WatchTimeAccumulationTests: XCTestCase {
         XCTAssertNil(manager.lastWatchSampleAt["miner"])
     }
 }
+
+#if DEBUG
+@MainActor
+final class MinerManagerDebugStateTests: XCTestCase {
+    func testFakeMiningCampaignPresentsSyntheticActiveProgress() {
+        let manager = MinerManager(clientId: "test")
+        manager.miners = [
+            MinerManager.ManagedMiner(
+                id: "miner",
+                accountId: "account",
+                username: "tester"
+            )
+        ]
+
+        manager.setDebugState(for: "miner", state: .fakeMiningCampaign)
+
+        let miner = try! XCTUnwrap(manager.miners.first)
+        let campaign = try! XCTUnwrap(miner.allCampaigns.first)
+        let drop = try! XCTUnwrap(campaign.drops.first)
+
+        XCTAssertEqual(miner.status, .watching)
+        XCTAssertEqual(miner.workerState, .running)
+        XCTAssertTrue(miner.isRunning)
+        XCTAssertEqual(miner.currentCampaignId, campaign.id)
+        XCTAssertEqual(campaign.name, "Developer Preview Campaign")
+        XCTAssertEqual(campaign.game.name, "SwiftMiner Sandbox")
+        XCTAssertEqual(drop.progress?.currentMinutes, 24)
+        XCTAssertEqual(drop.progress?.requiredMinutes, 60)
+        XCTAssertEqual(MinerHealthSnapshot.make(miner: miner).health, .mining)
+    }
+
+    func testLeavingFakeMiningStateRemovesSyntheticCampaign() {
+        let manager = MinerManager(clientId: "test")
+        manager.miners = [
+            MinerManager.ManagedMiner(
+                id: "miner",
+                accountId: "account",
+                username: "tester"
+            )
+        ]
+
+        manager.setDebugState(for: "miner", state: .fakeMiningCampaign)
+        manager.setDebugState(for: "miner", state: .idle)
+
+        let miner = try! XCTUnwrap(manager.miners.first)
+        XCTAssertNil(miner.currentCampaign)
+        XCTAssertNil(miner.currentCampaignId)
+        XCTAssertTrue(miner.allCampaigns.isEmpty)
+        XCTAssertEqual(miner.status, .idle)
+        XCTAssertFalse(miner.isRunning)
+    }
+}
+#endif

@@ -899,7 +899,7 @@ struct MinerActivitySnapshot {
                 title: campaign.game.name,
                 subtitle: campaign.name,
                 detail: detail,
-                symbol: "play.fill",
+                symbol: "bolt.fill",
                 accent: .green,
                 progressFraction: progress?.fraction,
                 campaignId: campaign.id

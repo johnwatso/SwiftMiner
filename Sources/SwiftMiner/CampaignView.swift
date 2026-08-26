@@ -257,6 +257,40 @@ struct DropsListView: View {
     private var filterChipsRow: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
+                let isShowingAll = selectedFilters.isEmpty
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                        selectedFilters = []
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "square.grid.2x2")
+                            .font(.caption.weight(.semibold))
+                        Text("All")
+                            .font(.subheadline.weight(.medium))
+                    }
+                    .foregroundStyle(isShowingAll ? .primary : .secondary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(
+                        Group {
+                            if isShowingAll {
+                                Capsule().fill(.thinMaterial.opacity(0.95))
+                            } else {
+                                Capsule().fill(Color.clear)
+                            }
+                        }
+                    )
+                    .overlay(
+                        Capsule()
+                            .stroke(isShowingAll ? Color.primary.opacity(0.20) : Color.secondary.opacity(0.18), lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
+                .help("Show all campaigns")
+                .accessibilityLabel("All campaigns")
+                .accessibilityValue(isShowingAll ? "Selected" : "Not selected")
+
                 ForEach(DropFilter.allCases) { option in
                     let isSelected = selectedFilters.contains(option)
                     Button {
@@ -398,21 +432,32 @@ struct DropsListView: View {
     }
 
     private func isPrioritisedCampaign(_ campaign: CampaignViewData) -> Bool {
-        let gameId = campaign.gameId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let gameName = campaign.gameName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let comparableName = comparableGameName(gameName)
+        DropsCampaignFilterRules.matchesPrioritised(
+            campaign,
+            priorityGameNames: effectivePriorityGameNames,
+            priorityGameIDs: effectivePriorityGameIDs
+        )
+    }
 
-        if settings.gamePreferences.contains(where: { preference in
-            guard preference.state == .preferred else { return false }
-            let idMatches = !gameId.isEmpty && preference.gameId == gameId
-            let nameMatches = comparableGameName(preference.gameName) == comparableName
-            return idMatches || nameMatches
-        }) {
-            return true
+    private var effectivePriorityGameNames: [String] {
+        if let selectedMinerAccountId,
+           let miner = miners.first(where: { $0.accountId == selectedMinerAccountId }) {
+            return navigation.priorityGames(for: miner)
         }
 
-        let priorityNames = settings.priorityGames + miners.flatMap(\.priorityGames)
-        return priorityNames.contains { comparableGameName($0) == comparableName }
+        return settings.priorityGames + miners.flatMap { navigation.priorityGames(for: $0) }
+    }
+
+    private var effectivePriorityGameIDs: Set<String> {
+        let effectiveNames = Set(effectivePriorityGameNames.map(comparableGameName))
+        return Set(settings.gamePreferences.compactMap { preference in
+            guard preference.state == .preferred,
+                  effectiveNames.contains(comparableGameName(preference.gameName)),
+                  !preference.gameId.isEmpty else {
+                return nil
+            }
+            return preference.gameId
+        })
     }
 
     private func comparableGameName(_ value: String) -> String {
@@ -605,11 +650,15 @@ struct DropsListView: View {
         }
 
         if selectedFilters.isEmpty {
-            return "Select at least one filter to refine campaigns."
+            return "No campaigns are available."
         }
 
         if selectedFilters == [.active] {
             return "No campaigns are currently mining or in progress."
+        }
+
+        if selectedFilters == [.prioritised] {
+            return "No campaigns match your current priorities."
         }
 
         if selectedFilters == [.needsSetup] {
@@ -838,11 +887,13 @@ struct DropsListView: View {
     }
 
     private func filters(for campaign: CampaignViewData, activity: CampaignActivitySnapshot, now: Date) -> Set<DropFilter> {
-        if matchesNeedsSetupFilter(campaign, now: now) {
-            return [.needsSetup]
-        }
-
         var filters: Set<DropFilter> = []
+        if isPrioritisedCampaign(campaign) {
+            filters.insert(.prioritised)
+        }
+        if matchesNeedsSetupFilter(campaign, now: now) {
+            filters.insert(.needsSetup)
+        }
         if matchesActiveFilter(campaign, activity: activity, now: now) {
             filters.insert(.active)
         }
@@ -859,10 +910,10 @@ struct DropsListView: View {
     }
 
     private func matchesSelectedFilters(_ campaign: CampaignViewData, activity: CampaignActivitySnapshot, now: Date) -> Bool {
-        guard !selectedFilters.isEmpty else {
-            return false
-        }
-        return !filters(for: campaign, activity: activity, now: now).intersection(selectedFilters).isEmpty
+        DropsCampaignFilterRules.matchesSelectedFilters(
+            campaignFilters: filters(for: campaign, activity: activity, now: now),
+            selectedFilters: selectedFilters
+        )
     }
 
     private func activity(

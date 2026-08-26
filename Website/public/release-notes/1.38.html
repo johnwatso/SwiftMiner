@@ -27,7 +27,7 @@
 <body>
   <main>
     <h1>SwiftMiner 1.38</h1>
-    <p class="meta">Version 1.38 &middot; Build 2026082611</p>
+    <p class="meta">Version 1.38 &middot; Build 2026082621</p>
     <p class="intro">Each miner now explains itself in one place: a single operator panel, a queue that matches the summary above it, and a plain answer when there is no stream to watch.</p>
 
     <section>
@@ -67,6 +67,16 @@
       <ul>
         <li>A miner with no eligible stream live now says so on its card, names the campaign it is waiting on, and states that earning resumes automatically when a stream goes live.</li>
         <li>Drops goes back to being about campaigns. The waiting-for-stream banner has moved onto the miner it describes, which is where the answer was actually needed.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#9889; Clearer active-mining status</h2>
+      <p class="summary">Active mining now looks like a status, not a playback control.</p>
+      <ul>
+        <li>Mining and watching status indicators use a gently pulsing bolt instead of a play button, while actual playback actions and the explicit channel-watching label keep their media symbols. The pulse stops when Reduce Motion is enabled.</li>
+        <li>Debug builds add a per-miner Developer-menu state that shows a clearly labelled synthetic campaign with active drop progress, without touching Twitch or the real mining engine.</li>
+        <li>Drops adds All and Prioritised filters. All restores the complete curated campaign feed, while Prioritised follows the active global or per-miner priority list.</li>
       </ul>
     </section>
 

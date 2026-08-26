@@ -80,7 +80,7 @@ enum CampaignVisualState {
     var symbol: String {
         switch self {
         case .watching:
-            return "play.fill"
+            return "bolt.fill"
         case .inProgress:
             return "chart.line.uptrend.xyaxis"
         case .claimable:
@@ -824,7 +824,15 @@ struct CampaignStateBadge: View {
     var useDarkForeground = true
 
     var body: some View {
-        Label(titleOverride ?? state.label, systemImage: state.symbol)
+        HStack(spacing: 4) {
+            AnimatedStatusIcon(
+                symbol: state.symbol,
+                color: useDarkForeground ? state.accent : .white.opacity(0.95),
+                size: 10,
+                weight: .semibold
+            )
+            Text(titleOverride ?? state.label)
+        }
             .font(.caption2.weight(.semibold))
             .foregroundStyle(useDarkForeground ? state.accent : .white.opacity(0.95))
             .padding(.horizontal, 10)

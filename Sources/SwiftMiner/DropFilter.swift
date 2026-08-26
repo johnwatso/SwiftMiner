@@ -4,6 +4,7 @@ import SwiftMinerCore
 /// Filter options for the Drops list view.
 public enum DropFilter: String, CaseIterable, Identifiable, Hashable, Codable {
     case active
+    case prioritised
     case needsSetup
     case upcoming
     case completed
@@ -14,6 +15,7 @@ public enum DropFilter: String, CaseIterable, Identifiable, Hashable, Codable {
     public var title: String {
         switch self {
         case .active: return "Active"
+        case .prioritised: return "Prioritised"
         case .needsSetup: return "Needs Setup"
         case .upcoming: return "Upcoming"
         case .completed: return "Completed"
@@ -24,6 +26,7 @@ public enum DropFilter: String, CaseIterable, Identifiable, Hashable, Codable {
     public var symbol: String {
         switch self {
         case .active: return "dot.radiowaves.left.and.right"
+        case .prioritised: return "star.fill"
         case .needsSetup: return "personalhotspot.slash"
         case .upcoming: return "calendar.badge.clock"
         case .completed: return "checkmark.circle.fill"
@@ -36,6 +39,31 @@ public enum DropFilter: String, CaseIterable, Identifiable, Hashable, Codable {
 /// An unlinked campaign remains actionable in Drops because linking the game
 /// account is a setup task, even when an explicit priority lets mining proceed.
 enum DropsCampaignFilterRules {
+    /// An empty selection represents the exclusive All chip. Specific chips keep
+    /// their existing additive (OR) behaviour.
+    static func matchesSelectedFilters(
+        campaignFilters: Set<DropFilter>,
+        selectedFilters: Set<DropFilter>
+    ) -> Bool {
+        selectedFilters.isEmpty || !campaignFilters.intersection(selectedFilters).isEmpty
+    }
+
+    static func matchesPrioritised(
+        _ campaign: CampaignViewData,
+        priorityGameNames: [String],
+        priorityGameIDs: Set<String> = []
+    ) -> Bool {
+        let campaignID = normalizedID(campaign.gameId)
+        if !campaignID.isEmpty,
+           priorityGameIDs.contains(where: { normalizedID($0) == campaignID }) {
+            return true
+        }
+
+        let campaignName = comparableGameName(campaign.gameName)
+        guard !campaignName.isEmpty else { return false }
+        return priorityGameNames.contains { comparableGameName($0) == campaignName }
+    }
+
     static func matchesNeedsSetup(_ campaign: CampaignViewData, now: Date) -> Bool {
         guard campaign.startDate <= now,
               !campaign.isExpired(now: now),
@@ -60,6 +88,19 @@ enum DropsCampaignFilterRules {
         now: Date
     ) -> Bool {
         selectedFilters.contains(.needsSetup) && matchesNeedsSetup(campaign, now: now)
+    }
+
+    private static func normalizedID(_ value: String?) -> String {
+        value?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+    }
+
+    private static func comparableGameName(_ value: String) -> String {
+        value
+            .lowercased()
+            .unicodeScalars
+            .filter { CharacterSet.alphanumerics.contains($0) }
+            .map(String.init)
+            .joined()
     }
 }
 
@@ -97,7 +138,7 @@ public enum EventFilter: String, CaseIterable, Identifiable, Hashable, Codable {
 
     public var symbol: String {
         switch self {
-        case .mining: return "play.circle"
+        case .mining: return "bolt.circle"
         case .heartbeats: return "heart.fill"
         case .drops: return "shippingbox"
         case .warnings: return "exclamationmark.triangle"
