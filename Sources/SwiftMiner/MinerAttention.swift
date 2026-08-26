@@ -75,9 +75,12 @@ enum MinerAttention {
         guard !priorityKeys.isEmpty else { return nil }
 
         return miner.allCampaigns.first { campaign in
+            // Deliberately not `activityStatus(for:) == .requiresLink`: that status
+            // resolves to `.watching` for the current campaign, which suppressed the
+            // badge for exactly the campaign the miner is mining right now.
             guard campaign.isTimeActive,
                   campaign.status != .disabled,
-                  campaign.activityStatus(for: miner) == .requiresLink,
+                  !campaign.isAccountConnected,
                   campaign.drops.contains(where: { !$0.isClaimed }),
                   priorityKeys.contains(normalizedGameKey(campaign.game.name))
                     || priorityKeys.contains(normalizedGameKey(campaign.game.id)) else {
