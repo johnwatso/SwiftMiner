@@ -127,6 +127,7 @@ SwiftMiner has been built around those ideas. The goal isn’t to reinvent Twitc
 ## How It Works
 
 - Each account runs its own miner engine
+- SwiftMiner shares common resources between miner engines, making multi-account mining more efficient than running multiple instances of a standalone miner app
 - The engine fetches active campaigns and eligibility from Twitch
 - Campaigns are prioritized based on time remaining and user preference
 - A stream is selected for the active campaign
