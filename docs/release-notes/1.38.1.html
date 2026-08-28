@@ -3,7 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Fix Sonoma compatibility and Discord avatars - Release Notes</title>
+  <title>SwiftMiner 1.38.1 - Release Notes</title>
+  <meta name="description" content="Release notes for SwiftMiner 1.38.1: reliable Discord profile-picture preferences, restored icons on macOS 14, and reliable relaunching after moving SwiftMiner to Applications.">
+  <link rel="canonical" href="https://swiftminer.app/release-notes/1.38.1.html">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
   <style>
     :root { color-scheme: light dark; }
     body {
@@ -18,31 +23,68 @@
       margin: 0 auto;
       padding: 28px;
       border-radius: 22px;
-      background: rgba(255, 255, 255, 0.86);
-      box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
+      background: rgba(255, 255, 255, .86);
+      box-shadow: 0 20px 60px rgba(15, 23, 32, .10);
+      border: 1px solid rgba(82, 96, 109, .12);
     }
     h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
-    .meta { margin: 0 0 24px; color: #52606d; font-size: 14px; }
-    p { margin: 0 0 16px; }
-    a { color: #0a67a3; text-decoration: none; }
+    .meta, .summary { color: #52606d; font-size: 14px; }
+    .intro { margin: 0 0 24px; color: #384454; }
+    section { margin: 18px 0 0; padding: 18px 18px 14px; border: 1px solid rgba(82, 96, 109, .18); border-radius: 16px; border-left: 5px solid #7b4bd9; background: rgba(255, 255, 255, .42); }
+    h2 { margin: 0 0 4px; color: #7b4bd9; font-size: 18px; }
+    ul { margin: 12px 0 0; padding-left: 22px; }
+    li { margin: 0 0 8px; }
+    li:last-child { margin-bottom: 0; }
+    a { color: #7b4bd9; text-decoration: none; }
     a:hover { text-decoration: underline; }
     @media (prefers-color-scheme: dark) {
       body { background: #0b1015; color: #edf2f7; }
       main {
-        background: rgba(15, 23, 32, 0.88);
-        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+        background: rgba(15, 23, 32, .88);
+        border-color: rgba(159, 176, 194, .14);
       }
-      .meta { color: #9fb0c2; }
-      a { color: #73c3ff; }
+      .meta, .summary { color: #9fb0c2; }
+      .intro { color: #c8d3df; }
+      section { border-color: rgba(159, 176, 194, .18); background: rgba(255, 255, 255, .04); }
+      a { color: #b89aff; }
     }
   </style>
 </head>
 <body>
   <main>
-    <h1>Fix Sonoma compatibility and Discord avatars</h1>
-    <p class="meta">Version 1.38.1</p>
-    <p>Fix Sonoma compatibility and Discord avatars</p>
-    <p><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/1aa81ce64f8aa3d2f4e6906d691dc44105812abc">1aa81ce</a></p>
+    <h1>SwiftMiner 1.38.1</h1>
+    <p class="meta">Version 1.38.1 &middot; Build 2026082818</p>
+    <p class="intro">SwiftMiner now keeps the profile-picture service each account chose, restores the interface artwork missing on macOS 14 Sonoma, and reliably reopens from Applications after moving itself out of Downloads.</p>
+
+    <section>
+      <h2>&#128172; Discord pictures</h2>
+      <p class="summary">A Discord choice now stays a Discord choice.</p>
+      <ul>
+        <li>Accounts set to Discord keep Discord's generated account avatar instead of silently falling back to Twitch.</li>
+        <li>The Accounts badge and web dashboard resolve the selected picture service consistently.</li>
+        <li>Twitch-first accounts still ignore provider placeholders and retain their existing fallback behaviour.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#129517; macOS 14 interface</h2>
+      <p class="summary">The full SwiftMiner interface remains legible on Sonoma.</p>
+      <ul>
+        <li>Restores navigation, recovery, account-link, empty-state, and menu icons that used symbols only available on newer macOS releases.</li>
+        <li>Keeps the newer artwork on later macOS versions while selecting compatible fallbacks on macOS 14.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#128230; Applications handoff</h2>
+      <p class="summary">Moving SwiftMiner out of Downloads now completes cleanly.</p>
+      <ul>
+        <li>Reopens the installed copy from Applications after the move instead of quitting without returning.</li>
+        <li>Uses a separate activated instance for the handoff, covered by regression tests.</li>
+      </ul>
+    </section>
+
+    <p class="meta"><a href="./index.html">All release notes</a></p>
   </main>
 </body>
 </html>
