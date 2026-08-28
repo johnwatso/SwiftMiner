@@ -571,7 +571,7 @@ struct BeautifulRewardCard: View {
 
     private var rewardIcon: String {
         switch drop.rewardType {
-        case .badge: return "person.badge.shield.check.fill"
+        case .badge: return SystemSymbolCompatibility.resolvedName(for: "person.badge.shield.check.fill")
         case .emote: return "face.smiling.fill"
         case .inGame: return "gift.fill"
         }

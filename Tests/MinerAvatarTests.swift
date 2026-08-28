@@ -1,6 +1,7 @@
 import XCTest
 @testable import SwiftMiner
 import SwiftMinerCore
+import SwiftMinerService
 
 @MainActor
 final class MinerAvatarTests: XCTestCase {
@@ -154,12 +155,23 @@ final class MinerAvatarTests: XCTestCase {
         settings.twitchAvatarsData = "{}"
     }
 
-    func testGenericDiscordProfileImageIsNotUsedAsAnAvatar() {
+    func testGenericDiscordProfileImageIsUsedOnlyForAnExplicitDiscordChoice() {
         let generic = URL(string: "https://cdn.discordapp.com/embed/avatars/3.png")!
 
         XCTAssertTrue(MinerAvatarURL.isGenericDiscordProfileImage(generic))
-        XCTAssertNil(AccountAvatarSource.discord.resolve(discord: generic, twitch: nil))
-        XCTAssertEqual(AccountAvatarSource.discord.resolve(discord: generic, twitch: twitch), twitch)
+        XCTAssertEqual(AccountAvatarSource.discord.resolve(discord: generic, twitch: twitch), generic)
+        XCTAssertEqual(AccountAvatarSource.twitch.resolve(discord: generic, twitch: twitch), twitch)
+        XCTAssertNil(AccountAvatarSource.twitch.resolve(discord: generic, twitch: nil))
+    }
+
+    func testSwiftBotRetainsDiscordDefaultAvatarForAnExplicitDiscordChoice() throws {
+        let generic = URL(string: "https://cdn.discordapp.com/embed/avatars/3.png")!
+        let data = Data(#"{"discord_id":"123","display_name":"Gabe","avatar_url":"https://cdn.discordapp.com/embed/avatars/3.png"}"#.utf8)
+
+        let user = try JSONDecoder().decode(SwiftBotDiscordUser.self, from: data)
+
+        XCTAssertEqual(user.avatarURL, generic)
+        XCTAssertEqual(AccountAvatarSource.discord.resolve(discord: user.avatarURL, twitch: twitch), generic)
     }
 
     func testPruningDropsAccountsThatAreNoLongerMined() {

@@ -3,6 +3,56 @@ import XCTest
 @testable import SwiftMiner
 @testable import SwiftMinerCore
 
+final class SystemSymbolCompatibilityTests: XCTestCase {
+    func testPostSonomaAndInvalidSymbolsHaveSupportedFallbacks() {
+        let expectedFallbacks = [
+            "arrow.trianglehead.2.clockwise": "arrow.triangle.2.circlepath",
+            "checkmark.arrow.trianglehead.counterclockwise": "checkmark.circle",
+            "checkmark.circle.trianglebadge.exclamationmark.fill": "exclamationmark.circle.fill",
+            "exclamationmark.arrow.trianglehead.counterclockwise.rotate.90": "exclamationmark.arrow.triangle.2.circlepath",
+            "gift.slash": "gift.fill",
+            "list.bullet.rectangle.stack": "list.bullet.rectangle",
+            "list.dash.header.rectangle.fill": "rectangle.grid.2x2.fill",
+            "person.badge.shield.check.fill": "person.badge.shield.checkmark.fill",
+            "personalhotspot.slash": "personalhotspot",
+            "photo.badge.minus": "photo",
+            "waveform.path.ecg.text.clipboard.fill": "list.bullet.clipboard.fill",
+        ]
+
+        for (preferredName, expectedFallback) in expectedFallbacks {
+            let resolvedName = SystemSymbolCompatibility.resolvedName(for: preferredName) { name in
+                name != preferredName
+            }
+            XCTAssertEqual(resolvedName, expectedFallback, "Unexpected fallback for \(preferredName)")
+        }
+    }
+
+    func testAvailablePreferredSymbolIsPreserved() {
+        let resolvedName = SystemSymbolCompatibility.resolvedName(for: "new.symbol") { name in
+            name == "new.symbol"
+        }
+
+        XCTAssertEqual(resolvedName, "new.symbol")
+    }
+
+    func testMacOS14SimulationForcesFallbackEvenWhenPreferredSymbolExists() {
+        let resolvedName = SystemSymbolCompatibility.resolvedName(
+            for: "list.dash.header.rectangle.fill",
+            forceFallback: true
+        ) { _ in true }
+
+        XCTAssertEqual(resolvedName, "rectangle.grid.2x2.fill")
+    }
+
+    func testUnknownUnavailableSymbolUsesLastResortFallback() {
+        let resolvedName = SystemSymbolCompatibility.resolvedName(for: "unknown.symbol") { name in
+            name == "questionmark.circle"
+        }
+
+        XCTAssertEqual(resolvedName, "questionmark.circle")
+    }
+}
+
 @MainActor
 final class OverviewArtworkTests: XCTestCase {
     private let finalsArtwork = URL(string: "https://static-cdn.jtvnw.net/ttv-boxart/1910103699-600x800.jpg")!

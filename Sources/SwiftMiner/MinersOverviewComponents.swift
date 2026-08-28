@@ -30,7 +30,7 @@ struct MinerDiagnosticEvent: Identifiable {
         case .stallDetected:
             detail = "Stall recovery"
             category = "Stall recovery"
-            symbol = "exclamationmark.arrow.trianglehead.counterclockwise.rotate.90"
+            symbol = SystemSymbolCompatibility.resolvedName(for: "exclamationmark.arrow.trianglehead.counterclockwise.rotate.90")
             tint = .yellow
         case .inventoryRefreshed:
             detail = "Campaign scan"
@@ -676,7 +676,7 @@ struct PendingItem: Identifiable, Equatable {
     var iconSystemName: String {
         if isMuted { return "bell.slash" }
         switch kind {
-        case .accountLink: return "personalhotspot.slash"
+        case .accountLink: return SystemSymbolCompatibility.resolvedName(for: "personalhotspot.slash")
         case .subscriptionRequired: return "creditcard"
         }
     }

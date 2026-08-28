@@ -328,12 +328,14 @@ final class WebDashboardSecurityTests: XCTestCase {
         XCTAssertFalse(WebDashboardAssets.appJS.contains("Drops Claimed This Week"))
     }
 
-    func testOperatorOverviewUsesOnlyCustomProfilePictures() {
+    func testOperatorOverviewHonoursAnExplicitDiscordPicturePreference() {
         XCTAssertTrue(WebDashboardAssets.appJS.contains("operator-miner-avatar"))
         XCTAssertTrue(WebDashboardAssets.appJS.contains("referrerpolicy=\"no-referrer\""))
         XCTAssertTrue(WebDashboardAssets.appJS.contains("function customProfileImageURL(...urls)"))
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("function secureProfileImageURL(url)"))
         XCTAssertTrue(WebDashboardAssets.appJS.contains("discordapp.com/embed/avatars/"))
         XCTAssertTrue(WebDashboardAssets.appJS.contains("customProfileImageURL(acc.profileImageURL, acc.discordProfileImageURL)"))
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("secureProfileImageURL(acc.discordProfileImageURL) || customProfileImageURL(acc.profileImageURL)"))
         XCTAssertFalse(WebDashboardAssets.appJS.contains("${esc(cfg.headline)}${watchingHTML}"))
     }
 

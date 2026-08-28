@@ -888,6 +888,10 @@ enum WebDashboardAssets {
       });
     }
 
+    function secureProfileImageURL(url) {
+      return typeof url === 'string' && url.toLowerCase().startsWith('https://') ? url : undefined;
+    }
+
     // Honours the account's picture source from the app, trying the other
     // service second so the dashboard resolves exactly as the app does.
     // One sentence covering the whole fleet, so the header answers "is everything OK?"
@@ -920,7 +924,7 @@ enum WebDashboardAssets {
 
     function accountProfileImageURL(acc) {
       return acc.prefersDiscordProfileImage
-        ? customProfileImageURL(acc.discordProfileImageURL, acc.profileImageURL)
+        ? secureProfileImageURL(acc.discordProfileImageURL) || customProfileImageURL(acc.profileImageURL)
         : customProfileImageURL(acc.profileImageURL, acc.discordProfileImageURL);
     }
 

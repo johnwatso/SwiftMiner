@@ -131,7 +131,11 @@ struct MinerHealthCard: View {
                         healthDetail(
                             recovery.succeeded == true ? "Recovery succeeded" : "Last recovery",
                             date: recovery.finishedAt ?? recovery.startedAt,
-                            symbol: recovery.succeeded == true ? "checkmark.arrow.trianglehead.counterclockwise" : "arrow.trianglehead.2.clockwise"
+                            symbol: SystemSymbolCompatibility.resolvedName(
+                                for: recovery.succeeded == true
+                                    ? "checkmark.arrow.trianglehead.counterclockwise"
+                                    : "arrow.trianglehead.2.clockwise"
+                            )
                         )
                     }
                     Spacer()

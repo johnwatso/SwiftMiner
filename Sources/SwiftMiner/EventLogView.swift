@@ -414,7 +414,7 @@ private struct EventFilterHelpPopover: View {
 
                     if filter == .warnings {
                         HStack(alignment: .top, spacing: 9) {
-                            Image(systemName: "exclamationmark.arrow.trianglehead.counterclockwise.rotate.90")
+                            Image(systemName: SystemSymbolCompatibility.resolvedName(for: "exclamationmark.arrow.trianglehead.counterclockwise.rotate.90"))
                                 .font(.system(size: 14, weight: .semibold))
                                 .foregroundStyle(.yellow)
                                 .frame(width: 18)
@@ -492,7 +492,10 @@ private struct EventLogRow: View {
 
     private var stallRecoveryIcon: (symbol: String, color: Color)? {
         guard isStallRecoveryEvent(eventSearchText(for: event)) else { return nil }
-        return ("exclamationmark.arrow.trianglehead.counterclockwise.rotate.90", .yellow)
+        return (
+            SystemSymbolCompatibility.resolvedName(for: "exclamationmark.arrow.trianglehead.counterclockwise.rotate.90"),
+            .yellow
+        )
     }
 
     var body: some View {
@@ -570,7 +573,7 @@ struct ActivityEventPresentation {
 
         if isStallRecoveryEvent(searchText) {
             category = "Stall recovery"
-            symbol = "exclamationmark.arrow.trianglehead.counterclockwise.rotate.90"
+            symbol = SystemSymbolCompatibility.resolvedName(for: "exclamationmark.arrow.trianglehead.counterclockwise.rotate.90")
             color = .yellow
         } else {
             category = eventFilter.title

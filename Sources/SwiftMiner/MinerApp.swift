@@ -826,7 +826,7 @@ struct MenuBarContent: View {
         case .stopped, .idle:    return "stop.fill"
         case .paused:            return "clock.fill"
         case .idleNoEligibleCampaigns: return "pause.circle"
-        case .blockedAccountNotLinked: return "personalhotspot.slash"
+        case .blockedAccountNotLinked: return SystemSymbolCompatibility.resolvedName(for: "personalhotspot.slash")
         }
     }
 

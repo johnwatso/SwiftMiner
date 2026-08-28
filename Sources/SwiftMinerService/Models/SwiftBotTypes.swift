@@ -22,7 +22,11 @@ public struct SwiftBotDiscordUser: Codable, Sendable, Identifiable, Equatable {
         self.id = id
         self.displayName = displayName
         self.username = username
-        self.avatarURL = MinerAvatarURL.usable(avatarURL)
+        // Preserve Discord's generated account avatar. The account-level source
+        // resolver decides whether a provider default is appropriate: an
+        // explicit Discord choice should honour it, while Twitch-first fallback
+        // paths continue to require a custom Discord picture.
+        self.avatarURL = MinerAvatarURL.secure(avatarURL)
     }
 
     enum CodingKeys: String, CodingKey {
@@ -44,7 +48,7 @@ public struct SwiftBotDiscordUser: Codable, Sendable, Identifiable, Equatable {
         id = try container.decode(String.self, forKey: .id)
         displayName = try container.decode(String.self, forKey: .displayName)
         username = try container.decodeIfPresent(String.self, forKey: .username)
-        avatarURL = MinerAvatarURL.usable(try container.decodeIfPresent(URL.self, forKey: .avatarURL)
+        avatarURL = MinerAvatarURL.secure(try container.decodeIfPresent(URL.self, forKey: .avatarURL)
             ?? alternate.decodeIfPresent(URL.self, forKey: .avatarUrl)
             ?? alternate.decodeIfPresent(URL.self, forKey: .displayAvatarURL)
             ?? alternate.decodeIfPresent(URL.self, forKey: .avatar))

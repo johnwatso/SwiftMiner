@@ -339,7 +339,10 @@ private struct MinerRow: View {
                 Button(role: .destructive) {
                     showUnlinkConfirmation = true
                 } label: {
-                    Label("Unlink", systemImage: "personalhotspot.slash")
+                    Label(
+                        "Unlink",
+                        systemImage: SystemSymbolCompatibility.resolvedName(for: "personalhotspot.slash")
+                    )
                 }
             case .linked:
                 Button {
@@ -360,7 +363,10 @@ private struct MinerRow: View {
                 Button(role: .destructive) {
                     showUnlinkConfirmation = true
                 } label: {
-                    Label("Unlink", systemImage: "personalhotspot.slash")
+                    Label(
+                        "Unlink",
+                        systemImage: SystemSymbolCompatibility.resolvedName(for: "personalhotspot.slash")
+                    )
                 }
             }
         } label: {

@@ -134,7 +134,7 @@ struct CampaignDetailView: View {
                     if campaign.drops.isEmpty {
                         MaterialEmptyStatePanel(
                             "No drops available",
-                            systemImage: "gift.slash",
+                            systemImage: SystemSymbolCompatibility.resolvedName(for: "gift.slash"),
                             description: "This campaign doesn’t have any drop items to display yet."
                         )
                         .frame(maxWidth: .infinity)
@@ -338,7 +338,7 @@ struct DropRowView: View {
 
     private var rewardIcon: String {
         switch drop.rewardType {
-        case .badge: return "person.badge.shield.check.fill"
+        case .badge: return SystemSymbolCompatibility.resolvedName(for: "person.badge.shield.check.fill")
         case .emote: return "face.smiling.fill"
         case .inGame: return "gift.fill"
         }

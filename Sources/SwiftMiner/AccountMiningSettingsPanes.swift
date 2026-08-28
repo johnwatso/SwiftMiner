@@ -240,7 +240,7 @@ struct AccountSettingsAccountRow: View {
     /// claims Discord over a Twitch image.
     private var resolvedSource: AccountAvatarSource? {
         guard let avatarURL else { return nil }
-        return avatarURL == MinerAvatarURL.usable(discordAvatarURL) ? .discord : .twitch
+        return avatarURL == MinerAvatarURL.secure(discordAvatarURL) ? .discord : .twitch
     }
 
     private var profilePicture: some View {

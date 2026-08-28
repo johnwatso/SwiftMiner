@@ -74,11 +74,20 @@ enum ApplicationsFolderInstaller {
         return destinationURL
     }
 
+    static func relaunchConfiguration() -> NSWorkspace.OpenConfiguration {
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        // The Downloads copy is still running when this request is made. Without
+        // a new instance, Launch Services can simply activate that process; the
+        // subsequent termination then leaves no copy of SwiftMiner open.
+        configuration.createsNewApplicationInstance = true
+        return configuration
+    }
+
     private static func moveAndRelaunch(bundleURL: URL) {
         do {
             let destinationURL = try moveApp(from: bundleURL, to: applicationsDirectoryURL)
-            let configuration = NSWorkspace.OpenConfiguration()
-            configuration.activates = true
+            let configuration = relaunchConfiguration()
             NSWorkspace.shared.openApplication(at: destinationURL, configuration: configuration) { _, error in
                 Task { @MainActor in
                     if let error {
