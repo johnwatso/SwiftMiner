@@ -1266,7 +1266,7 @@ private struct MinerStatusLegendPopover: View {
                 description: "This miner stopped receiving Twitch activity while others are still active."
             ),
             StatusEntry(
-                symbol: "personalhotspot.slash",
+                symbol: SystemSymbolCompatibility.resolvedName(for: "personalhotspot.slash"),
                 paletteColors: nil,
                 monoColor: .orange,
                 title: "Account Not Linked",
@@ -1453,9 +1453,9 @@ private enum OverviewSystemState: Equatable {
         case .recovering:
             return "wrench.and.screwdriver.fill"
         case .noRecentActivity:
-            return "checkmark.circle.trianglebadge.exclamationmark.fill"
+            return SystemSymbolCompatibility.resolvedName(for: "checkmark.circle.trianglebadge.exclamationmark.fill")
         case .blockedAccountNotLinked:
-            return "personalhotspot.slash"
+            return SystemSymbolCompatibility.resolvedName(for: "personalhotspot.slash")
         case .blockedAuthenticationExpired, .blockedNeedsAttention:
             return "exclamationmark.triangle.fill"
         case .mining:

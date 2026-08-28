@@ -27,7 +27,7 @@ public enum DropFilter: String, CaseIterable, Identifiable, Hashable, Codable {
         switch self {
         case .active: return "dot.radiowaves.left.and.right"
         case .prioritised: return "star.fill"
-        case .needsSetup: return "personalhotspot.slash"
+        case .needsSetup: return SystemSymbolCompatibility.resolvedName(for: "personalhotspot.slash")
         case .upcoming: return "calendar.badge.clock"
         case .completed: return "checkmark.circle.fill"
         case .ended: return "clock"
@@ -143,7 +143,7 @@ public enum EventFilter: String, CaseIterable, Identifiable, Hashable, Codable {
         case .drops: return "shippingbox"
         case .warnings: return "exclamationmark.triangle"
         case .errors: return "xmark.octagon"
-        case .accountLink: return "personalhotspot.slash"
+        case .accountLink: return SystemSymbolCompatibility.resolvedName(for: "personalhotspot.slash")
         case .scan: return "barcode.viewfinder"
         case .discord: return "checkmark.message.fill"
         case .audit: return "person.text.rectangle"

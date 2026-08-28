@@ -206,7 +206,7 @@ struct MinerStateCard: View {
                 return StateConfig(
                     headline: "Blocked — Account not linked",
                     subtitle: gameName ?? "Link your account to earn drops.",
-                    icon: "personalhotspot.slash",
+                    icon: SystemSymbolCompatibility.resolvedName(for: "personalhotspot.slash"),
                     color: .orange
                 )
             } else if reasons.contains(.noEligibleCampaign) {
@@ -1320,7 +1320,7 @@ struct MinerActivitySnapshot {
                 title: campaign.game.name,
                 subtitle: campaign.name,
                 detail: "Account not linked",
-                symbol: "personalhotspot.slash",
+                symbol: SystemSymbolCompatibility.resolvedName(for: "personalhotspot.slash"),
                 accent: .orange,
                 campaignId: campaign.id,
                 requiresAccountLink: true
@@ -1448,7 +1448,7 @@ struct MinerActivitySnapshot {
             return "bolt.horizontal.circle.fill"
         }
         if miner.showsNoRecentActivityAttention {
-            return "checkmark.circle.trianglebadge.exclamationmark.fill"
+            return SystemSymbolCompatibility.resolvedName(for: "checkmark.circle.trianglebadge.exclamationmark.fill")
         }
         if now.id.hasPrefix("starting-") || now.id.hasPrefix("stopped-") {
             return now.symbol

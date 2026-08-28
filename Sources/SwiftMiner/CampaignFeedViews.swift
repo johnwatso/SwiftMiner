@@ -363,7 +363,7 @@ struct CampaignFeedCard: View {
                         GameActionMenuLabel(
                             title: "Remove Custom Artwork",
                             subtitle: "Return to Steam or Twitch artwork.",
-                            systemImage: "photo.badge.minus"
+                            systemImage: SystemSymbolCompatibility.resolvedName(for: "photo.badge.minus")
                         )
                     }
                 }

@@ -2792,14 +2792,17 @@ public enum AccountAvatarSource: String, CaseIterable, Identifiable, Codable, Se
         }
     }
 
-    /// Resolves the requested service while filtering generic provider images,
-    /// falling back to the other service rather than dropping to the initial.
+    /// Resolves the requested service, falling back to the other rather than
+    /// dropping to the initial. An explicit Discord choice accepts Discord's
+    /// generated account avatar; the Twitch-first path only uses Discord as a
+    /// fallback when Discord supplied a custom picture.
     public func resolve(discord: URL?, twitch: URL?) -> URL? {
-        let discord = MinerAvatarURL.usable(discord)
+        let secureDiscord = MinerAvatarURL.secure(discord)
+        let customDiscord = MinerAvatarURL.usable(discord)
         let twitch = MinerAvatarURL.usable(twitch)
         switch self {
-        case .twitch: return twitch ?? discord
-        case .discord: return discord ?? twitch
+        case .twitch: return twitch ?? customDiscord
+        case .discord: return secureDiscord ?? twitch
         }
     }
 }

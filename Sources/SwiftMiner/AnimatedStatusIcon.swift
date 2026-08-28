@@ -1,4 +1,53 @@
+import AppKit
 import SwiftUI
+
+/// Keeps SF Symbols visible when a newer symbol name is used on an older macOS release.
+/// Call this at the point where a symbol name is selected so every downstream renderer,
+/// including `Label`, receives a name that exists on the current system.
+enum SystemSymbolCompatibility {
+    static let macOS14SimulationEnvironmentKey = "SWIFTMINER_SIMULATE_MACOS14_SYMBOLS"
+
+    private static let fallbackNames: [String: String] = [
+        "arrow.trianglehead.2.clockwise": "arrow.triangle.2.circlepath",
+        "checkmark.arrow.trianglehead.counterclockwise": "checkmark.circle",
+        "checkmark.circle.trianglebadge.exclamationmark.fill": "exclamationmark.circle.fill",
+        "exclamationmark.arrow.trianglehead.counterclockwise.rotate.90": "exclamationmark.arrow.triangle.2.circlepath",
+        "gift.slash": "gift.fill",
+        "list.bullet.rectangle.stack": "list.bullet.rectangle",
+        "list.dash.header.rectangle.fill": "rectangle.grid.2x2.fill",
+        "person.badge.shield.check.fill": "person.badge.shield.checkmark.fill",
+        "personalhotspot.slash": "personalhotspot",
+        "photo.badge.minus": "photo",
+        "waveform.path.ecg.text.clipboard.fill": "list.bullet.clipboard.fill",
+    ]
+
+    static func resolvedName(for preferredName: String) -> String {
+        #if DEBUG
+        let forceFallback = ProcessInfo.processInfo.environment[macOS14SimulationEnvironmentKey] == "1"
+        #else
+        let forceFallback = false
+        #endif
+
+        return resolvedName(for: preferredName, forceFallback: forceFallback) { name in
+            NSImage(systemSymbolName: name, accessibilityDescription: nil) != nil
+        }
+    }
+
+    static func resolvedName(
+        for preferredName: String,
+        forceFallback: Bool = false,
+        symbolExists: (String) -> Bool
+    ) -> String {
+        if forceFallback, let fallbackName = fallbackNames[preferredName] {
+            return symbolExists(fallbackName) ? fallbackName : "questionmark.circle"
+        }
+
+        guard !symbolExists(preferredName) else { return preferredName }
+
+        let fallbackName = fallbackNames[preferredName] ?? "questionmark.circle"
+        return symbolExists(fallbackName) ? fallbackName : "questionmark.circle"
+    }
+}
 
 // MARK: - AnimatedStatusIcon
 

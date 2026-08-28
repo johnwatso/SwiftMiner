@@ -113,4 +113,11 @@ final class ApplicationsFolderInstallerTests: XCTestCase {
         XCTAssertTrue(fileManager.fileExists(atPath: sourceBundleURL.path))
         XCTAssertTrue(fileManager.fileExists(atPath: installedBundleURL.path))
     }
+
+    func testRelaunchConfigurationStartsASeparateActivatedInstance() {
+        let configuration = ApplicationsFolderInstaller.relaunchConfiguration()
+
+        XCTAssertTrue(configuration.activates)
+        XCTAssertTrue(configuration.createsNewApplicationInstance)
+    }
 }

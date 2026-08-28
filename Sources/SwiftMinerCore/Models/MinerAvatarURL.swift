@@ -7,10 +7,17 @@ import Foundation
 /// but they obscure SwiftMiner's more helpful status/initial fallback and can
 /// prevent a custom picture from the other linked service from being used.
 public enum MinerAvatarURL {
+    /// Returns an HTTPS profile-image URL without deciding whether the image is
+    /// a provider default. Callers that are honouring an explicit provider
+    /// choice may still want that provider's generated account avatar.
+    public static func secure(_ url: URL?) -> URL? {
+        guard let url, url.scheme?.lowercased() == "https" else { return nil }
+        return url
+    }
+
     /// Returns `nil` for a missing, insecure, or provider-default profile image.
     public static func usable(_ url: URL?) -> URL? {
-        guard let url,
-              url.scheme?.lowercased() == "https",
+        guard let url = secure(url),
               !isProviderPlaceholder(url) else {
             return nil
         }

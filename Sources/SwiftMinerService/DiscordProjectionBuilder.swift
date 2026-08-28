@@ -220,7 +220,7 @@ public actor DiscordProjectionBuilder {
         let ownerDiscordId = acct.ownerDiscordId
 
         let discordProfileURL: URL? = if let ownerDiscordId {
-            MinerAvatarURL.usable(await discordProfileImageURL(ownerDiscordId))
+            MinerAvatarURL.secure(await discordProfileImageURL(ownerDiscordId))
         } else {
             nil
         }
@@ -314,7 +314,7 @@ public actor DiscordProjectionBuilder {
                 username: record.username,
                 nickname: await accountNickname(record.twitchId),
                 profileImageURL: MinerAvatarURL.usable(await twitchProfileImageURL(record.twitchId)),
-                discordProfileImageURL: MinerAvatarURL.usable(await discordProfileImageURL(discordUserId)),
+                discordProfileImageURL: MinerAvatarURL.secure(await discordProfileImageURL(discordUserId)),
                 prefersDiscordProfileImage: await prefersDiscordProfileImage(record.twitchId)
             )
         } catch {

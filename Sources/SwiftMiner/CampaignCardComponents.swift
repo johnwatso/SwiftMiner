@@ -214,7 +214,7 @@ struct CampaignMinerInspectorPopover: View {
         case .claimed: return "checkmark.circle.fill"
         case .claimedUnlinked: return "checkmark.circle.badge.questionmark.fill"
         case .ready, .idle: return "pause.circle.fill"
-        case .blocked: return "personalhotspot.slash"
+        case .blocked: return SystemSymbolCompatibility.resolvedName(for: "personalhotspot.slash")
         case .needsAuth: return "exclamationmark.triangle.fill"
         }
     }

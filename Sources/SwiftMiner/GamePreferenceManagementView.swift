@@ -76,7 +76,7 @@ struct GamePreferenceManagementView: View {
 
                 if prioritisedGames.isEmpty && excludedGames.isEmpty {
                     VStack(spacing: 8) {
-                        Image(systemName: "list.bullet.rectangle.stack")
+                        Image(systemName: SystemSymbolCompatibility.resolvedName(for: "list.bullet.rectangle.stack"))
                             .font(.system(size: 24))
                             .foregroundStyle(.tertiary)
                         Text("No rules configured.")
@@ -156,7 +156,7 @@ private struct PreferenceRow: View {
             }
 
             HStack(spacing: 8) {
-                Image(systemName: "arrow.trianglehead.2.clockwise")
+                Image(systemName: SystemSymbolCompatibility.resolvedName(for: "arrow.trianglehead.2.clockwise"))
                     .foregroundStyle(.secondary)
                     .frame(width: 24)
 

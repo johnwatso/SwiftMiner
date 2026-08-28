@@ -84,8 +84,10 @@ public struct DiscordUserProjection: Codable, Sendable {
         /// Twitch placeholder is deliberately omitted so clients can use their
         /// own fallback artwork.
         public let profileImageURL: URL?
-        /// The linked Discord user's profile picture. Web clients use this when
-        /// Twitch has no custom picture of its own.
+        /// The linked Discord user's profile picture, including Discord's
+        /// generated account avatar. Web clients honour it when Discord is the
+        /// explicit preference; Twitch-first fallback still requires a custom
+        /// Discord picture.
         public let discordProfileImageURL: URL?
         /// The picture service this account is set to in the app. Clients try
         /// the preferred service first and the other one as a fallback, so the
