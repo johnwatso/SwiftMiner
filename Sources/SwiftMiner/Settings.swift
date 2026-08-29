@@ -40,19 +40,19 @@ public final class Settings {
     // Typed accessors that mirror @AppStorage semantics: missing or mistyped
     // values fall back to the default, enums round-trip through rawValue.
 
-    private static func read(_ key: String, default def: Bool) -> Bool {
+    static func read(_ key: String, default def: Bool) -> Bool {
         (appStorageStore.object(forKey: key) as? Bool) ?? def
     }
 
-    private static func read(_ key: String, default def: Int) -> Int {
+    static func read(_ key: String, default def: Int) -> Int {
         (appStorageStore.object(forKey: key) as? Int) ?? def
     }
 
-    private static func read(_ key: String, default def: String) -> String {
+    static func read(_ key: String, default def: String) -> String {
         appStorageStore.string(forKey: key) ?? def
     }
 
-    private static func read<V: RawRepresentable>(_ key: String, default def: V) -> V where V.RawValue == String {
+    static func read<V: RawRepresentable>(_ key: String, default def: V) -> V where V.RawValue == String {
         guard let rawValue = appStorageStore.string(forKey: key),
               let value = V(rawValue: rawValue) else {
             return def
@@ -60,19 +60,19 @@ public final class Settings {
         return value
     }
 
-    private static func write(_ key: String, _ value: Bool) {
+    static func write(_ key: String, _ value: Bool) {
         appStorageStore.set(value, forKey: key)
     }
 
-    private static func write(_ key: String, _ value: Int) {
+    static func write(_ key: String, _ value: Int) {
         appStorageStore.set(value, forKey: key)
     }
 
-    private static func write(_ key: String, _ value: String) {
+    static func write(_ key: String, _ value: String) {
         appStorageStore.set(value, forKey: key)
     }
 
-    private static func write<V: RawRepresentable>(_ key: String, _ value: V) where V.RawValue == String {
+    static func write<V: RawRepresentable>(_ key: String, _ value: V) where V.RawValue == String {
         appStorageStore.set(value.rawValue, forKey: key)
     }
 
@@ -426,7 +426,7 @@ public final class Settings {
     }
 
     /// JSON-encoded array of DropFilter for the Drops list view.
-    private var selectedDropsFiltersData: String {
+    var selectedDropsFiltersData: String {
         get {
             access(keyPath: \.selectedDropsFiltersData)
             return Self.read("selectedDropsFiltersData", default: "[\"active\"]")
@@ -458,7 +458,7 @@ public final class Settings {
     }
 
     /// JSON-encoded array of EventFilter for the Events view.
-    private var selectedEventFiltersData: String {
+    var selectedEventFiltersData: String {
         get {
             access(keyPath: \.selectedEventFiltersData)
             return Self.read("selectedEventFiltersData", default: "[\"audit\",\"drops\",\"errors\",\"heartbeats\",\"mining\",\"system\",\"updates\",\"warnings\"]")
@@ -608,7 +608,7 @@ public final class Settings {
 
     /// JSON-encoded warnings that should be suppressed.
     /// Format: "accountId:gameId:warningType"
-    private var ignoredWarningsData: String {
+    var ignoredWarningsData: String {
         get {
             access(keyPath: \.ignoredWarningsData)
             return Self.read("ignoredWarningsData", default: "[]")
@@ -889,1047 +889,13 @@ public final class Settings {
         }
     }
 
-    // MARK: - Web Dashboard
+    // MARK: - Game Preference Cache
     //
-    // Optional self-service browser dashboard. Independent of SwiftBot — it only
-    // needs a Discord OAuth app (for sign-in) and a public origin. Disabled by
-    // default; the in-process HTTP server registers its routes only when enabled.
+    // Stored here rather than in Settings+GamePreferences.swift only because an extension
+    // cannot declare stored properties; the logic that uses them lives in that file.
+    @ObservationIgnored var cachedGamePreferences: [GamePreference] = []
+    @ObservationIgnored var cachedGamePreferencesKey: String?
 
-    /// Whether the self-service web dashboard is enabled
-    public var webDashboardEnabled: Bool {
-        get {
-            access(keyPath: \.webDashboardEnabled)
-            return Self.read("webDashboardEnabled", default: false)
-        }
-        set {
-            withMutation(keyPath: \.webDashboardEnabled) {
-                Self.write("webDashboardEnabled", newValue)
-            }
-        }
-    }
-
-    /// Public origin the dashboard is served from (e.g. https://swiftminer.example.com).
-    /// When SwiftBot is paired this is composed automatically from
-    /// `webDashboardSubdomain` + the domain SwiftBot reports.
-    public var webDashboardBaseURL: String {
-        get {
-            access(keyPath: \.webDashboardBaseURL)
-            return Self.read("webDashboardBaseURL", default: "")
-        }
-        set {
-            withMutation(keyPath: \.webDashboardBaseURL) {
-                Self.write("webDashboardBaseURL", newValue)
-            }
-        }
-    }
-
-    /// Subdomain for the dashboard when the domain comes from SwiftBot
-    /// (e.g. "swiftminer" → swiftminer.example.com).
-    public var webDashboardSubdomain: String {
-        get {
-            access(keyPath: \.webDashboardSubdomain)
-            return Self.read("webDashboardSubdomain", default: "swiftminer")
-        }
-        set {
-            withMutation(keyPath: \.webDashboardSubdomain) {
-                Self.write("webDashboardSubdomain", newValue)
-            }
-        }
-    }
-
-    /// When a downloaded update gets installed (the install relaunches the app).
-    public var autoUpdateInstallPolicy: AutoUpdateInstallPolicy {
-        get {
-            access(keyPath: \.autoUpdateInstallPolicy)
-            return Self.read("autoUpdateInstallPolicy", default: .whenIdle)
-        }
-        set {
-            withMutation(keyPath: \.autoUpdateInstallPolicy) {
-                Self.write("autoUpdateInstallPolicy", newValue)
-            }
-        }
-    }
-
-    /// Hour of day (0–23) for scheduled update installs.
-    public var autoUpdateInstallHour: Int {
-        get {
-            access(keyPath: \.autoUpdateInstallHour)
-            return Self.read("autoUpdateInstallHour", default: 3)
-        }
-        set {
-            withMutation(keyPath: \.autoUpdateInstallHour) {
-                Self.write("autoUpdateInstallHour", newValue)
-            }
-        }
-    }
-
-    /// Whether the one-time "web dashboard is live" DM announcement has been
-    /// sent. Set after the first confirmed tunnel registration; never resent on
-    /// updates or relaunches.
-    public var webDashboardAnnounced: Bool {
-        get {
-            access(keyPath: \.webDashboardAnnounced)
-            return Self.read("webDashboardAnnounced", default: false)
-        }
-        set {
-            withMutation(keyPath: \.webDashboardAnnounced) {
-                Self.write("webDashboardAnnounced", newValue)
-            }
-        }
-    }
-
-    /// SwiftBot's public hostname (e.g. swiftbot.example.com), cached from its
-    /// tunnel info. Used for Discord sign-in brokered via SwiftBot.
-    public var webDashboardSwiftBotHostname: String {
-        get {
-            access(keyPath: \.webDashboardSwiftBotHostname)
-            return Self.read("webDashboardSwiftBotHostname", default: "")
-        }
-        set {
-            withMutation(keyPath: \.webDashboardSwiftBotHostname) {
-                Self.write("webDashboardSwiftBotHostname", newValue)
-            }
-        }
-    }
-
-    /// Whether users may sign in to the web dashboard with Twitch OAuth.
-    /// Credentials stay saved when this is off, so the provider can be
-    /// temporarily disabled without reconfiguring the Twitch application.
-    public var webDashboardTwitchOAuthEnabled: Bool {
-        get {
-            access(keyPath: \.webDashboardTwitchOAuthEnabled)
-            return Self.read("webDashboardTwitchOAuthEnabled", default: true)
-        }
-        set {
-            withMutation(keyPath: \.webDashboardTwitchOAuthEnabled) {
-                Self.write("webDashboardTwitchOAuthEnabled", newValue)
-            }
-        }
-    }
-
-    /// Whether users may sign in to the web dashboard with Discord OAuth.
-    /// Discord OAuth is completed by a paired SwiftBot, which also verifies
-    /// server membership before it returns an identity assertion.
-    public var webDashboardDiscordOAuthEnabled: Bool {
-        get {
-            access(keyPath: \.webDashboardDiscordOAuthEnabled)
-            return Self.read("webDashboardDiscordOAuthEnabled", default: true)
-        }
-        set {
-            withMutation(keyPath: \.webDashboardDiscordOAuthEnabled) {
-                Self.write("webDashboardDiscordOAuthEnabled", newValue)
-            }
-        }
-    }
-
-    /// Twitch OAuth application client ID used for web sign-in
-    public var webDashboardTwitchClientID: String {
-        get {
-            access(keyPath: \.webDashboardTwitchClientID)
-            return Self.read("webDashboardTwitchClientID", default: "")
-        }
-        set {
-            withMutation(keyPath: \.webDashboardTwitchClientID) {
-                Self.write("webDashboardTwitchClientID", newValue)
-            }
-        }
-    }
-
-    /// Twitch OAuth application client secret used for web sign-in
-    public var webDashboardTwitchClientSecret: String {
-        get {
-            access(keyPath: \.webDashboardTwitchClientSecret)
-            return Self.read("webDashboardTwitchClientSecret", default: "")
-        }
-        set {
-            withMutation(keyPath: \.webDashboardTwitchClientSecret) {
-                Self.write("webDashboardTwitchClientSecret", newValue)
-            }
-        }
-    }
-
-    /// Whether local username/password sign-in is allowed (default on). Only
-    /// honoured for local/LAN access, never over the public domain.
-    public var webDashboardLocalEnabled: Bool {
-        get {
-            access(keyPath: \.webDashboardLocalEnabled)
-            return Self.read("webDashboardLocalEnabled", default: true)
-        }
-        set {
-            withMutation(keyPath: \.webDashboardLocalEnabled) {
-                Self.write("webDashboardLocalEnabled", newValue)
-            }
-        }
-    }
-
-    /// Username for local sign-in.
-    public var webDashboardLocalUsername: String {
-        get {
-            access(keyPath: \.webDashboardLocalUsername)
-            return Self.read("webDashboardLocalUsername", default: "admin")
-        }
-        set {
-            withMutation(keyPath: \.webDashboardLocalUsername) {
-                Self.write("webDashboardLocalUsername", newValue)
-            }
-        }
-    }
-
-    /// Encoded salted hash of the local password ("iterations:saltHex:hashHex").
-    /// Empty until the operator sets a password; local sign-in is unavailable
-    /// until then (no default credential ships).
-    public var webDashboardLocalPasswordHash: String {
-        get {
-            access(keyPath: \.webDashboardLocalPasswordHash)
-            return Self.read("webDashboardLocalPasswordHash", default: "")
-        }
-        set {
-            withMutation(keyPath: \.webDashboardLocalPasswordHash) {
-                Self.write("webDashboardLocalPasswordHash", newValue)
-            }
-        }
-    }
-
-    private static let webDashboardLocalPasswordService = "com.swiftminer.app.web-dashboard.local-password"
-
-    public func webDashboardLocalPassword() -> String? {
-        Self.readWebDashboardLocalPassword(username: webDashboardLocalUsername)
-    }
-
-    public func saveWebDashboardLocalPassword(_ password: String, username: String) throws {
-        let cleanUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleanUsername.isEmpty else { return }
-
-        let oldUsername = webDashboardLocalUsername.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !oldUsername.isEmpty, oldUsername != cleanUsername {
-            Self.deleteWebDashboardLocalPassword(username: oldUsername)
-        }
-
-        try Self.writeWebDashboardLocalPassword(password, username: cleanUsername)
-    }
-
-    public func deleteWebDashboardLocalPassword(username: String? = nil) {
-        Self.deleteWebDashboardLocalPassword(username: username ?? webDashboardLocalUsername)
-    }
-
-    private func isBlank(_ s: String) -> Bool {
-        s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    /// Whether local sign-in is fully set up (enabled, username, password set).
-    public var webDashboardLocalConfigured: Bool {
-        webDashboardLocalEnabled && !isBlank(webDashboardLocalUsername) && !isBlank(webDashboardLocalPasswordHash)
-    }
-
-    /// Whether Twitch web sign-in has complete credentials.
-    public var webDashboardTwitchConfigured: Bool {
-        !isBlank(webDashboardTwitchClientID) && !isBlank(webDashboardTwitchClientSecret)
-    }
-
-    /// Parses the user-entered Public URL leniently: a bare hostname like
-    /// "swiftminer.example.com" is treated as https. Returns nil only when the
-    /// value is empty or genuinely not a usable http(s) origin.
-    public static func normalizedWebDashboardURL(from raw: String) -> URL? {
-        var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !s.isEmpty else { return nil }
-        if !s.contains("://") { s = "https://" + s }
-        guard let url = URL(string: s),
-              let scheme = url.scheme?.lowercased(),
-              scheme == "https" || scheme == "http",
-              let host = url.host, host.contains(".") || host == "localhost" else {
-            return nil
-        }
-        return url
-    }
-
-    /// Whether Twitch OAuth sign-in is fully configured (needs the public URL).
-    public var webDashboardOAuthConfigured: Bool {
-        webDashboardTwitchOAuthEnabled && !isBlank(webDashboardBaseURL) && webDashboardTwitchConfigured
-    }
-
-    public var webDashboardSwiftBotSSOConfigured: Bool {
-        swiftBotEnabled
-            && !isBlank(swiftBotHmacSecret)
-            && !isBlank(webDashboardSwiftBotHostname)
-    }
-
-    /// Whether Discord OAuth can be offered by the paired SwiftBot.
-    public var webDashboardDiscordOAuthConfigured: Bool {
-        webDashboardDiscordOAuthEnabled && webDashboardSwiftBotSSOConfigured
-    }
-
-    /// Whether the dashboard is usable: enabled, and at least one sign-in method
-    /// available — local username/password, Twitch OAuth, or Discord via SwiftBot.
-    public var webDashboardConfigured: Bool {
-        webDashboardEnabled
-            && (webDashboardLocalConfigured || webDashboardOAuthConfigured || webDashboardDiscordOAuthConfigured)
-    }
-
-    // MARK: - Discord DM Notification Preferences
-
-    // MARK: - Discord DM Notification Preferences
-    //
-    // Important notifications default ON — these relate to account recovery and action required.
-    // Activity notifications default OFF — these are informational and can be noisy.
-
-    public var dmCampaignCompletedEnabled: Bool {
-        get {
-            access(keyPath: \.dmCampaignCompletedEnabled)
-            return Self.read("dmCampaignCompletedEnabled", default: false)
-        }
-        set {
-            withMutation(keyPath: \.dmCampaignCompletedEnabled) {
-                Self.write("dmCampaignCompletedEnabled", newValue)
-            }
-        }
-    }
-
-    public var dmConnectionExpiredEnabled: Bool {
-        get {
-            access(keyPath: \.dmConnectionExpiredEnabled)
-            return Self.read("dmConnectionExpiredEnabled", default: true)
-        }
-        set {
-            withMutation(keyPath: \.dmConnectionExpiredEnabled) {
-                Self.write("dmConnectionExpiredEnabled", newValue)
-            }
-        }
-    }
-
-    public var dmWelcomeBackEnabled: Bool {
-        get {
-            access(keyPath: \.dmWelcomeBackEnabled)
-            return Self.read("dmWelcomeBackEnabled", default: false)
-        }
-        set {
-            withMutation(keyPath: \.dmWelcomeBackEnabled) {
-                Self.write("dmWelcomeBackEnabled", newValue)
-            }
-        }
-    }
-
-    public var dmLinkRequiredEnabled: Bool {
-        get {
-            access(keyPath: \.dmLinkRequiredEnabled)
-            return Self.read("dmLinkRequiredEnabled", default: true)
-        }
-        set {
-            withMutation(keyPath: \.dmLinkRequiredEnabled) {
-                Self.write("dmLinkRequiredEnabled", newValue)
-            }
-        }
-    }
-
-    public var dmCampaignDetectedEnabled: Bool {
-        get {
-            access(keyPath: \.dmCampaignDetectedEnabled)
-            return Self.read("dmCampaignDetectedEnabled", default: false)
-        }
-        set {
-            withMutation(keyPath: \.dmCampaignDetectedEnabled) {
-                Self.write("dmCampaignDetectedEnabled", newValue)
-            }
-        }
-    }
-
-    public var dmAccountActionRequiredEnabled: Bool {
-        get {
-            access(keyPath: \.dmAccountActionRequiredEnabled)
-            return Self.read("dmAccountActionRequiredEnabled", default: true)
-        }
-        set {
-            withMutation(keyPath: \.dmAccountActionRequiredEnabled) {
-                Self.write("dmAccountActionRequiredEnabled", newValue)
-            }
-        }
-    }
-
-    public var quietHoursEnabled: Bool {
-        get {
-            access(keyPath: \.quietHoursEnabled)
-            return Self.read("quietHoursEnabled", default: false)
-        }
-        set {
-            withMutation(keyPath: \.quietHoursEnabled) {
-                Self.write("quietHoursEnabled", newValue)
-            }
-        }
-    }
-
-    public var quietHoursStartMinute: Int {
-        get {
-            access(keyPath: \.quietHoursStartMinute)
-            return Self.read("quietHoursStartMinute", default: 22 * 60)
-        }
-        set {
-            withMutation(keyPath: \.quietHoursStartMinute) {
-                Self.write("quietHoursStartMinute", newValue)
-            }
-        }
-    }
-
-    public var quietHoursEndMinute: Int {
-        get {
-            access(keyPath: \.quietHoursEndMinute)
-            return Self.read("quietHoursEndMinute", default: 7 * 60)
-        }
-        set {
-            withMutation(keyPath: \.quietHoursEndMinute) {
-                Self.write("quietHoursEndMinute", newValue)
-            }
-        }
-    }
-    
-    /// JSON-encoded array of GamePreference for selected games
-    public var gamePreferencesData: String {
-        get {
-            access(keyPath: \.gamePreferencesData)
-            return Self.read("gamePreferencesData", default: "[]")
-        }
-        set {
-            withMutation(keyPath: \.gamePreferencesData) {
-                Self.write("gamePreferencesData", newValue)
-            }
-        }
-    }
-
-    /// JSON-encoded array of game-scoped failover streamer rules.
-    public var gameFailoverStreamersData: String {
-        get {
-            access(keyPath: \.gameFailoverStreamersData)
-            return Self.read("gameFailoverStreamersData", default: "[]")
-        }
-        set {
-            withMutation(keyPath: \.gameFailoverStreamersData) {
-                Self.write("gameFailoverStreamersData", newValue)
-            }
-        }
-    }
-
-    /// Legacy storage (kept for migration only)
-    private var priorityGamesString: String {
-        get {
-            access(keyPath: \.priorityGamesString)
-            return Self.read("priorityGamesString", default: "")
-        }
-        set {
-            withMutation(keyPath: \.priorityGamesString) {
-                Self.write("priorityGamesString", newValue)
-            }
-        }
-    }
-
-    /// Legacy storage (kept for migration only)
-    private var excludedGamesString: String {
-        get {
-            access(keyPath: \.excludedGamesString)
-            return Self.read("excludedGamesString", default: "")
-        }
-        set {
-            withMutation(keyPath: \.excludedGamesString) {
-                Self.write("excludedGamesString", newValue)
-            }
-        }
-    }
-
-    /// JSON-encoded map of Twitch account ID -> ordered priority game names.
-    public var accountPriorityGamesData: String {
-        get {
-            access(keyPath: \.accountPriorityGamesData)
-            return Self.read("accountPriorityGamesData", default: "{}")
-        }
-        set {
-            withMutation(keyPath: \.accountPriorityGamesData) {
-                Self.write("accountPriorityGamesData", newValue)
-            }
-        }
-    }
-
-    /// JSON-encoded map of Twitch account ID -> whether global priority games
-    /// should be appended after the miner's own list. Missing means true for
-    /// backward compatibility.
-    public var accountIncludesGlobalPriorityGamesData: String {
-        get {
-            access(keyPath: \.accountIncludesGlobalPriorityGamesData)
-            return Self.read("accountIncludesGlobalPriorityGamesData", default: "{}")
-        }
-        set {
-            withMutation(keyPath: \.accountIncludesGlobalPriorityGamesData) {
-                Self.write("accountIncludesGlobalPriorityGamesData", newValue)
-            }
-        }
-    }
-
-    /// JSON-backed per-account source selection for priority games.
-    public var accountPrioritySourcesData: String {
-        get {
-            access(keyPath: \.accountPrioritySourcesData)
-            return Self.read("accountPrioritySourcesData", default: "{}")
-        }
-        set {
-            withMutation(keyPath: \.accountPrioritySourcesData) {
-                Self.write("accountPrioritySourcesData", newValue)
-            }
-        }
-    }
-
-    /// JSON-encoded map of Twitch account ID -> games excluded only for that
-    /// miner. Global exclusions still apply to every miner.
-    public var accountExcludedGamesData: String {
-        get {
-            access(keyPath: \.accountExcludedGamesData)
-            return Self.read("accountExcludedGamesData", default: "{}")
-        }
-        set {
-            withMutation(keyPath: \.accountExcludedGamesData) {
-                Self.write("accountExcludedGamesData", newValue)
-            }
-        }
-    }
-
-    /// Mining strategy selection
-    public var miningStrategy: MiningStrategy {
-        get {
-            access(keyPath: \.miningStrategy)
-            return Self.read("miningStrategy", default: .mineAll)
-        }
-        set {
-            withMutation(keyPath: \.miningStrategy) {
-                Self.write("miningStrategy", newValue)
-            }
-        }
-    }
-
-    // MARK: - Game Preferences
-
-    /// Memoized decode of `gamePreferencesData`. Decoding + normalization is
-    /// expensive and `gamePreferences` is read many times per SwiftUI render
-    /// (directly, and via `excludedGames`/`gameNames(for:)`), so we cache the
-    /// result and only re-decode when the backing JSON string actually changes.
-    /// `@ObservationIgnored` storage on this `@MainActor` class: mutating it
-    /// from the getter is safe and never triggers a view-update cycle.
-    @ObservationIgnored private var cachedGamePreferences: [GamePreference] = []
-    @ObservationIgnored private var cachedGamePreferencesKey: String?
-
-    /// Decoded game preferences from JSON storage
-    public var gamePreferences: [GamePreference] {
-        get {
-            let raw = gamePreferencesData
-            if cachedGamePreferencesKey == raw {
-                return cachedGamePreferences
-            }
-            let decoded: [GamePreference]
-            if let data = raw.data(using: .utf8),
-               let prefs = try? JSONDecoder().decode([GamePreference].self, from: data) {
-                decoded = normalizedPreferences(prefs)
-            } else {
-                decoded = []
-            }
-            cachedGamePreferencesKey = raw
-            cachedGamePreferences = decoded
-            return decoded
-        }
-        set {
-            let normalized = normalizedPreferences(newValue)
-            if let data = try? JSONEncoder().encode(normalized),
-               let string = String(data: data, encoding: .utf8) {
-                guard gamePreferencesData != string else { return }
-                gamePreferencesData = string
-                // Keep the cache hot for the value we just persisted.
-                cachedGamePreferencesKey = string
-                cachedGamePreferences = normalized
-            }
-        }
-    }
-
-    public var gameFailoverStreamers: [GameFailoverStreamer] {
-        get {
-            guard let data = gameFailoverStreamersData.data(using: .utf8),
-                  let rules = try? JSONDecoder().decode([GameFailoverStreamer].self, from: data) else {
-                return []
-            }
-            return normalizedFailoverStreamers(rules)
-        }
-        set {
-            let normalized = normalizedFailoverStreamers(newValue)
-            if let data = try? JSONEncoder().encode(normalized),
-               let string = String(data: data, encoding: .utf8) {
-                guard gameFailoverStreamersData != string else { return }
-                gameFailoverStreamersData = string
-            }
-        }
-    }
-
-    /// Priority game names derived from preferences (backward compat for MinerEngine)
-    public var priorityGames: [String] {
-        gameNames(for: .preferred)
-    }
-
-    public var accountPriorityGames: [String: [String]] {
-        get {
-            guard let data = accountPriorityGamesData.data(using: .utf8),
-                  let decoded = try? JSONDecoder().decode([String: [String]].self, from: data) else {
-                return [:]
-            }
-            return decoded.mapValues(Self.normalizedPriorityGameNames)
-        }
-        set {
-            let normalized = newValue.reduce(into: [String: [String]]()) { result, entry in
-                let key = entry.key.trimmingCharacters(in: .whitespacesAndNewlines)
-                let values = Self.normalizedPriorityGameNames(entry.value)
-                if !key.isEmpty, !values.isEmpty {
-                    result[key] = values
-                }
-            }
-            if let data = try? JSONEncoder().encode(normalized),
-               let string = String(data: data, encoding: .utf8) {
-                accountPriorityGamesData = string
-            }
-        }
-    }
-
-    public func priorityGames(forAccountId accountId: String) -> [String] {
-        let key = accountId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !key.isEmpty else { return priorityGames }
-        switch prioritySource(forAccountId: key) {
-        case .global:
-            return priorityGames
-        case .globalAndPersonal:
-            return Self.normalizedPriorityGameNames(personalPriorityGames(forAccountId: key) + priorityGames)
-        case .personal:
-            return personalPriorityGames(forAccountId: key)
-        }
-    }
-
-    public var accountIncludesGlobalPriorityGames: [String: Bool] {
-        get {
-            guard let data = accountIncludesGlobalPriorityGamesData.data(using: .utf8),
-                  let decoded = try? JSONDecoder().decode([String: Bool].self, from: data) else {
-                return [:]
-            }
-            return decoded.reduce(into: [String: Bool]()) { result, entry in
-                let key = entry.key.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !key.isEmpty {
-                    result[key] = entry.value
-                }
-            }
-        }
-        set {
-            let normalized = newValue.reduce(into: [String: Bool]()) { result, entry in
-                let key = entry.key.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !key.isEmpty {
-                    result[key] = entry.value
-                }
-            }
-            if let data = try? JSONEncoder().encode(normalized),
-               let string = String(data: data, encoding: .utf8) {
-                accountIncludesGlobalPriorityGamesData = string
-            }
-        }
-    }
-
-    public func includesGlobalPriorityGames(forAccountId accountId: String) -> Bool {
-        switch prioritySource(forAccountId: accountId) {
-        case .global, .globalAndPersonal: return true
-        case .personal: return false
-        }
-    }
-
-    public var accountPrioritySources: [String: AccountPrioritySource] {
-        get {
-            guard let data = accountPrioritySourcesData.data(using: .utf8),
-                  let decoded = try? JSONDecoder().decode([String: AccountPrioritySource].self, from: data) else {
-                return [:]
-            }
-            return decoded.reduce(into: [String: AccountPrioritySource]()) { result, entry in
-                let key = entry.key.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !key.isEmpty { result[key] = entry.value }
-            }
-        }
-        set {
-            let normalized = newValue.reduce(into: [String: AccountPrioritySource]()) { result, entry in
-                let key = entry.key.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !key.isEmpty { result[key] = entry.value }
-            }
-            if let data = try? JSONEncoder().encode(normalized),
-               let string = String(data: data, encoding: .utf8) {
-                accountPrioritySourcesData = string
-            }
-        }
-    }
-
-    public func prioritySource(forAccountId accountId: String) -> AccountPrioritySource {
-        let key = accountId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !key.isEmpty else { return .global }
-        if let source = accountPrioritySources[key] { return source }
-        if accountIncludesGlobalPriorityGames[key] == false { return .personal }
-        return accountPriorityGames[key, default: []].isEmpty ? .global : .globalAndPersonal
-    }
-
-    public func setPrioritySource(_ source: AccountPrioritySource, forAccountId accountId: String) {
-        let key = accountId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !key.isEmpty else { return }
-        var sources = accountPrioritySources
-        sources[key] = source
-        accountPrioritySources = sources
-
-        // Keep the legacy value aligned for callers that have not yet migrated.
-        var includeGlobals = accountIncludesGlobalPriorityGames
-        includeGlobals[key] = source != .personal
-        accountIncludesGlobalPriorityGames = includeGlobals
-    }
-
-    public func setIncludesGlobalPriorityGames(_ include: Bool, forAccountId accountId: String) {
-        let key = accountId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !key.isEmpty else { return }
-        if include {
-            let hasPersonalPriorities = !accountPriorityGames[key, default: []].isEmpty
-            setPrioritySource(hasPersonalPriorities ? .globalAndPersonal : .global, forAccountId: key)
-        } else {
-            setPrioritySource(.personal, forAccountId: key)
-        }
-    }
-
-    /// Whether this account has an explicitly configured, per-account priority
-    /// list. The native UI uses this to expose only the reset action; creating
-    /// and editing the list belongs in the Web UI.
-    public func hasCustomPriorityGames(forAccountId accountId: String) -> Bool {
-        let key = accountId.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !key.isEmpty && !accountPriorityGames[key, default: []].isEmpty
-    }
-
-    /// Removes an account's custom priority list and restores the shared global
-    /// priority order.
-    @discardableResult
-    public func resetPriorityGamesToGlobal(forAccountId accountId: String) -> [String] {
-        let key = accountId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !key.isEmpty else { return priorityGames }
-
-        var priorities = accountPriorityGames
-        priorities.removeValue(forKey: key)
-        accountPriorityGames = priorities
-        setPrioritySource(.global, forAccountId: key)
-        return priorityGames(forAccountId: key)
-    }
-
-    @discardableResult
-    public func prioritiseGameForAccount(accountId: String, gameName: String) -> [String] {
-        let key = accountId.trimmingCharacters(in: .whitespacesAndNewlines)
-        let game = gameName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !key.isEmpty, !game.isEmpty else { return priorityGames(forAccountId: accountId) }
-
-        if prioritySource(forAccountId: key) == .global {
-            setPrioritySource(.globalAndPersonal, forAccountId: key)
-        }
-        var map = accountPriorityGames
-        let existing = priorityGames(forAccountId: key)
-        let remaining = existing.filter { $0.localizedCaseInsensitiveCompare(game) != .orderedSame }
-        let updated = Self.normalizedPriorityGameNames([game] + remaining)
-        map[key] = updated
-        accountPriorityGames = map
-        return priorityGames(forAccountId: key)
-    }
-
-    /// Remove a game from a miner's personal priority override, returning the
-    /// miner's resulting effective list. Seeds the override from the global list
-    /// first (so removing a personal game doesn't accidentally re-inherit it).
-    @discardableResult
-    public func deprioritiseGameForAccount(accountId: String, gameName: String) -> [String] {
-        let key = accountId.trimmingCharacters(in: .whitespacesAndNewlines)
-        let game = gameName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !key.isEmpty, !game.isEmpty else { return priorityGames(forAccountId: accountId) }
-
-        var map = accountPriorityGames
-        let existing = priorityGames(forAccountId: key)
-        let updated = Self.normalizedPriorityGameNames(
-            existing.filter { $0.localizedCaseInsensitiveCompare(game) != .orderedSame }
-        )
-        map[key] = updated
-        accountPriorityGames = map
-        return priorityGames(forAccountId: key)
-    }
-
-    /// Replace a miner's personal priority games with `games`, returning the miner's
-    /// resulting effective list. The stored override keeps the personal games ahead of
-    /// the global list (global still applies, at lower priority). Used by the Discord
-    /// "edit games" modal, which submits the whole personal list at once.
-    @discardableResult
-    public func setPersonalPriorityGames(accountId: String, games: [String]) -> [String] {
-        let key = accountId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !key.isEmpty else { return priorityGames(forAccountId: accountId) }
-
-        let combined = Self.normalizedPriorityGameNames(games)
-        var map = accountPriorityGames
-        map[key] = combined
-        accountPriorityGames = map
-        if !combined.isEmpty, prioritySource(forAccountId: key) == .global {
-            setPrioritySource(.globalAndPersonal, forAccountId: key)
-        }
-        return priorityGames(forAccountId: key)
-    }
-
-    /// The games prioritised specifically for one miner. When global priorities
-    /// also apply, games that duplicate the global list are omitted from the
-    /// returned list. Stored personal priorities remain available while the
-    /// global-only source is selected, so changing sources never discards them.
-    public func personalPriorityGames(forAccountId accountId: String) -> [String] {
-        let key = accountId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !key.isEmpty, let override = accountPriorityGames[key] else { return [] }
-        // Hide global duplicates only while the global list still applies to
-        // this miner — there they'd be redundant. When the miner opts out of
-        // global priorities, a personally-added game must stand on its own even
-        // if it also appears globally; filtering it here made adding such a
-        // game silently do nothing.
-        guard prioritySource(forAccountId: key) == .globalAndPersonal else { return override }
-        let globalKeys = Set(priorityGames.map { $0.lowercased() })
-        return override.filter { !globalKeys.contains($0.lowercased()) }
-    }
-
-    public var accountExcludedGames: [String: [String]] {
-        get {
-            guard let data = accountExcludedGamesData.data(using: .utf8),
-                  let decoded = try? JSONDecoder().decode([String: [String]].self, from: data) else { return [:] }
-            return decoded.reduce(into: [String: [String]]()) { result, entry in
-                let key = entry.key.trimmingCharacters(in: .whitespacesAndNewlines)
-                let games = Self.normalizedPriorityGameNames(entry.value)
-                if !key.isEmpty, !games.isEmpty { result[key] = games }
-            }
-        }
-        set {
-            let normalized = newValue.reduce(into: [String: [String]]()) { result, entry in
-                let key = entry.key.trimmingCharacters(in: .whitespacesAndNewlines)
-                let games = Self.normalizedPriorityGameNames(entry.value)
-                if !key.isEmpty, !games.isEmpty { result[key] = games }
-            }
-            if let data = try? JSONEncoder().encode(normalized),
-               let string = String(data: data, encoding: .utf8) {
-                accountExcludedGamesData = string
-            }
-        }
-    }
-
-    public func excludedGames(forAccountId accountId: String) -> [String] {
-        Self.normalizedPriorityGameNames(excludedGames + accountExcludedGames[accountId, default: []])
-    }
-
-    @discardableResult
-    public func setExcludedGames(accountId: String, games: [String]) -> [String] {
-        let key = accountId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !key.isEmpty else { return excludedGames }
-        var values = accountExcludedGames
-        values[key] = Self.normalizedPriorityGameNames(games)
-        accountExcludedGames = values
-        return excludedGames(forAccountId: key)
-    }
-
-    public func removeExcludedGames(forAccountId accountId: String) {
-        let key = accountId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !key.isEmpty else { return }
-        var values = accountExcludedGames
-        values.removeValue(forKey: key)
-        accountExcludedGames = values
-    }
-
-    /// Excluded game names and category IDs derived from preferences (backward
-    /// compat for MinerEngine). Special Events is treated as IRL-adjacent for
-    /// the mining safety option because it can host real-world event campaigns.
-    public var excludedGames: [String] {
-        var games = gameNames(for: .excluded)
-        if !mineIRLCampaigns {
-            games.append(contentsOf: [
-                Game.specialIRLCategoryId,
-                Game.specialEventsCategoryId
-            ])
-        }
-        return games
-    }
-
-    /// Add or update a game preference
-    public func addGamePreference(_ game: Game, state: PreferenceState) {
-        setGamePreference(game, state: state)
-    }
-
-    /// Add or update a game preference with the provided state.
-    public func setGamePreference(_ game: Game, state: PreferenceState) {
-        var prefs = gamePreferences
-        if let index = prefs.firstIndex(where: { preferenceMatches($0, gameId: game.id, gameName: game.name) }) {
-            let old = prefs[index]
-            prefs[index] = GamePreference(
-                gameId: game.id,
-                gameName: game.name,
-                boxArtURL: game.boxArtURL ?? old.boxArtURL,
-                customArtworkURL: old.customArtworkURL,
-                state: state
-            )
-        } else {
-            prefs.append(GamePreference(gameId: game.id, gameName: game.name, boxArtURL: game.boxArtURL, state: state))
-        }
-        gamePreferences = prefs
-    }
-
-    /// Remove a game preference by game ID
-    public func removeGamePreference(gameId: String) {
-        var prefs = gamePreferences
-        let removed = prefs.filter { $0.gameId == gameId }
-        prefs.removeAll { $0.gameId == gameId }
-        gamePreferences = prefs
-        removeCachedArtworkFiles(for: removed)
-    }
-
-    /// Remove a specific game preference.
-    public func removeGamePreference(_ preference: GamePreference) {
-        var prefs = gamePreferences
-        let removed = prefs.filter { preferenceMatches($0, gameId: preference.gameId, gameName: preference.gameName) }
-        prefs.removeAll { preferenceMatches($0, gameId: preference.gameId, gameName: preference.gameName) }
-        gamePreferences = prefs
-        clearFailoverStreamer(for: preference)
-        removeCachedArtworkFiles(for: removed)
-    }
-
-    public func failoverStreamer(for preference: GamePreference) -> GameFailoverStreamer? {
-        gameFailoverStreamers.first { failoverMatches($0, gameId: preference.gameId, gameName: preference.gameName) }
-    }
-
-    public func setFailoverStreamer(_ login: String, for preference: GamePreference) {
-        guard let normalizedLogin = GameFailoverStreamer.normalizedStreamerLogin(login) else {
-            clearFailoverStreamer(for: preference)
-            return
-        }
-
-        var rules = gameFailoverStreamers
-        let updated = GameFailoverStreamer(
-            gameId: preference.gameId,
-            gameName: preference.gameName,
-            streamerLogin: normalizedLogin,
-            enabled: true
-        )
-
-        if let index = rules.firstIndex(where: { failoverMatches($0, gameId: preference.gameId, gameName: preference.gameName) }) {
-            rules[index] = updated
-        } else {
-            rules.append(updated)
-        }
-        gameFailoverStreamers = rules
-    }
-
-    public func clearFailoverStreamer(for preference: GamePreference) {
-        var rules = gameFailoverStreamers
-        rules.removeAll { failoverMatches($0, gameId: preference.gameId, gameName: preference.gameName) }
-        gameFailoverStreamers = rules
-    }
-
-    /// Set a stored preference to a specific state.
-    public func setPreferenceState(_ state: PreferenceState, for preference: GamePreference) {
-        var prefs = gamePreferences
-        if let idx = prefs.firstIndex(where: { preferenceMatches($0, gameId: preference.gameId, gameName: preference.gameName) }) {
-            let old = prefs[idx]
-            prefs[idx] = GamePreference(
-                gameId: old.gameId,
-                gameName: old.gameName,
-                boxArtURL: old.boxArtURL,
-                customArtworkURL: old.customArtworkURL,
-                state: state
-            )
-        }
-        gamePreferences = prefs
-    }
-
-    public func setCustomArtwork(from sourceURL: URL, for game: Game) throws {
-        let accessed = sourceURL.startAccessingSecurityScopedResource()
-        defer {
-            if accessed {
-                sourceURL.stopAccessingSecurityScopedResource()
-            }
-        }
-
-        let directory = try customArtworkDirectory()
-        let fileExtension = preferredArtworkExtension(for: sourceURL)
-        let destination = directory
-            .appendingPathComponent(customArtworkFileStem(gameId: game.id, gameName: game.name))
-            .appendingPathExtension(fileExtension)
-
-        if FileManager.default.fileExists(atPath: destination.path) {
-            try FileManager.default.removeItem(at: destination)
-        }
-        try FileManager.default.copyItem(at: sourceURL, to: destination)
-
-        var prefs = gamePreferences
-        if let index = prefs.firstIndex(where: { preferenceMatches($0, gameId: game.id, gameName: game.name) }) {
-            let old = prefs[index]
-            removeCachedArtworkFile(at: old.customArtworkURL)
-            prefs[index] = GamePreference(
-                gameId: old.gameId.isEmpty ? game.id : old.gameId,
-                gameName: game.name,
-                boxArtURL: game.boxArtURL ?? old.boxArtURL,
-                customArtworkURL: destination,
-                state: old.state
-            )
-        } else {
-            prefs.append(GamePreference(
-                gameId: game.id,
-                gameName: game.name,
-                boxArtURL: game.boxArtURL,
-                customArtworkURL: destination,
-                state: .preferred
-            ))
-        }
-        gamePreferences = prefs
-    }
-
-    /// Drops persisted artwork links so the next render falls back to live artwork.
-    ///
-    /// Rewriting each preference through `GamePreference.init` is what does the work:
-    /// it rejects `file://` URLs outright, so any cache path stored by an older build
-    /// is discarded here. Uploaded artwork is passed through untouched — it lives in
-    /// Application Support and is the user's own file, not a cache.
-    public func clearCachedArtworkLinks() {
-        gamePreferences = gamePreferences.map { preference in
-            GamePreference(
-                gameId: preference.gameId,
-                gameName: preference.gameName,
-                boxArtURL: preference.resolvedBoxArtURL,
-                customArtworkURL: preference.customArtworkURL,
-                state: preference.state
-            )
-        }
-    }
-
-    public func removeCustomArtwork(for game: Game) {
-        var prefs = gamePreferences
-        guard let index = prefs.firstIndex(where: { preferenceMatches($0, gameId: game.id, gameName: game.name) }) else {
-            return
-        }
-
-        let old = prefs[index]
-        removeCachedArtworkFile(at: old.customArtworkURL)
-        prefs[index] = GamePreference(
-            gameId: old.gameId,
-            gameName: old.gameName,
-            boxArtURL: old.boxArtURL,
-            customArtworkURL: nil,
-            state: old.state
-        )
-        gamePreferences = prefs
-    }
-
-    /// Toggle a stored preference through preferred -> excluded -> neutral.
-    public func togglePreferenceState(for preference: GamePreference) {
-        setPreferenceState(nextPreferenceState(after: preference.state), for: preference)
-    }
-
-    /// Reorder game preferences within a state group (drag-to-reorder support).
-    /// Moves only items that share `state`; items in other states are unaffected.
-    public func moveGamePreferences(fromOffsets: IndexSet, toOffset: Int, inState state: PreferenceState) {
-        var prefs = gamePreferences
-        let stateIndices = prefs.indices.filter { prefs[$0].state == state }
-        var stateItems = stateIndices.map { prefs[$0] }
-        stateItems.move(fromOffsets: fromOffsets, toOffset: toOffset)
-        for (position, originalIndex) in stateIndices.enumerated() {
-            prefs[originalIndex] = stateItems[position]
-        }
-        gamePreferences = prefs
-    }
-    
     // MARK: - Enums
 
     public enum LogLevel: String, CaseIterable, Identifiable, Sendable {
@@ -2020,7 +986,7 @@ public final class Settings {
         }
     }
 
-    private func nextPreferenceState(after state: PreferenceState) -> PreferenceState {
+    func nextPreferenceState(after state: PreferenceState) -> PreferenceState {
         switch state {
         case .preferred:
             return .excluded
@@ -2031,7 +997,7 @@ public final class Settings {
         }
     }
 
-    private func gameNames(for state: PreferenceState) -> [String] {
+    func gameNames(for state: PreferenceState) -> [String] {
         // `gamePreferences` is already normalized (and memoized); no need to
         // re-run the dedupe/trim pass on every access.
         gamePreferences
@@ -2039,7 +1005,7 @@ public final class Settings {
             .map(\.gameName)
     }
 
-    private func normalizedPreferences(_ preferences: [GamePreference]) -> [GamePreference] {
+    func normalizedPreferences(_ preferences: [GamePreference]) -> [GamePreference] {
         var seen = Set<String>()
         var deduped: [GamePreference] = []
 
@@ -2062,7 +1028,7 @@ public final class Settings {
         return deduped.reversed()
     }
 
-    private func normalizedFailoverStreamers(_ streamers: [GameFailoverStreamer]) -> [GameFailoverStreamer] {
+    func normalizedFailoverStreamers(_ streamers: [GameFailoverStreamer]) -> [GameFailoverStreamer] {
         var seen = Set<String>()
         var deduped: [GameFailoverStreamer] = []
 
@@ -2085,7 +1051,7 @@ public final class Settings {
         return deduped.reversed()
     }
 
-    private static func normalizedPriorityGameNames(_ games: [String]) -> [String] {
+    static func normalizedPriorityGameNames(_ games: [String]) -> [String] {
         var seen = Set<String>()
         var result: [String] = []
         for game in games {
@@ -2097,7 +1063,7 @@ public final class Settings {
         return result
     }
 
-    private func preferenceMatches(_ preference: GamePreference, gameId: String, gameName: String) -> Bool {
+    func preferenceMatches(_ preference: GamePreference, gameId: String, gameName: String) -> Bool {
         let storedId = preference.gameId.trimmingCharacters(in: .whitespacesAndNewlines)
         let incomingId = gameId.trimmingCharacters(in: .whitespacesAndNewlines)
         if !storedId.isEmpty && !incomingId.isEmpty && storedId == incomingId {
@@ -2108,7 +1074,7 @@ public final class Settings {
             .localizedCaseInsensitiveCompare(gameName.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame
     }
 
-    private func failoverMatches(_ failover: GameFailoverStreamer, gameId: String, gameName: String) -> Bool {
+    func failoverMatches(_ failover: GameFailoverStreamer, gameId: String, gameName: String) -> Bool {
         let storedId = failover.gameId.trimmingCharacters(in: .whitespacesAndNewlines)
         let incomingId = gameId.trimmingCharacters(in: .whitespacesAndNewlines)
         if !storedId.isEmpty && !incomingId.isEmpty && storedId == incomingId {
@@ -2134,7 +1100,7 @@ public final class Settings {
         return gameName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
-    private func customArtworkDirectory() throws -> URL {
+    func customArtworkDirectory() throws -> URL {
         let base = try FileManager.default.url(
             for: .applicationSupportDirectory,
             in: .userDomainMask,
@@ -2148,13 +1114,13 @@ public final class Settings {
         return directory
     }
 
-    private func preferredArtworkExtension(for url: URL) -> String {
+    func preferredArtworkExtension(for url: URL) -> String {
         let ext = url.pathExtension.lowercased()
         let supported = Set(["png", "jpg", "jpeg", "heic", "webp", "tiff", "gif"])
         return supported.contains(ext) ? ext : "png"
     }
 
-    private func customArtworkFileStem(gameId: String, gameName: String) -> String {
+    func customArtworkFileStem(gameId: String, gameName: String) -> String {
         let key = preferenceKey(gameId: gameId, gameName: gameName)
         let scalars = key.unicodeScalars.map { scalar -> Character in
             CharacterSet.alphanumerics.contains(scalar) ? Character(scalar) : "-"
@@ -2166,72 +1132,15 @@ public final class Settings {
         return stem.isEmpty ? UUID().uuidString : stem
     }
 
-    private func removeCachedArtworkFiles(for preferences: [GamePreference]) {
+    func removeCachedArtworkFiles(for preferences: [GamePreference]) {
         for preference in preferences {
             removeCachedArtworkFile(at: preference.customArtworkURL)
         }
     }
 
-    private func removeCachedArtworkFile(at url: URL?) {
+    func removeCachedArtworkFile(at url: URL?) {
         guard let url, url.isFileURL, FileManager.default.fileExists(atPath: url.path) else { return }
         try? FileManager.default.removeItem(at: url)
-    }
-
-    private static func readWebDashboardLocalPassword(username: String) -> String? {
-        let cleanUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleanUsername.isEmpty else { return nil }
-
-        var query = webDashboardLocalPasswordQuery(username: cleanUsername)
-        query[kSecReturnData as String] = true
-        query[kSecMatchLimit as String] = kSecMatchLimitOne
-
-        var item: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &item)
-        guard status == errSecSuccess, let data = item as? Data else { return nil }
-        return String(data: data, encoding: .utf8)
-    }
-
-    private static func writeWebDashboardLocalPassword(_ password: String, username: String) throws {
-        let data = Data(password.utf8)
-        let query = webDashboardLocalPasswordQuery(username: username)
-        let update: [String: Any] = [kSecValueData as String: data]
-
-        let status = SecItemUpdate(query as CFDictionary, update as CFDictionary)
-        if status == errSecSuccess { return }
-        if status != errSecItemNotFound {
-            throw keychainError(status, operation: "update")
-        }
-
-        var add = query
-        add[kSecValueData as String] = data
-        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        let addStatus = SecItemAdd(add as CFDictionary, nil)
-        guard addStatus == errSecSuccess else {
-            throw keychainError(addStatus, operation: "save")
-        }
-    }
-
-    private static func deleteWebDashboardLocalPassword(username: String) {
-        let cleanUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleanUsername.isEmpty else { return }
-        SecItemDelete(webDashboardLocalPasswordQuery(username: cleanUsername) as CFDictionary)
-    }
-
-    private static func webDashboardLocalPasswordQuery(username: String) -> [String: Any] {
-        [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: webDashboardLocalPasswordService,
-            kSecAttrAccount as String: username
-        ]
-    }
-
-    private static func keychainError(_ status: OSStatus, operation: String) -> NSError {
-        let message = SecCopyErrorMessageString(status, nil) as String? ?? "OSStatus \(status)"
-        return NSError(
-            domain: "SwiftMiner.WebDashboardLocalPassword",
-            code: Int(status),
-            userInfo: [NSLocalizedDescriptionKey: "Could not \(operation) the local dashboard password in Keychain: \(message)"]
-        )
     }
 
     // MARK: - Legacy Keychain backup cleanup
@@ -2385,125 +1294,4 @@ public final class Settings {
         return !(minute >= start || minute < end)
     }
 
-    public func exportBackupData(includeSecrets: Bool = false) throws -> Data {
-        let backup = SettingsBackup(
-            exportedAt: Date(),
-            autoClaimEnabled: autoClaimEnabled,
-            autoClaimPointsEnabled: autoClaimPointsEnabled,
-            logLevel: logLevel.rawValue,
-            maxLogEntries: maxLogEntries,
-            appPresenceMode: appPresenceMode.rawValue,
-            autoStartOnLaunch: autoStartOnLaunch,
-            startMinimized: startMinimized,
-            enableBadgesEmotes: enableBadgesEmotes,
-            mineIRLCampaigns: mineIRLCampaigns,
-            avoidDuplicateStreams: avoidDuplicateStreams,
-            antiStallRecoveryEnabled: antiStallRecoveryEnabled,
-            prioritiseFollowedStreamers: prioritiseFollowedStreamers,
-            syncMinersState: syncMinersState,
-            minerAvatarSource: minerAvatarSource.rawValue,
-            accountAvatarSourcesData: accountAvatarSourcesData,
-            runInBackground: runInBackground,
-            selectedDropsFiltersData: selectedDropsFiltersData,
-            selectedEventFiltersData: selectedEventFiltersData,
-            preferredQuality: preferredQuality.rawValue,
-            showClaimNotifications: showClaimNotifications,
-            ignoredWarningsData: ignoredWarningsData,
-            twitchClientId: includeSecrets ? twitchClientId : "",
-            swiftBotEnabled: swiftBotEnabled,
-            swiftBotEndpoint: swiftBotEndpoint,
-            swiftBotWebhookURL: swiftBotWebhookURL,
-            swiftMinerAPIEndpoint: swiftMinerAPIEndpoint,
-            swiftBotHmacSecret: includeSecrets ? swiftBotHmacSecret : "",
-            swiftMinerAPIKey: includeSecrets ? swiftMinerAPIKey : "",
-            dmCampaignCompletedEnabled: dmCampaignCompletedEnabled,
-            dmConnectionExpiredEnabled: dmConnectionExpiredEnabled,
-            dmWelcomeBackEnabled: dmWelcomeBackEnabled,
-            dmLinkRequiredEnabled: dmLinkRequiredEnabled,
-            dmCampaignDetectedEnabled: dmCampaignDetectedEnabled,
-            dmAccountActionRequiredEnabled: dmAccountActionRequiredEnabled,
-            quietHoursEnabled: quietHoursEnabled,
-            quietHoursStartMinute: quietHoursStartMinute,
-            quietHoursEndMinute: quietHoursEndMinute,
-            gamePreferencesData: gamePreferencesData,
-            miningStrategy: miningStrategy.rawValue
-        )
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        return try encoder.encode(backup)
-    }
-
-    public func importBackupData(_ data: Data) throws {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        let backup = try decoder.decode(SettingsBackup.self, from: data)
-
-        autoClaimEnabled = backup.autoClaimEnabled
-        autoClaimPointsEnabled = backup.autoClaimPointsEnabled
-        logLevel = Settings.LogLevel(rawValue: backup.logLevel) ?? .info
-        maxLogEntries = backup.maxLogEntries
-        appPresenceMode = AppPresenceMode(rawValue: backup.appPresenceMode) ?? .dockOnly
-        autoStartOnLaunch = backup.autoStartOnLaunch
-        startMinimized = backup.startMinimized
-        enableBadgesEmotes = backup.enableBadgesEmotes
-        mineIRLCampaigns = backup.mineIRLCampaigns ?? false
-        avoidDuplicateStreams = backup.avoidDuplicateStreams
-        antiStallRecoveryEnabled = backup.antiStallRecoveryEnabled
-        prioritiseFollowedStreamers = backup.prioritiseFollowedStreamers
-        syncMinersState = backup.syncMinersState
-        minerAvatarSource = backup.minerAvatarSource.flatMap(MinerAvatarSource.init(rawValue:)) ?? .automatic
-        // A backup from before per-account pictures carries none; leaving the map
-        // empty lets every account inherit `defaultAvatarSource`, which the
-        // legacy value just above still drives.
-        accountAvatarSourcesData = backup.accountAvatarSourcesData ?? "{}"
-        runInBackground = backup.runInBackground
-        selectedDropsFiltersData = backup.selectedDropsFiltersData
-        selectedEventFiltersData = backup.selectedEventFiltersData
-        preferredQuality = Settings.StreamQuality(rawValue: backup.preferredQuality) ?? .auto
-        showClaimNotifications = backup.showClaimNotifications
-        ignoredWarningsData = backup.ignoredWarningsData
-        if !backup.twitchClientId.isEmpty { twitchClientId = backup.twitchClientId }
-        swiftBotEnabled = backup.swiftBotEnabled
-        swiftBotEndpoint = backup.swiftBotEndpoint
-        swiftBotWebhookURL = backup.swiftBotWebhookURL
-        swiftMinerAPIEndpoint = backup.swiftMinerAPIEndpoint
-        if !backup.swiftBotHmacSecret.isEmpty { swiftBotHmacSecret = backup.swiftBotHmacSecret }
-        if !backup.swiftMinerAPIKey.isEmpty { swiftMinerAPIKey = backup.swiftMinerAPIKey }
-        dmCampaignCompletedEnabled = backup.dmCampaignCompletedEnabled
-        dmConnectionExpiredEnabled = backup.dmConnectionExpiredEnabled
-        dmWelcomeBackEnabled = backup.dmWelcomeBackEnabled
-        dmLinkRequiredEnabled = backup.dmLinkRequiredEnabled
-        dmCampaignDetectedEnabled = backup.dmCampaignDetectedEnabled
-        dmAccountActionRequiredEnabled = backup.dmAccountActionRequiredEnabled
-        quietHoursEnabled = backup.quietHoursEnabled
-        quietHoursStartMinute = normalizedMinute(backup.quietHoursStartMinute)
-        quietHoursEndMinute = normalizedMinute(backup.quietHoursEndMinute)
-        gamePreferencesData = backup.gamePreferencesData
-        miningStrategy = MiningStrategy(rawValue: backup.miningStrategy) ?? .mineAll
-    }
-
-    private func normalizedMinute(_ minute: Int) -> Int {
-        min(max(minute, 0), 23 * 60 + 59)
-    }
-
-    public func ensureSwiftBotSecrets() {
-        if swiftMinerAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).count < 32 ||
-            swiftMinerAPIKey == "dev-key-change-in-production" {
-            swiftMinerAPIKey = Self.generateSecret()
-        }
-        if swiftBotHmacSecret.trimmingCharacters(in: .whitespacesAndNewlines).count < 32 {
-            swiftBotHmacSecret = Self.generateSecret()
-        }
-    }
-
-    private static func generateSecret(byteCount: Int = 32) -> String {
-        var bytes = [UInt8](repeating: 0, count: byteCount)
-        let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
-        if status == errSecSuccess {
-            return bytes.map { String(format: "%02x", $0) }.joined()
-        }
-        return UUID().uuidString.replacingOccurrences(of: "-", with: "") +
-            UUID().uuidString.replacingOccurrences(of: "-", with: "")
-    }
 }
