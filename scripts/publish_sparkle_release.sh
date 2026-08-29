@@ -113,6 +113,7 @@ xcodebuild \
   -project "$PROJECT_PATH" \
   -scheme SparklePublisher \
   -configuration "$CONFIGURATION" \
+  -destination "generic/platform=macOS" \
   -derivedDataPath "$DERIVED_DATA_DIR" \
   build
 

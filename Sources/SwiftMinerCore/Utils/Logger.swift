@@ -55,10 +55,12 @@ extension Logger {
     public static let auth = Logger(category: "Auth")
     /// Campaign discovery, mapping, merging, and drops progress.
     public static let campaigns = Logger(category: "Campaigns")
-    /// Steam artwork lookup and caching.
-    public static let artwork = Logger(category: "SteamArtwork")
+    /// Campaign and game artwork resolution and caching.
+    public static let artwork = Logger(category: "Artwork")
     /// Keychain, SQLite, and account persistence.
     public static let storage = Logger(category: "Storage")
     /// User notifications and unattended-incident reporting.
     public static let notifications = Logger(category: "Notifications")
+    /// App lifecycle, window/menu setup, and the embedded local HTTP server.
+    public static let app = Logger(category: "App")
 }

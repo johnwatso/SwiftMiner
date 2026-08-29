@@ -112,7 +112,7 @@ final class OverviewArtworkTests: XCTestCase {
         let session = URLSession(configuration: sessionConfiguration)
         let counter = RequestCounter()
         let url = URL(string: "https://example.com/campaign.png")!
-        let png = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nGQAAAAASUVORK5CYII=")!
+        let png = try XCTUnwrap(Self.testPNGData())
 
         MockURLProtocol.requestHandler = { request in
             counter.increment()
@@ -164,6 +164,28 @@ final class OverviewArtworkTests: XCTestCase {
             endDate: Date().addingTimeInterval(3600)
         )
     }
+
+    private static func testPNGData() -> Data? {
+        guard let bitmap = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: 2,
+            pixelsHigh: 2,
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bytesPerRow: 0,
+            bitsPerPixel: 0
+        ) else { return nil }
+        let purple = NSColor(deviceRed: 0.55, green: 0.25, blue: 0.85, alpha: 1)
+        let blue = NSColor(deviceRed: 0.20, green: 0.55, blue: 0.95, alpha: 1)
+        bitmap.setColor(purple, atX: 0, y: 0)
+        bitmap.setColor(blue, atX: 1, y: 0)
+        bitmap.setColor(blue, atX: 0, y: 1)
+        bitmap.setColor(purple, atX: 1, y: 1)
+        return bitmap.representation(using: .png, properties: [:])
+    }
 }
 
 private final class RequestCounter: @unchecked Sendable {
@@ -180,5 +202,40 @@ private final class RequestCounter: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return count
+    }
+}
+
+final class LegacySteamArtworkCleanupTests: XCTestCase {
+    /// The Steam artwork feature was removed; an install that used it still holds a cache
+    /// directory and defaults keys nothing will read again. Custom uploaded artwork lives
+    /// elsewhere and must survive untouched.
+    func testLegacySteamArtworkCleanupClearsItsDefaultsOnceAndLeavesOthersAlone() throws {
+        let suiteName = "LegacySteamArtworkCleanupTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set(true, forKey: "preferSteamArtwork")
+        defaults.set(["THE FINALS": "2073850"], forKey: "steamArtworkAppIdCache")
+        defaults.set(["Halo": "976730"], forKey: "steamArtworkManualOverrides")
+        defaults.set("{}", forKey: "gamePreferences")
+
+        LegacySteamArtworkCleanup.runIfNeeded(defaults: defaults)
+
+        XCTAssertNil(defaults.object(forKey: "preferSteamArtwork"))
+        XCTAssertNil(defaults.object(forKey: "steamArtworkAppIdCache"))
+        XCTAssertNil(defaults.object(forKey: "steamArtworkManualOverrides"))
+        XCTAssertEqual(
+            defaults.string(forKey: "gamePreferences"), "{}",
+            "Game preferences carry customArtworkURL; the cleanup must not touch them."
+        )
+        XCTAssertNotNil(
+            defaults.object(forKey: LegacySteamArtworkCleanup.completedKey),
+            "A clean install should not pay for this on every launch."
+        )
+
+        // A second run is a no-op rather than re-clearing keys the user has since set.
+        defaults.set(true, forKey: "preferSteamArtwork")
+        LegacySteamArtworkCleanup.runIfNeeded(defaults: defaults)
+        XCTAssertTrue(defaults.bool(forKey: "preferSteamArtwork"))
     }
 }

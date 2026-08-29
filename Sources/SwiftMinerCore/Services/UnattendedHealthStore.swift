@@ -242,16 +242,55 @@ public actor UnattendedHealthStore {
         try encoder.encode(state).write(to: fileURL, options: .atomic)
     }
 
+    /// Reads the persisted history, falling back to an empty store when there is nothing usable.
+    ///
+    /// Every fallback used to look identical — `try?` turned a first launch, an unreadable file,
+    /// and a truncated one all into "no history", and the next `persist()` overwrote the evidence.
+    /// Since the incident history is what an operator reads back after an unattended failure,
+    /// losing it silently is the worst possible outcome, so each cause is now logged and a file
+    /// we could not decode is moved aside instead of being overwritten.
     private static func loadState(from fileURL: URL) -> PersistedState {
-        guard let data = try? Data(contentsOf: fileURL) else {
+        let data: Data
+        do {
+            data = try Data(contentsOf: fileURL)
+        } catch let error as CocoaError where error.code == .fileNoSuchFile || error.code == .fileReadNoSuchFile {
+            // First launch, or the support directory was cleared. Nothing to report.
+            return PersistedState()
+        } catch {
+            Logger.storage.error("Unattended health history at \(fileURL.path) could not be read (\(error.localizedDescription)); starting from an empty history")
             return PersistedState()
         }
+
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        guard let decoded = try? decoder.decode(PersistedState.self, from: data),
-              decoded.schemaVersion == PersistedState.currentSchemaVersion else {
+        let decoded: PersistedState
+        do {
+            decoded = try decoder.decode(PersistedState.self, from: data)
+        } catch {
+            Logger.storage.error("Unattended health history at \(fileURL.path) is corrupt (\(error.localizedDescription)); quarantining it and starting from an empty history")
+            quarantine(fileURL)
             return PersistedState()
         }
+
+        guard decoded.schemaVersion == PersistedState.currentSchemaVersion else {
+            Logger.storage.warning("Unattended health history at \(fileURL.path) uses schema \(decoded.schemaVersion), expected \(PersistedState.currentSchemaVersion); starting from an empty history")
+            quarantine(fileURL)
+            return PersistedState()
+        }
+
         return decoded
+    }
+
+    /// Renames an unusable history file out of the way so the next `persist()` cannot destroy it.
+    private static func quarantine(_ fileURL: URL) {
+        let quarantined = fileURL.deletingPathExtension()
+            .appendingPathExtension("corrupt-\(Int(Date().timeIntervalSince1970))")
+            .appendingPathExtension(fileURL.pathExtension)
+        do {
+            try FileManager.default.moveItem(at: fileURL, to: quarantined)
+            Logger.storage.info("Moved unusable unattended health history to \(quarantined.path)")
+        } catch {
+            Logger.storage.error("Could not move unusable unattended health history aside: \(error.localizedDescription)")
+        }
     }
 }

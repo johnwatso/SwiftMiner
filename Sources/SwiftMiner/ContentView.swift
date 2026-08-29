@@ -138,7 +138,6 @@ struct OverviewView: View {
     private var settings: Settings { .shared }
     @State private var overviewCampaigns: [CampaignViewData] = []
     @State private var isRefreshing = false
-    @State private var steamIdSheetPresentation: SteamIdSheetPresentation?
     @State private var isShowingGameManagement = false
     @State private var customArtworkImportGame: Game?
     @State private var isShowingArtworkImporter = false
@@ -167,22 +166,12 @@ struct OverviewView: View {
             .padding(24)
         }
         .navigationTitle("Overview")
-        .onReceive(NotificationCenter.default.publisher(for: .steamArtworkDidUpdate)) { _ in
-            Task { @MainActor in
-                applyOverviewCampaigns(await navigation.minerManager.dataCoordinator.allCampaigns(
-                    preferSteamArtwork: settings.preferSteamArtwork
-                ))
-            }
-        }
         .onReceive(NotificationCenter.default.publisher(for: .dropsCampaignsDidUpdate)) { _ in
             // Miner registration makes the per-account disk caches available after
             // Overview's first task may already have returned empty. Drops listens to
             // this same event; keep Overview on the same source-of-truth timeline.
             Task { @MainActor in
-                applyOverviewCampaigns(await navigation.minerManager.dataCoordinator.allCampaigns(
-                    preferSteamArtwork: settings.preferSteamArtwork
-                ))
-                await enrichPreferredGameArtwork()
+                applyOverviewCampaigns(await navigation.minerManager.dataCoordinator.allCampaigns())
             }
         }
         .toolbar {
@@ -196,15 +185,6 @@ struct OverviewView: View {
             }
         }
         .task { await refreshSummary() }
-        .onChange(of: settings.gamePreferencesData) { _, _ in
-            Task { await enrichPreferredGameArtwork() }
-        }
-        .sheet(item: $steamIdSheetPresentation) { presentation in
-            SetSteamIdSheet { appId in
-                applySteamAppId(appId, for: presentation.gameName)
-            }
-            .presentationBackground(.clear)
-        }
         .sheet(isPresented: $isShowingGameManagement) {
             GamePreferenceManagementView(
                 settings: settings,
@@ -225,10 +205,10 @@ struct OverviewView: View {
                 do {
                     try settings.setCustomArtwork(from: url, for: game)
                 } catch {
-                    print("[Overview] Custom artwork import failed: \(error.localizedDescription)")
+                    Logger.artwork.error("Custom artwork import failed: \(error.localizedDescription)")
                 }
             case .failure(let error):
-                print("[Overview] Custom artwork selection failed: \(error.localizedDescription)")
+                Logger.artwork.error("Custom artwork selection failed: \(error.localizedDescription)")
             }
         }
     }
@@ -402,10 +382,7 @@ struct OverviewView: View {
         if overviewCampaigns.isEmpty && !navigation.minerManager.dataCoordinator.lastKnownAllCampaigns.isEmpty {
             overviewCampaigns = navigation.minerManager.dataCoordinator.lastKnownAllCampaigns
         }
-        applyOverviewCampaigns(await navigation.minerManager.dataCoordinator.allCampaigns(
-            preferSteamArtwork: Settings.shared.preferSteamArtwork
-        ))
-        await enrichPreferredGameArtwork()
+        applyOverviewCampaigns(await navigation.minerManager.dataCoordinator.allCampaigns())
         isRefreshing = false
     }
 
@@ -415,50 +392,13 @@ struct OverviewView: View {
 
         await navigation.restartMinersAndRefreshOverviewData()
 
-        applyOverviewCampaigns(await navigation.minerManager.dataCoordinator.allCampaigns(
-            preferSteamArtwork: Settings.shared.preferSteamArtwork
-        ))
-        await enrichPreferredGameArtwork()
-    }
-
-    /// Enriches `steamArtworkOverrides` for preferred games that have no active campaign.
-    /// Already-resolved and custom-artwork games are skipped so returning to Overview does
-    /// not repeat Steam lookups that cannot change the visible cards.
-    private func enrichPreferredGameArtwork() async {
-        guard settings.preferSteamArtwork else { return }
-        let existingArtwork = navigation.minerManager.dataCoordinator.steamArtworkOverrides
-        let names = settings.gamePreferences
-            .filter {
-                $0.state == .preferred
-                    && $0.customArtworkURL == nil
-                    && existingArtwork[$0.gameName] == nil
-            }
-            .map(\.gameName)
-        guard !names.isEmpty else { return }
-        await navigation.minerManager.dataCoordinator.enrichGameNames(names)
-    }
-
-    private func presentSteamIdSheet(for gameName: String) {
-        steamIdSheetPresentation = SteamIdSheetPresentation(gameName: gameName)
+        applyOverviewCampaigns(await navigation.minerManager.dataCoordinator.allCampaigns())
     }
 
     private func presentCustomArtworkImporter(for game: Game) {
         customArtworkImportGame = game
         DispatchQueue.main.async {
             isShowingArtworkImporter = true
-        }
-    }
-
-    private func applySteamAppId(_ appId: String, for gameName: String) {
-        guard SteamArtworkService.supportsSteamArtwork(forGameName: gameName) else {
-            return
-        }
-
-        Task {
-            await SteamArtworkService.shared.setManualAppId(for: gameName, appId: appId)
-            // enrichGameNames posts .steamArtworkDidUpdate, which refreshes
-            // overviewCampaigns above — no manual invalidation needed.
-            await navigation.minerManager.dataCoordinator.enrichGameNames([gameName])
         }
     }
 
@@ -623,7 +563,6 @@ struct OverviewView: View {
                                 activeDragIndex: activePriorityDragIndex,
                                 projectedDropIndex: projectedPriorityDropIndex,
                                 activeDragProgress: activePriorityDragProgress,
-                                onSetSteamId: presentSteamIdSheet(for:),
                                 onUploadCustomArtwork: presentCustomArtworkImporter(for:),
                                 onDragProjectionChanged: updatePriorityDragProjection,
                                 onDragEnded: clearPriorityDragProjection,
@@ -639,7 +578,6 @@ struct OverviewView: View {
                 StaggeredCampaignRail(
                     items: items,
                     prominence: prominence,
-                    onSetSteamId: presentSteamIdSheet(for:),
                     onUploadCustomArtwork: presentCustomArtworkImporter(for:)
                 )
                 .padding(.horizontal, 2)
@@ -663,8 +601,7 @@ struct OverviewView: View {
                         CampaignFeedCard(
                             item: item,
                             prominence: prominence,
-                            onSetSteamId: presentSteamIdSheet(for:),
-                            onUploadCustomArtwork: presentCustomArtworkImporter(for:)
+                                    onUploadCustomArtwork: presentCustomArtworkImporter(for:)
                         )
                     }
                 }
@@ -739,12 +676,7 @@ struct OverviewView: View {
         }
         let game = Game(id: campaign.gameId ?? campaign.id, name: campaign.gameName, boxArtURL: campaign.artworkURL)
         let preference = preferredPreference(matching: game)
-        let artworkURL = preference?.customArtworkURL
-            ?? (
-                SteamArtworkService.supportsSteamArtwork(forGameName: campaign.gameName, gameId: campaign.gameId)
-                    ? navigation.minerManager.dataCoordinator.steamArtworkOverrides[campaign.gameName] ?? campaign.artworkURL
-                    : campaign.artworkURL
-            )
+        let artworkURL = preference?.customArtworkURL ?? campaign.artworkURL
         return CampaignRailItem(
             id: "\(section.rawValue)-\(campaign.id)",
             section: section,
@@ -803,10 +735,6 @@ struct OverviewView: View {
     }
 
     private func makePreferredGameItem(_ preference: GamePreference) -> CampaignRailItem {
-        let supportsSteamArtwork = SteamArtworkService.supportsSteamArtwork(
-            forGameName: preference.gameName,
-            gameId: preference.gameId
-        )
         // This item is built precisely because the game has no *eligible* campaign,
         // but an ineligible one (completed, unlinked) usually still exists and
         // carries live Twitch art. Preferences hold no remote URL of their own once
@@ -820,13 +748,8 @@ struct OverviewView: View {
         )
 
         let artworkURL = preference.customArtworkURL
-            ?? (
-                supportsSteamArtwork
-                    ? navigation.minerManager.dataCoordinator.steamArtworkOverrides[preference.gameName]
-                        ?? preference.resolvedBoxArtURL
-                        ?? campaignArtwork
-                    : preference.resolvedBoxArtURL ?? campaignArtwork
-            )
+            ?? preference.resolvedBoxArtURL
+            ?? campaignArtwork
         return CampaignRailItem(
             id: "preferred-\(preference.gameId.isEmpty ? preference.gameName : preference.gameId)",
             section: .prioritised,
@@ -947,16 +870,7 @@ struct OverviewView: View {
                     : "Your preferred games are ready for the next campaign.",
                 progressPercent: 0,
                 artworkURL: preferredGames.first.flatMap { pref in
-                    pref.customArtworkURL
-                        ?? (
-                            SteamArtworkService.supportsSteamArtwork(
-                                forGameName: pref.gameName,
-                                gameId: pref.gameId
-                            )
-                            ? navigation.minerManager.dataCoordinator.steamArtworkOverrides[pref.gameName]
-                                ?? (settings.preferSteamArtwork ? nil : pref.resolvedBoxArtURL)
-                            : pref.resolvedBoxArtURL
-                        )
+                    pref.customArtworkURL ?? pref.resolvedBoxArtURL
                 },
                 tint: .orange,
                 hasOnlyBadgesOrEmotes: false,
@@ -1141,7 +1055,7 @@ struct OverviewView: View {
         let progressPercent = (campaign.overviewProgressFraction ?? 0) * 100
 #if DEBUG
         if progressPercent > 0, !campaign.hasValidProgress {
-            print("[Overview] ERROR: attempted to render progress for \(campaign.id) without Drops progress")
+            Logger.campaigns.error("Attempted to render progress for \(campaign.id) without Drops progress")
         }
 #endif
         return progressPercent

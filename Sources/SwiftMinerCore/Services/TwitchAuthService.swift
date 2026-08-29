@@ -8,6 +8,7 @@ public actor TwitchAuthService {
 
     private let clientId: String
     private let tokenStore: any TokenStore
+    private let urlSession: URLSession
     private let tokenURL = URL(string: "https://id.twitch.tv/oauth2/token")!
     private let deviceCodeURL = URL(string: "https://id.twitch.tv/oauth2/device")!
     private let validateURL = URL(string: "https://id.twitch.tv/oauth2/validate")!
@@ -38,9 +39,14 @@ public actor TwitchAuthService {
         self.onTokenRefresh = handler
     }
 
-    public init(clientId: String, tokenStore: any TokenStore) {
+    public init(
+        clientId: String,
+        tokenStore: any TokenStore,
+        urlSession: URLSession = .shared
+    ) {
         self.clientId = clientId
         self.tokenStore = tokenStore
+        self.urlSession = urlSession
     }
 
     // MARK: - Device Code Flow
@@ -78,7 +84,7 @@ public actor TwitchAuthService {
         ]
         request.httpBody = bodyParams.percentEncoded()
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await urlSession.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw TwitchMinerError.networkError("Invalid response")
@@ -88,7 +94,7 @@ public actor TwitchAuthService {
             let message = String(data: data, encoding: .utf8) ?? "Unknown error"
             // Debug logging
             Logger.auth.error("ERROR: status=\(httpResponse.statusCode)")
-            Logger.auth.debug("Request body: client_id=\(clientId.prefix(6))... scopes='\(scopes)'")
+            Logger.auth.debug("Device authorization request failed for scopes='\(scopes)'")
             Logger.auth.error("Response: \(message)")
             throw TwitchMinerError.apiError(statusCode: httpResponse.statusCode, message: message)
         }
@@ -144,7 +150,7 @@ public actor TwitchAuthService {
         ]
         request.httpBody = bodyParams.percentEncoded()
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await urlSession.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw TwitchMinerError.networkError("Invalid response")
@@ -218,12 +224,11 @@ public actor TwitchAuthService {
 
     private func performRefresh(account: Account) async throws -> String {
         guard !account.refreshToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            // No refresh grant: TDM cookie imports store an empty refresh token, and the web
-            // client ID returns expires_in = 0 so the device flow invents a 30-day deadline.
-            // Both fabricate `tokenExpiry`, so it must never be treated as proof the token is
-            // dead — Twitch is the only authority on that. Trusting the local deadline used to
-            // fail every refresh instantly, which took PubSub offline for the whole fleet while
-            // the token was still working perfectly for GraphQL.
+            // Some legacy accounts and Twitch client flows have no refresh grant, while the web
+            // client may return expires_in = 0 and require a locally assumed deadline. That
+            // `tokenExpiry` must never be treated as proof the token is dead — Twitch is the only
+            // authority on that. Trusting the local deadline used to fail every refresh instantly,
+            // taking PubSub offline while the token still worked perfectly for GraphQL.
             return try await revalidateWithoutRefreshGrant(account: account)
         }
 
@@ -238,7 +243,7 @@ public actor TwitchAuthService {
         ]
         request.httpBody = bodyParams.percentEncoded()
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await urlSession.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             Logger.auth.info("No HTTP response refreshing \(account.username); keeping the existing token")
@@ -294,14 +299,11 @@ public actor TwitchAuthService {
             info = try await validateTokenInternal(account.accessToken)
         } catch let error as TwitchMinerError {
             if case .authenticationFailed = error {
-                // `/oauth2/validate` speaks for Helix OAuth tokens. A token imported from web
-                // cookies is not one, so Twitch rejects it here while GraphQL keeps accepting it
-                // happily. Treating that 401 as proof of death sent a "re-authenticate" DM on
-                // every single launch for an account that went on to mine perfectly, because the
-                // throw also skipped the re-arm below and left the account in this path forever.
-                // Keep the token, re-arm a short window, and let a real GraphQL rejection be the
-                // thing that asks the user for a new login.
-                Logger.auth.warning("Token for \(account.username) was rejected by /validate, which is not authoritative for cookie-imported tokens; keeping it and letting GraphQL decide")
+                // `/oauth2/validate` is not authoritative for every legacy token type SwiftMiner
+                // may already have stored. Treating that 401 as proof of death can repeatedly ask
+                // an otherwise working account to sign in. Keep the token, re-arm a short window,
+                // and let a real GraphQL rejection request a new login.
+                Logger.auth.warning("Token for \(account.username) was rejected by /validate, which is not authoritative for every legacy token; keeping it and letting GraphQL decide")
                 return await rearmingWindow(
                     for: account,
                     lifetime: Self.unverifiedTokenRecheckInterval
@@ -344,7 +346,15 @@ public actor TwitchAuthService {
             scopes: scopes ?? account.scopes
         )
 
-        try? await tokenStore.save(account: renewed)
+        do {
+            try await tokenStore.save(account: renewed)
+        } catch {
+            // The token itself is fine, so the caller must still get it — failing the request
+            // here would take a working account offline over a storage fault. But the re-arm only
+            // lived in memory, so the next launch walks straight back into the refresh path that
+            // this window exists to break. Say so loudly enough to be found in `log show`.
+            Logger.storage.error("Could not persist the re-armed token window for \(account.username): \(error.localizedDescription). The account keeps working this session but will re-enter the refresh path after a restart.")
+        }
         self.currentAccount = renewed
         return renewed.accessToken
     }
@@ -385,31 +395,6 @@ public actor TwitchAuthService {
         return (userId: response.userId, login: response.login)
     }
 
-    /// Import a session from TDM cookies (auth-token).
-    /// Validates the token and saves it to secure storage.
-    public func importTDMSession(token: String) async throws -> Account {
-        Logger.auth.info("Importing TDM session token (len=\(token.count))")
-
-        // 1. Validate the token to get user info
-        let userInfo = try await validateTokenInternal(token)
-        Logger.auth.info("Token validated for \(userInfo.login)")
-
-        // 2. Create account (TDM sessions don't have refresh tokens, so we default to 30d expiry)
-        let account = await mergingStoredIdentity(into: Account(
-            id: userInfo.userId,
-            username: userInfo.login,
-            accessToken: token,
-            refreshToken: "", // TDM cookies usually don't have this
-            tokenExpiry: Date().addingTimeInterval(30 * 24 * 3600),
-            scopes: userInfo.scopes
-        ))
-
-        // 3. Save to secure storage
-        try await tokenStore.save(account: account)
-        self.currentAccount = account
-        return account
-    }
-
     /// Carries the fields SwiftMiner owns onto a freshly authenticated account.
     ///
     /// A sign-in only knows what Twitch returned, so saving it as-is overwrites
@@ -441,13 +426,13 @@ public actor TwitchAuthService {
         var request = URLRequest(url: validateURL)
         request.setValue("OAuth \(token)", forHTTPHeaderField: "Authorization")
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await urlSession.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw TwitchMinerError.authenticationFailed("Token validation failed: no HTTP response")
         }
         let responseBody = String(data: data, encoding: .utf8) ?? "<non-utf8>"
-        Logger.auth.debug("Validate response: status=\(httpResponse.statusCode) body=\(responseBody.prefix(200))")
+        Logger.auth.debug("Validate response: status=\(httpResponse.statusCode), bytes=\(data.count)")
         // Only a 401 means the token itself is dead. Any other non-200 is a Twitch-side problem
         // and must stay distinguishable, so callers can retry instead of dropping the account.
         if httpResponse.statusCode == 401 {
@@ -496,7 +481,7 @@ public actor TwitchAuthService {
         guard let url = components.url else { return }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        let (_, response) = try await URLSession.shared.data(for: request)
+        let (_, response) = try await urlSession.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse,
               (200...299).contains(httpResponse.statusCode) else {
             throw TwitchMinerError.authenticationFailed("Twitch token revocation failed")

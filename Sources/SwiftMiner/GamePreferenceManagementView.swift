@@ -90,8 +90,10 @@ struct GamePreferenceManagementView: View {
             .listStyle(.inset)
         }
         .frame(width: 480, height: 500)
-        .onChange(of: settings.gameFailoverStreamersData) { _, _ in
-            minerManager.updateFailoverStreamers(settings.gameFailoverStreamers)
+        // `.task(id:)` rather than `.onChange` + `Task {}`: SwiftUI cancels the in-flight push
+        // when the rules change again, so a rapid series of edits cannot land out of order.
+        .task(id: settings.gameFailoverStreamersData) {
+            await minerManager.updateFailoverStreamers(settings.gameFailoverStreamers)
         }
     }
 }
@@ -99,7 +101,6 @@ struct GamePreferenceManagementView: View {
 private struct PreferenceRow: View {
     let preference: GamePreference
     var settings: Settings
-    @AppStorage("preferSteamArtwork", store: Settings.appStorageStore) private var preferSteamArtwork: Bool = false
     @State private var resolvedArtworkURL: URL?
     @State private var failoverLogin: String = ""
 
@@ -115,18 +116,7 @@ private struct PreferenceRow: View {
                 .frame(width: 24, height: 32)
                 .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
                 .task(id: artworkRefreshID) {
-                    if let customArtworkURL = preference.customArtworkURL {
-                        resolvedArtworkURL = customArtworkURL
-                    } else if preferSteamArtwork,
-                       SteamArtworkService.supportsSteamArtwork(
-                           forGameName: preference.gameName,
-                           gameId: preference.gameId
-                       ) {
-                        // Prefer Steam portrait; leave nil (shows placeholder) if lookup fails — never falls back to Twitch URL
-                        resolvedArtworkURL = await SteamArtworkService.shared.portraitURL(for: preference.gameName)
-                    } else {
-                        resolvedArtworkURL = preference.resolvedBoxArtURL
-                    }
+                    resolvedArtworkURL = preference.customArtworkURL ?? preference.resolvedBoxArtURL
                 }
 
                 Text(preference.gameName)
@@ -192,7 +182,7 @@ private struct PreferenceRow: View {
     }
 
     private var artworkRefreshID: String {
-        "\(preferSteamArtwork)-\(preference.customArtworkURL?.absoluteString ?? "")"
+        preference.customArtworkURL?.absoluteString ?? ""
     }
 
     private func syncFailover() {

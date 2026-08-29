@@ -385,13 +385,13 @@ public final class NavigationModel {
             if Settings.shared.webDashboardConfigured {
                 onWebDashboardAvailabilityChanged?(true, nil)
             }
-            print("[NavigationModel] SwiftMiner HTTP server listening on port \(port)")
+            Logger.app.info("SwiftMiner HTTP server listening on port \(port)")
         } catch {
             logEvent(message: "API server failed on port \(port): \(error.localizedDescription)", level: .error)
             if Settings.shared.webDashboardConfigured {
                 onWebDashboardAvailabilityChanged?(false, error.localizedDescription)
             }
-            print("[NavigationModel] Failed to start HTTP server on port \(port): \(error)")
+            Logger.app.error("Failed to start the HTTP server on port \(port): \(error.localizedDescription)")
         }
     }
 
@@ -792,7 +792,7 @@ public final class NavigationModel {
             await loadPersistentEvents()
             recordInstalledVersionTransition()
         } catch {
-            print("[NavigationModel] Failed to open database: \(error)")
+            Logger.storage.error("Failed to open the SwiftMiner database: \(error.localizedDescription). Activity history and persisted events are unavailable this session.")
         }
 
         await wireDMActivityLogging()
@@ -1040,9 +1040,7 @@ public final class NavigationModel {
                 return
             }
 
-            _ = await coordinator.allCampaigns(
-                preferSteamArtwork: Settings.shared.preferSteamArtwork
-            )
+            _ = await coordinator.allCampaigns()
             guard !Task.isCancelled else { return }
 
             _ = self.refreshDropsInBackground(force: force)
@@ -1077,9 +1075,7 @@ public final class NavigationModel {
             await coordinator.refreshAll()
             guard !Task.isCancelled else { return }
 
-            _ = await coordinator.allCampaigns(
-                preferSteamArtwork: Settings.shared.preferSteamArtwork
-            )
+            _ = await coordinator.allCampaigns()
             NotificationCenter.default.post(name: .dropsCampaignsDidUpdate, object: coordinator)
         }
         return true

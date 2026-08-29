@@ -192,7 +192,7 @@ public actor TwitchAPIClient {
     private var followedChannelLookupRetryAt: [String: Date] = [:]
     private let followedChannelLookupBackoff: TimeInterval = 5 * 60
     /// Users whose token Twitch will not accept for the follow endpoint at all — typically a
-    /// session imported without Helix follow scope. Retrying that is not a backoff problem, it
+    /// session authenticated without Helix follow scope. Retrying that is not a backoff problem, it
     /// is permanently unanswerable, and each attempt costs a doomed token refresh. Give up for
     /// the session rather than rediscovering it every five minutes for every account.
     private var followedChannelLookupUnavailable: Set<String> = []
@@ -1197,11 +1197,9 @@ public actor TwitchAPIClient {
     ) async throws -> Data {
         let operationName = request.operationName
         await traceGQL(operationName)
-        let tokenPrefix = accessToken.prefix(8)
-        let tokenLength = accessToken.count
-        let clientPrefix = clientId.prefix(8)
+        let isAuthenticated = !accessToken.isEmpty
         await traceGQLDebug {
-            "[TwitchAPIClient] Request: \(operationName) token=\(tokenPrefix)…(len:\(tokenLength)) clientID=\(clientPrefix)…"
+            "[TwitchAPIClient] Request: \(operationName) authenticated=\(isAuthenticated)"
         }
 
         guard let requestURL = URL(string: gqlUrl) else {

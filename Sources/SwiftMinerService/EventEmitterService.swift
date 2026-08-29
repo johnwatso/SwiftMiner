@@ -191,8 +191,18 @@ public actor EventEmitterService {
     }
 
     private func insert(envelope: EventEnvelope) async {
-        guard let payloadData = try? encoder.encode(envelope),
-              let payloadString = String(data: payloadData, encoding: .utf8) else { return }
+        let payloadString: String
+        do {
+            let payloadData = try encoder.encode(envelope)
+            guard let encoded = String(data: payloadData, encoding: .utf8) else {
+                Logger.storage.error("Could not encode outbox event \(envelope.eventType) as UTF-8")
+                return
+            }
+            payloadString = encoded
+        } catch {
+            Logger.storage.error("Could not encode outbox event \(envelope.eventType): \(error.localizedDescription)")
+            return
+        }
         do {
             try await manager.execute { db in
                 let sql = """
@@ -200,15 +210,21 @@ public actor EventEmitterService {
                 VALUES (?, ?, ?, ?, 'pending');
                 """
                 var stmt: OpaquePointer?
-                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                    throw eventEmitterSQLiteError(db, operation: "prepare outbox insert")
+                }
                 defer { sqlite3_finalize(stmt) }
                 sqlite3_bind_text(stmt, 1, envelope.eventId, -1, SQLITE_TRANSIENT_EMITTER)
                 sqlite3_bind_text(stmt, 2, envelope.eventType, -1, SQLITE_TRANSIENT_EMITTER)
                 sqlite3_bind_text(stmt, 3, payloadString, -1, SQLITE_TRANSIENT_EMITTER)
                 sqlite3_bind_text(stmt, 4, envelope.delivery.idempotencyKey, -1, SQLITE_TRANSIENT_EMITTER)
-                sqlite3_step(stmt)
+                guard sqlite3_step(stmt) == SQLITE_DONE else {
+                    throw eventEmitterSQLiteError(db, operation: "insert outbox event")
+                }
             }
-        } catch {}
+        } catch {
+            Logger.storage.error("Failed to persist outbox event \(envelope.eventType): \(error.localizedDescription)")
+        }
     }
 
     private func iso8601(_ date: Date) -> String {
@@ -270,3 +286,12 @@ public enum EventDataValue: Codable, Sendable, Equatable {
 }
 
 private let SQLITE_TRANSIENT_EMITTER = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+
+private func eventEmitterSQLiteError(_ db: OpaquePointer?, operation: String) -> NSError {
+    let message = db.map { String(cString: sqlite3_errmsg($0)) } ?? "database unavailable"
+    return NSError(
+        domain: "EventEmitterService",
+        code: Int(sqlite3_errcode(db)),
+        userInfo: [NSLocalizedDescriptionKey: "SQLite could not \(operation): \(message)"]
+    )
+}

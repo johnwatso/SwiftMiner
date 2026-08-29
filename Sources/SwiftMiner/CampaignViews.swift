@@ -92,13 +92,7 @@ struct CampaignDetailView: View {
     @Environment(NavigationModel.self) private var navigation
     private var settings: Settings { .shared }
 
-    private var bannerURL: URL? {
-        if let artworkURL {
-            return artworkURL
-        }
-        guard settings.preferSteamArtwork else { return nil }
-        return navigation.minerManager.dataCoordinator.steamHeroOverrides[campaign.gameName]
-    }
+    private var bannerURL: URL? { artworkURL }
 
     private var campaignGame: Game {
         Game(id: campaign.gameId ?? "", name: campaign.gameName, boxArtURL: campaign.artworkURL)

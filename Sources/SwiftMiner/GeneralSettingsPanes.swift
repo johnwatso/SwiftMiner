@@ -123,9 +123,6 @@ struct GeneralSettingsView: View {
 
     private var artworkSettings: some View {
         Section {
-            Toggle("Use Steam artwork for game images", isOn: $settings.preferSteamArtwork)
-            SettingsSecondaryText("Falls back to Twitch artwork when a game is not found on Steam.")
-
             LabeledContent("Cached Artwork") {
                 HStack(spacing: 8) {
                     Button("Clear and Redownload") {
@@ -161,9 +158,8 @@ struct GeneralSettingsView: View {
 
         let coordinator = navigation.minerManager.dataCoordinator
         await CampaignArtworkCache.shared.clearCache()
-        await coordinator.clearSteamArtworkCache()
         await coordinator.refreshAll()
-        _ = await coordinator.allCampaigns(preferSteamArtwork: settings.preferSteamArtwork)
+        _ = await coordinator.allCampaigns()
         NotificationCenter.default.post(name: .dropsCampaignsDidUpdate, object: coordinator)
 
         withAnimation { artworkRefreshState = .finished }

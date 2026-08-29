@@ -59,6 +59,7 @@ public actor SQLiteAdminLinkingService: AdminLinkingService {
                 return accounts
             }
         } catch {
+            print("[SwiftMinerService] Could not list Twitch accounts: \(error.localizedDescription). Returning an empty list.")
             return []
         }
     }
@@ -317,6 +318,9 @@ public actor SQLiteAdminLinkingService: AdminLinkingService {
                 return users
             }
         } catch {
+            // An empty admin list and a broken database look identical to the caller, so name
+            // the difference here rather than letting the UI imply there are no users.
+            print("[SwiftMinerService] Could not list miner users: \(error.localizedDescription). Returning an empty list.")
             return []
         }
     }
@@ -366,10 +370,16 @@ public actor SQLiteAdminLinkingService: AdminLinkingService {
                 return accounts
             }
         } catch {
+            print("[SwiftMinerService] Could not list Twitch accounts: \(error.localizedDescription). Returning an empty list.")
             return []
         }
     }
 
+    /// Refreshes the stored Twitch identity for an account.
+    ///
+    /// Best-effort by contract — callers use it to keep display names current and must not fail a
+    /// user-facing action over it — but a failure means the admin list keeps showing a stale
+    /// username or operator flag, so it is reported rather than discarded.
     public func upsertAccountIdentity(twitchId: String, username: String, isOperator: Bool) async {
         do {
             try await manager.execute { db in
@@ -385,27 +395,43 @@ public actor SQLiteAdminLinkingService: AdminLinkingService {
                     is_operator = excluded.is_operator;
                 """
                 var stmt: OpaquePointer?
-                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                    throw self.dbError(db)
+                }
                 defer { sqlite3_finalize(stmt) }
                 sqlite3_bind_text(stmt, 1, twitchId, -1, SQLITE_TRANSIENT)
                 sqlite3_bind_text(stmt, 2, username, -1, SQLITE_TRANSIENT)
                 sqlite3_bind_int(stmt, 3, isOperator ? 1 : 0)
-                sqlite3_step(stmt)
+                guard sqlite3_step(stmt) == SQLITE_DONE else {
+                    throw self.dbError(db)
+                }
             }
-        } catch {}
+        } catch {
+            print("[SwiftMinerService] Could not refresh the stored identity for Twitch account \(twitchId): \(error.localizedDescription)")
+        }
     }
 
+    /// Removes an account row outright.
+    ///
+    /// A silent failure here leaves the account visible to admins and still owned by its Discord
+    /// user after they were told it was gone, so the failure is surfaced in the service log.
     public func deleteAccountRow(twitchId: String) async {
         do {
             try await manager.execute { db in
                 let sql = "DELETE FROM twitch_accounts WHERE twitch_id = ?;"
                 var stmt: OpaquePointer?
-                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                    throw self.dbError(db)
+                }
                 defer { sqlite3_finalize(stmt) }
                 sqlite3_bind_text(stmt, 1, twitchId, -1, SQLITE_TRANSIENT)
-                sqlite3_step(stmt)
+                guard sqlite3_step(stmt) == SQLITE_DONE else {
+                    throw self.dbError(db)
+                }
             }
-        } catch {}
+        } catch {
+            print("[SwiftMinerService] Could not delete Twitch account row \(twitchId): \(error.localizedDescription)")
+        }
     }
 
     public func unlinkAccount(twitchAccountId: String, operatorIdentity: OperatorIdentity) async -> AdminUnlinkResult {

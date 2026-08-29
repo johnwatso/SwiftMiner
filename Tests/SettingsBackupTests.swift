@@ -6,16 +6,16 @@ import SwiftMinerCore
 final class SettingsBackupTests: XCTestCase {
     private var settings: Settings!
 
-    override func setUp() {
-        super.setUp()
+    override func setUp() async throws {
+        try await super.setUp()
         settings = Settings.shared
         settings.resetToDefaults()
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         settings.resetToDefaults()
         settings = nil
-        super.tearDown()
+        try await super.tearDown()
     }
 
     func testQuietHoursHandlesOvernightWindow() {
@@ -32,7 +32,6 @@ final class SettingsBackupTests: XCTestCase {
         settings.quietHoursEnabled = true
         settings.quietHoursStartMinute = 21 * 60
         settings.quietHoursEndMinute = 8 * 60
-        settings.preferSteamArtwork = false
         settings.swiftBotEndpoint = "http://127.0.0.1:9000"
 
         let data = try settings.exportBackupData()
@@ -42,7 +41,6 @@ final class SettingsBackupTests: XCTestCase {
         XCTAssertTrue(settings.quietHoursEnabled)
         XCTAssertEqual(settings.quietHoursStartMinute, 21 * 60)
         XCTAssertEqual(settings.quietHoursEndMinute, 8 * 60)
-        XCTAssertFalse(settings.preferSteamArtwork)
         XCTAssertEqual(settings.swiftBotEndpoint, "http://127.0.0.1:9000")
     }
 

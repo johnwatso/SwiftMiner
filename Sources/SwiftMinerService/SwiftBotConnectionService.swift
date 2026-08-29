@@ -16,15 +16,18 @@ public actor RestSwiftBotConnectionService: SwiftBotConnectionService {
     private(set) public var state: SwiftBotConnectionState = .notConfigured
     private let outboxProvider: @Sendable () -> EventOutboxService?
     private let dmLogStore: DMLogStore?
+    private let urlSession: URLSession
     private var dmActivityHandler: DMActivityHandler?
 
     public init(
         endpoint: String,
         dmLogStore: DMLogStore? = nil,
+        urlSession: URLSession = .shared,
         outboxProvider: @escaping @Sendable () -> EventOutboxService?
     ) {
         self.endpoint = Self.validatedURL(from: endpoint)
         self.dmLogStore = dmLogStore
+        self.urlSession = urlSession
         self.outboxProvider = outboxProvider
         if self.endpoint == nil {
             self.state = .notConfigured
@@ -59,7 +62,7 @@ public actor RestSwiftBotConnectionService: SwiftBotConnectionService {
         request.timeoutInterval = 5.0
         
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await urlSession.data(for: request)
             if let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) {
                 // SwiftBot 1.11+ reports a `paired` flag in /health. Treat a
                 // present-and-false flag as `.unpaired` so the UI prompts the
@@ -93,7 +96,7 @@ public actor RestSwiftBotConnectionService: SwiftBotConnectionService {
         request.httpMethod = "GET"
         request.timeoutInterval = 5.0
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await urlSession.data(for: request)
             guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else { return nil }
             return try JSONDecoder().decode(SwiftBotTunnelInfo.self, from: data)
         } catch {
@@ -133,7 +136,7 @@ public actor RestSwiftBotConnectionService: SwiftBotConnectionService {
         request.setValue(signature, forHTTPHeaderField: "X-SwiftMiner-Signature")
 
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await urlSession.data(for: request)
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
             let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
             if (200...299).contains(status), let publicURL = json?["publicURL"] as? String {
@@ -154,7 +157,7 @@ public actor RestSwiftBotConnectionService: SwiftBotConnectionService {
         request.httpMethod = "GET"
         request.timeoutInterval = 5.0
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await urlSession.data(for: request)
             guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else { return [] }
             let wrapper = try JSONDecoder().decode(UsersResponse.self, from: data)
             return wrapper.users
@@ -221,7 +224,7 @@ public actor RestSwiftBotConnectionService: SwiftBotConnectionService {
         }
 
         do {
-            let (_, response) = try await URLSession.shared.data(for: request)
+            let (_, response) = try await urlSession.data(for: request)
             let ok = (response as? HTTPURLResponse).map { (200...299).contains($0.statusCode) } ?? false
             if !ok, let http = response as? HTTPURLResponse {
                 swiftBotConnectionLogger.error("sendDM non-2xx status=\(http.statusCode)")

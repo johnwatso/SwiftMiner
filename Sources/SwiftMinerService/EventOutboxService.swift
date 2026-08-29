@@ -12,16 +12,23 @@ public actor EventOutboxService {
     private let manager: SQLiteManager
     private var webhookURL: URL?
     private var hmacSecret: String
+    private let urlSession: URLSession
     private var pollingTask: Task<Void, Never>?
 
     // Backoff per retry_count (index = attempt number after first failure)
     fileprivate static let backoffIntervals: [TimeInterval] = [30, 120, 600, 3_600, 21_600, 86_400]
     private static let maxRetries = backoffIntervals.count
 
-    public init(manager: SQLiteManager, webhookURL: URL?, hmacSecret: String) {
+    public init(
+        manager: SQLiteManager,
+        webhookURL: URL?,
+        hmacSecret: String,
+        urlSession: URLSession = .shared
+    ) {
         self.manager = manager
         self.webhookURL = webhookURL
         self.hmacSecret = hmacSecret
+        self.urlSession = urlSession
     }
 
     public func updateConfig(webhookURL: URL?, hmacSecret: String) {
@@ -90,11 +97,17 @@ public actor EventOutboxService {
                 LIMIT 10;
                 """
                 var stmt: OpaquePointer?
-                if sqlite3_prepare_v2(db, pendingSql, -1, &stmt, nil) == SQLITE_OK {
-                    defer { sqlite3_finalize(stmt) }
-                    while sqlite3_step(stmt) == SQLITE_ROW {
-                        if let row = OutboxRow(statement: stmt) { rows.append(row) }
-                    }
+                guard sqlite3_prepare_v2(db, pendingSql, -1, &stmt, nil) == SQLITE_OK else {
+                    throw eventOutboxSQLiteError(db, operation: "prepare pending-event query")
+                }
+                defer { sqlite3_finalize(stmt) }
+                var pendingStep = sqlite3_step(stmt)
+                while pendingStep == SQLITE_ROW {
+                    if let row = OutboxRow(statement: stmt) { rows.append(row) }
+                    pendingStep = sqlite3_step(stmt)
+                }
+                guard pendingStep == SQLITE_DONE else {
+                    throw eventOutboxSQLiteError(db, operation: "read pending events")
                 }
 
                 // Retryable events — include all, filter by backoff window in Swift
@@ -106,13 +119,19 @@ public actor EventOutboxService {
                 LIMIT 20;
                 """
                 var retryStmt: OpaquePointer?
-                if sqlite3_prepare_v2(db, retryableSql, -1, &retryStmt, nil) == SQLITE_OK {
-                    defer { sqlite3_finalize(retryStmt) }
-                    while sqlite3_step(retryStmt) == SQLITE_ROW {
-                        if let row = OutboxRow(statement: retryStmt), row.isBackoffElapsed {
-                            rows.append(row)
-                        }
+                guard sqlite3_prepare_v2(db, retryableSql, -1, &retryStmt, nil) == SQLITE_OK else {
+                    throw eventOutboxSQLiteError(db, operation: "prepare retryable-event query")
+                }
+                defer { sqlite3_finalize(retryStmt) }
+                var retryableStep = sqlite3_step(retryStmt)
+                while retryableStep == SQLITE_ROW {
+                    if let row = OutboxRow(statement: retryStmt), row.isBackoffElapsed {
+                        rows.append(row)
                     }
+                    retryableStep = sqlite3_step(retryStmt)
+                }
+                guard retryableStep == SQLITE_DONE else {
+                    throw eventOutboxSQLiteError(db, operation: "read retryable events")
                 }
 
                 let staleDeliveringSql = """
@@ -124,18 +143,25 @@ public actor EventOutboxService {
                 LIMIT 10;
                 """
                 var staleStmt: OpaquePointer?
-                if sqlite3_prepare_v2(db, staleDeliveringSql, -1, &staleStmt, nil) == SQLITE_OK {
-                    defer { sqlite3_finalize(staleStmt) }
-                    while sqlite3_step(staleStmt) == SQLITE_ROW {
-                        if let row = OutboxRow(statement: staleStmt) {
-                            rows.append(row)
-                        }
+                guard sqlite3_prepare_v2(db, staleDeliveringSql, -1, &staleStmt, nil) == SQLITE_OK else {
+                    throw eventOutboxSQLiteError(db, operation: "prepare stale-delivery query")
+                }
+                defer { sqlite3_finalize(staleStmt) }
+                var staleStep = sqlite3_step(staleStmt)
+                while staleStep == SQLITE_ROW {
+                    if let row = OutboxRow(statement: staleStmt) {
+                        rows.append(row)
                     }
+                    staleStep = sqlite3_step(staleStmt)
+                }
+                guard staleStep == SQLITE_DONE else {
+                    throw eventOutboxSQLiteError(db, operation: "read stale deliveries")
                 }
 
                 return rows
             }
         } catch {
+            Logger.storage.error("Failed to read the event outbox: \(error.localizedDescription)")
             return []
         }
     }
@@ -179,7 +205,7 @@ public actor EventOutboxService {
         request.setValue(signature, forHTTPHeaderField: "X-SwiftMiner-Signature")
 
         do {
-            let (_, response) = try await URLSession.shared.data(for: request)
+            let (_, response) = try await urlSession.data(for: request)
             guard let http = response as? HTTPURLResponse else { return .retryable }
             let code = http.statusCode
             if (200..<300).contains(code) || code == 409 { return .success }
@@ -219,7 +245,9 @@ public actor EventOutboxService {
                     """
                 }
                 var stmt: OpaquePointer?
-                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                    throw eventOutboxSQLiteError(db, operation: "prepare status update")
+                }
                 defer { sqlite3_finalize(stmt) }
                 if let retryCount {
                     sqlite3_bind_text(stmt, 1, status, -1, SQLITE_TRANSIENT_LOCAL)
@@ -229,9 +257,13 @@ public actor EventOutboxService {
                     sqlite3_bind_text(stmt, 1, status, -1, SQLITE_TRANSIENT_LOCAL)
                     sqlite3_bind_text(stmt, 2, id, -1, SQLITE_TRANSIENT_LOCAL)
                 }
-                sqlite3_step(stmt)
+                guard sqlite3_step(stmt) == SQLITE_DONE else {
+                    throw eventOutboxSQLiteError(db, operation: "update event status")
+                }
             }
-        } catch {}
+        } catch {
+            Logger.storage.error("Failed to mark outbox event \(id) as \(status): \(error.localizedDescription)")
+        }
     }
 }
 
@@ -284,3 +316,12 @@ private struct OutboxRow {
 }
 
 private let SQLITE_TRANSIENT_LOCAL = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+
+private func eventOutboxSQLiteError(_ db: OpaquePointer?, operation: String) -> NSError {
+    let message = db.map { String(cString: sqlite3_errmsg($0)) } ?? "database unavailable"
+    return NSError(
+        domain: "EventOutboxService",
+        code: Int(sqlite3_errcode(db)),
+        userInfo: [NSLocalizedDescriptionKey: "SQLite could not \(operation): \(message)"]
+    )
+}

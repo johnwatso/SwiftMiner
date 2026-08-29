@@ -130,14 +130,23 @@ public actor EarningLedgerStore {
     /// completed hour is never lost to a crash.
     private func persistIfNeeded(at date: Date, rolledOverInto hourStart: Date) {
         guard let lastPersistAt else {
-            try? persist(at: date)
+            persistAndReportFailure(at: date)
             return
         }
 
         let intervalElapsed = date.timeIntervalSince(lastPersistAt) >= persistInterval
         let rolledOver = EarningLedgerBucket.hourStart(for: lastPersistAt) != hourStart
         guard intervalElapsed || rolledOver else { return }
-        try? persist(at: date)
+        persistAndReportFailure(at: date)
+    }
+
+    private func persistAndReportFailure(at date: Date) {
+        do {
+            try persist(at: date)
+        } catch {
+            // Keep `isDirty` set so the next interval or explicit flush retries.
+            Logger.storage.error("Earning ledger persistence failed: \(error.localizedDescription)")
+        }
     }
 
     private func persist(at date: Date = Date()) throws {
@@ -158,15 +167,28 @@ public actor EarningLedgerStore {
     }
 
     private static func loadState(from fileURL: URL) -> PersistedState {
-        guard let data = try? Data(contentsOf: fileURL) else {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            return PersistedState()
+        }
+        let data: Data
+        do {
+            data = try Data(contentsOf: fileURL)
+        } catch {
+            Logger.storage.error("Could not read the earning ledger: \(error.localizedDescription)")
             return PersistedState()
         }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        guard let decoded = try? decoder.decode(PersistedState.self, from: data),
-              decoded.schemaVersion == PersistedState.currentSchemaVersion else {
+        do {
+            let decoded = try decoder.decode(PersistedState.self, from: data)
+            guard decoded.schemaVersion == PersistedState.currentSchemaVersion else {
+                Logger.storage.error("Earning ledger schema \(decoded.schemaVersion) is unsupported")
+                return PersistedState()
+            }
+            return decoded
+        } catch {
+            Logger.storage.error("Could not decode the earning ledger: \(error.localizedDescription)")
             return PersistedState()
         }
-        return decoded
     }
 }

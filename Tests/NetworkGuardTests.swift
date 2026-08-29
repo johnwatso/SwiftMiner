@@ -1,7 +1,7 @@
 import XCTest
 
 /// Verifies the fail-fast network guard actually intercepts the escape routes it
-/// claims to — primarily `URLSession.shared`, which several services use directly.
+/// claims to, including any accidental use of `URLSession.shared`.
 final class NetworkGuardTests: XCTestCase {
 
     func testSharedSessionUnmockedRequestIsBlocked() async {

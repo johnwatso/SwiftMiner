@@ -50,7 +50,9 @@ actor ActivityLogStore {
                 VALUES (?, ?, ?, ?, ?, ?, ?);
                 """
                 var stmt: OpaquePointer?
-                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                    throw activityLogSQLiteError(db, operation: "prepare activity-log insert")
+                }
                 defer { sqlite3_finalize(stmt) }
 
                 sqlite3_bind_text(stmt, 1, entry.id.uuidString, -1, SQLITE_TRANSIENT_ACTIVITY_LOG)
@@ -72,10 +74,13 @@ actor ActivityLogStore {
                 } else {
                     sqlite3_bind_null(stmt, 7)
                 }
-                _ = sqlite3_step(stmt)
+                guard sqlite3_step(stmt) == SQLITE_DONE else {
+                    throw activityLogSQLiteError(db, operation: "insert activity-log entry")
+                }
             }
         } catch {
             // Best effort: logging must never block the UI or web request path.
+            Logger.storage.error("Failed to save activity-log entry: \(error.localizedDescription)")
         }
 
         if shouldPrune {
@@ -111,14 +116,19 @@ actor ActivityLogStore {
                 );
                 """
                 var stmt: OpaquePointer?
-                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                    throw activityLogSQLiteError(db, operation: "prepare activity-log prune")
+                }
                 defer { sqlite3_finalize(stmt) }
                 sqlite3_bind_int(stmt, 1, Int32(retainedOverall))
                 sqlite3_bind_int(stmt, 2, Int32(retainedPerCategory))
-                _ = sqlite3_step(stmt)
+                guard sqlite3_step(stmt) == SQLITE_DONE else {
+                    throw activityLogSQLiteError(db, operation: "prune activity-log entries")
+                }
             }
         } catch {
             // Best effort.
+            Logger.storage.error("Failed to prune activity-log entries: \(error.localizedDescription)")
         }
     }
 
@@ -152,17 +162,23 @@ actor ActivityLogStore {
                 ORDER BY timestamp DESC;
                 """
                 var stmt: OpaquePointer?
-                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
+                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                    throw activityLogSQLiteError(db, operation: "prepare activity-log query")
+                }
                 defer { sqlite3_finalize(stmt) }
                 sqlite3_bind_int(stmt, 1, Int32(max(limit, 0)))
                 sqlite3_bind_int(stmt, 2, Int32(retainedPerCategory))
 
                 var entries: [EventEntry] = []
-                while sqlite3_step(stmt) == SQLITE_ROW {
+                var stepResult = sqlite3_step(stmt)
+                while stepResult == SQLITE_ROW {
                     guard let idText = sqlite3_column_text(stmt, 0),
                           let messageText = sqlite3_column_text(stmt, 2),
                           let levelText = sqlite3_column_text(stmt, 3)
-                    else { continue }
+                    else {
+                        stepResult = sqlite3_step(stmt)
+                        continue
+                    }
 
                     let id = UUID(uuidString: String(cString: idText)) ?? UUID()
                     let timestamp = Date(timeIntervalSince1970: sqlite3_column_double(stmt, 1))
@@ -179,10 +195,15 @@ actor ActivityLogStore {
                         rawMessage: rawMessage,
                         category: category
                     ))
+                    stepResult = sqlite3_step(stmt)
+                }
+                guard stepResult == SQLITE_DONE else {
+                    throw activityLogSQLiteError(db, operation: "read activity-log entries")
                 }
                 return entries
             }
         } catch {
+            Logger.storage.error("Failed to load activity-log entries: \(error.localizedDescription)")
             return []
         }
     }
@@ -191,14 +212,28 @@ actor ActivityLogStore {
         do {
             try await manager.execute { db in
                 var stmt: OpaquePointer?
-                guard sqlite3_prepare_v2(db, "DELETE FROM activity_log_entries;", -1, &stmt, nil) == SQLITE_OK else { return }
+                guard sqlite3_prepare_v2(db, "DELETE FROM activity_log_entries;", -1, &stmt, nil) == SQLITE_OK else {
+                    throw activityLogSQLiteError(db, operation: "prepare activity-log clear")
+                }
                 defer { sqlite3_finalize(stmt) }
-                _ = sqlite3_step(stmt)
+                guard sqlite3_step(stmt) == SQLITE_DONE else {
+                    throw activityLogSQLiteError(db, operation: "clear activity-log entries")
+                }
             }
         } catch {
             // Best effort.
+            Logger.storage.error("Failed to clear activity-log entries: \(error.localizedDescription)")
         }
     }
 }
 
 private let SQLITE_TRANSIENT_ACTIVITY_LOG = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+
+private func activityLogSQLiteError(_ db: OpaquePointer?, operation: String) -> NSError {
+    let message = db.map { String(cString: sqlite3_errmsg($0)) } ?? "database unavailable"
+    return NSError(
+        domain: "ActivityLogStore",
+        code: Int(sqlite3_errcode(db)),
+        userInfo: [NSLocalizedDescriptionKey: "SQLite could not \(operation): \(message)"]
+    )
+}

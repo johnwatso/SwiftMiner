@@ -8,12 +8,9 @@ struct GameCampaignDeckCard: View {
     let group: GameAggregate
     let selectedAccountId: String?
     let activityProvider: (CampaignViewData) -> CampaignActivitySnapshot
-    var onSteamIdSet: ((String) async -> Void)?
 
     @State private var isHovered = false
-    @State private var showingSteamIdPopover = false
     @State private var showingInspectorPopover = false
-    @State private var steamIdDraft = ""
     @State private var extractedArtworkTint: Color?
 
     private var cardState: CampaignCardState {
@@ -31,11 +28,6 @@ struct GameCampaignDeckCard: View {
     private var campaignGame: Game {
         let firstCampaign = group.campaigns.first?.campaign
         return Game(id: firstCampaign?.gameId ?? "", name: group.gameName, boxArtURL: group.artworkURL)
-    }
-
-    private var supportsSteamArtwork: Bool {
-        let firstCampaign = group.campaigns.first?.campaign
-        return SteamArtworkService.supportsSteamArtwork(forGameName: group.gameName, gameId: firstCampaign?.gameId)
     }
 
     private var minerAccountStates: [AccountState] {
@@ -400,30 +392,6 @@ struct GameCampaignDeckCard: View {
             } label: {
                 Label("Exclude Game", systemImage: "minus.circle")
             }
-
-            Divider()
-
-            if supportsSteamArtwork {
-                Button {
-                    steamIdDraft = ""
-                    showingSteamIdPopover = true
-                } label: {
-                    Label("Set Steam ID", systemImage: "photo.artframe")
-                }
-            }
-        }
-        .popover(isPresented: $showingSteamIdPopover, arrowEdge: .bottom) {
-            SteamIdInputPopover(
-                gameName: group.gameName,
-                appId: $steamIdDraft,
-                onConfirm: {
-                    showingSteamIdPopover = false
-                    let id = steamIdDraft.trimmingCharacters(in: .whitespaces)
-                    guard !id.isEmpty else { return }
-                    Task { await onSteamIdSet?(id) }
-                },
-                onCancel: { showingSteamIdPopover = false }
-            )
         }
     }
 
@@ -690,37 +658,5 @@ private extension TimeInterval {
         } else {
             return "\(days) \(days == 1 ? "day" : "days") left"
         }
-    }
-}
-
-// MARK: - Steam ID Input Popover
-
-struct SteamIdInputPopover: View {
-    let gameName: String
-    @Binding var appId: String
-    let onConfirm: () -> Void
-    let onCancel: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Set Steam App ID")
-                .font(.headline)
-            Text("Override artwork lookup for \"\(gameName)\"")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            TextField("App ID (e.g. 2073850)", text: $appId)
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 260)
-            HStack {
-                Button("Cancel", action: onCancel)
-                Spacer()
-                Button("Set") { onConfirm() }
-                    .keyboardShortcut(.return)
-                    .disabled(appId.trimmingCharacters(in: .whitespaces).isEmpty)
-                    .buttonStyle(.borderedProminent)
-            }
-        }
-        .padding(16)
-        .frame(width: 300)
     }
 }

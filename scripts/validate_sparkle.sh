@@ -26,6 +26,7 @@ load_build_settings() {
         -project "$PROJECT_PATH" \
         -scheme "$SCHEME" \
         -configuration "$CONFIGURATION" \
+        -destination "generic/platform=macOS" \
         -showBuildSettings 2>/dev/null || true)
 }
 

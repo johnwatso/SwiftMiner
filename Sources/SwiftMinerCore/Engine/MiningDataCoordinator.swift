@@ -24,23 +24,22 @@ public final class MiningDataCoordinator {
     /// Account ID lookup by miner ID
     private var minerAccountIds: [String: String] = [:]
 
-    /// Steam portrait artwork overrides populated during enrichment.
-    /// Key = gameName (as returned by Twitch), Value = Steam CDN portrait URL.
-    /// Used by views that consume raw Campaign objects (e.g. ContentView overview rail).
-    public private(set) var steamArtworkOverrides: [String: URL] = [:]
-
-    /// Steam hero banner overrides populated during enrichment.
-    /// Key = gameName, Value = Steam CDN hero URL (landscape, freshest art).
-    /// Used for full-bleed blurred backgrounds in the Drops view.
-    public private(set) var steamHeroOverrides: [String: URL] = [:]
-
     /// Last known result of `allCampaigns()` — available synchronously so views can
     /// render immediately on recreation without waiting for the async re-fetch.
     public private(set) var lastKnownAllCampaigns: [CampaignViewData] = []
 
     /// Last known result of `currentCampaigns()` — same purpose as above.
     public private(set) var lastKnownCurrentCampaigns: [CampaignViewData] = []
-    
+
+    /// Tail of the registration/teardown chain, so those two never overtake each other.
+    ///
+    /// Both hops have to reach `aggregatedService`, which is an actor, so both suspend before
+    /// they do anything. Firing them as independent tasks let a removal land before the
+    /// registration it was meant to undo — leaving a dead account wired into aggregation for the
+    /// rest of the session — and let two registrations for the same account interleave. Chaining
+    /// each new hop behind the previous one keeps them in call order.
+    private var coordinationChain: Task<Void, Never>?
+
     // MARK: - Initialization
     
     public init(campaignStore: CampaignStore) {
@@ -77,8 +76,8 @@ public final class MiningDataCoordinator {
         minerAccountIds[minerId] = accountId
 
         // Register with aggregation service
-        Task {
-            await aggregatedService.registerAccount(
+        enqueueCoordination {
+            await self.aggregatedService.registerAccount(
                 accountId: accountId,
                 username: username,
                 service: dataService
@@ -95,7 +94,7 @@ public final class MiningDataCoordinator {
             // Fake accounts created by hosted unit tests must remain inert.
             if !SwiftMinerRuntime.isRunningTests {
                 // Trigger initial aggregation
-                await refreshAll()
+                await self.refreshAll()
             }
         }
     }
@@ -106,9 +105,27 @@ public final class MiningDataCoordinator {
         minerEngines.removeValue(forKey: minerId)
         minerAccountIds.removeValue(forKey: minerId)
 
-        Task {
-            await aggregatedService.unregisterAccount(accountId: accountId)
-            await refreshAll()
+        enqueueCoordination {
+            await self.aggregatedService.unregisterAccount(accountId: accountId)
+            // Fake accounts created by hosted unit tests must remain inert.
+            if !SwiftMinerRuntime.isRunningTests {
+                await self.refreshAll()
+            }
+        }
+    }
+
+    /// Waits until every coordination hop queued so far — including the most recent one — has
+    /// finished. Test-only; production callers are fire-and-forget by design.
+    func drainPendingCoordination() async {
+        await coordinationChain?.value
+    }
+
+    /// Runs `work` after every previously queued coordination hop has completed.
+    private func enqueueCoordination(_ work: @escaping @MainActor () async -> Void) {
+        let previous = coordinationChain
+        coordinationChain = Task { @MainActor in
+            await previous?.value
+            await work()
         }
     }
     
@@ -121,139 +138,18 @@ public final class MiningDataCoordinator {
 
     /// Get the unified cached campaign feed used by the Drops UI.
     /// This applies the curated feed filter (excludes .irrelevant).
-    /// Pass `preferSteamArtwork: true` to substitute Steam CDN artwork where available.
-    public func currentCampaigns(preferSteamArtwork: Bool = false) async -> [CampaignViewData] {
-        let campaigns = await aggregatedService.currentCampaigns()
-        let result = preferSteamArtwork ? await enrichWithSteamArtwork(campaigns) : campaigns
+    public func currentCampaigns() async -> [CampaignViewData] {
+        let result = await aggregatedService.currentCampaigns()
         lastKnownCurrentCampaigns = result
         return result
     }
 
     /// Get ALL cached campaigns without filtering.
     /// Use this for the "All" tab to show complete campaign history.
-    /// Pass `preferSteamArtwork: true` to substitute Steam CDN artwork where available.
-    public func allCampaigns(preferSteamArtwork: Bool = false) async -> [CampaignViewData] {
-        let campaigns = await aggregatedService.allCampaigns()
-        let result = preferSteamArtwork ? await enrichWithSteamArtwork(campaigns) : campaigns
+    public func allCampaigns() async -> [CampaignViewData] {
+        let result = await aggregatedService.allCampaigns()
         lastKnownAllCampaigns = result
         return result
-    }
-
-    // MARK: - Steam Artwork Enrichment
-
-    /// Clears the Steam artwork override cache and re-enriches from scratch.
-    /// Called when the user taps "Refresh Artwork".
-    public func clearSteamArtworkCache() async {
-        await SteamArtworkService.shared.clearCache()
-        steamArtworkOverrides.removeAll()
-        steamHeroOverrides.removeAll()
-    }
-
-    /// Substitutes Steam CDN artwork into a list of campaigns.
-    /// Populates `steamArtworkOverrides` (portrait) and `steamHeroOverrides` (hero banner)
-    /// so all views can do a sync lookup without an async call.
-    /// 
-    /// Uses TaskGroup for parallel enrichment — significantly faster for multiple campaigns.
-    private func enrichWithSteamArtwork(_ campaigns: [CampaignViewData]) async -> [CampaignViewData] {
-        // Create lookup tables for quick index access
-        let gameNames = campaigns
-            .map { $0.gameName }
-            .filter { SteamArtworkService.supportsSteamArtwork(forGameName: $0) }
-        
-        // Structure to hold enrichment results
-        struct EnrichmentResult {
-            let gameName: String
-            let portraitURL: URL?
-            let heroURL: URL?
-        }
-        
-        // Parallel enrichment using TaskGroup
-        let results: [EnrichmentResult] = await withTaskGroup(of: EnrichmentResult.self) { group in
-            for gameName in gameNames {
-                group.addTask {
-                    async let portrait = SteamArtworkService.shared.portraitURL(for: gameName)
-                    async let hero = SteamArtworkService.shared.heroURL(for: gameName)
-                    return EnrichmentResult(
-                        gameName: gameName,
-                        portraitURL: await portrait,
-                        heroURL: await hero
-                    )
-                }
-            }
-            
-            var results: [EnrichmentResult] = []
-            for await result in group {
-                results.append(result)
-            }
-            return results
-        }
-        
-        // Build lookup dictionaries from results
-        var portraitURLs: [String: URL] = [:]
-        var heroURLs: [String: URL] = [:]
-        for result in results {
-            if let url = result.portraitURL {
-                portraitURLs[result.gameName] = url
-            }
-            if let url = result.heroURL {
-                heroURLs[result.gameName] = url
-            }
-        }
-        
-        // Update override caches
-        let previousArtworkCount = steamArtworkOverrides.count
-        let previousHeroCount = steamHeroOverrides.count
-
-        steamArtworkOverrides.merge(portraitURLs) { _, new in new }
-        steamHeroOverrides.merge(heroURLs) { _, new in new }
-        
-        if steamArtworkOverrides.count > previousArtworkCount || steamHeroOverrides.count > previousHeroCount {
-            NotificationCenter.default.post(name: .steamArtworkDidUpdate, object: self)
-        }
-        
-        // Apply to campaigns
-        return campaigns.map { campaign in
-            if let url = portraitURLs[campaign.gameName] {
-                return campaign.withArtworkURL(url)
-            }
-            return campaign
-        }
-    }
-    
-    /// Enriches `steamArtworkOverrides` / `steamHeroOverrides` for a list of bare game names
-    /// that may not appear in the active campaign feed (e.g. preferred games with no live campaign).
-    /// Safe to call repeatedly — `SteamArtworkService` caches App ID lookups persistently.
-    public func enrichGameNames(_ names: [String]) async {
-        let supportedNames = names.filter { SteamArtworkService.supportsSteamArtwork(forGameName: $0) }
-        guard !supportedNames.isEmpty else { return }
-        struct EnrichmentResult {
-            let gameName: String
-            let portraitURL: URL?
-            let heroURL: URL?
-        }
-        let results: [EnrichmentResult] = await withTaskGroup(of: EnrichmentResult.self) { group in
-            for name in supportedNames {
-                group.addTask {
-                    async let portrait = SteamArtworkService.shared.portraitURL(for: name)
-                    async let hero = SteamArtworkService.shared.heroURL(for: name)
-                    return EnrichmentResult(gameName: name, portraitURL: await portrait, heroURL: await hero)
-                }
-            }
-            var results: [EnrichmentResult] = []
-            for await result in group { results.append(result) }
-            return results
-        }
-        let previousArtworkCount = steamArtworkOverrides.count
-        let previousHeroCount = steamHeroOverrides.count
-
-        for result in results {
-            if let url = result.portraitURL { steamArtworkOverrides[result.gameName] = url }
-            if let url = result.heroURL { steamHeroOverrides[result.gameName] = url }
-        }
-        
-        if steamArtworkOverrides.count > previousArtworkCount || steamHeroOverrides.count > previousHeroCount {
-            NotificationCenter.default.post(name: .steamArtworkDidUpdate, object: self)
-        }
     }
 
     /// Clears persisted campaign/inventory snapshots used for Drops history.

@@ -1002,17 +1002,27 @@ public actor DiscordAPIRoutes {
         }
     }
 
+    /// Reports whether the Discord user has a `miner_users` row.
+    ///
+    /// A read failure answers "no", which is the safe direction for every caller — it makes them
+    /// create the row rather than assume one exists — but it is not the same as an absent row, so
+    /// it gets logged instead of being swallowed.
     private func userExists(discordUserId: String) async -> Bool {
         do {
             return try await manager.query { db in
                 let sql = "SELECT 1 FROM miner_users WHERE discord_id = ?;"
                 var stmt: OpaquePointer?
-                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return false }
+                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                    throw Self.sqliteError(db, code: 8)
+                }
                 defer { sqlite3_finalize(stmt) }
                 sqlite3_bind_text(stmt, 1, discordUserId, -1, SQLITE_TRANSIENT_ROUTES)
                 return sqlite3_step(stmt) == SQLITE_ROW
             }
-        } catch { return false }
+        } catch {
+            print("[SwiftMinerService] Could not check whether Discord user \(discordUserId) exists: \(error.localizedDescription). Treating them as new.")
+            return false
+        }
     }
 
     private func fetchDMState(discordUserId: String) async -> DiscordDMState {
@@ -1090,19 +1100,35 @@ public actor DiscordAPIRoutes {
         )
     }
 
+    /// Reports whether the Discord user owns at least one Twitch account.
+    ///
+    /// As with `userExists`, a read failure answers "no" — the direction that offers the user a
+    /// link rather than hiding one — but it is logged so a broken database is not mistaken for an
+    /// unlinked user.
     private func hasLinkedAccount(discordUserId: String) async -> Bool {
         do {
             return try await manager.query { db in
                 let sql = "SELECT 1 FROM twitch_accounts WHERE owner_discord_id = ? LIMIT 1;"
                 var stmt: OpaquePointer?
-                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return false }
+                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                    throw Self.sqliteError(db, code: 9)
+                }
                 defer { sqlite3_finalize(stmt) }
                 sqlite3_bind_text(stmt, 1, discordUserId, -1, SQLITE_TRANSIENT_ROUTES)
                 return sqlite3_step(stmt) == SQLITE_ROW
             }
-        } catch { return false }
+        } catch {
+            print("[SwiftMinerService] Could not check linked accounts for Discord user \(discordUserId): \(error.localizedDescription). Treating them as unlinked.")
+            return false
+        }
     }
 
+    /// Writes the activation session to disk so an in-flight link survives a service restart.
+    ///
+    /// The in-memory copy in `activationSessions` is what the current process polls against, so a
+    /// write failure is not fatal to this attempt and must not fail the caller's request. It does
+    /// mean the link is lost if the service restarts before the user finishes authorizing, which
+    /// is exactly the kind of thing the empty `catch` here used to hide.
     private func persistActivationSession(_ session: ActivationSession) async {
         do {
             try await manager.execute { db in
@@ -1111,7 +1137,9 @@ public actor DiscordAPIRoutes {
                 VALUES (?, ?, ?, ?);
                 """
                 var stmt: OpaquePointer?
-                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                    throw Self.sqliteError(db, code: 6)
+                }
                 defer { sqlite3_finalize(stmt) }
                 sqlite3_bind_text(stmt, 1, session.sessionId, -1, SQLITE_TRANSIENT_ROUTES)
                 sqlite3_bind_text(stmt, 2, session.discordUserId, -1, SQLITE_TRANSIENT_ROUTES)
@@ -1119,9 +1147,19 @@ public actor DiscordAPIRoutes {
                 let dateFormatter = ISO8601DateFormatter()
                 let expiresString = dateFormatter.string(from: session.expiresAt)
                 sqlite3_bind_text(stmt, 4, expiresString, -1, SQLITE_TRANSIENT_ROUTES)
-                sqlite3_step(stmt)
+                guard sqlite3_step(stmt) == SQLITE_DONE else {
+                    throw Self.sqliteError(db, code: 7)
+                }
             }
-        } catch {}
+        } catch {
+            print("[SwiftMinerService] Could not persist activation session \(session.sessionId) for Discord user \(session.discordUserId): \(error.localizedDescription). Linking continues in memory but will not survive a restart.")
+        }
+    }
+
+    /// Wraps SQLite's last error message so a failed statement carries a readable reason.
+    private static func sqliteError(_ db: OpaquePointer?, code: Int) -> NSError {
+        let msg = db.map { String(cString: sqlite3_errmsg($0)) } ?? "unknown SQLite error"
+        return NSError(domain: "DiscordAPIRoutes", code: code, userInfo: [NSLocalizedDescriptionKey: msg])
     }
 
     // MARK: - Utilities

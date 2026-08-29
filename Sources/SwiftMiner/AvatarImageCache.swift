@@ -13,6 +13,8 @@ import SwiftUI
 actor AvatarImageCache {
     static let shared = AvatarImageCache()
 
+    private let urlSession: URLSession
+
     /// Decoded images kept in memory to avoid re-reading/decoding from disk on every
     /// view appearance. Bounded by `NSCache`'s own eviction under memory pressure.
     private let memory = NSCache<NSString, NSImage>()
@@ -22,6 +24,10 @@ actor AvatarImageCache {
 
     /// True once the pre-Twitch cache folder has been cleared this launch.
     private var hasPrunedLegacyDirectory = false
+
+    init(urlSession: URLSession = .shared) {
+        self.urlSession = urlSession
+    }
 
     private var cacheDirectory: URL? {
         FileManager.default
@@ -68,7 +74,7 @@ actor AvatarImageCache {
 
     private func download(url: URL, key: String) async -> NSImage? {
         do {
-            let (data, response) = try await URLSession.shared.data(from: url)
+            let (data, response) = try await urlSession.data(from: url)
             guard (response as? HTTPURLResponse)?.statusCode == 200,
                   let image = NSImage(data: data) else { return nil }
 

@@ -31,8 +31,11 @@ public enum WatchSessionStatus: Sendable {
     case error(TwitchMinerError)
 }
 
-/// Represents an active watch session
-public class WatchSession: @unchecked Sendable {
+/// Immutable-at-module-boundary snapshot of an active watch session.
+///
+/// Value semantics ensure callbacks and callers cannot race the manager's
+/// actor-isolated mutations through a shared reference.
+public struct WatchSession: Sendable {
     public let id: String
     public let channelId: String
     public let channelName: String
@@ -41,13 +44,13 @@ public class WatchSession: @unchecked Sendable {
     public let gameId: String
     /// Live stream broadcast ID — included in the Spade beacon payload.
     /// Nil when the stream ID isn't available; beacon falls back to "0".
-    public var broadcastId: String?
+    public internal(set) var broadcastId: String?
     public let startedAt: Date
-    public var state: WatchSessionState
-    public var totalWatchTimeSeconds: TimeInterval
-    public var lastHeartbeatAt: Date?
-    public var lastHeartbeatTransport: String?
-    public var consecutiveHeartbeatFailures: Int
+    public internal(set) var state: WatchSessionState
+    public internal(set) var totalWatchTimeSeconds: TimeInterval
+    public internal(set) var lastHeartbeatAt: Date?
+    public internal(set) var lastHeartbeatTransport: String?
+    public internal(set) var consecutiveHeartbeatFailures: Int
 
     public init(
         id: String,
@@ -102,9 +105,13 @@ public var userId: String = ""
 /// Set the user ID (actor-isolated setter for cross-actor use). Also
 /// switches the Spade beacon to the sticky-per-account UA so this miner's
 /// watch traffic shares a fingerprint with its auth/API requests.
-public func setUserId(_ id: String) {
+///
+/// The beacon hop is awaited rather than detached: it used to run in a loose `Task`, so a
+/// re-login could hand the beacon the previous account's ID after this manager had already
+/// moved on, and the next heartbeat would go out under the wrong fingerprint.
+public func setUserId(_ id: String) async {
     userId = id
-    Task { await spadeBeacon.setAccountId(id) }
+    await spadeBeacon.setAccountId(id)
 }
 
 /// Callbacks
@@ -187,7 +194,7 @@ init(
 
         // Create session
         sessionCounter += 1
-        let session = WatchSession(
+        var session = WatchSession(
             id: "session_\(sessionCounter)_\(Date().timeIntervalSince1970)",
             channelId: channel.id,
             channelName: channel.login,
@@ -207,7 +214,7 @@ init(
         // Start community points auto-claim
         await communityPointsService.startAutoClaim(channelLogin: channel.login, channelId: channel.id)
 
-        return activeSession!
+        return session
     }
 
     /// Stop the current watch session
@@ -233,7 +240,7 @@ init(
 
     /// Resume a paused watch session
     public func resumeWatching() async throws {
-        guard let session = activeSession, session.state == .paused else {
+        guard var session = activeSession, session.state == .paused else {
             throw TwitchMinerError.sessionNotStarted
         }
 
@@ -268,7 +275,7 @@ init(
 
         // Create session
         sessionCounter += 1
-        let session = WatchSession(
+        var session = WatchSession(
             id: "session_\(sessionCounter)_\(Date().timeIntervalSince1970)",
             channelId: channel.id,
             channelName: channel.login,
@@ -317,7 +324,7 @@ init(
     }
 
     private func sendHeartbeat() async {
-        guard let session = activeSession, session.state == .watching else {
+        guard var session = activeSession, session.state == .watching else {
             return
         }
 

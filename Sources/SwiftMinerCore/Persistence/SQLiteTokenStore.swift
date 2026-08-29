@@ -139,11 +139,17 @@ public final class SQLiteTokenStore: TokenStore, Sendable {
     public func updateOperatorStatus(twitchUserId: String, isOperator: Bool) async throws {
         try await manager.execute { db in
             if isOperator {
+                // Only one account may be operator app-wide. Ignoring this statement's result
+                // while the UPDATE below throws meant a failed clear could leave two operators
+                // in the table, which nothing downstream expects.
                 let clearSql = "UPDATE twitch_accounts SET is_operator = 0;"
                 var clearStmt: OpaquePointer?
-                if sqlite3_prepare_v2(db, clearSql, -1, &clearStmt, nil) == SQLITE_OK {
-                    sqlite3_step(clearStmt)
-                    sqlite3_finalize(clearStmt)
+                guard sqlite3_prepare_v2(db, clearSql, -1, &clearStmt, nil) == SQLITE_OK else {
+                    throw self.dbError(db)
+                }
+                defer { sqlite3_finalize(clearStmt) }
+                guard sqlite3_step(clearStmt) == SQLITE_DONE else {
+                    throw self.dbError(db)
                 }
             }
             

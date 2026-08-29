@@ -7,16 +7,16 @@ final class AccountPriorityGamesTests: XCTestCase {
     private var settings: Settings!
     private let account = "account-1"
 
-    override func setUp() {
-        super.setUp()
+    override func setUp() async throws {
+        try await super.setUp()
         settings = Settings.shared
         settings.resetToDefaults()
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         settings.resetToDefaults()
         settings = nil
-        super.tearDown()
+        try await super.tearDown()
     }
 
     func testSetPersonalPriorityGamesTrimsAndDeduplicates() {

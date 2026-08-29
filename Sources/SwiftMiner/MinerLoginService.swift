@@ -58,10 +58,13 @@ public final class MinerLoginService {
 
         // resolvedClientId always returns a value (falls back to Twitch's web client ID)
         let clientId = Settings.shared.resolvedClientId
-        
-        // Debug logging
-        print("[MinerLoginService] Using client_id: \(clientId.prefix(10))... (length: \(clientId.count))")
-        print("[MinerLoginService] Source: \(ProcessInfo.processInfo.environment["TWITCH_CLIENT_ID"]?.isEmpty == false ? "env" : Settings.shared.twitchClientId.isEmpty ? "default" : "settings")")
+
+        // Where the client ID came from is useful when a sign-in misbehaves; the ID itself is
+        // not, and a user-supplied one does not belong in a log at all.
+        let clientIdSource = ProcessInfo.processInfo.environment["TWITCH_CLIENT_ID"]?.isEmpty == false
+            ? "environment"
+            : Settings.shared.twitchClientId.isEmpty ? "default" : "settings"
+        Logger.auth.info("Starting device authorization using the \(clientIdSource) client ID")
 
         state = .starting
 

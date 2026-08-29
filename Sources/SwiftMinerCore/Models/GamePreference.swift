@@ -48,13 +48,12 @@ public struct GamePreference: Codable, Sendable, Identifiable, Equatable {
         )
     }
 
-    /// `boxArtURL` is written from whatever artwork the UI had resolved at the time,
-    /// which — with Steam artwork preferred — is a `file://` path inside
-    /// `~/Library/Caches`. That directory is purgeable by macOS, so preferences
-    /// persisted a link that could simply evaporate, leaving a permanently blank
-    /// tile with no route back to the remote image. Only remote URLs are durable
-    /// enough to store here; artwork the user deliberately uploaded lives in
-    /// `customArtworkURL` under Application Support and is left alone.
+    /// `boxArtURL` is written from whatever artwork the UI had resolved at the time, which for a
+    /// while could be a `file://` path inside `~/Library/Caches`. That directory is purgeable by
+    /// macOS, so preferences persisted a link that could simply evaporate, leaving a permanently
+    /// blank tile with no route back to the remote image. Only remote URLs are durable enough to
+    /// store here; artwork the user deliberately uploaded lives in `customArtworkURL` under
+    /// Application Support and is left alone.
     private static func durableArtworkURL(_ url: URL?) -> URL? {
         guard let url, url.isFileURL else { return url }
         return nil

@@ -9,8 +9,8 @@ final class OnboardingPresentationTests: XCTestCase {
     var settings: Settings!
     var minerManager: MinerManager!
 
-    override func setUp() {
-        super.setUp()
+    override func setUp() async throws {
+        try await super.setUp()
         settings = Settings.shared
         settings.resetToDefaults()
         

@@ -47,12 +47,25 @@
   <main>
     <h1>SwiftMiner Release Notes</h1>
     <p class="meta">Recent Sparkle update history</p>
+    <h2>🐝 <a href="./1.38.2.html">Version 1.38.2</a></h2>
+    <ul>
+      <li>Stops automatic recovery reporting success when a miner's real-time drop connection failed to come back.</li>
+      <li>Loads cached campaign artwork from disk again instead of falling back to a placeholder until the next download.</li>
+      <li>Applies miner additions, removals, and failover-streamer edits in the order you made them, and updates the watch session before the next heartbeat.</li>
+      <li>Adds a Dismiss button to Needs attention for the game-account link and subscription reminders, sharing the Pending list's mute.</li>
+      <li>Removes access-token fragments, client-ID fragments, token-validation bodies, and the service API key from log output, and sends app diagnostics to the system log.</li>
+      <li>Reports activity-log, earning-ledger, event-outbox, keychain, account-activation, and admin-linking write failures instead of discarding them, and sets aside unattended health history it cannot read.</li>
+      <li>Adds a Release build, static analysis, project-drift and built-app verification, and code-coverage reporting to continuous integration.</li>
+      <li>Removes Steam artwork, which Twitch's own higher-resolution box art made redundant; custom artwork uploads are unchanged and kept.</li>
+      <li>Updates SwiftMiner to version 1.38.2 build 2026083000.</li>
+    </ul>
+
     <h2>🐛 <a href="./1.38.1.html">Version 1.38.1</a></h2>
     <ul>
       <li>Honours an account's Discord picture preference even when Discord supplies its generated account avatar.</li>
       <li>Fixes missing navigation, recovery, account-link, empty-state, and menu icons when SwiftMiner runs on macOS 14.</li>
       <li>Reopens SwiftMiner from Applications after moving itself there from Downloads.</li>
-      <li>Updates SwiftMiner to version 1.38.1 build 2026082818.</li>
+      <li>Updates SwiftMiner to version 1.38.1 build 2026083000.</li>
     </ul>
 
     <h2>🧭 <a href="./1.38.html">Version 1.38</a></h2>
@@ -66,7 +79,7 @@
       <li>⚡ Active mining uses a gently pulsing bolt status symbol instead of looking like a playback button, respecting Reduce Motion.</li>
       <li>🧪 Debug builds can show a synthetic active campaign from the Developer menu for checking the mining UI safely.</li>
       <li>⭐ Drops adds All and Prioritised filters, with Prioritised following the selected miner&rsquo;s effective priority list.</li>
-      <li>Updates SwiftMiner to version 1.38 build 2026082621.</li>
+      <li>Updates SwiftMiner to version 1.38 build 2026083000.</li>
     </ul>
 
     <h2>🧭 <a href="./1.37.3.html">Version 1.37.3</a></h2>
@@ -81,7 +94,7 @@
       <li>🔐 New installs prompt for signed updates by default; unattended download and install are opt-in in Settings.</li>
       <li>🗑️ The web dashboard can remove its own mined account behind a typed confirmation, stopping mining and revoking its Twitch authorization without deleting the Twitch account.</li>
       <li>🚫 Each miner can exclude individual games in the web dashboard, while the native app keeps Global priorities until a web-created custom list is reset.</li>
-      <li>Updates SwiftMiner to version 1.37.3 build 2026081709.</li>
+      <li>Updates SwiftMiner to version 1.37.3 build 2026083000.</li>
     </ul>
 
     <h2>🧭 <a href="./1.37.2.html">Version 1.37.2</a></h2>
@@ -94,7 +107,7 @@
       <li>🛠️ Audits the three essential Twitch persisted queries against upstream and updates Sparkle to 2.9.5.</li>
       <li>🔒 Uses ShipHook&rsquo;s source appcast files for Sparkle release validation and publishing, avoiding stale website-output checks.</li>
       <li>🔐 Reconnect Twitch now opens the browser authorization flow, refreshes the selected miner&rsquo;s credentials, and resumes mining after approval.</li>
-      <li>Updates SwiftMiner to version 1.37.2 build 2026081215.</li>
+      <li>Updates SwiftMiner to version 1.37.2 build 2026083000.</li>
     </ul>
 
     <h2>🧭 <a href="./1.37.1.html">Version 1.37.1</a></h2>
@@ -103,7 +116,7 @@
       <li>📜 Keeps Activity Log history for each kind of activity separately, so routine mining chatter can no longer bury audit entries, warnings, or errors within the hour, and narrowing to one filter fills the list.</li>
       <li>🔢 Adds a real Activity Log history size in Advanced settings, from 5,000 to 100,000 entries, applied immediately.</li>
       <li>🧭 Simplifies the web dashboard overview: the heading states the fleet's condition in a sentence, replacing the stat tiles and the filter row.</li>
-      <li>Updates SwiftMiner to version 1.37.1 build 2026080709.</li>
+      <li>Updates SwiftMiner to version 1.37.1 build 2026083000.</li>
     </ul>
 
     <h2>🧭 <a href="./1.37.html">Version 1.37</a></h2>
@@ -113,7 +126,7 @@
       <li>🖼️ Restores Up next artwork for prioritised campaigns that are awaiting a game-account link.</li>
       <li>🧰 Restores the Export Diagnostic Logs save panel and includes evidence for live streams that fail Drops verification.</li>
       <li>🔐 Applies the Twitch and Discord sign-in switches to the web dashboard right away, so a disabled provider stops being offered without relaunching.</li>
-      <li>Updates SwiftMiner to version 1.37 build 2026080613.</li>
+      <li>Updates SwiftMiner to version 1.37 build 2026083000.</li>
     </ul>
 
     <h2>🧭 <a href="./1.36.9.html">Version 1.36.9</a></h2>
@@ -123,7 +136,7 @@
       <li>🎨 Replaces decorative operational gradients with neutral system surfaces, reserving colour for meaningful state and matching fallback symbols to Overview's SF Symbol treatment.</li>
       <li>⏱️ Uses every reward's own active window when choosing a campaign: future or expired rewards no longer trigger viewing, while staggered campaigns remain mineable whenever one reward is live.</li>
       <li>🐛 Makes Activity Log failures and symbols clearer, and keeps subscription-only entries focused on priority games.</li>
-      <li>Updates SwiftMiner to version 1.36.9 build 2026080521.</li>
+      <li>Updates SwiftMiner to version 1.36.9 build 2026083000.</li>
     </ul>
 
     <h2>🧭 <a href="./1.36.7.html">Version 1.36.7</a></h2>
@@ -133,7 +146,7 @@
       <li>Updates Twitch's campaign-discovery and inventory queries to the current persisted-query revisions, clearly flags future compatibility changes, and safely handles duplicate progress records from Twitch.</li>
       <li>Uses linked Discord or Twitch profile pictures in the web dashboard and native miner list, falling back to the miner status symbol when neither is available.</li>
       <li>Adds a direct Overview button to each native miner operator header.</li>
-      <li>Updates SwiftMiner to version 1.36.7 build 2026080212.</li>
+      <li>Updates SwiftMiner to version 1.36.7 build 2026083000.</li>
     </ul>
 
     <h2>🧭 <a href="./1.36.6.html">Version 1.36.6</a></h2>
