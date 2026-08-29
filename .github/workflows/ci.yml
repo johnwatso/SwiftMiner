@@ -29,15 +29,36 @@ jobs:
     name: Build and test
     runs-on: macos-26
     timeout-minutes: 60
+    env:
+      XCODEGEN_VERSION: "2.46.0"
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
 
-      - name: Install XcodeGen
-        run: brew install xcodegen
+      # Pinned deliberately. The drift check below compares generated output byte for
+      # byte, and XcodeGen reorders parts of the project between releases — 2.46.0
+      # sorts the target list differently to 2.45.4 — so `brew install xcodegen`
+      # turns any upstream release into a red build on an unchanged repository.
+      # Bump this together with the local version used to regenerate the project.
+      - name: Install XcodeGen ${{ env.XCODEGEN_VERSION }}
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/xcodegen.zip \
+            "https://github.com/yonaskolb/XcodeGen/releases/download/${XCODEGEN_VERSION}/xcodegen.zip"
+          unzip -q /tmp/xcodegen.zip -d /tmp/xcodegen
+          # The archive's internal layout is XcodeGen's to change; locate the binary
+          # rather than hard-coding a path that a future release could move.
+          binary="$(find /tmp/xcodegen -type f -name xcodegen -perm -u+x | head -n 1)"
+          if [[ -z "$binary" ]]; then
+            echo "::error::No xcodegen binary found in the $XCODEGEN_VERSION archive."
+            exit 1
+          fi
+          echo "$(dirname "$binary")" >> "$GITHUB_PATH"
 
       - name: Generate Xcode project
-        run: xcodegen
+        run: |
+          xcodegen --version
+          xcodegen
 
       # The generated project is committed, so it can drift from project.yml the moment
       # someone edits one without regenerating the other. Everything downstream builds the
@@ -45,8 +66,8 @@ jobs:
       - name: Check the committed Xcode project matches project.yml
         run: |
           if ! git diff --quiet -- SwiftMiner.xcodeproj; then
-            echo "::error::SwiftMiner.xcodeproj is out of date with project.yml. Run 'xcodegen' and commit the result."
-            git diff --stat -- SwiftMiner.xcodeproj
+            echo "::error::SwiftMiner.xcodeproj is out of date with project.yml. Run 'xcodegen' ($XCODEGEN_VERSION) and commit the result."
+            git diff -- SwiftMiner.xcodeproj
             exit 1
           fi
 

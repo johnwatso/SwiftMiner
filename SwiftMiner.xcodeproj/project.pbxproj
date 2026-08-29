@@ -1031,12 +1031,12 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				779EDB4CEE28ED23D2231CCB /* SparklePublisher */,
-				97C8E54F291D272FD7301055 /* SwiftMiner */,
 				1E655FE537E6ED297C97229E /* SwiftMinerCore */,
-				7A231EC5D7FDEFC2FD3B169E /* SwiftMinerCoreTests */,
+				97C8E54F291D272FD7301055 /* SwiftMiner */,
 				7225A34BE67880D906CFD7D9 /* SwiftMinerService */,
 				BAAF5524DE32BDE4F2D93A9C /* SwiftMinerServiceTool */,
+				7A231EC5D7FDEFC2FD3B169E /* SwiftMinerCoreTests */,
+				779EDB4CEE28ED23D2231CCB /* SparklePublisher */,
 			);
 		};
 /* End PBXProject section */
