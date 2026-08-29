@@ -42,7 +42,8 @@
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "YES"
-      onlyGenerateCoverageForSpecifiedTargets = "NO">
+      codeCoverageEnabled = "YES"
+      onlyGenerateCoverageForSpecifiedTargets = "YES">
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
@@ -67,6 +68,29 @@
       </Testables>
       <CommandLineArguments>
       </CommandLineArguments>
+      <CodeCoverageTargets>
+         <BuildableReference
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "1E655FE537E6ED297C97229E"
+            BuildableName = "libSwiftMinerCore.a"
+            BlueprintName = "SwiftMinerCore"
+            ReferencedContainer = "container:SwiftMiner.xcodeproj">
+         </BuildableReference>
+         <BuildableReference
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "7225A34BE67880D906CFD7D9"
+            BuildableName = "libSwiftMinerService.a"
+            BlueprintName = "SwiftMinerService"
+            ReferencedContainer = "container:SwiftMiner.xcodeproj">
+         </BuildableReference>
+         <BuildableReference
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "97C8E54F291D272FD7301055"
+            BuildableName = "SwiftMiner.app"
+            BlueprintName = "SwiftMiner"
+            ReferencedContainer = "container:SwiftMiner.xcodeproj">
+         </BuildableReference>
+      </CodeCoverageTargets>
    </TestAction>
    <LaunchAction
       buildConfiguration = "Debug"

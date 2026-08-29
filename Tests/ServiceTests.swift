@@ -8,8 +8,8 @@ final class ServiceTests: XCTestCase {
     var authService: TwitchAuthService!
     var apiClient: TwitchAPIClient!
     
-    override func setUp() {
-        super.setUp()
+    override func setUp() async throws {
+        try await super.setUp()
         
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [MockURLProtocol.self]
@@ -19,12 +19,12 @@ final class ServiceTests: XCTestCase {
         apiClient = TwitchAPIClient(authService: authService, clientId: "test_client", session: mockSession, persistsCampaignCaches: false)
     }
     
-    override func tearDown() {
+    override func tearDown() async throws {
         MockURLProtocol.stubResponseData = nil
         MockURLProtocol.stubError = nil
         MockURLProtocol.lastRequest = nil
         MockURLProtocol.requestHandler = nil
-        super.tearDown()
+        try await super.tearDown()
     }
     
     // MARK: - TwitchAPIClient Tests
@@ -1027,13 +1027,6 @@ final class ServiceTests: XCTestCase {
         XCTAssertEqual(operations.recordedValues.filter { $0 == "DirectoryPage_Game" }.count, 1)
     }
 
-    func testJustChattingDoesNotSupportSteamArtwork() {
-        XCTAssertFalse(SteamArtworkService.supportsSteamArtwork(forGameName: "Just Chatting"))
-        XCTAssertFalse(SteamArtworkService.supportsSteamArtwork(forGameName: " just chatting "))
-        XCTAssertFalse(SteamArtworkService.supportsSteamArtwork(forGameName: "Anything", gameId: "509658"))
-        XCTAssertTrue(SteamArtworkService.supportsSteamArtwork(forGameName: "THE FINALS", gameId: "1910103699"))
-    }
-    
     // MARK: - CommunityPointsService Tests
     
     func testCommunityPointsAutoClaim() async throws {

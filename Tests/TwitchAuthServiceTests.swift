@@ -5,15 +5,12 @@ import XCTest
 
 /// Tests for TwitchAuthService covering auth state, token validation logic,
 /// refresh deduplication, logout, and response model decoding.
-///
-/// Note: `TwitchAuthService` uses `URLSession.shared` internally (not injected),
-/// so network-dependent paths (initiateDeviceFlow, pollForToken, importTDMSession)
-/// require a refactor to accept an injectable URLSession before they can be unit tested.
-/// Those paths are marked with TODO comments below. All non-network logic is covered here.
 @MainActor
 final class TwitchAuthServiceTests: XCTestCase {
 
     var service: TwitchAuthService!
+    var tokenStore: TestTokenStore!
+    var mockSession: URLSession!
 
     func testRejectedSavedSessionErrorNamesTheRejectedOperation() {
         let error = TwitchAPIClient.rejectedSavedSessionError(operation: "ViewerDropCampaigns")
@@ -24,14 +21,29 @@ final class TwitchAuthServiceTests: XCTestCase {
         XCTAssertTrue(detail.contains("HTTP 401"))
     }
 
-    override func setUp() {
-        super.setUp()
-        service = TwitchAuthService(clientId: "test_client_id", tokenStore: TestTokenStore())
+    override func setUp() async throws {
+        try await super.setUp()
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        mockSession = URLSession(configuration: configuration)
+        tokenStore = TestTokenStore()
+        service = TwitchAuthService(
+            clientId: "test_client_id",
+            tokenStore: tokenStore,
+            urlSession: mockSession
+        )
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
+        MockURLProtocol.stubResponseData = nil
+        MockURLProtocol.stubError = nil
+        MockURLProtocol.lastRequest = nil
+        MockURLProtocol.requestHandler = nil
         service = nil
-        super.tearDown()
+        tokenStore = nil
+        mockSession.invalidateAndCancel()
+        mockSession = nil
+        try await super.tearDown()
     }
 
     // MARK: - isAuthenticated
@@ -310,29 +322,134 @@ final class TwitchAuthServiceTests: XCTestCase {
                        "Android client ID must match TDM's ANDROID_APP exactly (kd1unb4b3q4t58fwlpcbzcbnm76a8fp)")
     }
 
-    // MARK: - TODO: Network-dependent tests (require URLSession injection)
-    //
-    // The following paths need TwitchAuthService to accept an injectable URLSession:
-    //
-    // - initiateDeviceFlow() — POST /oauth2/device
-    //   Tests: correct scopes, X-Device-Id header present, Android UA, Referer header,
-    //          HTTP 400 throws .apiError, successful 200 decodes DeviceCodeResponse
-    //
-    // - pollForToken() — loops calling requestToken()
-    //   Tests: authorization_pending continues loop, slow_down doubles interval,
-    //          successful response saves account and returns it,
-    //          non-retryable error propagates immediately
-    //
-    // - validateToken() — GET /oauth2/validate
-    //   Tests: Authorization: OAuth <token> header, 200 returns userId+login,
-    //          401 throws .authenticationFailed
-    //
-    // - importTDMSession() — validates then saves account
-    //   Tests: valid token creates Account with 30d expiry, invalid token throws
-    //
-    // - refreshTokenIfNeeded() with expired token — POST /oauth2/token
-    //   Tests: concurrent calls deduplicated (single refresh task), successful refresh
-    //          fires onTokenRefresh callback, failure throws .tokenExpired
+    // MARK: - Network behavior
+
+    func testInitiateDeviceFlowBuildsExpectedRequestAndDecodesResponse() async throws {
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            let data = #"{"device_code":"device_abc","expires_in":1800,"interval":5,"user_code":"ABCD-1234","verification_uri":"https://www.twitch.tv/activate"}"#.data(using: .utf8)!
+            return (response, data)
+        }
+
+        let response = try await service.initiateDeviceFlow(includeFollowedChannels: true)
+        let request = try XCTUnwrap(MockURLProtocol.lastRequest)
+        let body = String(data: try XCTUnwrap(request.httpBody), encoding: .utf8) ?? ""
+
+        XCTAssertEqual(response.deviceCode, "device_abc")
+        XCTAssertEqual(request.httpMethod, "POST")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Referer"), "https://www.twitch.tv")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "X-Device-Id")?.count, 32)
+        XCTAssertFalse(request.value(forHTTPHeaderField: "User-Agent")?.isEmpty ?? true)
+        XCTAssertTrue(body.contains("client_id=test_client_id"))
+        XCTAssertTrue(body.contains("scopes=user:read:follows"))
+    }
+
+    func testInitiateDeviceFlowPropagatesAPIError() async {
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 400, httpVersion: nil, headerFields: nil
+            )!
+            return (response, #"{"message":"invalid client"}"#.data(using: .utf8)!)
+        }
+
+        do {
+            _ = try await service.initiateDeviceFlow()
+            XCTFail("Expected the device endpoint failure to propagate")
+        } catch let TwitchMinerError.apiError(statusCode, message) {
+            XCTAssertEqual(statusCode, 400)
+            XCTAssertTrue(message.contains("invalid client"))
+        } catch {
+            XCTFail("Expected apiError, got \(error)")
+        }
+    }
+
+    func testValidateTokenUsesOAuthHeaderAndReturnsIdentity() async throws {
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            let data = #"{"client_id":"test_client_id","login":"miner","scopes":[],"user_id":"u1","expires_in":3600}"#.data(using: .utf8)!
+            return (response, data)
+        }
+
+        let identity = try await service.validateToken("secret-token")
+
+        XCTAssertEqual(identity.userId, "u1")
+        XCTAssertEqual(identity.login, "miner")
+        XCTAssertEqual(MockURLProtocol.lastRequest?.value(forHTTPHeaderField: "Authorization"), "OAuth secret-token")
+    }
+
+    func testValidateTokenMapsUnauthorizedResponseToAuthenticationFailure() async {
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 401, httpVersion: nil, headerFields: nil
+            )!
+            return (response, #"{"message":"invalid access token"}"#.data(using: .utf8)!)
+        }
+
+        do {
+            _ = try await service.validateToken("expired-token")
+            XCTFail("Expected token rejection")
+        } catch let TwitchMinerError.authenticationFailed(message) {
+            XCTAssertTrue(message.contains("rejected"))
+        } catch {
+            XCTFail("Expected authenticationFailed, got \(error)")
+        }
+    }
+
+    func testPollForTokenContinuesAfterPendingThenPersistsSuccess() async throws {
+        let requests = LockedRequestCounter()
+        MockURLProtocol.requestHandler = { request in
+            let response: (Int) -> HTTPURLResponse = { status in
+                HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!
+            }
+            if request.url?.path == "/oauth2/validate" {
+                let data = #"{"client_id":"test_client_id","login":"miner","scopes":[],"user_id":"u1","expires_in":3600}"#.data(using: .utf8)!
+                return (response(200), data)
+            }
+            if requests.increment() == 1 {
+                return (response(400), #"{"message":"authorization_pending"}"#.data(using: .utf8)!)
+            }
+            let data = #"{"access_token":"new-token","refresh_token":"new-refresh","expires_in":3600,"scope":[],"token_type":"bearer"}"#.data(using: .utf8)!
+            return (response(200), data)
+        }
+
+        let account = try await service.pollForToken(deviceCode: "device-code", interval: 0)
+
+        XCTAssertEqual(account.accessToken, "new-token")
+        XCTAssertEqual(requests.value, 2)
+        let savedAccount = try await tokenStore.loadAccount(twitchUserId: "u1")
+        XCTAssertEqual(savedAccount, account)
+    }
+
+    func testConcurrentExpiredTokenRefreshesShareOneRequestAndFireCallback() async throws {
+        let requests = LockedRequestCounter()
+        let refreshedToken = LockedStringRecorder()
+        await service.setCurrentAccount(makeAccount(expiresIn: -1))
+        await service.setTokenRefreshHandler { token in
+            refreshedToken.record(token)
+        }
+        MockURLProtocol.requestHandler = { request in
+            _ = requests.increment()
+            Thread.sleep(forTimeInterval: 0.05)
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            let data = #"{"access_token":"refreshed-token","refresh_token":"refreshed-refresh","expires_in":3600,"scope":[],"token_type":"bearer"}"#.data(using: .utf8)!
+            return (response, data)
+        }
+
+        let authService = try XCTUnwrap(service)
+        async let first = authService.refreshTokenIfNeeded()
+        async let second = authService.refreshTokenIfNeeded()
+        let tokens = try await [first, second]
+
+        XCTAssertEqual(tokens, ["refreshed-token", "refreshed-token"])
+        XCTAssertEqual(requests.value, 1)
+        XCTAssertEqual(refreshedToken.value, "refreshed-token")
+    }
 
     // MARK: - Re-authentication
 
@@ -401,5 +518,41 @@ private extension TwitchAuthServiceTests {
             tokenExpiry: Date().addingTimeInterval(expiresIn),
             scopes: scopes
         )
+    }
+}
+
+private final class LockedRequestCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    @discardableResult
+    func increment() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        count += 1
+        return count
+    }
+
+    var value: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return count
+    }
+}
+
+private final class LockedStringRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var recordedValue: String?
+
+    func record(_ value: String) {
+        lock.lock()
+        recordedValue = value
+        lock.unlock()
+    }
+
+    var value: String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return recordedValue
     }
 }

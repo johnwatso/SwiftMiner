@@ -115,6 +115,46 @@ final class MinerAttentionTests: XCTestCase {
         XCTAssertTrue(item.subtitle.contains("Reminder muted"))
     }
 
+    // MARK: - Dismissal
+
+    /// The banner offers Dismiss only for the two reminders the user is allowed to silence.
+    /// Everything else describes a miner that cannot earn until someone acts, so a Dismiss there
+    /// would let the reason a miner is idle be hidden — which is what the banner exists to prevent.
+    func testOnlyTheCampaignRemindersCanBeDismissed() {
+        var miner = makeMiner()
+        miner.debugAttention = .accountLink(gameName: "Halo")
+        XCTAssertEqual(
+            MinerAttentionIssue.resolve(miner: miner, events: [])?.dismissal,
+            .accountLink(gameId: "debug-fake-link-game", gameName: "Halo")
+        )
+
+        miner.debugAttention = .subscriptionRequired
+        XCTAssertEqual(
+            MinerAttentionIssue.resolve(miner: miner, events: [])?.dismissal,
+            .subscriptionRequired(campaignId: "debug-fake-campaign")
+        )
+    }
+
+    func testBlockingStatesOfferNoDismissal() {
+        let reAuth = MinerAttentionIssue.resolve(miner: makeMiner(needsAuth: true), events: [])
+        XCTAssertEqual(reAuth?.title, "Twitch needs to be reconnected")
+        XCTAssertNil(reAuth?.dismissal, "Re-authentication is not something the user may silence.")
+
+        let stopped = MinerAttentionIssue.resolve(
+            miner: makeMiner(status: .error, workerState: .failed),
+            events: []
+        )
+        XCTAssertEqual(stopped?.title, "The mining worker stopped")
+        XCTAssertNil(stopped?.dismissal)
+
+        let blocked = MinerAttentionIssue.resolve(miner: makeMiner(status: .blockedAccountNotLinked), events: [])
+        XCTAssertEqual(blocked?.title, "Link a game account to Twitch")
+        XCTAssertNil(
+            blocked?.dismissal,
+            "This fallback has no campaign behind it, so there is no per-game mute to write."
+        )
+    }
+
     private func makeMiner(
         status: MinerManager.MinerStatus = .watching,
         needsAuth: Bool = false,

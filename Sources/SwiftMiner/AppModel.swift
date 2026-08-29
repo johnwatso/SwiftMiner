@@ -98,7 +98,7 @@ public final class AppModel {
             // Sync notification preference
             await manager.updateNotificationPreference(enabled: Settings.shared.showClaimNotifications && Settings.shared.allowsOperatorNotifications())
             await manager.updateAntiStallRecovery(enabled: Settings.shared.antiStallRecoveryEnabled)
-            manager.updateFailoverStreamers(Settings.shared.gameFailoverStreamers)
+            await manager.updateFailoverStreamers(Settings.shared.gameFailoverStreamers)
 
             // Keep app-level state (auth + badge) in sync whenever miners or
             // account-link warning preferences change. NavigationModel also
@@ -341,7 +341,7 @@ public final class AppModel {
         if #available(macOS 13.0, *) {
             UNUserNotificationCenter.current().setBadgeCount(count) { error in
                 guard let error else { return }
-                print("Warning: Failed to update notification badge count: \(error.localizedDescription)")
+                Logger.notifications.error("Failed to update the notification badge count: \(error.localizedDescription)")
             }
         }
     }

@@ -12,7 +12,6 @@ struct DropsListView: View {
     @State private var searchText: String = ""
     @State private var selectedMinerFilterId: String = DropsListView.allMinersFilterId
     @State private var visibleGroupLimit = 24
-    @AppStorage("preferSteamArtwork", store: Settings.appStorageStore) private var preferSteamArtwork: Bool = false
     private var settings: Settings { .shared }
 
     fileprivate static let allMinersFilterId = "__all_miners__"
@@ -73,11 +72,6 @@ struct DropsListView: View {
                                     selectedAccountId: selectedMinerAccountId,
                                     activityProvider: { campaign in
                                         context.activityByCampaignId[campaign.id] ?? activity(for: campaign)
-                                    },
-                                    onSteamIdSet: { appId in
-                                        await SteamArtworkService.shared.setManualAppId(for: group.gameName, appId: appId)
-                                        await navigation.minerManager.dataCoordinator.clearSteamArtworkCache()
-                                        await loadCampaignFeed()
                                     }
                                 )
                                 .transition(.opacity.combined(with: .scale(scale: 0.985)))
@@ -119,12 +113,6 @@ struct DropsListView: View {
         }
         .onChange(of: navigation.requestedDropsFilter) { _, _ in
             applyRequestedDropsFilter()
-        }
-        .onChange(of: preferSteamArtwork) { _, _ in
-            Task {
-                await navigation.minerManager.dataCoordinator.clearSteamArtworkCache()
-                await loadCampaignFeed()
-            }
         }
         .onChange(of: miners.map(\.accountId)) { _, accountIds in
             guard selectedMinerFilterId != Self.allMinersFilterId,
@@ -784,9 +772,7 @@ struct DropsListView: View {
         }
 
         // Load ALL campaigns (not filtered) for the "All" tab
-        let cached = await navigation.minerManager.dataCoordinator.allCampaigns(
-            preferSteamArtwork: Settings.shared.preferSteamArtwork
-        )
+        let cached = await navigation.minerManager.dataCoordinator.allCampaigns()
         if !cached.isEmpty {
             withAnimation(.easeInOut(duration: 0.2)) {
                 campaigns = cached

@@ -58,6 +58,8 @@ struct MinerApp: App {
                         // Migrate any legacy hardware-UUID account file into the real Keychain
                         // BEFORE accounts are loaded below. No-op on DEBUG and after the first run.
                         await LegacyAccountMigrator.migrateIfNeeded()
+                        // Reclaims the cache and defaults the removed Steam artwork feature left.
+                        LegacySteamArtworkCleanup.runIfNeeded()
                         if settings.shouldPromptForLegacyBackupDeletion {
                             settings.markLegacyBackupPromptShown()
                             showLegacyBackupPrompt = true
@@ -503,6 +505,7 @@ final class LaunchContextDelegate: NSObject, NSApplicationDelegate, ObservableOb
 
 private struct ReleaseNotesWindow: View {
     let releaseNotesURL: URL?
+    let urlSession: URLSession = .shared
     @State private var content: ReleaseNotesContent = .loading
 
     var body: some View {
@@ -539,7 +542,7 @@ private struct ReleaseNotesWindow: View {
         content = .loading
 
         do {
-            let (data, response) = try await URLSession.shared.data(from: releaseNotesURL)
+            let (data, response) = try await urlSession.data(from: releaseNotesURL)
             if let httpResponse = response as? HTTPURLResponse,
                !(200..<300).contains(httpResponse.statusCode) {
                 content = .failed("SwiftMiner could not load \(releaseNotesURL.absoluteString) because the server returned \(httpResponse.statusCode).")
@@ -701,7 +704,7 @@ enum UpdateCompletionNotification {
         do {
             try await center.add(makeRequest(for: update))
         } catch {
-            print("Warning: Failed to send update completion notification: \(error.localizedDescription)")
+            Logger.notifications.error("Failed to send the update completion notification: \(error.localizedDescription)")
         }
     }
 

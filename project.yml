@@ -54,10 +54,14 @@ targets:
         product: Sparkle
       - package: AsyncAlgorithms
         product: AsyncAlgorithms
+      # Xcode runs App Intents metadata extraction for Swift app targets. Linking
+      # the system framework lets that probe complete without a false warning.
+      - sdk: AppIntents.framework
     info:
       path: Sources/SwiftMiner/Info.plist
       properties:
         CFBundleIconFile: SwiftMiner
+        LSApplicationCategoryType: public.app-category.utilities
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         # New installs check in the background and prompt before downloading.
@@ -77,8 +81,8 @@ targets:
         SWIFT_STRICT_CONCURRENCY: complete
         PRODUCT_BUNDLE_IDENTIFIER: com.swiftminer.app
         MACOSX_DEPLOYMENT_TARGET: "14.0"
-        MARKETING_VERSION: "1.38.1"
-        CURRENT_PROJECT_VERSION: "2026082818"
+        MARKETING_VERSION: "1.38.2"
+        CURRENT_PROJECT_VERSION: "2026083000"
         INFOPLIST_KEY_CFBundleDisplayName: SwiftMiner
         INFOPLIST_KEY_CFBundleName: SwiftMiner
         CODE_SIGN_STYLE: Automatic
@@ -136,6 +140,8 @@ targets:
       - target: SwiftMinerCore
         link: false
       - target: SwiftMiner
+      # Xcode also runs App Intents metadata extraction for the test bundle.
+      - sdk: AppIntents.framework
     settings:
       base:
         SWIFT_VERSION: "6.0"
@@ -172,6 +178,11 @@ schemes:
         TWITCH_CLIENT_ID: ""
     test:
       config: Debug
+      gatherCoverageData: true
+      coverageTargets:
+        - SwiftMinerCore
+        - SwiftMinerService
+        - SwiftMiner
       targets:
         - SwiftMinerCoreTests
     archive:

@@ -291,9 +291,7 @@ struct GameSearchField: View {
     @MainActor
     private func refreshAvailableGames() async {
         isLoadingGames = true
-        let campaigns = await minerManager.dataCoordinator.currentCampaigns(
-            preferSteamArtwork: Settings.shared.preferSteamArtwork
-        )
+        let campaigns = await minerManager.dataCoordinator.currentCampaigns()
         availableGames = uniqueGames(from: campaigns)
         hasLoadedGames = true
         isLoadingGames = false
@@ -342,7 +340,7 @@ struct GameSearchField: View {
             twitchSearchResults = []
             twitchSearchErrorMessage = mappedError.message
             twitchSearchRequiresReauth = mappedError.requiresReauth
-            print("[GameSearchField] Twitch search failed for '\(query)': \(error)")
+            Logger.api.error("Twitch category search failed for '\(query)': \(error.localizedDescription)")
         }
         guard !Task.isCancelled else { return }
         isSearchingTwitch = false

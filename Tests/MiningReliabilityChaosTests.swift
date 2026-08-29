@@ -89,12 +89,12 @@ final class MiningReliabilityChaosTests: XCTestCase {
         MockURLProtocol.stubResponseData = nil
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         MockURLProtocol.requestHandler = nil
         MockURLProtocol.stubError = nil
         MockURLProtocol.stubResponseData = nil
         session.invalidateAndCancel()
-        super.tearDown()
+        try await super.tearDown()
     }
 
     func testOfflineThen503Then429RecoversWithoutFatalError() async throws {

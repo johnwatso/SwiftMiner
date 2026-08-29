@@ -295,15 +295,6 @@ public actor DropsService {
         )
     }
 
-    /// Clear the campaigns cache
-    public func clearCache() {
-        campaignsCache = []
-        lastCacheUpdate = nil
-        Task {
-            await inventoryService.clearCache()
-        }
-    }
-
     /// Fetch active campaigns (convenience method for MinerEngine)
     public func fetchActiveCampaigns() async throws -> [Campaign] {
         try await getActiveCampaigns()

@@ -66,7 +66,12 @@ if [[ "${SWIFTMINER_SKIP_BUILD:-0}" == "1" ]]; then
     exit 0
 fi
 
-xcodebuild -project "$PROJECT_PATH" -scheme "$SCHEME" -configuration "$CONFIGURATION" build
+xcodebuild \
+    -project "$PROJECT_PATH" \
+    -scheme "$SCHEME" \
+    -configuration "$CONFIGURATION" \
+    -destination "generic/platform=macOS" \
+    build
 
 INFO_PLIST="$(find "$HOME/Library/Developer/Xcode/DerivedData" -path "*/Build/Products/$CONFIGURATION/SwiftMiner.app/Contents/Info.plist" -print | sort | tail -n 1)"
 [[ -n "$INFO_PLIST" ]] || fail "built SwiftMiner Info.plist not found"

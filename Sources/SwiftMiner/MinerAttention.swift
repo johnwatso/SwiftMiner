@@ -114,7 +114,7 @@ enum MinerAttention {
         }
     }
 
-    private static func warningGameId(for campaign: Campaign) -> String {
+    static func warningGameId(for campaign: Campaign) -> String {
         let id = campaign.game.id.trimmingCharacters(in: .whitespacesAndNewlines)
         if !id.isEmpty { return id }
         return normalizedGameKey(campaign.game.name)
@@ -143,10 +143,23 @@ struct MinerAttentionIssue: Equatable {
         }
     }
 
+    /// The mute that silences this issue, for the ones the user is allowed to turn off.
+    ///
+    /// Only the two campaign reminders have one. A miner that needs re-authentication, has a
+    /// stopped worker, or has stalled is describing something SwiftMiner cannot work around, and
+    /// hiding that would hide the reason the miner is not earning — which is the whole point of
+    /// the banner. These map onto the same per-account mutes the Pending list uses, so silencing
+    /// an issue here and silencing it there are the same act, and it stays undoable from Pending.
+    enum Dismissal: Equatable {
+        case accountLink(gameId: String, gameName: String)
+        case subscriptionRequired(campaignId: String)
+    }
+
     let title: String
     let detail: String
     let recommendation: String
     let action: Action?
+    var dismissal: Dismissal?
 
     static func resolve(
         miner: MinerManager.ManagedMiner,
@@ -160,14 +173,16 @@ struct MinerAttentionIssue: Equatable {
                     title: "Link \(gameName) to Twitch",
                     detail: "This is a Developer-menu preview of a game account link blocker.",
                     recommendation: "Open Twitch Drops, link the game account, then return here. SwiftMiner will retry automatically.",
-                    action: .openTwitchDrops
+                    action: .openTwitchDrops,
+                    dismissal: .accountLink(gameId: "debug-fake-link-game", gameName: gameName)
                 )
             case .subscriptionRequired:
                 return MinerAttentionIssue(
                     title: "A Twitch subscription is required",
                     detail: "This is a Developer-menu preview of a subscription-only campaign.",
                     recommendation: "Subscribe to an eligible Twitch channel for this campaign, then refresh the miner to check the drops again.",
-                    action: nil
+                    action: nil,
+                    dismissal: .subscriptionRequired(campaignId: "debug-fake-campaign")
                 )
             }
         }
@@ -209,7 +224,11 @@ struct MinerAttentionIssue: Equatable {
                 title: "Link \(campaign.game.name) to Twitch",
                 detail: "\(campaign.name) has unclaimed drops, but the \(campaign.game.name) account is not linked.",
                 recommendation: "Open Twitch Drops, link the game account, then return here. SwiftMiner will retry automatically.",
-                action: .openTwitchDrops
+                action: .openTwitchDrops,
+                dismissal: .accountLink(
+                    gameId: MinerAttention.warningGameId(for: campaign),
+                    gameName: campaign.game.name
+                )
             )
         }
 
@@ -259,7 +278,8 @@ struct MinerAttentionIssue: Equatable {
                 title: "A Twitch subscription is required",
                 detail: "\(campaign.name) has drops that cannot be earned by watching without a paid Twitch subscription.",
                 recommendation: "Subscribe to an eligible Twitch channel for this campaign, then refresh the miner to check the drops again.",
-                action: nil
+                action: nil,
+                dismissal: .subscriptionRequired(campaignId: campaign.id)
             )
         }
 

@@ -440,23 +440,55 @@ struct MinersOverviewView: View {
                     .foregroundStyle(.secondary)
             }
 
-            if let action = attention.action {
-                Button(action.title) {
-                    switch action {
-                    case .reconnect:
-                        startLinkAccountFlow(for: miner)
-                    case .restart:
-                        restartMiner(for: miner)
-                    case .openTwitchDrops:
-                        openTwitchDropsInventory()
+            if attention.action != nil || attention.dismissal != nil {
+                HStack(spacing: 8) {
+                    if let action = attention.action {
+                        Button(action.title) {
+                            switch action {
+                            case .reconnect:
+                                startLinkAccountFlow(for: miner)
+                            case .restart:
+                                restartMiner(for: miner)
+                            case .openTwitchDrops:
+                                openTwitchDropsInventory()
+                            }
+                        }
+                        .tahoeButtonStyle()
+                    }
+
+                    // Only the campaign reminders offer this — see `MinerAttentionIssue.Dismissal`.
+                    // It writes the same per-account mute the Pending row's Dismiss does, so the
+                    // banner and the list cannot disagree about whether an item is silenced, and
+                    // the item stays in Pending with a "Remind me" button to undo it.
+                    if let dismissal = attention.dismissal {
+                        Button("Dismiss") {
+                            dismissAttention(dismissal, for: miner)
+                        }
+                        .tahoeButtonStyle()
+                        .accessibilityHint("Stops this reminder for this miner. Restore it from the Pending list.")
                     }
                 }
-                .tahoeButtonStyle()
             }
         }
         .padding(16)
         .tahoeCard(tint: .red.opacity(0.08))
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
+    }
+
+    private func dismissAttention(
+        _ dismissal: MinerAttentionIssue.Dismissal,
+        for miner: MinerManager.ManagedMiner
+    ) {
+        switch dismissal {
+        case let .accountLink(gameId, gameName):
+            setLinkReminder(false, for: miner, gameId: gameId, gameName: gameName)
+        case let .subscriptionRequired(campaignId):
+            settings.setIgnoreSubscriptionRequiredWarnings(
+                true,
+                for: miner.accountId,
+                campaignId: campaignId
+            )
+        }
     }
 
     private func diagnosticEvents(for miner: MinerManager.ManagedMiner) -> [MinerDiagnosticEvent] {

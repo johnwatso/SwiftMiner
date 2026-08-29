@@ -77,7 +77,6 @@ Task {
 }
 
 print("SwiftMinerService v\(SwiftMinerCore.version) starting...")
-print("[SwiftMinerService] API key: \(apiKey.prefix(4))...")
 print("[SwiftMinerService] Press Ctrl+C to stop.")
 
 // Keep the service running

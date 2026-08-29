@@ -75,8 +75,8 @@ final class SpadeBeaconServiceTests: XCTestCase {
     var mockSession: URLSession!
     var service: SpadeBeaconService!
 
-    override func setUp() {
-        super.setUp()
+    override func setUp() async throws {
+        try await super.setUp()
         SpadeBeaconURLMock.reset()
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [SpadeBeaconURLMock.self]
@@ -84,9 +84,9 @@ final class SpadeBeaconServiceTests: XCTestCase {
         service = SpadeBeaconService(urlSession: mockSession)
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         SpadeBeaconURLMock.reset()
-        super.tearDown()
+        try await super.tearDown()
     }
 
     // MARK: - Constants

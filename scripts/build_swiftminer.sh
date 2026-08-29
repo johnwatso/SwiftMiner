@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_PATH="$ROOT_DIR/SwiftMiner.xcodeproj"
 SCHEME="${SWIFTMINER_SCHEME:-SwiftMiner}"
 CONFIGURATION="${SWIFTMINER_CONFIGURATION:-Release}"
-DESTINATION="${SWIFTMINER_DESTINATION:-platform=macOS}"
+DESTINATION="${SWIFTMINER_DESTINATION:-generic/platform=macOS}"
 
 # Sync to origin/main before building — handles diverged state on persistent runners.
 git -C "$ROOT_DIR" fetch --no-tags origin

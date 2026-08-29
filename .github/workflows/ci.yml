@@ -39,6 +39,17 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen
 
+      # The generated project is committed, so it can drift from project.yml the moment
+      # someone edits one without regenerating the other. Everything downstream builds the
+      # generated copy, which means the drift only ever shows up locally, in Xcode.
+      - name: Check the committed Xcode project matches project.yml
+        run: |
+          if ! git diff --quiet -- SwiftMiner.xcodeproj; then
+            echo "::error::SwiftMiner.xcodeproj is out of date with project.yml. Run 'xcodegen' and commit the result."
+            git diff --stat -- SwiftMiner.xcodeproj
+            exit 1
+          fi
+
       - name: Validate Sparkle release source
         run: scripts/validate_sparkle.sh
 
@@ -51,22 +62,86 @@ jobs:
           xcodebuild -project SwiftMiner.xcodeproj \
             -scheme SwiftMiner \
             -configuration Debug \
-            -destination 'platform=macOS' \
+            -destination 'generic/platform=macOS' \
             -derivedDataPath DerivedData \
             build | tail -100
 
-      - name: Verify Sparkle configuration
+      # project.yml threads these through as build settings, so a typo or a stale
+      # Info.plist entry produces an app that installs and updates incorrectly while
+      # every source-level check still passes. Compare what actually shipped.
+      - name: Verify built app metadata
         run: |
-          APP="DerivedData/Build/Products/Debug/SwiftMiner.app"
-          /usr/libexec/PlistBuddy -c 'Print SUFeedURL' "$APP/Contents/Info.plist"
-          /usr/libexec/PlistBuddy -c 'Print SUPublicEDKey' "$APP/Contents/Info.plist"
+          set -euo pipefail
+          PLIST="DerivedData/Build/Products/Debug/SwiftMiner.app/Contents/Info.plist"
 
-      - name: Test
+          project_value() {
+            sed -nE "s/^[[:space:]]*$1:[[:space:]]*\"?([^\"]+)\"?[[:space:]]*$/\1/p" project.yml | head -n 1
+          }
+          expect() {
+            local key="$1" expected="$2"
+            local actual
+            actual="$(/usr/libexec/PlistBuddy -c "Print :$key" "$PLIST")"
+            if [[ "$actual" != "$expected" ]]; then
+              echo "::error::$key is '$actual' in the built app but '$expected' in project.yml"
+              exit 1
+            fi
+            echo "$key = $actual"
+          }
+
+          expect CFBundleShortVersionString "$(project_value MARKETING_VERSION)"
+          expect CFBundleVersion "$(project_value CURRENT_PROJECT_VERSION)"
+          expect LSApplicationCategoryType "$(project_value LSApplicationCategoryType)"
+          expect SUFeedURL "$(project_value SPARKLE_FEED_URL)"
+          expect SUPublicEDKey "$(project_value SPARKLE_PUBLIC_ED_KEY)"
+
+      - name: Static analysis
         run: |
           set -o pipefail
           xcodebuild -project SwiftMiner.xcodeproj \
             -scheme SwiftMiner \
             -configuration Debug \
-            -destination 'platform=macOS' \
+            -destination 'generic/platform=macOS' \
             -derivedDataPath DerivedData \
+            analyze | tail -100
+
+      - name: Test
+        run: |
+          set -o pipefail
+          rm -rf TestResults.xcresult
+          xcodebuild -project SwiftMiner.xcodeproj \
+            -scheme SwiftMiner \
+            -configuration Debug \
+            -destination "platform=macOS,arch=$(uname -m)" \
+            -derivedDataPath DerivedData \
+            -resultBundlePath TestResults.xcresult \
             test | tail -200
+
+      # Informational for now: reported so coverage movement is visible on every run,
+      # with no threshold to fail against until the numbers are somewhere worth holding.
+      - name: Report coverage
+        if: always()
+        run: |
+          set -euo pipefail
+          if [[ ! -d TestResults.xcresult ]]; then
+            echo "No test result bundle; skipping coverage report."
+            exit 0
+          fi
+          {
+            echo "### Code coverage"
+            echo
+            echo '```'
+            xcrun xccov view --report --only-targets TestResults.xcresult
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # Release turns on optimisation and whole-module builds, which reject code that a
+      # Debug build accepts. Shipping is the first place that used to be discovered.
+      - name: Release build
+        run: |
+          set -o pipefail
+          xcodebuild -project SwiftMiner.xcodeproj \
+            -scheme SwiftMiner \
+            -configuration Release \
+            -destination 'generic/platform=macOS' \
+            -derivedDataPath DerivedDataRelease \
+            build | tail -100

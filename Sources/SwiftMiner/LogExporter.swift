@@ -792,10 +792,6 @@ private final class ActivityLogSymbolCycler: NSImageView {
         contentTintColor = symbol.color
         image = NSImage(systemSymbolName: symbol.symbol, accessibilityDescription: "Preparing diagnostics")
     }
-
-    deinit {
-        stop()
-    }
 }
 
 private extension EventFilter {

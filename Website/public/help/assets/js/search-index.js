@@ -120,7 +120,7 @@ const searchIndex = [
     title: "General Preferences",
     url: "settings/#general",
     category: "Settings",
-    keywords: "general app presence dock menu bar run background start login minimize steam artwork tips",
+    keywords: "general app presence dock menu bar run background start login minimize artwork tips",
     snippet: "Manage app launch behavior, Dock / Menu Bar visibility, and visual assets."
   },
   {

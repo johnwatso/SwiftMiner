@@ -267,8 +267,16 @@ final class SwiftMinerCoreTests: XCTestCase {
 
 actor TestTokenStore: TokenStore {
     private var accounts: [String: Account] = [:]
+    private var saveFailure: (any Error)?
+
+    /// Makes every subsequent `save(account:)` fail, so tests can exercise the paths that have to
+    /// keep an account working — and have to say something — when persistence is unavailable.
+    func failSaves(with error: any Error) {
+        saveFailure = error
+    }
 
     func save(account: Account) async throws {
+        if let saveFailure { throw saveFailure }
         accounts[account.id] = account
     }
 

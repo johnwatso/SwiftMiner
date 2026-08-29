@@ -328,9 +328,7 @@ final class NavigationProjectionStateProvider: ProjectionStateProvider, @uncheck
         limit: Int
     ) async -> [DiscordUserProjection.RecentCampaign] {
         guard let model, model.minerForAccount(accountId) != nil else { return [] }
-        let campaigns = await model.minerManager.dataCoordinator.allCampaigns(
-            preferSteamArtwork: Settings.shared.preferSteamArtwork
-        )
+        let campaigns = await model.minerManager.dataCoordinator.allCampaigns()
         let now = Date()
         let excludedGames = Settings.shared.excludedGames
         let completed = campaigns.filter {

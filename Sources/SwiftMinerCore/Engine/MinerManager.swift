@@ -980,7 +980,14 @@ public final class MinerManager {
             for idx in miners.indices {
                 if miners[idx].id != minerId && miners[idx].isOperator {
                     miners[idx].isOperator = false
-                    try? await tokenStore.updateOperatorStatus(twitchUserId: miners[idx].accountId, isOperator: false)
+                    do {
+                        try await tokenStore.updateOperatorStatus(twitchUserId: miners[idx].accountId, isOperator: false)
+                    } catch {
+                        // The promotion below clears other operators in the store anyway, so this
+                        // rarely diverges — but the row this list is drawn from was already
+                        // changed, and a failure here is the only warning that it did not stick.
+                        Logger.engine.error("Failed to clear operator status for \(miners[idx].accountId): \(error.localizedDescription)")
+                    }
                 }
             }
         }
@@ -989,7 +996,7 @@ public final class MinerManager {
         do {
             try await tokenStore.updateOperatorStatus(twitchUserId: miners[index].accountId, isOperator: isOperator)
         } catch {
-            Logger.engine.error("Failed to update operator status for \(miners[index].accountId): \(error)")
+            Logger.engine.error("Failed to update operator status for \(miners[index].accountId): \(error.localizedDescription). The change is shown in the app but was not saved.")
         }
         
         onMinersChanged?()

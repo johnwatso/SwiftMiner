@@ -298,7 +298,11 @@ actor CampaignArtworkCache {
 
         if let localURL = cacheDirectory?.appendingPathComponent(key),
            FileManager.default.fileExists(atPath: localURL.path) {
-            if let image = NSImage(contentsOf: localURL) {
+            // Cache keys intentionally have no filename extension. Decode from
+            // bytes so ImageIO sniffs the actual format instead of receiving a
+            // misleading `public.data` type hint from the extensionless URL.
+            if let data = try? Data(contentsOf: localURL),
+               let image = NSImage(data: data) {
                 memory.setObject(image, forKey: key as NSString)
                 return image
             }
@@ -429,8 +433,13 @@ struct CampaignArtworkIcon: View {
 actor CampaignArtworkTintSampler {
     static let shared = CampaignArtworkTintSampler()
 
+    private let urlSession: URLSession
     private var cache: [URL: ArtworkRGB] = [:]
     private var inFlight: [URL: Task<ArtworkRGB?, Never>] = [:]
+
+    init(urlSession: URLSession = .shared) {
+        self.urlSession = urlSession
+    }
 
     func tintColor(from artworkURL: URL?) async -> Color? {
         guard let artworkURL else { return nil }
@@ -443,8 +452,11 @@ actor CampaignArtworkTintSampler {
             return await existingTask.value?.color
         }
 
-        let task = Task<ArtworkRGB?, Never> {
-            await Self.fetchAndExtractTint(from: artworkURL.highResolutionArtworkURL)
+        let task = Task<ArtworkRGB?, Never> { [urlSession] in
+            await Self.fetchAndExtractTint(
+                from: artworkURL.highResolutionArtworkURL,
+                urlSession: urlSession
+            )
         }
         inFlight[artworkURL] = task
 
@@ -458,9 +470,12 @@ actor CampaignArtworkTintSampler {
         return extracted?.color
     }
 
-    private static func fetchAndExtractTint(from url: URL) async -> ArtworkRGB? {
+    private static func fetchAndExtractTint(
+        from url: URL,
+        urlSession: URLSession
+    ) async -> ArtworkRGB? {
         do {
-            let (data, response) = try await URLSession.shared.data(from: url)
+            let (data, response) = try await urlSession.data(from: url)
             if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
                 return nil
             }

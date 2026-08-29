@@ -56,19 +56,19 @@ final class UnattendedHealthModel: ObservableObject {
     ) async {
         guard let store else { return }
         let observedAt = Date()
-        try? await store.record(.minerObserved(
+        await record(.minerObserved(
             minerID: id,
             displayName: displayName,
             at: observedAt
-        ))
-        try? await store.record(.incidentObserved(
+        ), into: store)
+        await record(.incidentObserved(
             minerID: id,
             kind: kind,
             severity: severity,
             summary: summary,
             recommendedAction: recommendedAction,
             at: observedAt
-        ))
+        ), into: store)
         await refresh()
     }
 
@@ -77,11 +77,24 @@ final class UnattendedHealthModel: ObservableObject {
         kind: HealthIncident.Kind
     ) async {
         guard let store else { return }
-        try? await store.record(.incidentResolved(
+        await record(.incidentResolved(
             minerID: id,
             kind: kind,
             at: Date()
-        ))
+        ), into: store)
         await refresh()
+    }
+
+    /// Writes one health event, reporting a storage failure instead of discarding it.
+    ///
+    /// `record` throws precisely so a failed `persist()` is visible. Swallowing it here meant the
+    /// incident history — the thing an operator reads back after an overnight failure — could
+    /// stop recording with nothing anywhere to say it had.
+    private func record(_ event: UnattendedHealthEvent, into store: UnattendedHealthStore) async {
+        do {
+            try await store.record(event)
+        } catch {
+            Logger.notifications.error("Could not record unattended health event: \(error.localizedDescription)")
+        }
     }
 }

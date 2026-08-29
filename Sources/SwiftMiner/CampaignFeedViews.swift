@@ -123,7 +123,6 @@ struct CampaignRailItem: Identifiable {
 struct CampaignFeedCard: View {
     let item: CampaignRailItem
     let prominence: CampaignCardProminence
-    let onSetSteamId: (String) -> Void
     let onUploadCustomArtwork: (Game) -> Void
     @State private var isHovering = false
 
@@ -362,22 +361,8 @@ struct CampaignFeedCard: View {
                     } label: {
                         GameActionMenuLabel(
                             title: "Remove Custom Artwork",
-                            subtitle: "Return to Steam or Twitch artwork.",
+                            subtitle: "Return to the artwork Twitch supplies.",
                             systemImage: SystemSymbolCompatibility.resolvedName(for: "photo.badge.minus")
-                        )
-                    }
-                }
-
-                Divider()
-
-                if SteamArtworkService.supportsSteamArtwork(forGameName: game.name, gameId: game.id) {
-                    Button {
-                        onSetSteamId(game.name)
-                    } label: {
-                        GameActionMenuLabel(
-                            title: "Set Steam ID",
-                            subtitle: "Set a Steam ID to enable high-resolution artwork for this game.",
-                            systemImage: "photo.artframe"
                         )
                     }
                 }
@@ -394,7 +379,6 @@ struct ReorderableCampaignFeedCard: View {
     let activeDragIndex: Int?
     let projectedDropIndex: Int?
     let activeDragProgress: CGFloat
-    let onSetSteamId: (String) -> Void
     let onUploadCustomArtwork: (Game) -> Void
     let onDragProjectionChanged: (Int, Int, CGFloat) -> Void
     let onDragEnded: () -> Void
@@ -455,7 +439,6 @@ struct ReorderableCampaignFeedCard: View {
         CampaignFeedCard(
             item: item,
             prominence: prominence,
-            onSetSteamId: onSetSteamId,
             onUploadCustomArtwork: onUploadCustomArtwork
         )
     }
@@ -517,7 +500,6 @@ struct ReorderableCampaignFeedCard: View {
 struct StaggeredCampaignRail: View {
     let items: [CampaignRailItem]
     let prominence: CampaignCardProminence
-    let onSetSteamId: (String) -> Void
     let onUploadCustomArtwork: (Game) -> Void
 
     var body: some View {
@@ -533,8 +515,7 @@ struct StaggeredCampaignRail: View {
                     CampaignFeedCard(
                         item: item,
                         prominence: prominence,
-                        onSetSteamId: onSetSteamId,
-                        onUploadCustomArtwork: onUploadCustomArtwork
+                                    onUploadCustomArtwork: onUploadCustomArtwork
                     )
                     .scaleEffect(scale)
                     .opacity(opacity)

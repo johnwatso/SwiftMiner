@@ -3,10 +3,8 @@ import Foundation
 
 /// Process-wide fail-fast guard against unexpected, unmocked network traffic in tests.
 ///
-/// Hosted XCTest launches the full SwiftMiner app, and several services
-/// (e.g. `TwitchAuthService`, `SteamArtworkService`) use `URLSession.shared`
-/// directly rather than an injected session. A test that forgets to install a
-/// mock could otherwise reach the real Twitch/Steam endpoints. This guard
+/// Hosted XCTest launches the full SwiftMiner app. A test that forgets to inject
+/// or install a mock session could otherwise reach a real endpoint. This guard
 /// registers a catch-all `URLProtocol` for the shared/default session, fails any
 /// request that reaches it, and records it so the owning test is flagged.
 ///

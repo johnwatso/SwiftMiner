@@ -38,12 +38,6 @@ final class WatchSessionManagerTests: XCTestCase {
         // Mock GQL for playback access token
         let playbackTokenJson = "{\"data\": {\"streamPlaybackAccessToken\": {\"value\": \"test_token\", \"signature\": \"test_sig\"}}}"
         
-        // Mock GQL for broadcast ID
-        let broadcastIdJson = "{\"data\": {\"user\": {\"stream\": {\"id\": \"broadcast_789\"}}}}"
-        
-        // Mock GQL for Community Points Context (needed by CommunityPointsService)
-        let pointsContextJson = "{\"data\": {\"community\": {\"channel\": {\"communityPoints\": {\"balance\": 100, \"user\": {\"self\": {\"communityPointsAvailableClaim\": null}}}}}}}"
-
         // Since startWatching makes multiple GQL calls, we need a way to handle sequential mocks.
         // For now, let's just make sure it starts and we can verify heartbeats.
         // MockURLProtocol needs to return different things for different URLs.
@@ -79,7 +73,8 @@ final class WatchSessionManagerTests: XCTestCase {
         
         let watchTime = await manager.totalWatchTime
         XCTAssertGreaterThan(watchTime, 0)
-        XCTAssertEqual(session.lastHeartbeatTransport, "Spade")
+        let currentSession = await manager.currentSession
+        XCTAssertEqual(currentSession?.lastHeartbeatTransport, "Spade")
         
         await manager.stopWatching()
         
@@ -113,11 +108,12 @@ final class WatchSessionManagerTests: XCTestCase {
         }
 
         let channel = Channel(id: "ch123", login: "testchannel", displayName: "TestChannel")
-        let session = try await manager.startWatching(channel: channel, campaignId: "camp456")
+        _ = try await manager.startWatching(channel: channel, campaignId: "camp456")
 
         try await Task.sleep(nanoseconds: 200_000_000)
 
-        XCTAssertEqual(session.lastHeartbeatTransport, "Twitch GQL fallback")
+        let currentSession = await manager.currentSession
+        XCTAssertEqual(currentSession?.lastHeartbeatTransport, "Twitch GQL fallback")
         let watchTime = await manager.totalWatchTime
         XCTAssertGreaterThan(watchTime, 0)
         await manager.stopWatching()
@@ -167,13 +163,15 @@ final class WatchSessionManagerTests: XCTestCase {
         }
 
         let channel = Channel(id: "ch123", login: "testchannel", displayName: "TestChannel")
-        let session = try await manager.startWatching(channel: channel, campaignId: "camp456")
+        _ = try await manager.startWatching(channel: channel, campaignId: "camp456")
 
         await fulfillment(of: [repeatedFailure], timeout: 3)
         let isWatching = await manager.isWatching
         XCTAssertFalse(isWatching)
-        XCTAssertEqual(session.consecutiveHeartbeatFailures, 2)
-        if case .error = session.state {
+        let activeSession = await manager.currentSession
+        let currentSession = try XCTUnwrap(activeSession)
+        XCTAssertEqual(currentSession.consecutiveHeartbeatFailures, 2)
+        if case .error = currentSession.state {
             // Expected terminal state.
         } else {
             XCTFail("Repeated heartbeat failures should end the watch session")

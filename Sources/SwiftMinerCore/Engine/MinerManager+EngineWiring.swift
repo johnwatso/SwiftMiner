@@ -359,12 +359,20 @@ extension MinerManager {
         onMinersChanged?()
     }
 
-    public func updateFailoverStreamers(_ streamers: [GameFailoverStreamer]) {
+    /// Pushes a new failover list to every engine.
+    ///
+    /// Each engine used to get its own detached task, so two saves in quick succession could
+    /// reach a given engine out of order — and, worse, reach different engines in different
+    /// orders, leaving the fleet running on two different failover lists with the manager
+    /// holding a third. Delivering them in a group the caller awaits keeps every engine on the
+    /// list that was saved last.
+    public func updateFailoverStreamers(_ streamers: [GameFailoverStreamer]) async {
         failoverStreamers = streamers
         currentFailoverStreamers = streamers
-        for engine in engines.values {
-            Task {
-                await engine.updateFailoverStreamers(streamers)
+        let targets = Array(engines.values)
+        await withTaskGroup(of: Void.self) { group in
+            for engine in targets {
+                group.addTask { await engine.updateFailoverStreamers(streamers) }
             }
         }
     }
@@ -388,8 +396,21 @@ extension MinerManager {
         miners[index].ownerDiscordId = discordId
         onMinersChanged?()
 
+        // The in-memory change above is already visible in the UI. If the write below fails the
+        // link is gone after the next launch with nothing to explain it — and `ownerDiscordId` is
+        // what resolves the account's Discord profile picture — so neither half stays silent.
         Task { [tokenStore] in
-            guard let existing = try? await tokenStore.loadAccount(twitchUserId: accountId) else { return }
+            let existing: Account?
+            do {
+                existing = try await tokenStore.loadAccount(twitchUserId: accountId)
+            } catch {
+                Logger.storage.error("Could not read account \(accountId) to set its Discord owner: \(error.localizedDescription). The link is not persisted.")
+                return
+            }
+            guard let existing else {
+                Logger.storage.error("No stored account \(accountId) to set a Discord owner on; the link is not persisted.")
+                return
+            }
             let updated = Account(
                 id: existing.id,
                 username: existing.username,
@@ -401,7 +422,11 @@ extension MinerManager {
                 scopes: existing.scopes,
                 isOperator: existing.isOperator
             )
-            try? await tokenStore.save(account: updated)
+            do {
+                try await tokenStore.save(account: updated)
+            } catch {
+                Logger.storage.error("Could not persist the Discord owner for account \(accountId): \(error.localizedDescription). The link will be gone after a restart.")
+            }
         }
     }
 
@@ -687,10 +712,19 @@ extension MinerManager {
         }
     }
 
+    /// Queues one health event for the unattended store.
+    ///
+    /// Fire-and-forget by design — recording health must never block the engine — but a storage
+    /// failure still has to leave a trace. Discarding it silently meant the incident history
+    /// could stop accumulating while everything upstream carried on as if it were being written.
     func recordHealth(_ event: UnattendedHealthEvent) {
         guard let unattendedHealthStore else { return }
         Task {
-            try? await unattendedHealthStore.record(event)
+            do {
+                try await unattendedHealthStore.record(event)
+            } catch {
+                Logger.storage.error("Could not record unattended health event: \(error.localizedDescription)")
+            }
         }
     }
 

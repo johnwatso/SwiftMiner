@@ -397,7 +397,7 @@ public actor MinerEngine {
         prioritiseFollowedStreamers: Bool = false,
         failoverStreamers: [GameFailoverStreamer] = [],
         ignoredAccountLinkWarningGames: [String] = []
-    ) {
+    ) async {
         self.priorityGames = priorityGames
         self.excludedGames = excludedGames
         self.enableBadgesEmotes = enableBadgesEmotes
@@ -412,9 +412,9 @@ public actor MinerEngine {
             self.notificationService = NotificationService()
         }
         
-        Task {
-            await notificationService?.configure(enabled: showClaimNotifications)
-        }
+        // Awaited rather than detached: two preference saves in quick succession could otherwise
+        // deliver their `configure` calls out of order and leave the service on the older setting.
+        await notificationService?.configure(enabled: showClaimNotifications)
     }
 
     /// Debug-only toggle. When enabled, the miner ignores account-link/eligibility gates
@@ -768,7 +768,7 @@ public actor MinerEngine {
         // whole fleet on polling with no real-time drop progress and nothing surfaced to the user.
         do {
             let token = try await apiClient.getAccessToken()
-            log("Access token loaded (\(token.prefix(8))…, length: \(token.count))")
+            log("Access credentials loaded")
             await apiClient.updateAccessToken(token)
             await pubSubClient.updateAccessToken(token)
         } catch {
@@ -884,6 +884,14 @@ public actor MinerEngine {
         }
     }
 
+    /// Refreshes the token and rebuilds the session on top of it.
+    ///
+    /// This is supervisor recovery stage 3, so it only runs on a miner that has already been
+    /// found stalled. The PubSub reconnect below used to be `try?` followed unconditionally by
+    /// "refresh completed": a failed reconnect handed the miner back to the supervisor looking
+    /// recovered while real-time drop progress was dead and only GraphQL polling remained. That
+    /// GraphQL-healthy/PubSub-dead pairing is the shape earning losses take, and it is exactly
+    /// what the startup path at `startPubSub` already refuses to hide.
     public func refreshAuthenticationSession() async throws {
         let token = try await authService.refreshTokenIfNeeded()
         await apiClient.updateAccessToken(token)
@@ -893,9 +901,24 @@ public actor MinerEngine {
             await apiClient.setAccountId(account.id)
             await authService.setAccountId(account.id)
         }
-        try? await pubSubClient.connect()
+
+        var pubSubReconnected = true
+        do {
+            try await pubSubClient.connect()
+            log("PubSub reconnected after authentication refresh")
+        } catch {
+            // Not thrown: the token refresh above did succeed, and failing the whole recovery
+            // would discard that. The watch loop reconnects PubSub on its next cycle. But the
+            // miner is on polling-only progress until it does, and that has to be visible.
+            pubSubReconnected = false
+            log("PubSub reconnect failed after authentication refresh: \(error.localizedDescription). Real-time drop progress is unavailable until the watch loop reconnects.")
+            Logger.engine.error("PubSub reconnect failed during recovery for \(self.currentAccount?.username ?? "unknown"): \(error.localizedDescription)")
+        }
+
         onOperationalEvent?(.authRefreshed)
-        log("Authentication/session refresh completed")
+        log(pubSubReconnected
+            ? "Authentication/session refresh completed"
+            : "Authentication/session refresh completed without PubSub")
     }
 
     /// Claims all ready drops immediately

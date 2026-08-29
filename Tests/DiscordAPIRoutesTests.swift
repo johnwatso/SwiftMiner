@@ -315,6 +315,77 @@ final class DiscordAPIRoutesTests: XCTestCase {
         // The Twitch identity stays alongside it — the dashboard shows both.
         XCTAssertEqual(nicknamedByTwitchId?.account?.username, "linkedminer")
     }
+
+    /// The activation row is what lets an in-flight link survive a service restart. Writing it
+    /// used to be wrapped in an empty `catch`, so a database that refused the insert produced a
+    /// perfectly successful 201 and a link that quietly evaporated on the next restart.
+    func testStartingActivationPersistsTheSessionRow() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            // A long poll interval keeps the background poll task asleep for the whole test.
+            let body = """
+            {"device_code":"device-abc","user_code":"WXYZ-1234","verification_uri":"https://www.twitch.tv/activate","expires_in":1800,"interval":900}
+            """
+            return (response, Data(body.utf8))
+        }
+        defer {
+            MockURLProtocol.requestHandler = nil
+            MockURLProtocol.stubResponseData = nil
+            MockURLProtocol.stubError = nil
+            MockURLProtocol.lastRequest = nil
+        }
+
+        let harness = try await RouteHarness(authService: TwitchAuthService(
+            clientId: "test_client_id",
+            tokenStore: TestTokenStore(),
+            urlSession: session
+        ))
+        try await harness.registerUser(discordUserId)
+
+        let response = await harness.router.handle(HTTPRequest(
+            method: "POST",
+            path: "/v1/users/\(discordUserId)/activation",
+            headers: [:],
+            body: Data()
+        ))
+        XCTAssertEqual(response.statusCode, 201)
+
+        let payload = try decodeJSON(response.body)
+        let sessionId = try XCTUnwrap(payload["sessionId"] as? String)
+
+        let storedDiscordId: String? = try await harness.manager.query { db in
+            var stmt: OpaquePointer?
+            let sql = "SELECT discord_id FROM oauth_link_sessions WHERE id = ?;"
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
+            defer { sqlite3_finalize(stmt) }
+            sqlite3_bind_text(stmt, 1, sessionId, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
+            guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
+            return String(cString: sqlite3_column_text(stmt, 0))
+        }
+        XCTAssertEqual(
+            storedDiscordId, discordUserId,
+            "A 201 has to mean the activation session actually reached the database."
+        )
+
+        // Stop the background poll task before the harness goes away.
+        let cancelled = await harness.router.handle(HTTPRequest(
+            method: "DELETE",
+            path: "/v1/users/\(discordUserId)/activation/\(sessionId)",
+            headers: [:],
+            body: Data()
+        ))
+        XCTAssertEqual(cancelled.statusCode, 204)
+    }
 }
 
 private final class RouteHarness {
@@ -323,7 +394,7 @@ private final class RouteHarness {
     let routes: DiscordAPIRoutes
     private let databaseURL: URL
 
-    init() async throws {
+    init(authService: TwitchAuthService? = nil) async throws {
         databaseURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftMiner-DiscordAPIRoutesTests-\(UUID().uuidString).sqlite")
         manager = SQLiteManager(databaseURL: databaseURL)
@@ -332,7 +403,8 @@ private final class RouteHarness {
         routes = DiscordAPIRoutes(
             manager: manager,
             projectionBuilder: DiscordProjectionBuilder(manager: manager),
-            apiKey: "test-api-key"
+            apiKey: "test-api-key",
+            authService: authService
         )
         await routes.configure(router)
     }
