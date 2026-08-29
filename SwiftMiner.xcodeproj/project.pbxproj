@@ -10,6 +10,7 @@
 		0043CF0EC5029EC739BE5F7F /* GamePreferenceComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = F52F9551C4B18A1F7A3D4173 /* GamePreferenceComponents.swift */; };
 		0052FB020B77AA5B929EE0A3 /* TwitchBoxArt.swift in Sources */ = {isa = PBXBuildFile; fileRef = C02547A88A4BAB2F7A7DABA7 /* TwitchBoxArt.swift */; };
 		03BB858FF57F2BEAF2560EC3 /* MinerHealthSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B780942F75249CF195C9244 /* MinerHealthSnapshot.swift */; };
+		03BDA5C5DFBB81EE3F5DCD40 /* Settings+DiscordNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27D4F1E10169D583B5A8B923 /* Settings+DiscordNotifications.swift */; };
 		043246205DB44F3ABA4EAB5A /* ApplicationsFolderInstallerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC3AF853EB52A31B632D0B30 /* ApplicationsFolderInstallerTests.swift */; };
 		0527D2AA5B1A268EFE44380C /* SwiftMinerDMEventService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF94C5B6274D4250D2A5F940 /* SwiftMinerDMEventService.swift */; };
 		05EDE4B6BDADF449C9F36B96 /* libSwiftMinerService.a in Frameworks */ = {isa = PBXBuildFile; fileRef = F79E8CD76AF45B0FC7080868 /* libSwiftMinerService.a */; };
@@ -23,6 +24,7 @@
 		128800EABBA91C7AB6A9650D /* ApplicationsFolderInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0867B1993E51420263F10E5 /* ApplicationsFolderInstaller.swift */; };
 		156A8D4734DACD633E3CC8BB /* MinerTableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E783D8A8E6145DE8BED34EED /* MinerTableView.swift */; };
 		1717B695ABFDB06BDEC06317 /* KeychainAccountStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F769E922F54C3EE8703F4F5 /* KeychainAccountStore.swift */; };
+		17CABFD758C91B87B85581F7 /* Settings+Backup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02640CD508B897F6E537B77B /* Settings+Backup.swift */; };
 		1843A5CE760FEA47E6E4BAA8 /* AsyncAlgorithms in Frameworks */ = {isa = PBXBuildFile; productRef = D556FD2F54AFA29EBC58E523 /* AsyncAlgorithms */; };
 		19FDAFDD14E8A2A5B78A2DB3 /* DMLogStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5BD1E13C13564BAF7ED49D7 /* DMLogStore.swift */; };
 		1A07E9FA650B8CFB69A0D223 /* MinerActivitySnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A62D525DAD95E511F9DA6C90 /* MinerActivitySnapshotTests.swift */; };
@@ -101,6 +103,7 @@
 		802FA8EC02560A28823938FA /* CampaignViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C67E7250E0A8C61154B61CBB /* CampaignViews.swift */; };
 		80BF3A0AF309839A57255411 /* LogRedactor.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF414565BE5F618A1909D947 /* LogRedactor.swift */; };
 		812443DB837ACE81CF97CCB8 /* TwitchAvatarStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD3A3FA3D2C53873D6817D19 /* TwitchAvatarStore.swift */; };
+		8321014D72F8520DFE67FB7D /* Settings+GamePreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E87C19EE96031768AE0DBE4 /* Settings+GamePreferences.swift */; };
 		8678D2740E99E270510283CC /* ClaimService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8602894B99CE1D0D592B2767 /* ClaimService.swift */; };
 		86F53EA04C314F8DC4C23BCE /* UnattendedHealthStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B199FBD956E177F78210A113 /* UnattendedHealthStoreTests.swift */; };
 		887E4BB173AF9184D7977C5D /* TokenStoreFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = F78D7567C8507C092BDE5F44 /* TokenStoreFactory.swift */; };
@@ -149,6 +152,7 @@
 		B0B3F31B7C6EC4F7BED6F11B /* DropsServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D227823A0CF0DEDA834B486B /* DropsServiceTests.swift */; };
 		B119C62B1833183E1EBDBB68 /* BoxArtResolutionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4435A45FA7AE10B8E9CA2F04 /* BoxArtResolutionTests.swift */; };
 		B16F074B9745C37F55F481B7 /* PubSubClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C67349DAA237D14A6C21D75 /* PubSubClient.swift */; };
+		B24995BC566B56EBF75CAE16 /* Settings+WebDashboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEAE41FAFC2755451A89172E /* Settings+WebDashboard.swift */; };
 		B5073D6F750D1504525FC42D /* MinerAttention.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0528E48497586BD35DE82149 /* MinerAttention.swift */; };
 		B5B0F32E53B7AE0C8F300E5F /* ChannelLivenessCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A174CB07DBB49229CB2E6678 /* ChannelLivenessCacheTests.swift */; };
 		B6820745B5DB991B2905AD36 /* SpadeBeaconService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 514F43250FDCF5A12579A212 /* SpadeBeaconService.swift */; };
@@ -277,6 +281,7 @@
 /* Begin PBXFileReference section */
 		0064C6F43AB01F4B7FBA6261 /* MinerAvatarURL.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinerAvatarURL.swift; sourceTree = "<group>"; };
 		011876AF5BD64BEC7BC88B09 /* CampaignDataService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignDataService.swift; sourceTree = "<group>"; };
+		02640CD508B897F6E537B77B /* Settings+Backup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Settings+Backup.swift"; sourceTree = "<group>"; };
 		02ED514E82ADDE29F84D41CF /* AppUpdater.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdater.swift; sourceTree = "<group>"; };
 		0374A8D7AF4EC4089222CA3B /* GamePreferenceManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GamePreferenceManagementView.swift; sourceTree = "<group>"; };
 		0528E48497586BD35DE82149 /* MinerAttention.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinerAttention.swift; sourceTree = "<group>"; };
@@ -315,6 +320,7 @@
 		2497EABA94E02C4816B3E5FA /* EarningLedgerStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EarningLedgerStore.swift; sourceTree = "<group>"; };
 		2598F0D5C79C88A414BC39E1 /* GameAggregate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameAggregate.swift; sourceTree = "<group>"; };
 		26908E3B6B9716D33FD72B00 /* NavigationModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationModel.swift; sourceTree = "<group>"; };
+		27D4F1E10169D583B5A8B923 /* Settings+DiscordNotifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Settings+DiscordNotifications.swift"; sourceTree = "<group>"; };
 		2B643A3B89EA0F0530799BEC /* SwiftMiner.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = SwiftMiner.icon; sourceTree = "<group>"; };
 		2BA5F9ED780558F18E1EAFE0 /* PerformanceDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceDiagnostics.swift; sourceTree = "<group>"; };
 		2BC4716C111FBCF7F847A533 /* DiscordUserProjection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscordUserProjection.swift; sourceTree = "<group>"; };
@@ -331,6 +337,7 @@
 		3AC5F2BA81633C5B76678925 /* CampaignViewData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignViewData.swift; sourceTree = "<group>"; };
 		3C27A208494D4653B30FCCB7 /* WebDashboardAppScript.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebDashboardAppScript.swift; sourceTree = "<group>"; };
 		3C67349DAA237D14A6C21D75 /* PubSubClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PubSubClient.swift; sourceTree = "<group>"; };
+		3E87C19EE96031768AE0DBE4 /* Settings+GamePreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Settings+GamePreferences.swift"; sourceTree = "<group>"; };
 		40FBB48E5544E325179C696C /* EarningLedgerStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EarningLedgerStoreTests.swift; sourceTree = "<group>"; };
 		41472EDA22183F56029E12DB /* WarningSuppressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WarningSuppressionTests.swift; sourceTree = "<group>"; };
 		41D6E3EDBE9FEE60A15BCD57 /* GameAggregateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameAggregateTests.swift; sourceTree = "<group>"; };
@@ -486,6 +493,7 @@
 		F9559DA840299AFF90133587 /* AdminLinkingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminLinkingService.swift; sourceTree = "<group>"; };
 		FBE90C8FED1ED1FE9B88FD3B /* MinerLoginService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinerLoginService.swift; sourceTree = "<group>"; };
 		FE95137E28DEA812A2D3D1E7 /* Settings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Settings.swift; sourceTree = "<group>"; };
+		FEAE41FAFC2755451A89172E /* Settings+WebDashboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Settings+WebDashboard.swift"; sourceTree = "<group>"; };
 		FFD9C80952F08A4D35F7005A /* EventEmitterServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventEmitterServiceTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -680,6 +688,10 @@
 				7559E3ABB6B9BA9EDAFCA012 /* NavigationProjectionStateProvider.swift */,
 				104E69E6B6B6F84B8E2B240F /* ResourceUsageMonitor.swift */,
 				FE95137E28DEA812A2D3D1E7 /* Settings.swift */,
+				02640CD508B897F6E537B77B /* Settings+Backup.swift */,
+				27D4F1E10169D583B5A8B923 /* Settings+DiscordNotifications.swift */,
+				3E87C19EE96031768AE0DBE4 /* Settings+GamePreferences.swift */,
+				FEAE41FAFC2755451A89172E /* Settings+WebDashboard.swift */,
 				B9F957F048CC5621019DC58A /* SettingsSupportingTypes.swift */,
 				D8A9E39DA6F930F08E6C1E1E /* SettingsView.swift */,
 				DAF81B3BBAA69FF63BECA50C /* SidebarView.swift */,
@@ -1265,6 +1277,10 @@
 				D40B7D026EB8107BEA8C7996 /* NavigationModel.swift in Sources */,
 				AA421486DE7DD26B85BCB4A4 /* NavigationProjectionStateProvider.swift in Sources */,
 				D6CC430AD2446A844C8FB57B /* ResourceUsageMonitor.swift in Sources */,
+				17CABFD758C91B87B85581F7 /* Settings+Backup.swift in Sources */,
+				03BDA5C5DFBB81EE3F5DCD40 /* Settings+DiscordNotifications.swift in Sources */,
+				8321014D72F8520DFE67FB7D /* Settings+GamePreferences.swift in Sources */,
+				B24995BC566B56EBF75CAE16 /* Settings+WebDashboard.swift in Sources */,
 				FE498AC922BA6F34D0EFC819 /* Settings.swift in Sources */,
 				492E4508C0782BDFF7E7086E /* SettingsSupportingTypes.swift in Sources */,
 				25D5E5483F55EA58AE81948A /* SettingsView.swift in Sources */,
