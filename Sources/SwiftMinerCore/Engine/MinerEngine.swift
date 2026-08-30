@@ -557,6 +557,10 @@ public actor MinerEngine {
             throw TwitchMinerError.watchSessionFailed("Engine already running")
         }
 
+        // Startup timing is logged because the wait before the first watch is made of
+        // several network round trips whose individual costs are otherwise invisible.
+        let startedAt = Date()
+
         isRunning = true
         let workerTaskID = UUID().uuidString
         session = MiningSession()
@@ -604,9 +608,10 @@ public actor MinerEngine {
         // Token acquisition and the PubSub connection are attempted separately: a token failure
         // used to skip the connect call *and* the client updates below it, silently leaving the
         // whole fleet on polling with no real-time drop progress and nothing surfaced to the user.
+        let tokenStartedAt = Date()
         do {
             let token = try await apiClient.getAccessToken()
-            log("Access credentials loaded")
+            log("Access credentials loaded in \(Self.elapsed(since: tokenStartedAt))")
             await apiClient.updateAccessToken(token)
             await pubSubClient.updateAccessToken(token)
         } catch {
@@ -621,9 +626,10 @@ public actor MinerEngine {
             }
         }
 
+        let pubSubStartedAt = Date()
         do {
             try await pubSubClient.connect()
-            log("PubSub connected")
+            log("PubSub connected in \(Self.elapsed(since: pubSubStartedAt))")
         } catch {
             log("PubSub connection failed (will retry during watch loop): \(error.localizedDescription)")
         }
@@ -636,6 +642,8 @@ public actor MinerEngine {
             await authService.setAccountId(account.id)
         }
 
+        log("Engine ready in \(Self.elapsed(since: startedAt)); handing over to the mining loop")
+
         // Start main mining loop
         mainTask = Task { [weak self] in
             guard let self = self else { return }
@@ -647,6 +655,10 @@ public actor MinerEngine {
         startMaintenanceLoop()
     }
     
+    static func elapsed(since start: Date) -> String {
+        String(format: "%.2fs", Date().timeIntervalSince(start))
+    }
+
     /// Stops the mining engine
     public func stop() async {
         log("Stopping miner...")
