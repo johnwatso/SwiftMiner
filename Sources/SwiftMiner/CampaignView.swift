@@ -333,7 +333,15 @@ struct DropsListView: View {
     private func makeRenderContext() -> DropsListRenderContext {
         let now = Date()
         let activeMinerCandidates = miners.filter { $0.status == .watching || $0.status == .claiming }
-        let customizedCampaigns = availableCampaigns.map(applyingCustomArtwork)
+        // Resolved once for the whole list: custom artwork and the exclusion test used to
+        // rescan every preference and every excluded game for each campaign.
+        let games = GameMatchIndex(
+            gamePreferences: settings.gamePreferences,
+            priorityGames: [],
+            excludedGames: Settings.shared.excludedGames,
+            matchesFoldedNames: false
+        )
+        let customizedCampaigns = availableCampaigns.map { applyingCustomArtwork(to: $0, games: games) }
         let activityByCampaignId = activitySnapshots(
             for: customizedCampaigns,
             activeMinerCandidates: activeMinerCandidates,
@@ -341,7 +349,7 @@ struct DropsListView: View {
         )
 
         let feedCampaigns = customizedCampaigns
-            .filter { shouldIncludeInDropsFeed($0, now: now) }
+            .filter { shouldIncludeInDropsFeed($0, now: now, games: games) }
             .sorted {
                 campaignSort(lhs: $0, rhs: $1, activityByCampaignId: activityByCampaignId)
             }
@@ -385,8 +393,12 @@ struct DropsListView: View {
         )
     }
 
-    private func shouldIncludeInDropsFeed(_ campaign: CampaignViewData, now: Date) -> Bool {
-        guard !isExcludedCampaign(campaign) else { return false }
+    private func shouldIncludeInDropsFeed(
+        _ campaign: CampaignViewData,
+        now: Date,
+        games: GameMatchIndex
+    ) -> Bool {
+        guard !games.isExcluded(gameName: campaign.gameName) else { return false }
         if campaign.relevance != .irrelevant {
             return true
         }
@@ -595,22 +607,18 @@ struct DropsListView: View {
         return .unavailable
     }
 
-    private func applyingCustomArtwork(to campaign: CampaignViewData) -> CampaignViewData {
-        let game = Game(id: campaign.gameId ?? "", name: campaign.gameName, boxArtURL: campaign.artworkURL)
-        guard let customArtworkURL = preferredPreference(matching: game)?.customArtworkURL else {
+    private func applyingCustomArtwork(
+        to campaign: CampaignViewData,
+        games: GameMatchIndex
+    ) -> CampaignViewData {
+        let preference = games.bestPreference(
+            gameId: campaign.gameId ?? "",
+            gameName: campaign.gameName
+        )
+        guard let customArtworkURL = preference?.customArtworkURL else {
             return campaign
         }
         return campaign.withArtworkURL(customArtworkURL)
-    }
-
-    private func preferredPreference(matching game: Game) -> GamePreference? {
-        let matches = settings.gamePreferences.filter { preference in
-            let idMatches = !game.id.isEmpty && preference.gameId == game.id
-            let nameMatches = preference.gameName.localizedCaseInsensitiveCompare(game.name) == .orderedSame
-            return idMatches || nameMatches
-        }
-
-        return matches.first(where: { $0.customArtworkURL != nil }) ?? matches.first
     }
 
     private var contextualBannerMessage: String? {
@@ -820,13 +828,6 @@ struct DropsListView: View {
         }
 
         return lhs.gameName < rhs.gameName
-    }
-
-    private func isExcludedCampaign(_ campaign: CampaignViewData) -> Bool {
-        let excluded = Settings.shared.excludedGames
-        return excluded.contains { gameName in
-            gameName.localizedCaseInsensitiveCompare(campaign.gameName) == .orderedSame
-        }
     }
 
     private func matchesActiveFilter(_ campaign: CampaignViewData, activity: CampaignActivitySnapshot, now: Date) -> Bool {

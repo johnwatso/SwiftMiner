@@ -20,11 +20,15 @@ struct GameMatchIndex {
         let preferences: [GamePreference]
         private let indicesByKey: [String: [Int]]
 
-        init(_ preferences: [GamePreference]) {
+        init(_ preferences: [GamePreference], matchesFoldedNames: Bool) {
             self.preferences = preferences
             var indicesByKey: [String: [Int]] = [:]
             for (index, preference) in preferences.enumerated() {
-                for key in GameMatchIndex.keys(gameId: preference.gameId, gameName: preference.gameName) {
+                for key in GameMatchIndex.keys(
+                    gameId: preference.gameId,
+                    gameName: preference.gameName,
+                    matchesFoldedNames: matchesFoldedNames
+                ) {
                     indicesByKey[key, default: []].append(index)
                 }
             }
@@ -52,17 +56,27 @@ struct GameMatchIndex {
     private let preferred: Lookup
     private let excludedKeys: Set<String>
     private let priorityRankByKey: [String: Int]
+    private let matchesFoldedNames: Bool
 
     /// Preferences in the `.preferred` state, in list order.
     var preferredPreferences: [GamePreference] { preferred.preferences }
 
+    /// - Parameter matchesFoldedNames: whether two names that differ only in punctuation
+    ///   and spacing ("Battlefield 6" and "Battlefield-6") count as the same game. The
+    ///   Overview feed matches that way; callers that only ever compared ids and
+    ///   case-insensitive names pass `false` to keep exactly that.
     init(
         gamePreferences: [GamePreference],
         priorityGames: [String],
-        excludedGames: [String]
+        excludedGames: [String],
+        matchesFoldedNames: Bool = true
     ) {
-        all = Lookup(gamePreferences)
-        preferred = Lookup(gamePreferences.filter { $0.state == .preferred })
+        self.matchesFoldedNames = matchesFoldedNames
+        all = Lookup(gamePreferences, matchesFoldedNames: matchesFoldedNames)
+        preferred = Lookup(
+            gamePreferences.filter { $0.state == .preferred },
+            matchesFoldedNames: matchesFoldedNames
+        )
         excludedKeys = Set(excludedGames.compactMap { Self.caseInsensitiveKey($0) })
 
         var priorityRankByKey: [String: Int] = [:]
@@ -76,9 +90,19 @@ struct GameMatchIndex {
         self.priorityRankByKey = priorityRankByKey
     }
 
-    func isExcluded(gameName: String) -> Bool {
-        guard let key = Self.caseInsensitiveKey(gameName) else { return false }
-        return excludedKeys.contains(key)
+    /// Excluded games are listed by name, but some callers also compared the list
+    /// against a campaign's game id, so both are checked when an id is supplied.
+    func isExcluded(gameName: String, gameId: String? = nil) -> Bool {
+        if let key = Self.caseInsensitiveKey(gameName), excludedKeys.contains(key) {
+            return true
+        }
+        guard let gameId, let idKey = Self.caseInsensitiveKey(gameId) else { return false }
+        return excludedKeys.contains(idKey)
+    }
+
+    /// Keys for one game, honouring this index's matching mode.
+    private func keys(gameId: String?, gameName: String) -> [String] {
+        Self.keys(gameId: gameId, gameName: gameName, matchesFoldedNames: matchesFoldedNames)
     }
 
     /// Position in the priority list, or `Int.max` when the game is not pinned.
@@ -88,11 +112,11 @@ struct GameMatchIndex {
     }
 
     func hasPreferredMatch(gameId: String?, gameName: String) -> Bool {
-        preferred.containsMatch(keys: Self.keys(gameId: gameId, gameName: gameName))
+        preferred.containsMatch(keys: keys(gameId: gameId, gameName: gameName))
     }
 
     func matchedPreferences(gameId: String?, gameName: String) -> [GamePreference] {
-        all.matches(keys: Self.keys(gameId: gameId, gameName: gameName))
+        all.matches(keys: keys(gameId: gameId, gameName: gameName))
     }
 
     /// The preference a matching game should draw from: one carrying uploaded artwork wins
@@ -104,7 +128,11 @@ struct GameMatchIndex {
 
     // MARK: - Keys
 
-    static func keys(gameId: String?, gameName: String) -> [String] {
+    static func keys(
+        gameId: String?,
+        gameName: String,
+        matchesFoldedNames: Bool = true
+    ) -> [String] {
         var keys: [String] = []
         if let gameId, !gameId.isEmpty {
             keys.append("id:" + gameId)
@@ -112,7 +140,7 @@ struct GameMatchIndex {
         if let caseKey = caseInsensitiveKey(gameName) {
             keys.append(caseKey)
         }
-        if let comparableKey = comparableKey(gameName) {
+        if matchesFoldedNames, let comparableKey = comparableKey(gameName) {
             keys.append(comparableKey)
         }
         return keys
