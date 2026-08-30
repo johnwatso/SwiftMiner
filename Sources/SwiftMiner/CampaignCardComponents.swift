@@ -47,8 +47,9 @@ enum CampaignCardState: String {
     var symbol: String {
         switch self {
         case .blocked: return "exclamationmark.triangle.fill"
-        case .active: return "dot.radiowaves.left.and.right"
-        case .inProgress: return "dot.radiowaves.left.and.right"
+        // Mining is a bolt across the app; radio waves said "signal", not "earning".
+        case .active: return "bolt.fill"
+        case .inProgress: return "bolt.fill"
         case .claimable: return "gift.fill"
         case .ready: return "checkmark.circle.fill"
         case .waiting: return "antenna.radiowaves.left.and.right"
