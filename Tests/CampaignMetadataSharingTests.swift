@@ -163,6 +163,48 @@ final class CampaignMetadataSharingTests: XCTestCase {
         XCTAssertEqual(flagTTL, shortWindow)
     }
 
+    /// Twitch returns a restricted campaign's approved channels on one fetch and omits them
+    /// on the next. The omission is not a claim the restriction was lifted — the allow flag
+    /// stays set — so dropping the list leaves nothing to probe and the campaign mineable
+    /// only through a directory that does not list these channels. That is how an esports
+    /// window is missed while the campaign sits there looking active.
+    func testAnApprovedChannelListSurvivesAFetchThatOmitsIt() async {
+        let client = TwitchAPIClient(
+            authService: TwitchAuthService(clientId: "test", tokenStore: InMemoryTokenStore()),
+            clientId: "test",
+            persistsCampaignCaches: false
+        )
+        let channels = [Channel(id: "1", login: "ow_esports", displayName: "OWCS")]
+
+        let withACL = await client.reinstatingKnownApprovedChannels(
+            Self.campaign(channels: channels, allowIsEnabled: true)
+        )
+        XCTAssertEqual(withACL.channels.map(\.login), ["ow_esports"])
+
+        let withoutACL = await client.reinstatingKnownApprovedChannels(
+            Self.campaign(channels: [], allowIsEnabled: true)
+        )
+        XCTAssertEqual(withoutACL.channels.map(\.login), ["ow_esports"])
+    }
+
+    /// A campaign that is simply open to everyone must not inherit a list from anywhere.
+    func testAnUnrestrictedCampaignIsNeverGivenChannels() async {
+        let client = TwitchAPIClient(
+            authService: TwitchAuthService(clientId: "test", tokenStore: InMemoryTokenStore()),
+            clientId: "test",
+            persistsCampaignCaches: false
+        )
+
+        _ = await client.reinstatingKnownApprovedChannels(
+            Self.campaign(channels: [Channel(id: "1", login: "ow_esports", displayName: "OWCS")], allowIsEnabled: true)
+        )
+        let open = await client.reinstatingKnownApprovedChannels(
+            Self.campaign(channels: [], allowIsEnabled: nil)
+        )
+
+        XCTAssertTrue(open.channels.isEmpty)
+    }
+
     private static func campaign(channels: [Channel], allowIsEnabled: Bool?) -> Campaign {
         Campaign(
             id: "campaign",

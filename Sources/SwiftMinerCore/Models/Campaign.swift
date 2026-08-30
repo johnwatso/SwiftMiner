@@ -453,6 +453,24 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
     public var hasKnownChannelRestrictions: Bool { !channels.isEmpty }
 
     /// Twitch says the campaign is restricted, but did not provide a usable ACL.
+    /// A copy carrying a different approved-channel list. Used to reinstate an ACL Twitch
+    /// returned once and then omitted; see `TwitchAPIClient.reinstatingKnownApprovedChannels`.
+    public func withChannels(_ channels: [Channel]) -> Campaign {
+        Campaign(
+            id: id,
+            name: name,
+            game: game,
+            status: status,
+            startDate: startDate,
+            endDate: endDate,
+            drops: drops,
+            channels: channels,
+            isAccountConnected: isAccountConnected,
+            allowIsEnabled: allowIsEnabled,
+            isPrioritised: isPrioritised
+        )
+    }
+
     public var hasUnresolvedChannelRestrictions: Bool {
         allowIsEnabled == true && channels.isEmpty
     }
