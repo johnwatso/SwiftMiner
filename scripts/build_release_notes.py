@@ -1,0 +1,239 @@
+#!/usr/bin/env python3
+"""Publish the release notes ShipHook writes under docs/ into the website.
+
+ShipHook can only write release notes to `docs/release-notes/`, so that directory is
+the source of truth: every page is authored (or regenerated) there, and the published
+site is built from it. This script does that build:
+
+  1. copies every `docs/release-notes/*.html` page into `Website/public/release-notes/`
+  2. writes the release-notes index from those pages, newest version first
+  3. refreshes the release-notes URLs in `Website/public/sitemap.xml`
+
+Both generated lists used to be maintained by hand and had drifted — the index was
+missing 11 pages and the sitemap 34 — which is the whole reason they are generated now.
+
+Run it after editing or adding a page, and commit the result. The website deploy
+workflow runs it too, so a ShipHook release reaches the site without a manual step.
+"""
+
+from __future__ import annotations
+
+import argparse
+import html
+import re
+import shutil
+import sys
+from datetime import date
+from pathlib import Path
+
+SITE_ORIGIN = "https://swiftminer.app"
+
+INDEX_HEAD = """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SwiftMiner Release Notes</title>
+  <meta name="description" content="Release notes and changelog for SwiftMiner, the native macOS Twitch Drops automation app.">
+  <link rel="canonical" href="https://swiftminer.app/release-notes/">
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      margin: 0;
+      padding: 32px 20px 48px;
+      font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f4f6f8;
+      color: #0f1720;
+    }
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 28px;
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.86);
+      box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
+    }
+    h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
+    .meta { margin: 0 0 24px; color: #52606d; font-size: 14px; }
+    h2 { margin: 28px 0 6px; font-size: 20px; }
+    .summary { margin: 0 0 4px; color: #384454; }
+    .build { margin: 0 0 20px; color: #52606d; font-size: 13px; }
+    a { color: #0a67a3; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #0b1015; color: #edf2f7; }
+      main {
+        background: rgba(15, 23, 32, 0.88);
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+      }
+      .meta { color: #9fb0c2; }
+      .summary { color: #c8d3df; }
+      .build { color: #9fb0c2; }
+      a { color: #73c3ff; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>SwiftMiner Release Notes</h1>
+    <p class="meta">Every release, newest first. Generated from the release-notes pages by scripts/build_release_notes.py.</p>
+"""
+
+INDEX_TAIL = """  </main>
+</body>
+</html>
+"""
+
+
+class ReleaseNote:
+    def __init__(self, path: Path):
+        self.path = path
+        self.filename = path.name
+        self.version = path.stem
+        markup = path.read_text(encoding="utf-8")
+        self.summary = self._summary(markup)
+        self.build = self._build(markup)
+        self.emoji = self._emoji(markup)
+
+    @staticmethod
+    def _text(markup: str) -> str:
+        without_tags = re.sub(r"<[^>]+>", " ", markup)
+        return re.sub(r"\s+", " ", without_tags).strip()
+
+    def _summary(self, markup: str) -> str:
+        intro = re.search(r'<p class="intro">(.*?)</p>', markup, re.DOTALL)
+        if intro:
+            return self._text(intro.group(1))
+        # ShipHook's own pages carry no intro: fall back to the first body paragraph
+        # that is not the version line.
+        for match in re.finditer(r"<p(?![^>]*class=\"meta\")[^>]*>(.*?)</p>", markup, re.DOTALL):
+            text = self._text(match.group(1))
+            if text and not text.startswith("Version "):
+                return text
+        return ""
+
+    def _build(self, markup: str) -> str:
+        meta = re.search(r'<p class="meta">(.*?)</p>', markup, re.DOTALL)
+        if not meta:
+            return ""
+        found = re.search(r"Build\s+([0-9]+)", self._text(meta.group(1)))
+        return found.group(1) if found else ""
+
+    def _emoji(self, markup: str) -> str:
+        """The leading glyph of the page's first section heading, so the index keeps the
+        character each release was given rather than inventing one."""
+        heading = re.search(r"<h2>\s*(&#\d+;|[^\s<A-Za-z])", markup)
+        return heading.group(1) if heading else ""
+
+    @property
+    def sort_key(self) -> tuple[int, ...]:
+        parts = []
+        for component in self.version.split("."):
+            digits = re.sub(r"[^0-9]", "", component)
+            parts.append(int(digits) if digits else 0)
+        while len(parts) < 4:
+            parts.append(0)
+        return tuple(parts)
+
+
+def load_notes(notes_dir: Path) -> list[ReleaseNote]:
+    notes = [
+        ReleaseNote(path)
+        for path in sorted(notes_dir.glob("*.html"))
+        if path.name != "index.html"
+    ]
+    if not notes:
+        raise SystemExit(f"No release-note pages found in {notes_dir}")
+    return sorted(notes, key=lambda note: note.sort_key, reverse=True)
+
+
+def render_index(notes: list[ReleaseNote]) -> str:
+    lines = [INDEX_HEAD]
+    for note in notes:
+        prefix = f"{note.emoji} " if note.emoji else ""
+        lines.append(
+            f'    <h2>{prefix}<a href="./{note.filename}">Version {html.escape(note.version)}</a></h2>\n'
+        )
+        if note.summary:
+            lines.append(f'    <p class="summary">{html.escape(note.summary)}</p>\n')
+        if note.build:
+            lines.append(f'    <p class="build">Build {html.escape(note.build)}</p>\n')
+    lines.append(INDEX_TAIL)
+    return "".join(lines)
+
+
+def publish_pages(notes_dir: Path, site_dir: Path) -> int:
+    site_dir.mkdir(parents=True, exist_ok=True)
+    copied = 0
+    for path in sorted(notes_dir.glob("*.html")):
+        if path.name == "index.html":
+            continue
+        shutil.copyfile(path, site_dir / path.name)
+        copied += 1
+    return copied
+
+
+def update_sitemap(sitemap: Path, notes: list[ReleaseNote]) -> int:
+    """Replace the release-notes URLs with one entry per page, keeping the `lastmod`
+    already recorded for a page so regenerating does not churn every date."""
+    if not sitemap.exists():
+        return 0
+
+    markup = sitemap.read_text(encoding="utf-8")
+    existing_lastmod = dict(
+        re.findall(
+            rf"<loc>{re.escape(SITE_ORIGIN)}/release-notes/([^<]*\.html)</loc><lastmod>([^<]+)</lastmod>",
+            markup,
+        )
+    )
+    today = date.today().isoformat()
+
+    entries = [
+        f"  <url><loc>{SITE_ORIGIN}/release-notes/{note.filename}</loc>"
+        f"<lastmod>{existing_lastmod.get(note.filename, today)}</lastmod>"
+        f"<changefreq>monthly</changefreq><priority>0.3</priority></url>"
+        for note in notes
+    ]
+
+    page_line = re.compile(
+        rf"^\s*<url><loc>{re.escape(SITE_ORIGIN)}/release-notes/[^<]*\.html</loc>.*$\n?",
+        re.MULTILINE,
+    )
+    first_match = page_line.search(markup)
+    markup = page_line.sub("", markup)
+
+    block = "\n".join(entries) + "\n"
+    if first_match:
+        # Keep the generated block where the hand-written one was.
+        insert_at = first_match.start()
+        markup = markup[:insert_at] + block + markup[insert_at:]
+    else:
+        markup = markup.replace("</urlset>", block + "</urlset>")
+
+    sitemap.write_text(markup, encoding="utf-8")
+    return len(entries)
+
+
+def main() -> int:
+    root = Path(__file__).resolve().parent.parent
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--notes-dir", type=Path, default=root / "docs" / "release-notes")
+    parser.add_argument("--site-dir", type=Path, default=root / "Website" / "public" / "release-notes")
+    parser.add_argument("--sitemap", type=Path, default=root / "Website" / "public" / "sitemap.xml")
+    args = parser.parse_args()
+
+    notes = load_notes(args.notes_dir)
+    copied = publish_pages(args.notes_dir, args.site_dir)
+    (args.site_dir / "index.html").write_text(render_index(notes), encoding="utf-8")
+    sitemap_entries = update_sitemap(args.sitemap, notes)
+
+    print(f"Published {copied} release-note pages from {args.notes_dir}")
+    print(f"Indexed {len(notes)} versions, newest {notes[0].version}")
+    print(f"Listed {sitemap_entries} release-note URLs in {args.sitemap.name}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

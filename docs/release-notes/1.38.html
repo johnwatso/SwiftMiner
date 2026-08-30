@@ -3,46 +3,83 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Document shared resource efficiency across miner engines - Release Notes</title>
+  <title>SwiftMiner 1.38 - Release Notes</title>
+  <meta name="description" content="Release notes for SwiftMiner 1.38: one operator panel per miner, a Campaign Queue that matches the mining summary, and clearer waiting-for-stream status.">
+  <link rel="canonical" href="https://swiftminer.app/release-notes/1.38.html">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
   <style>
     :root { color-scheme: light dark; }
-    body {
-      margin: 0;
-      padding: 32px 20px 48px;
-      font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #f4f6f8;
-      color: #0f1720;
-    }
-    main {
-      max-width: 760px;
-      margin: 0 auto;
-      padding: 28px;
-      border-radius: 22px;
-      background: rgba(255, 255, 255, 0.86);
-      box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
-    }
+    body { margin: 0; padding: 32px 20px 48px; font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f4f6f8; color: #0f1720; }
+    main { max-width: 760px; margin: 0 auto; padding: 28px; border-radius: 22px; background: rgba(255, 255, 255, .86); box-shadow: 0 20px 60px rgba(15, 23, 32, .10); border: 1px solid rgba(82, 96, 109, .12); }
     h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
-    .meta { margin: 0 0 24px; color: #52606d; font-size: 14px; }
-    p { margin: 0 0 16px; }
-    a { color: #0a67a3; text-decoration: none; }
-    a:hover { text-decoration: underline; }
-    @media (prefers-color-scheme: dark) {
-      body { background: #0b1015; color: #edf2f7; }
-      main {
-        background: rgba(15, 23, 32, 0.88);
-        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
-      }
-      .meta { color: #9fb0c2; }
-      a { color: #73c3ff; }
-    }
+    .meta, .summary { color: #52606d; font-size: 14px; }
+    .intro { margin: 0 0 24px; color: #384454; }
+    section { margin: 18px 0 0; padding: 18px 18px 14px; border: 1px solid rgba(82, 96, 109, .18); border-radius: 16px; border-left: 5px solid #7b4bd9; background: rgba(255, 255, 255, .42); }
+    h2 { margin: 0 0 4px; color: #7b4bd9; font-size: 18px; }
+    ul { margin: 12px 0 0; padding-left: 22px; }
+    li { margin: 0 0 8px; }
+    li:last-child { margin-bottom: 0; }
+    @media (prefers-color-scheme: dark) { body { background: #0b1015; color: #edf2f7; } main { background: rgba(15, 23, 32, .88); border-color: rgba(159, 176, 194, .14); } .meta, .summary { color: #9fb0c2; } .intro { color: #c8d3df; } section { border-color: rgba(159, 176, 194, .18); background: rgba(255, 255, 255, .04); } }
   </style>
 </head>
 <body>
   <main>
-    <h1>Document shared resource efficiency across miner engines</h1>
-    <p class="meta">Version 1.38</p>
-    <p>Document shared resource efficiency across miner engines</p>
-    <p><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/d714cc3b5820a862028ceea1d8e47288b9156132">d714cc3</a></p>
+    <h1>SwiftMiner 1.38</h1>
+    <p class="meta">Version 1.38 &middot; Build 2026082621</p>
+    <p class="intro">Each miner now explains itself in one place: a single operator panel, a queue that matches the summary above it, and a plain answer when there is no stream to watch.</p>
+
+    <section>
+      <h2>&#128029; Bug fixes</h2>
+      <p class="summary">Fixes to queue rendering and timestamp clarity.</p>
+      <ul>
+        <li>A campaign can no longer appear twice in Campaign Queue when the miner&rsquo;s current item and its scheduled candidates name it differently.</li>
+        <li>Recent activity timestamps include AM/PM again, so an evening event is no longer indistinguishable from a morning one.</li>
+        <li>Hardens campaign lookup against duplicate campaign IDs returned by Twitch.</li>
+        <li>The game-account link reminder no longer disappears for the campaign a miner is currently mining. The reminder was keyed off a status that resolves to &ldquo;watching&rdquo; the moment a campaign becomes the active target, so the warning went quiet for exactly the campaign accruing watch time toward a reward that needs the link to be delivered. It now appears in Needs attention and in the sidebar and Dock badges whether the campaign is queued or being watched.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#129658; One operator panel per miner</h2>
+      <p class="summary">Miner health and recovery history are no longer two separate cards to cross-reference.</p>
+      <ul>
+        <li>Recovery status, the live Twitch, campaign and drop-progress signals, and recent activity are combined into a single Status panel on each miner.</li>
+        <li>A healthy miner presents as one quiet line with its readings alongside, instead of a troubleshooting checklist. The full panel appears when something actually needs attention, and names what it is.</li>
+        <li>Recent activity uses the same wording, symbols and colours as the Activity Log, so an event means the same thing in both places.</li>
+        <li>The panel narrows to a stacked layout rather than clipping its readings when the window is small.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#128203; A queue that matches the summary</h2>
+      <p class="summary">Campaign Queue and the mining summary above it are now built from one resolved order.</p>
+      <ul>
+        <li>Up next and Campaign Queue always agree. Previously each worked out its own ordering, so the queue could disagree with the summary printed directly above it.</li>
+        <li>A prioritised campaign still awaiting a game-account link stays visible in the queue rather than disappearing from the schedule. It keeps its real scheduling status &mdash; the miner does watch and claim it &mdash; and carries a link marker noting that in-game delivery still needs the account linked. Muting that reminder stays in Needs attention, so the control is not repeated once per campaign.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#128225; Clearer waiting-for-stream status</h2>
+      <p class="summary">A waiting miner explains itself on its own card.</p>
+      <ul>
+        <li>A miner with no eligible stream live now says so on its card, names the campaign it is waiting on, and states that earning resumes automatically when a stream goes live.</li>
+        <li>Drops goes back to being about campaigns. The waiting-for-stream banner has moved onto the miner it describes, which is where the answer was actually needed.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#9889; Clearer active-mining status</h2>
+      <p class="summary">Active mining now looks like a status, not a playback control.</p>
+      <ul>
+        <li>Mining and watching status indicators use a gently pulsing bolt instead of a play button, while actual playback actions and the explicit channel-watching label keep their media symbols. The pulse stops when Reduce Motion is enabled.</li>
+        <li>Debug builds add a per-miner Developer-menu state that shows a clearly labelled synthetic campaign with active drop progress, without touching Twitch or the real mining engine.</li>
+        <li>Drops adds All and Prioritised filters. All restores the complete curated campaign feed, while Prioritised follows the active global or per-miner priority list.</li>
+      </ul>
+    </section>
+
   </main>
 </body>
 </html>

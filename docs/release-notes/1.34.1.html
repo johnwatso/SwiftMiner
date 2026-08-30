@@ -3,7 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Reconnect PubSub in the mining loop and skip non-earning campaigns - Release Notes</title>
+  <title>SwiftMiner 1.34.1 - Release Notes</title>
+  <meta name="description" content="Release notes for SwiftMiner 1.34.1: reconnects the live-events channel mid-session and stops looping on a campaign that can't earn.">
+  <link rel="canonical" href="https://swiftminer.app/release-notes/1.34.1.html">
+  <meta name="robots" content="index, follow">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
   <style>
     :root { color-scheme: light dark; }
     body {
@@ -20,10 +28,52 @@
       border-radius: 22px;
       background: rgba(255, 255, 255, 0.86);
       box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
+      border: 1px solid rgba(82, 96, 109, 0.12);
     }
     h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
-    .meta { margin: 0 0 24px; color: #52606d; font-size: 14px; }
-    p { margin: 0 0 16px; }
+    .meta { margin: 0 0 10px; color: #52606d; font-size: 14px; }
+    .intro { margin: 0 0 24px; color: #384454; }
+    section {
+      margin: 18px 0 0;
+      padding: 18px 18px 14px;
+      border: 1px solid rgba(82, 96, 109, 0.18);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.42);
+      border-left: 5px solid var(--accent, #0a67a3);
+    }
+    section.green  { --accent: #1c8c73; }
+    section.indigo { --accent: #5f5ac8; }
+    section.violet { --accent: #7b4bd9; }
+    section.amber  { --accent: #b9760a; }
+    section.teal   { --accent: #0a8aa3; }
+    section.rose   { --accent: #c0344d; }
+    h2 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 4px;
+      color: var(--accent, #0a67a3);
+      font-size: 18px;
+    }
+    .badge {
+      display: inline-grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--accent, #0a67a3) 15%, transparent);
+      font-size: 16px;
+    }
+    .summary { margin: 0 0 12px; color: #52606d; font-size: 14px; }
+    ul { margin: 0; padding-left: 22px; }
+    li { margin: 0 0 8px; }
+    li:last-child { margin-bottom: 0; }
+    code {
+      font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: rgba(82, 96, 109, 0.12);
+      padding: 1px 5px;
+      border-radius: 5px;
+    }
     a { color: #0a67a3; text-decoration: none; }
     a:hover { text-decoration: underline; }
     @media (prefers-color-scheme: dark) {
@@ -31,22 +81,42 @@
       main {
         background: rgba(15, 23, 32, 0.88);
         box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+        border-color: rgba(159, 176, 194, 0.14);
       }
-      .meta { color: #9fb0c2; }
+      .meta, .summary { color: #9fb0c2; }
+      .intro { color: #c8d3df; }
+      section {
+        border-color: rgba(159, 176, 194, 0.18);
+        background: rgba(255, 255, 255, 0.04);
+      }
+      code { background: rgba(159, 176, 194, 0.18); }
       a { color: #73c3ff; }
     }
   </style>
 </head>
 <body>
   <main>
-    <h1>Reconnect PubSub in the mining loop and skip non-earning campaigns</h1>
-    <p class="meta">Version 1.34.1</p>
-    <p>Reconnect PubSub in the mining loop and skip non-earning campaigns</p>
-<p>Two fixes prompted by a real incident where a miner sat for 3.5 hours on<br>the only campaign eligible for its account, earning nothing:</p>
-<p>- PubSub was connected only at miner start and on auth refresh, never<br>from the mining loop, despite a comment claiming otherwise. If the<br>socket dropped (or its initial connect failed) the miner ran blind on<br>real-time progress for the rest of the session, relying on polling<br>alone. startWatching failures now attempt one reconnect + retry.</p>
-<p>- When a campaign genuinely stalls (no verified progress, no external<br>claim) and there's no failover streamer to try, the miner kept<br>re-selecting that same campaign's streams forever because it was the<br>only eligible one. After nonEarningStallThreshold consecutive such<br>stalls it now puts the campaign on a cooldown so candidateCampaigns<br>skips it, letting the miner find other work or report idle. Any<br>verified progress clears the streak and cooldown.</p>
-<p>Adds tests for registerGenuineStall and isOnStallCooldown. Ships as<br>1.34.1 (1.34 was already released without these): new 1.34.1 release<br>notes, MARKETING_VERSION bumped to 1.34.1, build 2026072309. The<br>released 1.34 notes and the appcast are left untouched.</p>
-    <p><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/6b2c1ff49f9727be947d5ae510656b0d27d0778b">6b2c1ff</a></p>
+    <h1>SwiftMiner 1.34.1</h1>
+    <p class="meta">Version 1.34.1 · Build 2026072309</p>
+    <p class="intro">A focused follow-up to 1.34 that keeps a miner from getting stuck earning nothing — it now recovers its live-progress connection on its own and moves on from a campaign that can't make progress.</p>
+
+    <section class="rose">
+      <h2><span class="badge" aria-hidden="true">🐛</span> Bug Fixes</h2>
+      <p class="summary">Fixes for two conditions that could leave a miner running but not making progress.</p>
+      <ul>
+        <li>Reconnects the Twitch live-events (PubSub) channel from within the mining loop. Previously it was only established at miner start and on an authentication refresh — so if that connection dropped mid-session, real-time progress detection stayed offline until the app or a miner was restarted, and the miner ran on periodic polling alone.</li>
+        <li>Stops looping on a campaign that can't earn. When a campaign was the only one eligible for an account but wasn't crediting watch time, the miner would keep re-selecting its streams every fifteen minutes indefinitely. After several consecutive stalls with no progress and no external claim, SwiftMiner now skips that campaign for a cooldown and looks for other eligible work — or reports <strong>Idle — no eligible campaigns</strong> — then retries it later. Any verified progress clears the skip immediately.</li>
+      </ul>
+    </section>
+
+    <section class="indigo">
+      <h2><span class="badge" aria-hidden="true">🧪</span> Under the Hood</h2>
+      <p class="summary">Backed by additional automated coverage.</p>
+      <ul>
+        <li>Adds tests for the non-earning campaign cooldown (stall counting and skip window).</li>
+        <li>Prepared as SwiftMiner <strong>1.34.1</strong>, build <strong>2026072309</strong>.</li>
+      </ul>
+    </section>
   </main>
 </body>
 </html>

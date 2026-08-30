@@ -3,7 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Release SwiftMiner 1.36.3 - Release Notes</title>
+  <title>SwiftMiner 1.36.3 - Release Notes</title>
+  <meta name="description" content="Release notes for SwiftMiner 1.36.3: clearer miner status, completed-drop history, dashboard updates, and a more legible Overview.">
+  <link rel="canonical" href="https://swiftminer.app/release-notes/1.36.3.html">
+  <meta name="robots" content="index, follow">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
   <style>
     :root { color-scheme: light dark; }
     body {
@@ -20,33 +28,99 @@
       border-radius: 22px;
       background: rgba(255, 255, 255, 0.86);
       box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
+      border: 1px solid rgba(82, 96, 109, 0.12);
     }
     h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
-    .meta { margin: 0 0 24px; color: #52606d; font-size: 14px; }
-    p { margin: 0 0 16px; }
-    a { color: #0a67a3; text-decoration: none; }
-    a:hover { text-decoration: underline; }
+    .meta { margin: 0 0 10px; color: #52606d; font-size: 14px; }
+    .intro { margin: 0 0 24px; color: #384454; }
+    section {
+      margin: 18px 0 0;
+      padding: 18px 18px 14px;
+      border: 1px solid rgba(82, 96, 109, 0.18);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.42);
+      border-left: 5px solid var(--accent, #7b4bd9);
+    }
+    h2 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 4px;
+      color: var(--accent, #7b4bd9);
+      font-size: 18px;
+    }
+    .badge {
+      display: inline-grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--accent, #7b4bd9) 15%, transparent);
+      font-size: 16px;
+    }
+    .summary { margin: 0 0 12px; color: #52606d; font-size: 14px; }
+    ul { margin: 0; padding-left: 22px; }
+    li { margin: 0 0 8px; }
+    li:last-child { margin-bottom: 0; }
     @media (prefers-color-scheme: dark) {
       body { background: #0b1015; color: #edf2f7; }
       main {
         background: rgba(15, 23, 32, 0.88);
         box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+        border-color: rgba(159, 176, 194, 0.14);
       }
-      .meta { color: #9fb0c2; }
-      a { color: #73c3ff; }
+      .meta, .summary { color: #9fb0c2; }
+      .intro { color: #c8d3df; }
+      section {
+        border-color: rgba(159, 176, 194, 0.18);
+        background: rgba(255, 255, 255, 0.04);
+      }
     }
   </style>
 </head>
 <body>
   <main>
-    <h1>Release SwiftMiner 1.36.3</h1>
-    <p class="meta">Version 1.36.3</p>
-    <p>Release SwiftMiner 1.36.3</p>
-<p>Unify miner status across native, Discord, and web surfaces; clarify waiting, authentication, recovery, and stalled-mining states; and keep priority queues and artwork stable.</p>
-<p>Preserve completed campaign history and cached artwork outside the curated live feed, including in Discord and the web dashboard. Refresh dashboard identity, completed-drop summaries, and accessibility-oriented status presentation.</p>
-<p>Improve Overview prioritised-game layout with a responsive full-size grid that wraps excess games to a second row. Update release metadata and notes for version 1.36.3 (build 2026073013).</p>
-<p>Validation: xcodebuild -project SwiftMiner.xcodeproj -scheme SwiftMiner -configuration Debug build; xcodebuild -project SwiftMiner.xcodeproj -scheme SwiftMiner -configuration Debug test.</p>
-    <p><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/e6c7def5da05ffc7d226db809b7b77fcc857b0e2">e6c7def</a></p>
+    <h1>SwiftMiner 1.36.3</h1>
+    <p class="meta">Version 1.36.3 &middot; Build 2026073013</p>
+    <p class="intro">A clearer view of what each miner is doing, what has been completed, and which games should be mined next.</p>
+
+    <section>
+      <h2><span class="badge" aria-hidden="true">&#128225;</span> Trustworthy Miner Status</h2>
+      <p class="summary">Every surface now reflects the miner's actual state more consistently.</p>
+      <ul>
+        <li>Miner cards, detail views, Discord projections, and the web dashboard now draw on the same resolved state, preventing contradictory messages such as a miner being both finished and still searching for streams.</li>
+        <li>Waiting, authentication, recovery, and stalled-mining states are described more clearly, with the right follow-up action when attention is needed.</li>
+        <li>Priority queues stay stable as global and personal rules change, and priority artwork is resolved and remembered for older game rules that did not yet have a Twitch image.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2><span class="badge" aria-hidden="true">&#127873;</span> Completed Drops Stay Visible</h2>
+      <p class="summary">Completion history no longer disappears just because a campaign leaves the current curated feed.</p>
+      <ul>
+        <li>The native Completed filter, Discord projection, and web dashboard retain completed campaigns during their current window, including those whose final Twitch inventory response arrives without full campaign detail.</li>
+        <li>Cached drop and artwork data is preserved for ended campaign shells, so history remains useful instead of reverting to blank entries.</li>
+        <li>The web dashboard groups completed drops with a weekly total and presents Twitch identity and mining status without repeated or competing summaries.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2><span class="badge" aria-hidden="true">&#127918;</span> Clearer Priorities</h2>
+      <p class="summary">Every prioritised game stays visible without shrinking its artwork.</p>
+      <ul>
+        <li>The Overview's Prioritised artwork now forms a responsive grid: it fills each row with full-size game cards and continues onto a second row when there are more games than fit.</li>
+        <li>The existing Edit button remains available for managing the prioritised list.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2><span class="badge" aria-hidden="true">&#9881;</span> More Reliable Mining</h2>
+      <p class="summary">Background work is less likely to drift, overlap, or obscure an active session.</p>
+      <ul>
+        <li>Channel checks run on a fixed schedule, event delivery is processed in order, and refreshes no longer overlap a new watch session.</li>
+        <li>Idle CPU, network recovery, App Nap behavior, and system diagnostics have additional safeguards and instrumentation for more dependable long-running mining.</li>
+      </ul>
+    </section>
   </main>
 </body>
 </html>
