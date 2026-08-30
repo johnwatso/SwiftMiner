@@ -132,6 +132,37 @@ extension MinerEngine {
 
     /// Record the outcome of a live-channel probe for a game so later ranking and the
     /// mid-session re-evaluation can avoid preferring games that currently have no live stream.
+    /// A liveness check for an approved channel failed.
+    ///
+    /// This is the query that answers "is this esports channel live right now?", and while
+    /// it fails SwiftMiner is blind to exactly the campaigns whose windows are shortest —
+    /// a restricted campaign's channels can go live and be missed entirely. It used to be
+    /// a log line and nothing else: on 2026-08-18 it failed 266 times against
+    /// `VideoPlayerStreamInfoOverlayChannel` without the app ever saying so.
+    ///
+    /// One failure is noise (a cancelled task during a rescan is routine), so the issue is
+    /// raised only once a run of them says the query itself is broken, and the run resets
+    /// the moment a probe succeeds.
+    func recordApprovedChannelProbeFailure(channel: String, error: Error) {
+        let (category, detail) = Self.classifyIssue(error)
+        log("[ChannelSelect]   Could not check live state for approved channel \(channel): \(error.localizedDescription)")
+
+        guard !(error is CancellationError) else { return }
+        consecutiveApprovedChannelProbeFailures += 1
+        lastApprovedChannelProbeFailure = (detail: detail, at: Date())
+
+        guard consecutiveApprovedChannelProbeFailures == Self.approvedChannelProbeFailureThreshold else { return }
+        onOperationalEvent?(.issueDetected(
+            category: category,
+            detail: "Approved-channel liveness checks are failing (\(consecutiveApprovedChannelProbeFailures) in a row): \(detail)"
+        ))
+    }
+
+    func recordApprovedChannelProbeSuccess() {
+        consecutiveApprovedChannelProbeFailures = 0
+        lastApprovedChannelProbeFailure = nil
+    }
+
     func recordGameLiveProbe(
         _ gameKey: String,
         hasLiveChannel: Bool,
@@ -986,8 +1017,12 @@ extension MinerEngine {
                             broadcasterType: channel.broadcasterType,
                             aclBased: true
                         ))
+                        await self.recordApprovedChannelProbeSuccess()
                     } catch {
-                        await self.log("[ChannelSelect]   Could not check live state for approved channel \(channel.displayName): \(error.localizedDescription)")
+                        await self.recordApprovedChannelProbeFailure(
+                            channel: channel.displayName,
+                            error: error
+                        )
                         return nil
                     }
                 }

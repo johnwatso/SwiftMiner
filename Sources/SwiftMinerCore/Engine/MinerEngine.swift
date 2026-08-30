@@ -291,6 +291,13 @@ public actor MinerEngine {
     /// limited-time campaign with no live stream can repeatedly preempt or starve an active
     /// game (e.g. Overwatch) under the end-date-first `.mineAll` ordering.
     var gameLiveProbes: [String: (hasLiveChannel: Bool, checkedAt: Date)] = [:]
+    /// Consecutive failures of the approved-channel liveness query before it is treated as
+    /// broken rather than unlucky. Three probes is well inside one 60s ACL cycle, so a genuine
+    /// outage is reported within a minute or so of starting.
+    static let approvedChannelProbeFailureThreshold = 3
+    var consecutiveApprovedChannelProbeFailures = 0
+    var lastApprovedChannelProbeFailure: (detail: String, at: Date)?
+
     /// How long a "no live channel" probe result keeps a game demoted before it is re-probed.
     /// Generous enough to span more than one campaign-check cycle so demotion is stable, short
     /// enough that a game coming online is picked up on the next full rescan.
