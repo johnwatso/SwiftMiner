@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		0043CF0EC5029EC739BE5F7F /* GamePreferenceComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = F52F9551C4B18A1F7A3D4173 /* GamePreferenceComponents.swift */; };
 		0052FB020B77AA5B929EE0A3 /* TwitchBoxArt.swift in Sources */ = {isa = PBXBuildFile; fileRef = C02547A88A4BAB2F7A7DABA7 /* TwitchBoxArt.swift */; };
+		02CCA331ADD516C85B99DD92 /* GameMatchIndexTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEF247F1E20923EFA7310FF7 /* GameMatchIndexTests.swift */; };
 		03BB858FF57F2BEAF2560EC3 /* MinerHealthSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B780942F75249CF195C9244 /* MinerHealthSnapshot.swift */; };
 		03BDA5C5DFBB81EE3F5DCD40 /* Settings+DiscordNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27D4F1E10169D583B5A8B923 /* Settings+DiscordNotifications.swift */; };
 		043246205DB44F3ABA4EAB5A /* ApplicationsFolderInstallerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC3AF853EB52A31B632D0B30 /* ApplicationsFolderInstallerTests.swift */; };
@@ -100,6 +101,7 @@
 		74C1EF5D9BDFD32042EAAC2A /* GitHubIssueReporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C43EA5DBD5E9A09117B9798 /* GitHubIssueReporter.swift */; };
 		75E137100E2A1C6FB50A1653 /* MinerEngine+Presentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 971D9966C09F145D71C05D74 /* MinerEngine+Presentation.swift */; };
 		775FD9D7237262F2FE86011A /* RuntimeClock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17054AC963AE815169890A76 /* RuntimeClock.swift */; };
+		7C8CE0DBEFD484DBD5371F13 /* GameMatchIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73CC30EE7E88151928E8140C /* GameMatchIndex.swift */; };
 		7CDC0528B7FE59F8756FFC72 /* Campaign.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6C4D73F0D9BE5537D245A73 /* Campaign.swift */; };
 		7DF44A97293F3825BC006F7C /* MinerManager+GameState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D15B4A8E728CF157B9C0866 /* MinerManager+GameState.swift */; };
 		7E402CB3D782A91832915A52 /* CampaignMetadataSharingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2CF7310267C5DADE83E23CE /* CampaignMetadataSharingTests.swift */; };
@@ -388,6 +390,7 @@
 		70331D88C14DE8680BE6EAE1 /* MinerEngine+ChannelSelection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MinerEngine+ChannelSelection.swift"; sourceTree = "<group>"; };
 		703A0B41A5D6897C4E31F17D /* LogExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogExporter.swift; sourceTree = "<group>"; };
 		71FA5DF07B124B51C6C833B4 /* TwitchClientFingerprint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwitchClientFingerprint.swift; sourceTree = "<group>"; };
+		73CC30EE7E88151928E8140C /* GameMatchIndex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameMatchIndex.swift; sourceTree = "<group>"; };
 		7559E3ABB6B9BA9EDAFCA012 /* NavigationProjectionStateProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationProjectionStateProvider.swift; sourceTree = "<group>"; };
 		758AF13E9334C95906C1A325 /* SwiftMinerCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftMinerCore.swift; sourceTree = "<group>"; };
 		7A5BB01DA1C922DCEF69AD69 /* MinerManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinerManager.swift; sourceTree = "<group>"; };
@@ -457,6 +460,7 @@
 		CA4CEDB6297B13DCF0FDD8A7 /* DropEventsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropEventsService.swift; sourceTree = "<group>"; };
 		CC5245BAB7E806A37EEB9901 /* MinersOverviewComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinersOverviewComponents.swift; sourceTree = "<group>"; };
 		CD5023EC681D53196C9F4350 /* PrimaryStateResolverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrimaryStateResolverTests.swift; sourceTree = "<group>"; };
+		CEF247F1E20923EFA7310FF7 /* GameMatchIndexTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameMatchIndexTests.swift; sourceTree = "<group>"; };
 		D0B9958B06AA9508022FD2BC /* AnimatedStatusIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimatedStatusIcon.swift; sourceTree = "<group>"; };
 		D12899BD6300ED21BCE6187E /* CampaignMergeEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignMergeEngine.swift; sourceTree = "<group>"; };
 		D227823A0CF0DEDA834B486B /* DropsServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropsServiceTests.swift; sourceTree = "<group>"; };
@@ -687,6 +691,7 @@
 				6E08A9966225179B652AC9C8 /* DropsMinerCampaignFilter.swift */,
 				B165EA86CCC1CE19EBFD8064 /* EventLogView.swift */,
 				22F003BE203D0621CBA86E29 /* GameCampaignCards.swift */,
+				73CC30EE7E88151928E8140C /* GameMatchIndex.swift */,
 				F52F9551C4B18A1F7A3D4173 /* GamePreferenceComponents.swift */,
 				0374A8D7AF4EC4089222CA3B /* GamePreferenceManagementView.swift */,
 				877DE35C94E3759F2ECAB592 /* GeneralSettingsPanes.swift */,
@@ -858,6 +863,7 @@
 				40FBB48E5544E325179C696C /* EarningLedgerStoreTests.swift */,
 				FFD9C80952F08A4D35F7005A /* EventEmitterServiceTests.swift */,
 				41D6E3EDBE9FEE60A15BCD57 /* GameAggregateTests.swift */,
+				CEF247F1E20923EFA7310FF7 /* GameMatchIndexTests.swift */,
 				D3674D197B60A0404ACB40DE /* KeychainAccountStoreTests.swift */,
 				B6C699D919FF9FA3106CB659 /* LegacyAccountMigratorTests.swift */,
 				637C207EE3AF4206DA9F2C8F /* LogExporterTests.swift */,
@@ -1285,6 +1291,7 @@
 				473E3173DC609890A19F09A2 /* DropsMinerCampaignFilter.swift in Sources */,
 				384E1E7DF948787ACBA82CEC /* EventLogView.swift in Sources */,
 				B6E086CE2CD03B35132CE34F /* GameCampaignCards.swift in Sources */,
+				7C8CE0DBEFD484DBD5371F13 /* GameMatchIndex.swift in Sources */,
 				0043CF0EC5029EC739BE5F7F /* GamePreferenceComponents.swift in Sources */,
 				3409B039878F5812CE36AFB7 /* GamePreferenceManagementView.swift in Sources */,
 				49DF3EDEAD997B383228A000 /* GeneralSettingsPanes.swift in Sources */,
@@ -1353,6 +1360,7 @@
 				A7CE5EA5F16E661813E73E96 /* EarningLedgerStoreTests.swift in Sources */,
 				1B50F77DD72FFD1C737A7ADB /* EventEmitterServiceTests.swift in Sources */,
 				2B503A529D384687C95757EC /* GameAggregateTests.swift in Sources */,
+				02CCA331ADD516C85B99DD92 /* GameMatchIndexTests.swift in Sources */,
 				C67CDEF2767FE8F285D04C8F /* KeychainAccountStoreTests.swift in Sources */,
 				FBF849B4B3BF782439BF16F9 /* LegacyAccountMigratorTests.swift in Sources */,
 				0DA97EF00308C1F2837F3394 /* LogExporterTests.swift in Sources */,
