@@ -162,7 +162,7 @@ extension MinerManager {
                         kind: .channelChecksIncompatible,
                         severity: .critical,
                         summary: detail,
-                        recommendedAction: "Update SwiftMiner so it can check restricted campaigns again",
+                        recommendedAction: "Point a miner at the channel with Override Stream, or watch it on Twitch — drops still count",
                         at: Date()
                     ))
                 case .approvedChannelChecksRecovered:
