@@ -76,6 +76,7 @@ public struct HealthIncident: Codable, Sendable, Equatable, Identifiable {
         case webDashboardUnavailable
         case automaticUpdateFailed
         case accountLinkRequired
+        case channelChecksIncompatible
         case other
 
         /// Where each signal sits on the promotion path. Adding a case forces this choice;
@@ -94,6 +95,16 @@ public struct HealthIncident: Codable, Sendable, Equatable, Identifiable {
             // wrong until 1.34.5. Promote only once that data says it is precise.
             case .notEarning:
                 return .displayed
+            // Added in 1.38.3, and alerted rather than displayed despite the rule above,
+            // because the signal is raised only for a Twitch compatibility failure — a
+            // query shape Twitch no longer accepts. That has no transient cause: a blip or
+            // an outage classifies as a network error and never reaches here. While it
+            // lasts, SwiftMiner cannot tell whether a restricted campaign's channels are
+            // live, so esports drop windows pass unnoticed while everything else looks
+            // healthy. Silence is the failure mode being fixed; displaying it would repeat
+            // the miss on 2026-08-18, when 266 failures produced no user-visible signal.
+            case .channelChecksIncompatible:
+                return .alerted
             case .accountLinkRequired, .other:
                 return .displayed
             }

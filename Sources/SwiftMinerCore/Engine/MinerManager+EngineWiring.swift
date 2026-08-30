@@ -151,6 +151,27 @@ extension MinerManager {
                     await self.supervisor.recordStateUpdate(minerId: minerId, workerState: .running)
                 case .heartbeat, .stateUpdate:
                     await self.supervisor.recordStateUpdate(minerId: minerId)
+                case .approvedChannelChecksFailing(let detail, let isCompatibility):
+                    // Only a compatibility failure earns the notification: it will not clear
+                    // on its own, and while it lasts restricted campaigns — esports windows
+                    // above all — cannot be detected at all. A network failure is recorded by
+                    // the issue below and shown in Needs attention, without waking anyone.
+                    guard isCompatibility, let miner = self.getMiner(id: minerId) else { break }
+                    self.recordHealth(.incidentObserved(
+                        minerID: miner.id,
+                        kind: .channelChecksIncompatible,
+                        severity: .critical,
+                        summary: detail,
+                        recommendedAction: "Update SwiftMiner so it can check restricted campaigns again",
+                        at: Date()
+                    ))
+                case .approvedChannelChecksRecovered:
+                    guard let miner = self.getMiner(id: minerId) else { break }
+                    self.recordHealth(.incidentResolved(
+                        minerID: miner.id,
+                        kind: .channelChecksIncompatible,
+                        at: Date()
+                    ))
                 case .issueDetected(let category, let detail):
                     let cause = Self.mapIssueCategoryToStallCause(category)
                     await self.supervisor.recordIssue(minerId: minerId, cause: cause, detail: detail)

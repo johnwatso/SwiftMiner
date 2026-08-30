@@ -233,6 +233,18 @@ final class MinerAttentionTests: XCTestCase {
         XCTAssertEqual(MinerAttentionIssue.resolve(miner: miner, events: events)?.title, "The mining worker stopped")
     }
 
+    func testCompatibilityFailuresAreTheOnlyOnesTreatedAsPermanent() {
+        let compatibility = TwitchMinerError.twitchAPICompatibility(
+            operation: "VideoPlayerStreamInfoOverlayChannel",
+            reason: "The response no longer contains the stream."
+        )
+        let network = TwitchMinerError.networkError("The request timed out")
+
+        XCTAssertTrue(MinerEngine.isCompatibilityFailure(compatibility))
+        XCTAssertFalse(MinerEngine.isCompatibilityFailure(network))
+        XCTAssertFalse(MinerEngine.isCompatibilityFailure(CancellationError()))
+    }
+
     private func makeMiner(
         status: MinerManager.MinerStatus = .watching,
         needsAuth: Bool = false,

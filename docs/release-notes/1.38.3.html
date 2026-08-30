@@ -29,14 +29,14 @@
 <body>
   <main>
     <h1>SwiftMiner 1.38.3</h1>
-    <p class="meta">Version 1.38.3 &middot; Build 2026083111</p>
+    <p class="meta">Version 1.38.3 &middot; Build 2026083112</p>
     <p class="intro">A performance release. SwiftMiner stops repeating the same campaign, cache, and interface work on every refresh, keeps its image caches inside a fixed budget in memory and on disk, and reports what the event outbox is doing. Webhook retries now use the correct timing in every region, and the local dashboard turns away oversized or malformed requests before it reads them.</p>
 
     <section>
       <h2>&#128029; Fixes</h2>
       <p class="summary">Webhook retries keep their schedule wherever you are.</p>
       <ul>
-        <li>Says when SwiftMiner cannot tell whether a campaign's approved channels are live. That check failing is what makes an esports drop window pass unnoticed while the miner carries on watching everything else; it used to leave nothing behind but a line in the log.</li>
+        <li>Says when SwiftMiner cannot tell whether a campaign's approved channels are live. That check failing is what makes an esports drop window pass unnoticed while the miner carries on watching everything else; it used to leave nothing behind but a line in the log. When the cause is a Twitch change SwiftMiner has not caught up with — which does not fix itself — you are notified, because that is precisely when a drop window passes unnoticed.</li>
         <li>Reads the event outbox's stored timestamps with a fixed calendar rather than the one your region is set to. On a non-Gregorian regional calendar the timestamps failed to parse, so a webhook that needed retrying was retried immediately instead of after its backoff.</li>
       </ul>
     </section>
