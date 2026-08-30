@@ -66,6 +66,34 @@ final class AggregatedCampaignDataServiceTests: XCTestCase {
         XCTAssertTrue(merged.showsInActiveTab)
     }
 
+    func testCampaignDataServiceKeepsDecodedCampaignsInMemoryAfterFirstRead() async throws {
+        let suffix = UUID().uuidString
+        let accountId = "memory-cache-\(suffix)"
+        accountIds = [accountId]
+        let campaign = Campaign(
+            id: "campaign-\(suffix)",
+            name: "Memory Cache Campaign",
+            game: Game(id: "game-\(suffix)", name: "Cache Test"),
+            startDate: Date().addingTimeInterval(-3600),
+            endDate: Date().addingTimeInterval(3600),
+            drops: [],
+            isAccountConnected: true
+        )
+        CampaignDiskCache.save(campaigns: [campaign], accountId: accountId)
+        let service = await makeCampaignDataService(accountId: accountId)
+
+        let firstRead = await service.allCampaigns().map(\.id)
+        XCTAssertEqual(firstRead, [campaign.id])
+        CampaignDiskCache.clear(accountId: accountId)
+
+        let secondRead = await service.allCampaigns().map(\.id)
+        XCTAssertEqual(
+            secondRead,
+            [campaign.id],
+            "Repeated UI reads should use the decoded actor cache instead of reopening the campaign file."
+        )
+    }
+
     private func makeCampaignDataService(accountId: String) async -> CampaignDataService {
         let authService = TwitchAuthService(clientId: "test_client", tokenStore: TestTokenStore())
         let apiClient = TwitchAPIClient(authService: authService, clientId: "test_client", session: .shared, persistsCampaignCaches: false)

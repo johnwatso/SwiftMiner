@@ -2,6 +2,7 @@ import AppKit
 import CryptoKit
 import Foundation
 import SwiftUI
+import SwiftMinerCore
 
 /// Disk- and memory-backed cache for miner profile pictures, from Discord or Twitch.
 ///
@@ -13,7 +14,14 @@ import SwiftUI
 actor AvatarImageCache {
     static let shared = AvatarImageCache()
 
+    private static let defaultDiskByteLimit: Int64 = 64 * 1_024 * 1_024
+    private static let defaultDiskFileLimit = 256
+    private static let defaultBudgetCheckWriteInterval = 25
+
     private let urlSession: URLSession
+    private let diskByteLimit: Int64
+    private let diskFileLimit: Int
+    private let budgetCheckWriteInterval: Int
 
     /// Decoded images kept in memory to avoid re-reading/decoding from disk on every
     /// view appearance. Bounded by `NSCache`'s own eviction under memory pressure.
@@ -24,9 +32,25 @@ actor AvatarImageCache {
 
     /// True once the pre-Twitch cache folder has been cleared this launch.
     private var hasPrunedLegacyDirectory = false
+    private var hasAppliedDiskBudget = false
 
-    init(urlSession: URLSession = .shared) {
+    /// Cached files written since the last budget sweep. Pruning enumerates the whole
+    /// folder, so it runs once per launch and then only every `budgetCheckWriteInterval`
+    /// writes rather than after each download.
+    private var writesSinceBudgetCheck = 0
+
+    init(
+        urlSession: URLSession = .shared,
+        diskByteLimit: Int64 = AvatarImageCache.defaultDiskByteLimit,
+        diskFileLimit: Int = AvatarImageCache.defaultDiskFileLimit,
+        budgetCheckWriteInterval: Int = AvatarImageCache.defaultBudgetCheckWriteInterval
+    ) {
         self.urlSession = urlSession
+        self.diskByteLimit = diskByteLimit
+        self.diskFileLimit = diskFileLimit
+        self.budgetCheckWriteInterval = max(1, budgetCheckWriteInterval)
+        memory.countLimit = 64
+        memory.totalCostLimit = 64 * 1_024 * 1_024
     }
 
     private var cacheDirectory: URL? {
@@ -38,6 +62,7 @@ actor AvatarImageCache {
 
     func image(for url: URL) async -> NSImage? {
         pruneLegacyDirectoryIfNeeded()
+        applyDiskBudgetIfNeeded()
         let key = Self.key(for: url)
 
         if let cached = memory.object(forKey: key as NSString) {
@@ -48,7 +73,7 @@ actor AvatarImageCache {
         if let localURL = cacheDirectory?.appendingPathComponent(key),
            FileManager.default.fileExists(atPath: localURL.path),
            let image = NSImage(contentsOf: localURL) {
-            memory.setObject(image, forKey: key as NSString)
+            storeInMemory(image, key: key)
             return image
         }
 
@@ -83,12 +108,53 @@ actor AvatarImageCache {
                     at: localURL.deletingLastPathComponent(),
                     withIntermediateDirectories: true
                 )
-                try? data.write(to: localURL, options: .atomic)
+                do {
+                    try data.write(to: localURL, options: .atomic)
+                    applyDiskBudgetAfterWrite()
+                } catch {
+                    Logger.artwork.warning("Could not cache avatar: \(error.localizedDescription)")
+                }
             }
-            memory.setObject(image, forKey: key as NSString)
+            storeInMemory(image, key: key, cost: data.count)
             return image
         } catch {
             return nil
+        }
+    }
+
+    private func storeInMemory(_ image: NSImage, key: String, cost: Int? = nil) {
+        let estimatedCost = image.representations.first.map {
+            max(1, $0.pixelsWide * $0.pixelsHigh * 4)
+        } ?? 1
+        memory.setObject(
+            image,
+            forKey: key as NSString,
+            cost: max(cost ?? 0, estimatedCost)
+        )
+    }
+
+    private func applyDiskBudgetIfNeeded() {
+        guard !hasAppliedDiskBudget else { return }
+        hasAppliedDiskBudget = true
+        applyDiskBudget()
+    }
+
+    private func applyDiskBudgetAfterWrite() {
+        writesSinceBudgetCheck += 1
+        guard writesSinceBudgetCheck >= budgetCheckWriteInterval else { return }
+        applyDiskBudget()
+    }
+
+    private func applyDiskBudget() {
+        writesSinceBudgetCheck = 0
+        guard let cacheDirectory else { return }
+        let result = DiskCacheBudget.prune(
+            directory: cacheDirectory,
+            maximumBytes: diskByteLimit,
+            maximumFileCount: diskFileLimit
+        )
+        if result.removedFiles > 0 {
+            Logger.artwork.info("Pruned \(result.removedFiles) avatar cache file(s), freeing \(result.removedBytes) bytes")
         }
     }
 

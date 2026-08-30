@@ -144,6 +144,94 @@ final class OverviewArtworkTests: XCTestCase {
         session.invalidateAndCancel()
     }
 
+    func testCampaignArtworkCacheKeepsItsFolderInsideTheDiskBudget() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftMinerArtworkBudgetTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: sessionConfiguration)
+        defer { session.invalidateAndCancel() }
+        let png = try XCTUnwrap(Self.testPNGData())
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "image/png"]
+            )!
+            return (response, png)
+        }
+        defer { MockURLProtocol.requestHandler = nil }
+
+        // Every second download crosses the sweep interval, so the folder is pruned
+        // during the run rather than only at the next launch.
+        let cache = CampaignArtworkCache(
+            cacheDirectory: directory,
+            session: session,
+            diskByteLimit: Int64(png.count) * 2,
+            diskFileLimit: 2,
+            budgetCheckWriteInterval: 2
+        )
+        for index in 0..<6 {
+            let url = try XCTUnwrap(URL(string: "https://example.com/artwork-\(index).png"))
+            let image = await cache.image(for: url)
+            XCTAssertNotNil(image)
+        }
+
+        let cachedFiles = try FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )
+        XCTAssertLessThanOrEqual(cachedFiles.count, 2)
+    }
+
+    func testCampaignArtworkCachePrunesAnOversizedFolderOnFirstUse() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftMinerArtworkBudgetTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        // Stand in for a folder left oversized by an earlier launch.
+        for index in 0..<5 {
+            let url = directory.appendingPathComponent("stale-\(index)")
+            try Data(repeating: 0x41, count: 32).write(to: url)
+            try FileManager.default.setAttributes(
+                [.modificationDate: Date().addingTimeInterval(-Double(index) * 60)],
+                ofItemAtPath: url.path
+            )
+        }
+
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: sessionConfiguration)
+        defer { session.invalidateAndCancel() }
+        MockURLProtocol.requestHandler = { _ in
+            throw URLError(.notConnectedToInternet)
+        }
+        defer { MockURLProtocol.requestHandler = nil }
+
+        let cache = CampaignArtworkCache(
+            cacheDirectory: directory,
+            session: session,
+            diskByteLimit: 64,
+            diskFileLimit: 2
+        )
+        let missing = await cache.image(for: try XCTUnwrap(URL(string: "https://example.com/missing.png")))
+        XCTAssertNil(missing)
+
+        let remaining = try FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )
+        XCTAssertEqual(remaining.count, 2)
+        // The newest files survive: eviction is oldest-first.
+        XCTAssertEqual(Set(remaining.map { $0.lastPathComponent }), ["stale-0", "stale-1"])
+    }
+
     private func campaignViewData(
         id: String,
         gameId: String,

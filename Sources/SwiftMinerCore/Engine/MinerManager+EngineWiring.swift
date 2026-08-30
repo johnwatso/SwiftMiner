@@ -474,6 +474,24 @@ extension MinerManager {
 
     func updateMinerOperationalMetadata(minerId: String, metadata: MinerOperationalMetadata) {
         guard let index = miners.firstIndex(where: { $0.id == minerId }) else { return }
+        let miner = miners[index]
+        let durablePresentationChanged =
+            miner.lastSuccessfulPollAt != metadata.lastSuccessfulPollAt
+            || miner.lastCampaignRefreshAt != metadata.lastCampaignRefreshAt
+            || miner.lastDropProgressAt != metadata.lastDropProgressAt
+            || miner.workerStartedAt != metadata.workerStartedAt
+            || miner.workerState != metadata.workerState
+            || miner.workerTaskID != metadata.workerTaskID
+            || miner.isHealthy != metadata.isHealthy
+            || miner.isStalled != metadata.isStalled
+        let now = Date()
+        if !durablePresentationChanged,
+           let lastPresentation = lastOperationalPresentationAt[minerId],
+           now.timeIntervalSince(lastPresentation) < Self.operationalPresentationInterval {
+            return
+        }
+        lastOperationalPresentationAt[minerId] = now
+
         miners[index].lastEventAt = metadata.lastEventAt
         miners[index].lastSuccessfulPollAt = metadata.lastSuccessfulPollAt
         miners[index].lastCampaignRefreshAt = metadata.lastCampaignRefreshAt

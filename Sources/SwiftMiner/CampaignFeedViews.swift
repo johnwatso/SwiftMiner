@@ -534,12 +534,13 @@ struct StaggeredCampaignRail: View {
 
 struct CampaignCardMotionOverlay: View {
     let tint: Color
-    // Pause the 24fps timeline whenever the app isn't the active app, so a
-    // window left visible in the background stops driving the compositor.
+    // A 12fps drift is visually smooth at this scale while halving compositor work.
+    // Pause it when inactive or when the user requests reduced motion.
     @Environment(\.controlActiveState) private var controlActiveState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 24, paused: controlActiveState == .inactive)) { context in
+        TimelineView(.animation(minimumInterval: 1 / 12, paused: controlActiveState == .inactive || reduceMotion)) { context in
             let t = context.date.timeIntervalSinceReferenceDate
             let x = 0.2 + 0.6 * ((sin(t * 0.45) + 1) / 2)
             let y = 0.28 + 0.28 * ((cos(t * 0.32) + 1) / 2)
@@ -565,12 +566,13 @@ struct CampaignCardMotionOverlay: View {
 
 struct CampaignStandbyMotionOverlay: View {
     let tint: Color
-    // Pause the 24fps timeline whenever the app isn't the active app, so a
-    // window left visible in the background stops driving the compositor.
+    // A 12fps drift is visually smooth at this scale while halving compositor work.
+    // Pause it when inactive or when the user requests reduced motion.
     @Environment(\.controlActiveState) private var controlActiveState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 24, paused: controlActiveState == .inactive)) { context in
+        TimelineView(.animation(minimumInterval: 1 / 12, paused: controlActiveState == .inactive || reduceMotion)) { context in
             let t = context.date.timeIntervalSinceReferenceDate
 
             // Hue cycling (full cycle every 30s)

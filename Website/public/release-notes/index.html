@@ -49,6 +49,14 @@
     <p class="meta">Recent Sparkle update history</p>
     <h2>🐝 <a href="./1.38.2.html">Version 1.38.2</a></h2>
     <ul>
+      <li>Keeps decoded campaigns in memory, shares concurrent refreshes, and indexes multi-account aggregation to remove repeated disk decoding and list scans.</li>
+      <li>Builds shared and per-account campaign views from one snapshot, avoiding a duplicate aggregation pass after each refresh.</li>
+      <li>Coalesces Dock badge work, limits timestamp-only miner presentation updates, and skips cache rewrites when only refresh timestamps changed.</li>
+      <li>Bounds artwork and avatar memory, shares artwork with tint sampling, and reduces decorative animation work while respecting Reduce Motion.</li>
+      <li>Stops routine log and health updates from rewriting miner identities to the dashboard database.</li>
+      <li>Bounds and times out local dashboard requests, rejecting malformed or ambiguous request framing.</li>
+      <li>Caps the on-disk artwork and profile-picture caches and evicts the oldest files once either budget is passed.</li>
+      <li>Reports event-outbox queue depth, oldest undelivered event age, and webhook delivery timings in exported diagnostics.</li>
       <li>Stops automatic recovery reporting success when a miner's real-time drop connection failed to come back.</li>
       <li>Loads cached campaign artwork from disk again instead of falling back to a placeholder until the next download.</li>
       <li>Applies miner additions, removals, and failover-streamer edits in the order you made them, and updates the watch session before the next heartbeat.</li>
@@ -57,7 +65,7 @@
       <li>Reports activity-log, earning-ledger, event-outbox, keychain, account-activation, and admin-linking write failures instead of discarding them, and sets aside unattended health history it cannot read.</li>
       <li>Adds a Release build, static analysis, project-drift and built-app verification, and code-coverage reporting to continuous integration.</li>
       <li>Removes Steam artwork, which Twitch's own higher-resolution box art made redundant; custom artwork uploads are unchanged and kept.</li>
-      <li>Updates SwiftMiner to version 1.38.2 build 2026083000.</li>
+      <li>Updates SwiftMiner to version 1.38.2 build 2026083013.</li>
     </ul>
 
     <h2>🐛 <a href="./1.38.1.html">Version 1.38.1</a></h2>

@@ -444,6 +444,10 @@ public final class MinerManager {
     /// Miners currently flagged as watching-but-not-earning, so the health store is only
     /// written when a miner crosses the threshold rather than on every supervisor snapshot.
     var earningStalledMinerIds: Set<String> = []
+    /// Last time volatile supervisor timestamps were published into the observable miner array.
+    /// Bursts of log messages can otherwise invalidate every miner view many times per second.
+    var lastOperationalPresentationAt: [String: Date] = [:]
+    static let operationalPresentationInterval: TimeInterval = 1
 
     /// Last start options, used when anti-stall recovery restarts an individual miner.
     var currentPriorityGames: [String] = []
@@ -466,6 +470,12 @@ public final class MinerManager {
     /// Callbacks for aggregated events
     public var onMinerStatusChange: (@Sendable (ManagedMiner) -> Void)?
     public var onMinersChanged: (@Sendable () -> Void)?
+    /// Fired only when the set of managed accounts changes.
+    public var onMinerCollectionChanged: (@Sendable () -> Void)?
+    /// Fired only when the stable account identity projection changes. Consumers that mirror
+    /// identities to storage must not subscribe to `onMinersChanged`, which also carries frequent
+    /// health, progress, and log-driven state updates.
+    public var onMinerIdentitiesChanged: (@Sendable () -> Void)?
     /// Fired right after an account has been removed from the manager, with its Twitch ID.
     public var onAccountRemoved: (@Sendable (String) -> Void)?
     public var onAggregateProgress: (@Sendable (AggregateProgress) -> Void)?
@@ -738,6 +748,8 @@ public final class MinerManager {
         miners.append(miner)
         recordHealth(.minerObserved(minerID: minerId, displayName: miner.displayName, at: Date()))
         onMinersChanged?()
+        onMinerCollectionChanged?()
+        onMinerIdentitiesChanged?()
         Task { [supervisor] in
             await supervisor.registerMiner(minerId)
         }
@@ -929,9 +941,12 @@ public final class MinerManager {
         engines.removeValue(forKey: minerId)
         let removedAccountId = miner.accountId
         currentExcludedGamesByAccount.removeValue(forKey: removedAccountId)
+        lastOperationalPresentationAt.removeValue(forKey: minerId)
         miners.removeAll { $0.id == minerId }
         await supervisor.unregisterMiner(minerId)
         onMinersChanged?()
+        onMinerCollectionChanged?()
+        onMinerIdentitiesChanged?()
         onAccountRemoved?(removedAccountId)
     }
     
@@ -1000,6 +1015,7 @@ public final class MinerManager {
         }
         
         onMinersChanged?()
+        onMinerIdentitiesChanged?()
     }
     
     /// Get the engine for a specific miner
