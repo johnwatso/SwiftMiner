@@ -330,12 +330,17 @@ final class NavigationProjectionStateProvider: ProjectionStateProvider, @uncheck
         guard let model, model.minerForAccount(accountId) != nil else { return [] }
         let campaigns = await model.minerManager.dataCoordinator.allCampaigns()
         let now = Date()
-        let excludedGames = Settings.shared.excludedGames
+        // Built once: the predicate below runs for every campaign the account has.
+        let excluded = GameMatchIndex(
+            gamePreferences: [],
+            priorityGames: [],
+            excludedGames: Settings.shared.excludedGames
+        )
         let completed = campaigns.filter {
             // This is the same completion predicate the native Drops filter
             // uses. Some campaigns (such as THE FINALS) reach complete reward
             // progress while their raw inventory flag still lags behind.
-            Self.shouldIncludeInCompletedCampaigns($0, excludedGames: excludedGames)
+            Self.shouldIncludeInCompletedCampaigns($0, excluded: excluded)
                 && !$0.isExpired(now: now)
                 && ($0.combinedProgressFraction >= 0.995 || $0.isCompleted)
         }
@@ -359,12 +364,23 @@ final class NavigationProjectionStateProvider: ProjectionStateProvider, @uncheck
         _ campaign: CampaignViewData,
         excludedGames: [String]
     ) -> Bool {
-        guard campaign.dropsClaimed > 0 else { return false }
+        shouldIncludeInCompletedCampaigns(
+            campaign,
+            excluded: GameMatchIndex(
+                gamePreferences: [],
+                priorityGames: [],
+                excludedGames: excludedGames
+            )
+        )
+    }
 
-        return !excludedGames.contains { excludedGame in
-            excludedGame.localizedCaseInsensitiveCompare(campaign.gameName) == .orderedSame
-                || excludedGame.localizedCaseInsensitiveCompare(campaign.gameId ?? "") == .orderedSame
-        }
+    @MainActor
+    static func shouldIncludeInCompletedCampaigns(
+        _ campaign: CampaignViewData,
+        excluded: GameMatchIndex
+    ) -> Bool {
+        guard campaign.dropsClaimed > 0 else { return false }
+        return !excluded.isExcluded(gameName: campaign.gameName, gameId: campaign.gameId)
     }
 
     private static func recentCampaignProjection(from campaign: CampaignViewData) -> DiscordUserProjection.RecentCampaign {

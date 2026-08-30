@@ -64,12 +64,15 @@ struct GameSearchField: View {
     /// Games matching search query, excluding already-selected ones
     private var filteredGames: [Game] {
         let existingIds = Set(settings.gamePreferences.map { $0.gameId })
+        // Folded once rather than compared against every preference for every game
+        // in the picker's list.
+        let existingNames = Set(
+            settings.gamePreferences.map { $0.gameName.folding(options: .caseInsensitive, locale: .current) }
+        )
         return availableGames
             .filter { game in
                 !existingIds.contains(game.id)
-                && !settings.gamePreferences.contains(where: {
-                    $0.gameName.localizedCaseInsensitiveCompare(game.name) == .orderedSame
-                })
+                && !existingNames.contains(game.name.folding(options: .caseInsensitive, locale: .current))
             }
             .filter { normalizedQuery.isEmpty || $0.name.lowercased().contains(normalizedQuery) }
     }

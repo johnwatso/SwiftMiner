@@ -125,10 +125,14 @@ struct GameCampaignDeckCard: View {
     }
 
     private func eligibleMiners(from minerAccountStates: [AccountState]) -> [AccountState] {
-        minerAccountStates.filter { account in
-            if Settings.shared.excludedGames.contains(where: { $0.localizedCaseInsensitiveCompare(group.gameName) == .orderedSame }) {
-                return false
-            }
+        // The game is either excluded or it is not; asking once per miner rescanned the
+        // whole exclusion list for the same answer.
+        let isExcludedGame = Settings.shared.excludedGames.contains {
+            $0.localizedCaseInsensitiveCompare(group.gameName) == .orderedSame
+        }
+        guard !isExcludedGame else { return [] }
+
+        return minerAccountStates.filter { account in
             if isClaimedButNotLinked(account) {
                 return true
             }

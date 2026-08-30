@@ -128,6 +128,40 @@ final class GameMatchIndexTests: XCTestCase {
         )
     }
 
+    // MARK: - Strict mode
+
+    /// Drops' artwork lookup only ever compared ids and case-insensitive names. Folded
+    /// matching would newly pair "Battlefield-6" with "Battlefield 6" there, so the strict
+    /// index must not do it.
+    func testStrictModeMatchesIdsAndCaseInsensitiveNamesOnly() {
+        let strict = GameMatchIndex(
+            gamePreferences: preferences,
+            priorityGames: [],
+            excludedGames: [],
+            matchesFoldedNames: false
+        )
+
+        XCTAssertEqual(strict.bestPreference(gameId: "1", gameName: "BATTLEFIELD 6")?.gameId, "1")
+        XCTAssertEqual(strict.bestPreference(gameId: "", gameName: "Battlefield-6")?.gameName, "Battlefield-6")
+        // Folded-only match: the same game to the feed, a different one here.
+        XCTAssertNil(strict.bestPreference(gameId: "", gameName: "battlefield6"))
+        XCTAssertNotNil(index.bestPreference(gameId: "", gameName: "battlefield6"))
+    }
+
+    func testExclusionCanMatchAGameId() {
+        let index = GameMatchIndex(
+            gamePreferences: [],
+            priorityGames: [],
+            excludedGames: ["509660", "IRL"]
+        )
+
+        XCTAssertTrue(index.isExcluded(gameName: "Anything", gameId: "509660"))
+        XCTAssertTrue(index.isExcluded(gameName: "irl"))
+        XCTAssertFalse(index.isExcluded(gameName: "Rust", gameId: "12345"))
+        // Without an id supplied, only the name is consulted, as before.
+        XCTAssertFalse(index.isExcluded(gameName: "Anything"))
+    }
+
     // MARK: - Reference implementations
 
     /// The comparison `OverviewArtworkResolver.matches` and `preferenceMatches` performed.
