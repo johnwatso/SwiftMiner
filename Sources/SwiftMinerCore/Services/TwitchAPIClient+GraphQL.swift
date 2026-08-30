@@ -100,7 +100,9 @@ extension TwitchAPIClient {
                                 userLogin: self.userLogin,
                                 basicCampaign: campaign
                             )
-                            campaign = Self.mergeBasicCampaign(campaign, withDetails: details)
+                            campaign = await self.reinstatingKnownApprovedChannels(
+                                Self.mergeBasicCampaign(campaign, withDetails: details)
+                            )
                         } catch {
                             Logger.api.error("Failed to fetch details for campaign \(campaign.id): \(error)")
                         }
@@ -370,6 +372,29 @@ extension TwitchAPIClient {
     /// Combine ViewerDropsDashboard's broad metadata with DropCampaignDetails' richer,
     /// account-specific fields. Details is authoritative for link state, drops, ACL, and
     /// time/status data, while the dashboard can still carry artwork that details omits.
+    /// Remembers a campaign's approved-channel list, and puts it back when a later fetch
+    /// returns the campaign still restricted but with no channels to probe.
+    ///
+    /// Twitch returning an empty ACL is not a claim that the restriction was lifted: the
+    /// allow flag stays set. Treating it as "no channels" leaves the campaign verifiable
+    /// only through the public directory, which does not list the channels these campaigns
+    /// run on — so an esports window passes with the campaign visible but unmineable.
+    func reinstatingKnownApprovedChannels(_ campaign: Campaign) -> Campaign {
+        if !campaign.channels.isEmpty {
+            lastKnownApprovedChannels[campaign.id] = campaign.channels
+            return campaign
+        }
+
+        guard campaign.hasUnresolvedChannelRestrictions,
+              let remembered = lastKnownApprovedChannels[campaign.id],
+              !remembered.isEmpty else { return campaign }
+
+        Logger.api.info(
+            "[CampaignDetails] \(campaign.name) came back restricted with no approved channels; reusing the \(remembered.count) last seen."
+        )
+        return campaign.withChannels(remembered)
+    }
+
     private nonisolated static func mergeBasicCampaign(_ basic: Campaign, withDetails details: Campaign) -> Campaign {
         let detailedGame = details.game
         let basicGame = basic.game

@@ -1052,7 +1052,34 @@ extension MinerEngine {
             return collected
         }
 
-        return candidates.compactMap { resolvedByIndex[$0.offset] }
+        let verified = candidates.compactMap { resolvedByIndex[$0.offset] }
+        guard verified.isEmpty, hasReportedApprovedChannelProbeFailure else { return verified }
+
+        // Every probe failed and the cause is the query, not the channels. Skipping them
+        // here is what makes a broken liveness check indistinguishable from "nobody is
+        // streaming" — the campaign goes unmined for as long as Twitch's answer is
+        // unreadable. Offering them unverified is the lesser risk: an offline channel
+        // fails at watch start and the loop moves on, while a live one is mined instead of
+        // missed. Only reached when verification produced nothing at all, so a channel
+        // confirmed live is always preferred over a guess.
+        log("[ChannelSelect]   No approved channel could be verified and the liveness check itself is failing — trying them unverified.")
+        return candidates.map { _, channel in
+            Channel(
+                id: channel.id,
+                login: channel.login,
+                displayName: channel.displayName,
+                description: channel.description,
+                profileImageUrl: channel.profileImageUrl,
+                isLive: true,
+                viewerCount: channel.viewerCount,
+                gameId: channel.gameId,
+                gameName: channel.gameName,
+                tags: channel.tags,
+                hasDropsEnabled: true,
+                broadcasterType: channel.broadcasterType,
+                aclBased: true
+            )
+        }
     }
 
     internal static func verificationCandidates(from sortedChannels: [Channel], campaign: Campaign) -> [Channel] {

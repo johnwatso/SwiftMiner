@@ -308,6 +308,17 @@ public actor TwitchAPIClient {
     /// Benefit ID → ClaimedBenefit from the most recent inventory fetch (gameEventDrops).
     /// Used as a fallback to detect claimed drops when `self` is absent from DropCampaignDetails.
     /// Matches Python's `claimed_benefits: dict[str, datetime]` pattern.
+    /// The last non-empty approved-channel list seen for a campaign, keyed by campaign id.
+    ///
+    /// Twitch is inconsistent about returning the ACL for a restricted campaign: the same
+    /// campaign comes back with its channels on one fetch and with none on the next. An
+    /// empty list is not a statement that the campaign is now open to everyone — the
+    /// restriction flag stays set — it just leaves SwiftMiner with nothing to probe, and
+    /// the public directory does not list these channels. That is how an esports drop
+    /// becomes unmineable while the campaign sits there looking active.
+    ///
+    /// So an ACL, once seen, is remembered and reinstated when a later fetch omits it.
+    var lastKnownApprovedChannels: [String: [Channel]] = [:]
     var lastKnownClaimedBenefits: [String: ClaimedBenefit] = [:]
 
     /// Campaigns parsed from the most recent inventory `dropCampaignsInProgress` response.
@@ -323,6 +334,7 @@ public actor TwitchAPIClient {
         // switching, then let the new login load its own on next use.
         persistCampaignCachesIfNeeded()
         campaignDetailsByKey.removeAll(keepingCapacity: true)
+        lastKnownApprovedChannels.removeAll(keepingCapacity: true)
         campaignLinkStateByKey.removeAll(keepingCapacity: true)
         campaignCachesNeedPersisting = false
         self.userLogin = login
