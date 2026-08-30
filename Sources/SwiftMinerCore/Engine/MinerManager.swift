@@ -705,7 +705,12 @@ public final class MinerManager {
         await setup()
         if autoStart && !miners.isEmpty {
             Logger.engine.info("Auto-starting \(miners.count) miner(s) on launch")
+            // Each miner is started in turn, and each start waits on its own token
+            // acquisition and PubSub handshake, so the launch cost is the sum of them.
+            // Timed per miner to show what that sum is made of.
+            let launchStartedAt = Date()
             for miner in miners {
+                let minerStartedAt = Date()
                 try? await startMiner(
                     minerId: miner.id,
                     priorityGames: priorityGamesForMiner?(miner) ?? priorityGames,
@@ -717,7 +722,13 @@ public final class MinerManager {
                     prioritiseFollowedStreamers: prioritiseFollowedStreamers,
                     failoverStreamers: failoverStreamers
                 )
+                Logger.engine.info(
+                    "Started \(miner.displayName) in \(MinerEngine.elapsed(since: minerStartedAt))"
+                )
             }
+            Logger.engine.info(
+                "All \(miners.count) miner(s) started in \(MinerEngine.elapsed(since: launchStartedAt))"
+            )
         }
     }
     
