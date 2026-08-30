@@ -205,6 +205,12 @@ extension MinerEngine {
     /// `aclProbeInterval` means a broadcast starting mid-wait is picked up promptly instead of
     /// losing up to a full `campaignCheckInterval`.
     func waitForNextScan(restrictedCandidates: [Campaign]) async {
+        // Twitch pushes stream-up on these channels. Listening for the wait means a match
+        // starting is known in seconds rather than on the next probe — and it still works
+        // when the liveness query is failing, because nothing has to be asked.
+        await startMonitoringRestrictedChannels(in: restrictedCandidates)
+        defer { Task { await self.stopMonitoringRestrictedChannels() } }
+
         let tick = Duration.seconds(10)
         let totalTicks = max(1, Int(campaignCheckInterval / (10 * 1_000_000_000)))
         let ticksPerACLProbe = max(1, Int(Self.aclProbeInterval / 10))
@@ -225,6 +231,50 @@ extension MinerEngine {
                 log("An approved channel for a restricted campaign just went live — re-checking immediately.")
                 return
             }
+        }
+    }
+
+    /// Subscribes to stream state for the approved channels of the restricted campaigns
+    /// being waited on, most urgent first.
+    ///
+    /// The connection carries a topic budget shared with the drop and watch subscriptions,
+    /// so the campaigns closest to ending are subscribed first: those are the windows that
+    /// cannot be caught later.
+    func startMonitoringRestrictedChannels(in candidates: [Campaign]) async {
+        guard !candidates.isEmpty else { return }
+
+        var channelIds: [String] = []
+        var seen = Set<String>()
+        for campaign in candidates.sorted(by: { $0.endDate < $1.endDate }) {
+            for channel in campaign.channels where !channel.id.isEmpty {
+                guard seen.insert(channel.id).inserted else { continue }
+                channelIds.append(channel.id)
+            }
+        }
+        guard !channelIds.isEmpty else { return }
+
+        do {
+            let monitored = try await dropEventsService.startMonitoringChannels(
+                channelIds,
+                limit: Self.monitoredRestrictedChannelLimit
+            )
+            monitoredRestrictedChannelIds.formUnion(monitored)
+            if !monitored.isEmpty {
+                log("[ChannelSelect]   Listening for stream-up on \(monitored.count) approved channel(s) while waiting.")
+            }
+        } catch {
+            // Losing the push signal costs promptness, not correctness: the 60s probe still
+            // runs, so the wait carries on rather than failing.
+            log("[ChannelSelect]   Could not listen for approved-channel stream-up: \(error.localizedDescription)")
+        }
+    }
+
+    func stopMonitoringRestrictedChannels() async {
+        monitoredRestrictedChannelIds.removeAll()
+        do {
+            try await dropEventsService.stopMonitoringChannels(except: session?.currentChannelId)
+        } catch {
+            log("[ChannelSelect]   Could not stop listening for approved-channel stream-up: \(error.localizedDescription)")
         }
     }
 

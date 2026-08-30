@@ -112,6 +112,10 @@ public actor DropEventsService {
     // MARK: - Subscription management
 
     /// Subscribe to drop events for `userId` and stream state for `channelId`.
+    /// Channels subscribed for liveness only, so they can be released without touching the
+    /// subscription for the channel being watched.
+    private var monitoredChannelIds: Set<String> = []
+
     public func startWatching(userId: String, channelId: String) async throws {
         let dropTopic   = "user-drop-events.\(userId)"
         let streamTopic = "video-playback-by-id.\(channelId)"
@@ -119,6 +123,41 @@ public actor DropEventsService {
         try await pubSubClient.listen(to: [dropTopic, streamTopic])
         subscribedUserId = userId
         subscribedChannelIds.insert(channelId)
+    }
+
+    /// Subscribe to stream state for channels we are *waiting on* rather than watching.
+    ///
+    /// A restricted campaign's approved channels go live for short windows, and polling
+    /// only learns about it on the next probe — or never, if the liveness query is broken.
+    /// Twitch already pushes `stream-up` on these topics, so listening to them turns
+    /// "check again in a minute" into "told the moment it starts".
+    ///
+    /// Returns the ids actually subscribed: the connection has a topic budget, and the
+    /// caller decides what matters most rather than having the tail silently dropped.
+    @discardableResult
+    public func startMonitoringChannels(_ channelIds: [String], limit: Int) async throws -> [String] {
+        let wanted = channelIds.filter { !$0.isEmpty && !subscribedChannelIds.contains($0) }
+        guard !wanted.isEmpty else { return [] }
+
+        let accepted = Array(wanted.prefix(max(0, limit)))
+        guard !accepted.isEmpty else { return [] }
+
+        try await pubSubClient.listen(to: accepted.map { "video-playback-by-id.\($0)" })
+        monitoredChannelIds.formUnion(accepted)
+        subscribedChannelIds.formUnion(accepted)
+        return accepted
+    }
+
+    /// Drop the liveness subscriptions taken by `startMonitoringChannels`, leaving the
+    /// channel actually being watched subscribed.
+    public func stopMonitoringChannels(except keptChannelId: String? = nil) async throws {
+        var releasing = monitoredChannelIds
+        if let keptChannelId { releasing.remove(keptChannelId) }
+        guard !releasing.isEmpty else { return }
+
+        monitoredChannelIds.subtract(releasing)
+        subscribedChannelIds.subtract(releasing)
+        try await pubSubClient.unlisten(from: releasing.map { "video-playback-by-id.\($0)" })
     }
 
     /// Stop tracking stream state for a specific channel.
@@ -136,6 +175,7 @@ public actor DropEventsService {
 
         subscribedUserId = nil
         subscribedChannelIds = []
+        monitoredChannelIds = []
 
         guard !topics.isEmpty else { return }
         try await pubSubClient.unlisten(from: topics)

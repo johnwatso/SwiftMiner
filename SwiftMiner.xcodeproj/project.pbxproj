@@ -34,6 +34,7 @@
 		22EDED66F6618BC3998F098D /* MinerAttentionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD8985A46BE58B3140B0E681 /* MinerAttentionTests.swift */; };
 		23928AC5ADF9DE4666B811B8 /* BackgroundTaskOrderingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EE06B774B6D4826F590ABBE /* BackgroundTaskOrderingTests.swift */; };
 		23A92BAE34A832BE0D14E3EC /* HTTPTransportMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23F1E3A5B2FEE98049DF5790 /* HTTPTransportMetrics.swift */; };
+		245392822F0E53198CD945B0 /* RestrictedChannelMonitoringTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BA4F5ECCEEA111F5A1C8045 /* RestrictedChannelMonitoringTests.swift */; };
 		249C7DE2B2D13F9A5AC84049 /* AccountStateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB66D4A9EB7F4E54D88D2EC0 /* AccountStateStore.swift */; };
 		25D5E5483F55EA58AE81948A /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8A9E39DA6F930F08E6C1E1E /* SettingsView.swift */; };
 		282470A799B0647FB7FB4CB3 /* MiningReliabilityChaosTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF13F08E80FAC638D0E25E6B /* MiningReliabilityChaosTests.swift */; };
@@ -413,6 +414,7 @@
 		877DE35C94E3759F2ECAB592 /* GeneralSettingsPanes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneralSettingsPanes.swift; sourceTree = "<group>"; };
 		87DA7758FAC012A62B587018 /* CrashSentinel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrashSentinel.swift; sourceTree = "<group>"; };
 		8ACF08613C4DC075CA132ED1 /* CampaignService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignService.swift; sourceTree = "<group>"; };
+		8BA4F5ECCEEA111F5A1C8045 /* RestrictedChannelMonitoringTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestrictedChannelMonitoringTests.swift; sourceTree = "<group>"; };
 		8C5FA8EA9DD4F9899530C5F5 /* MinerOperatorDetail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinerOperatorDetail.swift; sourceTree = "<group>"; };
 		8CBA21A1EC2155E1DB26257E /* AggregatedCampaignDataService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AggregatedCampaignDataService.swift; sourceTree = "<group>"; };
 		8F0C36D4A3E4BE2B05796360 /* CampaignCardComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignCardComponents.swift; sourceTree = "<group>"; };
@@ -897,6 +899,7 @@
 				EBA1A5E3A980893167B1EA34 /* PersistenceFailureDiagnosticsTests.swift */,
 				CD5023EC681D53196C9F4350 /* PrimaryStateResolverTests.swift */,
 				AB70D19F15611C8382E9BB5B /* PubSubClientTests.swift */,
+				8BA4F5ECCEEA111F5A1C8045 /* RestrictedChannelMonitoringTests.swift */,
 				550FD9B06CAA7B5FEE2FA010 /* ServiceTests.swift */,
 				F2FAAA719F7BE0489949753A /* SettingsBackupTests.swift */,
 				0CADF2275D2FBA60D333419B /* SpadeBeaconServiceTests.swift */,
@@ -1398,6 +1401,7 @@
 				41A4CB73212B2C9965D23563 /* PersistenceFailureDiagnosticsTests.swift in Sources */,
 				0F4C7F2D087B2AFAEBDBE260 /* PrimaryStateResolverTests.swift in Sources */,
 				57176A9195FD8ED177DC96E2 /* PubSubClientTests.swift in Sources */,
+				245392822F0E53198CD945B0 /* RestrictedChannelMonitoringTests.swift in Sources */,
 				9C2BE5015F633DB93BE09E6F /* ServiceTests.swift in Sources */,
 				DAC7FA7B5C4D11DC4DC7327B /* SettingsBackupTests.swift in Sources */,
 				BEC429844CA9C889A06D7E60 /* SpadeBeaconServiceTests.swift in Sources */,
@@ -1503,7 +1507,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026083114;
+				CURRENT_PROJECT_VERSION = 2026083115;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;
@@ -1664,7 +1668,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026083114;
+				CURRENT_PROJECT_VERSION = 2026083115;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;

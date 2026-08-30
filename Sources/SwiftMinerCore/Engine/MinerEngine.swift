@@ -300,6 +300,13 @@ public actor MinerEngine {
     /// Consecutive failures of the approved-channel liveness query before it is treated as
     /// broken rather than unlucky. Three probes is well inside one 60s ACL cycle, so a genuine
     /// outage is reported within a minute or so of starting.
+    /// Approved channels subscribed for stream-up while waiting. Twitch allows 50 topics
+    /// per connection and the watch session needs its own, so this stays well clear of the
+    /// ceiling rather than competing with the subscriptions mining depends on.
+    static let monitoredRestrictedChannelLimit = 20
+    /// Channels subscribed for stream-up while waiting, so an arriving event can be told
+    /// apart from one for the channel already being watched.
+    var monitoredRestrictedChannelIds: Set<String> = []
     static let approvedChannelProbeFailureThreshold = 3
     var consecutiveApprovedChannelProbeFailures = 0
     /// Whether the current run of failures was reported, so recovery clears exactly the
@@ -504,6 +511,13 @@ public actor MinerEngine {
         switch event.kind {
         case .up:
             log("Stream \(event.channelId) is LIVE")
+            // An approved channel for a campaign we are waiting on just started. Waking now
+            // is the whole point of subscribing: these windows are short, and the next
+            // scheduled probe is up to a minute away.
+            if monitoredRestrictedChannelIds.contains(event.channelId) {
+                log("An approved channel for a restricted campaign went live — re-checking immediately.")
+                shouldRescanCampaigns = true
+            }
         case .down:
             log("Stream \(event.channelId) went OFFLINE")
         case .viewcount(let count):
