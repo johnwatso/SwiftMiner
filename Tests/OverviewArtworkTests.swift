@@ -7,6 +7,11 @@ final class SystemSymbolCompatibilityTests: XCTestCase {
     func testPostSonomaAndInvalidSymbolsHaveSupportedFallbacks() {
         let expectedFallbacks = [
             "arrow.trianglehead.2.clockwise": "arrow.triangle.2.circlepath",
+            // Badged bolts carry mining state in the menu bar. On macOS 14 they fall back
+            // to the plain symbols the status row used before they were introduced.
+            "bolt.badge.checkmark.fill": "checkmark.circle.fill",
+            "bolt.badge.clock.fill": "clock.fill",
+            "bolt.trianglebadge.exclamationmark.fill": "exclamationmark.triangle.fill",
             "checkmark.arrow.trianglehead.counterclockwise": "checkmark.circle",
             "checkmark.circle.trianglebadge.exclamationmark.fill": "exclamationmark.circle.fill",
             "exclamationmark.arrow.trianglehead.counterclockwise.rotate.90": "exclamationmark.arrow.triangle.2.circlepath",

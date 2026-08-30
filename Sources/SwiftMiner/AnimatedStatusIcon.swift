@@ -9,6 +9,9 @@ enum SystemSymbolCompatibility {
 
     private static let fallbackNames: [String: String] = [
         "arrow.trianglehead.2.clockwise": "arrow.triangle.2.circlepath",
+        "bolt.badge.checkmark.fill": "checkmark.circle.fill",
+        "bolt.badge.clock.fill": "clock.fill",
+        "bolt.trianglebadge.exclamationmark.fill": "exclamationmark.triangle.fill",
         "checkmark.arrow.trianglehead.counterclockwise": "checkmark.circle",
         "checkmark.circle.trianglebadge.exclamationmark.fill": "exclamationmark.circle.fill",
         "exclamationmark.arrow.trianglehead.counterclockwise.rotate.90": "exclamationmark.arrow.triangle.2.circlepath",
@@ -140,6 +143,16 @@ struct AnimatedStatusIcon: View {
                 } else {
                     base
                 }
+            } else if symbol == "bolt.badge.checkmark.fill"
+                        || symbol == "bolt.trianglebadge.exclamationmark.fill"
+                        || symbol == "bolt.badge.clock.fill" {
+                BadgedBoltIcon(
+                    badge: BadgedBoltIcon.Badge(symbol: symbol),
+                    color: color,
+                    size: size,
+                    weight: weight,
+                    isAnimated: isAnimated
+                )
             } else if symbol == "bolt.fill" || symbol == "bolt.circle.fill" {
                 let base = Image(systemName: symbol)
                     .font(.system(size: size, weight: weight))
@@ -181,6 +194,82 @@ struct AnimatedStatusIcon: View {
 }
 
 // MARK: - AnimatedCalendarCheckmarkIcon
+
+/// A bolt carrying a status badge, with only the bolt animated.
+///
+/// The badge is drawn separately rather than using the single `bolt.badge.*` symbol,
+/// for two reasons. A symbol effect applies to the whole symbol, so pulsing the real
+/// glyph would pulse its badge too, and the badge is the part that should stay still —
+/// it states a fact, while the bolt shows activity. Composing also means the animated
+/// form is built from `bolt.fill` and a badge symbol that have existed forever, so it
+/// renders the same on macOS 14 as anywhere else.
+private struct BadgedBoltIcon: View {
+    enum Badge {
+        case checkmark
+        case warning
+        case waiting
+
+        init(symbol: String) {
+            switch symbol {
+            case "bolt.trianglebadge.exclamationmark.fill": self = .warning
+            case "bolt.badge.clock.fill": self = .waiting
+            default: self = .checkmark
+            }
+        }
+
+        var symbol: String {
+            switch self {
+            case .checkmark: return "checkmark.circle.fill"
+            case .warning: return "exclamationmark.triangle.fill"
+            case .waiting: return "clock.fill"
+            }
+        }
+
+        var tint: Color {
+            switch self {
+            case .checkmark: return .green
+            case .warning: return .orange
+            case .waiting: return .secondary
+            }
+        }
+
+        /// Only a healthy fleet pulses. A warning that throbs reads as an alarm, and a
+        /// miner waiting for a stream is not doing anything worth animating.
+        var pulsesBolt: Bool { self == .checkmark }
+    }
+
+    let badge: Badge
+    let color: Color
+    let size: CGFloat
+    let weight: Font.Weight
+    let isAnimated: Bool
+
+    var body: some View {
+        let bolt = Image(systemName: "bolt.fill")
+            .font(.system(size: size, weight: weight))
+            .foregroundStyle(color)
+
+        ZStack(alignment: .bottomTrailing) {
+            if isAnimated && badge.pulsesBolt {
+                bolt.symbolEffect(.pulse, options: .repeating.speed(0.7))
+            } else {
+                bolt
+            }
+
+            Image(systemName: badge.symbol)
+                .font(.system(size: size * 0.5, weight: .bold))
+                .foregroundStyle(badge.tint)
+                .background(
+                    Circle()
+                        .fill(Color(nsColor: .windowBackgroundColor))
+                        .frame(width: size * 0.52, height: size * 0.52)
+                )
+                .offset(x: size * 0.22, y: size * 0.12)
+        }
+        // The badge overhangs the bolt, so the icon keeps the width its neighbours expect.
+        .frame(width: size * 1.1, alignment: .leading)
+    }
+}
 
 private struct AnimatedCalendarCheckmarkIcon: View {
     let calendarColor: Color
