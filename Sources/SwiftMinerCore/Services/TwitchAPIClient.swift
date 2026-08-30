@@ -265,6 +265,17 @@ public actor TwitchAPIClient {
     /// arrive with each `ViewerDropsDashboard` refresh, and `campaignLinkStateTTL` below
     /// keeps the mutable part on its own short leash.
     let campaignDetailsCacheTTL: TimeInterval = 4 * 60 * 60
+    /// ACL-restricted campaigns keep the old short window. `channels` is the approved-channel
+    /// list, and for a scarce esports campaign that list is the difference between catching a
+    /// match window and missing it — John has missed those events before. The long window
+    /// above is only safe for campaigns anyone can watch anywhere, which is nearly all of
+    /// them, so the launch saving survives almost intact.
+    let restrictedCampaignDetailsCacheTTL: TimeInterval = 20 * 60
+
+    /// The details window for one campaign: short when its channel list gates who can mine it.
+    func detailsCacheTTL(for campaign: Campaign) -> TimeInterval {
+        campaign.hasChannelRestrictions ? restrictedCampaignDetailsCacheTTL : campaignDetailsCacheTTL
+    }
     /// Account-link state is mutable and directly decides whether a campaign can be mined,
     /// so it is deliberately kept far shorter than the details window above. Keeping this
     /// bounded means linking or unlinking a game account is picked up within twenty
