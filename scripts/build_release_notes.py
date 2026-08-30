@@ -96,11 +96,17 @@ class ReleaseNote:
         self.summary = self._summary(markup)
         self.build = self._build(markup)
         self.emoji = self._emoji(markup)
+        self.title = self._title(markup)
+        self.section_count = len(re.findall(r"<section[\s>]", markup))
 
     @staticmethod
     def _text(markup: str) -> str:
         without_tags = re.sub(r"<[^>]+>", " ", markup)
         return re.sub(r"\s+", " ", without_tags).strip()
+
+    def _title(self, markup: str) -> str:
+        heading = re.search(r"<h1[^>]*>(.*?)</h1>", markup, re.DOTALL)
+        return self._text(heading.group(1)) if heading else ""
 
     def _summary(self, markup: str) -> str:
         intro = re.search(r'<p class="intro">(.*?)</p>', markup, re.DOTALL)
@@ -148,6 +154,27 @@ class ReleaseNote:
         while len(parts) < 4:
             parts.append(0)
         return tuple(parts)
+
+
+def validate(notes: list[ReleaseNote]) -> list[str]:
+    """Structural problems that mean a page is not a finished release note.
+
+    ShipHook writes its own `docs/release-notes/<version>.html` at every release,
+    generated from the tip commit message, and it lands on top of whatever curated page
+    was there. That page has no intro and no sections, so these checks turn a silent
+    overwrite into a red build."""
+    problems: list[str] = []
+    for note in notes:
+        if note.title != f"SwiftMiner {note.version}":
+            problems.append(
+                f"{note.filename}: title is {note.title!r}, expected 'SwiftMiner {note.version}' "
+                "— looks like a generated page, not a release note"
+            )
+        if not note.summary:
+            problems.append(f"{note.filename}: no intro paragraph to summarise the release")
+        if note.section_count == 0:
+            problems.append(f"{note.filename}: no <section> — nothing describes what changed")
+    return problems
 
 
 def load_notes(notes_dir: Path) -> list[ReleaseNote]:
@@ -228,15 +255,56 @@ def update_sitemap(sitemap: Path, notes: list[ReleaseNote]) -> int:
     return len(entries)
 
 
+def check(notes: list[ReleaseNote], sitemap: Path) -> int:
+    """Report anything a release would otherwise ship broken: a page that is not a
+    finished release note, or a sitemap that has fallen behind the pages."""
+    problems = validate(notes)
+
+    if sitemap.exists():
+        listed = set(
+            re.findall(
+                rf"<loc>{re.escape(SITE_ORIGIN)}/release-notes/([^<]*\.html)</loc>", sitemap.read_text(encoding="utf-8")
+            )
+        )
+        missing = sorted({note.filename for note in notes} - listed)
+        if missing:
+            problems.append(
+                f"{sitemap.name} is missing {len(missing)} page(s): {', '.join(missing)} "
+                "— run scripts/build_release_notes.py and commit the result"
+            )
+
+    for problem in problems:
+        print(f"::error::{problem}")
+    if problems:
+        print(f"{len(problems)} release-note problem(s) found")
+        return 1
+
+    print(f"Checked {len(notes)} release-note pages: all complete and listed")
+    return 0
+
+
 def main() -> int:
     root = Path(__file__).resolve().parent.parent
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--notes-dir", type=Path, default=root / "docs" / "release-notes")
     parser.add_argument("--site-dir", type=Path, default=root / "Website" / "public" / "release-notes")
     parser.add_argument("--sitemap", type=Path, default=root / "Website" / "public" / "sitemap.xml")
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Validate the pages and the sitemap without writing anything. Used by CI so a "
+        "page ShipHook overwrote, or a sitemap left unregenerated, fails the build.",
+    )
     args = parser.parse_args()
 
     notes = load_notes(args.notes_dir)
+    if args.check:
+        return check(notes, args.sitemap)
+
+    problems = validate(notes)
+    for problem in problems:
+        print(f"warning: {problem}")
+
     copied = publish_pages(args.notes_dir, args.site_dir)
     (args.site_dir / "index.html").write_text(render_index(notes), encoding="utf-8")
     sitemap_entries = update_sitemap(args.sitemap, notes)
