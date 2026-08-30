@@ -123,9 +123,21 @@ class ReleaseNote:
 
     def _emoji(self, markup: str) -> str:
         """The leading glyph of the page's first section heading, so the index keeps the
-        character each release was given rather than inventing one."""
-        heading = re.search(r"<h2>\s*(&#\d+;|[^\s<A-Za-z])", markup)
-        return heading.group(1) if heading else ""
+        character each release was given rather than inventing one.
+
+        Headings come in two shapes across the archive: the glyph written directly
+        (`<h2>&#128029; Fixes`) and the older badge span (`<h2><span class="badge">⚡</span>`).
+        Both are read, otherwise most of the back catalogue loses its character."""
+        heading = re.search(r"<h2[^>]*>(.*?)</h2>", markup, re.DOTALL)
+        if not heading:
+            return ""
+        inner = heading.group(1)
+        entity = re.match(r"\s*(&#\d+;)", inner)
+        if entity:
+            return entity.group(1)
+        text = self._text(inner)
+        glyphs = re.match(r"([^\w\s]+)", text)
+        return glyphs.group(1) if glyphs else ""
 
     @property
     def sort_key(self) -> tuple[int, ...]:
