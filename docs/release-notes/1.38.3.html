@@ -29,7 +29,7 @@
 <body>
   <main>
     <h1>SwiftMiner 1.38.3</h1>
-    <p class="meta">Version 1.38.3 &middot; Build 2026083108</p>
+    <p class="meta">Version 1.38.3 &middot; Build 2026083109</p>
     <p class="intro">A performance release. SwiftMiner stops repeating the same campaign, cache, and interface work on every refresh, keeps its image caches inside a fixed budget in memory and on disk, and reports what the event outbox is doing. Webhook retries now use the correct timing in every region, and the local dashboard turns away oversized or malformed requests before it reads them.</p>
 
     <section>
@@ -49,6 +49,7 @@
         <li>Builds both shared and per-account campaign views from the same refresh snapshot, removing a second collection and aggregation pass after every refresh.</li>
         <li>Skips campaign and inventory cache rewrites when only refresh timestamps changed, while periodically renewing the persisted timestamp so offline cache freshness remains accurate.</li>
         <li>Writes miner identities to the dashboard database only when identity data changes, rather than after every log or health update.</li>
+        <li>Starts mining sooner after launch. Campaign details are remembered for four hours rather than twenty minutes, so a restart no longer re-fetches every active campaign before the first stream can begin; newly published campaigns and account-link changes are still picked up as promptly as before.</li>
       </ul>
     </section>
 
