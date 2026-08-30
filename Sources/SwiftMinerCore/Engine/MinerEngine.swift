@@ -44,6 +44,12 @@ public actor MinerEngine {
     }
 
     public enum OperationalEvent: Sendable, Equatable {
+        /// The query that answers "is this approved channel live?" is failing repeatedly.
+        /// `isCompatibility` distinguishes a query Twitch no longer accepts — which stays
+        /// broken until SwiftMiner ships a new hash — from a network failure that will pass.
+        case approvedChannelChecksFailing(detail: String, isCompatibility: Bool)
+        /// A probe succeeded after a reported run of failures, so the incident can clear.
+        case approvedChannelChecksRecovered
         case workerStarted(taskID: String)
         case workerStopped
         case successfulPoll
@@ -296,6 +302,9 @@ public actor MinerEngine {
     /// outage is reported within a minute or so of starting.
     static let approvedChannelProbeFailureThreshold = 3
     var consecutiveApprovedChannelProbeFailures = 0
+    /// Whether the current run of failures was reported, so recovery clears exactly the
+    /// incidents that were raised and stays quiet otherwise.
+    var hasReportedApprovedChannelProbeFailure = false
     var lastApprovedChannelProbeFailure: (detail: String, at: Date)?
 
     /// How long a "no live channel" probe result keeps a game demoted before it is re-probed.

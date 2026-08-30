@@ -83,6 +83,8 @@ public actor UnattendedIncidentNotificationService {
             return "Mining Progress Stalled"
         case .notEarning:
             return "Watching Without Earning"
+        case .channelChecksIncompatible:
+            return "Esports Campaigns May Be Missed"
         case .webDashboardUnavailable:
             return "Dashboard Unavailable"
         case .automaticUpdateFailed:

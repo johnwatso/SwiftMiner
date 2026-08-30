@@ -229,5 +229,29 @@ final class UnattendedIncidentNotificationServiceTests: XCTestCase {
         XCTAssertEqual(HealthIncident.Kind.progressStalled.deliveryStage, .alerted)
         XCTAssertEqual(HealthIncident.Kind.webDashboardUnavailable.deliveryStage, .alerted)
         XCTAssertEqual(HealthIncident.Kind.automaticUpdateFailed.deliveryStage, .alerted)
+        // Alerted on arrival rather than displayed first, because it is raised only for a
+        // Twitch compatibility failure — a query shape that stays broken until SwiftMiner
+        // ships a new hash. Silence is the failure it exists to fix: on 2026-08-18 the
+        // liveness check failed 266 times with nothing reaching the user, and restricted
+        // esports campaigns were undetectable for the duration.
+        XCTAssertEqual(HealthIncident.Kind.channelChecksIncompatible.deliveryStage, .alerted)
+    }
+
+    func testIncompatibleChannelChecksNotifyWithTheirOwnTitle() async throws {
+        let request = UnattendedIncidentNotificationService.makeRequest(
+            incident: HealthIncident(
+                id: "miner-1-channelChecksIncompatible",
+                minerID: "miner-1",
+                kind: .channelChecksIncompatible,
+                severity: .critical,
+                openedAt: Date(),
+                lastObservedAt: Date(),
+                summary: "Approved-channel liveness checks are failing (3 in a row)",
+                recommendedAction: "Update SwiftMiner so it can check restricted campaigns again"
+            ),
+            displayName: "ruffcrumble"
+        )
+
+        XCTAssertEqual(request.content.title, "Esports Campaigns May Be Missed")
     }
 }

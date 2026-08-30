@@ -152,15 +152,30 @@ extension MinerEngine {
         lastApprovedChannelProbeFailure = (detail: detail, at: Date())
 
         guard consecutiveApprovedChannelProbeFailures == Self.approvedChannelProbeFailureThreshold else { return }
-        onOperationalEvent?(.issueDetected(
-            category: category,
-            detail: "Approved-channel liveness checks are failing (\(consecutiveApprovedChannelProbeFailures) in a row): \(detail)"
+        let summary = "Approved-channel liveness checks are failing (\(consecutiveApprovedChannelProbeFailures) in a row): \(detail)"
+        onOperationalEvent?(.issueDetected(category: category, detail: summary))
+        hasReportedApprovedChannelProbeFailure = true
+        onOperationalEvent?(.approvedChannelChecksFailing(
+            detail: summary,
+            isCompatibility: Self.isCompatibilityFailure(error)
         ))
+    }
+
+    /// True for a query shape Twitch no longer accepts. Unlike a network failure this does
+    /// not pass on its own — it stays broken until SwiftMiner ships an updated hash.
+    static func isCompatibilityFailure(_ error: Error) -> Bool {
+        guard let twitchError = error as? TwitchMinerError else { return false }
+        if case .twitchAPICompatibility = twitchError { return true }
+        return false
     }
 
     func recordApprovedChannelProbeSuccess() {
         consecutiveApprovedChannelProbeFailures = 0
         lastApprovedChannelProbeFailure = nil
+        guard hasReportedApprovedChannelProbeFailure else { return }
+        hasReportedApprovedChannelProbeFailure = false
+        log("[ChannelSelect]   Approved-channel liveness checks are working again")
+        onOperationalEvent?(.approvedChannelChecksRecovered)
     }
 
     func recordGameLiveProbe(
