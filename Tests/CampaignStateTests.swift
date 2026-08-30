@@ -279,6 +279,113 @@ final class CampaignStateTests: XCTestCase {
         XCTAssertEqual(cachedFallback.first(where: { $0.id == "c1" })?.drops.map(\.name), ["Cached Reward"])
     }
 
+    // MARK: - Persistence equivalence
+
+    func testPersistenceEquivalenceIgnoresRefreshTimestampsAndCollectionOrder() {
+        let firstProgress = Progress(
+            id: "progress-1",
+            dropId: "drop-1",
+            dropName: "Reward",
+            campaignId: "campaign-1",
+            currentMinutes: 12,
+            requiredMinutes: 60,
+            lastUpdated: now
+        )
+        let refreshedProgress = Progress(
+            id: "progress-1",
+            dropId: "drop-1",
+            dropName: "Reward",
+            campaignId: "campaign-1",
+            currentMinutes: 12,
+            requiredMinutes: 60,
+            lastUpdated: now.addingTimeInterval(60)
+        )
+        let secondProgress = Progress(
+            id: "progress-2",
+            dropId: "drop-2",
+            dropName: "Second Reward",
+            campaignId: "campaign-1",
+            currentMinutes: 0,
+            requiredMinutes: 30,
+            lastUpdated: now
+        )
+
+        XCTAssertTrue(firstProgress.isPersistenceEquivalent(to: refreshedProgress))
+        XCTAssertTrue(
+            [firstProgress, secondProgress].persistenceElementsEqual([secondProgress, refreshedProgress])
+        )
+
+        let originalSnapshot = InventorySnapshot(
+            accountId: "account-1",
+            benefitIDs: ["benefit-1"],
+            progress: [firstProgress],
+            lastUpdated: now
+        )
+        let refreshedSnapshot = InventorySnapshot(
+            accountId: "account-1",
+            benefitIDs: ["benefit-1"],
+            progress: [refreshedProgress],
+            lastUpdated: now.addingTimeInterval(60)
+        )
+
+        XCTAssertTrue(originalSnapshot.isPersistenceEquivalent(to: refreshedSnapshot))
+
+        let originalCampaign = Campaign(
+            id: "campaign-1",
+            name: "Campaign",
+            game: game,
+            startDate: now.addingTimeInterval(-60),
+            endDate: now.addingTimeInterval(3_600),
+            drops: [Drop(id: "drop-1", name: "Reward", requiredMinutes: 60, progress: firstProgress)]
+        )
+        let refreshedCampaign = Campaign(
+            id: "campaign-1",
+            name: "Campaign",
+            game: game,
+            startDate: now.addingTimeInterval(-60),
+            endDate: now.addingTimeInterval(3_600),
+            drops: [Drop(id: "drop-1", name: "Reward", requiredMinutes: 60, progress: refreshedProgress)]
+        )
+
+        XCTAssertTrue(originalCampaign.isPersistenceEquivalent(to: refreshedCampaign))
+    }
+
+    func testPersistenceEquivalenceDetectsMeaningfulProgressChanges() {
+        let original = Progress(
+            id: "progress-1",
+            dropId: "drop-1",
+            dropName: "Reward",
+            campaignId: "campaign-1",
+            currentMinutes: 12,
+            requiredMinutes: 60,
+            lastUpdated: now
+        )
+        let advanced = Progress(
+            id: "progress-1",
+            dropId: "drop-1",
+            dropName: "Reward",
+            campaignId: "campaign-1",
+            currentMinutes: 13,
+            requiredMinutes: 60,
+            lastUpdated: now.addingTimeInterval(60)
+        )
+
+        XCTAssertFalse(original.isPersistenceEquivalent(to: advanced))
+
+        let originalSnapshot = InventorySnapshot(
+            accountId: "account-1",
+            benefitIDs: ["benefit-1"],
+            progress: [original]
+        )
+        let advancedSnapshot = InventorySnapshot(
+            accountId: "account-1",
+            benefitIDs: ["benefit-1"],
+            progress: [advanced]
+        )
+
+        XCTAssertFalse(originalSnapshot.isPersistenceEquivalent(to: advancedSnapshot))
+    }
+
     // MARK: - Live-aware candidate ranking (Overwatch starvation fix)
 
     /// A limited-time campaign that ends sooner normally sorts first under `.mineAll`. When its

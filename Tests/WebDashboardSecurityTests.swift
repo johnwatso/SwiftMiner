@@ -7,6 +7,73 @@ import SwiftMinerCore
 
 final class WebDashboardSecurityTests: XCTestCase {
 
+    // MARK: - HTTP request framing
+
+    func testHTTPRequestFramerBuildsARequestAcrossChunks() throws {
+        var framer = HTTPRequestFramer(maximumHeaderBytes: 256, maximumBodyBytes: 32)
+
+        XCTAssertNil(try framer.append(Data("POST /api/test HTTP/1.1\r\nContent-Length: 5\r\n".utf8)))
+        let frame = try XCTUnwrap(framer.append(Data("X-Test: yes\r\n\r\nhello".utf8)))
+
+        XCTAssertEqual(frame.requestLine, "POST /api/test HTTP/1.1")
+        XCTAssertEqual(frame.headers["x-test"], "yes")
+        XCTAssertEqual(frame.body, Data("hello".utf8))
+    }
+
+    func testHTTPRequestFramerRejectsNegativeContentLength() {
+        var framer = HTTPRequestFramer()
+        XCTAssertThrowsError(
+            try framer.append(Data("POST / HTTP/1.1\r\nContent-Length: -1\r\n\r\n".utf8))
+        ) { error in
+            XCTAssertEqual(error as? HTTPRequestFramingError, .invalidContentLength)
+        }
+    }
+
+    func testHTTPRequestFramerRejectsNonNumericContentLength() {
+        var framer = HTTPRequestFramer()
+        XCTAssertThrowsError(
+            try framer.append(Data("POST / HTTP/1.1\r\nContent-Length: nope\r\n\r\n".utf8))
+        ) { error in
+            XCTAssertEqual(error as? HTTPRequestFramingError, .invalidContentLength)
+        }
+    }
+
+    func testHTTPRequestFramerRejectsDuplicateContentLength() {
+        var framer = HTTPRequestFramer()
+        XCTAssertThrowsError(
+            try framer.append(Data("POST / HTTP/1.1\r\nContent-Length: 1\r\nContent-Length: 2\r\n\r\n".utf8))
+        ) { error in
+            XCTAssertEqual(error as? HTTPRequestFramingError, .invalidContentLength)
+        }
+    }
+
+    func testHTTPRequestFramerRejectsTransferEncoding() {
+        var framer = HTTPRequestFramer()
+        XCTAssertThrowsError(
+            try framer.append(Data("POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n".utf8))
+        ) { error in
+            XCTAssertEqual(error as? HTTPRequestFramingError, .malformedHeaders)
+        }
+    }
+
+    func testHTTPRequestFramerRejectsOversizedHeaders() {
+        var framer = HTTPRequestFramer(maximumHeaderBytes: 24, maximumBodyBytes: 32)
+        XCTAssertThrowsError(
+            try framer.append(Data("GET / HTTP/1.1\r\nX-Long: abcdefghijklmnop".utf8))
+        ) { error in
+            XCTAssertEqual(error as? HTTPRequestFramingError, .headersTooLarge)
+        }
+    }
+
+    func testHTTPRequestFramerRejectsOversizedBodyBeforeBufferingIt() {
+        var framer = HTTPRequestFramer(maximumHeaderBytes: 256, maximumBodyBytes: 4)
+        XCTAssertThrowsError(
+            try framer.append(Data("POST / HTTP/1.1\r\nContent-Length: 5\r\n\r\n".utf8))
+        ) { error in
+            XCTAssertEqual(error as? HTTPRequestFramingError, .bodyTooLarge)
+        }
+    }
+
     // MARK: - Crypto / CSRF
 
     func testConstantTimeEqualsMatchesOnlyIdenticalStrings() {

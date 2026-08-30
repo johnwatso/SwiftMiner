@@ -226,7 +226,9 @@ public final class MiningDataCoordinator {
             let currentCampaignId = await engine.currentCampaignId
             await aggregatedService.updateActiveCampaign(accountId: accountId, campaignId: currentCampaignId)
         }
-        await aggregatedService.refreshAll()
+        let allCampaigns = await aggregatedService.refreshAll()
+        lastKnownAllCampaigns = allCampaigns
+        lastKnownCurrentCampaigns = CampaignMapper.composeFeed(from: allCampaigns)
     }
 
     /// Force refresh one miner's campaign and inventory data, then update the
@@ -239,7 +241,10 @@ public final class MiningDataCoordinator {
             await aggregatedService.updateActiveCampaign(accountId: accountId, campaignId: currentCampaignId)
         }
 
-        await aggregatedService.refreshAccount(accountId: accountId)
+        if let allCampaigns = await aggregatedService.refreshAccount(accountId: accountId) {
+            lastKnownAllCampaigns = allCampaigns
+            lastKnownCurrentCampaigns = CampaignMapper.composeFeed(from: allCampaigns)
+        }
     }
 
     /// Update whether an account needs manual re-authentication in aggregated UI state.

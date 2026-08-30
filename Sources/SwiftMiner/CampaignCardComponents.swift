@@ -270,20 +270,45 @@ struct CampaignMinerInspectorPopover: View {
 actor CampaignArtworkCache {
     static let shared = CampaignArtworkCache()
 
+    private static let defaultDiskByteLimit: Int64 = 256 * 1_024 * 1_024
+    private static let defaultDiskFileLimit = 600
+    private static let defaultBudgetCheckWriteInterval = 25
+
     private let memory = NSCache<NSString, NSImage>()
     private var inFlight: [String: Task<NSImage?, Never>] = [:]
     private let cacheDirectory: URL?
     private let session: URLSession
+    private let diskByteLimit: Int64
+    private let diskFileLimit: Int
+    private let budgetCheckWriteInterval: Int
+    private var hasAppliedDiskBudget = false
 
-    init(cacheDirectory: URL? = nil, session: URLSession = .shared) {
+    /// Cached files written since the last budget sweep. Pruning enumerates the whole
+    /// folder, so it runs once per launch and then only every `budgetCheckWriteInterval`
+    /// writes rather than after each of the hundreds of artwork downloads a cold start makes.
+    private var writesSinceBudgetCheck = 0
+
+    init(
+        cacheDirectory: URL? = nil,
+        session: URLSession = .shared,
+        diskByteLimit: Int64 = CampaignArtworkCache.defaultDiskByteLimit,
+        diskFileLimit: Int = CampaignArtworkCache.defaultDiskFileLimit,
+        budgetCheckWriteInterval: Int = CampaignArtworkCache.defaultBudgetCheckWriteInterval
+    ) {
         self.cacheDirectory = cacheDirectory ?? FileManager.default
             .urls(for: .cachesDirectory, in: .userDomainMask)
             .first?
             .appendingPathComponent("SwiftMiner/CampaignArtwork", isDirectory: true)
         self.session = session
+        self.diskByteLimit = diskByteLimit
+        self.diskFileLimit = diskFileLimit
+        self.budgetCheckWriteInterval = max(1, budgetCheckWriteInterval)
+        memory.countLimit = 96
+        memory.totalCostLimit = 192 * 1_024 * 1_024
     }
 
     func image(for url: URL) async -> NSImage? {
+        applyDiskBudgetIfNeeded()
         let key = Self.key(for: url)
 
         if let cached = memory.object(forKey: key as NSString) {
@@ -292,7 +317,7 @@ actor CampaignArtworkCache {
 
         if url.isFileURL {
             guard let image = NSImage(contentsOf: url) else { return nil }
-            memory.setObject(image, forKey: key as NSString)
+            storeInMemory(image, key: key)
             return image
         }
 
@@ -303,7 +328,7 @@ actor CampaignArtworkCache {
             // misleading `public.data` type hint from the extensionless URL.
             if let data = try? Data(contentsOf: localURL),
                let image = NSImage(data: data) {
-                memory.setObject(image, forKey: key as NSString)
+                storeInMemory(image, key: key, cost: data.count)
                 return image
             }
             // A partial or invalid image should never become a permanent miss.
@@ -346,10 +371,51 @@ actor CampaignArtworkCache {
                 at: localURL.deletingLastPathComponent(),
                 withIntermediateDirectories: true
             )
-            try? data.write(to: localURL, options: .atomic)
+            do {
+                try data.write(to: localURL, options: .atomic)
+                applyDiskBudgetAfterWrite()
+            } catch {
+                Logger.artwork.warning("Could not cache campaign artwork: \(error.localizedDescription)")
+            }
         }
-        memory.setObject(image, forKey: key as NSString)
+        storeInMemory(image, key: key, cost: data.count)
         return image
+    }
+
+    private func applyDiskBudgetIfNeeded() {
+        guard !hasAppliedDiskBudget else { return }
+        hasAppliedDiskBudget = true
+        applyDiskBudget()
+    }
+
+    private func applyDiskBudgetAfterWrite() {
+        writesSinceBudgetCheck += 1
+        guard writesSinceBudgetCheck >= budgetCheckWriteInterval else { return }
+        applyDiskBudget()
+    }
+
+    private func applyDiskBudget() {
+        writesSinceBudgetCheck = 0
+        guard let cacheDirectory else { return }
+        let result = DiskCacheBudget.prune(
+            directory: cacheDirectory,
+            maximumBytes: diskByteLimit,
+            maximumFileCount: diskFileLimit
+        )
+        if result.removedFiles > 0 {
+            Logger.artwork.info("Pruned \(result.removedFiles) campaign artwork cache file(s), freeing \(result.removedBytes) bytes")
+        }
+    }
+
+    private func storeInMemory(_ image: NSImage, key: String, cost: Int? = nil) {
+        let estimatedCost = image.representations.first.map {
+            max(1, $0.pixelsWide * $0.pixelsHigh * 4)
+        } ?? 1
+        memory.setObject(
+            image,
+            forKey: key as NSString,
+            cost: max(cost ?? 0, estimatedCost)
+        )
     }
 
     private static func key(for url: URL) -> String {
@@ -433,12 +499,15 @@ struct CampaignArtworkIcon: View {
 actor CampaignArtworkTintSampler {
     static let shared = CampaignArtworkTintSampler()
 
-    private let urlSession: URLSession
+    private static let ciContext = CIContext()
+    private let artworkCache: CampaignArtworkCache
     private var cache: [URL: ArtworkRGB] = [:]
+    private var cacheOrder: [URL] = []
     private var inFlight: [URL: Task<ArtworkRGB?, Never>] = [:]
+    private let cacheLimit = 256
 
-    init(urlSession: URLSession = .shared) {
-        self.urlSession = urlSession
+    init(artworkCache: CampaignArtworkCache = .shared) {
+        self.artworkCache = artworkCache
     }
 
     func tintColor(from artworkURL: URL?) async -> Color? {
@@ -452,11 +521,10 @@ actor CampaignArtworkTintSampler {
             return await existingTask.value?.color
         }
 
-        let task = Task<ArtworkRGB?, Never> { [urlSession] in
-            await Self.fetchAndExtractTint(
-                from: artworkURL.highResolutionArtworkURL,
-                urlSession: urlSession
-            )
+        let resolvedURL = artworkURL.highResolutionArtworkURL
+        let task = Task<ArtworkRGB?, Never> { [artworkCache] in
+            guard let image = await artworkCache.image(for: resolvedURL) else { return nil }
+            return Self.extractDominantColor(from: image)?.softenedForGlass
         }
         inFlight[artworkURL] = task
 
@@ -465,29 +533,19 @@ actor CampaignArtworkTintSampler {
 
         if let extracted {
             cache[artworkURL] = extracted
+            cacheOrder.append(artworkURL)
+            if cacheOrder.count > cacheLimit {
+                let evicted = cacheOrder.removeFirst()
+                cache.removeValue(forKey: evicted)
+            }
         }
 
         return extracted?.color
     }
 
-    private static func fetchAndExtractTint(
-        from url: URL,
-        urlSession: URLSession
-    ) async -> ArtworkRGB? {
-        do {
-            let (data, response) = try await urlSession.data(from: url)
-            if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
-                return nil
-            }
-
-            return extractDominantColor(from: data)?.softenedForGlass
-        } catch {
-            return nil
-        }
-    }
-
-    private static func extractDominantColor(from data: Data) -> ArtworkRGB? {
-        guard let ciImage = CIImage(data: data) else { return nil }
+    private static func extractDominantColor(from image: NSImage) -> ArtworkRGB? {
+        guard let data = image.tiffRepresentation,
+              let ciImage = CIImage(data: data) else { return nil }
         let extent = ciImage.extent
         guard !extent.isEmpty else { return nil }
 
@@ -496,9 +554,8 @@ actor CampaignArtworkTintSampler {
         filter.setValue(CIVector(cgRect: extent), forKey: kCIInputExtentKey)
         guard let outputImage = filter.outputImage else { return nil }
 
-        let context = CIContext()
         var pixel = [UInt8](repeating: 0, count: 4)
-        context.render(
+        ciContext.render(
             outputImage,
             toBitmap: &pixel,
             rowBytes: 4,

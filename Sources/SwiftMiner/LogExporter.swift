@@ -430,6 +430,17 @@ enum LogExporter {
             }
         }
 
+        if let outbox = performance.eventOutbox {
+            out += "Event outbox: pending=\(outbox.pendingCount) delivering=\(outbox.deliveringCount) retryable=\(outbox.retryableCount) terminal=\(outbox.terminalCount) sent=\(outbox.sentCount)"
+            if let oldestAge = outbox.oldestUndeliveredAgeSeconds {
+                out += " oldestUndelivered=\(formatDuration(oldestAge))"
+            }
+            out += " observed=\(formatter.string(from: outbox.observedAt))\n"
+            out += "  deliveries: attempts=\(outbox.deliveryAttemptCount) ok=\(outbox.successfulDeliveryCount) retryable=\(outbox.retryableFailureCount) terminal=\(outbox.terminalFailureCount)"
+            out += " networkAvg=\(formatPerfDuration(outbox.averageNetworkSeconds)) networkMax=\(formatPerfDuration(outbox.maxNetworkSeconds))"
+            out += " endToEndAvg=\(formatPerfDuration(outbox.averageEndToEndSeconds)) endToEndMax=\(formatPerfDuration(outbox.maxEndToEndSeconds))\n"
+        }
+
         if performance.miningCycles.isEmpty {
             out += "Mining cycles: none recorded\n"
         } else {

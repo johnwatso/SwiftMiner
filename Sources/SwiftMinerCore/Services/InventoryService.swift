@@ -24,6 +24,13 @@ public struct InventorySnapshot: Codable, Sendable, Equatable {
     public static func empty(accountId: String) -> InventorySnapshot {
         InventorySnapshot(accountId: accountId, benefitIDs: [], progress: [], discoveredCampaigns: [], lastUpdated: .distantPast)
     }
+
+    func isPersistenceEquivalent(to other: InventorySnapshot) -> Bool {
+        accountId == other.accountId
+            && benefitIDs == other.benefitIDs
+            && progress.persistenceElementsEqual(other.progress)
+            && discoveredCampaigns.persistenceElementsEqual(other.discoveredCampaigns)
+    }
 }
 
 public enum InventorySnapshotSource: String, Sendable, Equatable {
@@ -51,7 +58,9 @@ public actor InventoryService {
     private let apiClient: TwitchAPIClient
     private var accountId: String?
     private var snapshotCache: InventorySnapshot?
+    private var lastPersistenceAt: Date?
     private let cacheDuration: TimeInterval = 60
+    private let persistenceRefreshInterval: TimeInterval = 30 * 60
 
     public init(apiClient: TwitchAPIClient) {
         self.apiClient = apiClient
@@ -62,6 +71,7 @@ public actor InventoryService {
 
         if snapshotCache?.accountId != accountId {
             snapshotCache = InventoryDiskCache.load(accountId: accountId)
+            lastPersistenceAt = snapshotCache?.lastUpdated
         }
     }
 
@@ -95,8 +105,15 @@ public actor InventoryService {
                 progress: result.progress,
                 discoveredCampaigns: result.discoveredCampaigns
             )
+            let contentChanged = !(snapshotCache?.isPersistenceEquivalent(to: snapshot) ?? false)
             snapshotCache = snapshot
-            InventoryDiskCache.save(snapshot)
+            let needsFreshTimestamp = lastPersistenceAt.map {
+                snapshot.lastUpdated.timeIntervalSince($0) >= persistenceRefreshInterval
+            } ?? true
+            if contentChanged || needsFreshTimestamp {
+                InventoryDiskCache.save(snapshot)
+                lastPersistenceAt = snapshot.lastUpdated
+            }
             return InventoryFetchResult(snapshot: snapshot, source: .network)
         } catch {
             if forceRefresh {
@@ -135,6 +152,7 @@ public actor InventoryService {
         }
 
         snapshotCache = nil
+        lastPersistenceAt = nil
         InventoryDiskCache.clear(accountId: accountId)
     }
 }

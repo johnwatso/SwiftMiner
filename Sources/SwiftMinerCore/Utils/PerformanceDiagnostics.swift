@@ -103,12 +103,37 @@ public actor PerformanceDiagnostics {
         public let slowCycles: [MiningCycleTiming]
     }
 
+    public enum EventOutboxDeliveryOutcome: String, Sendable, Equatable {
+        case succeeded
+        case retryableFailure
+        case terminalFailure
+    }
+
+    public struct EventOutboxSummary: Sendable, Equatable {
+        public let observedAt: Date
+        public let pendingCount: Int
+        public let deliveringCount: Int
+        public let retryableCount: Int
+        public let terminalCount: Int
+        public let sentCount: Int
+        public let oldestUndeliveredAgeSeconds: TimeInterval?
+        public let deliveryAttemptCount: Int
+        public let successfulDeliveryCount: Int
+        public let retryableFailureCount: Int
+        public let terminalFailureCount: Int
+        public let averageNetworkSeconds: TimeInterval
+        public let maxNetworkSeconds: TimeInterval
+        public let averageEndToEndSeconds: TimeInterval
+        public let maxEndToEndSeconds: TimeInterval
+    }
+
     public struct Snapshot: Sendable, Equatable {
         public let generatedAt: Date
         public let requestOperations: [RequestOperation]
         public let slowRequests: [RecentRequest]
         public let miningCycles: [MiningCycleSummary]
         public let transportHosts: [TransportHost]
+        public let eventOutbox: EventOutboxSummary?
     }
 
     private struct RequestAccumulator {
@@ -147,10 +172,29 @@ public actor PerformanceDiagnostics {
         var lastRecordedOrder: UInt64 = 0
     }
 
+    private struct EventOutboxAccumulator {
+        var observedAt: Date?
+        var pendingCount = 0
+        var deliveringCount = 0
+        var retryableCount = 0
+        var terminalCount = 0
+        var sentCount = 0
+        var oldestUndeliveredAgeSeconds: TimeInterval?
+        var deliveryAttemptCount = 0
+        var successfulDeliveryCount = 0
+        var retryableFailureCount = 0
+        var terminalFailureCount = 0
+        var totalNetworkSeconds: TimeInterval = 0
+        var maxNetworkSeconds: TimeInterval = 0
+        var totalEndToEndSeconds: TimeInterval = 0
+        var maxEndToEndSeconds: TimeInterval = 0
+    }
+
     private var requestsByOperation: [String: RequestAccumulator] = [:]
     private var slowRequests: [RecentRequest] = []
     private var miningByMiner: [String: MiningAccumulator] = [:]
     private var transportByHost: [String: TransportAccumulator] = [:]
+    private var eventOutbox = EventOutboxAccumulator()
     private var transportRecordOrder: UInt64 = 0
 
     private let maxLatencySamplesPerOperation = 200
@@ -168,6 +212,7 @@ public actor PerformanceDiagnostics {
         slowRequests.removeAll(keepingCapacity: true)
         miningByMiner.removeAll(keepingCapacity: true)
         transportByHost.removeAll(keepingCapacity: true)
+        eventOutbox = EventOutboxAccumulator()
         transportRecordOrder = 0
     }
 
@@ -291,6 +336,49 @@ public actor PerformanceDiagnostics {
         miningByMiner[key] = accumulator
     }
 
+    public func recordEventOutboxQueue(
+        pendingCount: Int,
+        deliveringCount: Int,
+        retryableCount: Int,
+        terminalCount: Int,
+        sentCount: Int,
+        oldestUndeliveredAt: Date?,
+        observedAt: Date = Date()
+    ) {
+        eventOutbox.observedAt = observedAt
+        eventOutbox.pendingCount = max(0, pendingCount)
+        eventOutbox.deliveringCount = max(0, deliveringCount)
+        eventOutbox.retryableCount = max(0, retryableCount)
+        eventOutbox.terminalCount = max(0, terminalCount)
+        eventOutbox.sentCount = max(0, sentCount)
+        eventOutbox.oldestUndeliveredAgeSeconds = oldestUndeliveredAt.map {
+            max(0, observedAt.timeIntervalSince($0))
+        }
+    }
+
+    public func recordEventOutboxDelivery(
+        networkSeconds: TimeInterval,
+        queuedAt: Date,
+        outcome: EventOutboxDeliveryOutcome,
+        finishedAt: Date = Date()
+    ) {
+        let networkDuration = max(0, networkSeconds)
+        let endToEndDuration = max(0, finishedAt.timeIntervalSince(queuedAt))
+        eventOutbox.deliveryAttemptCount += 1
+        switch outcome {
+        case .succeeded:
+            eventOutbox.successfulDeliveryCount += 1
+        case .retryableFailure:
+            eventOutbox.retryableFailureCount += 1
+        case .terminalFailure:
+            eventOutbox.terminalFailureCount += 1
+        }
+        eventOutbox.totalNetworkSeconds += networkDuration
+        eventOutbox.maxNetworkSeconds = max(eventOutbox.maxNetworkSeconds, networkDuration)
+        eventOutbox.totalEndToEndSeconds += endToEndDuration
+        eventOutbox.maxEndToEndSeconds = max(eventOutbox.maxEndToEndSeconds, endToEndDuration)
+    }
+
     public func totalRequestCount() -> Int {
         requestsByOperation.values.reduce(0) { $0 + $1.requestCount }
     }
@@ -362,12 +450,37 @@ public actor PerformanceDiagnostics {
             )
         }.sorted { $0.host < $1.host }
 
+        let outboxSummary = eventOutbox.observedAt.map { observedAt in
+            EventOutboxSummary(
+                observedAt: observedAt,
+                pendingCount: eventOutbox.pendingCount,
+                deliveringCount: eventOutbox.deliveringCount,
+                retryableCount: eventOutbox.retryableCount,
+                terminalCount: eventOutbox.terminalCount,
+                sentCount: eventOutbox.sentCount,
+                oldestUndeliveredAgeSeconds: eventOutbox.oldestUndeliveredAgeSeconds,
+                deliveryAttemptCount: eventOutbox.deliveryAttemptCount,
+                successfulDeliveryCount: eventOutbox.successfulDeliveryCount,
+                retryableFailureCount: eventOutbox.retryableFailureCount,
+                terminalFailureCount: eventOutbox.terminalFailureCount,
+                averageNetworkSeconds: eventOutbox.deliveryAttemptCount == 0
+                    ? 0
+                    : eventOutbox.totalNetworkSeconds / Double(eventOutbox.deliveryAttemptCount),
+                maxNetworkSeconds: eventOutbox.maxNetworkSeconds,
+                averageEndToEndSeconds: eventOutbox.deliveryAttemptCount == 0
+                    ? 0
+                    : eventOutbox.totalEndToEndSeconds / Double(eventOutbox.deliveryAttemptCount),
+                maxEndToEndSeconds: eventOutbox.maxEndToEndSeconds
+            )
+        }
+
         return Snapshot(
             generatedAt: Date(),
             requestOperations: requestOperations,
             slowRequests: slowRequests,
             miningCycles: miningCycles,
-            transportHosts: transportHosts
+            transportHosts: transportHosts,
+            eventOutbox: outboxSummary
         )
     }
 

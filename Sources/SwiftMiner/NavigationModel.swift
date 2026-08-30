@@ -969,7 +969,7 @@ public final class NavigationModel {
         }
         let settings = Settings.shared
         minerManager.updateClientId(settings.resolvedClientId)
-        minerManager.onMinersChanged = { [weak self] in
+        minerManager.onMinerIdentitiesChanged = { [weak self] in
             Task { [weak self] in
                 await self?.syncMinersToSQLite()
             }
@@ -1075,7 +1075,6 @@ public final class NavigationModel {
             await coordinator.refreshAll()
             guard !Task.isCancelled else { return }
 
-            _ = await coordinator.allCampaigns()
             NotificationCenter.default.post(name: .dropsCampaignsDidUpdate, object: coordinator)
         }
         return true

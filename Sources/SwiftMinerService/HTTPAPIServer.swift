@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import SwiftMinerCore
 
 // MARK: - HTTP Types
 
@@ -84,6 +85,121 @@ public struct HTTPResponse: Sendable {
     public static let methodNotAllowed = HTTPResponse.error(code: "method_not_allowed", message: "Method not allowed.", statusCode: 405)
     public static let unauthorized = HTTPResponse.error(code: "unauthorized", message: "Invalid or missing Authorization header.", statusCode: 401)
     public static let badRequest = HTTPResponse.error(code: "bad_request", message: "Bad request.", statusCode: 400)
+    public static let payloadTooLarge = HTTPResponse.error(code: "payload_too_large", message: "Request body is too large.", statusCode: 413)
+    public static let requestHeaderFieldsTooLarge = HTTPResponse.error(code: "headers_too_large", message: "Request headers are too large.", statusCode: 431)
+}
+
+// MARK: - Bounded request framing
+
+enum HTTPRequestFramingError: Error, Equatable {
+    case headersTooLarge
+    case malformedHeaders
+    case invalidContentLength
+    case bodyTooLarge
+}
+
+struct HTTPRequestFrame: Equatable {
+    let requestLine: String?
+    let headers: [String: String]
+    let body: Data
+}
+
+/// Incrementally frames one HTTP/1.1 request while keeping unauthenticated input bounded.
+/// The dashboard can listen on LAN interfaces, so limits are enforced before route auth runs.
+struct HTTPRequestFramer {
+    static let defaultMaximumHeaderBytes = 64 * 1024
+    static let defaultMaximumBodyBytes = 1024 * 1024
+
+    private let maximumHeaderBytes: Int
+    private let maximumBodyBytes: Int
+    private var buffer = Data()
+    private var bodyStart: Int?
+    private var expectedBodyBytes: Int?
+    private var requestLine: String?
+    private var headers: [String: String] = [:]
+
+    init(
+        maximumHeaderBytes: Int = Self.defaultMaximumHeaderBytes,
+        maximumBodyBytes: Int = Self.defaultMaximumBodyBytes
+    ) {
+        self.maximumHeaderBytes = max(1, maximumHeaderBytes)
+        self.maximumBodyBytes = max(0, maximumBodyBytes)
+    }
+
+    mutating func append(_ data: Data) throws -> HTTPRequestFrame? {
+        buffer.append(data)
+
+        if bodyStart == nil {
+            guard let headerRange = buffer.range(of: Data("\r\n\r\n".utf8)) else {
+                if buffer.count > maximumHeaderBytes {
+                    throw HTTPRequestFramingError.headersTooLarge
+                }
+                return nil
+            }
+
+            guard headerRange.upperBound <= maximumHeaderBytes else {
+                throw HTTPRequestFramingError.headersTooLarge
+            }
+            guard let headerString = String(
+                data: buffer.subdata(in: 0..<headerRange.upperBound),
+                encoding: .utf8
+            ) else {
+                throw HTTPRequestFramingError.malformedHeaders
+            }
+
+            let lines = headerString.split(separator: "\r\n", omittingEmptySubsequences: false)
+            requestLine = lines.first.map(String.init)
+            for line in lines.dropFirst() where !line.isEmpty {
+                let text = String(line)
+                guard let colonIndex = text.firstIndex(of: ":") else {
+                    throw HTTPRequestFramingError.malformedHeaders
+                }
+                let key = String(text[..<colonIndex]).trimmingCharacters(in: .whitespaces).lowercased()
+                let value = String(text[text.index(after: colonIndex)...]).trimmingCharacters(in: .whitespaces)
+                guard !key.isEmpty else {
+                    throw HTTPRequestFramingError.malformedHeaders
+                }
+                if key == "content-length", headers[key] != nil {
+                    throw HTTPRequestFramingError.invalidContentLength
+                }
+                headers[key] = value
+            }
+
+            // Chunked request bodies are intentionally unsupported by this small
+            // dashboard server. Reject them instead of interpreting the request as
+            // bodyless and leaving ambiguous bytes for a proxy or later parser.
+            guard headers["transfer-encoding"] == nil else {
+                throw HTTPRequestFramingError.malformedHeaders
+            }
+
+            let contentLength: Int
+            if let rawLength = headers["content-length"] {
+                guard let parsed = Int(rawLength), parsed >= 0 else {
+                    throw HTTPRequestFramingError.invalidContentLength
+                }
+                contentLength = parsed
+            } else {
+                contentLength = 0
+            }
+            guard contentLength <= maximumBodyBytes else {
+                throw HTTPRequestFramingError.bodyTooLarge
+            }
+
+            bodyStart = headerRange.upperBound
+            expectedBodyBytes = contentLength
+        }
+
+        guard let bodyStart, let expectedBodyBytes else { return nil }
+        let receivedBodyBytes = buffer.count - bodyStart
+        guard receivedBodyBytes >= expectedBodyBytes else { return nil }
+
+        let bodyEnd = bodyStart + expectedBodyBytes
+        return HTTPRequestFrame(
+            requestLine: requestLine,
+            headers: headers,
+            body: buffer.subdata(in: bodyStart..<bodyEnd)
+        )
+    }
 }
 
 // MARK: - Router
@@ -141,6 +257,7 @@ public actor HTTPRouter {
 // MARK: - Server
 
 public actor HTTPAPIServer {
+    private static let requestReadTimeout: TimeInterval = 15
     private let port: UInt16
     private let router: HTTPRouter
     private var listener: NWListener?
@@ -241,85 +358,64 @@ public actor HTTPAPIServer {
     }
 
     private func handleConnection(_ connection: NWConnection) async {
-        var buffer = Data()
-        var headersParsed = false
-        var contentLength = 0
-        var headerData = Data()
-        var requestLine: String?
-        var headers: [String: String] = [:]
+        var framer = HTTPRequestFramer()
 
         while true {
             do {
-                let data = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, Error>) in
-                    connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { data, _, isComplete, error in
-                        if let error = error {
-                            continuation.resume(throwing: error)
-                            return
-                        }
-                        if isComplete {
-                            continuation.resume(returning: data ?? Data())
-                            return
-                        }
-                        continuation.resume(returning: data ?? Data())
-                    }
+                let data = try await withRuntimeTimeout(
+                    operationName: "HTTP request read",
+                    seconds: Self.requestReadTimeout
+                ) {
+                    try await Self.receiveChunk(from: connection)
                 }
-
-                buffer.append(data)
-
-                if !headersParsed {
-                    if let headerRange = buffer.range(of: Data("\r\n\r\n".utf8)) {
-                        headerData = buffer.subdata(in: 0..<headerRange.upperBound)
-                        let bodyStart = headerRange.upperBound
-                        let headerString = String(data: headerData, encoding: .utf8) ?? ""
-                        let lines = headerString.split(separator: "\r\n", omittingEmptySubsequences: false)
-
-                        if let first = lines.first {
-                            requestLine = String(first)
-                        }
-
-                        for line in lines.dropFirst() {
-                            let trimmed = String(line)
-                            if let colonIndex = trimmed.firstIndex(of: ":") {
-                                let key = String(trimmed[..<colonIndex]).trimmingCharacters(in: .whitespaces).lowercased()
-                                let value = String(trimmed[trimmed.index(after: colonIndex)...]).trimmingCharacters(in: .whitespaces)
-                                headers[key] = value
-                            }
-                        }
-
-                        if let cl = headers["content-length"], let length = Int(cl) {
-                            contentLength = length
-                        }
-
-                        headersParsed = true
-
-                        let bodySoFar = buffer.count - bodyStart
-                        if bodySoFar >= contentLength {
-                            let bodyEnd = bodyStart + contentLength
-                            let body = buffer.subdata(in: bodyStart..<bodyEnd)
-                            await processRequest(connection: connection, requestLine: requestLine, headers: headers, body: body)
-                            return
-                        }
-                    }
-                } else {
-                    let bodyStart = headerData.count
-                    let bodySoFar = buffer.count - bodyStart
-                    if bodySoFar >= contentLength {
-                        let bodyEnd = bodyStart + contentLength
-                        let body = buffer.subdata(in: bodyStart..<bodyEnd)
-                        await processRequest(connection: connection, requestLine: requestLine, headers: headers, body: body)
-                        return
-                    }
+                if let frame = try framer.append(data) {
+                    await processRequest(
+                        connection: connection,
+                        requestLine: frame.requestLine,
+                        headers: frame.headers,
+                        body: frame.body
+                    )
+                    return
                 }
 
                 if data.isEmpty {
                     break
                 }
+            } catch HTTPRequestFramingError.headersTooLarge {
+                await sendResponse(connection, .requestHeaderFieldsTooLarge)
+                connection.cancel()
+                return
+            } catch HTTPRequestFramingError.bodyTooLarge {
+                await sendResponse(connection, .payloadTooLarge)
+                connection.cancel()
+                return
+            } catch HTTPRequestFramingError.invalidContentLength,
+                    HTTPRequestFramingError.malformedHeaders {
+                await sendResponse(connection, .badRequest)
+                connection.cancel()
+                return
             } catch {
                 break
             }
         }
 
         connection.cancel()
+    }
+
+    private nonisolated static func receiveChunk(from connection: NWConnection) async throws -> Data {
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, Error>) in
+                connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { data, _, _, error in
+                    if let error {
+                        continuation.resume(throwing: error)
+                    } else {
+                        continuation.resume(returning: data ?? Data())
+                    }
+                }
+            }
+        } onCancel: {
+            connection.cancel()
+        }
     }
 
     private func processRequest(connection: NWConnection, requestLine: String?, headers: [String: String], body: Data) async {
@@ -414,7 +510,9 @@ private enum HTTPStatusText {
         case 404: return "Not Found"
         case 405: return "Method Not Allowed"
         case 409: return "Conflict"
+        case 413: return "Payload Too Large"
         case 429: return "Too Many Requests"
+        case 431: return "Request Header Fields Too Large"
         case 500: return "Internal Server Error"
         default: return "Unknown"
         }

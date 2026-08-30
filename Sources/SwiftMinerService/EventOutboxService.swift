@@ -57,7 +57,8 @@ public actor EventOutboxService {
             payload: #"{"message": "Hello from SwiftMiner!", "timestamp": "\#(Date().formatted(.iso8601))"}"#,
             retryCount: 0,
             idempotencyKey: nil,
-            lastAttempt: nil
+            lastAttempt: nil,
+            createdAt: Date()
         )
         let outcome = await attemptDelivery(event: testEvent, to: webhookURL)
         return outcome == .success
@@ -73,12 +74,22 @@ public actor EventOutboxService {
     }
 
     private func pollAndDeliver() async {
-        guard let webhookURL else { return }
+        guard let webhookURL else {
+            await recordQueueObservation()
+            return
+        }
         let events = await fetchDeliverableEvents()
         for event in events {
             guard !Task.isCancelled else { return }
             await deliver(event: event, to: webhookURL)
         }
+        await recordQueueObservation()
+    }
+
+    /// Performs one queue observation and delivery pass. Kept internal for deterministic
+    /// integration tests and for callers that need an immediate flush after configuration.
+    func pollOnce() async {
+        await pollAndDeliver()
     }
 
     // MARK: - Fetch
@@ -90,7 +101,7 @@ public actor EventOutboxService {
 
                 // Pending events — deliver immediately
                 let pendingSql = """
-                SELECT id, event_type, payload, retry_count, idempotency_key, last_attempt
+                SELECT id, event_type, payload, retry_count, idempotency_key, last_attempt, created_at
                 FROM event_outbox
                 WHERE status = 'pending'
                 ORDER BY created_at ASC
@@ -112,7 +123,7 @@ public actor EventOutboxService {
 
                 // Retryable events — include all, filter by backoff window in Swift
                 let retryableSql = """
-                SELECT id, event_type, payload, retry_count, idempotency_key, last_attempt
+                SELECT id, event_type, payload, retry_count, idempotency_key, last_attempt, created_at
                 FROM event_outbox
                 WHERE status = 'failed_retryable'
                 ORDER BY last_attempt ASC
@@ -135,7 +146,7 @@ public actor EventOutboxService {
                 }
 
                 let staleDeliveringSql = """
-                SELECT id, event_type, payload, retry_count, idempotency_key, last_attempt
+                SELECT id, event_type, payload, retry_count, idempotency_key, last_attempt, created_at
                 FROM event_outbox
                 WHERE status = 'delivering'
                   AND (last_attempt IS NULL OR last_attempt <= datetime('now', '-5 minutes'))
@@ -166,12 +177,94 @@ public actor EventOutboxService {
         }
     }
 
+    private func fetchQueueObservation() async -> OutboxQueueObservation? {
+        do {
+            return try await manager.query { db in
+                let sql = """
+                SELECT status, COUNT(*), MIN(created_at)
+                FROM event_outbox
+                GROUP BY status;
+                """
+                var stmt: OpaquePointer?
+                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                    throw eventOutboxSQLiteError(db, operation: "prepare queue observation")
+                }
+                defer { sqlite3_finalize(stmt) }
+
+                var observation = OutboxQueueObservation()
+                var step = sqlite3_step(stmt)
+                while step == SQLITE_ROW {
+                    guard let statusPointer = sqlite3_column_text(stmt, 0) else {
+                        step = sqlite3_step(stmt)
+                        continue
+                    }
+                    let status = String(cString: statusPointer)
+                    let count = Int(sqlite3_column_int64(stmt, 1))
+                    let oldest = sqlite3_column_text(stmt, 2).flatMap {
+                        parseEventOutboxSQLiteDate(String(cString: $0))
+                    }
+
+                    switch status {
+                    case "pending":
+                        observation.pendingCount = count
+                        observation.includeUndelivered(oldest)
+                    case "delivering":
+                        observation.deliveringCount = count
+                        observation.includeUndelivered(oldest)
+                    case "failed_retryable":
+                        observation.retryableCount = count
+                        observation.includeUndelivered(oldest)
+                    case "failed_terminal":
+                        observation.terminalCount = count
+                    case "sent":
+                        observation.sentCount = count
+                    default:
+                        break
+                    }
+                    step = sqlite3_step(stmt)
+                }
+                guard step == SQLITE_DONE else {
+                    throw eventOutboxSQLiteError(db, operation: "read queue observation")
+                }
+                return observation
+            }
+        } catch {
+            Logger.storage.error("Failed to inspect the event outbox: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    private func recordQueueObservation() async {
+        guard let observation = await fetchQueueObservation() else { return }
+        await PerformanceDiagnostics.shared.recordEventOutboxQueue(
+            pendingCount: observation.pendingCount,
+            deliveringCount: observation.deliveringCount,
+            retryableCount: observation.retryableCount,
+            terminalCount: observation.terminalCount,
+            sentCount: observation.sentCount,
+            oldestUndeliveredAt: observation.oldestUndeliveredAt
+        )
+    }
+
     // MARK: - Delivery
 
     private func deliver(event: OutboxRow, to webhookURL: URL) async {
         await updateStatus(id: event.id, status: "delivering")
 
+        let deliveryStartedAt = Date()
         let outcome = await attemptDelivery(event: event, to: webhookURL)
+        let deliveryFinishedAt = Date()
+        let diagnosticOutcome: PerformanceDiagnostics.EventOutboxDeliveryOutcome = switch outcome {
+        case .success: .succeeded
+        case .retryable: .retryableFailure
+        case .terminal: .terminalFailure
+        }
+        await PerformanceDiagnostics.shared.recordEventOutboxDelivery(
+            networkSeconds: deliveryFinishedAt.timeIntervalSince(deliveryStartedAt),
+            queuedAt: event.createdAt,
+            outcome: diagnosticOutcome,
+            finishedAt: deliveryFinishedAt
+        )
         let newRetryCount = event.retryCount + 1
 
         switch outcome {
@@ -276,14 +369,24 @@ private struct OutboxRow {
     let retryCount: Int
     let idempotencyKey: String?
     let lastAttempt: Date?
+    let createdAt: Date
 
-    init(id: String, eventType: String, payload: String, retryCount: Int, idempotencyKey: String?, lastAttempt: Date?) {
+    init(
+        id: String,
+        eventType: String,
+        payload: String,
+        retryCount: Int,
+        idempotencyKey: String?,
+        lastAttempt: Date?,
+        createdAt: Date
+    ) {
         self.id = id
         self.eventType = eventType
         self.payload = payload
         self.retryCount = retryCount
         self.idempotencyKey = idempotencyKey
         self.lastAttempt = lastAttempt
+        self.createdAt = createdAt
     }
 
     init?(statement: OpaquePointer?) {
@@ -298,12 +401,15 @@ private struct OutboxRow {
         idempotencyKey = sqlite3_column_text(stmt, 4).map { String(cString: $0) }
 
         if let lastAttemptPtr = sqlite3_column_text(stmt, 5) {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-            formatter.timeZone = TimeZone(secondsFromGMT: 0)
-            lastAttempt = formatter.date(from: String(cString: lastAttemptPtr))
+            lastAttempt = parseEventOutboxSQLiteDate(String(cString: lastAttemptPtr))
         } else {
             lastAttempt = nil
+        }
+        if let createdAtPtr = sqlite3_column_text(stmt, 6),
+           let parsed = parseEventOutboxSQLiteDate(String(cString: createdAtPtr)) {
+            createdAt = parsed
+        } else {
+            createdAt = Date()
         }
     }
 
@@ -313,6 +419,31 @@ private struct OutboxRow {
         let interval = EventOutboxService.backoffIntervals[max(0, index)]
         return Date().timeIntervalSince(lastAttempt) >= interval
     }
+}
+
+private struct OutboxQueueObservation: Sendable {
+    var pendingCount = 0
+    var deliveringCount = 0
+    var retryableCount = 0
+    var terminalCount = 0
+    var sentCount = 0
+    var oldestUndeliveredAt: Date?
+
+    mutating func includeUndelivered(_ date: Date?) {
+        guard let date else { return }
+        oldestUndeliveredAt = oldestUndeliveredAt.map { min($0, date) } ?? date
+    }
+}
+
+/// Parses SQLite's `CURRENT_TIMESTAMP` / `datetime()` text form, which is always UTC and
+/// Gregorian. The POSIX locale keeps parsing independent of the user's region calendar.
+private func parseEventOutboxSQLiteDate(_ value: String) -> Date? {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+    formatter.timeZone = TimeZone(secondsFromGMT: 0)
+    formatter.calendar = Calendar(identifier: .gregorian)
+    return formatter.date(from: value)
 }
 
 private let SQLITE_TRANSIENT_LOCAL = unsafeBitCast(-1, to: sqlite3_destructor_type.self)

@@ -201,6 +201,21 @@ final class LogExporterTests: XCTestCase {
                 networkProtocol: "h2"
             )
         )
+        await PerformanceDiagnostics.shared.recordEventOutboxQueue(
+            pendingCount: 3,
+            deliveringCount: 1,
+            retryableCount: 2,
+            terminalCount: 4,
+            sentCount: 20,
+            oldestUndeliveredAt: now.addingTimeInterval(-120),
+            observedAt: now
+        )
+        await PerformanceDiagnostics.shared.recordEventOutboxDelivery(
+            networkSeconds: 0.25,
+            queuedAt: now.addingTimeInterval(-120),
+            outcome: .succeeded,
+            finishedAt: now
+        )
         let performance = await PerformanceDiagnostics.shared.snapshot()
         let usage = ResourceUsageMonitor.Diagnostics(
             isRunning: true,
@@ -246,6 +261,8 @@ final class LogExporterTests: XCTestCase {
         XCTAssertTrue(report.contains("[Gabe] cycles=1 avg=2.00s p95=2.00s max=2.00s"))
         XCTAssertTrue(report.contains("outcome=watching total=2.00s campaigns=800ms claims=100ms channels=900ms watchStart=200ms candidates=3"))
         XCTAssertTrue(report.contains("gql.twitch.tv: count=1 reused=1 taskAvg=420ms dnsAvg=20ms connectAvg=60ms tlsAvg=30ms responseAvg=400ms protocols=h2"))
+        XCTAssertTrue(report.contains("Event outbox: pending=3 delivering=1 retryable=2 terminal=4 sent=20 oldestUndelivered=2m0s"))
+        XCTAssertTrue(report.contains("deliveries: attempts=1 ok=1 retryable=0 terminal=0 networkAvg=250ms networkMax=250ms endToEndAvg=120.00s endToEndMax=120.00s"))
 
         await PerformanceDiagnostics.shared.reset()
     }

@@ -71,6 +71,8 @@ public final class AppModel {
     private let engine: MinerEngine
     private let clientId: String
     private weak var minerManager: MinerManager?
+    private var badgeRefreshTask: Task<Void, Never>?
+    private var lastAppliedBadgeCount: Int?
 
     // MARK: - Init
 
@@ -100,18 +102,24 @@ public final class AppModel {
             await manager.updateAntiStallRecovery(enabled: Settings.shared.antiStallRecoveryEnabled)
             await manager.updateFailoverStreamers(Settings.shared.gameFailoverStreamers)
 
-            // Keep app-level state (auth + badge) in sync whenever miners or
-            // account-link warning preferences change. NavigationModel also
-            // observes this callback to mirror newly added miners into SQLite
-            // for the web dashboard, so preserve that observer rather than
-            // replacing it.
+            // Authentication changes only when accounts are added or removed.
+            let existingOnCollectionChanged = manager.onMinerCollectionChanged
+            manager.onMinerCollectionChanged = { [weak self] in
+                existingOnCollectionChanged?()
+                Task { @MainActor [weak self] in
+                    guard let self,
+                          let manager = self.minerManager else { return }
+                    self.reconcileManagerCollection(manager)
+                }
+            }
+
+            // Status/progress callbacks can arrive in bursts. Coalesce badge work
+            // so one log burst does not repeatedly scan campaigns and touch Dock state.
             let existingOnMinersChanged = manager.onMinersChanged
             manager.onMinersChanged = { [weak self] in
                 existingOnMinersChanged?()
                 Task { @MainActor [weak self] in
-                    guard let self,
-                          let manager = self.minerManager else { return }
-                    self.reconcileManagerState(manager)
+                    self?.scheduleBadgeRefresh()
                 }
             }
             return
@@ -315,22 +323,45 @@ public final class AppModel {
     }
 
     private func reconcileManagerState(_ manager: MinerManager) {
-        isAuthenticated = !manager.miners.isEmpty
+        reconcileManagerCollection(manager)
         refreshNotificationBadge()
+    }
+
+    private func reconcileManagerCollection(_ manager: MinerManager) {
+        let authenticated = !manager.miners.isEmpty
+        if isAuthenticated != authenticated {
+            isAuthenticated = authenticated
+        }
+    }
+
+    private func scheduleBadgeRefresh() {
+        badgeRefreshTask?.cancel()
+        badgeRefreshTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(100))
+            guard !Task.isCancelled, let self else { return }
+            self.badgeRefreshTask = nil
+            self.refreshNotificationBadge()
+        }
     }
 
     public func refreshNotificationBadge() {
         guard let manager = minerManager else {
-            setDockBadgeCount(0)
+            applyDockBadgeCountIfChanged(0)
             return
         }
 
-        setDockBadgeCount(
+        applyDockBadgeCountIfChanged(
             MinerAttention.attentionCount(
                 miners: manager.miners,
                 settings: Settings.shared
             )
         )
+    }
+
+    private func applyDockBadgeCountIfChanged(_ count: Int) {
+        guard lastAppliedBadgeCount != count else { return }
+        lastAppliedBadgeCount = count
+        setDockBadgeCount(count)
     }
 
     private func setDockBadgeCount(_ count: Int) {

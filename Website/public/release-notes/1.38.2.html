@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SwiftMiner 1.38.2 - Release Notes</title>
-  <meta name="description" content="Release notes for SwiftMiner 1.38.2: recovery no longer reports success with real-time drop progress dead, cached campaign artwork loads again, miner changes apply in order, and storage faults are reported instead of discarded.">
+  <meta name="description" content="Release notes for SwiftMiner 1.38.2: recovery and storage failures are clearer, campaign refreshes use less disk and CPU, artwork memory is bounded, and the local dashboard rejects oversized or malformed requests.">
   <link rel="canonical" href="https://swiftminer.app/release-notes/1.38.2.html">
   <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
@@ -29,8 +29,26 @@
 <body>
   <main>
     <h1>SwiftMiner 1.38.2</h1>
-    <p class="meta">Version 1.38.2 &middot; Build 2026083000</p>
-    <p class="intro">A reliability and privacy release. Automatic recovery no longer reports success while real-time drop progress is dead, cached campaign artwork loads again, changes you make to your miners apply in the order you made them, diagnostics no longer echo fragments of your credentials, and storage faults that used to pass silently now say what went wrong.</p>
+    <p class="meta">Version 1.38.2 &middot; Build 2026083013</p>
+    <p class="intro">A reliability, privacy, and performance release. Automatic recovery no longer reports success while real-time drop progress is dead, campaign and artwork work is lighter and bounded, changes you make to your miners apply in order, diagnostics no longer echo fragments of credentials, and storage faults that used to pass silently now say what went wrong.</p>
+
+    <section>
+      <h2>&#9889; Performance and resilience</h2>
+      <p class="summary">Less repeated disk, database, aggregation, interface, image, and animation work.</p>
+      <ul>
+        <li>Keeps each account&rsquo;s decoded campaign cache in memory after its first load and coalesces concurrent refreshes, instead of reading and decoding the same multi-megabyte file repeatedly.</li>
+        <li>Builds indexed campaign lookups across accounts and collects their cached snapshots concurrently, avoiding repeated full-list scans as account and campaign counts grow.</li>
+        <li>Builds both shared and per-account campaign views from the same refresh snapshot, removing a second collection and aggregation pass after every refresh.</li>
+        <li>Limits volatile miner telemetry presentation updates to once per second while still publishing state, health, task, and progress changes immediately; Dock badge refreshes are coalesced and unchanged badge values are ignored.</li>
+        <li>Skips campaign and inventory cache rewrites when only refresh timestamps changed, while periodically renewing the persisted timestamp so offline cache freshness remains accurate.</li>
+        <li>Writes miner identities to the dashboard database only when identity data changes, rather than after every log or health update.</li>
+        <li>Bounds decoded campaign artwork, profile-picture, and sampled-tint memory; artwork and tint sampling now share downloads and reuse one image-processing context.</li>
+        <li>Halves decorative campaign-card animation updates and stops them for Reduce Motion as well as when SwiftMiner is inactive.</li>
+        <li>Bounds local dashboard request headers and bodies, times out incomplete requests, and rejects malformed, duplicated, or unsupported body framing before authentication and routing.</li>
+        <li>Caps the on-disk campaign artwork and profile-picture caches, evicting the oldest files once either cache passes its size or file-count budget, so they can no longer grow without limit.</li>
+        <li>Records event-outbox queue depth, the age of the oldest undelivered event, and webhook delivery timings, and includes them in exported diagnostics.</li>
+      </ul>
+    </section>
 
     <section>
       <h2>&#128029; Fixes</h2>

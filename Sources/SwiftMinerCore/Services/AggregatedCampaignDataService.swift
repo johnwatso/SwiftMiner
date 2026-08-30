@@ -9,7 +9,14 @@ import Foundation
 /// - Per-account progress and claimed state
 /// - Offline-first: Uses cached data from each miner
 public actor AggregatedCampaignDataService {
-    
+
+    private typealias CampaignIndex = [String: [String: CampaignViewData]]
+
+    private struct RefreshSnapshot {
+        let aggregated: [AggregatedCampaign]
+        let allCampaigns: [CampaignViewData]
+    }
+
     // MARK: - Types
     
     /// Pre-computed mining state for a single account on a campaign.
@@ -326,26 +333,31 @@ public actor AggregatedCampaignDataService {
         )
     }
     
-    /// Force refresh for all accounts and update CampaignStore
-    public func refreshAll() async {
+    /// Force refresh for all accounts and build both UI projections from one
+    /// collection of per-account campaign data.
+    @discardableResult
+    public func refreshAll() async -> [CampaignViewData] {
         let services = Array(accountServices.values)
         await withTaskGroup(of: Void.self) { group in
             for service in services {
                 group.addTask { await service.refresh() }
             }
         }
-        let aggregated = await getAggregatedCampaignsInternal()
-        await updateCampaignStore(using: aggregated)
+        let snapshot = await buildRefreshSnapshot()
+        await updateCampaignStore(using: snapshot.aggregated)
+        return snapshot.allCampaigns
     }
 
     /// Force refresh for one account while retaining the other accounts' cached
     /// campaign data in the shared feed.
-    public func refreshAccount(accountId: String) async {
-        guard let service = accountServices[accountId] else { return }
+    @discardableResult
+    public func refreshAccount(accountId: String) async -> [CampaignViewData]? {
+        guard let service = accountServices[accountId] else { return nil }
 
         await service.refresh()
-        let aggregated = await getAggregatedCampaignsInternal()
-        await updateCampaignStore(using: aggregated)
+        let snapshot = await buildRefreshSnapshot()
+        await updateCampaignStore(using: snapshot.aggregated)
+        return snapshot.allCampaigns
     }
     
     /// Push aggregated campaigns to CampaignStore (if configured)
@@ -373,17 +385,40 @@ public actor AggregatedCampaignDataService {
     }
     
     // MARK: - Private Helpers
-    
+
+    private func buildRefreshSnapshot() async -> RefreshSnapshot {
+        let (viewDataByAccount, bestMetadata) = await collectCurrentCampaignViewData()
+
+        let aggregated = bestMetadata.values.map { data in
+            buildAggregatedCampaign(
+                from: data,
+                viewDataByAccount: viewDataByAccount
+            )
+        }.sorted { $0.gameName < $1.gameName }
+
+        let allCampaigns = bestMetadata.values.map { data in
+            buildUnifiedCampaignViewData(
+                from: data,
+                viewDataByAccount: viewDataByAccount
+            )
+        }.sorted { $0.gameName < $1.gameName }
+
+        return RefreshSnapshot(
+            aggregated: aggregated,
+            allCampaigns: allCampaigns
+        )
+    }
+
     private func buildAggregatedCampaign(
         from data: CampaignViewData,
-        viewDataByAccount: [String: [CampaignViewData]]
+        viewDataByAccount: CampaignIndex
     ) -> AggregatedCampaign {
         var accountProgress: [String: AggregatedCampaign.AccountProgress] = [:]
         var accountStates: [AggregatedCampaign.AccountState] = []
         var anyConnected = false
 
         let accountCampaigns = viewDataByAccount.compactMap { accountId, campaigns in
-            campaigns.first(where: { $0.id == data.id }).map { (accountId, $0) }
+            campaigns[data.id].map { (accountId, $0) }
         }
 
         for (accountId, viewData) in accountCampaigns {
@@ -465,17 +500,29 @@ public actor AggregatedCampaignDataService {
         )
     }
 
-    private func collectCurrentCampaignViewData() async -> ([String: [CampaignViewData]], [String: CampaignViewData]) {
-        var viewDataByAccount: [String: [CampaignViewData]] = [:]
+    private func collectCurrentCampaignViewData() async -> (CampaignIndex, [String: CampaignViewData]) {
+        let services = accountServices
+        var snapshots: [(String, [CampaignViewData])] = []
+
+        await withTaskGroup(of: (String, [CampaignViewData]).self) { group in
+            for (accountId, service) in services {
+                group.addTask {
+                    (accountId, await service.allCampaigns())
+                }
+            }
+            for await snapshot in group {
+                snapshots.append(snapshot)
+            }
+        }
+
+        var viewDataByAccount: CampaignIndex = [:]
         var bestMetadata: [String: CampaignViewData] = [:]
 
-        for (accountId, service) in accountServices {
-            // Use allCampaigns() instead of currentCampaigns() to get unfiltered data
-            // This ensures we see connected campaigns even if they are currently .irrelevant
-            let viewData = await service.allCampaigns()
-            viewDataByAccount[accountId] = viewData
+        for (accountId, viewData) in snapshots {
+            var campaignsByID: [String: CampaignViewData] = [:]
 
             for data in viewData {
+                campaignsByID[data.id] = data
                 if let existing = bestMetadata[data.id] {
                     if shouldReplaceMetadata(existing: existing, incoming: data) {
                         bestMetadata[data.id] = data
@@ -484,42 +531,24 @@ public actor AggregatedCampaignDataService {
                     bestMetadata[data.id] = data
                 }
             }
+            viewDataByAccount[accountId] = campaignsByID
         }
 
         return (viewDataByAccount, bestMetadata)
     }
-    
+
     /// Collects ALL campaigns from all accounts without filtering.
     /// Use this for the "All" tab to include campaigns excluded from the curated feed.
-    private func collectAllCampaignViewData() async -> ([String: [CampaignViewData]], [String: CampaignViewData]) {
-        var viewDataByAccount: [String: [CampaignViewData]] = [:]
-        var bestMetadata: [String: CampaignViewData] = [:]
-
-        for (accountId, service) in accountServices {
-            // Use allCampaigns() instead of currentCampaigns() to get unfiltered data
-            let viewData = await service.allCampaigns()
-            viewDataByAccount[accountId] = viewData
-
-            for data in viewData {
-                if let existing = bestMetadata[data.id] {
-                    if shouldReplaceMetadata(existing: existing, incoming: data) {
-                        bestMetadata[data.id] = data
-                    }
-                } else {
-                    bestMetadata[data.id] = data
-                }
-            }
-        }
-
-        return (viewDataByAccount, bestMetadata)
+    private func collectAllCampaignViewData() async -> (CampaignIndex, [String: CampaignViewData]) {
+        await collectCurrentCampaignViewData()
     }
 
     private func buildUnifiedCampaignViewData(
         from data: CampaignViewData,
-        viewDataByAccount: [String: [CampaignViewData]]
+        viewDataByAccount: CampaignIndex
     ) -> CampaignViewData {
         let accountCampaigns = viewDataByAccount.compactMap { accountId, campaigns in
-            campaigns.first(where: { $0.id == data.id }).map { (accountId, $0) }
+            campaigns[data.id].map { (accountId, $0) }
         }
 
         // Progress should NOT be averaged across accounts.
