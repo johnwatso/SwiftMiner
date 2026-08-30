@@ -254,16 +254,30 @@ public actor TwitchAPIClient {
     /// (name, dates, drop definitions, channel ACL); the fast-moving per-drop claim and
     /// progress state is owned by the inventory snapshot, which is fetched separately and
     /// merged over campaigns by `syncCampaigns`, so it is unaffected by this TTL.
-    let campaignDetailsCacheTTL: TimeInterval = 20 * 60
+    ///
+    /// Four hours rather than twenty minutes because this window is also what a *launch*
+    /// inherits through `CampaignDetailsDiskCache`. A diagnostics export from a cold start
+    /// on 2026-08-31 showed 244 `DropCampaignDetails` requests in the 26 seconds after
+    /// launch — every time-active campaign on both accounts — with 420s of cumulative
+    /// rate-limit wait, and a first mining cycle that spent 25.5s of its 31.3s fetching
+    /// campaigns. Any relaunch more than twenty minutes after the last one paid that in
+    /// full. Campaigns already known are the only thing this window covers: new ones still
+    /// arrive with each `ViewerDropsDashboard` refresh, and `campaignLinkStateTTL` below
+    /// keeps the mutable part on its own short leash.
+    let campaignDetailsCacheTTL: TimeInterval = 4 * 60 * 60
     /// Account-link state is mutable and directly decides whether a campaign can be mined,
-    /// so an authoritative answer is never trusted for longer than the details window.
-    /// Keeping this bounded means linking or unlinking a game account is picked up within
-    /// twenty minutes without requiring an app restart.
+    /// so it is deliberately kept far shorter than the details window above. Keeping this
+    /// bounded means linking or unlinking a game account is picked up within twenty
+    /// minutes without requiring an app restart.
     let campaignLinkStateTTL: TimeInterval = 20 * 60
     /// Shared metadata contains only campaign-global facts. It can safely outlive an
     /// account's link-state answer, which lets staggered miners reuse it without extending
     /// the lifetime of mutable account state. A real per-account refresh updates this copy.
-    let sharedCampaignMetadataTTL: TimeInterval = 60 * 60
+    ///
+    /// Kept above `campaignDetailsCacheTTL` so a second account arriving late can still
+    /// reuse it rather than re-fetching what the first account already has — the ordering
+    /// link state < details < shared metadata is asserted by CampaignMetadataSharingTests.
+    let sharedCampaignMetadataTTL: TimeInterval = 6 * 60 * 60
     let availableDropsCacheTTL: TimeInterval = 60
     let liveChannelsCacheTTL: TimeInterval = 60
     private let slugCandidatesCacheTTL: TimeInterval = 30 * 60
