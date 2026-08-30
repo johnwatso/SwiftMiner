@@ -155,6 +155,84 @@ final class MinerAttentionTests: XCTestCase {
         )
     }
 
+    // MARK: - Approved-channel liveness checks
+
+    /// A miner that keeps watching while the liveness query is broken shows nothing today.
+    /// It is the campaigns limited to specific channels — esports windows — that go missing,
+    /// so a run of failed checks has to reach the user while the miner still looks fine.
+    func testRepeatedApprovedChannelProbeFailuresRaiseAttentionOnARunningMiner() {
+        let miner = makeMiner()
+        let events = (0..<3).map { index in
+            EventEntry(
+                message: "[ChannelSelect]   Could not check live state for approved channel ow_esports\(index): Twitch compatibility update required for VideoPlayerStreamInfoOverlayChannel",
+                level: .warning,
+                minerId: miner.id
+            )
+        }
+
+        let attention = MinerAttentionIssue.resolve(miner: miner, events: events)
+
+        XCTAssertEqual(attention?.title, "Restricted campaigns can't be checked")
+        XCTAssertEqual(attention?.action, .restart)
+        XCTAssertEqual(attention?.detail, "SwiftMiner could not tell whether 3 channels were live — 3 checks failed in the last 30 minutes.")
+    }
+
+    /// One failed probe is routine — a rescan cancels in-flight checks all the time.
+    func testASingleApprovedChannelProbeFailureIsNotWorthInterrupting() {
+        let miner = makeMiner()
+        let event = EventEntry(
+            message: "[ChannelSelect]   Could not check live state for approved channel ow_esports: cancelled",
+            level: .warning,
+            minerId: miner.id
+        )
+
+        XCTAssertNil(MinerAttentionIssue.resolve(miner: miner, events: [event]))
+    }
+
+    func testApprovedChannelProbeFailuresOutsideTheWindowAreIgnored() {
+        let miner = makeMiner()
+        let stale = Date().addingTimeInterval(-(MinerAttention.approvedChannelProbeFailureWindow + 60))
+        let events = (0..<5).map { index in
+            EventEntry(
+                timestamp: stale,
+                message: "[ChannelSelect]   Could not check live state for approved channel ow_esports\(index): Twitch compatibility update required",
+                level: .warning,
+                minerId: miner.id
+            )
+        }
+
+        XCTAssertNil(MinerAttentionIssue.resolve(miner: miner, events: events))
+    }
+
+    /// Another miner's failures are not this miner's problem.
+    func testApprovedChannelProbeFailuresFromAnotherMinerAreIgnored() {
+        let miner = makeMiner()
+        let events = (0..<4).map { index in
+            EventEntry(
+                message: "[ChannelSelect]   Could not check live state for approved channel ow_esports\(index): Twitch compatibility update required",
+                level: .warning,
+                minerId: "someone-else"
+            )
+        }
+
+        XCTAssertNil(MinerAttentionIssue.resolve(miner: miner, events: events))
+    }
+
+    /// A stopped worker has its own, more urgent story; this must not displace it.
+    func testAFailedWorkerStillReportsItsOwnFailureFirst() {
+        let miner = makeMiner(status: .error, workerState: .failed)
+        var events = (0..<4).map { index in
+            EventEntry(
+                message: "[ChannelSelect]   Could not check live state for approved channel ow_esports\(index): Twitch compatibility update required",
+                level: .warning,
+                minerId: miner.id
+            )
+        }
+        events.append(EventEntry(message: "Error: worker stopped", level: .error, minerId: miner.id))
+
+        XCTAssertEqual(MinerAttentionIssue.resolve(miner: miner, events: events)?.title, "The mining worker stopped")
+    }
+
     private func makeMiner(
         status: MinerManager.MinerStatus = .watching,
         needsAuth: Bool = false,

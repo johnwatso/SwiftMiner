@@ -59,6 +59,44 @@ enum MinerAttention {
         miners.filter { hasPendingAttention(for: $0, settings: settings) }.count
     }
 
+    /// Marker written by `MinerEngine.recordApprovedChannelProbeFailure`.
+    static let approvedChannelProbeFailureMarker = "Could not check live state for approved channel"
+    /// How many failures within the window count as the query being broken rather than one
+    /// unlucky probe, and how far back to look. The engine probes approved channels every
+    /// 60 seconds while waiting, so a genuine outage clears this quickly and a one-off does not.
+    static let approvedChannelProbeFailureThreshold = 3
+    static let approvedChannelProbeFailureWindow: TimeInterval = 30 * 60
+
+    /// Describes a run of failed approved-channel liveness checks for this miner, if the
+    /// recent event log holds enough of them to mean the query itself is broken.
+    static func approvedChannelProbeFailure(
+        for miner: MinerManager.ManagedMiner,
+        events: [EventEntry],
+        now: Date = Date()
+    ) -> String? {
+        let cutoff = now.addingTimeInterval(-approvedChannelProbeFailureWindow)
+        let failures = events.filter { event in
+            event.minerId == miner.id
+                && event.timestamp >= cutoff
+                && event.message.contains(approvedChannelProbeFailureMarker)
+        }
+        guard failures.count >= approvedChannelProbeFailureThreshold else { return nil }
+
+        let channels = Set(
+            failures.compactMap { event -> String? in
+                guard let range = event.message.range(of: approvedChannelProbeFailureMarker) else { return nil }
+                let remainder = event.message[range.upperBound...]
+                guard let colon = remainder.firstIndex(of: ":") else { return nil }
+                let channel = remainder[..<colon].trimmingCharacters(in: .whitespaces)
+                return channel.isEmpty ? nil : channel
+            }
+        )
+        let channelSummary = channels.count == 1
+            ? "\(channels.first ?? "one channel")"
+            : "\(channels.count) channels"
+        return "SwiftMiner could not tell whether \(channelSummary) were live — \(failures.count) checks failed in the last 30 minutes."
+    }
+
     /// The first non-muted account-link blocker, if any. Shared with the
     /// attention panel so a badge always has a matching explanation and next step.
     static func accountLinkReminderCampaign(
@@ -214,6 +252,21 @@ struct MinerAttentionIssue: Equatable {
                 title: "The mining worker stopped",
                 detail: latestError ?? "SwiftMiner stopped this worker after an unexpected mining error.",
                 recommendation: "Restart this miner. If it fails again, export its diagnostics and contact support.",
+                action: .restart
+            )
+        }
+
+        // A miner that is happily watching one campaign can still be blind to the
+        // restricted ones. The check that answers "is this esports channel live?" fails
+        // silently — the worker never stops, so none of the states above catch it, and the
+        // only trace is a warning in a log nobody reads. Campaigns limited to a channel
+        // list are exactly the ones whose windows are too short to miss.
+        if miner.isRunning,
+           let failure = MinerAttention.approvedChannelProbeFailure(for: miner, events: events) {
+            return MinerAttentionIssue(
+                title: "Restricted campaigns can't be checked",
+                detail: failure,
+                recommendation: "Update SwiftMiner. Until the check works, campaigns limited to specific channels — esports broadcasts especially — may be missed while this miner keeps watching everything else.",
                 action: .restart
             )
         }
