@@ -49,7 +49,6 @@
         <li>Builds both shared and per-account campaign views from the same refresh snapshot, removing a second collection and aggregation pass after every refresh.</li>
         <li>Skips campaign and inventory cache rewrites when only refresh timestamps changed, while periodically renewing the persisted timestamp so offline cache freshness remains accurate.</li>
         <li>Writes miner identities to the dashboard database only when identity data changes, rather than after every log or health update.</li>
-        <li>Matches Overview&rsquo;s prioritised feed through hashed game lookups instead of comparing every campaign against every preferred game, resolves each campaign&rsquo;s sort position once instead of re-deriving it on both sides of every comparison, and keeps the excluded-game filter applied once rather than on each read.</li>
       </ul>
     </section>
 

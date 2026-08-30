@@ -3,7 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Prepare SwiftMiner 1.33 release - Release Notes</title>
+  <title>SwiftMiner 1.33 - Release Notes</title>
+  <meta name="description" content="Release notes for SwiftMiner 1.33, covering macOS 14 support, clearer subscription status, a cleaner single-miner interface, and more resilient Twitch Drops mining.">
+  <link rel="canonical" href="https://swiftminer.app/release-notes/1.33.html">
+  <meta name="robots" content="index, follow">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
   <style>
     :root { color-scheme: light dark; }
     body {
@@ -20,10 +28,45 @@
       border-radius: 22px;
       background: rgba(255, 255, 255, 0.86);
       box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
+      border: 1px solid rgba(82, 96, 109, 0.12);
     }
     h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
-    .meta { margin: 0 0 24px; color: #52606d; font-size: 14px; }
-    p { margin: 0 0 16px; }
+    .meta { margin: 0 0 10px; color: #52606d; font-size: 14px; }
+    .intro { margin: 0 0 24px; color: #384454; }
+    section {
+      margin: 18px 0 0;
+      padding: 18px 18px 14px;
+      border: 1px solid rgba(82, 96, 109, 0.18);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.42);
+      border-left: 5px solid var(--accent, #0a67a3);
+    }
+    section.green  { --accent: #1c8c73; }
+    section.indigo { --accent: #5f5ac8; }
+    section.violet { --accent: #7b4bd9; }
+    section.amber  { --accent: #b9760a; }
+    section.teal   { --accent: #0a8aa3; }
+    h2 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 4px;
+      color: var(--accent, #0a67a3);
+      font-size: 18px;
+    }
+    .badge {
+      display: inline-grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--accent, #0a67a3) 15%, transparent);
+      font-size: 16px;
+    }
+    .summary { margin: 0 0 12px; color: #52606d; font-size: 14px; }
+    ul { margin: 0; padding-left: 22px; }
+    li { margin: 0 0 8px; }
+    li:last-child { margin-bottom: 0; }
     a { color: #0a67a3; text-decoration: none; }
     a:hover { text-decoration: underline; }
     @media (prefers-color-scheme: dark) {
@@ -31,25 +74,90 @@
       main {
         background: rgba(15, 23, 32, 0.88);
         box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+        border-color: rgba(159, 176, 194, 0.14);
       }
-      .meta { color: #9fb0c2; }
+      .meta, .summary { color: #9fb0c2; }
+      .intro { color: #c8d3df; }
+      section {
+        border-color: rgba(159, 176, 194, 0.18);
+        background: rgba(255, 255, 255, 0.04);
+      }
       a { color: #73c3ff; }
     }
   </style>
 </head>
 <body>
   <main>
-    <h1>Prepare SwiftMiner 1.33 release</h1>
-    <p class="meta">Version 1.33</p>
-    <p>Prepare SwiftMiner 1.33 release</p>
-<p>Release summary since SwiftMiner 1.32.5:</p>
-<p>- Platform compatibility: lower every app, library, tool, publisher, and test deployment target to macOS 14 while retaining native Apple Silicon and Intel support. Keep macOS 15 Mesh Gradient and macOS 26 Liquid Glass features availability-gated so Sonoma uses established visual fallbacks. Document the compatibility-first policy in the README and website: older macOS versions and Intel remain supported until required app features or Apple frameworks make a newer target necessary.</p>
-<p>- Campaign and WebUI status: restrict account-link blocking to attemptable priority campaigns, treat subscription-only priority work as ineligible when progress cannot be earned, project subscription requirements through the dashboard API, remove fully gated campaigns from Up Next, and present a dedicated Subscription required state with Needs Sub labels. Preserve the existing behavior that prioritised games may be attempted before an external game account is linked.</p>
-<p>- Mining reliability: update Twitch live-directory discovery metadata, use direct Spade watch heartbeats with automatic Twitch GQL fallback, separate desired PubSub subscriptions from per-socket state, restore topics deterministically in bounded batches after reconnects, retry failed restoration with backoff, and refresh the active campaign inventory from Twitch after verified progress so parallel drops remain synchronized.</p>
-<p>- Single-miner experience: hide global-priority controls when only one miner is configured, expose miner-count projections consistently to the WebUI, and allow the native Miners workspace to use the full available width.</p>
-<p>- Quality and repository maintenance: add regression coverage for account-link and subscription-gated states, dashboard projections, single-miner behavior, PubSub batching and replay, heartbeat fallback, current Twitch query metadata, and campaign-wide progress refreshes. Remove redundant Swift access modifiers and immutable-header warnings, align generated Xcode 26.6 project metadata with project.yml, and configure GitHub Linguist to focus repository language statistics on Swift.</p>
-<p>- Website and release metadata: update download requirements and public copy for macOS 14, publish detailed SwiftMiner 1.33 release notes, restore the historical 1.32.5 notes to released build 2026070308, and set MARKETING_VERSION to 1.33 with timestamp build 2026072010 in both project.yml and the generated Xcode project. Leave the stable Sparkle appcast tied to the binary that is currently published.</p>
-    <p><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/7c84a6c97da34100807eda1f82461028d765ecf7">7c84a6c</a></p>
+    <h1>SwiftMiner 1.33</h1>
+    <p class="meta">Version 1.33 · Build 2026072116</p>
+    <p class="intro">A broad compatibility and reliability update: SwiftMiner now supports macOS 14 Sonoma, explains subscription-gated campaigns more clearly, simplifies single-miner setups, and hardens the Twitch transports that keep mining sessions alive.</p>
+
+    <section class="violet">
+      <h2><span class="badge" aria-hidden="true">🖥️</span> Wider Mac Compatibility</h2>
+      <p class="summary">SwiftMiner now supports macOS 14.0 or later on both Apple Silicon and Intel Macs.</p>
+      <ul>
+        <li>Lowers the deployment target from macOS 26 to macOS 14 across the app, core and service libraries, command-line tools, publisher, and test targets.</li>
+        <li>Keeps native <strong>arm64</strong> and <strong>x86_64</strong> release slices so supported Apple Silicon and Intel Macs run without translation.</li>
+        <li>Retains graceful visual fallbacks for newer platform features: macOS 15 receives Mesh Gradient artwork and macOS 26 receives Liquid Glass, while Sonoma keeps the established material-based appearance.</li>
+        <li>Updates the website, download metadata, and README to publish the new macOS 14 minimum consistently.</li>
+        <li>Documents the long-term support policy: SwiftMiner will keep supporting the oldest practical macOS versions and Intel hardware until a required feature or Apple framework makes a newer platform necessary.</li>
+      </ul>
+    </section>
+
+    <section class="green">
+      <h2><span class="badge" aria-hidden="true">🧘</span> Clearer Campaign Status</h2>
+      <p class="summary">Account linking and paid-subscription requirements now appear only where they genuinely affect mining.</p>
+      <ul>
+        <li>Stops unrelated unlinked public campaigns from making a miner look account-blocked after its priority filters have already ruled those campaigns out.</li>
+        <li>Reserves the account-link blocked state for attemptable priority campaigns that genuinely belong to the miner's effective priority list.</li>
+        <li>Falls back to no eligible campaigns when the only visible priority campaign is subscription-only and cannot earn watch progress.</li>
+        <li>Exposes subscription-required drop counts and campaign gating through the dashboard API instead of flattening those rewards into ordinary upcoming work.</li>
+        <li>Removes fully subscription-gated campaigns from the WebUI's Up Next list and presents a dedicated Subscription required card with clear <strong>Needs Sub</strong> labels.</li>
+        <li>Preserves the existing priority rule: prioritised games can still be attempted before the external game account is linked when Twitch provides eligible work.</li>
+      </ul>
+    </section>
+
+    <section class="amber">
+      <h2><span class="badge" aria-hidden="true">⛏️</span> Mining Reliability</h2>
+      <p class="summary">Watch sessions now follow Twitch's current transport behavior and recover their live subscriptions more predictably.</p>
+      <ul>
+        <li>Preserves approved-channel lists for short-lived esports campaigns when Twitch returns channels using the compact <code>id</code>/<code>name</code> representation.</li>
+        <li>Merges approved channels discovered through Inventory when the Drops dashboard omits them, allowing official broadcasts outside the exact game directory to be probed directly.</li>
+        <li>Tracks restricted campaigns whose approved-channel list is unavailable as a distinct diagnostic state instead of silently treating them as unrestricted directory campaigns.</li>
+        <li>Moves known approved streams ahead of directory verification limits and directly verifies restricted campaigns whenever the bounded directory scan did not find them.</li>
+        <li>Rotates bounded directory and approved-channel probes across their overflow, ensuring lower-viewer and later-listed eligible streams are eventually checked without increasing per-scan request limits.</li>
+        <li>Rejects unverified approved-channel guesses after directory failures and keeps empty-campaign polling at five-minute intervals so newly started drops are discovered promptly.</li>
+        <li>Updates the Twitch live-directory persisted query used to discover eligible Drops streams.</li>
+        <li>Sends watch heartbeats directly through Spade as the primary transport, with Twitch GQL retained as an automatic fallback when direct delivery fails.</li>
+        <li>Tracks the PubSub topics SwiftMiner wants independently from the topics submitted on the current socket, so reconnecting cannot silently lose desired subscriptions.</li>
+        <li>Restores PubSub topics deterministically after reconnects, splits listen and unlisten changes into bounded batches of 20, and retries failed restoration attempts with backoff.</li>
+        <li>Force-refreshes the active campaign's complete Twitch inventory after verified progress, keeping parallel drops synchronized from server-confirmed state without inventing local progress.</li>
+      </ul>
+    </section>
+
+    <section class="teal">
+      <h2><span class="badge" aria-hidden="true">🎛️</span> Cleaner Single-Miner Experience</h2>
+      <p class="summary">Controls intended for multi-account setups stay out of the way when SwiftMiner has only one miner.</p>
+      <ul>
+        <li>Hides the per-miner global-priorities toggle in both the native app and WebUI when only one miner is configured.</li>
+        <li>Exposes the configured miner count through dashboard projections so every interface makes the same single-versus-multi-miner decision.</li>
+        <li>Lets the native Miners workspace use the full available window width instead of reserving space for a secondary pane that is not needed.</li>
+        <li>Refreshes website wording to describe SwiftMiner simply as <strong>Built for Mac</strong>.</li>
+      </ul>
+    </section>
+
+    <section class="indigo">
+      <h2><span class="badge" aria-hidden="true">🧪</span> Release Quality &amp; Coverage</h2>
+      <p class="summary">The compatibility and mining changes are backed by focused regression coverage and cleaner project metadata.</p>
+      <ul>
+        <li>Adds tests for unrelated unlinked campaigns, prioritised unlinked campaigns, subscription-only priority campaigns, and single-miner dashboard behavior.</li>
+        <li>Adds focused coverage for approved-channel parsing and dashboard/inventory merging, bounded channel-probe rotation, subscription-gated WebUI state, dashboard API projections, current Twitch query metadata, PubSub batching and replay, heartbeat fallback, and campaign-wide progress refreshes.</li>
+        <li>Cleans redundant Swift access modifiers and immutable HTTP response headers so the affected application targets build without those compiler warnings.</li>
+        <li>Updates generated Xcode project and scheme metadata for Xcode 26.6 while keeping <code>project.yml</code> as the source of truth.</li>
+        <li>Configures GitHub Linguist to keep the repository language bar focused on the native Swift application rather than website, documentation, and release-automation assets.</li>
+        <li>Prepared as SwiftMiner <strong>1.33</strong>, build <strong>2026072116</strong>.</li>
+      </ul>
+    </section>
   </main>
 </body>
 </html>

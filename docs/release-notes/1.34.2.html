@@ -3,7 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Fix Overview progress bars sweeping from zero on every appear - Release Notes</title>
+  <title>SwiftMiner 1.34.2 - Release Notes</title>
+  <meta name="description" content="Release notes for SwiftMiner 1.34.2: fixes the Overview progress bars resetting to zero on every open or refresh.">
+  <link rel="canonical" href="https://swiftminer.app/release-notes/1.34.2.html">
+  <meta name="robots" content="index, follow">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
   <style>
     :root { color-scheme: light dark; }
     body {
@@ -20,10 +28,41 @@
       border-radius: 22px;
       background: rgba(255, 255, 255, 0.86);
       box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
+      border: 1px solid rgba(82, 96, 109, 0.12);
     }
     h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
-    .meta { margin: 0 0 24px; color: #52606d; font-size: 14px; }
-    p { margin: 0 0 16px; }
+    .meta { margin: 0 0 10px; color: #52606d; font-size: 14px; }
+    .intro { margin: 0 0 24px; color: #384454; }
+    section {
+      margin: 18px 0 0;
+      padding: 18px 18px 14px;
+      border: 1px solid rgba(82, 96, 109, 0.18);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.42);
+      border-left: 5px solid var(--accent, #0a67a3);
+    }
+    section.rose   { --accent: #c0344d; }
+    h2 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 4px;
+      color: var(--accent, #0a67a3);
+      font-size: 18px;
+    }
+    .badge {
+      display: inline-grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--accent, #0a67a3) 15%, transparent);
+      font-size: 16px;
+    }
+    .summary { margin: 0 0 12px; color: #52606d; font-size: 14px; }
+    ul { margin: 0; padding-left: 22px; }
+    li { margin: 0 0 8px; }
+    li:last-child { margin-bottom: 0; }
     a { color: #0a67a3; text-decoration: none; }
     a:hover { text-decoration: underline; }
     @media (prefers-color-scheme: dark) {
@@ -31,21 +70,31 @@
       main {
         background: rgba(15, 23, 32, 0.88);
         box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+        border-color: rgba(159, 176, 194, 0.14);
       }
-      .meta { color: #9fb0c2; }
+      .meta, .summary { color: #9fb0c2; }
+      .intro { color: #c8d3df; }
+      section {
+        border-color: rgba(159, 176, 194, 0.18);
+        background: rgba(255, 255, 255, 0.04);
+      }
       a { color: #73c3ff; }
     }
   </style>
 </head>
 <body>
   <main>
-    <h1>Fix Overview progress bars sweeping from zero on every appear</h1>
-    <p class="meta">Version 1.34.2</p>
-    <p>Fix Overview progress bars sweeping from zero on every appear</p>
-<p>AnimatedLinearProgressView reset its displayed value to 0 in onAppear<br>and animated up to the real value every time it appeared. On the<br>Overview that meant the miner progress bars re-filled from empty each<br>time the page was shown or refreshed — which looked odd and made live<br>progress seem to only move on refresh (a refresh restarts miners and<br>re-mounts the cards, re-triggering the sweep), masking the small<br>incremental steps that were actually happening.</p>
-<p>The bar now seeds its displayed value to the true progress at init, so<br>it renders where the miner actually is on the first frame, and animates<br>only genuine changes. Reduce Motion still applies instantly.</p>
-<p>Ships as 1.34.2 (1.34.1 was released while this was in progress): new<br>1.34.2 notes, MARKETING_VERSION 1.34.2, build 2026072310 (bumped past<br>1.34.1's same-hour 2026072309 so Sparkle sees it as newer). Released<br>1.34.1 notes and the appcast are untouched.</p>
-    <p><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/74e9c9abd76e32c6db86d1ac3468bbd18222243e">74e9c9a</a></p>
+    <h1>SwiftMiner 1.34.2</h1>
+    <p class="meta">Version 1.34.2 · Build 2026072310</p>
+    <p class="intro">A small interface fix for the Overview progress bars.</p>
+
+    <section class="rose">
+      <h2><span class="badge" aria-hidden="true">🐛</span> Bug Fixes</h2>
+      <p class="summary">A cosmetic issue that made live progress hard to read on the Overview.</p>
+      <ul>
+        <li>Fixed the Overview progress bars resetting to zero and sweeping back up every time the page was opened or refreshed. Each miner's bar now shows its true progress immediately and animates only real changes — so live progress reads correctly instead of appearing to move only on refresh.</li>
+      </ul>
+    </section>
   </main>
 </body>
 </html>

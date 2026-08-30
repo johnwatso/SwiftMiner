@@ -3,7 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Release SwiftMiner 1.35.11 - Release Notes</title>
+  <title>SwiftMiner 1.35.11 - Release Notes</title>
+  <meta name="description" content="Release notes for SwiftMiner 1.35.11: restores real-time drop progress for accounts whose stored token expiry had lapsed, and stops idle miners consuming their whole request budget.">
+  <link rel="canonical" href="https://swiftminer.app/release-notes/1.35.11.html">
+  <meta name="robots" content="index, follow">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
   <style>
     :root { color-scheme: light dark; }
     body {
@@ -20,10 +28,52 @@
       border-radius: 22px;
       background: rgba(255, 255, 255, 0.86);
       box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
+      border: 1px solid rgba(82, 96, 109, 0.12);
     }
     h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
-    .meta { margin: 0 0 24px; color: #52606d; font-size: 14px; }
-    p { margin: 0 0 16px; }
+    .meta { margin: 0 0 10px; color: #52606d; font-size: 14px; }
+    .intro { margin: 0 0 24px; color: #384454; }
+    section {
+      margin: 18px 0 0;
+      padding: 18px 18px 14px;
+      border: 1px solid rgba(82, 96, 109, 0.18);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.42);
+      border-left: 5px solid var(--accent, #0a67a3);
+    }
+    section.green  { --accent: #1c8c73; }
+    section.indigo { --accent: #5f5ac8; }
+    section.violet { --accent: #7b4bd9; }
+    section.amber  { --accent: #b9760a; }
+    section.teal   { --accent: #0a8aa3; }
+    section.rose   { --accent: #c0344d; }
+    h2 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 4px;
+      color: var(--accent, #0a67a3);
+      font-size: 18px;
+    }
+    .badge {
+      display: inline-grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--accent, #0a67a3) 15%, transparent);
+      font-size: 16px;
+    }
+    .summary { margin: 0 0 12px; color: #52606d; font-size: 14px; }
+    ul { margin: 0; padding-left: 22px; }
+    li { margin: 0 0 8px; }
+    li:last-child { margin-bottom: 0; }
+    code {
+      font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: rgba(82, 96, 109, 0.12);
+      padding: 1px 5px;
+      border-radius: 5px;
+    }
     a { color: #0a67a3; text-decoration: none; }
     a:hover { text-decoration: underline; }
     @media (prefers-color-scheme: dark) {
@@ -31,27 +81,63 @@
       main {
         background: rgba(15, 23, 32, 0.88);
         box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+        border-color: rgba(159, 176, 194, 0.14);
       }
-      .meta { color: #9fb0c2; }
+      .meta, .summary { color: #9fb0c2; }
+      .intro { color: #c8d3df; }
+      section {
+        border-color: rgba(159, 176, 194, 0.18);
+        background: rgba(255, 255, 255, 0.04);
+      }
+      code { background: rgba(159, 176, 194, 0.18); }
       a { color: #73c3ff; }
     }
   </style>
 </head>
 <body>
   <main>
-    <h1>Release SwiftMiner 1.35.11</h1>
-    <p class="meta">Version 1.35.11</p>
-    <p>Release SwiftMiner 1.35.11</p>
-<p>A reliability release for the mining loop. Every account had quietly lost its<br>real-time drop connection, and idle miners were spending their whole Twitch<br>request budget re-asking questions they had just answered.</p>
-<p>Real-time drop progress</p>
-<p>- Stop treating an invented token deadline as proof a token is dead. Sessions<br>imported from cookies store no refresh token, and the web client reports no<br>expiry, so SwiftMiner fabricated a 30-day deadline. Once it passed, every<br>refresh failed instantly while the token was still serving hundreds of<br>successful GraphQL requests, taking PubSub offline for the whole fleet and<br>leaving mining on polling alone.<br>- Revalidate such tokens against Twitch and re-arm the local window from what<br>Twitch reports. A transport failure keeps the existing token rather than<br>taking a working account offline; only a 401 is treated as fatal.<br>- Load the access token and open the PubSub connection as separate steps. A<br>token failure used to skip both, and a rejected token was logged and<br>forgotten; it now surfaces as an account that needs reconnecting.</p>
-<p>Idle request budget</p>
-<p>- Share approved-channel liveness across every miner. Restricted esports<br>campaigns list dozens of approved channels, and each miner probed all of<br>them per selection cycle and again per idle tick: 641 probes and 22 minutes<br>of accumulated rate-limit backoff inside a three-minute window.<br>- Cache only misses, and only for less than one probe interval, so a channel<br>coming online is still found on the next tick. The cache can never be the<br>reason a campaign is missed; a test pins that relationship.<br>- Back off the followed-channel lookup after a failure instead of retrying it<br>every cycle, where each attempt forced another doomed token refresh.</p>
-<p>Honest status</p>
-<p>- Include the game the scheduler actually selected when evaluating per-game<br>state. Only prioritised games were considered, so a miner hunting streams<br>for a non-prioritised campaign reported &quot;Drops complete&quot;.</p>
-<p>Tests and versioning</p>
-<p>- Pin the liveness cache window below the probe interval, and assert a live<br>channel is never cached.<br>- Cover a scheduled non-prioritised game producing its own state and not<br>reading as finished.<br>- Update SwiftMiner to version 1.35.11, build 2026072910, and add the 1.35.11<br>release notes page.</p>
-    <p><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/5ae783980999b25bfb365681704bb8a1ef48e9a6">5ae7839</a></p>
+    <h1>SwiftMiner 1.35.11</h1>
+    <p class="meta">Version 1.35.11 &middot; Build 2026072910</p>
+    <p class="intro">A reliability release for the mining loop. Every account had quietly lost its real-time drop connection, and idle miners were spending their entire Twitch request budget re-asking questions they had just answered. Both are fixed, along with the status text that hid it.</p>
+
+    <section class="rose">
+      <h2><span class="badge" aria-hidden="true">&#128027;</span> Real-Time Drop Progress Restored</h2>
+      <p class="summary">The most serious fix in this release: every miner was running blind.</p>
+      <ul>
+        <li>Restores the live drop-progress (PubSub) connection for accounts signed in without a refresh grant. Sessions imported from cookies store no refresh token, and Twitch's web client reports no expiry, so SwiftMiner invented a 30-day deadline. Once that invented deadline passed, every token refresh failed instantly &mdash; even though the token itself was still perfectly valid and serving hundreds of successful requests. The result was silent: real-time progress went offline for the whole fleet and mining fell back to polling alone.</li>
+        <li>Twitch is now the only authority on whether such a token is dead. SwiftMiner revalidates against Twitch and re-arms its local window instead of trusting a deadline it made up, and a transport failure deliberately leaves a working account alone.</li>
+        <li>Loads the access token and opens the live connection as separate steps. A token problem used to skip both, and a genuinely rejected token was logged and forgotten &mdash; it is now surfaced as an account that needs reconnecting rather than a miner that quietly earns nothing.</li>
+      </ul>
+    </section>
+
+    <section class="amber">
+      <h2><span class="badge" aria-hidden="true">&#9889;</span> Idle Miners No Longer Exhaust the Request Budget</h2>
+      <p class="summary">Waiting for a stream cost as much as mining one.</p>
+      <ul>
+        <li>Shares approved-channel liveness checks across every miner. Restricted esports campaigns can list dozens of approved channels, and each miner was probing all of them on every selection cycle and again on every idle tick. One diagnostic captured 641 liveness probes and 22 minutes of accumulated rate-limit backoff inside a three-minute window, starving the requests that actually pick a channel.</li>
+        <li>Whether a channel is live is the same answer for every account, so it is now asked once. The cache holds only misses, and only for less than one probe interval, so an approved channel coming online is still discovered on the very next tick &mdash; the cache can never be the reason a campaign is missed. That relationship is pinned by a test.</li>
+        <li>Stops retrying the followed-channel lookup once it fails. Follow state only reorders otherwise-equal channels, but each failed attempt was forcing another doomed token refresh &mdash; thirteen in three minutes. It now backs off and ranks channels without it.</li>
+      </ul>
+    </section>
+
+    <section class="teal">
+      <h2><span class="badge" aria-hidden="true">&#127919;</span> Honest Status</h2>
+      <p class="summary">A miner no longer describes itself using work it isn't doing.</p>
+      <ul>
+        <li>A miner waiting for a stream no longer reports <strong>Drops complete</strong>. Smart strategy regularly schedules a campaign for a game that is not on the prioritised list, but only prioritised games were being evaluated &mdash; so the miner described itself from games it had already finished while actively hunting streams for the campaign it had just selected.</li>
+        <li>The game the scheduler actually chose is now part of that assessment, so the reported state reflects real work.</li>
+      </ul>
+    </section>
+
+    <section class="indigo">
+      <h2><span class="badge" aria-hidden="true">&#129514;</span> Under the Hood</h2>
+      <p class="summary">Coverage for the safety properties, not just the happy paths.</p>
+      <ul>
+        <li>Adds tests pinning the liveness cache window below the probe interval, proving a cached miss has always expired before the next probe and that a live channel is never cached.</li>
+        <li>Adds coverage for a scheduled non-prioritised game producing its own state, and for a miner waiting on one not being reported as finished.</li>
+        <li>Prepared as SwiftMiner <strong>1.35.11</strong>, build <strong>2026072910</strong>.</li>
+      </ul>
+    </section>
   </main>
 </body>
 </html>

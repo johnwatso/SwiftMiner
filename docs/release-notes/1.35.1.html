@@ -3,7 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Release SwiftMiner 1.35.1 - Release Notes</title>
+  <title>SwiftMiner 1.35.1 - Release Notes</title>
+  <meta name="description" content="Release notes for SwiftMiner 1.35.1: fixes the multi-miner launch slowdown and stops subscription-gated campaigns from masking what a miner is really doing.">
+  <link rel="canonical" href="https://swiftminer.app/release-notes/1.35.1.html">
+  <meta name="robots" content="index, follow">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
   <style>
     :root { color-scheme: light dark; }
     body {
@@ -20,10 +28,52 @@
       border-radius: 22px;
       background: rgba(255, 255, 255, 0.86);
       box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
+      border: 1px solid rgba(82, 96, 109, 0.12);
     }
     h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
-    .meta { margin: 0 0 24px; color: #52606d; font-size: 14px; }
-    p { margin: 0 0 16px; }
+    .meta { margin: 0 0 10px; color: #52606d; font-size: 14px; }
+    .intro { margin: 0 0 24px; color: #384454; }
+    section {
+      margin: 18px 0 0;
+      padding: 18px 18px 14px;
+      border: 1px solid rgba(82, 96, 109, 0.18);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.42);
+      border-left: 5px solid var(--accent, #0a67a3);
+    }
+    section.green  { --accent: #1c8c73; }
+    section.indigo { --accent: #5f5ac8; }
+    section.violet { --accent: #7b4bd9; }
+    section.amber  { --accent: #b9760a; }
+    section.teal   { --accent: #0a8aa3; }
+    section.rose   { --accent: #c0344d; }
+    h2 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 4px;
+      color: var(--accent, #0a67a3);
+      font-size: 18px;
+    }
+    .badge {
+      display: inline-grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--accent, #0a67a3) 15%, transparent);
+      font-size: 16px;
+    }
+    .summary { margin: 0 0 12px; color: #52606d; font-size: 14px; }
+    ul { margin: 0; padding-left: 22px; }
+    li { margin: 0 0 8px; }
+    li:last-child { margin-bottom: 0; }
+    code {
+      font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: rgba(82, 96, 109, 0.12);
+      padding: 1px 5px;
+      border-radius: 5px;
+    }
     a { color: #0a67a3; text-decoration: none; }
     a:hover { text-decoration: underline; }
     @media (prefers-color-scheme: dark) {
@@ -31,27 +81,66 @@
       main {
         background: rgba(15, 23, 32, 0.88);
         box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+        border-color: rgba(159, 176, 194, 0.14);
       }
-      .meta { color: #9fb0c2; }
+      .meta, .summary { color: #9fb0c2; }
+      .intro { color: #c8d3df; }
+      section {
+        border-color: rgba(159, 176, 194, 0.18);
+        background: rgba(255, 255, 255, 0.04);
+      }
+      code { background: rgba(159, 176, 194, 0.18); }
       a { color: #73c3ff; }
     }
   </style>
 </head>
 <body>
   <main>
-    <h1>Release SwiftMiner 1.35.1</h1>
-    <p class="meta">Version 1.35.1</p>
-    <p>Release SwiftMiner 1.35.1</p>
-<p>A follow-up to 1.35 that removes the multi-miner launch slowdown and stops<br>the miner status card reporting a paywall it was never waiting on.</p>
-<p>Subscription-gated campaigns</p>
-<p>- Stop presenting a subscription-gated campaign as a miner's current state.<br>Campaign and channel selection already excluded them, but the highest<br>priority one was substituted for the real status, so every idle miner<br>appeared parked on a paywall while it was actually looking for streams for<br>a different game.<br>- Treat a campaign whose only unclaimed drops need a paid subscription as<br>finished, so a prioritised game left with only those reads as up to date<br>rather than blocked.<br>- Stop a gated campaign suppressing the Up next row for another campaign in<br>the same game, which concealed work that could actually be mined.<br>- Keep the gated campaign visible as a mutable Pending reminder on the miner.</p>
-<p>Requests and launch performance</p>
-<p>- Fix the multi-miner launch slowdown that could leave accounts on Updating<br>for more than three minutes, by combining a bounded fleet request budget<br>with the existing five-request-per-second ceiling for each miner.<br>- Coalesce campaign refreshes at the Twitch client boundary so the mining<br>engine and dashboard share one campaign-detail fan-out.<br>- Coalesce cross-miner campaign-detail lookups once Twitch has confirmed each<br>account's link state, sharing campaign definitions while keeping progress,<br>claims, authentication and uncertain link state isolated per account.<br>- Prioritise followed streamers with one paginated followed-channel lookup<br>instead of one subscription request per candidate channel.</p>
-<p>Queue and status honesty</p>
-<p>- Explain Smart's deadline-first ordering, and report the miner's real recent<br>channel check instead of assuming no eligible live channel.<br>- Ignore unrelated unlinked campaigns while keeping an explicitly prioritised<br>game mineable before its external account is linked.<br>- Keep completed and unlinked campaigns out of prospective Up next and Then<br>positions, and only say Watching or Currently mining for a real session.<br>- Restore the Drops &quot;Needs Setup&quot; filter for live unlinked campaigns.</p>
-<p>Tests and versioning</p>
-<p>- Add coverage for startup refresh coalescing, per-miner ceilings inside the<br>fleet budget, account-state isolation, and followed-channel selection.<br>- Assert a subscription-gated priority game reads as up to date and no longer<br>suppresses a mineable campaign for the same game.<br>- Update SwiftMiner to version 1.35.1, build 2026072909, and add the 1.35.1<br>release notes page.</p>
-    <p><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/01df63507949bd027d81b37d35709c736d0d39af">01df635</a></p>
+    <h1>SwiftMiner 1.35.1</h1>
+    <p class="meta">Version 1.35.1 &middot; Build 2026072909</p>
+    <p class="intro">A follow-up to 1.35 that removes the multi-miner launch slowdown, and stops the miner status card from reporting a paywall it was never waiting on. Subscription-gated rewards are now treated as finished work: the engine already skipped them, and the interface finally says so.</p>
+
+    <section class="rose">
+      <h2><span class="badge" aria-hidden="true">&#128027;</span> Bug Fixes</h2>
+      <p class="summary">Two conditions that made a working miner look stuck.</p>
+      <ul>
+        <li>A miner no longer reports <strong>Subscription Required</strong> as its current state. Campaigns whose only remaining rewards need a paid Twitch subscription were already excluded from scheduling, but the highest-priority one was shown in place of the miner's real status &mdash; so every idle miner appeared parked on a paywall while it was actually looking for streams for a different game. Those campaigns now count as finished, and remain visible as a mutable Pending reminder on the miner.</li>
+        <li>A subscription-gated campaign no longer hides other work for the same game. Its presence used to suppress that game's <strong>Up next</strong> row, concealing a campaign that could actually be mined.</li>
+      </ul>
+    </section>
+
+    <section class="amber">
+      <h2><span class="badge" aria-hidden="true">&#9889;</span> Performance</h2>
+      <p class="summary">Faster cold launch with several miners, and far fewer wasted Twitch requests.</p>
+      <ul>
+        <li>Fixes the multi-miner launch slowdown that could leave accounts on <strong>Updating</strong> for more than three minutes: miners retain an individual five-request-per-second ceiling while the fleet can now make bounded concurrent progress.</li>
+        <li>Coalesces campaign refreshes at the Twitch client boundary, so the mining engine and dashboard share one campaign-detail fan-out even when their separate service layers refresh at the same time.</li>
+        <li>Coalesces simultaneous cross-miner campaign-detail lookups when Twitch's dashboard has already confirmed each account's link state. Campaign definitions are shared, while progress, claims, authentication and uncertain account-link state remain isolated per miner.</li>
+        <li>Prioritises followed streamers with one paginated followed-channel lookup instead of probing Twitch's subscription endpoint once for every candidate channel.</li>
+      </ul>
+    </section>
+
+    <section class="teal">
+      <h2><span class="badge" aria-hidden="true">&#127919;</span> Honest Queue and Status</h2>
+      <p class="summary">The queue explains its own ordering and reports what was actually checked.</p>
+      <ul>
+        <li>Explains when Smart ordering puts an earlier-ending campaign ahead of a prioritised game, and replaces the queue's assumed &ldquo;No eligible channels live&rdquo; message with the miner's real recent channel check or an honest &ldquo;Not checked yet&rdquo; state.</li>
+        <li>Waiting and eligibility states are reported honestly: unrelated unlinked campaigns are ignored, while an explicitly prioritised game remains mineable even before its external game account is linked.</li>
+        <li>Completed and unlinked campaigns stay out of prospective <strong>Up next</strong> and <strong>Then</strong> positions. Prioritised games that still need account linking remain visible as actionable Pending reminders, and appear as current work only after the miner actually selects them.</li>
+        <li>Only labels a miner as <strong>Watching</strong> or <strong>Currently mining</strong> when it has a real watch session, so a pending unlinked priority cannot look selected before mining starts.</li>
+        <li>Restores the Drops &ldquo;Needs Setup&rdquo; filter for live unlinked campaigns while retaining the rule that an explicitly prioritised game can still be mined before linking.</li>
+      </ul>
+    </section>
+
+    <section class="indigo">
+      <h2><span class="badge" aria-hidden="true">&#129514;</span> Under the Hood</h2>
+      <p class="summary">Coverage for the paths this release changed.</p>
+      <ul>
+        <li>Adds regression coverage for API-level and cross-miner startup refresh coalescing, per-miner request ceilings inside the fleet budget, account-state isolation, and followed-channel selection without subscription-request fan-out.</li>
+        <li>Adds coverage asserting that a subscription-gated priority game reads as up to date rather than blocked, and no longer suppresses a mineable campaign for the same game.</li>
+        <li>Prepared as SwiftMiner <strong>1.35.1</strong>, build <strong>2026072909</strong>.</li>
+      </ul>
+    </section>
   </main>
 </body>
 </html>

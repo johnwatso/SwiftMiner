@@ -3,7 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Release SwiftMiner 1.32.5 - Release Notes</title>
+  <title>SwiftMiner 1.32.5 - Release Notes</title>
+  <meta name="description" content="Release notes for SwiftMiner 1.32.5, covering calmer account-link status handling for priority mining.">
+  <link rel="canonical" href="https://swiftminer.app/release-notes/1.32.5.html">
+  <meta name="robots" content="index, follow">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
   <style>
     :root { color-scheme: light dark; }
     body {
@@ -20,10 +28,45 @@
       border-radius: 22px;
       background: rgba(255, 255, 255, 0.86);
       box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
+      border: 1px solid rgba(82, 96, 109, 0.12);
     }
     h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
-    .meta { margin: 0 0 24px; color: #52606d; font-size: 14px; }
-    p { margin: 0 0 16px; }
+    .meta { margin: 0 0 10px; color: #52606d; font-size: 14px; }
+    .intro { margin: 0 0 24px; color: #384454; }
+    section {
+      margin: 18px 0 0;
+      padding: 18px 18px 14px;
+      border: 1px solid rgba(82, 96, 109, 0.18);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.42);
+      border-left: 5px solid var(--accent, #0a67a3);
+    }
+    section.green  { --accent: #1c8c73; }
+    section.indigo { --accent: #5f5ac8; }
+    section.violet { --accent: #7b4bd9; }
+    section.amber  { --accent: #b9760a; }
+    section.teal   { --accent: #0a8aa3; }
+    h2 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 4px;
+      color: var(--accent, #0a67a3);
+      font-size: 18px;
+    }
+    .badge {
+      display: inline-grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--accent, #0a67a3) 15%, transparent);
+      font-size: 16px;
+    }
+    .summary { margin: 0 0 12px; color: #52606d; font-size: 14px; }
+    ul { margin: 0; padding-left: 22px; }
+    li { margin: 0 0 8px; }
+    li:last-child { margin-bottom: 0; }
     a { color: #0a67a3; text-decoration: none; }
     a:hover { text-decoration: underline; }
     @media (prefers-color-scheme: dark) {
@@ -31,18 +74,51 @@
       main {
         background: rgba(15, 23, 32, 0.88);
         box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+        border-color: rgba(159, 176, 194, 0.14);
       }
-      .meta { color: #9fb0c2; }
+      .meta, .summary { color: #9fb0c2; }
+      .intro { color: #c8d3df; }
+      section {
+        border-color: rgba(159, 176, 194, 0.18);
+        background: rgba(255, 255, 255, 0.04);
+      }
       a { color: #73c3ff; }
     }
   </style>
 </head>
 <body>
   <main>
-    <h1>Release SwiftMiner 1.32.5</h1>
-    <p class="meta">Version 1.32.5</p>
-    <p>Release SwiftMiner 1.32.5</p>
-    <p><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/8122e8628dba59018dcca84aeefed3e40ff6dabb">8122e86</a></p>
+    <h1>SwiftMiner 1.32.5</h1>
+    <p class="meta">Version 1.32.5 · Build 2026070308</p>
+    <p class="intro">A focused status-polish update that keeps healthy miners from sounding blocked when Twitch simply has no mineable priority campaign for them.</p>
+
+    <section class="green">
+      <h2><span class="badge" aria-hidden="true">🧘</span> Calmer Miner Status</h2>
+      <p class="summary">Account-link warnings now appear only when linking is actually the reason a priority campaign cannot move forward.</p>
+      <ul>
+        <li>Stops unrelated unlinked public campaigns from making a miner look account-blocked after its priority filters have already ruled those campaigns out.</li>
+        <li>Reserves the account-link blocked state for attemptable priority campaigns that genuinely belong to the miner's active priority list.</li>
+        <li>Falls back to no eligible campaigns when the only visible priority campaign is subscription-only and cannot be watched for progress.</li>
+      </ul>
+    </section>
+
+    <section class="teal">
+      <h2><span class="badge" aria-hidden="true">🎯</span> Priority Mining Behavior</h2>
+      <p class="summary">The mining rule stays the same: prioritised games can still be attempted even before the external game account is linked.</p>
+      <ul>
+        <li>Keeps the miner focused on its effective priority list, including global priorities used by that account.</li>
+        <li>Avoids presenting account linking as a hard blocker when the miner is simply idle because Twitch has no eligible priority stream available.</li>
+      </ul>
+    </section>
+
+    <section class="indigo">
+      <h2><span class="badge" aria-hidden="true">🧪</span> Reliability Coverage</h2>
+      <p class="summary">Regression tests cover the account-link cases that made this status feel too alarming.</p>
+      <ul>
+        <li>Adds tests for unrelated unlinked campaigns, prioritised unlinked campaigns, and subscription-only priority campaigns.</li>
+        <li>Prepared as SwiftMiner <strong>1.32.5</strong>, build <strong>2026070308</strong>.</li>
+      </ul>
+    </section>
   </main>
 </body>
 </html>

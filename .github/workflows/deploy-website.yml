@@ -9,6 +9,7 @@ on:
       - "docs/appcast.xml"
       - "docs/beta/appcast.xml"
       - "docs/release-notes/**"
+      - "scripts/build_release_notes.py"
       - ".github/workflows/deploy-website.yml"
   workflow_dispatch:
 
@@ -46,16 +47,12 @@ jobs:
             cp docs/beta/appcast.xml Website/public/beta/appcast.xml
           fi
 
-          if [ -d docs/release-notes ]; then
-            mkdir -p Website/public/release-notes
-            for file in docs/release-notes/*.html; do
-              [ -e "$file" ] || continue
-              target="Website/public/release-notes/$(basename "$file")"
-              if [ ! -f "$target" ]; then
-                cp "$file" "$target"
-              fi
-            done
-          fi
+      - name: Build release notes
+        run: |
+          # docs/release-notes is the source of truth — ShipHook can only write there.
+          # This publishes those pages into the site and regenerates the index and the
+          # sitemap's release-notes URLs, so a ShipHook release needs no manual step.
+          python3 scripts/build_release_notes.py
 
       - name: Upload website
         uses: actions/upload-pages-artifact@v5
