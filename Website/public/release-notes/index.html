@@ -53,6 +53,7 @@
       <li>Keeps decoded campaigns in memory, shares concurrent refreshes, and indexes multi-account aggregation to remove repeated disk decoding and list scans.</li>
       <li>Builds shared and per-account campaign views from one snapshot, avoiding a duplicate aggregation pass after each refresh.</li>
       <li>Skips cache rewrites when only refresh timestamps changed, and stops routine log and health updates from rewriting miner identities to the dashboard database.</li>
+      <li>Derives Overview&rsquo;s prioritised feed through hashed game lookups and one-off sort keys instead of pairwise comparisons on every interface update.</li>
       <li>Bounds artwork and avatar memory, caps both image cache folders on disk, and shares artwork with tint sampling.</li>
       <li>Coalesces Dock badge work, limits timestamp-only miner presentation updates, and reduces decorative animation work while respecting Reduce Motion.</li>
       <li>Bounds and times out local dashboard requests, rejecting malformed or ambiguous request framing.</li>

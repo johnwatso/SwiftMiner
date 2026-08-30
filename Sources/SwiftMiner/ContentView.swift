@@ -137,22 +137,17 @@ struct OverviewView: View {
     @Environment(NavigationModel.self) private var navigation
     private var settings: Settings { .shared }
     @State private var overviewCampaigns: [CampaignViewData] = []
+    /// `overviewCampaigns` with excluded games removed. Held rather than derived because
+    /// the feed, the system-state banner, the activity section, and artwork resolution all
+    /// read it, and each read used to re-run a locale comparison against every exclusion.
+    @State private var visibleCampaigns: [CampaignViewData] = []
     @State private var isRefreshing = false
     @State private var isShowingGameManagement = false
     @State private var customArtworkImportGame: Game?
     @State private var isShowingArtworkImporter = false
     @State private var isMinerStatusLegendPresented = false
 
-    private var campaigns: [CampaignViewData] {
-        // Resolve the exclusion list once, not once per campaign inside the filter.
-        let excluded = settings.excludedGames
-        return overviewCampaigns
-            .filter { campaign in
-                !excluded.contains(where: {
-                    $0.localizedCaseInsensitiveCompare(campaign.gameName) == .orderedSame
-                })
-            }
-    }
+    private var campaigns: [CampaignViewData] { visibleCampaigns }
 
     var body: some View {
         ScrollView {
@@ -185,6 +180,9 @@ struct OverviewView: View {
             }
         }
         .task { await refreshSummary() }
+        .onChange(of: settings.excludedGames) { _, excluded in
+            visibleCampaigns = Self.visibleCampaigns(in: overviewCampaigns, excludedGames: excluded)
+        }
         .sheet(isPresented: $isShowingGameManagement) {
             GamePreferenceManagementView(
                 settings: settings,
@@ -372,15 +370,32 @@ struct OverviewView: View {
     /// Assigns only when the data actually changed, so refresh storms that
     /// produce an identical campaign array don't invalidate the whole overview.
     private func applyOverviewCampaigns(_ fresh: [CampaignViewData]) {
-        if fresh != overviewCampaigns {
-            overviewCampaigns = fresh
-        }
+        guard fresh != overviewCampaigns else { return }
+        setOverviewCampaigns(fresh)
+    }
+
+    private func setOverviewCampaigns(_ fresh: [CampaignViewData]) {
+        overviewCampaigns = fresh
+        visibleCampaigns = Self.visibleCampaigns(in: fresh, excludedGames: settings.excludedGames)
+    }
+
+    private static func visibleCampaigns(
+        in campaigns: [CampaignViewData],
+        excludedGames: [String]
+    ) -> [CampaignViewData] {
+        guard !excludedGames.isEmpty else { return campaigns }
+        let index = GameMatchIndex(
+            gamePreferences: [],
+            priorityGames: [],
+            excludedGames: excludedGames
+        )
+        return campaigns.filter { !index.isExcluded(gameName: $0.gameName) }
     }
 
     private func refreshSummary() async {
         isRefreshing = true
         if overviewCampaigns.isEmpty && !navigation.minerManager.dataCoordinator.lastKnownAllCampaigns.isEmpty {
-            overviewCampaigns = navigation.minerManager.dataCoordinator.lastKnownAllCampaigns
+            setOverviewCampaigns(navigation.minerManager.dataCoordinator.lastKnownAllCampaigns)
         }
         applyOverviewCampaigns(await navigation.minerManager.dataCoordinator.allCampaigns())
         isRefreshing = false
@@ -615,19 +630,105 @@ struct OverviewView: View {
         settings.gamePreferences.filter { $0.state == .preferred }
     }
 
-    private var prioritisedCampaigns: [CampaignViewData] {
-        campaigns
-            .filter { campaign in
-                (campaign.relevance == .prioritised || preferredGames.contains(where: { matches(campaign, preference: $0) }))
-                    && isPrioritisedRailEligible(campaign)
-            }
-            .sorted(by: campaignDisplaySort)
+    /// Lookups the prioritised feed resolves once and then reuses for every campaign it
+    /// touches. Rebuilding them per campaign is what made this chain the most expensive
+    /// thing Overview did on a body pass.
+    private struct CampaignFeedContext {
+        let preferences: GameMatchIndex
+        let watched: WatchedCampaignIndex
     }
 
+    /// Campaigns a miner is currently watching, resolved from one pass over the miners
+    /// rather than a fresh filtered array for every campaign asked about.
+    private struct WatchedCampaignIndex {
+        private let campaignIds: Set<String>
+        private let campaignNames: Set<String>
 
-    private var uniquePrioritisedCampaigns: [CampaignViewData] {
+        init(miners: [MinerManager.ManagedMiner]) {
+            var campaignIds: Set<String> = []
+            var campaignNames: Set<String> = []
+            for miner in miners where miner.status == .watching || miner.status == .claiming {
+                if let id = miner.currentCampaignId {
+                    campaignIds.insert(id)
+                } else if let name = miner.currentCampaign {
+                    campaignNames.insert(name)
+                }
+            }
+            self.campaignIds = campaignIds
+            self.campaignNames = campaignNames
+        }
+
+        func isWatched(_ campaign: CampaignViewData) -> Bool {
+            campaignIds.contains(campaign.id) || campaignNames.contains(campaign.campaignName)
+        }
+    }
+
+    /// The feed's sort order, resolved once per campaign. The comparator this replaces
+    /// re-derived visual state and rescanned the priority list on both sides of every
+    /// comparison, so a full sort paid for each of them thousands of times.
+    private struct CampaignSortKey: Comparable {
+        let displayPriority: Int
+        let pinnedRank: Int
+        let progressPercent: Double
+        let endDate: Date
+        let gameName: String
+
+        static func < (lhs: Self, rhs: Self) -> Bool {
+            if lhs.displayPriority != rhs.displayPriority {
+                return lhs.displayPriority < rhs.displayPriority
+            }
+            if lhs.pinnedRank != rhs.pinnedRank {
+                return lhs.pinnedRank < rhs.pinnedRank
+            }
+            if lhs.progressPercent != rhs.progressPercent {
+                return lhs.progressPercent > rhs.progressPercent
+            }
+            if lhs.endDate != rhs.endDate {
+                return lhs.endDate < rhs.endDate
+            }
+            return lhs.gameName < rhs.gameName
+        }
+    }
+
+    private func makeFeedContext() -> CampaignFeedContext {
+        CampaignFeedContext(
+            preferences: GameMatchIndex(
+                gamePreferences: settings.gamePreferences,
+                priorityGames: settings.priorityGames,
+                excludedGames: settings.excludedGames
+            ),
+            watched: WatchedCampaignIndex(miners: navigation.minerManager.miners)
+        )
+    }
+
+    private func sortKey(for campaign: CampaignViewData, context: CampaignFeedContext) -> CampaignSortKey {
+        CampaignSortKey(
+            displayPriority: displayPriority(for: campaign, watched: context.watched),
+            pinnedRank: context.preferences.priorityRank(gameName: campaign.gameName),
+            progressPercent: campaignProgressPercent(for: campaign),
+            endDate: campaign.endDate,
+            gameName: campaign.gameName
+        )
+    }
+
+    private func prioritisedCampaigns(context: CampaignFeedContext) -> [CampaignViewData] {
+        campaigns
+            .filter { campaign in
+                (campaign.relevance == .prioritised
+                    || context.preferences.hasPreferredMatch(
+                        gameId: campaign.gameId,
+                        gameName: campaign.gameName
+                    ))
+                    && isPrioritisedRailEligible(campaign)
+            }
+            .map { (campaign: $0, key: sortKey(for: $0, context: context)) }
+            .sorted { $0.key < $1.key }
+            .map(\.campaign)
+    }
+
+    private func uniquePrioritisedCampaigns(context: CampaignFeedContext) -> [CampaignViewData] {
         var seen = Set<String>()
-        return prioritisedCampaigns.filter { campaign in
+        return prioritisedCampaigns(context: context).filter { campaign in
             let normalizedName = normalizedGameKey(campaign.gameName)
             let key = normalizedName.isEmpty ? normalizedGameKey(campaign.gameId ?? campaign.id) : normalizedName
             return seen.insert(key).inserted
@@ -641,17 +742,27 @@ struct OverviewView: View {
     }
 
 
-    private var prioritisedFeedItems: [CampaignRailItem] {
-        let campaignPool = uniquePrioritisedCampaigns
+    private func prioritisedFeedItems(context: CampaignFeedContext) -> [CampaignRailItem] {
+        let campaignPool = uniquePrioritisedCampaigns(context: context)
+        // Each campaign's match keys are resolved once here, so pairing preferences to
+        // campaigns below is set membership rather than a locale comparison per pair.
+        let poolKeys = campaignPool.map {
+            Set(GameMatchIndex.keys(gameId: $0.gameId, gameName: $0.gameName))
+        }
         var usedCampaignIds = Set<String>()
         var items: [CampaignRailItem] = []
 
-        for preference in preferredGames {
-            if let campaign = campaignPool.first(where: { campaign in
-                !usedCampaignIds.contains(campaign.id) && matches(campaign, preference: preference)
+        for preference in context.preferences.preferredPreferences {
+            let preferenceKeys = Set(
+                GameMatchIndex.keys(gameId: preference.gameId, gameName: preference.gameName)
+            )
+            if let poolIndex = campaignPool.indices.first(where: { index in
+                !usedCampaignIds.contains(campaignPool[index].id)
+                    && !poolKeys[index].isDisjoint(with: preferenceKeys)
             }) {
+                let campaign = campaignPool[poolIndex]
                 usedCampaignIds.insert(campaign.id)
-                items.append(makeRailItem(for: campaign, section: .prioritised))
+                items.append(makeRailItem(for: campaign, section: .prioritised, context: context))
             } else {
                 items.append(makePreferredGameItem(preference))
             }
@@ -659,23 +770,27 @@ struct OverviewView: View {
 
         let unpinnedCampaigns = campaignPool
             .filter { !usedCampaignIds.contains($0.id) }
-            .map { makeRailItem(for: $0, section: .prioritised) }
+            .map { makeRailItem(for: $0, section: .prioritised, context: context) }
 
         items.append(contentsOf: unpinnedCampaigns)
         return Array(deduplicatedPrioritisedItems(items).prefix(12))
     }
 
     private var displayedPrioritisedFeedItems: [CampaignRailItem] {
-        prioritisedFeedItems
+        prioritisedFeedItems(context: makeFeedContext())
     }
 
-    private func makeRailItem(for campaign: CampaignViewData, section: CampaignFeedSection) -> CampaignRailItem {
-        var state = visualState(for: campaign)
-        if state == .idle && isBeingWatched(campaign) {
+    private func makeRailItem(
+        for campaign: CampaignViewData,
+        section: CampaignFeedSection,
+        context: CampaignFeedContext
+    ) -> CampaignRailItem {
+        var state = visualState(for: campaign, watched: context.watched)
+        if state == .idle && context.watched.isWatched(campaign) {
             state = .watching
         }
         let game = Game(id: campaign.gameId ?? campaign.id, name: campaign.gameName, boxArtURL: campaign.artworkURL)
-        let preference = preferredPreference(matching: game)
+        let preference = context.preferences.bestPreference(gameId: game.id, gameName: campaign.gameName)
         let artworkURL = preference?.customArtworkURL ?? campaign.artworkURL
         return CampaignRailItem(
             id: "\(section.rawValue)-\(campaign.id)",
@@ -707,10 +822,6 @@ struct OverviewView: View {
         }
 
         return campaigns.first(where: { $0.campaignName == campaignName })
-    }
-
-    private func priorityOrderIndex(for gameName: String) -> Int {
-        settings.priorityGames.firstIndex(where: { $0.localizedCaseInsensitiveCompare(gameName) == .orderedSame }) ?? Int.max
     }
 
     private func normalizedGameKey(_ value: String) -> String {
@@ -820,14 +931,6 @@ struct OverviewView: View {
         }
     }
 
-    private func preferredPreference(matching game: Game) -> GamePreference? {
-        let matches = settings.gamePreferences.filter { preference in
-            preferenceMatches(preference, game: game)
-        }
-
-        return matches.first(where: { $0.customArtworkURL != nil }) ?? matches.first
-    }
-
     private func preferenceMatches(_ preference: GamePreference, game: Game) -> Bool {
         let idMatches = !game.id.isEmpty && preference.gameId == game.id
         let nameMatches = preference.gameName.localizedCaseInsensitiveCompare(game.name) == .orderedSame
@@ -917,7 +1020,10 @@ struct OverviewView: View {
         }
     }
 
-    private func visualState(for campaign: CampaignViewData) -> CampaignVisualState {
+    private func visualState(
+        for campaign: CampaignViewData,
+        watched: WatchedCampaignIndex
+    ) -> CampaignVisualState {
         if campaign.isCompleted {
             return .claimed
         }
@@ -927,7 +1033,7 @@ struct OverviewView: View {
         }
 
         if campaign.hasValidProgress {
-            return isBeingWatched(campaign) ? .watching : .inProgress
+            return watched.isWatched(campaign) ? .watching : .inProgress
         }
 
         return .idle
@@ -963,14 +1069,6 @@ struct OverviewView: View {
         !watchingMiners(for: campaign).isEmpty
     }
 
-    private func matches(_ campaign: CampaignViewData, preference: GamePreference) -> Bool {
-        OverviewArtworkResolver.matches(
-            gameId: campaign.gameId,
-            gameName: campaign.gameName,
-            preference: preference
-        )
-    }
-
     private func campaignDetailText(
         for campaign: CampaignViewData,
         state: CampaignVisualState
@@ -997,35 +1095,11 @@ struct OverviewView: View {
         }
     }
 
-    private func campaignDisplaySort(lhs: CampaignViewData, rhs: CampaignViewData) -> Bool {
-        let lhsPriority = displayPriority(for: lhs)
-        let rhsPriority = displayPriority(for: rhs)
-
-        if lhsPriority != rhsPriority {
-            return lhsPriority < rhsPriority
-        }
-
-        let lhsPinned = priorityOrderIndex(for: lhs.gameName)
-        let rhsPinned = priorityOrderIndex(for: rhs.gameName)
-        if lhsPinned != rhsPinned {
-            return lhsPinned < rhsPinned
-        }
-
-        let lhsProgress = campaignProgressPercent(for: lhs)
-        let rhsProgress = campaignProgressPercent(for: rhs)
-        if lhsProgress != rhsProgress {
-            return lhsProgress > rhsProgress
-        }
-
-        if lhs.endDate != rhs.endDate {
-            return lhs.endDate < rhs.endDate
-        }
-
-        return lhs.gameName < rhs.gameName
-    }
-
-    private func displayPriority(for campaign: CampaignViewData) -> Int {
-        switch visualState(for: campaign) {
+    private func displayPriority(
+        for campaign: CampaignViewData,
+        watched: WatchedCampaignIndex
+    ) -> Int {
+        switch visualState(for: campaign, watched: watched) {
         case .watching: return 0
         case .claimable: return 1
         case .inProgress: return 2
