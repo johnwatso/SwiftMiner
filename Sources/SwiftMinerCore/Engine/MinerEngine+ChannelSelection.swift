@@ -1016,6 +1016,7 @@ extension MinerEngine {
                         // Resets any escalated backoff, so a channel that has just come back
                         // online is probed at full speed again rather than staying skipped.
                         await ChannelLivenessCache.shared.recordLive(login: login)
+                        await self.recordApprovedChannelProbeSuccess()
                         let resolved = await self.resolveChannelIdIfNeeded(channel)
                         return (index, Channel(
                             id: resolved.id,
@@ -1032,7 +1033,6 @@ extension MinerEngine {
                             broadcasterType: channel.broadcasterType,
                             aclBased: true
                         ))
-                        await self.recordApprovedChannelProbeSuccess()
                     } catch {
                         await self.recordApprovedChannelProbeFailure(
                             channel: channel.displayName,

@@ -266,7 +266,7 @@ struct MinerAttentionIssue: Equatable {
             return MinerAttentionIssue(
                 title: "Restricted campaigns can't be checked",
                 detail: failure,
-                recommendation: "Update SwiftMiner. Until the check works, campaigns limited to specific channels — esports broadcasts especially — may be missed while this miner keeps watching everything else.",
+                recommendation: "Use Override Stream to point this miner straight at the channel, or open the stream on Twitch yourself — drops still count either way. SwiftMiner keeps watching everything else meanwhile, and resumes checking on its own once the check recovers.",
                 action: .restart
             )
         }

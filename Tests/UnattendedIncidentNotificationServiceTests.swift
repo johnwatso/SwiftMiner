@@ -247,7 +247,7 @@ final class UnattendedIncidentNotificationServiceTests: XCTestCase {
                 openedAt: Date(),
                 lastObservedAt: Date(),
                 summary: "Approved-channel liveness checks are failing (3 in a row)",
-                recommendedAction: "Update SwiftMiner so it can check restricted campaigns again"
+                recommendedAction: "Point a miner at the channel with Override Stream, or watch it on Twitch — drops still count"
             ),
             displayName: "ruffcrumble"
         )
