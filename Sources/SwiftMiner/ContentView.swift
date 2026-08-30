@@ -117,6 +117,43 @@ enum OverviewArtworkResolver {
         return idMatches || nameMatches
     }
 
+    /// Artwork for preferred games that have no eligible campaign of their own, indexed
+    /// under the same match keys the feed uses.
+    ///
+    /// Resolving this per preference rescanned every campaign — and re-flattened every
+    /// miner's campaign list — once for each preferred game still waiting for a campaign.
+    /// Built at most once per feed derivation, and only when some game actually needs it.
+    struct ArtworkIndex {
+        /// The first campaign, in the order the sources were given, whose usable artwork
+        /// matched a key. Keeping the position preserves the "first match wins, primary
+        /// source before fallback" order the linear scan produced.
+        private var byKey: [String: (position: Int, url: URL)] = [:]
+
+        init(sources: [[(gameId: String?, gameName: String, artworkURL: URL?)]]) {
+            var position = 0
+            for source in sources {
+                for campaign in source {
+                    defer { position += 1 }
+                    let keys = GameMatchIndex.keys(
+                        gameId: campaign.gameId,
+                        gameName: campaign.gameName
+                    ).filter { byKey[$0] == nil }
+                    guard !keys.isEmpty, let url = usable(campaign.artworkURL) else { continue }
+                    for key in keys {
+                        byKey[key] = (position, url)
+                    }
+                }
+            }
+        }
+
+        func artworkURL(for preference: GamePreference) -> URL? {
+            GameMatchIndex.keys(gameId: preference.gameId, gameName: preference.gameName)
+                .compactMap { byKey[$0] }
+                .min(by: { $0.position < $1.position })?
+                .url
+        }
+    }
+
     private static func usable(_ url: URL?) -> URL? {
         guard let url else { return nil }
         guard url.isFileURL else { return url }
@@ -690,6 +727,15 @@ struct OverviewView: View {
         }
     }
 
+    private func makeArtworkIndex() -> OverviewArtworkResolver.ArtworkIndex {
+        OverviewArtworkResolver.ArtworkIndex(sources: [
+            campaigns.map { ($0.gameId, $0.gameName, $0.artworkURL) },
+            navigation.minerManager.miners.flatMap(\.allCampaigns).map {
+                ($0.game.id, $0.game.name, $0.game.boxArtURL)
+            }
+        ])
+    }
+
     private func makeFeedContext() -> CampaignFeedContext {
         CampaignFeedContext(
             preferences: GameMatchIndex(
@@ -751,6 +797,8 @@ struct OverviewView: View {
         }
         var usedCampaignIds = Set<String>()
         var items: [CampaignRailItem] = []
+        // Only built if some preferred game turns out to have no eligible campaign.
+        var artworkIndex: OverviewArtworkResolver.ArtworkIndex?
 
         for preference in context.preferences.preferredPreferences {
             let preferenceKeys = Set(
@@ -764,7 +812,9 @@ struct OverviewView: View {
                 usedCampaignIds.insert(campaign.id)
                 items.append(makeRailItem(for: campaign, section: .prioritised, context: context))
             } else {
-                items.append(makePreferredGameItem(preference))
+                let artwork = artworkIndex ?? makeArtworkIndex()
+                artworkIndex = artwork
+                items.append(makePreferredGameItem(preference, artwork: artwork))
             }
         }
 
@@ -841,22 +891,15 @@ struct OverviewView: View {
         navigation.reconnectTwitchAccount(for: miner.id)
     }
 
-    private func isGameExcluded(_ gameName: String) -> Bool {
-        settings.excludedGames.contains(where: { $0.localizedCaseInsensitiveCompare(gameName) == .orderedSame })
-    }
-
-    private func makePreferredGameItem(_ preference: GamePreference) -> CampaignRailItem {
+    private func makePreferredGameItem(
+        _ preference: GamePreference,
+        artwork: OverviewArtworkResolver.ArtworkIndex
+    ) -> CampaignRailItem {
         // This item is built precisely because the game has no *eligible* campaign,
         // but an ineligible one (completed, unlinked) usually still exists and
         // carries live Twitch art. Preferences hold no remote URL of their own once
         // a dead cache path is discarded, so without this the tile drops to initials.
-        let campaignArtwork = OverviewArtworkResolver.artworkURL(
-            for: preference,
-            campaigns: campaigns
-        ) ?? OverviewArtworkResolver.artworkURL(
-            for: preference,
-            campaigns: navigation.minerManager.miners.flatMap(\.allCampaigns)
-        )
+        let campaignArtwork = artwork.artworkURL(for: preference)
 
         let artworkURL = preference.customArtworkURL
             ?? preference.resolvedBoxArtURL

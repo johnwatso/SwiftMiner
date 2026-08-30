@@ -144,6 +144,43 @@ final class OverviewArtworkTests: XCTestCase {
         session.invalidateAndCancel()
     }
 
+    /// The index replaced a per-preference scan of every campaign. It has to pick the
+    /// same artwork the scan did: first match wins, primary source before fallback, and
+    /// a file URL that no longer exists is skipped rather than returned.
+    func testArtworkIndexPicksWhatTheLinearScanPicked() throws {
+        let remote = try XCTUnwrap(URL(string: "https://example.com/battlefield.png"))
+        let laterRemote = try XCTUnwrap(URL(string: "https://example.com/battlefield-later.png"))
+        let fallbackRemote = try XCTUnwrap(URL(string: "https://example.com/rust.png"))
+        let missingFile = URL(fileURLWithPath: "/tmp/swiftminer-does-not-exist-\(UUID().uuidString).png")
+
+        let primary = [
+            (gameId: Optional("99"), gameName: "Unrelated Game", artworkURL: Optional(remote)),
+            (gameId: Optional("1"), gameName: "Battlefield 6", artworkURL: Optional(missingFile)),
+            (gameId: Optional("1"), gameName: "Battlefield 6", artworkURL: Optional(remote)),
+            (gameId: Optional("1"), gameName: "Battlefield 6", artworkURL: Optional(laterRemote))
+        ]
+        let fallback = [
+            (gameId: Optional("2"), gameName: "Rust", artworkURL: Optional(fallbackRemote)),
+            (gameId: Optional("1"), gameName: "Battlefield 6", artworkURL: Optional(laterRemote))
+        ]
+        let index = OverviewArtworkResolver.ArtworkIndex(sources: [primary, fallback])
+
+        // Skips the missing file, takes the first usable match, and prefers the primary source.
+        let battlefield = GamePreference(gameId: "1", gameName: "Battlefield 6", state: .preferred)
+        XCTAssertEqual(index.artworkURL(for: battlefield), remote)
+
+        // Only the fallback source carries this one.
+        let rust = GamePreference(gameId: "2", gameName: "Rust", state: .preferred)
+        XCTAssertEqual(index.artworkURL(for: rust), fallbackRemote)
+
+        // Matching by name alone still works, as it did through comparableName.
+        let byName = GamePreference(gameId: "", gameName: "battlefield-6", state: .preferred)
+        XCTAssertEqual(index.artworkURL(for: byName), remote)
+
+        let unknown = GamePreference(gameId: "404", gameName: "Nothing Here", state: .preferred)
+        XCTAssertNil(index.artworkURL(for: unknown))
+    }
+
     func testCampaignArtworkCacheKeepsItsFolderInsideTheDiskBudget() async throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftMinerArtworkBudgetTests-\(UUID().uuidString)", isDirectory: true)
