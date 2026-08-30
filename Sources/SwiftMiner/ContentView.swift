@@ -274,7 +274,7 @@ struct MinerStatusLegendPopover: View {
     private var entries: [StatusEntry] {
         [
             StatusEntry(
-                symbol: "dot.radiowaves.left.and.right",
+                symbol: "bolt.fill",
                 paletteColors: nil,
                 monoColor: .green,
                 title: "Watching",
@@ -507,23 +507,31 @@ enum OverviewSystemState: Equatable {
         case .idleAllCampaignsCompleted:
             return "calendar.badge.checkmark"
         case .waitingForLiveStream:
-            return "antenna.radiowaves.left.and.right"
+            // Mining that cannot start yet, not a fault.
+            return SystemSymbolCompatibility.resolvedName(for: "bolt.badge.clock.fill")
         case .waitingRefreshingCampaigns:
             return "arrow.clockwise"
         case .waitingAuthenticating:
             return "arrow.triangle.2.circlepath"
         case .minerUnresponsive:
-            return "bolt.horizontal.circle.fill"
+            return SystemSymbolCompatibility.resolvedName(for: "bolt.trianglebadge.exclamationmark.fill")
         case .recovering:
             return "wrench.and.screwdriver.fill"
         case .noRecentActivity:
-            return SystemSymbolCompatibility.resolvedName(for: "checkmark.circle.trianglebadge.exclamationmark.fill")
+            // Running, but banking nothing — a mining problem, so a badged bolt like the rest.
+            return SystemSymbolCompatibility.resolvedName(for: "bolt.trianglebadge.exclamationmark.fill")
         case .blockedAccountNotLinked:
             return SystemSymbolCompatibility.resolvedName(for: "personalhotspot.slash")
         case .blockedAuthenticationExpired, .blockedNeedsAttention:
             return "exclamationmark.triangle.fill"
-        case .mining:
-            return "dot.radiowaves.left.and.right"
+        case .mining(let activeMinerCount, let totalMinerCount):
+            // The bolt is what mining looks like everywhere else in the app, so the banner
+            // uses it too, badged with whether the whole squad is up.
+            return SystemSymbolCompatibility.resolvedName(
+                for: activeMinerCount < totalMinerCount
+                    ? "bolt.trianglebadge.exclamationmark.fill"
+                    : "bolt.badge.checkmark.fill"
+            )
         }
     }
 

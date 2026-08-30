@@ -255,7 +255,7 @@ struct MinerStateCard: View {
             return StateConfig(
                 headline: "Watching \(progress.gameName)",
                 subtitle: nil,
-                icon: "dot.radiowaves.left.and.right",
+                icon: "bolt.fill",
                 color: .green
             )
 
@@ -1465,7 +1465,7 @@ struct MinerActivitySnapshot {
 
         switch miner.status {
         case .watching:
-            return "dot.radiowaves.left.and.right"
+            return "bolt.fill"
         case .claiming:
             return "gift.fill"
         case .waitingForStream:

@@ -25,7 +25,7 @@ public enum DropFilter: String, CaseIterable, Identifiable, Hashable, Codable {
 
     public var symbol: String {
         switch self {
-        case .active: return "dot.radiowaves.left.and.right"
+        case .active: return "bolt.fill"
         case .prioritised: return "star.fill"
         case .needsSetup: return SystemSymbolCompatibility.resolvedName(for: "personalhotspot.slash")
         case .upcoming: return "calendar.badge.clock"

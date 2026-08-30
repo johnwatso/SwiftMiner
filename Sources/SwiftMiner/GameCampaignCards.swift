@@ -168,7 +168,7 @@ struct GameCampaignDeckCard: View {
     ) -> CardStatusSummary {
         if activeCount > 0 {
             let title = activeCount == 1 ? "1 Miner Active" : "\(activeCount) Miners Active"
-            return CardStatusSummary(title: title, icon: "dot.radiowaves.left.and.right")
+            return CardStatusSummary(title: title, icon: "bolt.fill")
         }
         let claimedUnlinkedCount = minerAccountStates.filter(isClaimedButNotLinked).count
         if claimedUnlinkedCount > 0 {

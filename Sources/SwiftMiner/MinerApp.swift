@@ -840,9 +840,9 @@ struct MenuBarContent: View {
         // a warning, so a quiet evening does not look like something went wrong.
         case .waitingForStream, .paused:
             return SystemSymbolCompatibility.resolvedName(for: "bolt.badge.clock.fill")
-        // Stopped is something the user chose. A slashed bolt says mining is off; a warning
-        // triangle would claim a problem that is not there.
-        case .stopped, .idle:    return "bolt.slash.fill"
+        // Stopped is something the user chose, so it reads as "no current", not as a fault.
+        // Red carries that it is not mining without borrowing the warning triangle.
+        case .stopped, .idle:    return "bolt.horizontal.circle"
         case .idleNoEligibleCampaigns: return "pause.circle"
         case .blockedAccountNotLinked: return SystemSymbolCompatibility.resolvedName(for: "personalhotspot.slash")
         }
@@ -857,7 +857,10 @@ struct MenuBarContent: View {
             return .orange
         }
 
-        return .secondary
+        switch appModel.overallStatus {
+        case .stopped, .idle: return .red
+        default: return .secondary
+        }
     }
 
     private func openDashboard() {
