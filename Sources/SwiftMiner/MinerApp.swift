@@ -810,13 +810,24 @@ struct MenuBarContent: View {
         }
     }
 
+    /// The bolt carries mining state, so the badge says which state without changing the
+    /// thing being read. Statuses that are not about mining — signing in, claiming, fetching
+    /// — keep their own symbols rather than being forced into the bolt family.
+    ///
+    /// Every badged bolt goes through `SystemSymbolCompatibility`: on macOS 14 these
+    /// resolve to the plain symbols this used before.
     private var statusIcon: String {
         if appModel.totalMiners > 0, appModel.activeMiners == appModel.totalMiners {
-            return appModel.hasMinerAttentionItems ? "exclamationmark.triangle.fill" : "checkmark.circle.fill"
+            return SystemSymbolCompatibility.resolvedName(
+                for: appModel.hasMinerAttentionItems
+                    ? "bolt.trianglebadge.exclamationmark.fill"
+                    : "bolt.badge.checkmark.fill"
+            )
         }
 
+        // Some running, some not: mining is degraded rather than stopped.
         if appModel.activeMiners > 0, appModel.activeMiners < appModel.totalMiners {
-            return "exclamationmark.triangle.fill"
+            return SystemSymbolCompatibility.resolvedName(for: "bolt.trianglebadge.exclamationmark.fill")
         }
 
         switch appModel.overallStatus {
@@ -824,10 +835,14 @@ struct MenuBarContent: View {
         case .authenticating:    return "key.fill"
         case .fetchingCampaigns: return "arrow.clockwise"
         case .claiming:          return "gift.fill"
-        case .error:             return "exclamationmark.triangle.fill"
-        case .waitingForStream:  return "clock.fill"
-        case .stopped, .idle:    return "stop.fill"
-        case .paused:            return "clock.fill"
+        case .error:             return SystemSymbolCompatibility.resolvedName(for: "bolt.trianglebadge.exclamationmark.fill")
+        // Waiting is mining that cannot start yet, not a fault: a clock badge rather than
+        // a warning, so a quiet evening does not look like something went wrong.
+        case .waitingForStream, .paused:
+            return SystemSymbolCompatibility.resolvedName(for: "bolt.badge.clock.fill")
+        // Stopped is something the user chose. A slashed bolt says mining is off; a warning
+        // triangle would claim a problem that is not there.
+        case .stopped, .idle:    return "bolt.slash.fill"
         case .idleNoEligibleCampaigns: return "pause.circle"
         case .blockedAccountNotLinked: return SystemSymbolCompatibility.resolvedName(for: "personalhotspot.slash")
         }

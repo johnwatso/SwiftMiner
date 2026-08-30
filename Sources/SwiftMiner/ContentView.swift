@@ -648,10 +648,10 @@ struct OverviewSystemStateBanner: View {
             healthTint: fleet.healthTint,
             uptimeLabel: "Avg Uptime",
             lastPollLabel: "Avg Last Poll",
-            healthLabel: "Fleet Health",
+            healthLabel: "Squad Health",
             showsLabels: showsLabels,
             // Wider than the per-miner cluster: these labels carry the "Avg" and
-            // "Fleet" qualifiers and must stay on one line.
+            // "Squad" qualifiers and must stay on one line.
             cellWidth: 136
         )
     }
