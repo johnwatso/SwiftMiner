@@ -133,6 +133,51 @@ final class CampaignMetadataSharingTests: XCTestCase {
         XCTAssertGreaterThan(sharedMetadataTTL, detailsTTL)
     }
 
+    /// A campaign whose approved-channel list gates who can mine it keeps the short window:
+    /// for a scarce esports campaign that list is the difference between catching a match
+    /// window and missing it, and the long window exists only to spare relaunches the
+    /// re-fetch of campaigns anyone can watch anywhere.
+    func testRestrictedCampaignsKeepTheShortDetailsWindow() async {
+        let client = TwitchAPIClient(
+            authService: TwitchAuthService(clientId: "test", tokenStore: InMemoryTokenStore()),
+            clientId: "test",
+            persistsCampaignCaches: false
+        )
+
+        let openCampaign = Self.campaign(channels: [], allowIsEnabled: nil)
+        let restrictedByList = Self.campaign(
+            channels: [Channel(id: "1", login: "ow_esports", displayName: "OWCS")],
+            allowIsEnabled: nil
+        )
+        let restrictedByFlag = Self.campaign(channels: [], allowIsEnabled: true)
+
+        let longWindow = await client.campaignDetailsCacheTTL
+        let shortWindow = await client.restrictedCampaignDetailsCacheTTL
+        XCTAssertLessThan(shortWindow, longWindow)
+
+        let openTTL = await client.detailsCacheTTL(for: openCampaign)
+        let listTTL = await client.detailsCacheTTL(for: restrictedByList)
+        let flagTTL = await client.detailsCacheTTL(for: restrictedByFlag)
+        XCTAssertEqual(openTTL, longWindow)
+        XCTAssertEqual(listTTL, shortWindow)
+        XCTAssertEqual(flagTTL, shortWindow)
+    }
+
+    private static func campaign(channels: [Channel], allowIsEnabled: Bool?) -> Campaign {
+        Campaign(
+            id: "campaign",
+            name: "Campaign",
+            game: Game(id: "1", name: "Overwatch"),
+            status: .active,
+            startDate: Date(timeIntervalSince1970: 1_700_000_000),
+            endDate: Date(timeIntervalSince1970: 1_700_100_000),
+            drops: [],
+            channels: channels,
+            isAccountConnected: true,
+            allowIsEnabled: allowIsEnabled
+        )
+    }
+
     /// A shared cache hit that depends on a remembered link result must expire with that
     /// result, rather than silently stretching it for another full details-cache window.
     func testSharedDetailsNeverOutliveRememberedLinkState() {

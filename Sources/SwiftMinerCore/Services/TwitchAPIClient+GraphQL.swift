@@ -244,7 +244,7 @@ extension TwitchAPIClient {
                 campaign: campaign,
                 expiresAt: Self.sharedCampaignDetailsExpiration(
                     now: now,
-                    detailsTTL: campaignDetailsCacheTTL,
+                    detailsTTL: detailsCacheTTL(for: campaign),
                     basicIsAccountConnected: basicCampaign.isAccountConnected,
                     knownLinkStateExpiresAt: knownLinkState?.expiresAt
                 )
@@ -335,7 +335,7 @@ extension TwitchAPIClient {
         )
         campaignDetailsByKey[cacheKey] = CampaignDetailsCacheEntry(
             campaign: campaign,
-            expiresAt: Date().addingTimeInterval(campaignDetailsCacheTTL)
+            expiresAt: Date().addingTimeInterval(detailsCacheTTL(for: campaign))
         )
         // Remember what this fetch established about the account's link state, so later
         // cycles can take the shared metadata path without losing that answer.
