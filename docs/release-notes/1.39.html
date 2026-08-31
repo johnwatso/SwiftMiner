@@ -3,47 +3,103 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Prepare SwiftMiner 1.39 release - Release Notes</title>
+  <title>SwiftMiner 1.39 - Release Notes</title>
+  <meta name="description" content="Release notes for SwiftMiner 1.39: faster startup and refreshes, stronger esports and restricted-channel monitoring, clearer mining status, bounded caches, Keychain-backed secrets, and safer dashboard sign-in.">
+  <link rel="canonical" href="https://swiftminer.app/release-notes/1.39.html">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
   <style>
     :root { color-scheme: light dark; }
-    body {
-      margin: 0;
-      padding: 32px 20px 48px;
-      font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #f4f6f8;
-      color: #0f1720;
-    }
-    main {
-      max-width: 760px;
-      margin: 0 auto;
-      padding: 28px;
-      border-radius: 22px;
-      background: rgba(255, 255, 255, 0.86);
-      box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
-    }
+    body { margin: 0; padding: 32px 20px 48px; font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f4f6f8; color: #0f1720; }
+    main { max-width: 760px; margin: 0 auto; padding: 28px; border-radius: 22px; background: rgba(255, 255, 255, .86); box-shadow: 0 20px 60px rgba(15, 23, 32, .10); border: 1px solid rgba(82, 96, 109, .12); }
     h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
-    .meta { margin: 0 0 24px; color: #52606d; font-size: 14px; }
-    p { margin: 0 0 16px; }
-    a { color: #0a67a3; text-decoration: none; }
+    .meta, .summary { color: #52606d; font-size: 14px; }
+    .intro { margin: 0 0 24px; color: #384454; }
+    section { margin: 18px 0 0; padding: 18px 18px 14px; border: 1px solid rgba(82, 96, 109, .18); border-radius: 16px; border-left: 5px solid #7b4bd9; background: rgba(255, 255, 255, .42); }
+    h2 { margin: 0 0 4px; color: #7b4bd9; font-size: 18px; }
+    ul { margin: 12px 0 0; padding-left: 22px; }
+    li { margin: 0 0 8px; }
+    li:last-child { margin-bottom: 0; }
+    a { color: #7b4bd9; text-decoration: none; }
     a:hover { text-decoration: underline; }
-    @media (prefers-color-scheme: dark) {
-      body { background: #0b1015; color: #edf2f7; }
-      main {
-        background: rgba(15, 23, 32, 0.88);
-        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
-      }
-      .meta { color: #9fb0c2; }
-      a { color: #73c3ff; }
-    }
+    @media (prefers-color-scheme: dark) { body { background: #0b1015; color: #edf2f7; } main { background: rgba(15, 23, 32, .88); border-color: rgba(159, 176, 194, .14); } .meta, .summary { color: #9fb0c2; } .intro { color: #c8d3df; } section { border-color: rgba(159, 176, 194, .18); background: rgba(255, 255, 255, .04); } a { color: #b89aff; } }
   </style>
 </head>
 <body>
   <main>
-    <h1>Prepare SwiftMiner 1.39 release</h1>
-    <p class="meta">Version 1.39</p>
-    <p>Prepare SwiftMiner 1.39 release</p>
-<p>Harden credential migration, dashboard security, and realtime monitoring lifecycle. Refine campaign filtering and status behavior, add regression coverage, and stage curated release notes without conflicting with ShipHook output.</p>
-    <p><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/b46c9aa79e05cc33886a71a1a877b07bc7cfa956">b46c9aa</a></p>
+    <h1>SwiftMiner 1.39</h1>
+    <p class="meta">Version 1.39 &middot; Build 2026090107</p>
+    <p class="intro">A substantial reliability, performance, and security release. SwiftMiner starts faster, is much harder to shake off restricted esports campaigns, makes degraded Twitch services visible, keeps sensitive secrets in the macOS Keychain, and presents mining state more clearly throughout the app.</p>
+
+    <section>
+      <h2>&#127942; Esports and restricted campaigns</h2>
+      <p class="summary">Short, channel-restricted drop windows are detected sooner and survive incomplete Twitch data.</p>
+      <ul>
+        <li>Listens for Twitch stream-up events on the approved channels it is waiting for, starting an esports broadcast in seconds instead of waiting for the next minute-by-minute check.</li>
+        <li>Remembers approved-channel lists across refreshes and launches when Twitch omits them, preserving their original campaign expiry and bounding the on-disk history to 600 campaigns.</li>
+        <li>Uses recent stream-up events and carefully limited direct attempts when Twitch&rsquo;s live-status query is incompatible, without repeatedly trying channels confirmed offline.</li>
+        <li>Waits for subscription acknowledgements, preserves stream-event ordering, cleans up old waits safely, and rotates overflow channels so the same campaigns are not permanently excluded from push monitoring.</li>
+        <li>Surfaces repeated channel-check failures in Needs Attention and notifications, ignores routine cancellations, clears recovered incidents promptly, and points to Override Stream or Twitch as immediate fallbacks.</li>
+        <li>Keeps restricted campaigns on a fresh twenty-minute details window and merges newer Twitch status and dates into cached data, so an extended event is not hidden by an old end time.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#9889; Clearer mining status and Drops controls</h2>
+      <p class="summary">The bolt means mining everywhere, and controls show what they actually selected.</p>
+      <ul>
+        <li>Uses the mining bolt consistently across the menu bar, Overview, cards, game summaries, Drops filters, and icon legend. Checkmark, warning, and clock badges distinguish healthy, attention, and waiting states; stopped mining no longer looks like a fault.</li>
+        <li>Renames Fleet Health to Squad Health and keeps every Overview status symbol at the same clear visual size.</li>
+        <li>Makes the All control in Drops select every campaign filter and clear every filter on the next click instead of repeatedly applying an invisible show-everything state.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#128640; Faster startup and less repeated work</h2>
+      <p class="summary">Campaign refreshes, cache reads, and Overview presentation stop repeating work they already completed.</p>
+      <ul>
+        <li>Remembers ordinary campaign details for four hours rather than twenty minutes, avoiding hundreds of repeat detail requests after a restart while retaining the shorter window for restricted campaigns and account-link state.</li>
+        <li>Keeps decoded campaign data in memory, coalesces concurrent refreshes, collects account snapshots concurrently, and uses indexed campaign, game, artwork, and feed lookups instead of repeated full scans.</li>
+        <li>Builds shared and per-account views from one snapshot, skips cache rewrites when only timestamps changed, and writes dashboard identities only when their data actually changes.</li>
+        <li>Logs token loading, real-time connection setup, each miner&rsquo;s startup, the handoff to its mining loop, and total squad startup time so a slow launch can be diagnosed precisely.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#128444; Bounded caches and a calmer interface</h2>
+      <p class="summary">Artwork, profile pictures, and volatile status updates stay within deliberate budgets.</p>
+      <ul>
+        <li>Bounds decoded artwork, profile pictures, and sampled tints in memory while sharing image downloads and processing work.</li>
+        <li>Caps every image-cache folder on disk by both size and file count, evicting the oldest files once either budget is exceeded.</li>
+        <li>Coalesces volatile telemetry and unchanged Dock badge refreshes, reduces decorative animation work, and stops animations when SwiftMiner is inactive or Reduce Motion is enabled without delaying meaningful state or progress changes.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#128274; Security and long-running reliability</h2>
+      <p class="summary">Credentials are harder to lose or expose, and background work now ends with the account that owns it.</p>
+      <ul>
+        <li>Moves the SwiftBot signing secret, local API key, and dashboard OAuth client secrets from preferences into the macOS Keychain, migrating existing values after a successful Keychain write.</li>
+        <li>Keeps an unreadable legacy account backup retryable instead of recording an empty migration as complete and later offering to delete the only remaining credential copy.</li>
+        <li>Requires HTTPS for public web-dashboard sign-in while preserving plain HTTP for loopback and local-network access, protecting OAuth callbacks and week-long session cookies from travelling over the public internet unencrypted.</li>
+        <li>Stops an account&rsquo;s repeating background drop-state refresh before removing that account, preventing continued Twitch polling and retained services after deletion.</li>
+        <li>Reports sustained outages of Twitch&rsquo;s legacy real-time feed while periodic reconciliation keeps mining and claiming functional, and orders disconnect/reconnect signals so quick recoveries are reported correctly.</li>
+        <li>Reads event-outbox timestamps with a fixed calendar, preserving webhook retry timing in regions using a non-Gregorian system calendar.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#128272; Local dashboard and diagnostics</h2>
+      <p class="summary">Requests are bounded, failures are observable, and exported diagnostics explain more of what happened.</p>
+      <ul>
+        <li>Bounds local dashboard request headers and bodies, times out incomplete requests, and rejects malformed, duplicated, or unsupported body framing before authentication and routing.</li>
+        <li>Adds event-outbox depth, oldest-event age, webhook timings, and real-time transport health to diagnostics so degraded delivery is easier to explain.</li>
+        <li>Reorganises the large Overview implementation, expands regression coverage across the new reliability and security work, fixes SQLite test teardown warnings, and hardens release automation against generated-project and release-note drift.</li>
+      </ul>
+    </section>
+
+    <p class="meta"><a href="./index.html">All release notes</a></p>
   </main>
 </body>
 </html>
