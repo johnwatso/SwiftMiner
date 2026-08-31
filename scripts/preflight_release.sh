@@ -41,6 +41,11 @@ ENCLOSURE_SIGNATURE="$(xmllint --xpath 'string(//enclosure/@*[local-name()="edSi
 [[ -n "$APPCAST_SHORT_VERSION" ]] || fail "appcast short version is missing"
 [[ "$APPCAST_BUILD_VERSION" =~ ^[0-9]{10}$ ]] || fail "appcast build '$APPCAST_BUILD_VERSION' is not a valid published build number"
 
+# Materialise the ignored website output from the curated notes and ShipHook archive
+# before checking it. This keeps the release input outside ShipHook's destination while
+# preserving the existing preflight contract for the page and generated index.
+python3 "$ROOT_DIR/scripts/build_release_notes.py"
+
 RELEASE_NOTES="$ROOT_DIR/Website/public/release-notes/$MARKETING_VERSION.html"
 [[ -f "$RELEASE_NOTES" ]] || fail "release notes missing: $RELEASE_NOTES"
 grep -q "Build $CURRENT_PROJECT_VERSION" "$RELEASE_NOTES" || fail "release notes do not mention Build $CURRENT_PROJECT_VERSION"

@@ -83,4 +83,36 @@ final class LegacyAccountMigratorTests: XCTestCase {
         let afterSecond = try await target.loadAllAccounts()
         XCTAssertTrue(afterSecond.isEmpty)
     }
+
+    /// The reported failure: an undecryptable legacy file read as "no accounts", the migration
+    /// recorded itself as complete, and the app then offered to delete the only surviving copy
+    /// of the user's credentials. A failed read must stay a failure.
+    func testUnreadableLegacySourceLeavesMigrationRetryable() async throws {
+        let source = TestTokenStore()
+        try await source.save(account: makeAccount("1"))
+        await source.failLoads(with: LegacyTokenStoreError.undecryptable(
+            underlying: NSError(domain: "test", code: 1)
+        ))
+        let target = TestTokenStore()
+        let defaults = makeDefaults()
+
+        do {
+            try await LegacyAccountMigrator.migrate(from: source, into: target, defaults: defaults)
+            XCTFail("A legacy store that cannot be read must not migrate silently")
+        } catch {
+            // Expected.
+        }
+
+        XCTAssertNil(
+            defaults.object(forKey: LegacyAccountMigrator.migratedAtKey),
+            "The flag must stay unset so the next launch retries instead of prompting to delete the backup"
+        )
+
+        // Once the read works again, the retry imports normally.
+        await source.failLoads(with: nil)
+        try await LegacyAccountMigrator.migrate(from: source, into: target, defaults: defaults)
+        let imported = try await target.loadAllAccounts()
+        XCTAssertEqual(imported.count, 1)
+        XCTAssertNotNil(defaults.object(forKey: LegacyAccountMigrator.migratedAtKey))
+    }
 }

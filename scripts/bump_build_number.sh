@@ -21,14 +21,11 @@ MARKETING_VERSION="$(sed -nE 's/^[[:space:]]*MARKETING_VERSION:[[:space:]]*"?([^
 perl -0pi -e 's/CURRENT_PROJECT_VERSION: "\d{10}"/CURRENT_PROJECT_VERSION: "'$BUILD_NUMBER'"/g' "$PROJECT_YML"
 perl -0pi -e 's/CURRENT_PROJECT_VERSION = \d{10};/CURRENT_PROJECT_VERSION = '$BUILD_NUMBER';/g' "$PBXPROJ"
 
-RELEASE_NOTES="$ROOT_DIR/Website/public/release-notes/$MARKETING_VERSION.html"
+RELEASE_NOTES="$ROOT_DIR/Documentation/ReleaseNotes/$MARKETING_VERSION.html"
 if [[ -f "$RELEASE_NOTES" ]]; then
     perl -0pi -e 's/Build \d{10}/Build '$BUILD_NUMBER'/g' "$RELEASE_NOTES"
 fi
 
-INDEX="$ROOT_DIR/Website/public/release-notes/index.html"
-if [[ -f "$INDEX" ]]; then
-    perl -0pi -e 's/Build \d{10}/Build '$BUILD_NUMBER'/g' "$INDEX"
-fi
+python3 "$ROOT_DIR/scripts/build_release_notes.py"
 
 echo "Updated SwiftMiner $MARKETING_VERSION build number to $BUILD_NUMBER."

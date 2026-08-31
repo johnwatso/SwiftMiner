@@ -9,6 +9,7 @@ on:
       - "docs/appcast.xml"
       - "docs/beta/appcast.xml"
       - "docs/release-notes/**"
+      - "Documentation/ReleaseNotes/**"
       - "scripts/build_release_notes.py"
       - ".github/workflows/deploy-website.yml"
   workflow_dispatch:
@@ -49,9 +50,9 @@ jobs:
 
       - name: Build release notes
         run: |
-          # docs/release-notes is the source of truth — ShipHook can only write there.
-          # This publishes those pages into the site and regenerates the index and the
-          # sitemap's release-notes URLs, so a ShipHook release needs no manual step.
+          # ShipHook writes to docs/release-notes. Curated pages live separately under
+          # Documentation/ReleaseNotes so ShipHook never copies a file onto itself.
+          # The builder merges both sources, preferring curated pages for the website.
           python3 scripts/build_release_notes.py --check
           python3 scripts/build_release_notes.py
 

@@ -49,8 +49,10 @@ class ReleaseNotesBuilderTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.notes_dir = Path(self._tmp.name) / "notes"
+        self.curated_dir = Path(self._tmp.name) / "curated"
         self.site_dir = Path(self._tmp.name) / "site"
         self.notes_dir.mkdir()
+        self.curated_dir.mkdir()
         self.addCleanup(self._tmp.cleanup)
 
     def write(self, version: str, *, build: str = "2026083014", intro: str = "A release.", heading: str = "&#128029; Fixes") -> None:
@@ -101,6 +103,43 @@ class ReleaseNotesBuilderTests(unittest.TestCase):
     def test_a_complete_page_reports_no_problems(self) -> None:
         self.write("1.38.3")
         self.assertEqual(BUILDER.validate(self.notes()), [])
+
+    def test_curated_page_replaces_shiphook_page_for_the_same_version(self) -> None:
+        (self.notes_dir / "1.39.html").write_text(
+            SHIPHOOK.format(version="1.39"), encoding="utf-8"
+        )
+        (self.curated_dir / "1.39.html").write_text(
+            CURATED.format(
+                version="1.39",
+                build="2026090107",
+                intro="A substantial release.",
+                heading="&#127942; Esports",
+            ),
+            encoding="utf-8",
+        )
+
+        notes = BUILDER.load_notes(self.notes_dir, self.curated_dir)
+
+        self.assertEqual(len(notes), 1)
+        self.assertEqual(notes[0].summary, "A substantial release.")
+        self.assertEqual(BUILDER.validate(notes), [])
+
+    def test_curated_page_overwrites_generated_page_in_site_output(self) -> None:
+        (self.notes_dir / "1.39.html").write_text(
+            SHIPHOOK.format(version="1.39"), encoding="utf-8"
+        )
+        curated = CURATED.format(
+            version="1.39",
+            build="2026090107",
+            intro="A substantial release.",
+            heading="&#127942; Esports",
+        )
+        (self.curated_dir / "1.39.html").write_text(curated, encoding="utf-8")
+
+        BUILDER.publish_pages(self.notes_dir, self.site_dir)
+        BUILDER.publish_pages(self.curated_dir, self.site_dir)
+
+        self.assertEqual((self.site_dir / "1.39.html").read_text(encoding="utf-8"), curated)
 
     def test_check_fails_when_the_sitemap_has_fallen_behind(self) -> None:
         self.write("1.38.3")

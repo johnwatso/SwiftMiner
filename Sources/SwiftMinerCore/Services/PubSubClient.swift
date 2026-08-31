@@ -151,8 +151,32 @@ final class URLSessionPubSubSocket: PubSubSocket, @unchecked Sendable {
 }
 
 /// Client for Twitch PubSub (WebSocket)
+///
+/// ## Endpoint risk
+///
+/// `pubsub-edge.twitch.tv` is Twitch's legacy real-time edge. The drop topics SwiftMiner
+/// listens on (`user-drop-events`, `video-playback-by-id`) are undocumented and carry no
+/// compatibility guarantee, and Twitch has been retiring this infrastructure in favour of
+/// EventSub — which does not expose an equivalent drop-progress subscription.
+///
+/// SwiftMiner therefore treats this transport as **best-effort, not load-bearing**:
+///
+/// - Every drop-progress figure PubSub reports is independently recoverable from GraphQL.
+///   `MinerEngine`'s reconcile tick re-reads inventory whenever no progress has arrived for
+///   `progressReconcileInterval`, so mining and claiming keep working with PubSub dead —
+///   progress simply lands in batches instead of live.
+/// - A connection that never comes up, or goes away and stays away, is reported rather than
+///   retried in silence. See `MinerEngine.noteRealtimeEvents(connected:detail:)`: a sustained
+///   outage raises a `realtimeEventsOffline` health incident. A silent failure here is what
+///   previously let the whole fleet look healthy while earning nothing.
+///
+/// If the endpoint is withdrawn entirely, the observable effect is a permanent outage
+/// incident on every miner, not a silent regression.
 public actor PubSubClient: NSObject {
-    private let url = URL(string: "wss://pubsub-edge.twitch.tv/v1")!
+    /// Twitch's legacy PubSub edge. Named rather than inlined so the one place that pins
+    /// SwiftMiner to retiring infrastructure is greppable.
+    public static let endpoint = URL(string: "wss://pubsub-edge.twitch.tv/v1")!
+    private let url = PubSubClient.endpoint
     private let socketFactory: PubSubSocketFactory
     private var socket: (any PubSubSocket)?
     private var isConnected = false
@@ -193,7 +217,8 @@ public actor PubSubClient: NSObject {
     public var onMessage: (@Sendable (String, AnyJSONValue) async -> Void)?
     
     /// Callback for connection state changes
-    public var onConnectionStateChange: (@Sendable (Bool) -> Void)?
+    /// Awaited so a disconnect/reconnect pair cannot be reordered by unstructured callback tasks.
+    public var onConnectionStateChange: (@Sendable (Bool) async -> Void)?
     
     /// Callback for debug logging
     public var onDebugLog: (@Sendable (String) -> Void)?
@@ -204,7 +229,7 @@ public actor PubSubClient: NSObject {
     }
     
     /// Actor-safe setter for connection state changes
-    public func setConnectionStateHandler(_ handler: @Sendable @escaping (Bool) -> Void) {
+    public func setConnectionStateHandler(_ handler: @Sendable @escaping (Bool) async -> Void) {
         onConnectionStateChange = handler
     }
     
@@ -280,7 +305,8 @@ public actor PubSubClient: NSObject {
         reconnectTask?.cancel()
         reconnectTask = nil
         connectionGeneration &+= 1
-        tearDownSocket(reportDisconnected: true)
+        let disconnected = tearDownSocket(reportDisconnected: true)
+        if disconnected { await onConnectionStateChange?(false) }
         log("PubSub disconnected")
     }
 
@@ -309,7 +335,7 @@ public actor PubSubClient: NSObject {
             // The caller must not believe a rejected new subscription is active. Existing
             // desired topics remain intact and will still be restored on the replacement socket.
             activeTopics.subtract(newTopics)
-            requestReconnect(generation: connectionGeneration)
+            await requestReconnect(generation: connectionGeneration)
             throw error
         }
     }
@@ -338,7 +364,7 @@ public actor PubSubClient: NSObject {
                 log("Unsubscribed from topics: \(batch.joined(separator: ", "))")
             }
         } catch {
-            requestReconnect(generation: connectionGeneration)
+            await requestReconnect(generation: connectionGeneration)
             throw error
         }
     }
@@ -517,10 +543,14 @@ public actor PubSubClient: NSObject {
             throw error
         }
 
-        onConnectionStateChange?(true)
+        await onConnectionStateChange?(true)
     }
 
-    private func tearDownSocket(reportDisconnected: Bool) {
+    /// Tears down the socket and returns whether the caller should emit a disconnected event.
+    /// The callback itself is awaited by the async caller so connection transitions preserve
+    /// the order in which this actor observed them.
+    @discardableResult
+    private func tearDownSocket(reportDisconnected: Bool) -> Bool {
         let wasConnected = isConnected
         pingTask?.cancel()
         pingTask = nil
@@ -534,9 +564,7 @@ public actor PubSubClient: NSObject {
         isConnected = false
         submittedTopics.removeAll()
 
-        if reportDisconnected && wasConnected {
-            onConnectionStateChange?(false)
-        }
+        return reportDisconnected && wasConnected
     }
 
     private func startListening(generation: UInt64) {
@@ -588,7 +616,7 @@ public actor PubSubClient: NSObject {
             case .reconnect:
                 // Server requested reconnect
                 log("[PubSub] Server requested RECONNECT")
-                requestReconnect(generation: generation)
+                await requestReconnect(generation: generation)
 
             case .message:
                 reconnectAttempt = 0
@@ -670,12 +698,13 @@ public actor PubSubClient: NSObject {
     
     private func handleConnectionError(_ error: Error, generation: UInt64) async {
         guard generation == connectionGeneration, isConnected else { return }
-        requestReconnect(generation: generation)
+        await requestReconnect(generation: generation)
     }
 
-    private func requestReconnect(generation: UInt64) {
+    private func requestReconnect(generation: UInt64) async {
         guard shouldRemainConnected, generation == connectionGeneration else { return }
-        tearDownSocket(reportDisconnected: true)
+        let disconnected = tearDownSocket(reportDisconnected: true)
+        if disconnected { await onConnectionStateChange?(false) }
         guard reconnectTask == nil else { return }
 
         reconnectTask = Task { [weak self] in

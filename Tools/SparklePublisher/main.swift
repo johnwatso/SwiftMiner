@@ -31,7 +31,7 @@ func usage() {
       SparklePublisher --version <version> --artifact <exported-app-or-zip> [--release-notes <release-notes-html>] [--channel stable|beta]
 
     Example:
-      ./scripts/publish_sparkle_release.sh 1.0.1 ~/Desktop/SwiftMiner.app docs/release-notes/1.0.1.html --channel beta
+      ./scripts/publish_sparkle_release.sh 1.39 ~/Desktop/SwiftMiner.app Documentation/ReleaseNotes/1.39.html --channel beta
 
     Environment:
       SPARKLE_GENERATE_APPCAST   Optional absolute path to generate_appcast

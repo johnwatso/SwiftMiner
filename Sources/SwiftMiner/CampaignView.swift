@@ -20,6 +20,9 @@ struct DropsListView: View {
         get { settings.selectedDropsFilters }
         nonmutating set { settings.selectedDropsFilters = newValue }
     }
+    private var allFiltersSelected: Bool {
+        DropsCampaignFilterRules.allFiltersSelected(in: selectedFilters)
+    }
 
     private var miners: [MinerManager.ManagedMiner] { navigation.minerManager.miners }
     private var hasAccounts: Bool { !miners.isEmpty }
@@ -245,24 +248,23 @@ struct DropsListView: View {
     private var filterChipsRow: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                let isShowingAll = selectedFilters.isEmpty
                 Button {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                        selectedFilters = []
+                        selectedFilters = DropsCampaignFilterRules.togglingAllFilters(in: selectedFilters)
                     }
                 } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: "square.grid.2x2")
+                        Image(systemName: allFiltersSelected ? "checklist.checked" : "checklist")
                             .font(.caption.weight(.semibold))
                         Text("All")
                             .font(.subheadline.weight(.medium))
                     }
-                    .foregroundStyle(isShowingAll ? .primary : .secondary)
+                    .foregroundStyle(allFiltersSelected ? .primary : .secondary)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 7)
                     .background(
                         Group {
-                            if isShowingAll {
+                            if allFiltersSelected {
                                 Capsule().fill(.thinMaterial.opacity(0.95))
                             } else {
                                 Capsule().fill(Color.clear)
@@ -271,13 +273,15 @@ struct DropsListView: View {
                     )
                     .overlay(
                         Capsule()
-                            .stroke(isShowingAll ? Color.primary.opacity(0.20) : Color.secondary.opacity(0.18), lineWidth: 1)
+                            .stroke(allFiltersSelected ? Color.primary.opacity(0.20) : Color.secondary.opacity(0.18), lineWidth: 1)
                     )
                 }
                 .buttonStyle(.plain)
-                .help("Show all campaigns")
-                .accessibilityLabel("All campaigns")
-                .accessibilityValue(isShowingAll ? "Selected" : "Not selected")
+                .help(allFiltersSelected ? "Turn all filters off" : "Turn all filters on")
+                .accessibilityLabel("All campaign filters")
+                .accessibilityValue(allFiltersSelected ? "Selected" : "Not selected")
+
+                Divider().frame(height: 18)
 
                 ForEach(DropFilter.allCases) { option in
                     let isSelected = selectedFilters.contains(option)
@@ -625,7 +629,7 @@ struct DropsListView: View {
         guard isRefreshing else { return nil }
 
         if selectedFilters.isEmpty {
-            return "Refreshing campaigns in the background"
+            return "Refreshing campaigns in the background; no filters are selected"
         }
 
         if selectedFilters.count == 1, let only = selectedFilters.first {
@@ -646,7 +650,7 @@ struct DropsListView: View {
         }
 
         if selectedFilters.isEmpty {
-            return "No campaigns are available."
+            return "No campaign filters are selected."
         }
 
         if selectedFilters == [.active] {

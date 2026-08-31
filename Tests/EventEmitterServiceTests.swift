@@ -10,11 +10,12 @@ final class EventEmitterServiceTests: XCTestCase {
             .appendingPathComponent("SwiftMiner-EventEmitterServiceTests-\(UUID().uuidString).sqlite")
         let manager = SQLiteManager(databaseURL: databaseURL)
         try await manager.open()
-        defer {
-            Task {
-                await manager.close()
-                try? FileManager.default.removeItem(at: databaseURL)
-            }
+        // Close before unlinking: removing the file while SQLite still has it open makes
+        // macOS log "database integrity compromised by API violation". `addTeardownBlock`
+        // can await the close, which `defer` cannot.
+        addTeardownBlock {
+            await manager.close()
+            try? FileManager.default.removeItem(at: databaseURL)
         }
 
         let service = EventEmitterService(manager: manager)
@@ -86,12 +87,10 @@ final class EventEmitterServiceTests: XCTestCase {
         try await manager.open()
         await PerformanceDiagnostics.shared.reset()
 
-        defer {
-            Task {
-                await PerformanceDiagnostics.shared.reset()
-                await manager.close()
-                try? FileManager.default.removeItem(at: databaseURL)
-            }
+        addTeardownBlock {
+            await PerformanceDiagnostics.shared.reset()
+            await manager.close()
+            try? FileManager.default.removeItem(at: databaseURL)
         }
 
         try await manager.execute { db in

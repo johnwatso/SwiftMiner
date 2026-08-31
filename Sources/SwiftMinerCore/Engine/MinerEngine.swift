@@ -59,6 +59,12 @@ public actor MinerEngine {
         case heartbeat
         case stateUpdate
         case issueDetected(category: IssueCategory, detail: String)
+        /// Real-time drop events (Twitch PubSub) have been unavailable long enough that the
+        /// miner is running on the polling safety net alone. Mining continues; progress lands
+        /// in batches instead of live.
+        case realtimeEventsOffline(detail: String)
+        /// Real-time drop events came back after a reported outage.
+        case realtimeEventsRestored
     }
 
     static func classifyIssue(_ error: Error) -> (IssueCategory, String) {
@@ -145,6 +151,21 @@ public actor MinerEngine {
     var isRunning = false
     private var mainTask: Task<Void, Never>?
     var maintenanceTask: Task<Void, Never>?
+
+    // MARK: Real-time transport health
+    /// When PubSub last went away, or nil while it is connected. Drives the outage grace.
+    private var realtimeEventsOfflineSince: Date?
+    /// Whether the current outage has already been reported, so it is reported once and
+    /// withdrawn once.
+    private var realtimeEventsOutageReported = false
+    private var realtimeEventsOutageTask: Task<Void, Never>?
+    /// Test seam: production uses `defaultRealtimeEventsOutageGrace`.
+    private var realtimeEventsOutageGrace = MinerEngine.defaultRealtimeEventsOutageGrace
+
+    /// Shortens the outage grace so tests don't wait ten minutes for the report.
+    func setRealtimeEventsOutageGrace(_ seconds: TimeInterval) {
+        realtimeEventsOutageGrace = seconds
+    }
     /// A real watch session is user-requested work. Keep normal App Nap heuristics from
     /// deprioritising its heartbeat and recovery timers, while still allowing macOS to sleep.
     var activeWatchActivity: NSObjectProtocol?
@@ -280,6 +301,13 @@ public actor MinerEngine {
     /// reconciles against inventory. Real-time events are authoritative when they arrive; this
     /// only spends a request when they stop, so a healthy miner never pays for it.
     static let progressReconcileInterval: TimeInterval = 5 * 60
+
+    /// How long real-time drop events may be unavailable before the outage is reported.
+    ///
+    /// Long enough to sit out an ordinary reconnect (the client's own backoff tops out well
+    /// inside this) and short enough that a transport that is never coming back — a retired
+    /// endpoint, a rejected topic — is visible within one reconcile cycle rather than never.
+    static let defaultRealtimeEventsOutageGrace: TimeInterval = 10 * 60
     static let failoverCooldown: TimeInterval = 10 * 60
     static let subscriptionWarningRepeatInterval: TimeInterval = 6 * 60 * 60
     static let noCandidateBackoffBaseInterval: UInt64 = 300 * 1_000_000_000
@@ -572,8 +600,62 @@ public actor MinerEngine {
             await self?.logStreamState(event)
         }
 
+        // Real-time delivery is best-effort (see `PubSubClient`), so its state is telemetry the
+        // engine reports rather than something mining depends on. Without this the transport can
+        // die — including for good, if Twitch retires the endpoint — while every other signal
+        // still reads healthy.
+        await pubSubClient.setConnectionStateHandler { [weak self] connected in
+            await self?.noteRealtimeEvents(connected: connected)
+        }
+
         // Configure the service to receive messages
         await dropEventsService.configure()
+    }
+
+    // MARK: - Real-time transport health
+
+    /// Records a PubSub connection transition and reports a *sustained* outage.
+    ///
+    /// Reconnects are routine and must not raise anything: only an outage that outlives
+    /// `realtimeEventsOutageGrace` is reported, and it is withdrawn as soon as the socket is
+    /// back. Mining is unaffected either way — the reconcile tick keeps progress correct — so
+    /// this exists to make the degraded mode legible instead of silent.
+    func noteRealtimeEvents(connected: Bool, detail: String? = nil) {
+        if connected {
+            realtimeEventsOutageTask?.cancel()
+            realtimeEventsOutageTask = nil
+            realtimeEventsOfflineSince = nil
+            if realtimeEventsOutageReported {
+                realtimeEventsOutageReported = false
+                log("Real-time drop events are back.")
+                onOperationalEvent?(.realtimeEventsRestored)
+            }
+            return
+        }
+
+        // Already counting down (or already reported) — don't restart the clock on every retry.
+        guard realtimeEventsOfflineSince == nil else { return }
+        let since = Date()
+        realtimeEventsOfflineSince = since
+        let reason = detail
+        let grace = realtimeEventsOutageGrace
+        realtimeEventsOutageTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(grace * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            await self?.reportRealtimeEventsOutage(since: since, detail: reason)
+        }
+    }
+
+    private func reportRealtimeEventsOutage(since: Date, detail: String?) {
+        // A reconnect between scheduling and firing clears `realtimeEventsOfflineSince`.
+        guard realtimeEventsOfflineSince == since, !realtimeEventsOutageReported else { return }
+        realtimeEventsOutageReported = true
+        let minutes = max(1, Int(Date().timeIntervalSince(since) / 60))
+        let summary = detail.map { "Real-time drop events offline for \(minutes)m: \($0)" }
+            ?? "Real-time drop events offline for \(minutes)m"
+        log("\(summary). Drop progress is being reconciled from Twitch periodically instead — mining continues, but figures update in batches.")
+        Logger.engine.error("PubSub unavailable for \(minutes)m for \(self.currentAccount?.username ?? "unknown")")
+        onOperationalEvent?(.realtimeEventsOffline(detail: summary))
     }
     
     // MARK: - Public API
@@ -673,6 +755,10 @@ public actor MinerEngine {
             log("PubSub connected in \(Self.elapsed(since: pubSubStartedAt))")
         } catch {
             log("PubSub connection failed (will retry during watch loop): \(error.localizedDescription)")
+            // A connection that never comes up produces no state *change*, so start the
+            // outage clock here as well — otherwise the one failure mode that matters most,
+            // real-time events never working at all, is the one nothing reports.
+            noteRealtimeEvents(connected: false, detail: error.localizedDescription)
         }
 
         // Pass user info to services
@@ -711,7 +797,12 @@ public actor MinerEngine {
         maintenanceTask?.cancel()
         maintenanceTask = nil
         
-        // Stop PubSub watching
+        // Stop PubSub watching. The outage countdown goes with it: a socket that closes
+        // because the miner stopped is not an outage.
+        realtimeEventsOutageTask?.cancel()
+        realtimeEventsOutageTask = nil
+        realtimeEventsOfflineSince = nil
+        realtimeEventsOutageReported = false
         try? await dropEventsService.stopWatching()
         
         await watchSessionManager.stopWatching()

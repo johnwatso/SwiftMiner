@@ -10,8 +10,11 @@ let storedPort = URL(string: storedEndpoint)?.port
 let port = UInt16(ProcessInfo.processInfo.environment["SWIFTMINER_API_PORT"] ?? "")
     ?? storedPort.flatMap(UInt16.init)
     ?? 8080
+// The app keeps this in the Keychain (`SecretStore`); `UserDefaults` is only a fallback for
+// an install that predates the move, and the environment always wins so this tool can run
+// standalone without Keychain access.
 let apiKey = ProcessInfo.processInfo.environment["SWIFTMINER_API_KEY"]
-    ?? defaults.string(forKey: "swiftMinerAPIKey")
+    ?? SecretStore.read(.swiftMinerAPIKey, legacyDefaults: defaults)
     ?? ""
 
 guard apiKey.count >= 32, apiKey != "dev-key-change-in-production" else {

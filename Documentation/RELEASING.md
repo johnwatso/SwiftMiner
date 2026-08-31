@@ -36,8 +36,14 @@ export SPARKLE_PRIVATE_KEY_PATH="/path/to/your/private_key.pem"
 
 **Example:**
 ```bash
-./scripts/publish_sparkle_release.sh 1.05 ./DerivedData/Build/Products/Release/SwiftMiner.app Website/public/release-notes/1.05.html --channel stable
+./scripts/publish_sparkle_release.sh 1.39 ./DerivedData/Build/Products/Release/SwiftMiner.app Documentation/ReleaseNotes/1.39.html --channel stable
 ```
+
+Curated notes must stay in `Documentation/ReleaseNotes/` before release. ShipHook copies
+the supplied page into `docs/release-notes/<version>.html`; using that destination as
+the input makes ShipHook's `cp` fail because both paths are identical. The website
+builder merges the curated directory with ShipHook's archive and prefers the curated
+page when both contain the same version.
 
 ## 3. Manual Appcast Signing (Fallback)
 

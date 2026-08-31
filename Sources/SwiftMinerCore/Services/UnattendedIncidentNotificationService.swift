@@ -91,6 +91,8 @@ public actor UnattendedIncidentNotificationService {
             return "Automatic Update Failed"
         case .accountLinkRequired:
             return "Account Link Required"
+        case .realtimeEventsOffline:
+            return "Live Drop Updates Unavailable"
         case .other:
             return "SwiftMiner Needs Attention"
         }

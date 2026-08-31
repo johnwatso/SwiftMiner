@@ -71,10 +71,48 @@ When updating the build number:
 >
 > `CURRENT_PROJECT_VERSION` in `project.yml` / `project.pbxproj` may be bumped freely on dev commits — but leave the appcast to ShipHook. The **only** time the appcast is edited by hand is the deliberate post-release EdDSA re-signing step the user explicitly asks for (see "Appcast EdDSA signing" below), and even then you only insert the `sparkle:edSignature` for the binary ShipHook already published — never the version/build fields.
 - Update release notes for the active marketing version:
-  - `Website/public/release-notes/<MARKETING_VERSION>.html`
-  - `Website/public/release-notes/index.html`
+  - Author the curated input at `Documentation/ReleaseNotes/<MARKETING_VERSION>.html`.
+  - Do not place an unreleased page at `docs/release-notes/<MARKETING_VERSION>.html`:
+    that is ShipHook's copy destination, and using it as the input makes ShipHook copy
+    the file onto itself and fail after notarization.
+  - Run `python3 scripts/build_release_notes.py` to generate the ignored
+    `Website/public/release-notes/` pages, index, and sitemap entries.
   - Any visible build references should match the generated build number.
 - If the marketing version changes, make sure release-note links and filenames follow the new version.
+
+### Curated release notes and GitHub Releases
+
+The polished, curated release notes are authoritative. ShipHook may create a generic
+page from the tip commit message as part of publishing; that output is a transport
+fallback, not acceptable final release copy.
+
+- A finished release note should be easy to scan while retaining useful detail:
+  group related changes into a small number of outcome-focused sections, lead with
+  what improved for the user, and combine closely related implementation details.
+  Do not publish a commit dump, a single refactor description, or internal class and
+  function names as the primary release story.
+- Treat a page as generic ShipHook output when it lacks the normal SwiftMiner version
+  title, introduction, and structured sections, or when it mostly repeats the latest
+  commit message. `python3 scripts/build_release_notes.py --check` detects this shape.
+- Never move the curated input into ShipHook's destination before publishing. Keep it
+  at `Documentation/ReleaseNotes/<version>.html`; the website builder overlays it on
+  `docs/release-notes/<version>.html`, so the polished page replaces generic ShipHook
+  output on the public site without triggering the same-file copy failure.
+- After every ShipHook release, run the release-note builder and verify that the
+  generated website page for that version exactly matches the curated input. If
+  ShipHook committed a generic page under `docs/`, leave the curated input in place;
+  it remains the public authority and safely shadows the generated page.
+- The matching GitHub Release body should follow the same editorial style and cover
+  the same user-visible changes, using concise Markdown headings and bullets. It does
+  not need to reproduce every sentence, but it must not be only a commit title or raw
+  implementation notes.
+- As part of every release completion, and during periodic release-maintenance audits,
+  inspect at least the latest stable GitHub Release (and latest beta when applicable)
+  with `gh release view`. Confirm its version, body, tag, and attached SwiftMiner zip.
+  If the body is generic and the task includes release publishing authority, replace
+  it with a Markdown rendering of the curated notes using `gh release edit`; otherwise
+  report the mismatch explicitly for the user to approve. Also verify that its linked
+  website notes resolve to the curated page.
 
 Before reporting that version/build changes are complete, verify the built app Info.plist reports the expected values:
 
