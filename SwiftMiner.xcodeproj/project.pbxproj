@@ -127,6 +127,7 @@
 		91A58F7E3CA6B37F6A074345 /* MinerEngine+DropProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = A62EC84086B76B8E4E887B4D /* MinerEngine+DropProgress.swift */; };
 		920D17943E1A62FA72CF046D /* GQLHashes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E4586104002CEF72BA27B9E /* GQLHashes.swift */; };
 		92F50709B99C5BF86A6FE6AE /* AdminLinkingTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D66BADBB509C6B9B573607A7 /* AdminLinkingTypes.swift */; };
+		934AF6F50A988E700AD0CB40 /* ApprovedChannelPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3263002894A3B72AFC4F2E77 /* ApprovedChannelPersistenceTests.swift */; };
 		939EF6722C3666DD63CDC642 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAF81B3BBAA69FF63BECA50C /* SidebarView.swift */; };
 		943D5433D6782A731913FC45 /* WebDashboardConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FE0CD7343CBCA411699E72F /* WebDashboardConfig.swift */; };
 		9551176F3A3C6FE59C2C7267 /* AppUpdater.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02ED514E82ADDE29F84D41CF /* AppUpdater.swift */; };
@@ -349,6 +350,7 @@
 		305B04699BD520AFB3A5FA57 /* HTTPAPIServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPAPIServer.swift; sourceTree = "<group>"; };
 		31B9D0BF6E195096BE8D2550 /* DiskCacheBudget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiskCacheBudget.swift; sourceTree = "<group>"; };
 		320947611A8A4BB7759DAF7C /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
+		3263002894A3B72AFC4F2E77 /* ApprovedChannelPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApprovedChannelPersistenceTests.swift; sourceTree = "<group>"; };
 		33B3A3F3F9BC6F96CC3B358D /* TwitchRequestCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwitchRequestCoordinator.swift; sourceTree = "<group>"; };
 		36C4B40CA1A00C6AB1960760 /* MinerEngine+Callbacks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MinerEngine+Callbacks.swift"; sourceTree = "<group>"; };
 		3890500ACC8AE036BC125962 /* UnattendedIncidentNotificationServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnattendedIncidentNotificationServiceTests.swift; sourceTree = "<group>"; };
@@ -861,6 +863,7 @@
 				52BB3B5489AED17CA1BCF0EF /* ActivityLogStoreTests.swift */,
 				5F534FC0C4A706694C2C7007 /* AggregatedCampaignDataServiceTests.swift */,
 				AC3AF853EB52A31B632D0B30 /* ApplicationsFolderInstallerTests.swift */,
+				3263002894A3B72AFC4F2E77 /* ApprovedChannelPersistenceTests.swift */,
 				2EE06B774B6D4826F590ABBE /* BackgroundTaskOrderingTests.swift */,
 				4435A45FA7AE10B8E9CA2F04 /* BoxArtResolutionTests.swift */,
 				7BBB8613168AE0A29515BD3E /* CampaignDetailsPersistenceTests.swift */,
@@ -1363,6 +1366,7 @@
 				4C618AB672E8CC49AE54E634 /* ActivityLogStoreTests.swift in Sources */,
 				E64A2E73C87D520DDF9B7BDB /* AggregatedCampaignDataServiceTests.swift in Sources */,
 				043246205DB44F3ABA4EAB5A /* ApplicationsFolderInstallerTests.swift in Sources */,
+				934AF6F50A988E700AD0CB40 /* ApprovedChannelPersistenceTests.swift in Sources */,
 				23928AC5ADF9DE4666B811B8 /* BackgroundTaskOrderingTests.swift in Sources */,
 				B119C62B1833183E1EBDBB68 /* BoxArtResolutionTests.swift in Sources */,
 				0661C62BF5A351F3FDA14A1B /* CampaignDetailsPersistenceTests.swift in Sources */,
@@ -1507,7 +1511,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026083115;
+				CURRENT_PROJECT_VERSION = 2026083116;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;
@@ -1668,7 +1672,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026083115;
+				CURRENT_PROJECT_VERSION = 2026083116;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;

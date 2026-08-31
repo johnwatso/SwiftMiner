@@ -245,8 +245,11 @@ private struct BadgedBoltIcon: View {
     let isAnimated: Bool
 
     var body: some View {
+        // The bolt is a narrow glyph, so at the caller's point size it reads lighter than
+        // the wide symbols it sits beside — and the badge takes a bite out of it. Drawn a
+        // little larger so the icon carries the same weight in a row as its neighbours.
         let bolt = Image(systemName: "bolt.fill")
-            .font(.system(size: size, weight: weight))
+            .font(.system(size: size * 1.15, weight: weight))
             .foregroundStyle(color)
 
         ZStack(alignment: .bottomTrailing) {
@@ -257,17 +260,17 @@ private struct BadgedBoltIcon: View {
             }
 
             Image(systemName: badge.symbol)
-                .font(.system(size: size * 0.5, weight: .bold))
+                .font(.system(size: size * 0.62, weight: .bold))
                 .foregroundStyle(badge.tint)
                 .background(
                     Circle()
                         .fill(Color(nsColor: .windowBackgroundColor))
-                        .frame(width: size * 0.52, height: size * 0.52)
+                        .frame(width: size * 0.65, height: size * 0.65)
                 )
                 .offset(x: size * 0.22, y: size * 0.12)
         }
         // The badge overhangs the bolt, so the icon keeps the width its neighbours expect.
-        .frame(width: size * 1.1, alignment: .leading)
+        .frame(width: size * 1.4, alignment: .leading)
     }
 }
 
