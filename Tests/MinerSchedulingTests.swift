@@ -186,4 +186,31 @@ final class MinerSchedulingTests: XCTestCase {
         XCTAssertFalse(MinerEngine.shouldAbandonUnverifiedSelection(isUnverified: true, emptyPolls: 2))
         XCTAssertTrue(MinerEngine.shouldAbandonUnverifiedSelection(isUnverified: true, emptyPolls: 3))
     }
+
+    func testApprovedChannelsFailOpenOnlyForCurrentCompatibilityFailures() {
+        XCTAssertTrue(MinerEngine.shouldOfferUnverifiedApprovedChannels(
+            verifiedCount: 0,
+            candidateCount: 3,
+            compatibilityFailureCount: 3,
+            hasReportedProbeFailure: true
+        ))
+        XCTAssertFalse(MinerEngine.shouldOfferUnverifiedApprovedChannels(
+            verifiedCount: 0,
+            candidateCount: 3,
+            compatibilityFailureCount: 0,
+            hasReportedProbeFailure: true
+        ), "a stale incident must not turn confirmed-offline channels into live guesses")
+        XCTAssertFalse(MinerEngine.shouldOfferUnverifiedApprovedChannels(
+            verifiedCount: 0,
+            candidateCount: 3,
+            compatibilityFailureCount: 2,
+            hasReportedProbeFailure: true
+        ), "a mixed network/query failure is not proof that every candidate was unverifiable")
+        XCTAssertFalse(MinerEngine.shouldOfferUnverifiedApprovedChannels(
+            verifiedCount: 0,
+            candidateCount: 3,
+            compatibilityFailureCount: 3,
+            hasReportedProbeFailure: false
+        ), "the existing escalation threshold still applies")
+    }
 }

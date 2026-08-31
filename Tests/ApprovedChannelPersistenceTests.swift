@@ -113,6 +113,38 @@ final class ApprovedChannelPersistenceTests: XCTestCase {
         XCTAssertEqual(omitted.channels.map(\.login), ["ow_esports"])
     }
 
+    func testAClientPreservesTheOriginalExpiryWhenItResavesRestoredChannels() async throws {
+        let originalExpiry = Date().addingTimeInterval(24 * 60 * 60)
+        CampaignDetailsDiskCache.save(
+            details: [:],
+            linkStates: [:],
+            approvedChannels: [
+                "campaign-1": CampaignDetailsDiskCache.ApprovedChannelsEntry(
+                    channels: owcs,
+                    expiresAt: originalExpiry
+                )
+            ],
+            userLogin: userLogin
+        )
+
+        let client = makeClient()
+        await client.setUserLogin(userLogin)
+        await client.loadPersistedCampaignCachesIfNeeded()
+        _ = await client.reinstatingKnownApprovedChannels(campaign(
+            id: "campaign-2",
+            channels: [Channel(id: "67890", login: "ow_esports_2", displayName: "OWCS 2")]
+        ))
+        await client.persistCampaignCachesIfNeeded()
+
+        let resaved = CampaignDetailsDiskCache.load(userLogin: userLogin)
+        let resavedExpiry = try XCTUnwrap(resaved.approvedChannels["campaign-1"]?.expiresAt)
+        XCTAssertEqual(
+            resavedExpiry.timeIntervalSince1970,
+            originalExpiry.timeIntervalSince1970,
+            accuracy: 0.001
+        )
+    }
+
     private func makeClient() -> TwitchAPIClient {
         TwitchAPIClient(
             authService: TwitchAuthService(clientId: "test", tokenStore: InMemoryTokenStore()),

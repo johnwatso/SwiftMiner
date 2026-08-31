@@ -29,7 +29,7 @@
 <body>
   <main>
     <h1>SwiftMiner 1.38.3</h1>
-    <p class="meta">Version 1.38.3 &middot; Build 2026083116</p>
+    <p class="meta">Version 1.38.3 &middot; Build 2026083117</p>
     <p class="intro">A performance release. SwiftMiner stops repeating the same campaign, cache, and interface work on every refresh, keeps its image caches inside a fixed budget in memory and on disk, and reports what the event outbox is doing. Webhook retries now use the correct timing in every region, and the local dashboard turns away oversized or malformed requests before it reads them.</p>
 
     <section>
@@ -40,6 +40,10 @@
         <li>Keeps mining campaigns limited to specific channels — esports drops above all — when Twitch stops listing which channels those are. The approved channel list is remembered once seen and reinstated when a later refresh omits it, instead of falling back to a public directory that does not carry these streams.</li>
         <li>Tries a campaign's approved channels anyway when the check that tells SwiftMiner whether they are live is itself broken, rather than treating an unreadable answer as nobody streaming.</li>
         <li>Says when SwiftMiner cannot tell whether a campaign's approved channels are live. That check failing is what makes an esports drop window pass unnoticed while the miner carries on watching everything else; it used to leave nothing behind but a line in the log. When the cause is a Twitch change SwiftMiner has not caught up with — which does not fix itself — you are notified, because that is precisely when a drop window passes unnoticed.</li>
+        <li>Limits emergency approved-channel guesses to a compatibility failure happening in the current check. An old warning, a network interruption, or a channel confirmed offline can no longer make SwiftMiner repeatedly attempt an offline stream, and a healthy offline answer now clears the warning.</li>
+        <li>Finishes releasing an esports wait's stream-up subscriptions before starting the next wait, so delayed cleanup cannot silently unsubscribe the channels SwiftMiner has just begun monitoring.</li>
+        <li>Keeps a remembered approved-channel list's original campaign-end expiry across relaunches instead of extending it by another week whenever the cache is saved.</li>
+        <li>Uses the latest Twitch dashboard status and dates when cached campaign details are reused, so an extended esports window is not hidden behind an older end time for up to four hours.</li>
         <li>Reads the event outbox's stored timestamps with a fixed calendar rather than the one your region is set to. On a non-Gregorian regional calendar the timestamps failed to parse, so a webhook that needed retrying was retried immediately instead of after its backoff.</li>
       </ul>
     </section>

@@ -26,6 +26,14 @@ class SparkleReleasePathTests(unittest.TestCase):
         self.assertIn('local-name()="releaseNotesLink"', validate_script)
         self.assertIn('Website/public/release-notes', validate_script)
 
+    def test_website_deploy_validates_release_notes_before_publishing(self) -> None:
+        workflow = (self.root / ".github/workflows/deploy-website.yml").read_text(encoding="utf-8")
+
+        check = "python3 scripts/build_release_notes.py --check"
+        publish = "python3 scripts/build_release_notes.py\n"
+        self.assertIn(check, workflow)
+        self.assertLess(workflow.index(check), workflow.index(publish))
+
 
 if __name__ == "__main__":
     unittest.main()

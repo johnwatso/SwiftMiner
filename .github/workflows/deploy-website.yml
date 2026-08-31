@@ -52,6 +52,7 @@ jobs:
           # docs/release-notes is the source of truth — ShipHook can only write there.
           # This publishes those pages into the site and regenerates the index and the
           # sitemap's release-notes URLs, so a ShipHook release needs no manual step.
+          python3 scripts/build_release_notes.py --check
           python3 scripts/build_release_notes.py
 
       - name: Upload website

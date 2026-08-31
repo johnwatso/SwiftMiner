@@ -209,7 +209,6 @@ extension MinerEngine {
         // starting is known in seconds rather than on the next probe — and it still works
         // when the liveness query is failing, because nothing has to be asked.
         await startMonitoringRestrictedChannels(in: restrictedCandidates)
-        defer { Task { await self.stopMonitoringRestrictedChannels() } }
 
         let tick = Duration.seconds(10)
         let totalTicks = max(1, Int(campaignCheckInterval / (10 * 1_000_000_000)))
@@ -219,19 +218,23 @@ extension MinerEngine {
         let timer = AsyncTimerSequence(interval: tick, clock: runtimeClock)
 
         for await _ in timer {
-            if Task.isCancelled || shouldRescanCampaigns { return }
+            if Task.isCancelled || shouldRescanCampaigns { break }
 
             elapsedTicks += 1
-            if elapsedTicks >= totalTicks { return }
+            if elapsedTicks >= totalTicks { break }
 
             guard !restrictedCandidates.isEmpty,
                   elapsedTicks % ticksPerACLProbe == 0 else { continue }
 
             if await anyApprovedChannelLive(in: restrictedCandidates) {
                 log("An approved channel for a restricted campaign just went live — re-checking immediately.")
-                return
+                break
             }
         }
+
+        // This is part of the wait's state transition, not background housekeeping. Awaiting
+        // it prevents an old wait from unsubscribing topics installed by the next wait.
+        await stopMonitoringRestrictedChannels()
     }
 
     /// Subscribes to stream state for the approved channels of the restricted campaigns
