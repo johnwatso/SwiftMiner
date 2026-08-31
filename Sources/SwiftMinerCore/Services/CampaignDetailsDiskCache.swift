@@ -32,19 +32,35 @@ enum CampaignDetailsDiskCache {
         let expiresAt: Date
     }
 
+    /// A restricted campaign's approved channels, kept until the campaign itself ends.
+    ///
+    /// Deliberately outlives the details entry it came from. Twitch omits this list on some
+    /// fetches, and a launch that lands on one of those omissions has nothing to probe and
+    /// nothing to subscribe to — the campaign is visible and unmineable. Remembering the
+    /// list across launches is what makes it recoverable at all: within a session there may
+    /// simply never have been a fetch that carried it.
+    struct ApprovedChannelsEntry: Codable {
+        let channels: [Channel]
+        /// The campaign's own end date: past it the list can never be useful again.
+        let expiresAt: Date
+    }
+
     struct Contents {
         let details: [String: DetailsEntry]
         let linkStates: [String: LinkStateEntry]
+        let approvedChannels: [String: ApprovedChannelsEntry]
 
-        var isEmpty: Bool { details.isEmpty && linkStates.isEmpty }
+        var isEmpty: Bool { details.isEmpty && linkStates.isEmpty && approvedChannels.isEmpty }
 
-        static let empty = Contents(details: [:], linkStates: [:])
+        static let empty = Contents(details: [:], linkStates: [:], approvedChannels: [:])
     }
 
     private struct Envelope: Codable {
         let savedAt: Date
         let details: [String: DetailsEntry]
         let linkStates: [String: LinkStateEntry]
+        /// Absent in files written before approved channels were persisted.
+        let approvedChannels: [String: ApprovedChannelsEntry]?
     }
 
     /// Twitch logins are `[a-zA-Z0-9_]`, but the value reaches us from the API, so it is
@@ -74,6 +90,7 @@ enum CampaignDetailsDiskCache {
     static func save(
         details: [String: DetailsEntry],
         linkStates: [String: LinkStateEntry],
+        approvedChannels: [String: ApprovedChannelsEntry] = [:],
         userLogin: String
     ) {
         guard let url = fileURL(userLogin: userLogin) else { return }
@@ -82,13 +99,21 @@ enum CampaignDetailsDiskCache {
         let now = Date()
         let liveDetails = details.filter { $0.value.expiresAt > now }
         let liveLinkStates = linkStates.filter { $0.value.expiresAt > now }
-        guard !liveDetails.isEmpty || !liveLinkStates.isEmpty else {
+        // Approved channels expire with the campaign rather than with its details window:
+        // the whole point is to still have them on a launch where Twitch omits them.
+        let liveApprovedChannels = approvedChannels.filter { $0.value.expiresAt > now }
+        guard !liveDetails.isEmpty || !liveLinkStates.isEmpty || !liveApprovedChannels.isEmpty else {
             try? FileManager.default.removeItem(at: url)
             return
         }
 
         do {
-            let envelope = Envelope(savedAt: now, details: liveDetails, linkStates: liveLinkStates)
+            let envelope = Envelope(
+                savedAt: now,
+                details: liveDetails,
+                linkStates: liveLinkStates,
+                approvedChannels: liveApprovedChannels
+            )
             let data = try JSONEncoder().encode(envelope)
             try data.write(to: url, options: .atomic)
         } catch {
@@ -106,7 +131,8 @@ enum CampaignDetailsDiskCache {
         let now = Date()
         let details = envelope.details.filter { $0.value.expiresAt > now }
         let linkStates = envelope.linkStates.filter { $0.value.expiresAt > now }
-        return Contents(details: details, linkStates: linkStates)
+        let approvedChannels = (envelope.approvedChannels ?? [:]).filter { $0.value.expiresAt > now }
+        return Contents(details: details, linkStates: linkStates, approvedChannels: approvedChannels)
     }
 
     static func clear(userLogin: String) {

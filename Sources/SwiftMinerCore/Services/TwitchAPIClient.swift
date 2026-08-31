@@ -319,6 +319,8 @@ public actor TwitchAPIClient {
     ///
     /// So an ACL, once seen, is remembered and reinstated when a later fetch omits it.
     var lastKnownApprovedChannels: [String: [Channel]] = [:]
+    /// When each remembered list stops mattering — the campaign's own end date.
+    var lastKnownApprovedChannelExpiry: [String: Date] = [:]
     var lastKnownClaimedBenefits: [String: ClaimedBenefit] = [:]
 
     /// Campaigns parsed from the most recent inventory `dropCampaignsInProgress` response.
@@ -335,6 +337,7 @@ public actor TwitchAPIClient {
         persistCampaignCachesIfNeeded()
         campaignDetailsByKey.removeAll(keepingCapacity: true)
         lastKnownApprovedChannels.removeAll(keepingCapacity: true)
+        lastKnownApprovedChannelExpiry.removeAll(keepingCapacity: true)
         campaignLinkStateByKey.removeAll(keepingCapacity: true)
         campaignCachesNeedPersisting = false
         self.userLogin = login

@@ -150,6 +150,9 @@ extension TwitchAPIClient {
                 expiresAt: entry.expiresAt
             )
         }
+        for (campaignId, entry) in contents.approvedChannels where lastKnownApprovedChannels[campaignId] == nil {
+            lastKnownApprovedChannels[campaignId] = entry.channels
+        }
         for (key, entry) in contents.linkStates where campaignLinkStateByKey[key] == nil {
             campaignLinkStateByKey[key] = CampaignLinkStateEntry(
                 isAccountConnected: entry.isAccountConnected,
@@ -192,6 +195,7 @@ extension TwitchAPIClient {
                     expiresAt: $0.expiresAt
                 )
             },
+            approvedChannels: approvedChannelsForPersistence(),
             userLogin: userLogin
         )
     }
@@ -381,7 +385,13 @@ extension TwitchAPIClient {
     /// run on — so an esports window passes with the campaign visible but unmineable.
     func reinstatingKnownApprovedChannels(_ campaign: Campaign) -> Campaign {
         if !campaign.channels.isEmpty {
+            // A list we did not have before is exactly what a future launch needs, so make
+            // sure the cycle writes it out rather than relying on some other change to.
+            if lastKnownApprovedChannels[campaign.id] != campaign.channels {
+                campaignCachesNeedPersisting = true
+            }
             lastKnownApprovedChannels[campaign.id] = campaign.channels
+            lastKnownApprovedChannelExpiry[campaign.id] = campaign.endDate
             return campaign
         }
 
@@ -393,6 +403,21 @@ extension TwitchAPIClient {
             "[CampaignDetails] \(campaign.name) came back restricted with no approved channels; reusing the \(remembered.count) last seen."
         )
         return campaign.withChannels(remembered)
+    }
+
+    /// Approved-channel lists worth writing out: the campaign's own end date bounds how
+    /// long the list can matter, and one whose end date was never seen is kept for a week
+    /// rather than discarded, since a list we cannot date is still better than none.
+    private func approvedChannelsForPersistence() -> [String: CampaignDetailsDiskCache.ApprovedChannelsEntry] {
+        let fallbackExpiry = Date().addingTimeInterval(7 * 24 * 60 * 60)
+        return lastKnownApprovedChannels.reduce(into: [:]) { result, element in
+            let (campaignId, channels) = element
+            guard !channels.isEmpty else { return }
+            result[campaignId] = CampaignDetailsDiskCache.ApprovedChannelsEntry(
+                channels: channels,
+                expiresAt: lastKnownApprovedChannelExpiry[campaignId] ?? fallbackExpiry
+            )
+        }
     }
 
     private nonisolated static func mergeBasicCampaign(_ basic: Campaign, withDetails details: Campaign) -> Campaign {
