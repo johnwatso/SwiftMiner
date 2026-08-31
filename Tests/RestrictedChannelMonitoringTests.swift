@@ -8,6 +8,17 @@ import XCTest
 /// These tests cover the subscription bookkeeping: what is listened to, what is released,
 /// and that the channel being watched is never released by mistake.
 final class RestrictedChannelMonitoringTests: XCTestCase {
+    private final class StreamOrderRecorder: @unchecked Sendable {
+        private let lock = NSLock()
+        private var values: [String] = []
+
+        func append(_ value: String) {
+            lock.withLock { values.append(value) }
+        }
+
+        var recorded: [String] { lock.withLock { values } }
+    }
+
     private func makeService(factory: MockSocketFactory) async -> DropEventsService {
         let client = PubSubClient(
             accessToken: "test-token",
@@ -84,5 +95,32 @@ final class RestrictedChannelMonitoringTests: XCTestCase {
         let monitored = try await service.startMonitoringChannels(["", "111"], limit: 20)
 
         XCTAssertEqual(monitored, ["111"])
+    }
+
+    func testStreamStateHandlerPreservesUpThenDownDeliveryOrder() async throws {
+        let factory = MockSocketFactory()
+        let service = await makeService(factory: factory)
+        let recorder = StreamOrderRecorder()
+        let downHandled = expectation(description: "stream-down handled")
+
+        await service.setStreamStateHandler { event in
+            switch event.kind {
+            case .up:
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                recorder.append("up")
+            case .down:
+                recorder.append("down")
+                downHandled.fulfill()
+            case .viewcount, .commercial:
+                break
+            }
+        }
+
+        let socket = try XCTUnwrap(factory[0])
+        socket.push(#"{"type":"MESSAGE","data":{"topic":"video-playback-by-id.111","message":"{\"type\":\"stream-up\"}"}}"#)
+        socket.push(#"{"type":"MESSAGE","data":{"topic":"video-playback-by-id.111","message":"{\"type\":\"stream-down\"}"}}"#)
+
+        await fulfillment(of: [downHandled], timeout: 3)
+        XCTAssertEqual(recorder.recorded, ["up", "down"])
     }
 }

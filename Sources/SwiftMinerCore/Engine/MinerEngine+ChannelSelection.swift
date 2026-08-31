@@ -130,9 +130,15 @@ extension MinerEngine {
         .idleNoEligibleCampaigns
     }
 
-    /// Record the outcome of a live-channel probe for a game so later ranking and the
-    /// mid-session re-evaluation can avoid preferring games that currently have no live stream.
-    /// A liveness check for an approved channel failed.
+    struct ApprovedChannelProbeFailure: Sendable, Equatable {
+        let channel: String
+        let message: String
+        let category: IssueCategory
+        let detail: String
+        let isCompatibility: Bool
+    }
+
+    /// A completed batch of liveness checks failed.
     ///
     /// This is the query that answers "is this esports channel live right now?", and while
     /// it fails SwiftMiner is blind to exactly the campaigns whose windows are shortest —
@@ -140,24 +146,42 @@ extension MinerEngine {
     /// a log line and nothing else: on 2026-08-18 it failed 266 times against
     /// `VideoPlayerStreamInfoOverlayChannel` without the app ever saying so.
     ///
-    /// One failure is noise (a cancelled task during a rescan is routine), so the issue is
-    /// raised only once a run of them says the query itself is broken, and the run resets
-    /// the moment a probe succeeds.
-    func recordApprovedChannelProbeFailure(channel: String, error: Error) {
-        let (category, detail) = Self.classifyIssue(error)
-        log("[ChannelSelect]   Could not check live state for approved channel \(channel): \(error.localizedDescription)")
+    /// One failed scan is noise, so the issue is raised only after three completed batches
+    /// fail without any valid live/offline response. A batch containing a successful response
+    /// recovers the run regardless of how its concurrent tasks happened to finish.
+    func recordApprovedChannelProbeBatch(
+        failures: [ApprovedChannelProbeFailure],
+        candidateCount: Int,
+        verifiedProbes: Int
+    ) {
+        for failure in failures {
+            log("[ChannelSelect]   Approved-channel liveness probe failed for \(failure.channel): \(failure.message)")
+        }
 
-        guard !(error is CancellationError) else { return }
+        if verifiedProbes > 0 {
+            recordApprovedChannelProbeSuccess()
+            return
+        }
+        guard !failures.isEmpty else { return }
+
         consecutiveApprovedChannelProbeFailures += 1
-        lastApprovedChannelProbeFailure = (detail: detail, at: Date())
+        let representative = failures.first(where: \.isCompatibility) ?? failures[0]
+        lastApprovedChannelProbeFailure = (detail: representative.detail, at: Date())
+        let isCompatibilityBatch = failures.count == candidateCount
+            && failures.allSatisfy(\.isCompatibility)
+        log(
+            "[ChannelSelect]   Approved-channel liveness batch failed: "
+            + "\(failures.count)/\(candidateCount) checks failed "
+            + "(\(consecutiveApprovedChannelProbeFailures) consecutive batch(es))"
+        )
 
         guard consecutiveApprovedChannelProbeFailures == Self.approvedChannelProbeFailureThreshold else { return }
-        let summary = "Approved-channel liveness checks are failing (\(consecutiveApprovedChannelProbeFailures) in a row): \(detail)"
-        onOperationalEvent?(.issueDetected(category: category, detail: summary))
+        let summary = "Approved-channel liveness checks failed for \(consecutiveApprovedChannelProbeFailures) consecutive batches: \(representative.detail)"
+        onOperationalEvent?(.issueDetected(category: representative.category, detail: summary))
         hasReportedApprovedChannelProbeFailure = true
         onOperationalEvent?(.approvedChannelChecksFailing(
             detail: summary,
-            isCompatibility: Self.isCompatibilityFailure(error)
+            isCompatibility: isCompatibilityBatch
         ))
     }
 
@@ -169,15 +193,29 @@ extension MinerEngine {
         return false
     }
 
+    /// Foundation cancellation is commonly surfaced as `URLError.cancelled` rather than
+    /// Swift's `CancellationError`. Neither form is evidence that Twitch's query is broken.
+    static func isCancellationFailure(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        if let urlError = error as? URLError, urlError.code == .cancelled { return true }
+        let nsError = error as NSError
+        return nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled
+    }
+
     func recordApprovedChannelProbeSuccess() {
+        let hadFailures = consecutiveApprovedChannelProbeFailures > 0
+        let hadReportedFailure = hasReportedApprovedChannelProbeFailure
         consecutiveApprovedChannelProbeFailures = 0
         lastApprovedChannelProbeFailure = nil
-        guard hasReportedApprovedChannelProbeFailure else { return }
         hasReportedApprovedChannelProbeFailure = false
+        guard hadFailures else { return }
         log("[ChannelSelect]   Approved-channel liveness checks are working again")
+        guard hadReportedFailure else { return }
         onOperationalEvent?(.approvedChannelChecksRecovered)
     }
 
+    /// Record the outcome of a live-channel probe for a game so later ranking and the
+    /// mid-session re-evaluation can avoid preferring games that currently have no live stream.
     func recordGameLiveProbe(
         _ gameKey: String,
         hasLiveChannel: Bool,
@@ -992,16 +1030,31 @@ extension MinerEngine {
         )
         approvedChannelProbeOffsets[campaign.id] = batch.nextOffset
         let candidates = Array(batch.channels.enumerated())
+        let now = runtimeClock.nowNanoseconds()
+        recentRestrictedStreamUpUntil = recentRestrictedStreamUpUntil.filter { $0.value > now }
+        let pubSubConfirmedIds = Self.recentRestrictedStreamUpChannelIds(
+            in: batch.channels,
+            evidence: recentRestrictedStreamUpUntil,
+            now: now
+        )
+        let pubSubConfirmedByIndex = candidates.reduce(into: [Int: Channel]()) { result, candidate in
+            guard pubSubConfirmedIds.contains(candidate.element.id) else { return }
+            result[candidate.offset] = Self.liveACLChannel(from: candidate.element)
+        }
         let probeCandidates = candidates.filter {
-            !$0.element.login.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            !pubSubConfirmedIds.contains($0.element.id)
+                && !$0.element.login.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        if !pubSubConfirmedIds.isEmpty {
+            log("[ChannelSelect]   PubSub recently confirmed \(pubSubConfirmedIds.count) approved channel(s) live.")
         }
         // Explicit begin/end rather than the closure form: wrapping a task group in a
         // non-Sendable closure trips strict concurrency.
         let probeSignpost = MiningSignpost.begin(.aclProbe)
         defer { MiningSignpost.end(.aclProbe, probeSignpost) }
         let probeResults = await withTaskGroup(
-            of: (index: Int, channel: Channel?, compatibilityFailure: Bool?, verified: Bool).self
-        ) { group -> (channels: [Int: Channel], compatibilityFailures: Int, verifiedProbes: Int) in
+            of: (index: Int, channel: Channel?, failure: ApprovedChannelProbeFailure?, verified: Bool).self
+        ) { group -> (channels: [Int: Channel], failures: [ApprovedChannelProbeFailure], verifiedProbes: Int) in
             for (index, channel) in probeCandidates {
                 let login = channel.login.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -1021,56 +1074,49 @@ extension MinerEngine {
                         // online is probed at full speed again rather than staying skipped.
                         await ChannelLivenessCache.shared.recordLive(login: login)
                         let resolved = await self.resolveChannelIdIfNeeded(channel)
-                        return (index, Channel(
-                            id: resolved.id,
-                            login: resolved.login,
-                            displayName: resolved.displayName,
-                            description: channel.description,
-                            profileImageUrl: channel.profileImageUrl,
-                            isLive: true,
-                            viewerCount: channel.viewerCount,
-                            gameId: channel.gameId,
-                            gameName: channel.gameName,
-                            tags: channel.tags,
-                            hasDropsEnabled: true,
-                            broadcasterType: channel.broadcasterType,
-                            aclBased: true
-                        ), nil, true)
+                        return (index, Self.liveACLChannel(from: resolved, metadata: channel), nil, true)
                     } catch {
-                        await self.recordApprovedChannelProbeFailure(
+                        guard !Self.isCancellationFailure(error) else {
+                            return (index, nil, nil, false)
+                        }
+                        let (category, detail) = Self.classifyIssue(error)
+                        return (index, nil, ApprovedChannelProbeFailure(
                             channel: channel.displayName,
-                            error: error
-                        )
-                        return (index, nil, Self.isCompatibilityFailure(error), false)
+                            message: error.localizedDescription,
+                            category: category,
+                            detail: detail,
+                            isCompatibility: Self.isCompatibilityFailure(error)
+                        ), false)
                     }
                 }
             }
 
             var collected: [Int: Channel] = [:]
-            var compatibilityFailures = 0
+            var failures: [ApprovedChannelProbeFailure] = []
             var verifiedProbes = 0
             for await result in group {
                 if let channel = result.channel {
                     collected[result.index] = channel
                 }
-                if result.compatibilityFailure == true { compatibilityFailures += 1 }
+                if let failure = result.failure { failures.append(failure) }
                 if result.verified { verifiedProbes += 1 }
             }
-            return (collected, compatibilityFailures, verifiedProbes)
+            return (collected, failures, verifiedProbes)
         }
 
-        // A successful "offline" response proves the query works just as surely as a live
-        // response. Apply recovery after the whole concurrent batch so late failures cannot
-        // re-open an incident that another task in this same batch already disproved.
-        if probeResults.verifiedProbes > 0 {
-            recordApprovedChannelProbeSuccess()
-        }
+        recordApprovedChannelProbeBatch(
+            failures: probeResults.failures,
+            candidateCount: probeCandidates.count,
+            verifiedProbes: probeResults.verifiedProbes
+        )
 
-        let verified = candidates.compactMap { probeResults.channels[$0.offset] }
+        let verified = candidates.compactMap {
+            pubSubConfirmedByIndex[$0.offset] ?? probeResults.channels[$0.offset]
+        }
         guard Self.shouldOfferUnverifiedApprovedChannels(
             verifiedCount: verified.count,
             candidateCount: probeCandidates.count,
-            compatibilityFailureCount: probeResults.compatibilityFailures,
+            compatibilityFailureCount: probeResults.failures.filter(\.isCompatibility).count,
             hasReportedProbeFailure: hasReportedApprovedChannelProbeFailure
         ) else { return verified }
 
@@ -1099,6 +1145,38 @@ extension MinerEngine {
                 aclBased: true
             )
         }
+    }
+
+    static func recentRestrictedStreamUpChannelIds(
+        in channels: [Channel],
+        evidence: [String: UInt64],
+        now: UInt64
+    ) -> Set<String> {
+        Set(channels.compactMap { channel in
+            guard !channel.id.isEmpty, let expiresAt = evidence[channel.id], expiresAt > now else {
+                return nil
+            }
+            return channel.id
+        })
+    }
+
+    private static func liveACLChannel(from resolved: Channel, metadata: Channel? = nil) -> Channel {
+        let source = metadata ?? resolved
+        return Channel(
+            id: resolved.id,
+            login: resolved.login,
+            displayName: resolved.displayName,
+            description: source.description,
+            profileImageUrl: source.profileImageUrl,
+            isLive: true,
+            viewerCount: source.viewerCount,
+            gameId: source.gameId,
+            gameName: source.gameName,
+            tags: source.tags,
+            hasDropsEnabled: true,
+            broadcasterType: source.broadcasterType,
+            aclBased: true
+        )
     }
 
     /// Fail open only when this exact batch proves that the liveness query is incompatible.

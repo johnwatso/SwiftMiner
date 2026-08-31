@@ -77,6 +77,30 @@ final class ApprovedChannelPersistenceTests: XCTestCase {
         XCTAssertNil(CampaignDetailsDiskCache.load(userLogin: userLogin).approvedChannels["campaign-1"])
     }
 
+    func testPersistedApprovedChannelsHaveAHardEntryCap() {
+        let expiry = Date().addingTimeInterval(24 * 60 * 60)
+        let entries = Dictionary(uniqueKeysWithValues: (0...CampaignDetailsDiskCache.maxApprovedChannelEntries).map { index in
+            (
+                "campaign-\(index)",
+                CampaignDetailsDiskCache.ApprovedChannelsEntry(
+                    channels: [Channel(id: "channel-\(index)", login: "channel_\(index)", displayName: "Channel \(index)")],
+                    expiresAt: expiry.addingTimeInterval(TimeInterval(index))
+                )
+            )
+        })
+
+        CampaignDetailsDiskCache.save(
+            details: [:],
+            linkStates: [:],
+            approvedChannels: entries,
+            userLogin: userLogin
+        )
+
+        let restored = CampaignDetailsDiskCache.load(userLogin: userLogin)
+        XCTAssertEqual(restored.approvedChannels.count, CampaignDetailsDiskCache.maxApprovedChannelEntries)
+        XCTAssertNil(restored.approvedChannels["campaign-0"], "the soonest-expiring overflow entry is discarded")
+    }
+
     /// A file written before approved channels were persisted must still load.
     func testAFileWithoutApprovedChannelsStillLoads() {
         CampaignDetailsDiskCache.save(

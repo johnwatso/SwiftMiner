@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>SwiftMiner 1.38.3 - Release Notes</title>
-  <meta name="description" content="Release notes for SwiftMiner 1.38.3: campaign refreshes repeat less work, artwork and profile-picture caches stay inside a budget on disk and in memory, webhook retry timing is correct in every region, and the local dashboard rejects oversized or malformed requests.">
-  <link rel="canonical" href="https://swiftminer.app/release-notes/1.38.3.html">
+  <title>SwiftMiner 1.38.4 - Release Notes</title>
+  <meta name="description" content="Release notes for SwiftMiner 1.38.4: campaign refreshes repeat less work, artwork and profile-picture caches stay inside a budget on disk and in memory, webhook retry timing is correct in every region, and the local dashboard rejects oversized or malformed requests.">
+  <link rel="canonical" href="https://swiftminer.app/release-notes/1.38.4.html">
   <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
@@ -28,8 +28,8 @@
 </head>
 <body>
   <main>
-    <h1>SwiftMiner 1.38.3</h1>
-    <p class="meta">Version 1.38.3 &middot; Build 2026083117</p>
+    <h1>SwiftMiner 1.38.4</h1>
+    <p class="meta">Version 1.38.4 &middot; Build 2026083120</p>
     <p class="intro">A performance release. SwiftMiner stops repeating the same campaign, cache, and interface work on every refresh, keeps its image caches inside a fixed budget in memory and on disk, and reports what the event outbox is doing. Webhook retries now use the correct timing in every region, and the local dashboard turns away oversized or malformed requests before it reads them.</p>
 
     <section>
@@ -44,6 +44,11 @@
         <li>Finishes releasing an esports wait's stream-up subscriptions before starting the next wait, so delayed cleanup cannot silently unsubscribe the channels SwiftMiner has just begun monitoring.</li>
         <li>Keeps a remembered approved-channel list's original campaign-end expiry across relaunches instead of extending it by another week whenever the cache is saved.</li>
         <li>Uses the latest Twitch dashboard status and dates when cached campaign details are reused, so an extended esports window is not hidden behind an older end time for up to four hours.</li>
+        <li>Uses Twitch's recent stream-up notification as temporary positive evidence that an approved esports channel is live. A broken live-status query no longer forces SwiftMiner to guess when Twitch has already announced the broadcast.</li>
+        <li>Counts complete failed scans rather than every channel in one concurrent scan before reporting the approved-channel check as broken. Routine cancelled requests do not advance that state, and any valid live or offline answer resets it.</li>
+        <li>Caps remembered approved-channel lists at 600 campaigns on disk and evicts the soonest-expiring overflow entries.</li>
+        <li>Waits for Twitch to acknowledge PubSub channel subscriptions instead of treating a sent WebSocket frame as success. Rejected or unanswered subscriptions now fail visibly and reconnect rather than leaving SwiftMiner silently unmonitored.</li>
+        <li>Preserves Twitch's ordering for stream-up and stream-down notifications, and rotates overflow channels through the restricted-campaign monitoring budget so the same approved channels are not permanently excluded from push detection.</li>
         <li>Reads the event outbox's stored timestamps with a fixed calendar rather than the one your region is set to. On a non-Gregorian regional calendar the timestamps failed to parse, so a webhook that needed retrying was retried immediately instead of after its backoff.</li>
       </ul>
     </section>

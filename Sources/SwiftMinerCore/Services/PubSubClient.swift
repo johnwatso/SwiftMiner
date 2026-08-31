@@ -9,6 +9,8 @@ public enum PubSubError: LocalizedError {
     case tooManyTopics
     case connectionClosed(URLSessionWebSocketTask.CloseCode, String?)
     case pongTimeout
+    case topicRequestRejected(String)
+    case topicResponseTimedOut
     
     public var errorDescription: String? {
         switch self {
@@ -26,6 +28,10 @@ public enum PubSubError: LocalizedError {
             return "Connection closed with code \(code.rawValue) and reason: \(reason ?? "none")"
         case .pongTimeout:
             return "PONG timeout - server not responding"
+        case .topicRequestRejected(let message):
+            return "Twitch rejected the PubSub subscription request: \(message)"
+        case .topicResponseTimedOut:
+            return "Twitch did not acknowledge the PubSub subscription request in time"
         }
     }
 }
@@ -46,11 +52,18 @@ public struct PubSubMessage: Codable, Sendable {
     public let type: PubSubMessageType
     public let nonce: String?
     public let data: [String: AnyJSONValue]?
+    public let error: String?
     
-    public init(type: PubSubMessageType, nonce: String? = nil, data: [String: AnyJSONValue]? = nil) {
+    public init(
+        type: PubSubMessageType,
+        nonce: String? = nil,
+        data: [String: AnyJSONValue]? = nil,
+        error: String? = nil
+    ) {
         self.type = type
         self.nonce = nonce
         self.data = data
+        self.error = error
     }
 }
 
@@ -153,6 +166,7 @@ public actor PubSubClient: NSObject {
     static let topicBatchSize = 20
     private let pingInterval: TimeInterval
     private let pongTimeout: TimeInterval
+    private let topicResponseTimeout: TimeInterval
     private let runtimeClock: RuntimeClock
     private let reconnectJitterFactor: @Sendable () -> Double
 
@@ -167,6 +181,11 @@ public actor PubSubClient: NSObject {
     private var reconnectTask: Task<Void, Never>?
     private var shouldRemainConnected = false
     private var connectionGeneration: UInt64 = 0
+    private var pendingTopicResponses: [String: (
+        generation: UInt64,
+        continuation: CheckedContinuation<Void, Error>
+    )] = [:]
+    private var topicResponseTimeoutTasks: [String: Task<Void, Never>] = [:]
     
     /// Delegate for handling received messages
     /// Awaited so a consumer can preserve WebSocket delivery order without spawning one
@@ -208,6 +227,7 @@ public actor PubSubClient: NSObject {
         socketFactory: @escaping PubSubSocketFactory,
         pingInterval: TimeInterval = 180, // 3 minutes
         pongTimeout: TimeInterval = 10,
+        topicResponseTimeout: TimeInterval = 15,
         baseReconnectDelay: TimeInterval = 1,
         maxReconnectDelay: TimeInterval = 60,
         runtimeClock: RuntimeClock = .continuous,
@@ -217,6 +237,7 @@ public actor PubSubClient: NSObject {
         self.socketFactory = socketFactory
         self.pingInterval = pingInterval
         self.pongTimeout = pongTimeout
+        self.topicResponseTimeout = topicResponseTimeout
         self.baseReconnectDelay = baseReconnectDelay
         self.maxReconnectDelay = maxReconnectDelay
         self.runtimeClock = runtimeClock
@@ -285,6 +306,9 @@ public actor PubSubClient: NSObject {
         do {
             try await submitPendingSubscriptions()
         } catch {
+            // The caller must not believe a rejected new subscription is active. Existing
+            // desired topics remain intact and will still be restored on the replacement socket.
+            activeTopics.subtract(newTopics)
             requestReconnect(generation: connectionGeneration)
             throw error
         }
@@ -305,7 +329,11 @@ public actor PubSubClient: NSObject {
 
         do {
             for batch in Self.topicBatches(Array(topicsOnCurrentSocket)) {
-                try await sendMessage(topicMessage(type: .unlisten, topics: batch))
+                try await sendTopicRequest(
+                    type: .unlisten,
+                    topics: batch,
+                    generation: connectionGeneration
+                )
                 submittedTopics.subtract(batch)
                 log("Unsubscribed from topics: \(batch.joined(separator: ", "))")
             }
@@ -364,6 +392,93 @@ public actor PubSubClient: NSObject {
         return PubSubMessage(type: type, nonce: UUID().uuidString, data: data)
     }
 
+    /// Sends a LISTEN/UNLISTEN only after registering its nonce, then waits until Twitch
+    /// explicitly accepts or rejects it. Registering first closes the race where a fast
+    /// RESPONSE arrives while the socket send is still suspended.
+    private func sendTopicRequest(
+        type: PubSubMessageType,
+        topics: [String],
+        generation: UInt64
+    ) async throws {
+        let message = topicMessage(type: type, topics: topics)
+        guard let nonce = message.nonce else {
+            throw PubSubError.topicRequestRejected("SwiftMiner generated a topic request without a nonce")
+        }
+
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                pendingTopicResponses[nonce] = (generation, continuation)
+
+                let clock = runtimeClock
+                let timeout = topicResponseTimeout
+                topicResponseTimeoutTasks[nonce] = Task { [weak self] in
+                    do {
+                        try await clock.sleep(nanoseconds: RuntimeClock.nanoseconds(timeout))
+                    } catch {
+                        return
+                    }
+                    await self?.completeTopicResponse(
+                        nonce: nonce,
+                        generation: generation,
+                        error: PubSubError.topicResponseTimedOut
+                    )
+                }
+
+                Task { [weak self] in
+                    await self?.transmitTopicRequest(
+                        message,
+                        nonce: nonce,
+                        generation: generation
+                    )
+                }
+            }
+        } onCancel: {
+            Task { [weak self] in
+                await self?.completeTopicResponse(
+                    nonce: nonce,
+                    generation: generation,
+                    error: CancellationError()
+                )
+            }
+        }
+    }
+
+    private func transmitTopicRequest(
+        _ message: PubSubMessage,
+        nonce: String,
+        generation: UInt64
+    ) async {
+        guard generation == connectionGeneration, pendingTopicResponses[nonce] != nil else { return }
+        do {
+            try await sendMessage(message)
+        } catch {
+            completeTopicResponse(nonce: nonce, generation: generation, error: error)
+        }
+    }
+
+    private func completeTopicResponse(
+        nonce: String,
+        generation: UInt64,
+        error: Error?
+    ) {
+        guard let pending = pendingTopicResponses[nonce], pending.generation == generation else { return }
+        pendingTopicResponses[nonce] = nil
+        topicResponseTimeoutTasks.removeValue(forKey: nonce)?.cancel()
+        if let error {
+            pending.continuation.resume(throwing: error)
+        } else {
+            pending.continuation.resume()
+        }
+    }
+
+    private func failAllPendingTopicResponses(with error: Error) {
+        let pending = Array(pendingTopicResponses.values)
+        pendingTopicResponses.removeAll()
+        for task in topicResponseTimeoutTasks.values { task.cancel() }
+        topicResponseTimeoutTasks.removeAll()
+        for response in pending { response.continuation.resume(throwing: error) }
+    }
+
     private func submitPendingSubscriptions() async throws {
         let pending = Self.pendingTopicSubscriptions(
             desired: activeTopics,
@@ -371,7 +486,11 @@ public actor PubSubClient: NSObject {
         )
 
         for batch in Self.topicBatches(pending) {
-            try await sendMessage(topicMessage(type: .listen, topics: batch))
+            try await sendTopicRequest(
+                type: .listen,
+                topics: batch,
+                generation: connectionGeneration
+            )
             submittedTopics.formUnion(batch)
             log("Subscribed to topics: \(batch.joined(separator: ", "))")
         }
@@ -409,6 +528,7 @@ public actor PubSubClient: NSObject {
         listenTask = nil
         pongTimeoutTask?.cancel()
         pongTimeoutTask = nil
+        failAllPendingTopicResponses(with: PubSubError.notConnected)
         socket?.cancel()
         socket = nil
         isConnected = false
@@ -479,8 +599,23 @@ public actor PubSubClient: NSObject {
                     await onMessage?(topic, payload)
                 }
             case .response:
-                // A server response proves the replacement socket completed a real round trip.
-                reconnectAttempt = 0
+                guard let nonce = message.nonce else {
+                    log("PubSub RESPONSE omitted its nonce")
+                    return
+                }
+                let responseError = message.error?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                if responseError.isEmpty {
+                    completeTopicResponse(nonce: nonce, generation: generation, error: nil)
+                    // Only an accepted request proves the replacement socket is healthy.
+                    reconnectAttempt = 0
+                } else {
+                    log("PubSub topic request rejected: \(responseError)")
+                    completeTopicResponse(
+                        nonce: nonce,
+                        generation: generation,
+                        error: PubSubError.topicRequestRejected(responseError)
+                    )
+                }
             default:
                 break
             }

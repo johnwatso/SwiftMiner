@@ -213,4 +213,89 @@ final class MinerSchedulingTests: XCTestCase {
             hasReportedProbeFailure: false
         ), "the existing escalation threshold still applies")
     }
+
+    func testApprovedChannelHealthCountsFailedBatchesRatherThanChannels() async {
+        let engine = MinerEngine(clientId: "test", tokenStore: InMemoryTokenStore())
+        let failure = MinerEngine.ApprovedChannelProbeFailure(
+            channel: "OWCS",
+            message: "Compatibility update required",
+            category: .twitchAPIFailure,
+            detail: "Compatibility update required for VideoPlayerStreamInfoOverlayChannel",
+            isCompatibility: true
+        )
+        let oneThirtyChannelBatch = Array(repeating: failure, count: 30)
+
+        await engine.recordApprovedChannelProbeBatch(
+            failures: oneThirtyChannelBatch,
+            candidateCount: 30,
+            verifiedProbes: 0
+        )
+        let countAfterOneBatch = await engine.consecutiveApprovedChannelProbeFailures
+        let reportedAfterOneBatch = await engine.hasReportedApprovedChannelProbeFailure
+        XCTAssertEqual(countAfterOneBatch, 1)
+        XCTAssertFalse(reportedAfterOneBatch)
+
+        for _ in 0..<2 {
+            await engine.recordApprovedChannelProbeBatch(
+                failures: oneThirtyChannelBatch,
+                candidateCount: 30,
+                verifiedProbes: 0
+            )
+        }
+        let countAfterThreeBatches = await engine.consecutiveApprovedChannelProbeFailures
+        let reportedAfterThreeBatches = await engine.hasReportedApprovedChannelProbeFailure
+        XCTAssertEqual(countAfterThreeBatches, 3)
+        XCTAssertTrue(reportedAfterThreeBatches)
+
+        await engine.recordApprovedChannelProbeBatch(
+            failures: [failure],
+            candidateCount: 2,
+            verifiedProbes: 1
+        )
+        let recoveredCount = await engine.consecutiveApprovedChannelProbeFailures
+        let recoveredReported = await engine.hasReportedApprovedChannelProbeFailure
+        XCTAssertEqual(recoveredCount, 0)
+        XCTAssertFalse(recoveredReported)
+    }
+
+    func testRecentPubSubStreamUpEvidenceIsBoundedAndCampaignScoped() {
+        let channels = [
+            Channel(id: "live", login: "ow_live", displayName: "Live"),
+            Channel(id: "expired", login: "ow_old", displayName: "Old"),
+            Channel(id: "unknown", login: "ow_unknown", displayName: "Unknown"),
+        ]
+        let confirmed = MinerEngine.recentRestrictedStreamUpChannelIds(
+            in: channels,
+            evidence: ["live": 200, "expired": 100, "other-campaign": 300],
+            now: 100
+        )
+
+        XCTAssertEqual(confirmed, ["live"])
+    }
+
+    func testFoundationCancellationDoesNotCountAsAProbeFailure() {
+        XCTAssertTrue(MinerEngine.isCancellationFailure(CancellationError()))
+        XCTAssertTrue(MinerEngine.isCancellationFailure(URLError(.cancelled)))
+        XCTAssertFalse(MinerEngine.isCancellationFailure(URLError(.timedOut)))
+    }
+
+    func testRestrictedChannelMonitoringRotatesAcrossOverflow() {
+        let channelIds = (0..<47).map(String.init)
+        var offset = 0
+        var visited: Set<String> = []
+
+        for _ in 0..<4 {
+            let batch = MinerEngine.rotatingRestrictedChannelMonitoringBatch(
+                from: channelIds,
+                limit: 20,
+                offset: offset
+            )
+            XCTAssertEqual(batch.channelIds.count, 20)
+            XCTAssertEqual(Array(batch.channelIds.prefix(10)), (0..<10).map(String.init))
+            visited.formUnion(batch.channelIds)
+            offset = batch.nextOffset
+        }
+
+        XCTAssertEqual(visited, Set(channelIds))
+    }
 }

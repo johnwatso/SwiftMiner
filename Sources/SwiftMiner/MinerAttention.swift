@@ -59,10 +59,11 @@ enum MinerAttention {
         miners.filter { hasPendingAttention(for: $0, settings: settings) }.count
     }
 
-    /// Marker written by `MinerEngine.recordApprovedChannelProbeFailure`.
-    static let approvedChannelProbeFailureMarker = "Could not check live state for approved channel"
-    /// How many failures within the window count as the query being broken rather than one
-    /// unlucky probe, and how far back to look. The engine probes approved channels every
+    /// Marker written once for each failed batch by `MinerEngine.recordApprovedChannelProbeBatch`.
+    static let approvedChannelProbeFailureMarker = "Approved-channel liveness batch failed"
+    static let approvedChannelProbeRecoveryMarker = "Approved-channel liveness checks are working again"
+    /// How many failed batches within the window count as the query being broken rather than
+    /// one unlucky scan, and how far back to look. The engine probes approved channels every
     /// 60 seconds while waiting, so a genuine outage clears this quickly and a one-off does not.
     static let approvedChannelProbeFailureThreshold = 3
     static let approvedChannelProbeFailureWindow: TimeInterval = 30 * 60
@@ -75,26 +76,22 @@ enum MinerAttention {
         now: Date = Date()
     ) -> String? {
         let cutoff = now.addingTimeInterval(-approvedChannelProbeFailureWindow)
+        let latestRecovery = events
+            .filter { event in
+                event.minerId == miner.id
+                    && event.timestamp >= cutoff
+                    && event.message.contains(approvedChannelProbeRecoveryMarker)
+            }
+            .map(\.timestamp)
+            .max()
         let failures = events.filter { event in
             event.minerId == miner.id
                 && event.timestamp >= cutoff
+                && event.timestamp > (latestRecovery ?? .distantPast)
                 && event.message.contains(approvedChannelProbeFailureMarker)
         }
         guard failures.count >= approvedChannelProbeFailureThreshold else { return nil }
-
-        let channels = Set(
-            failures.compactMap { event -> String? in
-                guard let range = event.message.range(of: approvedChannelProbeFailureMarker) else { return nil }
-                let remainder = event.message[range.upperBound...]
-                guard let colon = remainder.firstIndex(of: ":") else { return nil }
-                let channel = remainder[..<colon].trimmingCharacters(in: .whitespaces)
-                return channel.isEmpty ? nil : channel
-            }
-        )
-        let channelSummary = channels.count == 1
-            ? "\(channels.first ?? "one channel")"
-            : "\(channels.count) channels"
-        return "SwiftMiner could not tell whether \(channelSummary) were live — \(failures.count) checks failed in the last 30 minutes."
+        return "SwiftMiner could not check restricted channels — \(failures.count) scan batches failed in the last 30 minutes."
     }
 
     /// The first non-muted account-link blocker, if any. Shared with the

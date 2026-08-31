@@ -256,20 +256,57 @@ extension MinerEngine {
         }
         guard !channelIds.isEmpty else { return }
 
+        let batch = Self.rotatingRestrictedChannelMonitoringBatch(
+            from: channelIds,
+            limit: Self.monitoredRestrictedChannelLimit,
+            offset: restrictedChannelMonitoringOffset
+        )
+        restrictedChannelMonitoringOffset = batch.nextOffset
+
         do {
             let monitored = try await dropEventsService.startMonitoringChannels(
-                channelIds,
-                limit: Self.monitoredRestrictedChannelLimit
+                batch.channelIds,
+                limit: batch.channelIds.count
             )
             monitoredRestrictedChannelIds.formUnion(monitored)
             if !monitored.isEmpty {
-                log("[ChannelSelect]   Listening for stream-up on \(monitored.count) approved channel(s) while waiting.")
+                if channelIds.count > monitored.count {
+                    log(
+                        "[ChannelSelect]   Listening for stream-up on \(monitored.count) of "
+                        + "\(channelIds.count) approved channel(s) this wait; overflow coverage rotates."
+                    )
+                } else {
+                    log("[ChannelSelect]   Listening for stream-up on \(monitored.count) approved channel(s) while waiting.")
+                }
             }
         } catch {
             // Losing the push signal costs promptness, not correctness: the 60s probe still
             // runs, so the wait carries on rather than failing.
             log("[ChannelSelect]   Could not listen for approved-channel stream-up: \(error.localizedDescription)")
         }
+    }
+
+    /// Keeps the channels from the campaigns ending soonest continuously covered and rotates
+    /// the remaining PubSub budget through overflow. Polling still checks every campaign, but
+    /// no approved channel is permanently excluded from push detection when GQL is unhealthy.
+    static func rotatingRestrictedChannelMonitoringBatch(
+        from channelIds: [String],
+        limit: Int,
+        offset: Int
+    ) -> (channelIds: [String], nextOffset: Int) {
+        guard !channelIds.isEmpty, limit > 0 else { return ([], 0) }
+        guard channelIds.count > limit else { return (channelIds, 0) }
+
+        let pinnedCount = min(channelIds.count, limit / 2)
+        let pinned = Array(channelIds.prefix(pinnedCount))
+        let overflow = Array(channelIds.dropFirst(pinnedCount))
+        let rotatingCapacity = max(1, limit - pinned.count)
+        let normalizedOffset = ((offset % overflow.count) + overflow.count) % overflow.count
+        let rotating = (0..<min(rotatingCapacity, overflow.count)).map { step in
+            overflow[(normalizedOffset + step) % overflow.count]
+        }
+        let nextOffset = (normalizedOffset + rotating.count) % overflow.count
+        return (pinned + rotating, nextOffset)
     }
 
     func stopMonitoringRestrictedChannels() async {
