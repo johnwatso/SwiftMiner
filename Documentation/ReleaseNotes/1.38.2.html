@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SwiftMiner 1.38.2 - Release Notes</title>
+  <meta name="description" content="Release notes for SwiftMiner 1.38.2: recovery no longer reports success with real-time drop progress dead, cached campaign artwork loads again, miner changes apply in order, and storage faults are reported instead of discarded.">
+  <link rel="canonical" href="https://swiftminer.app/release-notes/1.38.2.html">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <style>
+    :root { color-scheme: light dark; }
+    body { margin: 0; padding: 32px 20px 48px; font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f4f6f8; color: #0f1720; }
+    main { max-width: 760px; margin: 0 auto; padding: 28px; border-radius: 22px; background: rgba(255, 255, 255, .86); box-shadow: 0 20px 60px rgba(15, 23, 32, .10); border: 1px solid rgba(82, 96, 109, .12); }
+    h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
+    .meta, .summary { color: #52606d; font-size: 14px; }
+    .intro { margin: 0 0 24px; color: #384454; }
+    section { margin: 18px 0 0; padding: 18px 18px 14px; border: 1px solid rgba(82, 96, 109, .18); border-radius: 16px; border-left: 5px solid #7b4bd9; background: rgba(255, 255, 255, .42); }
+    h2 { margin: 0 0 4px; color: #7b4bd9; font-size: 18px; }
+    ul { margin: 12px 0 0; padding-left: 22px; }
+    li { margin: 0 0 8px; }
+    li:last-child { margin-bottom: 0; }
+    a { color: #7b4bd9; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    @media (prefers-color-scheme: dark) { body { background: #0b1015; color: #edf2f7; } main { background: rgba(15, 23, 32, .88); border-color: rgba(159, 176, 194, .14); } .meta, .summary { color: #9fb0c2; } .intro { color: #c8d3df; } section { border-color: rgba(159, 176, 194, .18); background: rgba(255, 255, 255, .04); } a { color: #b89aff; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>SwiftMiner 1.38.2</h1>
+    <p class="meta">Version 1.38.2 &middot; Build 2026083000</p>
+    <p class="intro">A reliability and privacy release. Automatic recovery no longer reports success while real-time drop progress is dead, cached campaign artwork loads again, changes you make to your miners apply in the order you made them, diagnostics no longer echo fragments of your credentials, and storage faults that used to pass silently now say what went wrong.</p>
+
+    <section>
+      <h2>&#128029; Fixes</h2>
+      <p class="summary">Recovery tells the truth, artwork loads, and changes apply in order.</p>
+      <ul>
+        <li>Automatic recovery no longer reports a miner as recovered when its real-time drop connection failed to come back. The miner says it is running on polling only, so a miner that looks healthy while earning nothing is now visible.</li>
+        <li>Cached campaign artwork loads from disk again instead of falling back to a placeholder until the next download.</li>
+        <li>Adding and removing miners applies in the order you made the changes, so a removed account can no longer stay wired into the Drops view for the rest of the session.</li>
+        <li>Switching accounts updates the watch session before the next heartbeat goes out, rather than racing it.</li>
+        <li>Editing failover streamers reaches every miner in the order you saved them, so two quick edits can no longer leave miners running on different rules.</li>
+        <li>Needs attention can be dismissed for the two reminders that were already mutable — a game-account link and a subscription-only campaign. It uses the same mute as the Pending list, so the item stays there with Remind me to bring it back. States that mean a miner cannot earn until you act, such as reconnecting Twitch or a stopped worker, still have no dismiss.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#127912; Simpler artwork</h2>
+      <p class="summary">One source of game art, plus your own uploads.</p>
+      <ul>
+        <li>Removes Steam artwork. Twitch box art is now requested at a resolution that made the Steam lookup unnecessary, and Steam answered with a blank grey placeholder for titles it had no library art for &mdash; so preferring it could replace real artwork with nothing.</li>
+        <li>Uploading your own artwork for a game is unchanged, and existing uploads are kept. Remove Custom Artwork now returns the game to the artwork Twitch supplies.</li>
+        <li>The Use Steam artwork setting and the Set Steam ID menu items are gone, and the downloaded Steam images are deleted from the cache the next time SwiftMiner starts.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#128274; Quieter diagnostics</h2>
+      <p class="summary">Nothing resembling a credential goes into a log or a diagnostics export.</p>
+      <ul>
+        <li>Removes access-token fragments and lengths, client-ID fragments, token-validation response bodies, and the service API key from log output, including the client ID printed at the start of every Twitch sign-in.</li>
+        <li>Drops an unused legacy session-import path that stored logins with no refresh grant.</li>
+        <li>Sends app diagnostics to the system log rather than standard output, so failures such as a database that will not open are recoverable from Console after the fact instead of being lost in a normally launched app.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#128737; Failures that used to pass silently</h2>
+      <p class="summary">A fault in storage now leaves a trace you can act on.</p>
+      <ul>
+        <li>Activity-log, earning-ledger, and event-outbox writes report failures instead of discarding them.</li>
+        <li>Unattended health history that cannot be read is set aside rather than overwritten, so the record of an overnight failure survives to be read back.</li>
+        <li>Keychain, Discord account-activation, and admin-linking write failures are reported. An account whose renewed sign-in window cannot be saved keeps working for the session and explains what will happen after a restart.</li>
+        <li>Every write into the unattended health record reports its own failures, so the incident history cannot stop accumulating without saying so.</li>
+        <li>Linking a miner to a Discord owner reports a storage failure instead of showing the link and losing it at the next launch, and an operator change that could not be saved says so.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#129520; Build and release quality</h2>
+      <p class="summary">Cleaner builds and more of the release checked automatically.</p>
+      <ul>
+        <li>Declares SwiftMiner as a Utilities app and satisfies Xcode's App Intents metadata probe, so builds no longer emit a false missing-framework warning.</li>
+        <li>Uses an explicit generic macOS destination throughout repository build and release automation.</li>
+        <li>Adds a Release build, static analysis, an Xcode project drift check, built-app version and Sparkle key verification, and code-coverage reporting to continuous integration.</li>
+        <li>Separates the largest settings and web-dashboard source files into focused files, and adds regression tests for Twitch sign-in, token refresh, background ordering, corrupted stored state, and account activation.</li>
+      </ul>
+    </section>
+
+    <p class="meta"><a href="./index.html">All release notes</a></p>
+  </main>
+</body>
+</html>
