@@ -21,6 +21,7 @@ import Foundation
 enum CampaignDetailsDiskCache {
     private static let directoryName = "com.swiftminer"
     private static let folderName = "campaign-details"
+    static let maxApprovedChannelEntries = 600
 
     struct DetailsEntry: Codable {
         let campaign: Campaign
@@ -101,7 +102,13 @@ enum CampaignDetailsDiskCache {
         let liveLinkStates = linkStates.filter { $0.value.expiresAt > now }
         // Approved channels expire with the campaign rather than with its details window:
         // the whole point is to still have them on a launch where Twitch omits them.
-        let liveApprovedChannels = approvedChannels.filter { $0.value.expiresAt > now }
+        let liveApprovedChannels = Dictionary(
+            uniqueKeysWithValues: approvedChannels
+                .filter { $0.value.expiresAt > now }
+                .sorted { $0.value.expiresAt > $1.value.expiresAt }
+                .prefix(maxApprovedChannelEntries)
+                .map { ($0.key, $0.value) }
+        )
         guard !liveDetails.isEmpty || !liveLinkStates.isEmpty || !liveApprovedChannels.isEmpty else {
             try? FileManager.default.removeItem(at: url)
             return

@@ -11,6 +11,8 @@ final class MockPubSubSocket: PubSubSocket, @unchecked Sendable {
     private var waiter: CheckedContinuation<String?, Error>?
     private var wasResumed = false
     private var wasCancelled = false
+    private var automaticallyRespondsToTopicRequests = true
+    private var topicResponseError: String?
 
     // MARK: Test controls
 
@@ -25,6 +27,14 @@ final class MockPubSubSocket: PubSubSocket, @unchecked Sendable {
 
     func setSendError(_ error: Error?) {
         lock.withLock { sendError = error }
+    }
+
+    func setAutomaticallyRespondsToTopicRequests(_ enabled: Bool) {
+        lock.withLock { automaticallyRespondsToTopicRequests = enabled }
+    }
+
+    func setTopicResponseError(_ error: String?) {
+        lock.withLock { topicResponseError = error }
     }
 
     /// Deliver an incoming text frame to the client.
@@ -56,11 +66,23 @@ final class MockPubSubSocket: PubSubSocket, @unchecked Sendable {
     }
 
     func send(_ text: String) async throws {
-        let error: Error? = lock.withLock {
+        let state: (error: Error?, responds: Bool, responseError: String?) = lock.withLock {
             if sendError == nil { sentTexts.append(text) }
-            return sendError
+            return (sendError, automaticallyRespondsToTopicRequests, topicResponseError)
         }
-        if let error { throw error }
+        if let error = state.error { throw error }
+
+        guard state.responds,
+              let request = try? JSONDecoder().decode(PubSubMessage.self, from: Data(text.utf8)),
+              request.type == .listen || request.type == .unlisten,
+              let nonce = request.nonce,
+              let responseData = try? JSONEncoder().encode(PubSubMessage(
+                type: .response,
+                nonce: nonce,
+                error: state.responseError ?? ""
+              )),
+              let responseText = String(data: responseData, encoding: .utf8) else { return }
+        deliver(.success(responseText))
     }
 
     func receive() async throws -> String? {
@@ -91,6 +113,7 @@ final class MockPubSubSocket: PubSubSocket, @unchecked Sendable {
 final class MockSocketFactory: @unchecked Sendable {
     private let lock = NSLock()
     private var sockets: [MockPubSubSocket] = []
+    private var newSocketsAutomaticallyRespond = true
 
     var count: Int { lock.withLock { sockets.count } }
 
@@ -98,9 +121,17 @@ final class MockSocketFactory: @unchecked Sendable {
         lock.withLock { sockets.indices.contains(index) ? sockets[index] : nil }
     }
 
+    func setNewSocketsAutomaticallyRespond(_ enabled: Bool) {
+        lock.withLock { newSocketsAutomaticallyRespond = enabled }
+    }
+
     func make(url: URL) -> any PubSubSocket {
         let socket = MockPubSubSocket()
-        lock.withLock { sockets.append(socket) }
+        let responds = lock.withLock { () -> Bool in
+            sockets.append(socket)
+            return newSocketsAutomaticallyRespond
+        }
+        socket.setAutomaticallyRespondsToTopicRequests(responds)
         return socket
     }
 }
@@ -173,6 +204,7 @@ final class PubSubClientTests: XCTestCase {
     private func makeClient(factory: MockSocketFactory,
                             pingInterval: TimeInterval = 600,
                             pongTimeout: TimeInterval = 600,
+                            topicResponseTimeout: TimeInterval = 15,
                             runtimeClock: RuntimeClock = .continuous,
                             baseReconnectDelay: TimeInterval = 0.01) -> PubSubClient {
         PubSubClient(
@@ -180,6 +212,7 @@ final class PubSubClientTests: XCTestCase {
             socketFactory: { factory.make(url: $0) },
             pingInterval: pingInterval,
             pongTimeout: pongTimeout,
+            topicResponseTimeout: topicResponseTimeout,
             baseReconnectDelay: baseReconnectDelay,
             maxReconnectDelay: max(0.05, baseReconnectDelay * 8),
             runtimeClock: runtimeClock,
@@ -260,6 +293,50 @@ final class PubSubClientTests: XCTestCase {
                 return XCTFail("Unexpected error: \(error)")
             }
         }
+    }
+
+    func testRejectedListenThrowsAndDoesNotRemainActive() async throws {
+        let factory = MockSocketFactory()
+        let client = makeClient(factory: factory)
+
+        try await client.connect()
+        let socket = try XCTUnwrap(factory[0])
+        socket.setTopicResponseError("ERR_BADAUTH")
+
+        do {
+            try await client.listen(to: ["topic.rejected"])
+            XCTFail("Expected Twitch's rejected LISTEN to throw")
+        } catch let error as PubSubError {
+            guard case .topicRequestRejected("ERR_BADAUTH") = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+
+        let topicsAfterRejection = await client.currentTopics
+        XCTAssertFalse(topicsAfterRejection.contains("topic.rejected"))
+        await client.disconnect()
+    }
+
+    func testMissingListenResponseTimesOutAndDoesNotRemainActive() async throws {
+        let factory = MockSocketFactory()
+        let client = makeClient(factory: factory, topicResponseTimeout: 0.05)
+
+        try await client.connect()
+        let socket = try XCTUnwrap(factory[0])
+        socket.setAutomaticallyRespondsToTopicRequests(false)
+
+        do {
+            try await client.listen(to: ["topic.silent"])
+            XCTFail("Expected an unacknowledged LISTEN to time out")
+        } catch let error as PubSubError {
+            guard case .topicResponseTimedOut = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+
+        let topicsAfterTimeout = await client.currentTopics
+        XCTAssertFalse(topicsAfterTimeout.contains("topic.silent"))
+        await client.disconnect()
     }
 
     // MARK: - Reconnect behaviour

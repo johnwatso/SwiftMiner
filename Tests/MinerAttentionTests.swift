@@ -164,7 +164,7 @@ final class MinerAttentionTests: XCTestCase {
         let miner = makeMiner()
         let events = (0..<3).map { index in
             EventEntry(
-                message: "[ChannelSelect]   Could not check live state for approved channel ow_esports\(index): Twitch compatibility update required for VideoPlayerStreamInfoOverlayChannel",
+                message: "[ChannelSelect]   Approved-channel liveness batch failed: 3/3 checks failed (\(index + 1) consecutive batch(es))",
                 level: .warning,
                 minerId: miner.id
             )
@@ -174,14 +174,14 @@ final class MinerAttentionTests: XCTestCase {
 
         XCTAssertEqual(attention?.title, "Restricted campaigns can't be checked")
         XCTAssertEqual(attention?.action, .restart)
-        XCTAssertEqual(attention?.detail, "SwiftMiner could not tell whether 3 channels were live — 3 checks failed in the last 30 minutes.")
+        XCTAssertEqual(attention?.detail, "SwiftMiner could not check restricted channels — 3 scan batches failed in the last 30 minutes.")
     }
 
     /// One failed probe is routine — a rescan cancels in-flight checks all the time.
     func testASingleApprovedChannelProbeFailureIsNotWorthInterrupting() {
         let miner = makeMiner()
         let event = EventEntry(
-            message: "[ChannelSelect]   Could not check live state for approved channel ow_esports: cancelled",
+            message: "[ChannelSelect]   Approved-channel liveness batch failed: 1/1 checks failed (1 consecutive batch(es))",
             level: .warning,
             minerId: miner.id
         )
@@ -195,7 +195,7 @@ final class MinerAttentionTests: XCTestCase {
         let events = (0..<5).map { index in
             EventEntry(
                 timestamp: stale,
-                message: "[ChannelSelect]   Could not check live state for approved channel ow_esports\(index): Twitch compatibility update required",
+                message: "[ChannelSelect]   Approved-channel liveness batch failed: 3/3 checks failed (\(index + 1) consecutive batch(es))",
                 level: .warning,
                 minerId: miner.id
             )
@@ -209,7 +209,7 @@ final class MinerAttentionTests: XCTestCase {
         let miner = makeMiner()
         let events = (0..<4).map { index in
             EventEntry(
-                message: "[ChannelSelect]   Could not check live state for approved channel ow_esports\(index): Twitch compatibility update required",
+                message: "[ChannelSelect]   Approved-channel liveness batch failed: 3/3 checks failed (\(index + 1) consecutive batch(es))",
                 level: .warning,
                 minerId: "someone-else"
             )
@@ -223,7 +223,7 @@ final class MinerAttentionTests: XCTestCase {
         let miner = makeMiner(status: .error, workerState: .failed)
         var events = (0..<4).map { index in
             EventEntry(
-                message: "[ChannelSelect]   Could not check live state for approved channel ow_esports\(index): Twitch compatibility update required",
+                message: "[ChannelSelect]   Approved-channel liveness batch failed: 3/3 checks failed (\(index + 1) consecutive batch(es))",
                 level: .warning,
                 minerId: miner.id
             )
@@ -231,6 +231,35 @@ final class MinerAttentionTests: XCTestCase {
         events.append(EventEntry(message: "Error: worker stopped", level: .error, minerId: miner.id))
 
         XCTAssertEqual(MinerAttentionIssue.resolve(miner: miner, events: events)?.title, "The mining worker stopped")
+    }
+
+    func testSuccessfulBatchBreaksTheLogDerivedFailureRun() {
+        let miner = makeMiner()
+        let now = Date()
+        var events = (0..<3).map { index in
+            EventEntry(
+                timestamp: now.addingTimeInterval(TimeInterval(index)),
+                message: "[ChannelSelect]   Approved-channel liveness batch failed: 3/3 checks failed",
+                level: .warning,
+                minerId: miner.id
+            )
+        }
+        events.append(EventEntry(
+            timestamp: now.addingTimeInterval(3),
+            message: "[ChannelSelect]   Approved-channel liveness checks are working again",
+            level: .info,
+            minerId: miner.id
+        ))
+        events.append(contentsOf: (4..<6).map { index in
+            EventEntry(
+                timestamp: now.addingTimeInterval(TimeInterval(index)),
+                message: "[ChannelSelect]   Approved-channel liveness batch failed: 3/3 checks failed",
+                level: .warning,
+                minerId: miner.id
+            )
+        })
+
+        XCTAssertNil(MinerAttentionIssue.resolve(miner: miner, events: events))
     }
 
     func testCompatibilityFailuresAreTheOnlyOnesTreatedAsPermanent() {

@@ -67,8 +67,9 @@ public actor DropEventsService {
     /// Called when the watched stream goes offline (`stream-down` event).
     public var onStreamDown: (@Sendable (String) async -> Void)?
 
-    /// Called when any stream-state event arrives.
-    public var onStreamState: (@Sendable (StreamStateEvent) -> Void)?
+    /// Called when any stream-state event arrives. Awaited so a rapid stream-up/stream-down
+    /// pair cannot be reordered after the PubSub receive loop has delivered it in order.
+    public var onStreamState: (@Sendable (StreamStateEvent) async -> Void)?
 
     // MARK: - Private state
 
@@ -96,7 +97,7 @@ public actor DropEventsService {
         self.onStreamDown = handler
     }
     
-    public func setStreamStateHandler(_ handler: (@Sendable (StreamStateEvent) -> Void)?) {
+    public func setStreamStateHandler(_ handler: (@Sendable (StreamStateEvent) async -> Void)?) {
         self.onStreamState = handler
     }
 
@@ -263,19 +264,19 @@ public actor DropEventsService {
     private func handleStreamEvent(type: String, channelId: String, json: [String: Any]) async {
         switch type {
         case "stream-up":
-            onStreamState?(StreamStateEvent(channelId: channelId, kind: .up))
+            await onStreamState?(StreamStateEvent(channelId: channelId, kind: .up))
 
         case "stream-down":
             await onStreamDown?(channelId)
-            onStreamState?(StreamStateEvent(channelId: channelId, kind: .down))
+            await onStreamState?(StreamStateEvent(channelId: channelId, kind: .down))
 
         case "viewcount":
             let viewers = json["viewers"] as? Int ?? 0
-            onStreamState?(StreamStateEvent(channelId: channelId, kind: .viewcount(viewers)))
+            await onStreamState?(StreamStateEvent(channelId: channelId, kind: .viewcount(viewers)))
 
         case "commercial":
             let duration = json["length"] as? Int ?? 0
-            onStreamState?(StreamStateEvent(channelId: channelId, kind: .commercial(duration: duration)))
+            await onStreamState?(StreamStateEvent(channelId: channelId, kind: .commercial(duration: duration)))
 
         default:
             break

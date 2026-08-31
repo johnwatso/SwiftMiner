@@ -297,16 +297,24 @@ public actor MinerEngine {
     /// limited-time campaign with no live stream can repeatedly preempt or starve an active
     /// game (e.g. Overwatch) under the end-date-first `.mineAll` ordering.
     var gameLiveProbes: [String: (hasLiveChannel: Bool, checkedAt: Date)] = [:]
-    /// Consecutive failures of the approved-channel liveness query before it is treated as
-    /// broken rather than unlucky. Three probes is well inside one 60s ACL cycle, so a genuine
-    /// outage is reported within a minute or so of starting.
+    /// Consecutive failed *batches* of the approved-channel liveness query before it is treated
+    /// as broken rather than unlucky. Counting completed scans rather than concurrent channel
+    /// requests prevents one 30-channel fan-out from looking like 30 consecutive outages.
     /// Approved channels subscribed for stream-up while waiting. Twitch allows 50 topics
     /// per connection and the watch session needs its own, so this stays well clear of the
     /// ceiling rather than competing with the subscriptions mining depends on.
     static let monitoredRestrictedChannelLimit = 20
+    /// Offset into the lower-priority approved channels. The most urgent half remains
+    /// continuously monitored while the other half rotates between idle waits.
+    var restrictedChannelMonitoringOffset = 0
     /// Channels subscribed for stream-up while waiting, so an arriving event can be told
     /// apart from one for the channel already being watched.
     var monitoredRestrictedChannelIds: Set<String> = []
+    /// A PubSub stream-up is independent positive evidence that an approved channel is live.
+    /// Keep it briefly so the rescan triggered by that event does not have to trust a broken
+    /// GQL liveness query, then expire it in case a corresponding stream-down is lost.
+    static let recentRestrictedStreamUpInterval: TimeInterval = 10 * 60
+    var recentRestrictedStreamUpUntil: [String: UInt64] = [:]
     static let approvedChannelProbeFailureThreshold = 3
     var consecutiveApprovedChannelProbeFailures = 0
     /// Whether the current run of failures was reported, so recovery clears exactly the
@@ -515,10 +523,14 @@ public actor MinerEngine {
             // is the whole point of subscribing: these windows are short, and the next
             // scheduled probe is up to a minute away.
             if monitoredRestrictedChannelIds.contains(event.channelId) {
+                recentRestrictedStreamUpUntil[event.channelId] = runtimeClock.deadline(
+                    after: Self.recentRestrictedStreamUpInterval
+                )
                 log("An approved channel for a restricted campaign went live — re-checking immediately.")
                 shouldRescanCampaigns = true
             }
         case .down:
+            recentRestrictedStreamUpUntil.removeValue(forKey: event.channelId)
             log("Stream \(event.channelId) went OFFLINE")
         case .viewcount(let count):
             log("Stream \(event.channelId) viewers: \(count)")
@@ -553,12 +565,11 @@ public actor MinerEngine {
             await self?.enqueueMiningEvent(.streamDown(channelId: channelId))
         }
 
-        // Deliberately NOT routed through the event stream. `viewcount` fires repeatedly for
-        // every watched channel, and this handler only logs — it touches no shared state and
-        // needs no ordering. Keeping it off the mining queue prevents logging bursts from
-        // delaying a claim, stream-down, or progress event.
+        // Deliberately NOT routed through the mining event stream: `viewcount` fires repeatedly
+        // and must not delay claims or progress. DropEventsService still awaits this short actor
+        // hop, preserving socket order now that stream-up/down update recent live evidence.
         await dropEventsService.setStreamStateHandler { [weak self] event in
-            Task { await self?.logStreamState(event) }
+            await self?.logStreamState(event)
         }
 
         // Configure the service to receive messages
