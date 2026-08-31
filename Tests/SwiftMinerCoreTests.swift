@@ -170,7 +170,10 @@ final class SwiftMinerCoreTests: XCTestCase {
             .appendingPathComponent("SwiftMinerTests-\(UUID().uuidString).sqlite")
         let manager = SQLiteManager(databaseURL: databaseURL)
         try await manager.open()
-        defer {
+        // Close before unlinking, and await the close: an early failure that skipped the
+        // explicit close used to leave the file being removed while SQLite still held it.
+        addTeardownBlock {
+            await manager.close()
             try? FileManager.default.removeItem(at: databaseURL)
         }
 
@@ -215,8 +218,6 @@ final class SwiftMinerCoreTests: XCTestCase {
         let renamed = try XCTUnwrap(renamedAccount)
         XCTAssertEqual(renamed.nickname, "Boss Miner")
         XCTAssertEqual(renamed.accessToken, "new-access")
-
-        await manager.close()
     }
 
     func testSQLiteTokenStoreOperatorExclusivity() async throws {
@@ -224,7 +225,10 @@ final class SwiftMinerCoreTests: XCTestCase {
             .appendingPathComponent("SwiftMinerTests-\(UUID().uuidString).sqlite")
         let manager = SQLiteManager(databaseURL: databaseURL)
         try await manager.open()
-        defer {
+        // Close before unlinking, and await the close: an early failure that skipped the
+        // explicit close used to leave the file being removed while SQLite still held it.
+        addTeardownBlock {
+            await manager.close()
             try? FileManager.default.removeItem(at: databaseURL)
         }
 
@@ -260,19 +264,24 @@ final class SwiftMinerCoreTests: XCTestCase {
         let loaded2After = try XCTUnwrap(a2After)
         XCTAssertFalse(loaded1After.isOperator)
         XCTAssertTrue(loaded2After.isOperator)
-
-        await manager.close()
     }
 }
 
 actor TestTokenStore: TokenStore {
     private var accounts: [String: Account] = [:]
     private var saveFailure: (any Error)?
+    private var loadFailure: (any Error)?
 
     /// Makes every subsequent `save(account:)` fail, so tests can exercise the paths that have to
     /// keep an account working — and have to say something — when persistence is unavailable.
     func failSaves(with error: any Error) {
         saveFailure = error
+    }
+
+    /// Makes every subsequent read fail, standing in for a store whose contents exist but cannot
+    /// be recovered (an undecryptable legacy file, a Keychain that refuses to open).
+    func failLoads(with error: (any Error)?) {
+        loadFailure = error
     }
 
     func save(account: Account) async throws {
@@ -281,11 +290,13 @@ actor TestTokenStore: TokenStore {
     }
 
     func loadAllAccounts() async throws -> [Account] {
-        Array(accounts.values)
+        if let loadFailure { throw loadFailure }
+        return Array(accounts.values)
     }
 
     func loadAccount(twitchUserId: String) async throws -> Account? {
-        accounts[twitchUserId]
+        if let loadFailure { throw loadFailure }
+        return accounts[twitchUserId]
     }
 
     func updateTokenMaterial(twitchUserId: String, accessToken: String, refreshToken: String?, expiry: Date) async throws {

@@ -34,11 +34,16 @@ public enum LegacyAccountMigrator {
     ///   already in the Keychain are never overwritten by a stale file.
     /// - **Verified:** reads the target back and confirms the count before marking success; on
     ///   mismatch it throws and leaves the flag unset to retry.
+    /// - **Fail-closed:** a legacy store that exists but cannot be read throws rather than
+    ///   reporting zero accounts, so a bad read can never be recorded as a completed migration.
     static func migrate(from source: any TokenStore, into target: any TokenStore, defaults: UserDefaults) async throws {
         if defaults.object(forKey: migratedAtKey) != nil { return }
 
-        // A failed/empty legacy read (e.g. undecryptable file) yields [] — nothing to recover.
-        let legacy = (try? await source.loadAllAccounts()) ?? []
+        // A legacy read that *fails* is not the same as a legacy store that is *empty*. Only an
+        // absent file means "nothing to recover"; an unreadable or undecryptable one throws, so
+        // the flag stays unset, the migration is retried next launch, and — critically — the
+        // app never offers to delete the backup that still holds the user's only credentials.
+        let legacy = try await source.loadAllAccounts()
         let current = try await target.loadAllAccounts()
 
         if !legacy.isEmpty && current.isEmpty {

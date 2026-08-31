@@ -77,6 +77,10 @@ public struct HealthIncident: Codable, Sendable, Equatable, Identifiable {
         case automaticUpdateFailed
         case accountLinkRequired
         case channelChecksIncompatible
+        /// Twitch's real-time drop feed (PubSub) has been unavailable long enough that the
+        /// miner is running on periodic reconciliation alone. Mining continues; progress
+        /// updates arrive in batches rather than live.
+        case realtimeEventsOffline
         case other
 
         /// Where each signal sits on the promotion path. Adding a case forces this choice;
@@ -105,6 +109,12 @@ public struct HealthIncident: Codable, Sendable, Equatable, Identifiable {
             // the miss on 2026-08-18, when 266 failures produced no user-visible signal.
             case .channelChecksIncompatible:
                 return .alerted
+            // Added in 1.38.4. Starts at `.displayed` per the rule above: the transport it
+            // watches is legacy Twitch infrastructure, so how often a real outage lasts past
+            // the grace window is not yet known, and the user has nothing to do about it
+            // either way — mining keeps working. Promote only if the data earns it.
+            case .realtimeEventsOffline:
+                return .displayed
             case .accountLinkRequired, .other:
                 return .displayed
             }

@@ -1,19 +1,23 @@
 #!/usr/bin/env python3
-"""Publish the release notes ShipHook writes under docs/ into the website.
+"""Publish curated and ShipHook-generated release notes into the website.
 
-ShipHook can only write release notes to `docs/release-notes/`, so that directory is
-the source of truth: every page is authored (or regenerated) there, and the published
-site is built from it. This script does that build:
+ShipHook always copies a supplied page into `docs/release-notes/<version>.html`. Giving
+it a page that already lives at that path makes its `cp` fail because the source and
+destination are identical. Curated pages therefore live under
+`Documentation/ReleaseNotes/`; `docs/release-notes/` remains ShipHook's output and the
+historical archive. This script merges both sources, preferring the curated page when
+the same version exists in each location:
 
-  1. copies every `docs/release-notes/*.html` page into `Website/public/release-notes/`
-  2. writes the release-notes index from those pages, newest version first
+  1. copies ShipHook/archive pages and then curated pages into the website output
+  2. writes the release-notes index from the merged set, newest version first
   3. refreshes the release-notes URLs in `Website/public/sitemap.xml`
 
 Both generated lists used to be maintained by hand and had drifted — the index was
 missing 11 pages and the sitemap 34 — which is the whole reason they are generated now.
 
-Run it after editing or adding a page, and commit the result. The website deploy
-workflow runs it too, so a ShipHook release reaches the site without a manual step.
+Run it after editing or adding a curated page, and commit the sitemap result. The
+website deploy workflow runs it too, so ShipHook output reaches the site automatically
+without ever being used as its own copy source.
 """
 
 from __future__ import annotations
@@ -160,9 +164,9 @@ def validate(notes: list[ReleaseNote]) -> list[str]:
     """Structural problems that mean a page is not a finished release note.
 
     ShipHook writes its own `docs/release-notes/<version>.html` at every release,
-    generated from the tip commit message, and it lands on top of whatever curated page
-    was there. That page has no intro and no sections, so these checks turn a silent
-    overwrite into a red build."""
+    sometimes generated from the tip commit message. Curated pages shadow that output;
+    unshadowed generated pages have no intro or sections, so these checks still turn an
+    incomplete public page into a red build."""
     problems: list[str] = []
     for note in notes:
         if note.title != f"SwiftMiner {note.version}":
@@ -177,14 +181,24 @@ def validate(notes: list[ReleaseNote]) -> list[str]:
     return problems
 
 
-def load_notes(notes_dir: Path) -> list[ReleaseNote]:
-    notes = [
-        ReleaseNote(path)
+def load_notes(notes_dir: Path, curated_dir: Path | None = None) -> list[ReleaseNote]:
+    """Load the merged release archive, with curated pages winning by filename."""
+    paths = {
+        path.name: path
         for path in sorted(notes_dir.glob("*.html"))
         if path.name != "index.html"
-    ]
+    }
+    if curated_dir is not None and curated_dir.exists():
+        paths.update(
+            {
+                path.name: path
+                for path in sorted(curated_dir.glob("*.html"))
+                if path.name != "index.html"
+            }
+        )
+    notes = [ReleaseNote(path) for path in paths.values()]
     if not notes:
-        raise SystemExit(f"No release-note pages found in {notes_dir}")
+        raise SystemExit(f"No release-note pages found in {notes_dir} or {curated_dir}")
     return sorted(notes, key=lambda note: note.sort_key, reverse=True)
 
 
@@ -287,17 +301,23 @@ def main() -> int:
     root = Path(__file__).resolve().parent.parent
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--notes-dir", type=Path, default=root / "docs" / "release-notes")
+    parser.add_argument(
+        "--curated-dir",
+        type=Path,
+        default=root / "Documentation" / "ReleaseNotes",
+        help="Curated input pages kept outside ShipHook's docs/release-notes output path.",
+    )
     parser.add_argument("--site-dir", type=Path, default=root / "Website" / "public" / "release-notes")
     parser.add_argument("--sitemap", type=Path, default=root / "Website" / "public" / "sitemap.xml")
     parser.add_argument(
         "--check",
         action="store_true",
         help="Validate the pages and the sitemap without writing anything. Used by CI so a "
-        "page ShipHook overwrote, or a sitemap left unregenerated, fails the build.",
+        "generated-only page, or a sitemap left unregenerated, fails the build.",
     )
     args = parser.parse_args()
 
-    notes = load_notes(args.notes_dir)
+    notes = load_notes(args.notes_dir, args.curated_dir)
     if args.check:
         return check(notes, args.sitemap)
 
@@ -306,10 +326,14 @@ def main() -> int:
         print(f"warning: {problem}")
 
     copied = publish_pages(args.notes_dir, args.site_dir)
+    curated = publish_pages(args.curated_dir, args.site_dir) if args.curated_dir.exists() else 0
     (args.site_dir / "index.html").write_text(render_index(notes), encoding="utf-8")
     sitemap_entries = update_sitemap(args.sitemap, notes)
 
-    print(f"Published {copied} release-note pages from {args.notes_dir}")
+    print(
+        f"Published {copied} archived and {curated} curated release-note pages "
+        f"from {args.notes_dir} and {args.curated_dir}"
+    )
     print(f"Indexed {len(notes)} versions, newest {notes[0].version}")
     print(f"Listed {sitemap_entries} release-note URLs in {args.sitemap.name}")
     return 0

@@ -1,5 +1,6 @@
 import Foundation
 import Security
+import SwiftMinerService
 
 // Optional self-service browser dashboard. Independent of SwiftBot — it only needs a Discord
 // OAuth app (for sign-in) and a public origin. Disabled by default; the in-process HTTP server
@@ -156,15 +157,16 @@ extension Settings {
         }
     }
 
-    /// Twitch OAuth application client secret used for web sign-in
+    /// Twitch OAuth application client secret used for web sign-in.
+    /// Held in the Keychain, not `UserDefaults` — see `Settings.readSecret`.
     public var webDashboardTwitchClientSecret: String {
         get {
             access(keyPath: \.webDashboardTwitchClientSecret)
-            return Self.read("webDashboardTwitchClientSecret", default: "")
+            return Self.readSecret(.webDashboardTwitchClientSecret)
         }
         set {
             withMutation(keyPath: \.webDashboardTwitchClientSecret) {
-                Self.write("webDashboardTwitchClientSecret", newValue)
+                Self.writeSecret(.webDashboardTwitchClientSecret, newValue)
             }
         }
     }
@@ -248,8 +250,11 @@ extension Settings {
     }
 
     /// Parses the user-entered Public URL leniently: a bare hostname like
-    /// "swiftminer.example.com" is treated as https. Returns nil only when the
-    /// value is empty or genuinely not a usable http(s) origin.
+    /// "swiftminer.example.com" is treated as https. Returns nil when the value is empty,
+    /// is not a usable http(s) origin, or is plain `http://` on anything but a loopback or
+    /// local-network host — sign-in over a public HTTP origin would put the OAuth exchange
+    /// and the session cookie on the wire in clear text, so the service rejects it too
+    /// (`WebDashboardConfig.baseURLSupportsSignIn`).
     public static func normalizedWebDashboardURL(from raw: String) -> URL? {
         var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !s.isEmpty else { return nil }
@@ -257,9 +262,10 @@ extension Settings {
         guard let url = URL(string: s),
               let scheme = url.scheme?.lowercased(),
               scheme == "https" || scheme == "http",
-              let host = url.host, host.contains(".") || host == "localhost" else {
+              let host = url.host, !host.isEmpty else {
             return nil
         }
+        guard scheme == "https" || WebDashboardConfig.isLocalHostname(host) else { return nil }
         return url
     }
 

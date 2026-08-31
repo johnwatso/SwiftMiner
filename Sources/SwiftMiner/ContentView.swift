@@ -598,9 +598,24 @@ struct OverviewSystemStateBanner: View {
     let fleet: MinerFleetStatus
     let onAction: (OverviewSystemAction) -> Void
 
+    private var statusIconSize: CGFloat {
+        // The composed bolt is already enlarged inside AnimatedStatusIcon so its narrow
+        // glyph and overhanging badge carry the same visual weight as wider symbols.
+        // Give every other overview symbol the same optical 15% lift while leaving the
+        // mining symbol at the size that established the target proportions.
+        switch state.symbol {
+        case "bolt.badge.checkmark.fill",
+             "bolt.trianglebadge.exclamationmark.fill",
+             "bolt.badge.clock.fill":
+            return 16
+        default:
+            return 16 * 1.15
+        }
+    }
+
     var body: some View {
         HStack(spacing: 14) {
-            AnimatedStatusIcon(symbol: state.symbol, color: state.color, size: 16, weight: .semibold)
+            AnimatedStatusIcon(symbol: state.symbol, color: state.color, size: statusIconSize, weight: .semibold)
                 .frame(width: 38, height: 38, alignment: .center)
 
             VStack(alignment: .leading, spacing: 4) {

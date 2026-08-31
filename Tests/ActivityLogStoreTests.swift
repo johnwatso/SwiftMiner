@@ -8,7 +8,6 @@ final class ActivityLogStoreTests: XCTestCase {
     func testOpenRepairsMissingAuditCategorySchemaWhenMigrationIsRecorded() async throws {
         let databaseURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftMinerActivityLogMigration-\(UUID().uuidString).sqlite")
-        defer { try? FileManager.default.removeItem(at: databaseURL) }
 
         var rawDatabase: OpaquePointer?
         XCTAssertEqual(sqlite3_open(databaseURL.path, &rawDatabase), SQLITE_OK)
@@ -51,6 +50,10 @@ final class ActivityLogStoreTests: XCTestCase {
 
         let manager = SQLiteManager(databaseURL: databaseURL)
         try await manager.open()
+        addTeardownBlock {
+            await manager.close()
+            try? FileManager.default.removeItem(at: databaseURL)
+        }
 
         let migrated = try await manager.query { database in
             var statement: OpaquePointer?
@@ -77,8 +80,11 @@ final class ActivityLogStoreTests: XCTestCase {
             .appendingPathComponent("SwiftMinerActivityLog-\(UUID().uuidString).sqlite")
         let manager = SQLiteManager(databaseURL: databaseURL)
         try await manager.open()
-        defer {
-            Task { await manager.close() }
+        // Close before unlinking: removing the file while SQLite still has it open makes
+        // macOS log "database integrity compromised by API violation". `addTeardownBlock`
+        // can await the close, which `defer` cannot.
+        addTeardownBlock {
+            await manager.close()
             try? FileManager.default.removeItem(at: databaseURL)
         }
 
@@ -112,8 +118,8 @@ final class ActivityLogStoreTests: XCTestCase {
             .appendingPathComponent("SwiftMinerActivityLog-\(UUID().uuidString).sqlite")
         let manager = SQLiteManager(databaseURL: databaseURL)
         try await manager.open()
-        defer {
-            Task { await manager.close() }
+        addTeardownBlock {
+            await manager.close()
             try? FileManager.default.removeItem(at: databaseURL)
         }
 
@@ -131,8 +137,8 @@ final class ActivityLogStoreTests: XCTestCase {
             .appendingPathComponent("SwiftMinerActivityLog-\(UUID().uuidString).sqlite")
         let manager = SQLiteManager(databaseURL: databaseURL)
         try await manager.open()
-        defer {
-            Task { await manager.close() }
+        addTeardownBlock {
+            await manager.close()
             try? FileManager.default.removeItem(at: databaseURL)
         }
 
@@ -160,8 +166,8 @@ final class ActivityLogStoreTests: XCTestCase {
             .appendingPathComponent("SwiftMinerActivityLog-\(UUID().uuidString).sqlite")
         let manager = SQLiteManager(databaseURL: databaseURL)
         try await manager.open()
-        defer {
-            Task { await manager.close() }
+        addTeardownBlock {
+            await manager.close()
             try? FileManager.default.removeItem(at: databaseURL)
         }
 
@@ -205,8 +211,8 @@ final class ActivityLogStoreTests: XCTestCase {
             .appendingPathComponent("SwiftMinerAuditFill-\(UUID().uuidString).sqlite")
         let manager = SQLiteManager(databaseURL: databaseURL)
         try await manager.open()
-        defer {
-            Task { await manager.close() }
+        addTeardownBlock {
+            await manager.close()
             try? FileManager.default.removeItem(at: databaseURL)
         }
 

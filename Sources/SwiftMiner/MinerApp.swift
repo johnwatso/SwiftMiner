@@ -58,6 +58,10 @@ struct MinerApp: App {
                         // Migrate any legacy hardware-UUID account file into the real Keychain
                         // BEFORE accounts are loaded below. No-op on DEBUG and after the first run.
                         await LegacyAccountMigrator.migrateIfNeeded()
+                        // Move the SwiftBot pairing secret, local API key, and dashboard client
+                        // secret out of the defaults plist into the Keychain.
+                        // Runs before anything reads them, and is a no-op once done.
+                        SecretStore.migrateIfNeeded(defaults: Settings.appStorageStore)
                         // Reclaims the cache and defaults the removed Steam artwork feature left.
                         LegacySteamArtworkCleanup.runIfNeeded()
                         if settings.shouldPromptForLegacyBackupDeletion {

@@ -948,7 +948,10 @@ public final class MinerManager {
         try? await authService.revokeAccess(for: miner.accountId)
         try? await authService.logout(accountId: miner.accountId)
         
-        // Remove from collections
+        // Remove from collections. The state store owns a self-perpetuating refresh loop, so
+        // dropping the reference is not enough — an unstopped store keeps polling Twitch for
+        // an account that no longer exists.
+        miner.stateStore?.stop()
         engines.removeValue(forKey: minerId)
         let removedAccountId = miner.accountId
         currentExcludedGamesByAccount.removeValue(forKey: removedAccountId)

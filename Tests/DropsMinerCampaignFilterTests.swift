@@ -5,18 +5,50 @@ import XCTest
 final class DropsMinerCampaignFilterTests: XCTestCase {
     private let now = Date()
 
-    func testEmptyFilterSelectionRepresentsAllCampaigns() {
-        XCTAssertTrue(
+    func testEmptyFilterSelectionMatchesNoCampaigns() {
+        XCTAssertFalse(
             DropsCampaignFilterRules.matchesSelectedFilters(
                 campaignFilters: [.active],
                 selectedFilters: []
             )
         )
-        XCTAssertTrue(
+        XCTAssertFalse(
             DropsCampaignFilterRules.matchesSelectedFilters(
                 campaignFilters: [.completed],
                 selectedFilters: []
             )
+        )
+    }
+
+    func testToggleAllSelectsEveryFilterFromPartialSelection() {
+        let toggled = DropsCampaignFilterRules.togglingAllFilters(in: [.active])
+
+        XCTAssertEqual(toggled, Set(DropFilter.allCases))
+        XCTAssertTrue(DropsCampaignFilterRules.allFiltersSelected(in: toggled))
+    }
+
+    func testToggleAllClearsEveryFilterWhenAllAreSelected() {
+        let toggled = DropsCampaignFilterRules.togglingAllFilters(
+            in: Set(DropFilter.allCases)
+        )
+
+        XCTAssertTrue(toggled.isEmpty)
+        XCTAssertFalse(DropsCampaignFilterRules.allFiltersSelected(in: toggled))
+    }
+
+    func testLegacyEmptyAllSelectionMigratesToEveryFilterOnce() {
+        XCTAssertEqual(
+            DropsCampaignFilterRules.migratingLegacyAllSelection(
+                [],
+                migrationAlreadyApplied: false
+            ),
+            Set(DropFilter.allCases)
+        )
+        XCTAssertTrue(
+            DropsCampaignFilterRules.migratingLegacyAllSelection(
+                [],
+                migrationAlreadyApplied: true
+            ).isEmpty
         )
     }
 

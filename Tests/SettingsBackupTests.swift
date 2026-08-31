@@ -54,6 +54,28 @@ final class SettingsBackupTests: XCTestCase {
         XCTAssertTrue(settings.webDashboardDiscordOAuthEnabled)
     }
 
+    func testWebDashboardURLRequiresHTTPSOutsideTheLocalNetwork() {
+        XCTAssertEqual(
+            Settings.normalizedWebDashboardURL(from: "swiftminer.example.com"),
+            URL(string: "https://swiftminer.example.com")
+        )
+        XCTAssertNil(Settings.normalizedWebDashboardURL(from: "http://swiftminer.example.com"))
+
+        for local in [
+            "http://localhost:8080",
+            "http://127.0.0.1:8080",
+            "http://192.168.1.20:8080",
+            "http://swiftminer.local:8080",
+            "http://mac-mini:8080"
+        ] {
+            XCTAssertEqual(
+                Settings.normalizedWebDashboardURL(from: local),
+                URL(string: local),
+                "\(local) should remain available for local dashboard access"
+            )
+        }
+    }
+
     func testIRLCampaignsResetToDisabled() {
         settings.mineIRLCampaigns = true
 

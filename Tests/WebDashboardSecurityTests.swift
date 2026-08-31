@@ -161,6 +161,67 @@ final class WebDashboardSecurityTests: XCTestCase {
         XCTAssertTrue(http.anyProviderEnabled)
     }
 
+    /// A public plain-HTTP origin must never enable OAuth: the callback carries the
+    /// authorization `code` and the reply sets a week-long session cookie that cannot be
+    /// marked `Secure` on an http origin. Loopback and LAN hosts keep working.
+    func testPublicHTTPOriginCannotEnableSignIn() {
+        let publicHTTP = WebDashboardConfig(
+            baseURL: URL(string: "http://swiftminer.example.com")!,
+            discord: WebProviderCredentials(clientID: "id", clientSecret: "secret"),
+            twitch: WebProviderCredentials(clientID: "tid", clientSecret: "tsecret"),
+            swiftBotSSO: WebSwiftBotSSO(origin: "http://swiftminer.example.com", hmacSecret: "secret")
+        )
+        XCTAssertFalse(publicHTTP.baseURLSupportsSignIn)
+        XCTAssertFalse(publicHTTP.discordEnabled)
+        XCTAssertFalse(publicHTTP.twitchEnabled)
+        XCTAssertFalse(publicHTTP.swiftBotSSOEnabled)
+        XCTAssertFalse(publicHTTP.anyProviderEnabled)
+        XCTAssertFalse(publicHTTP.useSecureCookies)
+
+        for local in ["http://localhost:8080", "http://127.0.0.1:8080", "http://192.168.1.20:8080",
+                      "http://10.0.0.5", "http://172.16.4.4", "http://swiftminer.local", "http://mac-mini"] {
+            let cfg = WebDashboardConfig(
+                baseURL: URL(string: local)!,
+                discord: nil,
+                twitch: WebProviderCredentials(clientID: "tid", clientSecret: "tsecret")
+            )
+            XCTAssertTrue(cfg.twitchEnabled, "\(local) is a local origin and should keep working over http")
+        }
+
+        for publicHost in ["swiftminer.example.com", "203.0.113.10", "172.32.0.1", "8.8.8.8"] {
+            XCTAssertFalse(
+                WebDashboardConfig.isLocalHostname(publicHost),
+                "\(publicHost) must not be treated as local"
+            )
+        }
+    }
+
+    /// The same rule at the configuration boundary: a public http base URL is dropped
+    /// entirely rather than silently enabling an insecure dashboard.
+    func testFromEnvironmentDropsPublicHTTPBaseURL() throws {
+        let suiteName = "com.swiftminer.tests.web.\(UUID().uuidString)"
+        let suite = UserDefaults(suiteName: suiteName)!
+        suite.removePersistentDomain(forName: suiteName)
+        defer { suite.removePersistentDomain(forName: suiteName) }
+
+        suite.set("http://swiftminer.example.com", forKey: "webDashboardBaseURL")
+        suite.set("tid", forKey: "webDashboardTwitchClientID")
+        suite.set("tsecret", forKey: "webDashboardTwitchClientSecret")
+        // Local sign-in keeps the dashboard itself alive, so a nil config can't mask the result.
+        suite.set("operator", forKey: "webDashboardLocalUsername")
+        suite.set(WebSecurity.hashLocalPassword("pw", iterations: 1_000), forKey: "webDashboardLocalPasswordHash")
+
+        let publicHTTP = try XCTUnwrap(WebDashboardConfig.fromEnvironment(suite))
+        XCTAssertNil(publicHTTP.baseURL, "A public http:// origin must be dropped, not accepted")
+        XCTAssertFalse(publicHTTP.twitchEnabled)
+        XCTAssertTrue(publicHTTP.localEnabled, "Local sign-in is unaffected")
+
+        suite.set("http://127.0.0.1:8080", forKey: "webDashboardBaseURL")
+        let loopback = try XCTUnwrap(WebDashboardConfig.fromEnvironment(suite))
+        XCTAssertEqual(loopback.baseURL, URL(string: "http://127.0.0.1:8080"))
+        XCTAssertTrue(loopback.twitchEnabled)
+    }
+
     func testLocalPasswordHashRoundTrips() {
         let hash = WebSecurity.hashLocalPassword("hunter2", iterations: 2_000)
         let parts = hash.split(separator: ":")
@@ -210,7 +271,6 @@ final class WebDashboardSecurityTests: XCTestCase {
 
     func testLiveSwiftBotProviderCanDisableCachedDiscordSignIn() async throws {
         let mgr = try await openTempManager()
-        defer { Task { await mgr.close() } }
         let apiRoutes = DiscordAPIRoutes(
             manager: mgr,
             projectionBuilder: DiscordProjectionBuilder(manager: mgr),
@@ -244,7 +304,6 @@ final class WebDashboardSecurityTests: XCTestCase {
 
     func testLiveTwitchProviderCanDisableCachedTwitchSignIn() async throws {
         let mgr = try await openTempManager()
-        defer { Task { await mgr.close() } }
         let apiRoutes = DiscordAPIRoutes(
             manager: mgr,
             projectionBuilder: DiscordProjectionBuilder(manager: mgr),
@@ -288,7 +347,6 @@ final class WebDashboardSecurityTests: XCTestCase {
 
     func testTwitchSignInStillOfferedWithoutALiveProvider() async throws {
         let mgr = try await openTempManager()
-        defer { Task { await mgr.close() } }
         let apiRoutes = DiscordAPIRoutes(
             manager: mgr,
             projectionBuilder: DiscordProjectionBuilder(manager: mgr),
@@ -414,7 +472,6 @@ final class WebDashboardSecurityTests: XCTestCase {
 
     func testLocalLoginPageShowsOnlyUsernamePasswordForm() async throws {
         let mgr = try await openTempManager()
-        defer { Task { await mgr.close() } }
         let router = try await configuredWebRouter(manager: mgr)
 
         let response = await router.handle(HTTPRequest(
@@ -435,7 +492,6 @@ final class WebDashboardSecurityTests: XCTestCase {
 
     func testLANLoginPageShowsLocalUsernamePasswordForm() async throws {
         let mgr = try await openTempManager()
-        defer { Task { await mgr.close() } }
         let router = try await configuredWebRouter(manager: mgr)
 
         let response = await router.handle(HTTPRequest(
@@ -457,7 +513,6 @@ final class WebDashboardSecurityTests: XCTestCase {
 
     func testLANProviderLoginIsRejected() async throws {
         let mgr = try await openTempManager()
-        defer { Task { await mgr.close() } }
         let router = try await configuredWebRouter(manager: mgr)
 
         let response = await router.handle(HTTPRequest(
@@ -473,7 +528,6 @@ final class WebDashboardSecurityTests: XCTestCase {
 
     func testPublicLoginPageKeepsOAuthAndHidesLocalForm() async throws {
         let mgr = try await openTempManager()
-        defer { Task { await mgr.close() } }
         let router = try await configuredWebRouter(manager: mgr)
 
         let response = await router.handle(HTTPRequest(
@@ -501,7 +555,6 @@ final class WebDashboardSecurityTests: XCTestCase {
 
     func testLocalProviderLoginIsRejected() async throws {
         let mgr = try await openTempManager()
-        defer { Task { await mgr.close() } }
         let router = try await configuredWebRouter(manager: mgr)
 
         let response = await router.handle(HTTPRequest(
@@ -519,7 +572,6 @@ final class WebDashboardSecurityTests: XCTestCase {
 
     func testLocalLoginIssuesNonSecureCookieForHTTPAccess() async throws {
         let mgr = try await openTempManager()
-        defer { Task { await mgr.close() } }
         let router = try await configuredWebRouter(manager: mgr)
 
         let body = Data("username=admin&password=password".utf8)
@@ -547,7 +599,6 @@ final class WebDashboardSecurityTests: XCTestCase {
 
     func testLogoutClearsLocalSessionEvenBeforeCSRFLoads() async throws {
         let mgr = try await openTempManager()
-        defer { Task { await mgr.close() } }
         let router = try await configuredWebRouter(manager: mgr)
 
         let login = await router.handle(HTTPRequest(
@@ -577,7 +628,6 @@ final class WebDashboardSecurityTests: XCTestCase {
 
     func testDiscordLogoutAuditUsesLinkedMinerNameNotRawDiscordId() async throws {
         let mgr = try await openTempManager()
-        defer { Task { await mgr.close() } }
 
         let discordId = "123456789012345678"
         try await mgr.execute("""
@@ -617,7 +667,6 @@ final class WebDashboardSecurityTests: XCTestCase {
 
     func testAccountRemovalRequiresCSRFAndExactTypedConfirmation() async throws {
         let mgr = try await openTempManager()
-        defer { Task { await mgr.close() } }
         try await mgr.execute("""
         INSERT INTO twitch_accounts (
             twitch_id, username, access_token, refresh_token, token_expiry, scopes, link_state
@@ -678,7 +727,6 @@ final class WebDashboardSecurityTests: XCTestCase {
 
     func testMinerExclusionsRequireCSRFAndAreScopedToTheSignedInMiner() async throws {
         let mgr = try await openTempManager()
-        defer { Task { await mgr.close() } }
         try await mgr.createWebSession(
             id: "exclusions-session",
             principalType: "twitch",
@@ -732,7 +780,6 @@ final class WebDashboardSecurityTests: XCTestCase {
 
     func testWebSessionLifecycleAndExpiry() async throws {
         let mgr = try await openTempManager()
-        defer { Task { await mgr.close() } }
 
         let now: Double = 1_000_000
         try await mgr.createWebSession(id: "sess1", principalType: "discord", principalId: "123456789012345678",
@@ -754,7 +801,6 @@ final class WebDashboardSecurityTests: XCTestCase {
 
     func testPurgeRemovesOnlyExpiredSessions() async throws {
         let mgr = try await openTempManager()
-        defer { Task { await mgr.close() } }
         let now: Double = 2_000_000
         try await mgr.createWebSession(id: "live", principalType: "twitch", principalId: "1", csrfToken: "c", createdAt: now, expiresAt: now + 1000)
         try await mgr.createWebSession(id: "dead", principalType: "discord", principalId: "2", csrfToken: "c", createdAt: now, expiresAt: now - 1)
@@ -767,7 +813,6 @@ final class WebDashboardSecurityTests: XCTestCase {
 
     func testOAuthStateIsSingleUse() async throws {
         let mgr = try await openTempManager()
-        defer { Task { await mgr.close() } }
         let now: Double = 3_000_000
         try await mgr.createOAuthState("state-A", provider: "twitch", createdAt: now, expiresAt: now + 600)
         let firstUse = await mgr.consumeOAuthState("state-A", now: now + 10)
@@ -780,7 +825,6 @@ final class WebDashboardSecurityTests: XCTestCase {
 
     func testExpiredOAuthStateRejectedAndConsumed() async throws {
         let mgr = try await openTempManager()
-        defer { Task { await mgr.close() } }
         let now: Double = 4_000_000
         try await mgr.createOAuthState("stale", provider: "discord", createdAt: now - 1000, expiresAt: now - 1)
         let expired = await mgr.consumeOAuthState("stale", now: now)           // expired → nil
@@ -791,14 +835,12 @@ final class WebDashboardSecurityTests: XCTestCase {
 
     func testOwnerDiscordIdNilForUnknownAccount() async throws {
         let mgr = try await openTempManager()
-        defer { Task { await mgr.close() } }
         let owner = await mgr.ownerDiscordId(forTwitchAccount: "no-such-account")
         XCTAssertNil(owner)
     }
 
     func testSwiftBotSSORegistersNewDiscordUserWithoutMiner() async throws {
         let mgr = try await openTempManager()
-        defer { Task { await mgr.close() } }
         let apiRoutes = DiscordAPIRoutes(
             manager: mgr,
             projectionBuilder: DiscordProjectionBuilder(manager: mgr),
@@ -856,7 +898,6 @@ final class WebDashboardSecurityTests: XCTestCase {
 
     func testSwiftBotSSORejectsDiscordUserOutsideAttachedServer() async throws {
         let mgr = try await openTempManager()
-        defer { Task { await mgr.close() } }
         let apiRoutes = DiscordAPIRoutes(
             manager: mgr,
             projectionBuilder: DiscordProjectionBuilder(manager: mgr),
@@ -906,7 +947,6 @@ final class WebDashboardSecurityTests: XCTestCase {
 
     func testUnknownTwitchAccountCannotUseWebDashboard() async throws {
         let mgr = try await openTempManager()
-        defer { Task { await mgr.close() } }
         let apiRoutes = DiscordAPIRoutes(
             manager: mgr,
             projectionBuilder: DiscordProjectionBuilder(manager: mgr),
@@ -921,7 +961,6 @@ final class WebDashboardSecurityTests: XCTestCase {
 
     func testDiscordOperatorSessionReceivesOperatorOverview() async throws {
         let mgr = try await openTempManager()
-        defer { Task { await mgr.close() } }
         let discordId = "123456789012345678"
         try await mgr.execute("""
         INSERT INTO miner_users (discord_id, status) VALUES ('\(discordId)', 'registered');
@@ -955,7 +994,6 @@ final class WebDashboardSecurityTests: XCTestCase {
 
     func testDirectDiscordOAuthIsRejectedBecauseServerMembershipIsUnverified() async throws {
         let mgr = try await openTempManager()
-        defer { Task { await mgr.close() } }
         let apiRoutes = DiscordAPIRoutes(
             manager: mgr,
             projectionBuilder: DiscordProjectionBuilder(manager: mgr),
@@ -1006,11 +1044,19 @@ final class WebDashboardSecurityTests: XCTestCase {
         }
     }
 
+    /// Opens a throwaway database and registers its own teardown, so callers cannot forget —
+    /// and so the close is *awaited* before the file is unlinked. The previous
+    /// `defer { Task { await mgr.close() } }` never awaited the close and left every temp
+    /// database behind.
     private func openTempManager() async throws -> SQLiteManager {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftMiner-WebSecTests-\(UUID().uuidString).sqlite")
         let mgr = SQLiteManager(databaseURL: url)
         try await mgr.open()
+        addTeardownBlock {
+            await mgr.close()
+            try? FileManager.default.removeItem(at: url)
+        }
         return mgr
     }
 

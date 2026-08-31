@@ -76,6 +76,30 @@ public final class Settings {
         appStorageStore.set(value.rawValue, forKey: key)
     }
 
+    // MARK: - Secret Access
+    //
+    // Bearer credentials (the SwiftBot pairing secret, the local API key, the dashboard's
+    // Twitch client secret) go to the Keychain rather than the defaults plist, which is
+    // readable by anything running as the user. Reads still fall back to `appStorageStore`
+    // for a build that has not run `SecretStore.migrateIfNeeded` yet, so an upgrade never
+    // loses a working configuration.
+
+    static func readSecret(_ key: SecretStore.Key) -> String {
+        SecretStore.read(key, legacyDefaults: appStorageStore) ?? ""
+    }
+
+    static func writeSecret(_ key: SecretStore.Key, _ value: String) {
+        do {
+            try SecretStore.write(key, value)
+            // Clear any legacy plaintext copy so the two can never disagree.
+            appStorageStore.removeObject(forKey: key.rawValue)
+        } catch {
+            // Losing the value outright would break the integration; keep it working and say so.
+            Logger.storage.error("Could not save \(key.rawValue) to the Keychain: \(error.localizedDescription)")
+            appStorageStore.set(value, forKey: key.rawValue)
+        }
+    }
+
     // MARK: - Persisted Properties
     
     /// Whether auto-claim is enabled for completed drops
@@ -453,6 +477,20 @@ public final class Settings {
                let string = String(data: data, encoding: .utf8),
                selectedDropsFiltersData != string {
                 selectedDropsFiltersData = string
+            }
+        }
+    }
+
+    /// Earlier builds encoded the exclusive All chip as an empty selection. The
+    /// toggle-style All control needs empty to mean every filter is off instead.
+    private var dropsFilterToggleAllMigrationApplied: Bool {
+        get {
+            access(keyPath: \.dropsFilterToggleAllMigrationApplied)
+            return Self.read("dropsFilterToggleAllMigrationApplied", default: false)
+        }
+        set {
+            withMutation(keyPath: \.dropsFilterToggleAllMigrationApplied) {
+                Self.write("dropsFilterToggleAllMigrationApplied", newValue)
             }
         }
     }
@@ -863,28 +901,30 @@ public final class Settings {
         }
     }
 
-    /// Shared HMAC-SHA256 secret for webhook request signing
+    /// Shared HMAC-SHA256 secret for webhook request signing.
+    /// Held in the Keychain, not `UserDefaults` — see `Self.readSecret`.
     public var swiftBotHmacSecret: String {
         get {
             access(keyPath: \.swiftBotHmacSecret)
-            return Self.read("swiftBotHmacSecret", default: "")
+            return Self.readSecret(.swiftBotHmacSecret)
         }
         set {
             withMutation(keyPath: \.swiftBotHmacSecret) {
-                Self.write("swiftBotHmacSecret", newValue)
+                Self.writeSecret(.swiftBotHmacSecret, newValue)
             }
         }
     }
 
-    /// API Key for the SwiftMiner HTTP service (used by SwiftBot)
+    /// API Key for the SwiftMiner HTTP service (used by SwiftBot).
+    /// Held in the Keychain, not `UserDefaults` — see `Self.readSecret`.
     public var swiftMinerAPIKey: String {
         get {
             access(keyPath: \.swiftMinerAPIKey)
-            return Self.read("swiftMinerAPIKey", default: "")
+            return Self.readSecret(.swiftMinerAPIKey)
         }
         set {
             withMutation(keyPath: \.swiftMinerAPIKey) {
-                Self.write("swiftMinerAPIKey", newValue)
+                Self.writeSecret(.swiftMinerAPIKey, newValue)
             }
         }
     }
@@ -943,10 +983,20 @@ public final class Settings {
             appPresenceMode = .menuBarWhenClosed
         }
         migrateFromLegacyIfNeeded()
+        applyDropsFilterToggleAllMigrationIfNeeded()
         applyHeartbeatFilterDefaultIfNeeded()
         applyAuditFilterDefaultIfNeeded()
         applyUpdatesFilterDefaultIfNeeded()
         applyHardenedAntiStallDefaultIfNeeded()
+    }
+
+    private func applyDropsFilterToggleAllMigrationIfNeeded() {
+        guard !dropsFilterToggleAllMigrationApplied else { return }
+        selectedDropsFilters = DropsCampaignFilterRules.migratingLegacyAllSelection(
+            selectedDropsFilters,
+            migrationAlreadyApplied: false
+        )
+        dropsFilterToggleAllMigrationApplied = true
     }
 
     /// Earlier builds forcibly disabled this setting on every launch while recovery was being

@@ -172,6 +172,26 @@ extension MinerManager {
                         kind: .channelChecksIncompatible,
                         at: Date()
                     ))
+                case .realtimeEventsOffline(let detail):
+                    // Recorded, not alerted: the miner is still earning, just without live
+                    // progress. It matters because a permanently dead real-time transport
+                    // used to be invisible — every other signal keeps reading healthy.
+                    guard let miner = self.getMiner(id: minerId) else { break }
+                    self.recordHealth(.incidentObserved(
+                        minerID: miner.id,
+                        kind: .realtimeEventsOffline,
+                        severity: .warning,
+                        summary: detail,
+                        recommendedAction: "No action needed — drop progress is reconciled from Twitch every few minutes instead of live",
+                        at: Date()
+                    ))
+                case .realtimeEventsRestored:
+                    guard let miner = self.getMiner(id: minerId) else { break }
+                    self.recordHealth(.incidentResolved(
+                        minerID: miner.id,
+                        kind: .realtimeEventsOffline,
+                        at: Date()
+                    ))
                 case .issueDetected(let category, let detail):
                     let cause = Self.mapIssueCategoryToStallCause(category)
                     await self.supervisor.recordIssue(minerId: minerId, cause: cause, detail: detail)

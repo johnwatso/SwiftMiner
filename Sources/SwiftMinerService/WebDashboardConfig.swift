@@ -1,5 +1,10 @@
 import Foundation
 import CryptoKit
+import SwiftMinerCore
+import os
+
+// Qualified: SwiftMinerCore exports a `Logger` of its own.
+private let configLogger = os.Logger(subsystem: "com.swiftminer", category: "web")
 
 // MARK: - Configuration
 
@@ -77,15 +82,62 @@ public struct WebDashboardConfig: Sendable {
     public static let sessionTTL: TimeInterval = 7 * 24 * 60 * 60
     public static let oauthStateTTL: TimeInterval = 10 * 60
 
-    // OAuth providers require a public URL (for the redirect). Local sign-in
-    // does not.
-    public var discordEnabled: Bool { baseURL != nil && discord != nil }
-    public var twitchEnabled: Bool { baseURL != nil && twitch != nil }
+    /// Whether a hostname is loopback or on the local network, where plain HTTP is a
+    /// legitimate development/LAN setup rather than an exposed deployment.
+    ///
+    /// Covers loopback (`localhost`, `127.0.0.0/8`, `::1`), Bonjour `.local` names, bare
+    /// single-label LAN hostnames, and the RFC 1918 / link-local private ranges.
+    public static func isLocalHostname(_ rawHost: String?) -> Bool {
+        guard var host = rawHost?.lowercased(), !host.isEmpty else { return false }
+        // URL.host keeps IPv6 literals unbracketed, but be tolerant of either form.
+        host = host.trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
+
+        if host == "localhost" || host.hasSuffix(".localhost") { return true }
+        if host == "::1" || host == "0:0:0:0:0:0:0:1" { return true }
+        if host.hasSuffix(".local") { return true }
+        // Unique-local IPv6 (fc00::/7) and IPv6 link-local (fe80::/10).
+        if host.hasPrefix("fc") || host.hasPrefix("fd") || host.hasPrefix("fe8")
+            || host.hasPrefix("fe9") || host.hasPrefix("fea") || host.hasPrefix("feb") {
+            if host.contains(":") { return true }
+        }
+
+        let octets = host.split(separator: ".", omittingEmptySubsequences: false)
+        if octets.count == 4, octets.allSatisfy({ UInt8($0) != nil }) {
+            let parts = octets.map { UInt8($0)! }
+            switch (parts[0], parts[1]) {
+            case (127, _): return true                       // loopback
+            case (10, _): return true                        // 10.0.0.0/8
+            case (192, 168): return true                     // 192.168.0.0/16
+            case (169, 254): return true                     // link-local
+            case (172, let second) where (16...31).contains(second): return true // 172.16.0.0/12
+            default: return false
+            }
+        }
+
+        // A bare single-label hostname ("swiftminer-mac") can only resolve on the local network.
+        return !host.contains(".")
+    }
+
+    /// Whether `baseURL` is safe to carry OAuth callbacks and a session cookie.
+    ///
+    /// HTTPS always is. Plain HTTP is accepted **only** for loopback/LAN hosts: over a public
+    /// domain it would put the OAuth `code`, the `state`, and a week-long session cookie —
+    /// which cannot be marked `Secure` on an http origin — on the wire in clear text.
+    public var baseURLSupportsSignIn: Bool {
+        guard let baseURL, let scheme = baseURL.scheme?.lowercased() else { return false }
+        if scheme == "https" { return true }
+        return scheme == "http" && WebDashboardConfig.isLocalHostname(baseURL.host)
+    }
+
+    // OAuth providers require a public URL (for the redirect) that can carry a session
+    // securely. Local sign-in needs neither.
+    public var discordEnabled: Bool { baseURLSupportsSignIn && discord != nil }
+    public var twitchEnabled: Bool { baseURLSupportsSignIn && twitch != nil }
     public var localEnabled: Bool { local != nil }
     /// Discord-via-SwiftBot needs the public URL too: the assertion comes back
     /// to the dashboard's own https callback.
     public var swiftBotSSOEnabled: Bool {
-        baseURL != nil && swiftBotSSO != nil
+        baseURLSupportsSignIn && swiftBotSSO != nil
             && !(swiftBotSSO?.hmacSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
     }
     public var anyProviderEnabled: Bool { discordEnabled || twitchEnabled || swiftBotSSOEnabled }
@@ -115,7 +167,8 @@ public struct WebDashboardConfig: Sendable {
     public var publicHost: String? { baseURL?.host?.lowercased() }
 
     /// Cookies are marked `Secure` over HTTPS (the intended production setup
-    /// behind a TLS tunnel). Omitted for plain-HTTP local access.
+    /// behind a TLS tunnel). Omitted only for plain-HTTP access, which
+    /// `baseURLSupportsSignIn` restricts to loopback and the local network.
     public var useSecureCookies: Bool { baseURL?.scheme?.lowercased() == "https" }
 
     public init(
@@ -149,25 +202,47 @@ public struct WebDashboardConfig: Sendable {
             return nil
         }
 
+        /// OAuth client secrets live in the Keychain (`SecretStore`), not the defaults plist.
+        /// `UserDefaults` is still consulted last, for an install that has not yet run the
+        /// one-time migration or that configures the dashboard by hand.
+        func secretValue(_ envKey: String, _ storeKey: SecretStore.Key, _ defaultsKeys: String...) -> String? {
+            if let v = env[envKey], !v.isEmpty { return v }
+            if let v = SecretStore.read(storeKey), !v.isEmpty { return v }
+            for defaultsKey in defaultsKeys {
+                if let v = defaults.string(forKey: defaultsKey), !v.isEmpty { return v }
+            }
+            return nil
+        }
+
         let baseURL: URL?
         if let baseRaw = value("SWIFTMINER_WEB_BASE_URL", "webDashboardBaseURL", "swiftMinerWebBaseURL"),
            let url = URL(string: baseRaw),
            let scheme = url.scheme?.lowercased(),
            (scheme == "https" || scheme == "http"),
-           url.host != nil {
-            baseURL = url
+           let host = url.host, !host.isEmpty {
+            // Plain HTTP is only ever a local convenience. Accepting it for a public hostname
+            // would enable OAuth — and a week-long session cookie that cannot be `Secure` —
+            // over an interceptable connection.
+            if scheme == "http" && !isLocalHostname(host) {
+                configLogger.error(
+                    "Ignoring the web dashboard base URL: http:// is only supported for loopback or local-network hosts. Use https:// for \(host, privacy: .public)."
+                )
+                baseURL = nil
+            } else {
+                baseURL = url
+            }
         } else {
             baseURL = nil
         }
 
         var discord: WebProviderCredentials?
         if let id = value("SWIFTMINER_DISCORD_CLIENT_ID", "webDashboardDiscordClientID", "swiftMinerDiscordClientID"),
-           let secret = value("SWIFTMINER_DISCORD_CLIENT_SECRET", "webDashboardDiscordClientSecret", "swiftMinerDiscordClientSecret") {
+           let secret = secretValue("SWIFTMINER_DISCORD_CLIENT_SECRET", .webDashboardDiscordClientSecret, "webDashboardDiscordClientSecret", "swiftMinerDiscordClientSecret") {
             discord = WebProviderCredentials(clientID: id, clientSecret: secret)
         }
         var twitch: WebProviderCredentials?
         if let id = value("SWIFTMINER_TWITCH_CLIENT_ID", "webDashboardTwitchClientID", "swiftMinerTwitchClientID"),
-           let secret = value("SWIFTMINER_TWITCH_CLIENT_SECRET", "webDashboardTwitchClientSecret", "swiftMinerTwitchClientSecret") {
+           let secret = secretValue("SWIFTMINER_TWITCH_CLIENT_SECRET", .webDashboardTwitchClientSecret, "webDashboardTwitchClientSecret", "swiftMinerTwitchClientSecret") {
             twitch = WebProviderCredentials(clientID: id, clientSecret: secret)
         }
 

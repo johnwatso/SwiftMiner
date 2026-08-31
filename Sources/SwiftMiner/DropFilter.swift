@@ -39,13 +39,29 @@ public enum DropFilter: String, CaseIterable, Identifiable, Hashable, Codable {
 /// An unlinked campaign remains actionable in Drops because linking the game
 /// account is a setup task, even when an explicit priority lets mining proceed.
 enum DropsCampaignFilterRules {
-    /// An empty selection represents the exclusive All chip. Specific chips keep
-    /// their existing additive (OR) behaviour.
+    /// Specific chips use additive (OR) behaviour. With no chips selected,
+    /// no campaigns match.
     static func matchesSelectedFilters(
         campaignFilters: Set<DropFilter>,
         selectedFilters: Set<DropFilter>
     ) -> Bool {
-        selectedFilters.isEmpty || !campaignFilters.intersection(selectedFilters).isEmpty
+        !campaignFilters.intersection(selectedFilters).isEmpty
+    }
+
+    static func allFiltersSelected(in selectedFilters: Set<DropFilter>) -> Bool {
+        Set(DropFilter.allCases).isSubset(of: selectedFilters)
+    }
+
+    static func togglingAllFilters(in selectedFilters: Set<DropFilter>) -> Set<DropFilter> {
+        allFiltersSelected(in: selectedFilters) ? [] : Set(DropFilter.allCases)
+    }
+
+    static func migratingLegacyAllSelection(
+        _ selectedFilters: Set<DropFilter>,
+        migrationAlreadyApplied: Bool
+    ) -> Set<DropFilter> {
+        guard !migrationAlreadyApplied, selectedFilters.isEmpty else { return selectedFilters }
+        return Set(DropFilter.allCases)
     }
 
     static func matchesPrioritised(

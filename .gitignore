@@ -134,7 +134,7 @@ Logs for SM.txt
 Website/public/appcast.xml
 Website/public/beta/appcast.xml
 
-# Release-note pages are authored under docs/ (ShipHook's write location) and published
-# into the site by scripts/build_release_notes.py, which also writes the index. The
-# Website/public copies are build output — do not commit them.
+# Curated release-note pages and ShipHook's docs/ archive are merged by
+# scripts/build_release_notes.py, which writes this site output and its index.
+# These Website/public copies are build output — do not commit them.
 Website/public/release-notes/

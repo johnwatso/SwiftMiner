@@ -22,7 +22,8 @@ public final class AccountStateStore: Identifiable {
     // MARK: - Private
     
     private let dropsService: DropsService
-    private var refreshTask: Task<Void, Never>?
+    /// `private(set)` rather than `private` so lifecycle tests can assert the loop is cancelled.
+    private(set) var refreshTask: Task<Void, Never>?
     private let refreshInterval: TimeInterval = 60 // 1 minute
 
     // MARK: - Init
@@ -42,6 +43,11 @@ public final class AccountStateStore: Identifiable {
     /// and then continues on the normal refresh cadence.
     public func start(initialDelay: TimeInterval = 0) {
         stopAutoRefresh()
+        // The interval is captured up front so the task never has to hold `self` across a
+        // sleep. Binding `self` once outside the loop would keep the store — and its whole
+        // service graph — alive forever for an account that has since been removed, because
+        // nothing else cancels this task.
+        let interval = refreshInterval
         refreshTask = Task { [weak self] in
             if initialDelay > 0 {
                 do {
@@ -51,17 +57,23 @@ public final class AccountStateStore: Identifiable {
                 }
             }
 
-            guard !Task.isCancelled, let self else { return }
-            await self.refresh()
-
+            // One refresh site, inside the loop, so the strong binding lives for exactly one
+            // cycle and is gone again before every sleep. Binding `self` once above the loop —
+            // even to run only the first refresh — pins the store for the task's whole life.
+            var isFirstCycle = true
             while !Task.isCancelled {
-                do {
-                    try await Task.sleep(nanoseconds: UInt64(self.refreshInterval * 1_000_000_000))
-                } catch {
-                    return
+                if !isFirstCycle {
+                    do {
+                        try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+                    } catch {
+                        return
+                    }
+                    guard !Task.isCancelled else { return }
                 }
-                guard !Task.isCancelled else { break }
-                await self.refresh()
+                isFirstCycle = false
+
+                guard let store = self else { return }
+                await store.refresh()
             }
         }
     }
