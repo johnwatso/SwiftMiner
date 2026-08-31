@@ -205,6 +205,42 @@ final class CampaignMetadataSharingTests: XCTestCase {
         XCTAssertTrue(open.channels.isEmpty)
     }
 
+    func testFreshDashboardWindowWinsOverCachedCampaignDetails() {
+        let dashboardStart = Date(timeIntervalSince1970: 1_800_000_000)
+        let dashboardEnd = Date(timeIntervalSince1970: 1_800_100_000)
+        let dashboard = Campaign(
+            id: "campaign",
+            name: "Campaign",
+            game: Game(id: "1", name: "Overwatch"),
+            status: .active,
+            startDate: dashboardStart,
+            endDate: dashboardEnd,
+            drops: [],
+            channels: [],
+            isAccountConnected: true
+        )
+        let staleDetails = Campaign(
+            id: "campaign",
+            name: "Campaign",
+            game: Game(id: "1", name: "Overwatch"),
+            status: .expired,
+            startDate: Date(timeIntervalSince1970: 1_700_000_000),
+            endDate: Date(timeIntervalSince1970: 1_700_100_000),
+            drops: [drop(id: "drop", claimed: false, minutes: nil)],
+            channels: [Channel(id: "1", login: "ow_esports", displayName: "OWCS")],
+            isAccountConnected: true,
+            allowIsEnabled: true
+        )
+
+        let merged = TwitchAPIClient.mergeBasicCampaign(dashboard, withDetails: staleDetails)
+
+        XCTAssertEqual(merged.status, .active)
+        XCTAssertEqual(merged.startDate, dashboardStart)
+        XCTAssertEqual(merged.endDate, dashboardEnd)
+        XCTAssertEqual(merged.drops.map(\.id), ["drop"], "slow detail metadata is still enriched")
+        XCTAssertEqual(merged.channels.map(\.login), ["ow_esports"])
+    }
+
     private static func campaign(channels: [Channel], allowIsEnabled: Bool?) -> Campaign {
         Campaign(
             id: "campaign",

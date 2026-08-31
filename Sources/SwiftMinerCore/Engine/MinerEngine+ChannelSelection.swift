@@ -992,31 +992,34 @@ extension MinerEngine {
         )
         approvedChannelProbeOffsets[campaign.id] = batch.nextOffset
         let candidates = Array(batch.channels.enumerated())
+        let probeCandidates = candidates.filter {
+            !$0.element.login.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
         // Explicit begin/end rather than the closure form: wrapping a task group in a
         // non-Sendable closure trips strict concurrency.
         let probeSignpost = MiningSignpost.begin(.aclProbe)
         defer { MiningSignpost.end(.aclProbe, probeSignpost) }
-        let resolvedByIndex = await withTaskGroup(of: (Int, Channel)?.self) { group -> [Int: Channel] in
-            for (index, channel) in candidates {
+        let probeResults = await withTaskGroup(
+            of: (index: Int, channel: Channel?, compatibilityFailure: Bool?, verified: Bool).self
+        ) { group -> (channels: [Int: Channel], compatibilityFailures: Int, verifiedProbes: Int) in
+            for (index, channel) in probeCandidates {
                 let login = channel.login.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !login.isEmpty else { continue }
 
                 group.addTask {
                     // Shared across every miner: liveness is account-independent, and the cache
                     // window is shorter than the ACL re-probe interval so a channel coming online
                     // is still caught on the next tick. See ChannelLivenessCache.
                     if await ChannelLivenessCache.shared.isKnownOffline(login: login) {
-                        return nil
+                        return (index, nil, nil, true)
                     }
                     do {
                         guard try await self.apiClient.fetchBroadcastId(channelLogin: login) != nil else {
                             await ChannelLivenessCache.shared.recordOffline(login: login)
-                            return nil
+                            return (index, nil, nil, true)
                         }
                         // Resets any escalated backoff, so a channel that has just come back
                         // online is probed at full speed again rather than staying skipped.
                         await ChannelLivenessCache.shared.recordLive(login: login)
-                        await self.recordApprovedChannelProbeSuccess()
                         let resolved = await self.resolveChannelIdIfNeeded(channel)
                         return (index, Channel(
                             id: resolved.id,
@@ -1032,28 +1035,44 @@ extension MinerEngine {
                             hasDropsEnabled: true,
                             broadcasterType: channel.broadcasterType,
                             aclBased: true
-                        ))
+                        ), nil, true)
                     } catch {
                         await self.recordApprovedChannelProbeFailure(
                             channel: channel.displayName,
                             error: error
                         )
-                        return nil
+                        return (index, nil, Self.isCompatibilityFailure(error), false)
                     }
                 }
             }
 
             var collected: [Int: Channel] = [:]
+            var compatibilityFailures = 0
+            var verifiedProbes = 0
             for await result in group {
-                if let (index, channel) = result {
-                    collected[index] = channel
+                if let channel = result.channel {
+                    collected[result.index] = channel
                 }
+                if result.compatibilityFailure == true { compatibilityFailures += 1 }
+                if result.verified { verifiedProbes += 1 }
             }
-            return collected
+            return (collected, compatibilityFailures, verifiedProbes)
         }
 
-        let verified = candidates.compactMap { resolvedByIndex[$0.offset] }
-        guard verified.isEmpty, hasReportedApprovedChannelProbeFailure else { return verified }
+        // A successful "offline" response proves the query works just as surely as a live
+        // response. Apply recovery after the whole concurrent batch so late failures cannot
+        // re-open an incident that another task in this same batch already disproved.
+        if probeResults.verifiedProbes > 0 {
+            recordApprovedChannelProbeSuccess()
+        }
+
+        let verified = candidates.compactMap { probeResults.channels[$0.offset] }
+        guard Self.shouldOfferUnverifiedApprovedChannels(
+            verifiedCount: verified.count,
+            candidateCount: probeCandidates.count,
+            compatibilityFailureCount: probeResults.compatibilityFailures,
+            hasReportedProbeFailure: hasReportedApprovedChannelProbeFailure
+        ) else { return verified }
 
         // Every probe failed and the cause is the query, not the channels. Skipping them
         // here is what makes a broken liveness check indistinguishable from "nobody is
@@ -1063,7 +1082,7 @@ extension MinerEngine {
         // missed. Only reached when verification produced nothing at all, so a channel
         // confirmed live is always preferred over a guess.
         log("[ChannelSelect]   No approved channel could be verified and the liveness check itself is failing — trying them unverified.")
-        return candidates.map { _, channel in
+        return probeCandidates.map { _, channel in
             Channel(
                 id: channel.id,
                 login: channel.login,
@@ -1080,6 +1099,21 @@ extension MinerEngine {
                 aclBased: true
             )
         }
+    }
+
+    /// Fail open only when this exact batch proves that the liveness query is incompatible.
+    /// A remembered incident, an ordinary network outage, or channels confirmed offline must
+    /// never turn into guessed live streams.
+    static func shouldOfferUnverifiedApprovedChannels(
+        verifiedCount: Int,
+        candidateCount: Int,
+        compatibilityFailureCount: Int,
+        hasReportedProbeFailure: Bool
+    ) -> Bool {
+        hasReportedProbeFailure
+            && verifiedCount == 0
+            && candidateCount > 0
+            && compatibilityFailureCount == candidateCount
     }
 
     internal static func verificationCandidates(from sortedChannels: [Channel], campaign: Campaign) -> [Channel] {

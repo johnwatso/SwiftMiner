@@ -152,6 +152,7 @@ extension TwitchAPIClient {
         }
         for (campaignId, entry) in contents.approvedChannels where lastKnownApprovedChannels[campaignId] == nil {
             lastKnownApprovedChannels[campaignId] = entry.channels
+            lastKnownApprovedChannelExpiry[campaignId] = entry.expiresAt
         }
         for (key, entry) in contents.linkStates where campaignLinkStateByKey[key] == nil {
             campaignLinkStateByKey[key] = CampaignLinkStateEntry(
@@ -420,7 +421,7 @@ extension TwitchAPIClient {
         }
     }
 
-    private nonisolated static func mergeBasicCampaign(_ basic: Campaign, withDetails details: Campaign) -> Campaign {
+    nonisolated static func mergeBasicCampaign(_ basic: Campaign, withDetails details: Campaign) -> Campaign {
         let detailedGame = details.game
         let basicGame = basic.game
         let mergedGame = Game(
@@ -434,9 +435,12 @@ extension TwitchAPIClient {
             id: details.id.isEmpty ? basic.id : details.id,
             name: details.name.isEmpty ? basic.name : details.name,
             game: mergedGame,
-            status: details.status,
-            startDate: details.startDate,
-            endDate: details.endDate,
+            // ViewerDropsDashboard is fetched every refresh and is authoritative for the
+            // campaign window. Cached details can be four hours old, so letting them win here
+            // can hide an extension or status correction for the entire cache lifetime.
+            status: basic.status,
+            startDate: basic.startDate,
+            endDate: basic.endDate,
             drops: details.drops.isEmpty ? basic.drops : details.drops,
             channels: details.channels,
             isAccountConnected: details.isAccountConnected || basic.isAccountConnected,
