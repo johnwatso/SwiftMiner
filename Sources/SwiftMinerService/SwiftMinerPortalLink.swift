@@ -108,5 +108,4 @@ public enum SwiftMinerHelpLink {
     }
 
     public static let webDashboard = "\(base)/web-dashboard/"
-    public static let discord = "\(base)/discord/"
 }
