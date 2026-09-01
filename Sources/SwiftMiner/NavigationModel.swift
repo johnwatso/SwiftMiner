@@ -19,7 +19,6 @@ public final class NavigationModel {
         case miners
         case drops
         case events
-        case admin
 
         public var id: String {
             switch self {
@@ -27,7 +26,6 @@ public final class NavigationModel {
             case .miners: return "miners"
             case .drops: return "drops"
             case .events: return "events"
-            case .admin: return "admin"
             }
         }
 
@@ -37,7 +35,6 @@ public final class NavigationModel {
             case .miners: return "miners"
             case .drops: return "Drops"
             case .events: return "Activity Log"
-            case .admin: return "Discord"
             }
         }
     }
@@ -110,7 +107,7 @@ public final class NavigationModel {
     public var unownedAccounts: [Account] = []
     public var registeredUsers: [MinerUser] = []
     public var swiftBotState: SwiftBotConnectionState = .notConfigured
-    public var pendingSwiftBotPairingRequest = false
+    public var pendingIntegrationsSettingsRequest = false
     public var onWebDashboardAvailabilityChanged: ((Bool, String?) -> Void)?
 
     public func requestDropsFilter(_ intent: DropsFilterIntent) {
@@ -124,12 +121,19 @@ public final class NavigationModel {
 
     public func requestSwiftBotPairing() {
         Settings.shared.swiftBotEnabled = true
-        pendingSwiftBotPairingRequest = true
+        pendingIntegrationsSettingsRequest = true
     }
 
-    public func consumeSwiftBotPairingRequest() -> Bool {
-        defer { pendingSwiftBotPairingRequest = false }
-        return pendingSwiftBotPairingRequest
+    /// Ask the Settings window to open on Integrations, without changing any
+    /// setting — the miner's Discord section links here rather than repeating
+    /// the notification configuration inline.
+    public func requestDiscordSettings() {
+        pendingIntegrationsSettingsRequest = true
+    }
+
+    public func consumeIntegrationsSettingsRequest() -> Bool {
+        defer { pendingIntegrationsSettingsRequest = false }
+        return pendingIntegrationsSettingsRequest
     }
 
     /// Start the in-process HTTP server that exposes the SwiftMiner REST API to SwiftBot.
@@ -200,10 +204,12 @@ public final class NavigationModel {
             }
             // Confirm to the user via Discord DM with their Twitch username and current app-level priority games.
             let priorityGames = await MainActor.run { Settings.shared.priorityGames }
+            let portalBase = await MainActor.run { Self.portalBase() }
             _ = await self.swiftBotConnectionService.sendLinkedDM(
                 to: discordUserId,
                 twitchUsername: account.username,
-                priorityGames: priorityGames
+                priorityGames: priorityGames,
+                portalBase: portalBase
             )
         }
         await routes.setOnMinerControl { [weak self] discordUserId, action in
@@ -328,6 +334,7 @@ public final class NavigationModel {
                 Settings.shared.webDashboardSwiftBotHostname = info.swiftBotHostname
             }
         }
+        refreshDMPortalBase()
         if Settings.shared.webDashboardConfigured, let webConfig = makeWebDashboardConfig() {
             let webRoutes = WebDashboardRoutes(
                 config: webConfig,
@@ -514,6 +521,7 @@ public final class NavigationModel {
         switch result {
         case .success(let publicURL):
             logEvent(message: "Web dashboard registered on SwiftBot's tunnel at \(publicURL)", level: .info)
+            refreshDMPortalBase()
             await announceWebDashboardIfNeeded()
         case .failure(let message):
             if logFailures {
@@ -536,10 +544,14 @@ public final class NavigationModel {
         }
         var sent = 0
         for user in users {
+            let portal = SwiftMinerPortalLink(base: Self.portalBase())
             let request = SwiftBotDMRequest(
                 messageType: .webDashboardAvailable,
                 debug: false,
-                eventId: "webDashboardAvailable:\(user.discordId)"
+                eventId: "webDashboardAvailable:\(user.discordId)",
+                portalURL: portal?.dashboard,
+                portalDestination: portal.map { _ in SwiftBotPortalDestination.dashboard.rawValue },
+                helpURL: SwiftMinerHelpLink.webDashboard
             )
             if await swiftBotConnectionService.sendEventDM(to: user.discordId, request: request) {
                 sent += 1
@@ -606,6 +618,20 @@ public final class NavigationModel {
         guard let tiff = rendered.tiffRepresentation,
               let rep = NSBitmapImageRep(data: tiff) else { return nil }
         return rep.representation(using: .png, properties: [:])
+    }
+
+    /// The portal origin DM deep links are built from, or nil when no public
+    /// URL is configured. DMs then carry no portal button rather than one that
+    /// cannot resolve for the recipient.
+    static func portalBase() -> String? {
+        Settings.normalizedWebDashboardURL(from: Settings.shared.webDashboardBaseURL)?.absoluteString
+    }
+
+    /// Re-point DM deep links after the public URL changes — the operator can
+    /// edit it in Settings, and tunnel registration composes it automatically.
+    func refreshDMPortalBase() {
+        let base = Self.portalBase()
+        Task { await dmEventService?.updatePortalBase(base) }
     }
 
     /// Build the web dashboard config from Settings, or nil if no sign-in method
@@ -812,7 +838,10 @@ public final class NavigationModel {
         }
 
         // Wire DM event production — lightweight event emission, notification decisions stay in SwiftBot
-        let dmEventService = SwiftMinerDMEventService(connectionService: swiftBotConnectionService)
+        let dmEventService = SwiftMinerDMEventService(
+            connectionService: swiftBotConnectionService,
+            portalBase: Self.portalBase()
+        )
         self.dmEventService = dmEventService
 
         // No Discord DM is sent per drop claim — user-facing DMs are sent only
@@ -923,7 +952,12 @@ public final class NavigationModel {
                     accountId: miner.accountId,
                     minerDisplayName: miner.displayName,
                     discordUserId: miner.ownerDiscordId,
-                    priorityGames: priorityGames
+                    priorityGames: priorityGames,
+                    awaitingDelivery: Self.linkBlockedCampaignsAreClaimed(
+                        miner: miner,
+                        gameName: gameName,
+                        gameId: gameId
+                    )
                 )
             }
         }

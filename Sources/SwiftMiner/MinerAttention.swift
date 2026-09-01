@@ -1,5 +1,6 @@
 import Foundation
 import SwiftMinerCore
+import SwiftMinerService
 
 /// Shared rules for "this miner has something the user should look at."
 /// Used by the sidebar's Miners-tab badge, the per-miner source list dot,
@@ -96,6 +97,12 @@ enum MinerAttention {
 
     /// The first non-muted account-link blocker, if any. Shared with the
     /// attention panel so a badge always has a matching explanation and next step.
+    ///
+    /// A fully-claimed campaign still counts. Claiming on Twitch is not the same
+    /// as the publisher delivering the reward in-game, and that delivery is what
+    /// the missing account link blocks — so the reminder stands either way. The
+    /// Pending list applies the same rule; the two must not disagree about
+    /// whether a miner needs attention.
     static func accountLinkReminderCampaign(
         for miner: MinerManager.ManagedMiner,
         settings: Settings
@@ -109,14 +116,13 @@ enum MinerAttention {
         )
         guard !priorityKeys.isEmpty else { return nil }
 
-        return miner.allCampaigns.first { campaign in
+        let blockers = miner.allCampaigns.filter { campaign in
             // Deliberately not `activityStatus(for:) == .requiresLink`: that status
             // resolves to `.watching` for the current campaign, which suppressed the
             // badge for exactly the campaign the miner is mining right now.
             guard campaign.isTimeActive,
                   campaign.status != .disabled,
                   !campaign.isAccountConnected,
-                  campaign.drops.contains(where: { !$0.isClaimed }),
                   priorityKeys.contains(normalizedGameKey(campaign.game.name))
                     || priorityKeys.contains(normalizedGameKey(campaign.game.id)) else {
                 return false
@@ -126,6 +132,10 @@ enum MinerAttention {
                 gameId: warningGameId(for: campaign)
             )
         }
+
+        // Rewards still to earn outrank rewards merely awaiting delivery, so a
+        // miner with both gets the more urgent of the two messages.
+        return blockers.first { !$0.isFullyComplete } ?? blockers.first
     }
 
     /// The first non-muted subscription blocker. These apply even when the game
@@ -195,6 +205,66 @@ struct MinerAttentionIssue: Equatable {
     let recommendation: String
     let action: Action?
     var dismissal: Dismissal?
+
+    /// The blocking campaign is fully claimed, so the missing link only stops
+    /// delivery. Mirrors `PrioritisedLinkIssue.awaitingDelivery`.
+    var awaitingDelivery: Bool = false
+
+    /// Which flavour of link problem this is, matching what the banner says.
+    var linkIssueKind: SwiftBotIssueKind {
+        awaitingDelivery ? .accountLinkDeliveryPending : .accountLinkRequired
+    }
+
+    func dmRequest(
+        miner: MinerManager.ManagedMiner,
+        priorityGames: [String],
+        portal: SwiftMinerPortalLink? = nil
+    ) -> SwiftBotDMRequest {
+        if case let .accountLink(gameId, gameName) = dismissal {
+            return SwiftBotDMRequest(
+                messageType: .prioritisedGameNeedsLinking,
+                debug: false,
+                twitchUsername: miner.username,
+                priorityGames: priorityGames,
+                affectedGame: gameName,
+                accountId: miner.accountId,
+                minerDisplayName: miner.displayName,
+                affectedGameId: gameId,
+                portalURL: portal?.campaigns,
+                portalDestination: portal.map { _ in SwiftBotPortalDestination.campaigns.rawValue },
+                issueKind: linkIssueKind.rawValue,
+                helpURL: SwiftMinerHelpLink.url(for: linkIssueKind)
+            )
+        }
+
+        if action == .reconnect {
+            return SwiftBotDMRequest(
+                messageType: .reauth,
+                debug: false,
+                twitchUsername: miner.username,
+                priorityGames: priorityGames,
+                accountId: miner.accountId,
+                minerDisplayName: miner.displayName,
+                recoveryReason: detail,
+                portalURL: portal?.accountConnection,
+                portalDestination: portal.map { _ in SwiftBotPortalDestination.accountConnection.rawValue },
+                issueKind: SwiftBotIssueKind.connectionExpired.rawValue,
+                helpURL: SwiftMinerHelpLink.url(for: .connectionExpired)
+            )
+        }
+
+        return SwiftBotDMRequest(
+            messageType: .accountActionRequired,
+            debug: false,
+            twitchUsername: miner.username,
+            priorityGames: priorityGames,
+            accountId: miner.accountId,
+            minerDisplayName: miner.displayName,
+            recoveryReason: detail,
+            portalURL: portal?.miner(accountId: miner.accountId) ?? portal?.dashboard,
+            portalDestination: portal.map { _ in SwiftBotPortalDestination.miner.rawValue }
+        )
+    }
 
     static func resolve(
         miner: MinerManager.ManagedMiner,
@@ -270,15 +340,23 @@ struct MinerAttentionIssue: Equatable {
 
         let settings = Settings.shared
         if let campaign = MinerAttention.accountLinkReminderCampaign(for: miner, settings: settings) {
+            // Everything claimed means nothing left to earn — the link now only
+            // blocks the publisher from handing the rewards over in-game.
+            let awaitingDelivery = campaign.isFullyComplete
             return MinerAttentionIssue(
                 title: "Link \(campaign.game.name) to Twitch",
-                detail: "\(campaign.name) has unclaimed drops, but the \(campaign.game.name) account is not linked.",
-                recommendation: "Open Twitch Drops, link the game account, then return here. SwiftMiner will retry automatically.",
+                detail: awaitingDelivery
+                    ? "\(campaign.name) is fully claimed, but the \(campaign.game.name) account is not linked, so the rewards cannot be delivered to the game."
+                    : "\(campaign.name) has unclaimed drops, but the \(campaign.game.name) account is not linked.",
+                recommendation: awaitingDelivery
+                    ? "Open Twitch Drops and link the game account. Rewards you have already claimed are delivered once the link is in place."
+                    : "Open Twitch Drops, link the game account, then return here. SwiftMiner will retry automatically.",
                 action: .openTwitchDrops,
                 dismissal: .accountLink(
                     gameId: MinerAttention.warningGameId(for: campaign),
                     gameName: campaign.game.name
-                )
+                ),
+                awaitingDelivery: awaitingDelivery
             )
         }
 

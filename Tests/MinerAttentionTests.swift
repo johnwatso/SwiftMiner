@@ -1,6 +1,7 @@
 import XCTest
 @testable import SwiftMiner
 @testable import SwiftMinerCore
+import SwiftMinerService
 
 @MainActor
 final class MinerAttentionTests: XCTestCase {
@@ -113,6 +114,59 @@ final class MinerAttentionTests: XCTestCase {
         XCTAssertEqual(item.resolutionTitle, "Open Twitch Drops")
         XCTAssertEqual(item.actionTitle, "Remind me")
         XCTAssertTrue(item.subtitle.contains("Reminder muted"))
+    }
+
+    func testAccountLinkPendingItemBuildsTheDedicatedDiscordReminder() {
+        let issue = PrioritisedLinkIssue(
+            minerId: "miner-1",
+            accountId: "account-1",
+            minerName: "Test Miner",
+            gameId: "halo",
+            gameName: "Halo",
+            campaignNames: ["Campaign Evolved"],
+            isIgnored: false
+        )
+        let request = PendingItem(kind: .accountLink(issue), isMuted: false).dmRequest(
+            miner: makeMiner(),
+            priorityGames: ["Halo"]
+        )
+
+        XCTAssertEqual(request.messageType, .prioritisedGameNeedsLinking)
+        XCTAssertEqual(request.affectedGame, "Halo")
+        XCTAssertEqual(request.affectedGameId, "halo")
+        XCTAssertEqual(request.campaignName, "Campaign Evolved")
+        XCTAssertEqual(request.accountId, "account-1")
+        XCTAssertEqual(request.priorityGames, ["Halo"])
+    }
+
+    func testSubscriptionPendingItemBuildsAnActionRequiredDM() {
+        let item = PendingItem(
+            kind: .subscriptionRequired(
+                minerId: "miner-1",
+                accountId: "account-1",
+                campaignId: "campaign-1",
+                gameName: "Diablo IV",
+                campaignName: "Season Drops",
+                dropNames: ["Helm", "Wings"]
+            ),
+            isMuted: false
+        )
+        let request = item.dmRequest(miner: makeMiner(), priorityGames: [])
+
+        XCTAssertEqual(request.messageType, .accountActionRequired)
+        XCTAssertEqual(request.affectedGame, "Diablo IV")
+        XCTAssertEqual(request.campaignName, "Season Drops")
+        XCTAssertTrue(request.recoveryReason?.contains("Helm, Wings") == true)
+    }
+
+    func testReauthenticationAttentionBuildsAReauthDM() throws {
+        let miner = makeMiner(needsAuth: true)
+        let attention = try XCTUnwrap(MinerAttentionIssue.resolve(miner: miner, events: []))
+        let request = attention.dmRequest(miner: miner, priorityGames: ["Halo"])
+
+        XCTAssertEqual(request.messageType, .reauth)
+        XCTAssertEqual(request.twitchUsername, "tester")
+        XCTAssertEqual(request.accountId, "account-1")
     }
 
     // MARK: - Dismissal

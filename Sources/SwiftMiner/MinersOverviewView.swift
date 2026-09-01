@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftMinerCore
+import SwiftMinerService
 
 /// Execution layer overview - scalable multi-miner workspace.
 struct MinersOverviewView: View {
@@ -16,6 +17,10 @@ struct MinersOverviewView: View {
     @State private var nicknameEditor: MinerNicknameEditorPresentation?
     @State private var streamOverrideEditor: MinerStreamOverridePresentation?
     @State private var isRefreshingSelectedMiner = false
+    @State private var reminderDMStates: [String: ReminderDMSendState] = [:]
+    /// When each pending item's reminder was last delivered over Discord,
+    /// keyed by `PendingItem.id`. Rebuilt per selected miner.
+    @State private var reminderDeliveries: [String: Date] = [:]
 
     private var miners: [MinerManager.ManagedMiner] {
         navigation.minerManager.miners
@@ -79,7 +84,16 @@ struct MinersOverviewView: View {
             Task { await refreshTwitchAvatars() }
         }
         .onChange(of: settings.accountAvatarSourcesData) { _, _ in
-            Task { await refreshTwitchAvatars() }
+            // The selected URL itself swaps synchronously from the observed
+            // setting. Refresh both providers behind it so Settings changes
+            // also replace missing or stale cache data in this overview.
+            Task {
+                if settings.swiftBotEnabled,
+                   miners.contains(where: { $0.ownerDiscordId != nil }) {
+                    await navigation.refreshDiscordDisplayNames()
+                }
+                await refreshTwitchAvatars()
+            }
         }
         .onChange(of: miners.map(\.id)) { _, _ in
             syncSelection()
@@ -190,6 +204,13 @@ struct MinersOverviewView: View {
 
                     minerCampaignQueueSection(for: miner, presentation: presentation)
 
+                    // Discord is a capability of this miner, not a destination:
+                    // it sits between the queue and Status, and stays out of the
+                    // Status strip below.
+                    if settings.swiftBotEnabled {
+                        MinerDiscordSection(miner: miner)
+                    }
+
                     minerRecoveryDiagnosticsSection(for: miner)
                 }
                 .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -198,7 +219,11 @@ struct MinersOverviewView: View {
             }
             .id(miner.id)
             .task(id: miner.id) {
+                // Cleared first so a slower query can never leave the previous
+                // miner's Discord delivery notes on this one's pending rows.
+                reminderDeliveries = [:]
                 await refreshSelectedActivitySummary(for: miner.id)
+                await refreshReminderDeliveries(for: miner)
                 while !Task.isCancelled {
                     try? await Task.sleep(nanoseconds: 5 * 1_000_000_000)
                     await refreshSelectedActivitySummary(for: miner.id)
@@ -440,33 +465,48 @@ struct MinersOverviewView: View {
                     .foregroundStyle(.secondary)
             }
 
-            if attention.action != nil || attention.dismissal != nil {
-                HStack(spacing: 8) {
-                    if let action = attention.action {
-                        Button(action.title) {
-                            switch action {
-                            case .reconnect:
-                                startLinkAccountFlow(for: miner)
-                            case .restart:
-                                restartMiner(for: miner)
-                            case .openTwitchDrops:
-                                openTwitchDropsInventory()
-                            }
+            HStack(spacing: 8) {
+                if let action = attention.action {
+                    Button(action.title) {
+                        switch action {
+                        case .reconnect:
+                            startLinkAccountFlow(for: miner)
+                        case .restart:
+                            restartMiner(for: miner)
+                        case .openTwitchDrops:
+                            openTwitchDropsInventory()
                         }
-                        .tahoeButtonStyle()
                     }
+                    .tahoeButtonStyle()
+                }
 
-                    // Only the campaign reminders offer this — see `MinerAttentionIssue.Dismissal`.
-                    // It writes the same per-account mute the Pending row's Dismiss does, so the
-                    // banner and the list cannot disagree about whether an item is silenced, and
-                    // the item stays in Pending with a "Remind me" button to undo it.
-                    if let dismissal = attention.dismissal {
-                        Button("Dismiss") {
-                            dismissAttention(dismissal, for: miner)
-                        }
-                        .tahoeButtonStyle()
-                        .accessibilityHint("Stops this reminder for this miner. Restore it from the Pending list.")
+                let dmKey = "attention:\(miner.id):\(attention.title)"
+                ReminderDMButton(
+                    state: reminderDMStates[dmKey] ?? .idle,
+                    isAvailable: canSendReminderDM(to: miner),
+                    unavailableReason: reminderDMUnavailableReason(for: miner)
+                ) {
+                    sendReminderDM(
+                        attention.dmRequest(
+                            miner: miner,
+                            priorityGames: settings.priorityGames(forAccountId: miner.accountId),
+                            portal: portalLink
+                        ),
+                        to: miner,
+                        key: dmKey
+                    )
+                }
+
+                // Only the campaign reminders offer this — see `MinerAttentionIssue.Dismissal`.
+                // It writes the same per-account mute the Pending row's Dismiss does, so the
+                // banner and the list cannot disagree about whether an item is silenced, and
+                // the item stays in Pending with a "Remind me" button to undo it.
+                if let dismissal = attention.dismissal {
+                    Button("Dismiss") {
+                        dismissAttention(dismissal, for: miner)
                     }
+                    .tahoeButtonStyle()
+                    .accessibilityHint("Stops this reminder for this miner. Restore it from the Pending list.")
                 }
             }
         }
@@ -546,7 +586,22 @@ struct MinersOverviewView: View {
                     ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                         PendingItemRow(
                             item: item,
-                            onResolve: { openTwitchDropsInventory() }
+                            onResolve: { openTwitchDropsInventory() },
+                            dmState: reminderDMStates[item.id] ?? .idle,
+                            canSendDM: canSendReminderDM(to: miner),
+                            dmUnavailableReason: reminderDMUnavailableReason(for: miner),
+                            reminderNote: reminderNote(for: item, miner: miner),
+                            onSendDM: {
+                                sendReminderDM(
+                                    item.dmRequest(
+                                        miner: miner,
+                                        priorityGames: settings.priorityGames(forAccountId: miner.accountId),
+                                        portal: portalLink
+                                    ),
+                                    to: miner,
+                                    key: item.id
+                                )
+                            }
                         ) {
                             togglePendingMute(item)
                         }
@@ -672,6 +727,92 @@ struct MinersOverviewView: View {
     private func openTwitchDropsInventory() {
         guard let url = URL(string: "https://www.twitch.tv/drops/inventory") else { return }
         openURL(url)
+    }
+
+    /// Discord's line on one pending item: when its reminder last went out, or
+    /// that the automatic one is switched off. Silent when this miner has no
+    /// Discord link, where neither statement would mean anything.
+    private func reminderNote(
+        for item: PendingItem,
+        miner: MinerManager.ManagedMiner
+    ) -> PendingReminderNote? {
+        guard canSendReminderDM(to: miner) else { return nil }
+        if let sentAt = reminderDeliveries[item.id] { return .sent(sentAt) }
+        guard !automaticRemindersEnabled(for: item) else { return nil }
+        return .automaticRemindersOff
+    }
+
+    private func automaticRemindersEnabled(for item: PendingItem) -> Bool {
+        switch item.reminderMessageType {
+        case .prioritisedGameNeedsLinking: return settings.dmLinkRequiredEnabled
+        case .accountActionRequired: return settings.dmAccountActionRequiredEnabled
+        default: return true
+        }
+    }
+
+    /// Deep-link builder for the portal, or nil when no public URL is set.
+    /// A manual reminder then carries no portal button, same as an automatic one.
+    private var portalLink: SwiftMinerPortalLink? {
+        SwiftMinerPortalLink(base: NavigationModel.portalBase())
+    }
+
+    private func canSendReminderDM(to miner: MinerManager.ManagedMiner) -> Bool {
+        settings.swiftBotEnabled && miner.ownerDiscordId != nil
+    }
+
+    private func reminderDMUnavailableReason(for miner: MinerManager.ManagedMiner) -> String {
+        if miner.ownerDiscordId == nil {
+            return "Link this miner to a Discord user before sending a DM."
+        }
+        return "Enable the Discord integration before sending a DM."
+    }
+
+    private func sendReminderDM(
+        _ request: SwiftBotDMRequest,
+        to miner: MinerManager.ManagedMiner,
+        key: String
+    ) {
+        guard let discordId = miner.ownerDiscordId, settings.swiftBotEnabled else { return }
+        reminderDMStates[key] = .sending
+
+        Task {
+            let sent = await navigation.swiftBotConnectionService.sendEventDM(
+                to: discordId,
+                request: request
+            )
+            reminderDMStates[key] = sent ? .sent : .failed
+            if sent {
+                await refreshReminderDeliveries(for: miner)
+            }
+        }
+    }
+
+    /// Matches this miner's logged DM payloads back onto its pending items, so
+    /// a row can say when its own reminder last went out. Only successful sends
+    /// reach the log, so a match means the DM was delivered.
+    private func refreshReminderDeliveries(for miner: MinerManager.ManagedMiner) async {
+        guard settings.swiftBotEnabled, let discordId = miner.ownerDiscordId else {
+            reminderDeliveries = [:]
+            return
+        }
+
+        let payloads = await navigation.dmLogStore.recentProductionPayloads(
+            forDiscordId: discordId,
+            limit: 50
+        )
+        guard !payloads.isEmpty else {
+            reminderDeliveries = [:]
+            return
+        }
+
+        // Payloads arrive newest-first, so the first match is the latest send.
+        var deliveries: [String: Date] = [:]
+        for item in pendingItems(for: miner, campaigns: miner.allCampaigns) {
+            if let match = payloads.first(where: { item.matchesReminder($0.request) }) {
+                deliveries[item.id] = match.sentAt
+            }
+        }
+        reminderDeliveries = deliveries
     }
 
     @ViewBuilder
@@ -892,7 +1033,10 @@ struct MinersOverviewView: View {
                 gameId: gameId,
                 gameName: first.game.name,
                 campaignNames: blockedCampaigns.map(\.name).sorted(),
-                isIgnored: isIgnored
+                isIgnored: isIgnored,
+                // Only when nothing is left to earn anywhere in the group, so a
+                // group with one unclaimed campaign keeps the stronger wording.
+                awaitingDelivery: blockedCampaigns.allSatisfy(\.isFullyComplete)
             )
         }
         .sorted {
