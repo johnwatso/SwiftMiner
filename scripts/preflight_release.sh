@@ -78,8 +78,23 @@ xcodebuild \
     -destination "generic/platform=macOS" \
     build
 
-INFO_PLIST="$(find "$HOME/Library/Developer/Xcode/DerivedData" -path "*/Build/Products/$CONFIGURATION/SwiftMiner.app/Contents/Info.plist" -print | sort | tail -n 1)"
-[[ -n "$INFO_PLIST" ]] || fail "built SwiftMiner Info.plist not found"
+# Ask Xcode where it just put the app. Globbing DerivedData and taking the
+# last path alphabetically picks an arbitrary directory: a stale build folder
+# from an earlier checkout sorts however its random suffix happens to sort, so
+# the gate could validate a months-old app instead of the one it just built.
+BUILT_PRODUCTS_DIR="$(
+    xcodebuild \
+        -project "$PROJECT_PATH" \
+        -scheme "$SCHEME" \
+        -configuration "$CONFIGURATION" \
+        -destination "generic/platform=macOS" \
+        -showBuildSettings 2>/dev/null \
+    | awk -F' = ' '/^[[:space:]]*BUILT_PRODUCTS_DIR = /{print $2; exit}'
+)"
+[[ -n "$BUILT_PRODUCTS_DIR" ]] || fail "could not resolve BUILT_PRODUCTS_DIR from xcodebuild"
+
+INFO_PLIST="$BUILT_PRODUCTS_DIR/SwiftMiner.app/Contents/Info.plist"
+[[ -f "$INFO_PLIST" ]] || fail "built SwiftMiner Info.plist not found at $INFO_PLIST"
 
 BUILT_SHORT_VERSION="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$INFO_PLIST")"
 BUILT_BUILD_VERSION="$(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "$INFO_PLIST")"
