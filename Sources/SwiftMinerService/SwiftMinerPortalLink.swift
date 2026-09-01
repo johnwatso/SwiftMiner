@@ -98,7 +98,7 @@ public enum SwiftMinerHelpLink {
         switch kind {
         case .connectionExpired:
             return "\(base)/troubleshooting/"
-        case .accountLinkRequired:
+        case .accountLinkRequired, .accountLinkDeliveryPending:
             return "\(base)/twitch-drops-not-progressing/"
         case .subscriptionRequired:
             return "\(base)/subscription-required-drops/"

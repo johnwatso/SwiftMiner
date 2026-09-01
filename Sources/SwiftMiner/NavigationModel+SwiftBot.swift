@@ -196,6 +196,26 @@ extension NavigationModel {
         return priorities
     }
 
+    /// Whether every link-blocked campaign for this game is already claimed, so
+    /// the DM can say the rewards are waiting on the link rather than that they
+    /// cannot be earned. Matches the rule the miner's Pending list applies.
+    static func linkBlockedCampaignsAreClaimed(
+        miner: MinerManager.ManagedMiner,
+        gameName: String,
+        gameId: String
+    ) -> Bool {
+        let blocked = miner.allCampaigns.filter { campaign in
+            guard campaign.isTimeActive, campaign.status != .disabled, !campaign.isAccountConnected else {
+                return false
+            }
+            return campaign.game.id == gameId
+                || campaign.game.name.localizedCaseInsensitiveCompare(gameName) == .orderedSame
+        }
+        // No known blocked campaign means no basis for the softer wording.
+        guard !blocked.isEmpty else { return false }
+        return blocked.allSatisfy(\.isFullyComplete)
+    }
+
     func accountLinkWarningGameKey(for gameName: String) -> String {
         let target = gameName.lowercased()
         return minerManager.campaignStore.campaigns

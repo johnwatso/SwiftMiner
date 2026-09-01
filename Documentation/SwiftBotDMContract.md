@@ -88,12 +88,20 @@ a catch-all whose title should never read "Needs a Look" when the cause is known
 |---|---|
 | `connection_expired` | **Twitch Connection Expired** |
 | `account_link_required` | **Account Linking Required** |
+| `account_link_delivery_pending` | **Rewards Waiting on an Account Link** |
 | `subscription_required` | **Twitch Subscription Required** |
 | `unknown` | **Action Required** |
 
 `unknown` means SwiftMiner could not classify the cause, not that there is no
 cause — `recovery_reason` still carries the detail. Fall back to the generic
 title and show the reason as the body.
+
+`account_link_delivery_pending` is not a milder `account_link_required`, it is a
+different problem: the drops are already claimed on Twitch and the missing link
+only stops the publisher handing them over in-game. Nothing is at risk of being
+lost, so the DM must not tell the reader to go and earn rewards they already
+hold. SwiftMiner sets it wherever it knows — the Pending reminder, the attention
+banner's reminder, and the automatic warning — and the app's own wording matches.
 
 Treat an unrecognised value as `unknown`.
 
@@ -108,7 +116,7 @@ What SwiftMiner sends today. "Category" is the visual treatment tier.
 | Type | `issue_kind` | `portal_destination` | Key fields |
 |---|---|---|---|
 | `reauth` | `connection_expired` | `account_connection` | `twitch_username` |
-| `prioritised_game_needs_linking` | `account_link_required` | `campaigns` | `affected_game`, `affected_game_id`, `campaign_name`, `miner_display_name` |
+| `prioritised_game_needs_linking` | `account_link_required`, or `account_link_delivery_pending` when every blocked campaign is already claimed | `campaigns` | `affected_game`, `affected_game_id`, `campaign_name`, `miner_display_name` |
 | `account_action_required` | classified, else `unknown` | `campaign` when `campaign_id` is set, else `miner` | `recovery_reason`, `affected_game`, `campaign_name` |
 
 These should identify the affected miner, say what stopped working and what the

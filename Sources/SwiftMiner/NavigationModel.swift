@@ -952,7 +952,12 @@ public final class NavigationModel {
                     accountId: miner.accountId,
                     minerDisplayName: miner.displayName,
                     discordUserId: miner.ownerDiscordId,
-                    priorityGames: priorityGames
+                    priorityGames: priorityGames,
+                    awaitingDelivery: Self.linkBlockedCampaignsAreClaimed(
+                        miner: miner,
+                        gameName: gameName,
+                        gameId: gameId
+                    )
                 )
             }
         }
