@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Prepare the 1.40 release build - Release Notes</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      margin: 0;
+      padding: 32px 20px 48px;
+      font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f4f6f8;
+      color: #0f1720;
+    }
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 28px;
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.86);
+      box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
+    }
+    h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
+    .meta { margin: 0 0 24px; color: #52606d; font-size: 14px; }
+    p { margin: 0 0 16px; }
+    a { color: #0a67a3; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #0b1015; color: #edf2f7; }
+      main {
+        background: rgba(15, 23, 32, 0.88);
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+      }
+      .meta { color: #9fb0c2; }
+      a { color: #73c3ff; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Prepare the 1.40 release build</h1>
+    <p class="meta">Version 1.40</p>
+    <p>Prepare the 1.40 release build</p>
+<p>Refreshes the build number to the time of the release prep and syncs the<br>visible build reference in the 1.40 notes, which preflight enforces.</p>
+<p>Also fixes the release gate itself. preflight_release.sh located the built app<br>by globbing DerivedData and taking the last path alphabetically, which picks an<br>arbitrary directory rather than the one it just built: a stale 1.34.51 folder<br>from July sorted last, so the gate failed a correct 1.40 build. Worse, a stale<br>build whose version happened to match would have passed the gate while the real<br>one went unchecked. It now asks xcodebuild for BUILT_PRODUCTS_DIR.</p>
+    <p><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/36a5f2e6c1d33718a1a1160a11f0a414ba3342ff">36a5f2e</a></p>
+  </main>
+</body>
+</html>
