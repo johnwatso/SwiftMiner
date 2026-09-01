@@ -481,8 +481,10 @@ struct MinerDiscordSection: View {
         isSending = true
         defer { isSending = false }
         let sent = await navigation.swiftBotConnectionService.sendEventDM(to: discordId, request: request)
-        recentSendFailed = !sent
+        // Refresh history first: `load()` clears the transient failure flag, so
+        // this send's outcome has to be applied after it, never before.
         await load()
+        recentSendFailed = !sent
     }
 
     private func emitReauth() async {

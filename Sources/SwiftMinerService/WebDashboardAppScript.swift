@@ -63,6 +63,9 @@ extension WebDashboardAssets {
     /// The element a route wants in view, or null when this page has nothing
     /// matching — a campaign that has since ended, for instance.
     function routeTarget(r) {
+      // The identity card always renders on a miner page, so it is the last
+      // resort that keeps a deep link from silently doing nothing.
+      if (r.name === 'miner') return $('route-identity');
       if (r.name === 'campaign' && r.id) {
         const row = document.querySelector('[data-campaign-id="' + cssEscape(r.id) + '"]');
         if (row) return row;
@@ -73,7 +76,9 @@ extension WebDashboardAssets {
       if (r.name === 'campaigns') return $('route-campaigns') || $('route-subscription');
       if (r.name === 'drops') return $('route-drops');
       if (r.name === 'account') {
-        if (r.section === 'connection') return $('route-connection') || $('route-issues');
+        if (r.section === 'connection') {
+          return $('route-connection') || $('route-issues') || $('route-identity');
+        }
         return $('route-identity');
       }
       return null;
@@ -431,7 +436,7 @@ extension WebDashboardAssets {
     function activationCard(p) {
       if (!SESSION || SESSION.provider !== 'discord' || (p.account && p.account.twitchAccountId)) return '';
       if (!ACTIVATION) {
-        return `<div class="card">
+        return `<div class="card" id="route-connection">
           <div class="label">Link Twitch</div>
           <div class="row" style="align-items:flex-start">
             <div style="flex:1;min-width:0">
@@ -1404,7 +1409,11 @@ extension WebDashboardAssets {
       if (suppressHashChange) { suppressHashChange = false; return; }
       ROUTE = parseRoute();
       lastAppliedRouteKey = null;
-      if (ROUTE.name === 'miner' && ROUTE.id) {
+      // Only an operator session has a miner list to switch between. A
+      // single-miner user is already on the page the link refers to, so it
+      // falls through to applyRoute() rather than being dropped.
+      if (ROUTE.name === 'miner' && ROUTE.id
+          && OPERATOR_MINERS.some(m => minerId(m) === ROUTE.id)) {
         showOperatorMiner(ROUTE.id);
         return;
       }

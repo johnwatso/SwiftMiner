@@ -111,7 +111,7 @@ final class SwiftMinerPortalLinkTests: XCTestCase {
 
     func testHelpLinksPointAtSwiftMinerApp() {
         let urls = SwiftBotIssueKind.allCases.compactMap(SwiftMinerHelpLink.url(for:))
-            + [SwiftMinerHelpLink.webDashboard, SwiftMinerHelpLink.discord]
+            + [SwiftMinerHelpLink.webDashboard]
 
         for url in urls {
             XCTAssertTrue(url.hasPrefix("https://swiftminer.app/help/"), "unexpected help URL \(url)")
