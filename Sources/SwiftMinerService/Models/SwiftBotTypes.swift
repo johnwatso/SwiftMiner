@@ -133,6 +133,22 @@ public struct SwiftBotDMRequest: Codable, Sendable, Equatable {
     public let recoveryReason: String?
     /// Opaque event identifier for persistent deduplication on the SwiftBot side.
     public let eventId: String?
+    /// Absolute deep link into this operator's web portal, already pointing at
+    /// the page that explains or resolves the DM. Nil when the portal is not
+    /// reachable, in which case SwiftBot should render no portal button at all
+    /// rather than falling back to a link that would 404.
+    public let portalURL: String?
+    /// What `portalURL` points at, so SwiftBot can label the button without
+    /// parsing the URL. See `SwiftBotPortalDestination`.
+    public let portalDestination: String?
+    /// The specific problem behind a broad message type. Lets SwiftBot title a
+    /// DM "Twitch Subscription Required" instead of "Needs a Look".
+    /// See `SwiftBotIssueKind`.
+    public let issueKind: String?
+    /// Campaign this DM is about, where one applies.
+    public let campaignId: String?
+    /// Public help article covering this situation on swiftminer.app.
+    public let helpURL: String?
 
     public init(
         messageType: SwiftBotDMMessageType,
@@ -150,7 +166,12 @@ public struct SwiftBotDMRequest: Codable, Sendable, Equatable {
         minerDisplayName: String? = nil,
         affectedGameId: String? = nil,
         recoveryReason: String? = nil,
-        eventId: String? = nil
+        eventId: String? = nil,
+        portalURL: String? = nil,
+        portalDestination: String? = nil,
+        issueKind: String? = nil,
+        campaignId: String? = nil,
+        helpURL: String? = nil
     ) {
         self.messageType = messageType
         self.debug = debug
@@ -168,6 +189,11 @@ public struct SwiftBotDMRequest: Codable, Sendable, Equatable {
         self.affectedGameId = affectedGameId
         self.recoveryReason = recoveryReason
         self.eventId = eventId
+        self.portalURL = portalURL
+        self.portalDestination = portalDestination
+        self.issueKind = issueKind
+        self.campaignId = campaignId
+        self.helpURL = helpURL
     }
 
     enum CodingKeys: String, CodingKey {
@@ -187,6 +213,71 @@ public struct SwiftBotDMRequest: Codable, Sendable, Equatable {
         case affectedGameId = "affected_game_id"
         case recoveryReason = "recovery_reason"
         case eventId = "event_id"
+        case portalURL = "portal_url"
+        case portalDestination = "portal_destination"
+        case issueKind = "issue_kind"
+        case campaignId = "campaign_id"
+        case helpURL = "help_url"
+    }
+}
+
+/// Where a DM's portal button lands. SwiftMiner resolves the URL; SwiftBot uses
+/// the destination to choose the button label so wording stays consistent.
+public enum SwiftBotPortalDestination: String, Codable, Sendable, CaseIterable {
+    /// The portal root — only when nothing more specific applies.
+    case dashboard
+    /// The signed-in miner's own detail page.
+    case miner
+    /// The account's Twitch connection state, for reconnecting.
+    case accountConnection = "account_connection"
+    /// One named campaign.
+    case campaign
+    /// The campaign list.
+    case campaigns
+    /// Completed drops.
+    case drops
+
+    /// Suggested button label. SwiftBot may override, but these keep the
+    /// wording identical across every DM that lands in the same place.
+    public var suggestedButtonLabel: String {
+        switch self {
+        case .dashboard: return "Open Dashboard"
+        case .miner: return "View Miner"
+        case .accountConnection: return "Reconnect Twitch"
+        case .campaign: return "View Campaign"
+        case .campaigns: return "View Campaigns"
+        case .drops: return "View Drops"
+        }
+    }
+}
+
+/// The specific problem behind a broad message type, so a DM can name what is
+/// actually wrong. `account_action_required` in particular is a catch-all whose
+/// title should never read "Needs a Look" when the cause is known.
+public enum SwiftBotIssueKind: String, Codable, Sendable, CaseIterable {
+    /// A paid Twitch subscription is required to earn the campaign's drops.
+    case subscriptionRequired = "subscription_required"
+    /// An external game account must be linked to Twitch before the campaign's
+    /// drops can be earned.
+    case accountLinkRequired = "account_link_required"
+    /// The campaign's drops are all claimed on Twitch, but the missing account
+    /// link stops the publisher delivering them in-game. Nothing is at risk of
+    /// being lost — the rewards are simply waiting on the link.
+    case accountLinkDeliveryPending = "account_link_delivery_pending"
+    /// Twitch authentication expired or was revoked.
+    case connectionExpired = "connection_expired"
+    /// Cause not classified — SwiftBot should fall back to the generic title.
+    case unknown
+
+    /// Suggested DM title for this cause.
+    public var suggestedTitle: String {
+        switch self {
+        case .subscriptionRequired: return "Twitch Subscription Required"
+        case .accountLinkRequired: return "Account Linking Required"
+        case .accountLinkDeliveryPending: return "Rewards Waiting on an Account Link"
+        case .connectionExpired: return "Twitch Connection Expired"
+        case .unknown: return "Action Required"
+        }
     }
 }
 
@@ -221,7 +312,7 @@ public protocol SwiftBotConnectionService: Sendable {
     func fetchDiscordUsers() async -> [SwiftBotDiscordUser]
 
     /// Asks SwiftBot to send the normal post-link success DM.
-    func sendLinkedDM(to discordUserId: String, twitchUsername: String?, priorityGames: [String]) async -> Bool
+    func sendLinkedDM(to discordUserId: String, twitchUsername: String?, priorityGames: [String], portalBase: String?) async -> Bool
 
     /// Asks SwiftBot to send an internally marked debug preview DM.
     /// Debug previews must not mutate production DM progression state.

@@ -138,6 +138,58 @@ public actor DMLogStore {
         }
     }
 
+    public struct PayloadEntry: Sendable, Equatable {
+        public let sentAt: Date
+        public let request: SwiftBotDMRequest
+
+        public init(sentAt: Date, request: SwiftBotDMRequest) {
+            self.sentAt = sentAt
+            self.request = request
+        }
+    }
+
+    /// Recent production DMs with their decoded payloads, newest first. Callers
+    /// use the payload to tell *which* reminder a log entry was — a
+    /// "needs linking" DM for Rust and one for Halo share a message type.
+    public func recentProductionPayloads(
+        forDiscordId discordUserId: String,
+        limit: Int = 50
+    ) async -> [PayloadEntry] {
+        do {
+            return try await manager.query { db in
+                let sql = """
+                SELECT sent_at, payload_json FROM dm_log
+                WHERE discord_id = ? AND debug = 0 AND payload_json IS NOT NULL
+                ORDER BY sent_at DESC
+                LIMIT ?;
+                """
+                var stmt: OpaquePointer?
+                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
+                defer { sqlite3_finalize(stmt) }
+                sqlite3_bind_text(stmt, 1, discordUserId, -1, SQLITE_TRANSIENT_DM_LOG)
+                sqlite3_bind_int(stmt, 2, Int32(limit))
+
+                var entries: [PayloadEntry] = []
+                while sqlite3_step(stmt) == SQLITE_ROW {
+                    let ts = sqlite3_column_double(stmt, 0)
+                    guard let cString = sqlite3_column_text(stmt, 1) else { continue }
+                    let json = String(cString: cString)
+                    guard let data = json.data(using: .utf8),
+                          let request = try? JSONDecoder().decode(SwiftBotDMRequest.self, from: data) else {
+                        continue
+                    }
+                    entries.append(PayloadEntry(
+                        sentAt: Date(timeIntervalSince1970: ts),
+                        request: request
+                    ))
+                }
+                return entries
+            }
+        } catch {
+            return []
+        }
+    }
+
     /// Returns the most recently sent *production* DM payload for re-sending.
     /// Debug previews are excluded so a "Re-send last message" action never
     /// accidentally replays a test embed.

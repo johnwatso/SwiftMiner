@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SwiftMiner 1.40 - Release Notes</title>
+  <meta name="description" content="Release notes for SwiftMiner 1.40: Discord moves into the miner it belongs to, reminders and notifications link straight to the page that resolves them, and picture-source changes apply immediately.">
+  <link rel="canonical" href="https://swiftminer.app/release-notes/1.40.html">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <style>
+    :root { color-scheme: light dark; }
+    body { margin: 0; padding: 32px 20px 48px; font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f4f6f8; color: #0f1720; }
+    main { max-width: 760px; margin: 0 auto; padding: 28px; border-radius: 22px; background: rgba(255, 255, 255, .86); box-shadow: 0 20px 60px rgba(15, 23, 32, .10); border: 1px solid rgba(82, 96, 109, .12); }
+    h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
+    .meta, .summary { color: #52606d; font-size: 14px; }
+    .intro { margin: 0 0 24px; color: #384454; }
+    section { margin: 18px 0 0; padding: 18px 18px 14px; border: 1px solid rgba(82, 96, 109, .18); border-radius: 16px; border-left: 5px solid #7b4bd9; background: rgba(255, 255, 255, .42); }
+    h2 { margin: 0 0 4px; color: #7b4bd9; font-size: 18px; }
+    ul { margin: 12px 0 0; padding-left: 22px; }
+    li { margin: 0 0 8px; }
+    li:last-child { margin-bottom: 0; }
+    a { color: #7b4bd9; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    @media (prefers-color-scheme: dark) { body { background: #0b1015; color: #edf2f7; } main { background: rgba(15, 23, 32, .88); border-color: rgba(159, 176, 194, .14); } .meta, .summary { color: #9fb0c2; } .intro { color: #c8d3df; } section { border-color: rgba(159, 176, 194, .18); background: rgba(255, 255, 255, .04); } a { color: #b89aff; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>SwiftMiner 1.40</h1>
+    <p class="meta">Version 1.40 &middot; Build 2026090209</p>
+    <p class="intro">Discord stops being a separate destination and becomes part of the miner it belongs to. Notifications that ask you to do something now link straight to the page where you can do it, and the app is clearer about the difference between a reward you cannot earn and one that simply cannot be delivered yet.</p>
+
+    <section>
+      <h2>&#128029; Fixes</h2>
+      <ul>
+        <li>Account-link reminders no longer disappear from the Needs Attention banner and the sidebar count while remaining in Pending. All three now apply the same rule, so a miner never looks healthy in one place and blocked in another.</li>
+        <li>A campaign whose drops are all claimed but whose game account is still unlinked is described correctly: the rewards cannot be delivered, rather than the drops cannot be earned.</li>
+        <li>Picture-source changes apply immediately across Settings, Miners and the web dashboard instead of waiting for the next daily refresh, and a temporary network failure no longer clears a working Twitch picture.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#128172; Discord lives with its miner</h2>
+      <ul>
+        <li>The standalone Discord section has been removed from the sidebar. Everything it offered &mdash; linking, re-linking, unlinking, message history, resending, and sending a welcome message &mdash; now sits in a Discord section on the miner it belongs to, between the campaign queue and Status.</li>
+        <li>Collapsed, the section answers the only questions that usually matter: which account is linked, whether it is healthy, and how much history there is. Expanding it reveals the last DM, recent messages and the account controls.</li>
+        <li>Problems are distinguishable at a glance. A miner with no Discord account reads as not linked rather than as an error, while an unreachable bot, an account SwiftBot can no longer see, and a failed delivery each say so plainly.</li>
+        <li>Pending items report when their own reminder was last delivered, and say when automatic reminders are switched off so a silent reminder is never mistaken for a sent one.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#128279; Notifications that lead somewhere</h2>
+      <ul>
+        <li>Discord messages that ask you to act now carry a button to the exact page that resolves them &mdash; the account's connection, a named campaign, or your completed drops &mdash; instead of the dashboard front page.</li>
+        <li>The web dashboard understands links to a specific miner, campaign, account connection or drops list, and highlights what the message was about when you arrive.</li>
+        <li>Messages name the actual problem where SwiftMiner knows it, so a subscription requirement or a missing account link is stated outright rather than reported as something needing a look.</li>
+        <li>A reminder about drops you have already claimed says the rewards are waiting on the account link, instead of asking you to go and earn them again.</li>
+        <li>When no public dashboard URL is configured, messages carry no button at all rather than a link that cannot open.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#128218; Help</h2>
+      <ul>
+        <li>A new guide covers drops that require a paid Twitch subscription: what the warning means, why watch time alone will never complete them, and what your options are.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

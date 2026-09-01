@@ -1,6 +1,7 @@
 // Rows, sheets, banners, and chips supporting MinersOverviewView.
 import SwiftUI
 import SwiftMinerCore
+import SwiftMinerService
 
 struct MinerDiagnosticEvent: Identifiable {
     let id: String
@@ -594,9 +595,19 @@ struct PrioritisedLinkIssue: Identifiable, Equatable {
     let gameName: String
     let campaignNames: [String]
     let isIgnored: Bool
+    /// Every drop is already claimed on Twitch, so nothing more can be earned —
+    /// but the publisher still cannot deliver the rewards until the game account
+    /// is linked. The reminder stands; only its wording changes.
+    var awaitingDelivery: Bool = false
 
     var id: String {
         "\(minerId):\(gameId)"
+    }
+
+    /// Which flavour of link problem this is, so the DM can say whether the
+    /// rewards cannot be earned or merely cannot be handed over yet.
+    var linkIssueKind: SwiftBotIssueKind {
+        awaitingDelivery ? .accountLinkDeliveryPending : .accountLinkRequired
     }
 }
 
@@ -661,6 +672,9 @@ struct PendingItem: Identifiable, Equatable {
             if isMuted {
                 return "Reminder muted. Open Twitch Drops whenever you’re ready to link the game account."
             }
+            if issue.awaitingDelivery {
+                return "\(campaignDescription) is fully claimed, but the rewards can’t reach the game until you link your account in Twitch Drops."
+            }
             return "To earn \(campaignDescription), open Twitch Drops and link your game account."
         case .subscriptionRequired(_, _, _, _, let campaignName, let dropNames):
             if isMuted { return "\(campaignName) is muted." }
@@ -701,11 +715,155 @@ struct PendingItem: Identifiable, Equatable {
         guard resolutionTitle != nil else { return nil }
         return "arrow.up.right.square"
     }
+
+    /// The DM type this item's reminder is sent as. The Settings toggle that
+    /// gates the *automatic* version of that DM keys off the same type.
+    var reminderMessageType: SwiftBotDMMessageType {
+        switch kind {
+        case .accountLink: return .prioritisedGameNeedsLinking
+        case .subscriptionRequired: return .accountActionRequired
+        }
+    }
+
+    /// Whether a logged DM payload is *this* item's reminder. Message type alone
+    /// isn't enough: two prioritised games both send `prioritisedGameNeedsLinking`.
+    func matchesReminder(_ request: SwiftBotDMRequest) -> Bool {
+        switch kind {
+        case .accountLink(let issue):
+            guard request.messageType == .prioritisedGameNeedsLinking else { return false }
+            if let gameId = request.affectedGameId?.nilIfBlank {
+                return gameId == issue.gameId
+            }
+            return request.affectedGame?.localizedCaseInsensitiveCompare(issue.gameName) == .orderedSame
+        case .subscriptionRequired(_, let accountId, _, _, let campaignName, _):
+            guard request.messageType == .accountActionRequired else { return false }
+            guard request.campaignName == campaignName else { return false }
+            // Older payloads predate `accountId`; fall back to the campaign match.
+            guard let requestAccountId = request.accountId?.nilIfBlank else { return true }
+            return requestAccountId == accountId
+        }
+    }
+
+    func dmRequest(
+        miner: MinerManager.ManagedMiner,
+        priorityGames: [String],
+        portal: SwiftMinerPortalLink? = nil
+    ) -> SwiftBotDMRequest {
+        switch kind {
+        case .accountLink(let issue):
+            return SwiftBotDMRequest(
+                messageType: .prioritisedGameNeedsLinking,
+                debug: false,
+                twitchUsername: miner.username,
+                priorityGames: priorityGames,
+                affectedGame: issue.gameName,
+                campaignName: issue.campaignNames.first,
+                accountId: issue.accountId,
+                minerDisplayName: issue.minerName,
+                affectedGameId: issue.gameId,
+                portalURL: portal?.campaigns,
+                portalDestination: portal.map { _ in SwiftBotPortalDestination.campaigns.rawValue },
+                issueKind: issue.linkIssueKind.rawValue,
+                helpURL: SwiftMinerHelpLink.url(for: issue.linkIssueKind)
+            )
+        case .subscriptionRequired(
+            _, let accountId, let campaignId, let gameName, let campaignName, let dropNames
+        ):
+            let rewards = dropNames.isEmpty
+                ? "its remaining rewards"
+                : dropNames.joined(separator: ", ")
+            return SwiftBotDMRequest(
+                messageType: .accountActionRequired,
+                debug: false,
+                twitchUsername: miner.username,
+                priorityGames: priorityGames,
+                affectedGame: gameName,
+                campaignName: campaignName,
+                accountId: accountId,
+                minerDisplayName: miner.displayName,
+                recoveryReason: "A paid Twitch subscription is required to earn \(rewards) from \(campaignName).",
+                portalURL: portal?.campaign(id: campaignId) ?? portal?.campaigns,
+                portalDestination: portal.map { _ in SwiftBotPortalDestination.campaign.rawValue },
+                issueKind: SwiftBotIssueKind.subscriptionRequired.rawValue,
+                campaignId: campaignId,
+                helpURL: SwiftMinerHelpLink.url(for: .subscriptionRequired)
+            )
+        }
+    }
+}
+
+/// What a pending row has to say about Discord delivery, if anything. Nothing
+/// is said at all when the miner has no Discord to deliver through.
+enum PendingReminderNote: Equatable {
+    case sent(Date)
+    /// The automatic reminder for this item's DM type is switched off globally.
+    /// Manual sends still work, which is exactly what the row offers.
+    case automaticRemindersOff
+
+    var text: String {
+        switch self {
+        case .sent(let date):
+            return "Reminder sent via Discord \(MinerDiscordFormat.relative(date))"
+        case .automaticRemindersOff:
+            return "Automatic Discord reminders are off — send one manually or turn them on in Settings."
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .sent: return "checkmark.message"
+        case .automaticRemindersOff: return "bell.slash"
+        }
+    }
+}
+
+enum ReminderDMSendState: Equatable {
+    case idle
+    case sending
+    case sent
+    case failed
+}
+
+struct ReminderDMButton: View {
+    let state: ReminderDMSendState
+    let isAvailable: Bool
+    let unavailableReason: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            switch state {
+            case .idle:
+                Label("Send Reminder", systemImage: "paperplane")
+            case .sending:
+                HStack(spacing: 5) {
+                    ProgressView()
+                        .controlSize(.mini)
+                    Text("Sending…")
+                }
+            case .sent:
+                Label("Reminder Sent", systemImage: "checkmark")
+            case .failed:
+                Label("Retry Reminder", systemImage: "arrow.clockwise")
+            }
+        }
+        .tahoeButtonStyle()
+        .controlSize(.small)
+        .disabled(!isAvailable || state == .sending)
+        .help(isAvailable ? "Send this reminder to the miner's linked Discord account" : unavailableReason)
+        .accessibilityHint(isAvailable ? "Sends this reminder through SwiftBot" : unavailableReason)
+    }
 }
 
 struct PendingItemRow: View {
     let item: PendingItem
     let onResolve: (() -> Void)?
+    let dmState: ReminderDMSendState
+    let canSendDM: Bool
+    let dmUnavailableReason: String
+    /// What Discord has to say about this item, if the miner has Discord at all.
+    let reminderNote: PendingReminderNote?
+    let onSendDM: () -> Void
     let onAction: () -> Void
 
     var body: some View {
@@ -725,6 +883,15 @@ struct PendingItemRow: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
+
+                // A muted item already explains itself in the subtitle; the
+                // delivery note only adds something when reminders are live.
+                if !item.isMuted, let reminderNote {
+                    Label(reminderNote.text, systemImage: reminderNote.symbol)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
             }
 
             Spacer(minLength: 12)
@@ -740,6 +907,13 @@ struct PendingItemRow: View {
                     .tahoeButtonStyle()
                     .controlSize(.small)
                 }
+
+                ReminderDMButton(
+                    state: dmState,
+                    isAvailable: canSendDM,
+                    unavailableReason: dmUnavailableReason,
+                    action: onSendDM
+                )
 
                 Button(action: onAction) {
                     Label(item.actionTitle, systemImage: item.actionSystemImage)

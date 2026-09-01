@@ -318,7 +318,7 @@ struct AccountSettingsAccountRow: View {
         return Button {
             guard !isSelected else { return }
             settings.setAvatarSource(source, forAccountId: miner.accountId)
-            Task { await refreshAvatarPreview() }
+            Task { await refreshAvatarPreview(for: source) }
         } label: {
             AccountSourceMark(source: source, isMuted: !isSelected)
                 .frame(width: 14, height: 14)
@@ -366,14 +366,25 @@ struct AccountSettingsAccountRow: View {
         }
     }
 
-    private func refreshAvatarPreview() async {
-        if canUseDiscord {
-            // Either selection can end up drawing the Discord picture, so refresh
-            // it regardless — detached, because a slow Discord round trip must not
-            // hold up the Twitch lookup shown in the meantime.
-            Task { await navigation.refreshDiscordDisplayNames() }
+    private func refreshAvatarPreview(for source: AccountAvatarSource) async {
+        switch source {
+        case .discord:
+            // The persisted source changes before this request begins, so any
+            // cached Discord picture appears immediately. Awaiting a fresh
+            // SwiftBot lookup then replaces a missing or changed picture in the
+            // preview and every other consumer of this account avatar.
+            await navigation.refreshDiscordDisplayNames()
+            if discordAvatarURL == nil {
+                await twitchAvatars.refreshIfNeeded(miners: [miner], manager: navigation.minerManager)
+            }
+        case .twitch:
+            // A picker click is explicit refresh intent. Bypass the daily URL
+            // cache so an updated Twitch picture is pulled straight away.
+            await twitchAvatars.refresh(miner: miner, manager: navigation.minerManager)
+            if twitchAvatarURL == nil, canUseDiscord {
+                await navigation.refreshDiscordDisplayNames()
+            }
         }
-        await twitchAvatars.refreshIfNeeded(miners: [miner], manager: navigation.minerManager)
     }
 }
 

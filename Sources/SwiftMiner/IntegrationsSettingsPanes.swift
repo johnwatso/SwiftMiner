@@ -781,6 +781,10 @@ struct IntegrationsSettingsView: View {
         .padding(.horizontal, 24)
         .padding(.bottom, 20)
         .padding(.top, 10)
+        .onChange(of: settings.webDashboardBaseURL) { _, _ in
+            // DM deep links are built from this URL, so they have to follow it.
+            navigation.refreshDMPortalBase()
+        }
     }
 
     private var integrationEnableSection: some View {
@@ -1534,6 +1538,20 @@ struct IntegrationsSettingsView: View {
             affectedGame = sample?.gameName ?? "Test Game"
         }
 
+        // Previews have to carry the same deep links production does, or this
+        // section shows a DM that renders differently from the real thing.
+        let portal = SwiftMinerPortalLink(base: NavigationModel.portalBase())
+        let destination = Self.debugPortalDestination(for: type)
+        let issueKind = Self.debugIssueKind(for: type)
+        let campaignId = sample?.id
+        let portalURL: String? = {
+            switch destination {
+            case .campaign: return campaignId.flatMap { portal?.campaign(id: $0) } ?? portal?.campaigns
+            case .miner: return targetMiner.flatMap { portal?.miner(accountId: $0.accountId) } ?? portal?.dashboard
+            default: return portal?.url(for: destination)
+            }
+        }()
+
         return SwiftBotDMRequest(
             messageType: type,
             debug: true,
@@ -1548,8 +1566,37 @@ struct IntegrationsSettingsView: View {
             gameArtworkURL: (type == .campaignCompleted || type == .campaignDetected)
                 ? (sample?.gameImageUrl?.absoluteString ?? "https://static-cdn.jtvnw.net/ttv-boxart/1234_IGDB-285x380.jpg")
                 : nil,
-            recoveryReason: "Twitch token expired during mining."
+            recoveryReason: "Twitch token expired during mining.",
+            portalURL: portalURL,
+            portalDestination: portal.map { _ in destination.rawValue },
+            issueKind: issueKind?.rawValue,
+            campaignId: destination == .campaign ? campaignId : nil,
+            helpURL: issueKind.flatMap(SwiftMinerHelpLink.url(for:))
         )
+    }
+
+    /// Where each message type's portal button points, mirroring the
+    /// production send sites so a preview is not misleading.
+    static func debugPortalDestination(for type: SwiftBotDMMessageType) -> SwiftBotPortalDestination {
+        switch type {
+        case .reauth: return .accountConnection
+        case .prioritisedGameNeedsLinking: return .campaigns
+        case .accountActionRequired, .campaignDetected: return .campaign
+        case .campaignCompleted, .dropClaimed: return .drops
+        case .welcomeBack: return .miner
+        case .welcome, .discordLinked, .setup, .linked, .webDashboardAvailable: return .dashboard
+        }
+    }
+
+    static func debugIssueKind(for type: SwiftBotDMMessageType) -> SwiftBotIssueKind? {
+        switch type {
+        case .reauth: return .connectionExpired
+        case .prioritisedGameNeedsLinking: return .accountLinkRequired
+        // The Pending section's subscription-gated case is the common one, and
+        // it exercises the classified-title path.
+        case .accountActionRequired: return .subscriptionRequired
+        default: return nil
+        }
     }
 
     private func sendOneDebugDM(type: SwiftBotDMMessageType) async {

@@ -52,18 +52,36 @@ final class TwitchAvatarStore {
         }
         guard !stale.isEmpty else { return }
 
-        inFlightAccountIds.formUnion(stale.map(\.accountId))
-        defer { inFlightAccountIds.subtract(stale.map(\.accountId)) }
-
         for miner in stale {
-            guard let url = await manager.fetchTwitchProfileImageURL(minerId: miner.id) else { continue }
-            if MinerAvatarURL.usable(url) == nil {
-                entriesByAccountId.removeValue(forKey: miner.accountId)
-            } else {
-                entriesByAccountId[miner.accountId] = Entry(url: url, fetchedAt: Date())
-            }
+            await refresh(miner: miner, manager: manager)
         }
+    }
 
+    /// Re-resolves one account even when its stored URL is still inside the
+    /// normal daily cache window. The settings source picker uses this path:
+    /// clicking Twitch is an explicit request to show the current Twitch
+    /// picture now, not to keep trusting yesterday's URL.
+    func refresh(miner: MinerManager.ManagedMiner, manager: MinerManager) async {
+        await refresh(accountId: miner.accountId) {
+            await manager.fetchTwitchProfileImageURL(minerId: miner.id)
+        }
+    }
+
+    /// Resolver-injected form keeps the cache update deterministic in tests.
+    func refresh(accountId: String, resolver: () async -> URL?) async {
+        guard !inFlightAccountIds.contains(accountId) else { return }
+        inFlightAccountIds.insert(accountId)
+        defer { inFlightAccountIds.remove(accountId) }
+
+        // A transport failure retains the last known picture. A successful
+        // lookup that returns Twitch's stock image deliberately clears it so
+        // the selected source can fall back to Discord or the account initial.
+        guard let url = await resolver() else { return }
+        if MinerAvatarURL.usable(url) == nil {
+            entriesByAccountId.removeValue(forKey: accountId)
+        } else {
+            entriesByAccountId[accountId] = Entry(url: url, fetchedAt: Date())
+        }
         persist()
     }
 

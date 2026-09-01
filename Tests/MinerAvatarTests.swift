@@ -131,6 +131,42 @@ final class MinerAvatarTests: XCTestCase {
         XCTAssertTrue(TwitchAvatarStore.needsRefresh(entry, now: now))
     }
 
+    func testExplicitRefreshReplacesAFreshCachedTwitchAvatar() async {
+        let settings = Settings.shared
+        let previousData = settings.twitchAvatarsData
+        defer { settings.twitchAvatarsData = previousData }
+
+        settings.twitchAvatarsData = TwitchAvatarStore.encode([
+            "42": TwitchAvatarStore.Entry(url: twitch, fetchedAt: Date())
+        ])
+        let store = TwitchAvatarStore(settings: settings)
+        let replacement = URL(string: "https://static-cdn.jtvnw.net/jtv_user_pictures/new-300x300.png")!
+        var resolutions = 0
+
+        await store.refresh(accountId: "42") {
+            resolutions += 1
+            return replacement
+        }
+
+        XCTAssertEqual(resolutions, 1, "An explicit picker action must bypass the daily URL cache")
+        XCTAssertEqual(store.url(forAccountId: "42"), replacement)
+    }
+
+    func testExplicitRefreshRetainsCachedAvatarAfterTransportFailure() async {
+        let settings = Settings.shared
+        let previousData = settings.twitchAvatarsData
+        defer { settings.twitchAvatarsData = previousData }
+
+        settings.twitchAvatarsData = TwitchAvatarStore.encode([
+            "42": TwitchAvatarStore.Entry(url: twitch, fetchedAt: Date())
+        ])
+        let store = TwitchAvatarStore(settings: settings)
+
+        await store.refresh(accountId: "42") { nil }
+
+        XCTAssertEqual(store.url(forAccountId: "42"), twitch)
+    }
+
     func testEntriesRoundTripThroughStorage() {
         let entry = TwitchAvatarStore.Entry(url: twitch, fetchedAt: Date(timeIntervalSince1970: 1_700_000_000))
         let decoded = TwitchAvatarStore.decode(TwitchAvatarStore.encode(["42": entry]))

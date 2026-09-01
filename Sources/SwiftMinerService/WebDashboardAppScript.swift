@@ -23,6 +23,93 @@ extension WebDashboardAssets {
     let OPERATOR_MINERS = [];
     let OPERATOR_STATE = { selectedMinerId: null };
 
+    // ---------- deep-link routing ----------
+    // Discord DMs link straight at the thing they are about. The portal is a
+    // single page, so destinations are fragment routes and "navigating" means
+    // rendering as normal, then scrolling the matching card into view. Routes
+    // are mirrored in SwiftMinerPortalLink.swift, which builds these URLs.
+    //
+    //   #/miner/<twitchAccountId>   #/campaign/<campaignId>
+    //   #/campaigns                 #/account/connection
+    //   #/drops
+    let ROUTE = { name: 'home' };
+    let lastAppliedRouteKey = null;
+    /// Set when we wrote the fragment ourselves, so the resulting hashchange
+    /// does not re-render a view that is already on screen.
+    let suppressHashChange = false;
+
+    function parseRoute() {
+      const raw = String(location.hash || '');
+      let path = raw.charAt(0) === '#' ? raw.slice(1) : raw;
+      while (path.charAt(0) === '/') path = path.slice(1);
+      if (!path) return { name: 'home' };
+      const parts = path.split('/').filter(Boolean).map(part => {
+        try { return decodeURIComponent(part); } catch { return part; }
+      });
+      switch (parts[0]) {
+        case 'miner':     return parts[1] ? { name: 'miner', id: parts[1] } : { name: 'home' };
+        case 'campaign':  return parts[1] ? { name: 'campaign', id: parts[1] } : { name: 'campaigns' };
+        case 'campaigns': return { name: 'campaigns' };
+        case 'drops':     return { name: 'drops' };
+        case 'account':   return { name: 'account', section: parts[1] || 'overview' };
+        default:          return { name: 'home' };
+      }
+    }
+
+    function routeKey(r) {
+      return r.name + ':' + (r.id || r.section || '');
+    }
+
+    /// The element a route wants in view, or null when this page has nothing
+    /// matching — a campaign that has since ended, for instance.
+    function routeTarget(r) {
+      // The identity card always renders on a miner page, so it is the last
+      // resort that keeps a deep link from silently doing nothing.
+      if (r.name === 'miner') return $('route-identity');
+      if (r.name === 'campaign' && r.id) {
+        const row = document.querySelector('[data-campaign-id="' + cssEscape(r.id) + '"]');
+        if (row) return row;
+        // The campaign is gone or not listed; the campaign list is still the
+        // most useful place to land.
+        return $('route-campaigns');
+      }
+      if (r.name === 'campaigns') return $('route-campaigns') || $('route-subscription');
+      if (r.name === 'drops') return $('route-drops');
+      if (r.name === 'account') {
+        if (r.section === 'connection') {
+          return $('route-connection') || $('route-issues') || $('route-identity');
+        }
+        return $('route-identity');
+      }
+      return null;
+    }
+
+    function cssEscape(value) {
+      const s = String(value);
+      if (window.CSS && typeof window.CSS.escape === 'function') return window.CSS.escape(s);
+      let out = '';
+      for (const ch of s) {
+        out += /[a-zA-Z0-9_-]/.test(ch) ? ch : '_';
+      }
+      return out;
+    }
+
+    /// Called after every render. Scrolls once per distinct route so a
+    /// background refresh never yanks the page out from under the reader.
+    function applyRoute() {
+      if (ROUTE.name === 'home') { lastAppliedRouteKey = null; return; }
+      const key = routeKey(ROUTE);
+      if (key === lastAppliedRouteKey) return;
+      const target = routeTarget(ROUTE);
+      if (!target) return;
+      lastAppliedRouteKey = key;
+      window.requestAnimationFrame(() => {
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        target.classList.add('route-focus');
+        window.setTimeout(() => target.classList.remove('route-focus'), 2600);
+      });
+    }
+
     function startLoadingCopy() {
       const target = $('loading-copy');
       if (!target) return;
@@ -337,7 +424,7 @@ extension WebDashboardAssets {
         ? `<img src="${esc(profileImageURL)}" alt="" referrerpolicy="no-referrer">`
         : twitchIcon;
       return `
-        <section class="miner-identity" aria-label="Twitch account">
+        <section class="miner-identity" id="route-identity" aria-label="Twitch account">
           <div class="miner-avatar">${twitchAvatar}</div>
           <h2>${esc(accountDisplayName(acc) || 'Twitch account')}</h2>
           ${accountSecondaryName(acc) ? `<p class="miner-handle">${esc(accountSecondaryName(acc))}</p>` : ''}
@@ -349,7 +436,7 @@ extension WebDashboardAssets {
     function activationCard(p) {
       if (!SESSION || SESSION.provider !== 'discord' || (p.account && p.account.twitchAccountId)) return '';
       if (!ACTIVATION) {
-        return `<div class="card">
+        return `<div class="card" id="route-connection">
           <div class="label">Link Twitch</div>
           <div class="row" style="align-items:flex-start">
             <div style="flex:1;min-width:0">
@@ -439,7 +526,7 @@ extension WebDashboardAssets {
       if (!p.issues || !p.issues.length) return '';
       let rows = '';
       for (const is of p.issues) rows += `<div class="issue-row"><span class="issue-icon" aria-hidden="true">!</span><div class="issue-body"><div>${esc(is.message || is.type)}</div>${issueButtons(is)}</div></div>`;
-      return `<div class="card"><div class="label">Needs attention</div>${rows}</div>`;
+      return `<div class="card" id="route-issues"><div class="label">Needs attention</div>${rows}</div>`;
     }
 
     function globalPriorityGames(p) {
@@ -705,7 +792,7 @@ extension WebDashboardAssets {
         const when = active ? endsIn(c.endsAt) : dateLabel(c.startsAt, 'starts');
         const gatedCount = Number(c.subscriptionRequiredDropCount || 0);
         const gatedDetail = gatedCount ? ` · ${gatedCount} ${gatedCount === 1 ? 'drop needs' : 'drops need'} sub` : '';
-        rows += `<div class="campaign-row">
+        rows += `<div class="campaign-row" data-campaign-id="${esc(c.campaignId || '')}">
           <img class="boxart" alt="" data-game="${esc(c.game)}" data-art="${esc(c.boxArtURL || '')}">
           <div class="copy">
             <div class="title">${esc(c.game)}</div>
@@ -714,7 +801,7 @@ extension WebDashboardAssets {
           <button class="btn-secondary campaign-priority" data-game="${esc(c.game)}" ${accountId ? '' : 'disabled'}>${personal.some(g => g.toLowerCase() === String(c.game || '').toLowerCase()) ? 'Prioritised' : 'Prioritise'}</button>
         </div>`;
       }
-      return `<div class="card"><div class="label">Up next</div><div class="campaign-list">${rows}</div>${accountId ? '' : '<div class="muted" style="font-size:12px;margin-top:10px">Link Twitch before setting priorities.</div>'}</div>`;
+      return `<div class="card" id="route-campaigns"><div class="label">Up next</div><div class="campaign-list">${rows}</div>${accountId ? '' : '<div class="muted" style="font-size:12px;margin-top:10px">Link Twitch before setting priorities.</div>'}</div>`;
     }
 
     function subscriptionRequiredCard() {
@@ -725,7 +812,7 @@ extension WebDashboardAssets {
         const active = c.status === 'available';
         const when = active ? endsIn(c.endsAt) : dateLabel(c.startsAt, 'starts');
         const gatedCount = Number(c.subscriptionRequiredDropCount || c.dropCount || 0);
-        rows += `<div class="campaign-row">
+        rows += `<div class="campaign-row" data-campaign-id="${esc(c.campaignId || '')}">
           <img class="boxart" alt="" data-game="${esc(c.game)}" data-art="${esc(c.boxArtURL || '')}">
           <div class="copy">
             <div class="title">${esc(c.game)}</div>
@@ -734,7 +821,7 @@ extension WebDashboardAssets {
           <span class="campaign-gate">Needs Sub</span>
         </div>`;
       }
-      return `<div class="card"><div class="label">Subscription required</div><div class="campaign-list">${rows}</div></div>`;
+      return `<div class="card" id="route-subscription"><div class="label">Subscription required</div><div class="campaign-list">${rows}</div></div>`;
     }
 
     function dropsCard(p) {
@@ -751,7 +838,7 @@ extension WebDashboardAssets {
       }
       const count = `${dropsThisWeek} ${dropsThisWeek === 1 ? 'drop' : 'drops'} this week`;
       const empty = rows ? '' : '<div class="empty-activity">No campaign completions to show yet.</div>';
-      return `<section class="card" aria-label="Completed drops">
+      return `<section class="card" id="route-drops" aria-label="Completed drops">
         <div class="detail-section-header">
           <div class="label">Completed Drops</div>
           <div class="completed-count">${count}</div>
@@ -887,6 +974,7 @@ extension WebDashboardAssets {
       wireExclusions();
       wireAccountRemoval();
       fillGameOptions();
+      applyRoute();
     }
 
     function hydrateArt(root = document) {
@@ -1116,14 +1204,30 @@ extension WebDashboardAssets {
       hydrateArt();
       wireOperatorOverview();
       wireAccountRemoval();
+      applyRoute();
     }
 
     function showOperatorMiner(id) {
       const p = OPERATOR_MINERS.find(m => minerId(m) === String(id));
       if (!p) return;
       OPERATOR_STATE.selectedMinerId = String(id);
+      setRoute({ name: 'miner', id: String(id) });
       render(p);
       window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    /// Updates the fragment without re-entering the router: the caller is
+    /// already rendering the view this route describes.
+    function setRoute(next) {
+      ROUTE = next;
+      lastAppliedRouteKey = routeKey(next);
+      const hash = next.name === 'miner' && next.id
+        ? '#/miner/' + encodeURIComponent(next.id)
+        : '#/';
+      if (location.hash !== hash) {
+        suppressHashChange = true;
+        location.hash = hash;
+      }
     }
 
     function wireOperatorOverview() {
@@ -1147,6 +1251,7 @@ extension WebDashboardAssets {
       if (!back) return;
       back.addEventListener('click', () => {
         OPERATOR_STATE.selectedMinerId = null;
+        setRoute({ name: 'home' });
         renderOverview(OPERATOR_MINERS);
         window.scrollTo({ top: 0, behavior: 'smooth' });
       });
@@ -1189,11 +1294,16 @@ extension WebDashboardAssets {
         const data = JSON.parse(text);
         if (data.miners) {
           const miners = data.miners || [];
+          OPERATOR_MINERS.splice(0, OPERATOR_MINERS.length, ...miners);
+          // A #/miner/<twitchAccountId> deep link chooses the miner before the
+          // default view does, so a DM lands on the account it is about.
+          if (ROUTE.name === 'miner' && ROUTE.id && miners.some(m => minerId(m) === ROUTE.id)) {
+            OPERATOR_STATE.selectedMinerId = ROUTE.id;
+          }
           if (miners.length === 1) {
             OPERATOR_STATE.selectedMinerId = null;
             render(miners[0]);
           } else if (OPERATOR_STATE.selectedMinerId) {
-            OPERATOR_MINERS.splice(0, OPERATOR_MINERS.length, ...miners);
             const selected = miners.find(m => minerId(m) === OPERATOR_STATE.selectedMinerId);
             if (selected) render(selected);
             else {
@@ -1295,10 +1405,31 @@ extension WebDashboardAssets {
       }
     });
 
+    window.addEventListener('hashchange', () => {
+      if (suppressHashChange) { suppressHashChange = false; return; }
+      ROUTE = parseRoute();
+      lastAppliedRouteKey = null;
+      // Only an operator session has a miner list to switch between. A
+      // single-miner user is already on the page the link refers to, so it
+      // falls through to applyRoute() rather than being dropped.
+      if (ROUTE.name === 'miner' && ROUTE.id
+          && OPERATOR_MINERS.some(m => minerId(m) === ROUTE.id)) {
+        showOperatorMiner(ROUTE.id);
+        return;
+      }
+      if (ROUTE.name === 'home' && OPERATOR_STATE.selectedMinerId && OPERATOR_MINERS.length > 1) {
+        OPERATOR_STATE.selectedMinerId = null;
+        renderOverview(OPERATOR_MINERS);
+        return;
+      }
+      applyRoute();
+    });
+
     const hdr = $('hdrlogo');
     if (hdr) hideOnError(hdr);
     $('signout').addEventListener('click', doLogout);
     startLoadingCopy();
+    ROUTE = parseRoute();
     load();
     // Keep progress fresh without being chatty.
     setInterval(() => load(true), 60000);
