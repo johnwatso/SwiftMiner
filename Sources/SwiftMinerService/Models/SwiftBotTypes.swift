@@ -257,8 +257,13 @@ public enum SwiftBotPortalDestination: String, Codable, Sendable, CaseIterable {
 public enum SwiftBotIssueKind: String, Codable, Sendable, CaseIterable {
     /// A paid Twitch subscription is required to earn the campaign's drops.
     case subscriptionRequired = "subscription_required"
-    /// An external game account must be linked to Twitch.
+    /// An external game account must be linked to Twitch before the campaign's
+    /// drops can be earned.
     case accountLinkRequired = "account_link_required"
+    /// The campaign's drops are all claimed on Twitch, but the missing account
+    /// link stops the publisher delivering them in-game. Nothing is at risk of
+    /// being lost — the rewards are simply waiting on the link.
+    case accountLinkDeliveryPending = "account_link_delivery_pending"
     /// Twitch authentication expired or was revoked.
     case connectionExpired = "connection_expired"
     /// Cause not classified — SwiftBot should fall back to the generic title.
@@ -269,6 +274,7 @@ public enum SwiftBotIssueKind: String, Codable, Sendable, CaseIterable {
         switch self {
         case .subscriptionRequired: return "Twitch Subscription Required"
         case .accountLinkRequired: return "Account Linking Required"
+        case .accountLinkDeliveryPending: return "Rewards Waiting on an Account Link"
         case .connectionExpired: return "Twitch Connection Expired"
         case .unknown: return "Action Required"
         }

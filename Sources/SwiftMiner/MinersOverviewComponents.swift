@@ -603,6 +603,12 @@ struct PrioritisedLinkIssue: Identifiable, Equatable {
     var id: String {
         "\(minerId):\(gameId)"
     }
+
+    /// Which flavour of link problem this is, so the DM can say whether the
+    /// rewards cannot be earned or merely cannot be handed over yet.
+    var linkIssueKind: SwiftBotIssueKind {
+        awaitingDelivery ? .accountLinkDeliveryPending : .accountLinkRequired
+    }
 }
 
 struct PendingItem: Identifiable, Equatable {
@@ -757,8 +763,8 @@ struct PendingItem: Identifiable, Equatable {
                 affectedGameId: issue.gameId,
                 portalURL: portal?.campaigns,
                 portalDestination: portal.map { _ in SwiftBotPortalDestination.campaigns.rawValue },
-                issueKind: SwiftBotIssueKind.accountLinkRequired.rawValue,
-                helpURL: SwiftMinerHelpLink.url(for: .accountLinkRequired)
+                issueKind: issue.linkIssueKind.rawValue,
+                helpURL: SwiftMinerHelpLink.url(for: issue.linkIssueKind)
             )
         case .subscriptionRequired(
             _, let accountId, let campaignId, let gameName, let campaignName, let dropNames

@@ -206,6 +206,15 @@ struct MinerAttentionIssue: Equatable {
     let action: Action?
     var dismissal: Dismissal?
 
+    /// The blocking campaign is fully claimed, so the missing link only stops
+    /// delivery. Mirrors `PrioritisedLinkIssue.awaitingDelivery`.
+    var awaitingDelivery: Bool = false
+
+    /// Which flavour of link problem this is, matching what the banner says.
+    var linkIssueKind: SwiftBotIssueKind {
+        awaitingDelivery ? .accountLinkDeliveryPending : .accountLinkRequired
+    }
+
     func dmRequest(
         miner: MinerManager.ManagedMiner,
         priorityGames: [String],
@@ -223,8 +232,8 @@ struct MinerAttentionIssue: Equatable {
                 affectedGameId: gameId,
                 portalURL: portal?.campaigns,
                 portalDestination: portal.map { _ in SwiftBotPortalDestination.campaigns.rawValue },
-                issueKind: SwiftBotIssueKind.accountLinkRequired.rawValue,
-                helpURL: SwiftMinerHelpLink.url(for: .accountLinkRequired)
+                issueKind: linkIssueKind.rawValue,
+                helpURL: SwiftMinerHelpLink.url(for: linkIssueKind)
             )
         }
 
@@ -346,7 +355,8 @@ struct MinerAttentionIssue: Equatable {
                 dismissal: .accountLink(
                     gameId: MinerAttention.warningGameId(for: campaign),
                     gameName: campaign.game.name
-                )
+                ),
+                awaitingDelivery: awaitingDelivery
             )
         }
 

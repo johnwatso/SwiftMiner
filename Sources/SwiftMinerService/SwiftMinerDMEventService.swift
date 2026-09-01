@@ -118,17 +118,24 @@ public actor SwiftMinerDMEventService {
         _ = await connectionService.sendEventDM(to: discordUserId, request: request)
     }
 
+    /// `awaitingDelivery` means the blocked campaigns are fully claimed, so the
+    /// missing link stops delivery rather than earning. The DM says so.
     public func emitPrioritisedGameNeedsLinking(
         gameName: String,
         gameId: String?,
         accountId: String?,
         minerDisplayName: String?,
         discordUserId: String?,
-        priorityGames: [String]
+        priorityGames: [String],
+        awaitingDelivery: Bool = false
     ) async {
         guard let discordUserId else { return }
         let key = gameName.lowercased()
         guard !isRecentlyNotified(key: key, map: &lastLinkWarning, cooldown: linkWarningCooldown) else { return }
+
+        let issueKind: SwiftBotIssueKind = awaitingDelivery
+            ? .accountLinkDeliveryPending
+            : .accountLinkRequired
 
         let request = SwiftBotDMRequest(
             messageType: .prioritisedGameNeedsLinking,
@@ -142,8 +149,8 @@ public actor SwiftMinerDMEventService {
             eventId: "linkWarning:\(key):\(bucket(for: linkWarningCooldown))",
             portalURL: portal?.campaigns,
             portalDestination: portal.map { _ in SwiftBotPortalDestination.campaigns.rawValue },
-            issueKind: SwiftBotIssueKind.accountLinkRequired.rawValue,
-            helpURL: SwiftMinerHelpLink.url(for: .accountLinkRequired)
+            issueKind: issueKind.rawValue,
+            helpURL: SwiftMinerHelpLink.url(for: issueKind)
         )
 
         dmEventLogger.info("Emitting prioritisedGameNeedsLinking discordId=\(discordUserId, privacy: .private) game=\(gameName)")

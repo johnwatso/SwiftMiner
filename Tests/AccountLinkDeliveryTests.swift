@@ -1,6 +1,7 @@
 import XCTest
 @testable import SwiftMiner
 @testable import SwiftMinerCore
+import SwiftMinerService
 
 /// A link-blocked campaign whose drops are all claimed still needs the game
 /// account linked — claiming on Twitch is not the publisher delivering the
@@ -116,6 +117,76 @@ final class AccountLinkDeliveryTests: XCTestCase {
             let item = PendingItem(kind: .accountLink(issue(awaitingDelivery: awaitingDelivery)), isMuted: true)
             XCTAssertTrue(item.subtitle.hasPrefix("Reminder muted."), item.subtitle)
         }
+    }
+
+    // MARK: - What the DM says
+
+    func testPendingReminderClassifiesTheDeliveryCase() {
+        let miner = makeMiner(campaigns: [campaign(claimed: true)])
+        let item = PendingItem(kind: .accountLink(issue(awaitingDelivery: true)), isMuted: false)
+
+        let request = item.dmRequest(miner: miner, priorityGames: [])
+
+        XCTAssertEqual(request.messageType, .prioritisedGameNeedsLinking)
+        XCTAssertEqual(request.issueKind, SwiftBotIssueKind.accountLinkDeliveryPending.rawValue)
+    }
+
+    func testPendingReminderKeepsTheEarningClassificationWhenDropsRemain() {
+        let miner = makeMiner(campaigns: [campaign(claimed: false)])
+        let item = PendingItem(kind: .accountLink(issue(awaitingDelivery: false)), isMuted: false)
+
+        XCTAssertEqual(
+            item.dmRequest(miner: miner, priorityGames: []).issueKind,
+            SwiftBotIssueKind.accountLinkRequired.rawValue
+        )
+    }
+
+    /// The banner and the DM it sends must agree about which problem this is.
+    func testAttentionBannerDMMatchesWhatTheBannerSays() {
+        let claimed = makeMiner(campaigns: [campaign(claimed: true)])
+        let unclaimed = makeMiner(campaigns: [campaign(claimed: false)])
+
+        let claimedDM = MinerAttentionIssue.resolve(miner: claimed, events: [])?
+            .dmRequest(miner: claimed, priorityGames: [])
+        let unclaimedDM = MinerAttentionIssue.resolve(miner: unclaimed, events: [])?
+            .dmRequest(miner: unclaimed, priorityGames: [])
+
+        XCTAssertEqual(claimedDM?.issueKind, SwiftBotIssueKind.accountLinkDeliveryPending.rawValue)
+        XCTAssertEqual(unclaimedDM?.issueKind, SwiftBotIssueKind.accountLinkRequired.rawValue)
+    }
+
+    // MARK: - Automatic reminders
+
+    func testAutomaticReminderDetectsTheDeliveryCase() {
+        let miner = makeMiner(campaigns: [campaign(claimed: true)])
+
+        XCTAssertTrue(NavigationModel.linkBlockedCampaignsAreClaimed(
+            miner: miner, gameName: gameName, gameId: gameId
+        ))
+    }
+
+    func testAutomaticReminderKeepsEarningWordingWhenAnyDropRemains() {
+        let miner = makeMiner(campaigns: [
+            campaign(id: "a", claimed: true),
+            campaign(id: "b", claimed: false)
+        ])
+
+        XCTAssertFalse(NavigationModel.linkBlockedCampaignsAreClaimed(
+            miner: miner, gameName: gameName, gameId: gameId
+        ))
+    }
+
+    /// With nothing known to be blocked there is no basis for the softer
+    /// wording, so it must not be assumed.
+    func testAutomaticReminderDoesNotAssumeDeliveryWithoutABlockedCampaign() {
+        XCTAssertFalse(NavigationModel.linkBlockedCampaignsAreClaimed(
+            miner: makeMiner(campaigns: []), gameName: gameName, gameId: gameId
+        ))
+        XCTAssertFalse(NavigationModel.linkBlockedCampaignsAreClaimed(
+            miner: makeMiner(campaigns: [campaign(claimed: true, connected: true)]),
+            gameName: gameName,
+            gameId: gameId
+        ))
     }
 
     // MARK: - Fixtures
