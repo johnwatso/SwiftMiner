@@ -145,6 +145,13 @@ const searchIndex = [
     snippet: "Learn how SwiftMiner orders games, applies exclusions, combines account and global priorities, and verifies backup streamers after stalls."
   },
   {
+    title: "Subscription Required Drops",
+    url: "subscription-required-drops/",
+    category: "Settings",
+    keywords: "subscription sub subscriber paid gated required cannot earn watch time ineligible campaign reward publisher channel needs sub",
+    snippet: "Why some Twitch Drops campaigns cannot be earned by watch time alone, and what SwiftMiner does about them."
+  },
+  {
     title: "Configure a Failover Streamer",
     url: "game-rules/#failover-streamers",
     category: "Settings",
