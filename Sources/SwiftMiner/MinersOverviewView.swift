@@ -1033,7 +1033,10 @@ struct MinersOverviewView: View {
                 gameId: gameId,
                 gameName: first.game.name,
                 campaignNames: blockedCampaigns.map(\.name).sorted(),
-                isIgnored: isIgnored
+                isIgnored: isIgnored,
+                // Only when nothing is left to earn anywhere in the group, so a
+                // group with one unclaimed campaign keeps the stronger wording.
+                awaitingDelivery: blockedCampaigns.allSatisfy(\.isFullyComplete)
             )
         }
         .sorted {
