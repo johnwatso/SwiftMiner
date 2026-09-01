@@ -97,6 +97,12 @@ enum MinerAttention {
 
     /// The first non-muted account-link blocker, if any. Shared with the
     /// attention panel so a badge always has a matching explanation and next step.
+    ///
+    /// A fully-claimed campaign still counts. Claiming on Twitch is not the same
+    /// as the publisher delivering the reward in-game, and that delivery is what
+    /// the missing account link blocks — so the reminder stands either way. The
+    /// Pending list applies the same rule; the two must not disagree about
+    /// whether a miner needs attention.
     static func accountLinkReminderCampaign(
         for miner: MinerManager.ManagedMiner,
         settings: Settings
@@ -110,14 +116,13 @@ enum MinerAttention {
         )
         guard !priorityKeys.isEmpty else { return nil }
 
-        return miner.allCampaigns.first { campaign in
+        let blockers = miner.allCampaigns.filter { campaign in
             // Deliberately not `activityStatus(for:) == .requiresLink`: that status
             // resolves to `.watching` for the current campaign, which suppressed the
             // badge for exactly the campaign the miner is mining right now.
             guard campaign.isTimeActive,
                   campaign.status != .disabled,
                   !campaign.isAccountConnected,
-                  campaign.drops.contains(where: { !$0.isClaimed }),
                   priorityKeys.contains(normalizedGameKey(campaign.game.name))
                     || priorityKeys.contains(normalizedGameKey(campaign.game.id)) else {
                 return false
@@ -127,6 +132,10 @@ enum MinerAttention {
                 gameId: warningGameId(for: campaign)
             )
         }
+
+        // Rewards still to earn outrank rewards merely awaiting delivery, so a
+        // miner with both gets the more urgent of the two messages.
+        return blockers.first { !$0.isFullyComplete } ?? blockers.first
     }
 
     /// The first non-muted subscription blocker. These apply even when the game
@@ -322,10 +331,17 @@ struct MinerAttentionIssue: Equatable {
 
         let settings = Settings.shared
         if let campaign = MinerAttention.accountLinkReminderCampaign(for: miner, settings: settings) {
+            // Everything claimed means nothing left to earn — the link now only
+            // blocks the publisher from handing the rewards over in-game.
+            let awaitingDelivery = campaign.isFullyComplete
             return MinerAttentionIssue(
                 title: "Link \(campaign.game.name) to Twitch",
-                detail: "\(campaign.name) has unclaimed drops, but the \(campaign.game.name) account is not linked.",
-                recommendation: "Open Twitch Drops, link the game account, then return here. SwiftMiner will retry automatically.",
+                detail: awaitingDelivery
+                    ? "\(campaign.name) is fully claimed, but the \(campaign.game.name) account is not linked, so the rewards cannot be delivered to the game."
+                    : "\(campaign.name) has unclaimed drops, but the \(campaign.game.name) account is not linked.",
+                recommendation: awaitingDelivery
+                    ? "Open Twitch Drops and link the game account. Rewards you have already claimed are delivered once the link is in place."
+                    : "Open Twitch Drops, link the game account, then return here. SwiftMiner will retry automatically.",
                 action: .openTwitchDrops,
                 dismissal: .accountLink(
                     gameId: MinerAttention.warningGameId(for: campaign),

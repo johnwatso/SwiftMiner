@@ -595,6 +595,10 @@ struct PrioritisedLinkIssue: Identifiable, Equatable {
     let gameName: String
     let campaignNames: [String]
     let isIgnored: Bool
+    /// Every drop is already claimed on Twitch, so nothing more can be earned —
+    /// but the publisher still cannot deliver the rewards until the game account
+    /// is linked. The reminder stands; only its wording changes.
+    var awaitingDelivery: Bool = false
 
     var id: String {
         "\(minerId):\(gameId)"
@@ -661,6 +665,9 @@ struct PendingItem: Identifiable, Equatable {
                 : names
             if isMuted {
                 return "Reminder muted. Open Twitch Drops whenever you’re ready to link the game account."
+            }
+            if issue.awaitingDelivery {
+                return "\(campaignDescription) is fully claimed, but the rewards can’t reach the game until you link your account in Twitch Drops."
             }
             return "To earn \(campaignDescription), open Twitch Drops and link your game account."
         case .subscriptionRequired(_, _, _, _, let campaignName, let dropNames):
