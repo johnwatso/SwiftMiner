@@ -22,7 +22,7 @@ struct SidebarView: View {
     }
 
     fileprivate var sidebarItems: [SidebarItemSpec] {
-        var items: [SidebarItemSpec] = [
+        [
             SidebarItemSpec(
                 id: .overview,
                 title: "Overview",
@@ -36,10 +36,6 @@ struct SidebarView: View {
                 systemImage: SystemSymbolCompatibility.resolvedName(for: "waveform.path.ecg.text.clipboard.fill")
             ),
         ]
-        if settings.swiftBotEnabled {
-            items.append(SidebarItemSpec(id: .admin, title: "Discord", systemImage: "checkmark.message.fill"))
-        }
-        return items
     }
 
     private var currentSelection: NavigationModel.SidebarItem {
@@ -79,11 +75,6 @@ struct SidebarView: View {
             .gesture(selectionDragGesture)
         }
         .navigationTitle("SwiftMiner")
-        .onChange(of: settings.swiftBotEnabled) { _, enabled in
-            if !enabled && navigation.selectedItem == .admin {
-                navigation.selectedItem = .overview
-            }
-        }
     }
 
     private var selectionDragGesture: some Gesture {

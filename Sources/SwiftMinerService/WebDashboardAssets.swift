@@ -152,6 +152,21 @@ enum WebDashboardAssets {
         /* Entrance animation only on first paint — refreshes must not flicker. */
         body.loaded .card { animation: none; }
         @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
+        /* Arriving from a Discord deep link: mark what the DM was about, then
+           fade back so the page does not stay decorated. */
+        .route-focus {
+          animation: routeFocus 2.6s ease-out both;
+          border-radius: 14px;
+        }
+        @keyframes routeFocus {
+          0%   { box-shadow: 0 0 0 0 rgba(86, 188, 255, 0.0); }
+          12%  { box-shadow: 0 0 0 3px rgba(86, 188, 255, 0.55); }
+          70%  { box-shadow: 0 0 0 3px rgba(86, 188, 255, 0.42); }
+          100% { box-shadow: 0 0 0 0 rgba(86, 188, 255, 0.0); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .route-focus { animation: none; box-shadow: 0 0 0 3px rgba(86, 188, 255, 0.45); }
+        }
         .row { display: flex; align-items: center; gap: 10px; }
         .label { color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; }
         .muted { color: var(--muted); }

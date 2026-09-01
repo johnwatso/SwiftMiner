@@ -1,5 +1,6 @@
 import Foundation
 import SwiftMinerCore
+import SwiftMinerService
 
 /// Shared rules for "this miner has something the user should look at."
 /// Used by the sidebar's Miners-tab badge, the per-miner source list dot,
@@ -195,6 +196,57 @@ struct MinerAttentionIssue: Equatable {
     let recommendation: String
     let action: Action?
     var dismissal: Dismissal?
+
+    func dmRequest(
+        miner: MinerManager.ManagedMiner,
+        priorityGames: [String],
+        portal: SwiftMinerPortalLink? = nil
+    ) -> SwiftBotDMRequest {
+        if case let .accountLink(gameId, gameName) = dismissal {
+            return SwiftBotDMRequest(
+                messageType: .prioritisedGameNeedsLinking,
+                debug: false,
+                twitchUsername: miner.username,
+                priorityGames: priorityGames,
+                affectedGame: gameName,
+                accountId: miner.accountId,
+                minerDisplayName: miner.displayName,
+                affectedGameId: gameId,
+                portalURL: portal?.campaigns,
+                portalDestination: portal.map { _ in SwiftBotPortalDestination.campaigns.rawValue },
+                issueKind: SwiftBotIssueKind.accountLinkRequired.rawValue,
+                helpURL: SwiftMinerHelpLink.url(for: .accountLinkRequired)
+            )
+        }
+
+        if action == .reconnect {
+            return SwiftBotDMRequest(
+                messageType: .reauth,
+                debug: false,
+                twitchUsername: miner.username,
+                priorityGames: priorityGames,
+                accountId: miner.accountId,
+                minerDisplayName: miner.displayName,
+                recoveryReason: detail,
+                portalURL: portal?.accountConnection,
+                portalDestination: portal.map { _ in SwiftBotPortalDestination.accountConnection.rawValue },
+                issueKind: SwiftBotIssueKind.connectionExpired.rawValue,
+                helpURL: SwiftMinerHelpLink.url(for: .connectionExpired)
+            )
+        }
+
+        return SwiftBotDMRequest(
+            messageType: .accountActionRequired,
+            debug: false,
+            twitchUsername: miner.username,
+            priorityGames: priorityGames,
+            accountId: miner.accountId,
+            minerDisplayName: miner.displayName,
+            recoveryReason: detail,
+            portalURL: portal?.miner(accountId: miner.accountId) ?? portal?.dashboard,
+            portalDestination: portal.map { _ in SwiftBotPortalDestination.miner.rawValue }
+        )
+    }
 
     static func resolve(
         miner: MinerManager.ManagedMiner,

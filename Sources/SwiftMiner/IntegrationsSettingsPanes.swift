@@ -781,6 +781,10 @@ struct IntegrationsSettingsView: View {
         .padding(.horizontal, 24)
         .padding(.bottom, 20)
         .padding(.top, 10)
+        .onChange(of: settings.webDashboardBaseURL) { _, _ in
+            // DM deep links are built from this URL, so they have to follow it.
+            navigation.refreshDMPortalBase()
+        }
     }
 
     private var integrationEnableSection: some View {

@@ -56,14 +56,14 @@ struct SettingsView: View {
         }
         .padding(.top, -2)
         .frame(width: 640)
-        .onAppear(perform: consumePairingRequestIfNeeded)
-        .onChange(of: navigation.pendingSwiftBotPairingRequest) { _, _ in
-            consumePairingRequestIfNeeded()
+        .onAppear(perform: consumeIntegrationsRequestIfNeeded)
+        .onChange(of: navigation.pendingIntegrationsSettingsRequest) { _, _ in
+            consumeIntegrationsRequestIfNeeded()
         }
     }
 
-    private func consumePairingRequestIfNeeded() {
-        guard navigation.consumeSwiftBotPairingRequest() else { return }
+    private func consumeIntegrationsRequestIfNeeded() {
+        guard navigation.consumeIntegrationsSettingsRequest() else { return }
         selectedTab = .integrations
     }
 }

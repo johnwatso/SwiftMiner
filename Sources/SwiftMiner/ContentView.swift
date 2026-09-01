@@ -64,13 +64,6 @@ struct ContentView: View {
 
         case .events:
             EventLogView()
-
-        case .admin:
-            if Settings.shared.swiftBotEnabled {
-                AdminView()
-            } else {
-                OverviewView()
-            }
         }
     }
 }

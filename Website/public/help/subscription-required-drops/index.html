@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Drops That Require a Twitch Subscription - SwiftMiner Help</title>
+    <meta name="description" content="Why some Twitch Drops cannot be earned by watch time alone, how SwiftMiner reports subscription-gated campaigns, and what your options are.">
+    <link rel="canonical" href="https://swiftminer.app/help/subscription-required-drops/">
+    <meta name="robots" content="index, follow, max-image-preview:large">
+    <meta name="theme-color" content="#f5f5f7">
+    <meta property="og:type" content="article">
+    <meta property="og:site_name" content="SwiftMiner">
+    <meta property="og:url" content="https://swiftminer.app/help/subscription-required-drops/">
+    <meta property="og:title" content="Drops That Require a Twitch Subscription">
+    <meta property="og:description" content="What a subscription-gated Twitch Drops campaign means, and what SwiftMiner can and cannot do about it.">
+    <meta property="og:image" content="https://swiftminer.app/assets/landing/og-image.jpg">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Drops That Require a Twitch Subscription">
+    <meta name="twitter:description" content="What a subscription-gated Twitch Drops campaign means, and what SwiftMiner can and cannot do about it.">
+    <meta name="twitter:image" content="https://swiftminer.app/assets/landing/og-image.jpg">
+    <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"SwiftMiner","item":"https://swiftminer.app/"},{"@type":"ListItem","position":2,"name":"Help","item":"https://swiftminer.app/help/"},{"@type":"ListItem","position":3,"name":"Subscription Required Drops","item":"https://swiftminer.app/help/subscription-required-drops/"}]}
+    </script>
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <link rel="stylesheet" href="../../assets/css/tailwind.css">
+    <link rel="stylesheet" href="../assets/css/kbase.css">
+    <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
+    <script src="../assets/js/search-index.js" defer></script>
+    <script src="../assets/js/search.js" defer></script>
+    <script src="../assets/js/kbase.js" defer></script>
+</head>
+<body>
+    <nav class="nav" aria-label="Main"><div class="shell nav-inner"><a class="brand" href="../"><img src="../../assets/landing/swiftminer-icon.webp" alt=""><span>SwiftMiner Help</span></a><div class="nav-actions"><a class="nav-link" href="../">Help Home</a><a class="nav-link optional" href="../../">Overview</a><a class="nav-link" href="https://github.com/johnwatso/SwiftMiner/issues">Raise an Issue</a></div></div></nav>
+    <div class="shell">
+        <div class="breadcrumbs" aria-label="Breadcrumbs"><a href="../">Help Home</a><span class="sep">/</span><span class="current">Subscription Required Drops</span></div>
+        <header class="article-header">
+            <h1>Drops That Require a Twitch Subscription</h1>
+            <p class="article-intro">Some Twitch Drops campaigns hand out rewards only to paid subscribers of the channel or publisher. Watch time alone will never complete them, so SwiftMiner reports them rather than mining them.</p>
+            <div class="search-wrap" style="margin-top: 1.5rem; max-width: 100%;"><i class="ph-bold ph-magnifying-glass" style="position: absolute; top: 50%; left: 1.1rem; transform: translateY(-50%); color: var(--muted);"></i><input id="help-search" class="search" type="search" placeholder="Search help topics" aria-label="Search help topics" style="width: 100%; height: 48px; padding: 0 1.2rem 0 3rem; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-solid); color: var(--ink); font: inherit; outline: none; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);"></div>
+        </header>
+        <div class="kb-grid">
+            <main class="kb-content">
+                <h2 id="what-it-means">What the warning means</h2>
+                <p>Twitch lets a publisher attach rewards to a campaign that only paid subscribers can claim. The campaign still appears in your Drops list, and a stream may still be live and advertising it, but the reward is gated behind a subscription rather than behind watch time.</p>
+                <p>When SwiftMiner sees a campaign in this state it lists it under <strong>Pending</strong> on the miner, and under <strong>Subscription required</strong> in the web dashboard. It does not spend watch time on drops it cannot deliver.</p>
+
+                <h2 id="why-not-mine">Why SwiftMiner does not mine them anyway</h2>
+                <p>Watching a subscription-gated drop earns nothing. The progress bar may even advance on Twitch's side, but the reward is withheld at claim time. Spending a miner on that campaign would take watch time away from campaigns it can actually finish, so SwiftMiner treats the campaign as ineligible and moves on to the next prioritised game.</p>
+                <p>A campaign can be partly gated. Where only some of its drops need a subscription, SwiftMiner mines the rest as normal and reports the count that is gated.</p>
+
+                <h2 id="options">Your options</h2>
+                <p>There is no way for a miner to work around this — it is a Twitch entitlement, not a SwiftMiner limitation. What you can do:</p>
+                <ul>
+                    <li><strong>Subscribe to the channel or publisher</strong> named by the campaign, then let the miner run. Once Twitch sees the entitlement the drop becomes claimable.</li>
+                    <li><strong>Mute the reminder</strong> from the Pending item if you have decided not to subscribe. SwiftMiner stops raising it for that campaign on that account, and the item stays in the list with a <em>Remind me</em> button to undo it.</li>
+                    <li><strong>Exclude the game</strong> in Settings if none of its campaigns are worth the queue position. See <a href="../game-rules/">Game Priorities, Exclusions &amp; Failover Streamers</a>.</li>
+                </ul>
+
+                <h2 id="notifications">Discord notifications</h2>
+                <p>If the Discord integration is enabled and the miner is linked to a Discord account, SwiftMiner can send a DM when a prioritised campaign turns out to be subscription-gated. The DM names the campaign and links to it in your web dashboard.</p>
+                <p>These reminders are controlled by the <strong>Action required</strong> notification type in Settings &gt; Integrations. Turning it off stops the automatic DM; you can still send one by hand from the Pending item. See <a href="../notifications/">Notifications</a>.</p>
+
+                <h2 id="not-account-linking">Not the same as account linking</h2>
+                <p>A subscription requirement is not the same problem as an unlinked publisher account. If the warning asks you to link an EA, Ubisoft, Riot, or similar account, the reward is not gated behind payment and the fix is different — see <a href="../twitch-drops-not-progressing/">Twitch Drops Not Progressing on Mac</a>.</p>
+            </main>
+            <aside class="kb-sidebar" aria-label="Sidebar">
+                <div class="sidebar-section"><h2 class="sidebar-title">On this page</h2><ul class="toc-list"><li><a href="#what-it-means" class="toc-link">What it means</a></li><li><a href="#why-not-mine" class="toc-link">Why not mined</a></li><li><a href="#options" class="toc-link">Your options</a></li><li><a href="#notifications" class="toc-link">Discord notifications</a></li><li><a href="#not-account-linking" class="toc-link">Vs account linking</a></li></ul></div>
+                <div class="sidebar-section"><h2 class="sidebar-title">Related Articles</h2><ul class="related-links"><li><a href="../game-rules/"><i class="ph-bold ph-sliders"></i> Game Rules</a></li><li><a href="../twitch-drops-not-progressing/"><i class="ph-bold ph-warning"></i> Drops Not Progressing</a></li><li><a href="../notifications/"><i class="ph-bold ph-bell"></i> Notifications</a></li><li><a href="../web-dashboard/"><i class="ph-bold ph-globe"></i> Web Dashboard</a></li></ul></div>
+            </aside>
+        </div>
+    </div>
+    <footer class="footer"><div class="shell"><span>SwiftMiner Help · Published September 1, 2026</span><span><a class="nav-link" href="../../release-notes/">Release Notes</a> · <a class="nav-link" href="https://github.com/johnwatso/SwiftMiner">GitHub</a></span></div></footer>
+</body>
+</html>

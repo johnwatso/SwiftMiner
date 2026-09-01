@@ -166,14 +166,23 @@ public actor RestSwiftBotConnectionService: SwiftBotConnectionService {
         }
     }
 
-    public func sendLinkedDM(to discordUserId: String, twitchUsername: String?, priorityGames: [String]) async -> Bool {
-        await sendDM(
+    public func sendLinkedDM(
+        to discordUserId: String,
+        twitchUsername: String?,
+        priorityGames: [String],
+        portalBase: String? = nil
+    ) async -> Bool {
+        let portal = SwiftMinerPortalLink(base: portalBase)
+        return await sendDM(
             to: discordUserId,
             request: SwiftBotDMRequest(
                 messageType: .linked,
                 debug: false,
                 twitchUsername: twitchUsername,
-                priorityGames: priorityGames
+                priorityGames: priorityGames,
+                portalURL: portal?.dashboard,
+                portalDestination: portal.map { _ in SwiftBotPortalDestination.dashboard.rawValue },
+                helpURL: SwiftMinerHelpLink.webDashboard
             )
         )
     }

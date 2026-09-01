@@ -29,8 +29,19 @@
 <body>
   <main>
     <h1>SwiftMiner 1.39</h1>
-    <p class="meta">Version 1.39 &middot; Build 2026090107</p>
+    <p class="meta">Version 1.39 &middot; Build 2026090112</p>
     <p class="intro">A substantial reliability, performance, and security release. SwiftMiner starts faster, is much harder to shake off restricted esports campaigns, makes degraded Twitch services visible, keeps sensitive secrets in the macOS Keychain, and presents mining state more clearly throughout the app.</p>
+
+    <section>
+      <h2>&#128172; Actionable reminders and reliable profile pictures</h2>
+      <p class="summary">Operators can notify miners directly, and avatar choices take effect immediately.</p>
+      <ul>
+        <li>Adds a Send a DM action to Needs Attention and Pending reminders. Account-link reminders use SwiftBot&rsquo;s dedicated game-link message, while other reminders send the relevant action details to the linked Discord user.</li>
+        <li>Shows live sending, success, and retry states, and explains when a miner must be linked to Discord or the integration enabled before a reminder can be sent.</li>
+        <li>Applies Twitch and Discord picture-source changes immediately across Settings, Miners, and the web dashboard, refreshes Discord data on selection, and bypasses the daily Twitch URL cache when Twitch is explicitly selected.</li>
+        <li>Keeps the last working Twitch picture if an explicit refresh encounters a temporary transport failure.</li>
+      </ul>
+    </section>
 
     <section>
       <h2>&#127942; Esports and restricted campaigns</h2>
