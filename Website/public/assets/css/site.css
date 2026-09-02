@@ -70,6 +70,15 @@ html.light .glass-panel {
 .card-glow-discord {
     background: radial-gradient(circle at 90% 90%, rgba(88, 101, 242, 0.15), transparent 60%), rgba(25, 20, 40, 0.45);
 }
+/* The payoff step. Steps 01-03 each own one brand colour; this one carries all
+   three at once so the row reads as converging on the reward. */
+.card-glow-reward {
+    background:
+        radial-gradient(circle at 12% 6%, rgba(147, 51, 234, 0.20), transparent 55%),
+        radial-gradient(circle at 92% 10%, rgba(255, 0, 127, 0.17), transparent 55%),
+        radial-gradient(circle at 90% 92%, rgba(37, 99, 235, 0.16), transparent 60%),
+        rgba(25, 20, 40, 0.45);
+}
 
 /* Light mode card glow overrides */
 html.light .card-glow-purple {
@@ -83,6 +92,13 @@ html.light .card-glow-magenta {
 }
 html.light .card-glow-white {
     background: radial-gradient(circle at 90% 90%, rgba(100, 116, 139, 0.05), transparent 60%), rgba(255, 255, 255, 0.45);
+}
+html.light .card-glow-reward {
+    background:
+        radial-gradient(circle at 12% 6%, rgba(147, 51, 234, 0.11), transparent 55%),
+        radial-gradient(circle at 92% 10%, rgba(255, 0, 127, 0.10), transparent 55%),
+        radial-gradient(circle at 90% 92%, rgba(37, 99, 235, 0.09), transparent 60%),
+        rgba(255, 255, 255, 0.45);
 }
 html.light .card-glow-discord {
     background: radial-gradient(circle at 90% 90%, rgba(88, 101, 242, 0.08), transparent 60%), rgba(255, 255, 255, 0.45);
@@ -359,7 +375,11 @@ html.light .integration-logo-light {
 
 .content-section {
     position: relative;
-    min-height: 100dvh;
+    /* Deliberately not min-height: 100dvh. Nothing sets scroll-snap-type — the
+       only rules mentioning it force `none` — so a full-viewport section bought
+       no snap rhythm, it just padded short sections out with dead space: "How it
+       works" is 348px of content, which left ~550px of nothing under the cards.
+       The section padding below sets the rhythm instead. */
     display: flex;
     align-items: center;
     padding: clamp(7rem, 10vw, 9rem) 0;
@@ -370,12 +390,16 @@ html.light .integration-logo-light {
 }
 
 @media (min-width: 768px) {
-    body.sections-ready .snap-scroller > section {
+    /* Dimming the sections you are not reading is a focus effect on the dark
+       theme. On the light theme it is not: faint grey text on a near-white
+       background just disappears, so a neighbouring section reads as blank space
+       rather than as something out of focus. Dark only. */
+    html.dark body.sections-ready .snap-scroller > section {
         opacity: 0.25;
         transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
-    body.sections-ready .snap-scroller > section.is-current-section {
+    html.dark body.sections-ready .snap-scroller > section.is-current-section {
         opacity: 1;
     }
 
@@ -453,29 +477,176 @@ html.light .integration-logo-light {
     font-size: 1.35rem;
 }
 
+/* All four step icons share one treatment: a gradient disc with a white glyph
+   and a shadow in its own hue. Steps 01-03 stay inside a single colour family;
+   step 04 spans all three plus gold, so the payoff still reads as the finale. */
+.how-step-icon.purple,
+.how-step-icon.cyan,
+.how-step-icon.magenta,
+.how-step-icon.reward {
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: #fff;
+}
+
+html.light .how-step-icon.purple,
+html.light .how-step-icon.cyan,
+html.light .how-step-icon.magenta,
+html.light .how-step-icon.reward {
+    border-color: rgba(255, 255, 255, 0.6);
+}
+
 .how-step-icon.purple {
-    border: 1px solid rgba(147, 51, 234, 0.28);
-    background: rgba(147, 51, 234, 0.14);
-    color: #9333ea;
+    background: linear-gradient(135deg, #c084fc 0%, #9333ea 55%, #6366f1 100%);
+    box-shadow: 0 6px 18px rgba(147, 51, 234, 0.3);
 }
 
 .how-step-icon.cyan {
-    border: 1px solid rgba(37, 99, 235, 0.28);
-    background: rgba(37, 99, 235, 0.12);
-    color: #2563eb;
+    background: linear-gradient(135deg, #38bdf8 0%, #2563eb 60%, #1d4ed8 100%);
+    box-shadow: 0 6px 18px rgba(37, 99, 235, 0.3);
 }
 
 .how-step-icon.magenta {
-    border: 1px solid rgba(255, 0, 127, 0.26);
-    background: rgba(255, 0, 127, 0.12);
-    color: #ff007f;
+    background: linear-gradient(135deg, #ff8ac0 0%, #ff007f 55%, #c026d3 100%);
+    box-shadow: 0 6px 18px rgba(255, 0, 127, 0.3);
 }
 
-.how-step-icon.neutral {
-    border: 1px solid rgba(148, 163, 184, 0.24);
-    background: rgba(148, 163, 184, 0.1);
-    color: #94a3b8;
+html.light .how-step-icon.purple { box-shadow: 0 6px 18px rgba(147, 51, 234, 0.22); }
+html.light .how-step-icon.cyan { box-shadow: 0 6px 18px rgba(37, 99, 235, 0.22); }
+html.light .how-step-icon.magenta { box-shadow: 0 6px 18px rgba(255, 0, 127, 0.22); }
+
+/* Richer, two-layer card glows for this row only. The plain .card-glow-* rules
+   are shared with the feature and showcase cards elsewhere on the page, so the
+   step scope keeps that restyling contained. */
+.how-step-card.card-glow-purple {
+    background:
+        radial-gradient(circle at 12% 6%, rgba(168, 85, 247, 0.18), transparent 55%),
+        radial-gradient(circle at 90% 92%, rgba(99, 102, 241, 0.15), transparent 60%),
+        rgba(25, 20, 40, 0.45);
 }
+
+.how-step-card.card-glow-cyan {
+    background:
+        radial-gradient(circle at 12% 6%, rgba(56, 189, 248, 0.17), transparent 55%),
+        radial-gradient(circle at 90% 92%, rgba(37, 99, 235, 0.15), transparent 60%),
+        rgba(25, 20, 40, 0.45);
+}
+
+.how-step-card.card-glow-magenta {
+    background:
+        radial-gradient(circle at 12% 6%, rgba(255, 138, 192, 0.16), transparent 55%),
+        radial-gradient(circle at 90% 92%, rgba(192, 38, 211, 0.15), transparent 60%),
+        rgba(25, 20, 40, 0.45);
+}
+
+html.light .how-step-card.card-glow-purple {
+    background:
+        radial-gradient(circle at 12% 6%, rgba(168, 85, 247, 0.10), transparent 55%),
+        radial-gradient(circle at 90% 92%, rgba(99, 102, 241, 0.08), transparent 60%),
+        rgba(255, 255, 255, 0.45);
+}
+
+html.light .how-step-card.card-glow-cyan {
+    background:
+        radial-gradient(circle at 12% 6%, rgba(56, 189, 248, 0.10), transparent 55%),
+        radial-gradient(circle at 90% 92%, rgba(37, 99, 235, 0.08), transparent 60%),
+        rgba(255, 255, 255, 0.45);
+}
+
+html.light .how-step-card.card-glow-magenta {
+    background:
+        radial-gradient(circle at 12% 6%, rgba(255, 138, 192, 0.10), transparent 55%),
+        radial-gradient(circle at 90% 92%, rgba(192, 38, 211, 0.08), transparent 60%),
+        rgba(255, 255, 255, 0.45);
+}
+
+/* ---- Step 04: "Rewards are claimed" ------------------------------------ */
+
+.how-step-icon.reward {
+    background: linear-gradient(135deg, #9333ea 0%, #ff007f 55%, #fbbf24 100%);
+    box-shadow: 0 6px 18px rgba(255, 0, 127, 0.3);
+}
+
+html.light .how-step-icon.reward {
+    box-shadow: 0 6px 18px rgba(255, 0, 127, 0.22);
+}
+
+/* Gradient-filled step numbers. The stops stay mid-to-deep rather than starting
+   pale, so the digits keep their contrast on a white card too. */
+.how-step-number {
+    display: inline-block;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+.how-step-number.purple { background-image: linear-gradient(90deg, #a855f7, #6366f1); }
+.how-step-number.cyan { background-image: linear-gradient(90deg, #3b82f6, #1d4ed8); }
+.how-step-number.magenta { background-image: linear-gradient(90deg, #ff007f, #c026d3); }
+.how-step-number.reward { background-image: linear-gradient(90deg, #9333ea, #ff007f 60%, #fbbf24); }
+
+/* Confetti sits behind the card content, clipped to the card's own radius. */
+.how-step-payoff {
+    position: relative;
+}
+
+.how-step-payoff > *:not(.how-step-confetti) {
+    position: relative;
+    z-index: 1;
+}
+
+.how-step-confetti {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    border-radius: inherit;
+    pointer-events: none;
+    /* Densest near the gift icon and thinning as it falls, so the pieces never
+       compete with the body copy in the lower half of the card. */
+    -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 30%, rgba(0, 0, 0, 0.42) 62%, rgba(0, 0, 0, 0.12) 88%, transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 0%, #000 30%, rgba(0, 0, 0, 0.42) 62%, rgba(0, 0, 0, 0.12) 88%, transparent 100%);
+}
+
+.how-step-confetti i {
+    position: absolute;
+    top: -16px;
+    width: 7px;
+    height: 11px;
+    border-radius: 2px;
+    opacity: 0;
+    /* Transform and opacity only — this animates behind a backdrop-filter panel,
+       so anything that triggers layout or paint would be recomputed every frame. */
+    will-change: transform, opacity;
+    animation: confetti-fall 8s linear infinite;
+}
+
+@keyframes confetti-fall {
+    0%   { transform: translate3d(0, 0, 0) rotate(0deg); opacity: 0; }
+    10%  { opacity: var(--peak, 0.8); }
+    75%  { opacity: var(--peak, 0.8); }
+    100% { transform: translate3d(var(--drift, 8px), 300px, 0) rotate(var(--spin, 220deg)); opacity: 0; }
+}
+
+/* Travel is a fixed 300px rather than a percentage: percentages in a transform
+   resolve against the piece itself, not the card, so they would barely move. The
+   card clips whatever overshoots. */
+/* Saturated pieces read stronger against a white card, so ease them back. */
+html.light .how-step-confetti i {
+    --peak: 0.68;
+}
+
+.how-step-confetti i:nth-child(1)  { left: 6%;  background: #9333ea; animation-duration: 7.5s; animation-delay: -0.2s; --drift: 14px;  --spin: 240deg; --rest: 34px; }
+.how-step-confetti i:nth-child(2)  { left: 15%; background: #ff007f; animation-duration: 9s;   animation-delay: -3.4s; --drift: -10px; --spin: -180deg; --rest: 96px; }
+.how-step-confetti i:nth-child(3)  { left: 24%; background: #2563eb; animation-duration: 6.8s; animation-delay: -5.1s; --drift: 18px;  --spin: 300deg; --rest: 148px; width: 6px; height: 6px; border-radius: 999px; }
+.how-step-confetti i:nth-child(4)  { left: 33%; background: #fbbf24; animation-duration: 8.4s; animation-delay: -1.6s; --drift: -16px; --spin: 200deg; --rest: 58px; }
+.how-step-confetti i:nth-child(5)  { left: 42%; background: #ff007f; animation-duration: 7.1s; animation-delay: -6.2s; --drift: 9px;   --spin: -260deg; --rest: 122px; width: 8px; height: 8px; }
+.how-step-confetti i:nth-child(6)  { left: 51%; background: #9333ea; animation-duration: 9.4s; animation-delay: -2.5s; --drift: -13px; --spin: 190deg; --rest: 172px; }
+.how-step-confetti i:nth-child(7)  { left: 60%; background: #2563eb; animation-duration: 7.8s; animation-delay: -4.7s; --drift: 15px;  --spin: 280deg; --rest: 26px; }
+.how-step-confetti i:nth-child(8)  { left: 68%; background: #fbbf24; animation-duration: 6.5s; animation-delay: -0.9s; --drift: -8px;  --spin: -220deg; --rest: 108px; width: 6px; height: 6px; border-radius: 999px; }
+.how-step-confetti i:nth-child(9)  { left: 76%; background: #ff007f; animation-duration: 8.9s; animation-delay: -5.8s; --drift: 12px;  --spin: 210deg; --rest: 68px; }
+.how-step-confetti i:nth-child(10) { left: 84%; background: #9333ea; animation-duration: 7.3s; animation-delay: -3.1s; --drift: -17px; --spin: -300deg; --rest: 158px; width: 8px; height: 8px; }
+.how-step-confetti i:nth-child(11) { left: 91%; background: #2563eb; animation-duration: 8.6s; animation-delay: -1.2s; --drift: 10px;  --spin: 250deg; --rest: 46px; }
+.how-step-confetti i:nth-child(12) { left: 97%; background: #fbbf24; animation-duration: 7.9s; animation-delay: -6.9s; --drift: -12px; --spin: 170deg; --rest: 132px; }
 
 .privacy-layout {
     display: grid;
@@ -611,6 +782,13 @@ html.light .integration-logo-light {
         transition: none !important;
     }
     .animate-pulse { animation: none !important; }
+    /* Keep the confetti as a static scatter rather than hiding it — the pieces
+       start at opacity 0, so simply stopping the animation would blank them. */
+    .how-step-confetti i {
+        animation: none !important;
+        opacity: 0.6;
+        transform: translate3d(var(--drift, 8px), var(--rest, 90px), 0) rotate(var(--spin, 220deg));
+    }
 }
 
 /* Inline SVG icon sprite helper (replaces the Phosphor web-font).

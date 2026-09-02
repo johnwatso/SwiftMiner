@@ -11,6 +11,7 @@ on:
       - "docs/release-notes/**"
       - "Documentation/ReleaseNotes/**"
       - "scripts/build_release_notes.py"
+      - "scripts/stamp_site_version.py"
       - ".github/workflows/deploy-website.yml"
   workflow_dispatch:
 
@@ -47,6 +48,14 @@ jobs:
             mkdir -p Website/public/beta
             cp docs/beta/appcast.xml Website/public/beta/appcast.xml
           fi
+
+      - name: Stamp released version into the site
+        run: |
+          # The landing page upgrades its version text and download link from the
+          # GitHub API at runtime, but that fetch is rate limited and can fail; the
+          # baked-in literals are what visitors see when it does. Stamp them from
+          # the appcast so they cannot drift behind a release again.
+          python3 scripts/stamp_site_version.py
 
       - name: Build release notes
         run: |
