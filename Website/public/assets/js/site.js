@@ -98,7 +98,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Bump whenever the landing screenshots are regenerated — the swapped URLs
     // are otherwise identical, so returning visitors keep the cached old ones.
-    const screenshotAssetVersion = '20260727';
+    const screenshotAssetVersion = '20260902';
 
     function applyTheme(isLight) {
         const theme = isLight ? 'light' : 'dark';
