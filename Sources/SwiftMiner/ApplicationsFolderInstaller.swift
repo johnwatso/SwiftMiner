@@ -1,4 +1,5 @@
 import AppKit
+import CoreServices
 import Foundation
 
 /// Offers to place a manually downloaded copy of the app in `/Applications`.
@@ -14,18 +15,19 @@ enum ApplicationsFolderInstaller {
             for: .downloadsDirectory,
             in: .userDomainMask
         ).first
+        guard let downloadsDirectoryURL else { return }
 
-        let registeredBundleURL = Bundle.main.bundleIdentifier.flatMap {
-            NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0)
-        }
+        let registeredBundleURLs = Bundle.main.bundleIdentifier.map(registeredApplicationURLs) ?? []
         let installableBundleURL = sourceBundleURL(
             forRunningBundleURL: bundleURL,
-            registeredBundleURL: registeredBundleURL
+            registeredBundleURLs: registeredBundleURLs,
+            downloadsDirectoryURL: downloadsDirectoryURL
         )
 
-        guard let downloadsDirectoryURL,
-              isLocatedInDownloads(bundleURL: installableBundleURL, downloadsDirectoryURL: downloadsDirectoryURL)
-        else {
+        guard isLocatedInDownloads(
+            bundleURL: installableBundleURL,
+            downloadsDirectoryURL: downloadsDirectoryURL
+        ) else {
             return
         }
 
@@ -51,13 +53,31 @@ enum ApplicationsFolderInstaller {
     }
 
     /// Gatekeeper can run a downloaded app from a private App Translocation path.
-    /// In that case Launch Services retains the original bundle location, which is
-    /// the copy we need to move into Applications.
-    static func sourceBundleURL(forRunningBundleURL bundleURL: URL, registeredBundleURL: URL?) -> URL {
-        guard bundleURL.path.contains("/AppTranslocation/"), let registeredBundleURL else {
+    /// Launch Services may know about both that Downloads copy and an older installed
+    /// copy. Prefer the Downloads candidate instead of whichever one happens to be
+    /// returned first for the shared bundle identifier.
+    static func sourceBundleURL(
+        forRunningBundleURL bundleURL: URL,
+        registeredBundleURLs: [URL],
+        downloadsDirectoryURL: URL
+    ) -> URL {
+        guard bundleURL.path.contains("/AppTranslocation/") else {
             return bundleURL
         }
-        return registeredBundleURL
+        let downloadsCandidates = registeredBundleURLs.filter {
+            isLocatedInDownloads(bundleURL: $0, downloadsDirectoryURL: downloadsDirectoryURL)
+        }
+        return downloadsCandidates.first {
+            $0.lastPathComponent == bundleURL.lastPathComponent
+        } ?? downloadsCandidates.first ?? bundleURL
+    }
+
+    private static func registeredApplicationURLs(bundleIdentifier: String) -> [URL] {
+        guard let urls = LSCopyApplicationURLsForBundleIdentifier(bundleIdentifier as CFString, nil)?
+            .takeRetainedValue() as? [URL] else {
+            return []
+        }
+        return urls
     }
 
     static func moveApp(
@@ -66,8 +86,16 @@ enum ApplicationsFolderInstaller {
         fileManager: FileManager = .default
     ) throws -> URL {
         let destinationURL = destinationURL(for: bundleURL, applicationsDirectoryURL: applicationsDirectoryURL)
-        guard !fileManager.fileExists(atPath: destinationURL.path) else {
-            throw MoveError.destinationAlreadyExists(destinationURL)
+        if fileManager.fileExists(atPath: destinationURL.path) {
+            // Manual downloads are commonly launched while an older SwiftMiner is
+            // already installed. Replace it atomically after the user accepts the
+            // move prompt instead of requiring a trip to Finder first.
+            return try fileManager.replaceItemAt(
+                destinationURL,
+                withItemAt: bundleURL,
+                backupItemName: nil,
+                options: [.usingNewMetadataOnly]
+            ) ?? destinationURL
         }
 
         try fileManager.moveItem(at: bundleURL, to: destinationURL)
@@ -107,16 +135,5 @@ enum ApplicationsFolderInstaller {
         alert.messageText = "SwiftMiner couldn't move to Applications"
         alert.informativeText = error.localizedDescription
         alert.runModal()
-    }
-
-    private enum MoveError: LocalizedError {
-        case destinationAlreadyExists(URL)
-
-        var errorDescription: String? {
-            switch self {
-            case let .destinationAlreadyExists(destinationURL):
-                "A copy of SwiftMiner already exists at \(destinationURL.path). Remove or rename that copy, then try again."
-            }
-        }
     }
 }
