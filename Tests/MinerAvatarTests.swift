@@ -210,6 +210,54 @@ final class MinerAvatarTests: XCTestCase {
         XCTAssertEqual(AccountAvatarSource.discord.resolve(discord: user.avatarURL, twitch: twitch), generic)
     }
 
+    func testSwiftBotUserLookupCanRecoverAfterStartupFailure() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        let endpoint = "http://127.0.0.1:38888"
+        let expectedAvatar = "https://cdn.discordapp.com/avatars/123/avatar.png?size=96"
+        var attempts = 0
+
+        MockURLProtocol.requestHandler = { request in
+            attempts += 1
+            let statusCode = attempts == 1 ? 503 : 200
+            let data = attempts == 1
+                ? Data()
+                : Data(#"{"users":[{"discord_id":"123","display_name":"Gabe","username":"gabe","avatar_url":"https://cdn.discordapp.com/avatars/123/avatar.png?size=96"}]}"#.utf8)
+            return (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: statusCode,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                data
+            )
+        }
+        defer {
+            MockURLProtocol.requestHandler = nil
+            MockURLProtocol.stubResponseData = nil
+            MockURLProtocol.stubError = nil
+            MockURLProtocol.lastRequest = nil
+        }
+
+        let service = RestSwiftBotConnectionService(
+            endpoint: endpoint,
+            urlSession: session,
+            outboxProvider: { nil }
+        )
+
+        let startupUsers = await service.fetchDiscordUsers()
+        XCTAssertTrue(startupUsers.isEmpty)
+        let recovered = await service.fetchDiscordUsers()
+
+        XCTAssertEqual(attempts, 2)
+        XCTAssertEqual(MockURLProtocol.lastRequest?.url?.path, "/v1/users")
+        XCTAssertEqual(recovered.count, 1)
+        XCTAssertEqual(recovered.first?.id, "123")
+        XCTAssertEqual(recovered.first?.avatarURL?.absoluteString, expectedAvatar)
+    }
+
     func testPruningDropsAccountsThatAreNoLongerMined() {
         let settings = Settings.shared
         settings.twitchAvatarsData = TwitchAvatarStore.encode([

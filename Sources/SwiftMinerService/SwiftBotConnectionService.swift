@@ -158,10 +158,18 @@ public actor RestSwiftBotConnectionService: SwiftBotConnectionService {
         request.timeoutInterval = 5.0
         do {
             let (data, response) = try await urlSession.data(for: request)
-            guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else { return [] }
+            guard let http = response as? HTTPURLResponse else {
+                swiftBotConnectionLogger.warning("Discord user lookup returned a non-HTTP response")
+                return []
+            }
+            guard (200...299).contains(http.statusCode) else {
+                swiftBotConnectionLogger.warning("Discord user lookup returned HTTP \(http.statusCode)")
+                return []
+            }
             let wrapper = try JSONDecoder().decode(UsersResponse.self, from: data)
             return wrapper.users
         } catch {
+            swiftBotConnectionLogger.warning("Discord user lookup failed: \(error.localizedDescription)")
             return []
         }
     }

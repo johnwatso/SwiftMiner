@@ -830,7 +830,6 @@ public final class NavigationModel {
                 hmacSecret: Settings.shared.swiftBotHmacSecret
             )
             await eventOutboxService.start()
-            await refreshDiscordDisplayNames()
         }
         if !SwiftMinerRuntime.isRunningTests {
             startSwiftBotStateSync()

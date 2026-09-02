@@ -16,6 +16,13 @@ extension NavigationModel {
         }
         let newState = await swiftBotConnectionService.checkHealth()
         self.swiftBotState = newState
+        if newState == .connected {
+            // Health and the user directory become ready independently while
+            // SwiftBot launches. Refreshing identities on every connected
+            // health pass lets a failed startup lookup recover without the
+            // user having to reopen Settings or relaunch either app.
+            await refreshDiscordDisplayNames()
+        }
     }
 
     /// Update the SwiftBot endpoint and refresh connectivity.
@@ -396,10 +403,7 @@ extension NavigationModel {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 30_000_000_000) // 30 seconds
                 guard Settings.shared.swiftBotEnabled else { continue }
-                let newState = await swiftBotConnectionService.checkHealth()
-                await MainActor.run {
-                    self.swiftBotState = newState
-                }
+                await checkSwiftBotConnection()
             }
         }
     }
