@@ -22,6 +22,7 @@ actor AvatarImageCache {
     private let diskByteLimit: Int64
     private let diskFileLimit: Int
     private let budgetCheckWriteInterval: Int
+    private let retryDelaysNanoseconds: [UInt64]
 
     /// Decoded images kept in memory to avoid re-reading/decoding from disk on every
     /// view appearance. Bounded by `NSCache`'s own eviction under memory pressure.
@@ -43,12 +44,14 @@ actor AvatarImageCache {
         urlSession: URLSession = .shared,
         diskByteLimit: Int64 = AvatarImageCache.defaultDiskByteLimit,
         diskFileLimit: Int = AvatarImageCache.defaultDiskFileLimit,
-        budgetCheckWriteInterval: Int = AvatarImageCache.defaultBudgetCheckWriteInterval
+        budgetCheckWriteInterval: Int = AvatarImageCache.defaultBudgetCheckWriteInterval,
+        retryDelaysNanoseconds: [UInt64] = [500_000_000, 1_500_000_000]
     ) {
         self.urlSession = urlSession
         self.diskByteLimit = diskByteLimit
         self.diskFileLimit = diskFileLimit
         self.budgetCheckWriteInterval = max(1, budgetCheckWriteInterval)
+        self.retryDelaysNanoseconds = retryDelaysNanoseconds
         memory.countLimit = 64
         memory.totalCostLimit = 64 * 1_024 * 1_024
     }
@@ -98,28 +101,51 @@ actor AvatarImageCache {
     }
 
     private func download(url: URL, key: String) async -> NSImage? {
-        do {
-            let (data, response) = try await urlSession.data(from: url)
-            guard (response as? HTTPURLResponse)?.statusCode == 200,
-                  let image = NSImage(data: data) else { return nil }
-
-            if let localURL = cacheDirectory?.appendingPathComponent(key) {
-                try? FileManager.default.createDirectory(
-                    at: localURL.deletingLastPathComponent(),
-                    withIntermediateDirectories: true
-                )
-                do {
-                    try data.write(to: localURL, options: .atomic)
-                    applyDiskBudgetAfterWrite()
-                } catch {
-                    Logger.artwork.warning("Could not cache avatar: \(error.localizedDescription)")
+        for attempt in 0...retryDelaysNanoseconds.count {
+            do {
+                let (data, response) = try await urlSession.data(from: url)
+                let statusCode = (response as? HTTPURLResponse)?.statusCode
+                guard statusCode == 200 else {
+                    guard shouldRetry(statusCode: statusCode, afterAttempt: attempt) else { return nil }
+                    await waitBeforeRetry(afterAttempt: attempt)
+                    continue
                 }
+                guard let image = NSImage(data: data) else { return nil }
+
+                if let localURL = cacheDirectory?.appendingPathComponent(key) {
+                    try? FileManager.default.createDirectory(
+                        at: localURL.deletingLastPathComponent(),
+                        withIntermediateDirectories: true
+                    )
+                    do {
+                        try data.write(to: localURL, options: .atomic)
+                        applyDiskBudgetAfterWrite()
+                    } catch {
+                        Logger.artwork.warning("Could not cache avatar: \(error.localizedDescription)")
+                    }
+                }
+                storeInMemory(image, key: key, cost: data.count)
+                return image
+            } catch is CancellationError {
+                return nil
+            } catch {
+                guard attempt < retryDelaysNanoseconds.count else { return nil }
+                await waitBeforeRetry(afterAttempt: attempt)
             }
-            storeInMemory(image, key: key, cost: data.count)
-            return image
-        } catch {
-            return nil
         }
+        return nil
+    }
+
+    private func shouldRetry(statusCode: Int?, afterAttempt attempt: Int) -> Bool {
+        guard attempt < retryDelaysNanoseconds.count else { return false }
+        guard let statusCode else { return true }
+        return statusCode == 408 || statusCode == 429 || (500...599).contains(statusCode)
+    }
+
+    private func waitBeforeRetry(afterAttempt attempt: Int) async {
+        let delay = retryDelaysNanoseconds[attempt]
+        guard delay > 0 else { return }
+        try? await Task.sleep(nanoseconds: delay)
     }
 
     private func storeInMemory(_ image: NSImage, key: String, cost: Int? = nil) {

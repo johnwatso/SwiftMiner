@@ -44,7 +44,27 @@ final class ApplicationsFolderInstallerTests: XCTestCase {
         XCTAssertEqual(
             ApplicationsFolderInstaller.sourceBundleURL(
                 forRunningBundleURL: translocatedBundleURL,
-                registeredBundleURL: downloadsBundleURL
+                registeredBundleURLs: [downloadsBundleURL],
+                downloadsDirectoryURL: downloadsBundleURL.deletingLastPathComponent()
+            ),
+            downloadsBundleURL
+        )
+    }
+
+    func testTranslocatedBundlePrefersDownloadsOverAnInstalledCopy() {
+        let translocatedBundleURL = URL(
+            fileURLWithPath: "/private/var/folders/example/AppTranslocation/SwiftMiner.app",
+            isDirectory: true
+        )
+        let downloadsDirectoryURL = URL(fileURLWithPath: "/Users/example/Downloads", isDirectory: true)
+        let downloadsBundleURL = downloadsDirectoryURL.appendingPathComponent("SwiftMiner.app", isDirectory: true)
+        let installedBundleURL = URL(fileURLWithPath: "/Applications/SwiftMiner.app", isDirectory: true)
+
+        XCTAssertEqual(
+            ApplicationsFolderInstaller.sourceBundleURL(
+                forRunningBundleURL: translocatedBundleURL,
+                registeredBundleURLs: [installedBundleURL, downloadsBundleURL],
+                downloadsDirectoryURL: downloadsDirectoryURL
             ),
             downloadsBundleURL
         )
@@ -60,7 +80,8 @@ final class ApplicationsFolderInstallerTests: XCTestCase {
         XCTAssertEqual(
             ApplicationsFolderInstaller.sourceBundleURL(
                 forRunningBundleURL: applicationsBundleURL,
-                registeredBundleURL: downloadsBundleURL
+                registeredBundleURLs: [downloadsBundleURL],
+                downloadsDirectoryURL: downloadsBundleURL.deletingLastPathComponent()
             ),
             applicationsBundleURL
         )
@@ -89,7 +110,7 @@ final class ApplicationsFolderInstallerTests: XCTestCase {
         XCTAssertEqual(destinationURL.lastPathComponent, "SwiftMiner.app")
     }
 
-    func testMoveAppDoesNotReplaceAnExistingApplication() throws {
+    func testMoveAppReplacesAnExistingApplication() throws {
         let fileManager = FileManager.default
         let temporaryDirectoryURL = fileManager.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -102,16 +123,21 @@ final class ApplicationsFolderInstallerTests: XCTestCase {
         let installedBundleURL = applicationsDirectoryURL.appendingPathComponent("SwiftMiner.app", isDirectory: true)
         try fileManager.createDirectory(at: sourceBundleURL, withIntermediateDirectories: true)
         try fileManager.createDirectory(at: installedBundleURL, withIntermediateDirectories: true)
+        let newMarkerURL = sourceBundleURL.appendingPathComponent("new-version")
+        let oldMarkerURL = installedBundleURL.appendingPathComponent("old-version")
+        XCTAssertTrue(fileManager.createFile(atPath: newMarkerURL.path, contents: Data()))
+        XCTAssertTrue(fileManager.createFile(atPath: oldMarkerURL.path, contents: Data()))
 
-        XCTAssertThrowsError(
-            try ApplicationsFolderInstaller.moveApp(
-                from: sourceBundleURL,
-                to: applicationsDirectoryURL,
-                fileManager: fileManager
-            )
+        let result = try ApplicationsFolderInstaller.moveApp(
+            from: sourceBundleURL,
+            to: applicationsDirectoryURL,
+            fileManager: fileManager
         )
-        XCTAssertTrue(fileManager.fileExists(atPath: sourceBundleURL.path))
-        XCTAssertTrue(fileManager.fileExists(atPath: installedBundleURL.path))
+
+        XCTAssertEqual(result, installedBundleURL)
+        XCTAssertFalse(fileManager.fileExists(atPath: sourceBundleURL.path))
+        XCTAssertTrue(fileManager.fileExists(atPath: installedBundleURL.appendingPathComponent("new-version").path))
+        XCTAssertFalse(fileManager.fileExists(atPath: installedBundleURL.appendingPathComponent("old-version").path))
     }
 
     func testRelaunchConfigurationStartsASeparateActivatedInstance() {

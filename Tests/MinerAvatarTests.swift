@@ -258,6 +258,46 @@ final class MinerAvatarTests: XCTestCase {
         XCTAssertEqual(recovered.first?.avatarURL?.absoluteString, expectedAvatar)
     }
 
+    func testAvatarDownloadRetriesTransientServerFailure() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        let url = URL(string: "https://cdn.discordapp.com/avatars/123/\(UUID().uuidString).png")!
+        let png = try XCTUnwrap(Data(base64Encoded:
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+        ))
+        var attempts = 0
+
+        MockURLProtocol.requestHandler = { request in
+            attempts += 1
+            let statusCode = attempts == 1 ? 503 : 200
+            return (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: statusCode,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "image/png"]
+                )!,
+                statusCode == 200 ? png : Data()
+            )
+        }
+        defer {
+            MockURLProtocol.requestHandler = nil
+            MockURLProtocol.stubResponseData = nil
+            MockURLProtocol.stubError = nil
+            MockURLProtocol.lastRequest = nil
+        }
+
+        let cache = AvatarImageCache(
+            urlSession: session,
+            retryDelaysNanoseconds: [0]
+        )
+        let image = await cache.image(for: url)
+
+        XCTAssertNotNil(image)
+        XCTAssertEqual(attempts, 2)
+    }
+
     func testPruningDropsAccountsThatAreNoLongerMined() {
         let settings = Settings.shared
         settings.twitchAvatarsData = TwitchAvatarStore.encode([
