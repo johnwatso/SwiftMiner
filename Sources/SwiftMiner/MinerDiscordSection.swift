@@ -162,12 +162,55 @@ struct MinerDiscordSection: View {
     @State private var recentSendFailed = false
     @State private var isSending = false
 
+    private var displayedDiscordUser: SwiftBotDiscordUser? {
+#if DEBUG
+        if MarketingScreenshotFixture.isEnabled {
+            return SwiftBotDiscordUser(
+                id: MarketingScreenshotFixture.fakeDiscordId,
+                displayName: "Nova",
+                username: "nova.drops"
+            )
+        }
+#endif
+        return miner.ownerDiscordId.flatMap { navigation.discordUsersById[$0] }
+    }
+
+    private var displayedConnectionState: SwiftBotConnectionState {
+#if DEBUG
+        if MarketingScreenshotFixture.isEnabled { return .connected }
+#endif
+        return navigation.swiftBotState
+    }
+
+    private var displayedLastRequest: SwiftBotDMRequest? {
+#if DEBUG
+        if MarketingScreenshotFixture.isEnabled {
+            return SwiftBotDMRequest(
+                messageType: .campaignCompleted,
+                debug: false,
+                twitchUsername: miner.username,
+                campaignName: "Live Update 1.42.0",
+                minerDisplayName: miner.displayName
+            )
+        }
+#endif
+        return lastRequest
+    }
+
+    private var displaysExpandedContent: Bool {
+#if DEBUG
+        return isExpanded || MarketingScreenshotFixture.isEnabled
+#else
+        return isExpanded
+#endif
+    }
+
     private var presentation: MinerDiscordPresentation {
         MinerDiscordPresentation.resolve(
             miner: miner,
-            discordUser: miner.ownerDiscordId.flatMap { navigation.discordUsersById[$0] },
-            discordDisplayName: miner.ownerDiscordId.flatMap { navigation.discordDisplayNamesById[$0] },
-            connectionState: navigation.swiftBotState,
+            discordUser: displayedDiscordUser,
+            discordDisplayName: displayedDiscordUser?.displayName,
+            connectionState: displayedConnectionState,
             lastDM: lastDM,
             messageCount: visibleEntries.count,
             recentSendFailed: recentSendFailed
@@ -179,14 +222,14 @@ struct MinerDiscordSection: View {
             VStack(spacing: 0) {
                 MinerDiscordSummaryRow(
                     presentation: presentation,
-                    isExpanded: isExpanded
+                    isExpanded: displaysExpandedContent
                 ) {
                     withAnimation(.easeInOut(duration: 0.18)) {
                         isExpanded.toggle()
                     }
                 }
 
-                if isExpanded {
+                if displaysExpandedContent {
                     TahoeRowDivider(leadingInset: 14)
                     expandedContent
                 }
@@ -298,7 +341,7 @@ struct MinerDiscordSection: View {
             } label: {
                 Label("Resend Last DM", systemImage: "paperplane")
             }
-            .disabled(lastRequest == nil || isSending)
+            .disabled(displayedLastRequest == nil || isSending)
 
             Button {
                 Task { await sendWelcome() }
@@ -334,7 +377,7 @@ struct MinerDiscordSection: View {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(Array(visibleEntries.prefix(Self.recentMessageLimit).enumerated()), id: \.offset) { _, entry in
                         HStack(alignment: .firstTextBaseline, spacing: 10) {
-                            Text(MinerDiscordFormat.title(for: entry, request: lastRequest))
+                            Text(MinerDiscordFormat.title(for: entry, request: displayedLastRequest))
                                 .font(.caption)
                                 .lineLimit(1)
 
@@ -473,8 +516,11 @@ struct MinerDiscordSection: View {
     }
 
     private func resendLast() async {
-        guard let discordId = miner.ownerDiscordId, let lastRequest else { return }
-        await send(lastRequest, to: discordId)
+        guard let discordId = miner.ownerDiscordId, let displayedLastRequest else { return }
+#if DEBUG
+        if MarketingScreenshotFixture.isEnabled { return }
+#endif
+        await send(displayedLastRequest, to: discordId)
     }
 
     private func send(_ request: SwiftBotDMRequest, to discordId: String) async {
@@ -512,8 +558,8 @@ struct MinerDiscordSection: View {
     private var lastDM: MinerDiscordPresentation.LastDM? {
         guard let entry = visibleEntries.first else { return nil }
         return MinerDiscordPresentation.LastDM(
-            title: MinerDiscordFormat.title(for: entry, request: lastRequest),
-            detail: MinerDiscordFormat.detail(for: entry, request: lastRequest),
+            title: MinerDiscordFormat.title(for: entry, request: displayedLastRequest),
+            detail: MinerDiscordFormat.detail(for: entry, request: displayedLastRequest),
             sentAt: entry.sentAt,
             isDelivered: !recentSendFailed
         )
@@ -522,7 +568,18 @@ struct MinerDiscordSection: View {
     /// Configurable message types are filtered against Settings — history
     /// shouldn't list notifications the operator has turned off.
     private var visibleEntries: [DMLogStore.Entry] {
-        entries.filter { MinerDiscordFormat.isVisible(messageType: $0.messageType, settings: settings) }
+#if DEBUG
+        if MarketingScreenshotFixture.isEnabled {
+            let now = Date()
+            return [
+                DMLogStore.Entry(messageType: SwiftBotDMMessageType.campaignCompleted.rawValue, sentAt: now.addingTimeInterval(-12 * 60), isDebug: false),
+                DMLogStore.Entry(messageType: SwiftBotDMMessageType.dropClaimed.rawValue, sentAt: now.addingTimeInterval(-68 * 60), isDebug: false),
+                DMLogStore.Entry(messageType: SwiftBotDMMessageType.campaignDetected.rawValue, sentAt: now.addingTimeInterval(-3 * 60 * 60), isDebug: false),
+                DMLogStore.Entry(messageType: SwiftBotDMMessageType.welcome.rawValue, sentAt: now.addingTimeInterval(-25 * 60 * 60), isDebug: false)
+            ]
+        }
+#endif
+        return entries.filter { MinerDiscordFormat.isVisible(messageType: $0.messageType, settings: settings) }
     }
 
     private func load() async {
@@ -530,6 +587,13 @@ struct MinerDiscordSection: View {
         entries = []
         lastRequest = nil
         recentSendFailed = false
+
+#if DEBUG
+        if MarketingScreenshotFixture.isEnabled {
+            isLoading = false
+            return
+        }
+#endif
 
         guard let discordId = miner.ownerDiscordId else {
             isLoading = false
