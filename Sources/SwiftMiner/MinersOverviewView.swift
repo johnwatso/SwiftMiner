@@ -23,7 +23,12 @@ struct MinersOverviewView: View {
     @State private var reminderDeliveries: [String: Date] = [:]
 
     private var miners: [MinerManager.ManagedMiner] {
-        navigation.minerManager.miners
+        #if DEBUG
+        if MarketingScreenshotFixture.isEnabled {
+            return MarketingScreenshotFixture.miners(from: navigation.minerManager.miners)
+        }
+        #endif
+        return navigation.minerManager.miners
     }
 
     private var selectedMiner: MinerManager.ManagedMiner? {
@@ -33,6 +38,14 @@ struct MinersOverviewView: View {
 
     private var hasMultipleMiners: Bool {
         Self.shouldShowGlobalPriorityToggle(minerCount: miners.count)
+    }
+
+    private var showsDiscordSection: Bool {
+        #if DEBUG
+        return settings.swiftBotEnabled || MarketingScreenshotFixture.isEnabled
+        #else
+        return settings.swiftBotEnabled
+        #endif
     }
 
     static func shouldShowGlobalPriorityToggle(minerCount: Int) -> Bool {
@@ -207,7 +220,7 @@ struct MinersOverviewView: View {
                     // Discord is a capability of this miner, not a destination:
                     // it sits between the queue and Status, and stays out of the
                     // Status strip below.
-                    if settings.swiftBotEnabled {
+                    if showsDiscordSection {
                         MinerDiscordSection(miner: miner)
                     }
 
