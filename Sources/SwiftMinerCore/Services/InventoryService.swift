@@ -3,6 +3,13 @@ import Foundation
 public struct InventorySnapshot: Codable, Sendable, Equatable {
     public let accountId: String
     public let benefitIDs: Set<String>
+    /// When each claimed benefit was last awarded.
+    ///
+    /// Twitch reuses a benefit ID across campaigns — the same reward offered on each day of
+    /// an event, or on every tier of a daily affiliate campaign — so the ID alone cannot say
+    /// which campaign awarded it. The award time can: it falls inside the window of the
+    /// campaign that actually granted it. Absent for a benefit Twitch dated poorly.
+    public let benefitAwardedAt: [String: Date]
     public let progress: [Progress]
     public let discoveredCampaigns: [Campaign]
     public let lastUpdated: Date
@@ -10,12 +17,14 @@ public struct InventorySnapshot: Codable, Sendable, Equatable {
     public init(
         accountId: String,
         benefitIDs: Set<String>,
+        benefitAwardedAt: [String: Date] = [:],
         progress: [Progress],
         discoveredCampaigns: [Campaign] = [],
         lastUpdated: Date = Date()
     ) {
         self.accountId = accountId
         self.benefitIDs = benefitIDs
+        self.benefitAwardedAt = benefitAwardedAt
         self.progress = progress
         self.discoveredCampaigns = discoveredCampaigns
         self.lastUpdated = lastUpdated
@@ -98,10 +107,11 @@ public actor InventoryService {
 
         do {
             let result = try await apiClient.fetchInventory()
-            let benefitIDs = Set(await apiClient.getClaimedBenefits().keys)
+            let claimedBenefits = await apiClient.getClaimedBenefits()
             let snapshot = InventorySnapshot(
                 accountId: accountId,
-                benefitIDs: benefitIDs,
+                benefitIDs: Set(claimedBenefits.keys),
+                benefitAwardedAt: claimedBenefits.mapValues(\.lastAwardedAt),
                 progress: result.progress,
                 discoveredCampaigns: result.discoveredCampaigns
             )

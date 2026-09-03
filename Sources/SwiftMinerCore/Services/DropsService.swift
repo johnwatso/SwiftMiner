@@ -205,16 +205,45 @@ public actor DropsService {
             uniquingKeysWith: Self.preferredProgress
         )
 
+        // Benefit IDs Twitch offers in more than one campaign. Presence in inventory proves
+        // such a benefit was awarded somewhere, never that it was awarded *here*.
+        var campaignsPerBenefit: [String: Int] = [:]
+        for campaign in campaigns {
+            var seen = Set<String>()
+            for drop in campaign.drops {
+                for benefitId in Self.knownBenefitIds(of: drop) where seen.insert(benefitId).inserted {
+                    campaignsPerBenefit[benefitId, default: 0] += 1
+                }
+            }
+        }
+        let ambiguousBenefitIds = Set(campaignsPerBenefit.filter { $0.value > 1 }.keys)
+
         return campaigns.map { campaign in
             var updated = campaign
             updated.drops = campaign.drops.map { drop in
                 var d = drop
-                // SOURCE OF TRUTH: Only check inventory benefit IDs. 
-                // Ignore transient 'isClaimed' flags in progress dicts.
-                let knownBenefitIds = drop.benefitIds.isEmpty
-                    ? (drop.benefitID.isEmpty ? [] : [drop.benefitID])
-                    : drop.benefitIds
-                let claimedFromInventory = knownBenefitIds.contains { snapshot.benefitIDs.contains($0) }
+                // Inventory benefit IDs remain the source of truth for whether a reward was
+                // claimed — the transient `isClaimed` flags in progress dicts are not
+                // trustworthy on their own. What a benefit ID cannot do is say *which*
+                // campaign awarded it, because Twitch reuses one across campaigns: every
+                // match day of an event offering the same charm, every tier of every daily
+                // affiliate campaign. Claiming it once then marked it claimed everywhere, so
+                // each later campaign had nothing left to earn and was dropped from mining
+                // the moment its other reward was claimed. That is how the ALGS Split 2 PL
+                // charm was lost on three consecutive days.
+                //
+                // A shared benefit is therefore attributed by award time, which does identify
+                // the campaign that granted it. When Twitch dates it poorly, or the award
+                // predates this campaign, the reward is treated as still earnable: a
+                // redundant claim attempt is refused harmlessly, whereas a wrong "claimed"
+                // silently forfeits the reward.
+                let knownBenefitIds = Self.knownBenefitIds(of: drop)
+                let claimedFromInventory = knownBenefitIds.contains { benefitId in
+                    guard snapshot.benefitIDs.contains(benefitId) else { return false }
+                    guard ambiguousBenefitIds.contains(benefitId) else { return true }
+                    guard let awardedAt = snapshot.benefitAwardedAt[benefitId] else { return false }
+                    return awardedAt >= campaign.startDate && awardedAt <= campaign.endDate
+                }
                 d.isClaimed = claimedFromInventory
 
                 if let progress = progressByDropId[drop.id] {
@@ -250,6 +279,13 @@ public actor DropsService {
             }
             return updated
         }
+    }
+
+    /// The benefit IDs a drop is known by, preferring the full list over the legacy single value.
+    internal static func knownBenefitIds(of drop: Drop) -> [String] {
+        drop.benefitIds.isEmpty
+            ? (drop.benefitID.isEmpty ? [] : [drop.benefitID])
+            : drop.benefitIds
     }
 
     private static func preferredProgress(_ current: Progress, _ candidate: Progress) -> Progress {

@@ -26,8 +26,38 @@
 <body>
   <main>
     <h1>SwiftMiner 1.40.4</h1>
-    <p class="meta">Version 1.40.4 &middot; Build 2026090311</p>
-    <p class="intro">Prioritised and excluded games now share one Game Rules sheet, Mining settings opens on a Game Priority summary, and the legacy fallback streamer steps out of the way until it is actually needed.</p>
+    <p class="meta">Version 1.40.4 &middot; Build 2026090321</p>
+    <p class="intro">A campaign with more than one reward is no longer abandoned after you claim the first. Alongside that, prioritised and excluded games now share one Game Rules sheet, Mining settings opens on a Game Priority summary, and the legacy fallback streamer steps out of the way until it is actually needed.</p>
+
+    <section>
+      <h2>&#128029; Bug fixes</h2>
+      <ul>
+        <li>A reward claimed in one campaign no longer counts as claimed in every other campaign offering the same reward. Twitch reuses a reward&rsquo;s identifier across campaigns &mdash; each day of an esports event offering the same charm, or every tier of a daily affiliate campaign &mdash; and SwiftMiner read that identifier appearing in your inventory as proof the reward had been claimed everywhere it appeared. Those campaigns were then left with nothing to earn, so each one was dropped from mining the moment its other reward was claimed. A recent esports campaign lost its second, longer reward this way on three consecutive days, each time within a couple of minutes of the first reward being claimed and with about twenty-one hours of the window still to run. Shared rewards are now matched to the campaign that actually awarded them, and a reward SwiftMiner cannot confidently attribute is treated as still worth earning.</li>
+        <li>Claiming a reward no longer retires the whole campaign for a second reason: claiming refreshes a campaign&rsquo;s details, and if that refresh came back without its reward list, SwiftMiner treated the campaign as having nothing left to earn and stopped mining it for up to four hours.</li>
+        <li>A refresh can no longer leave a campaign knowing less than it did. Reward lists, approved-channel lists, restriction flags and confirmed game-account links are all kept when a Twitch response omits them. An omitted field is a lost answer, not a statement that the campaign lost the thing &mdash; a finished campaign still lists its rewards, marked as claimed.</li>
+        <li>A campaign that returns only some of its rewards no longer loses the rest. Previously only a completely empty list was protected, so a two-tier campaign sending one tier could still erase the other.</li>
+        <li>A campaign that vanishes from both of Twitch&rsquo;s lists while its window is still open and its rewards unfinished is kept rather than dropped, until the window closes or your inventory confirms everything is claimed.</li>
+        <li>A single &ldquo;not connected&rdquo; answer no longer unlinks a campaign your game account is linked to. A genuine unlink is still picked up within twenty minutes.</li>
+        <li>A campaign listed with an unusable start or end date is ignored rather than treated as having already expired.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#128269; Visible When It Matters</h2>
+      <ul>
+        <li>When a campaign you are mining stops being eligible while it is still active, the Activity Log names it and reports what it lost &mdash; rewards, eligibility, game-account link, status and end time. Previously this showed only as a number going down, which is why the problem above went unnoticed across three campaigns.</li>
+        <li>When a campaign is repaired from its last good state, the Activity Log says so and names the missing field. Campaigns Twitch listed with an unusable window are reported too.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#9889; Fewer Repeated Requests</h2>
+      <ul>
+        <li>A cached campaign is served for its full lifetime, with only its game-account link re-checked on the way out, instead of discarding the whole entry and re-fetching most campaigns every twenty minutes per account.</li>
+        <li>Remembered campaign data is compared by reward definition rather than by minute-to-minute progress, so an actively mined campaign no longer rewrites its cache file on every refresh.</li>
+        <li>Cache trimming runs once per refresh instead of once per campaign, and one miner&rsquo;s prioritised-games choice can no longer travel through the shared cache to another.</li>
+      </ul>
+    </section>
 
     <section>
       <h2>&#127919; One Place for Game Rules</h2>

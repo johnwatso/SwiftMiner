@@ -259,6 +259,126 @@ final class CampaignDropRetentionTests: XCTestCase {
         XCTAssertNil(parsed)
     }
 
+    // MARK: A reused benefit ID must not claim a reward in a campaign that never awarded it
+
+    private let sharedCharmBenefit = "fa395b5e_CUSTOM_ID_algs_s29_weapon_charm_01"
+
+    private func algsMatchDay(
+        id: String,
+        charmDropId: String,
+        packBenefit: String,
+        start: Date,
+        end: Date
+    ) -> Campaign {
+        Campaign(
+            id: id,
+            name: "ALGS Split 2 PL \(id)",
+            game: Game(id: "511224", name: "Apex Legends"),
+            status: .active,
+            startDate: start,
+            endDate: end,
+            drops: [
+                Drop(id: "pack-\(id)", name: "APEX Pack", requiredMinutes: 15, benefitID: packBenefit),
+                // The charm carries the SAME benefit ID on every match day. Only the drop id
+                // differs, which is why its progress restarted from zero each day.
+                Drop(id: charmDropId, name: "Sushi Nessie Gun Charm", requiredMinutes: 60, benefitID: sharedCharmBenefit)
+            ],
+            channels: [],
+            isAccountConnected: true
+        )
+    }
+
+    /// The failure that cost the charm three days running. Claiming it once in an earlier
+    /// match day put its benefit ID in inventory; every later match day then read that as
+    /// "already claimed", leaving the 15-minute pack as the only earnable reward. Claim the
+    /// pack and the campaign has nothing left to earn, so it leaves the candidate set within
+    /// one refresh — exactly when every miner stopped.
+    func testAnEarlierMatchDayClaimDoesNotRetireTodaysCharm() {
+        let day = 24.0 * 60 * 60
+        let md4Start = Date().addingTimeInterval(-3 * day)
+        let md4 = algsMatchDay(
+            id: "md4",
+            charmDropId: "charm-md4",
+            packBenefit: "pack_4",
+            start: md4Start,
+            end: md4Start.addingTimeInterval(20 * 60 * 60)
+        )
+        let md6 = algsMatchDay(
+            id: "md6",
+            charmDropId: "charm-md6",
+            packBenefit: "pack_6",
+            start: Date().addingTimeInterval(-20 * 60),
+            end: Date().addingTimeInterval(21 * 60 * 60)
+        )
+
+        let snapshot = InventorySnapshot(
+            accountId: "1",
+            benefitIDs: [sharedCharmBenefit],
+            // Awarded three days ago, during MD4 — not during today's campaign.
+            benefitAwardedAt: [sharedCharmBenefit: md4Start.addingTimeInterval(60 * 60)],
+            progress: [],
+            discoveredCampaigns: []
+        )
+
+        let merged = DropsService.mergeInventory(snapshot, into: [md4, md6])
+        let today = merged.first { $0.id == "md6" }
+
+        XCTAssertEqual(
+            today?.drops.first { $0.id == "charm-md6" }?.isClaimed,
+            false,
+            "today's charm was never awarded and must stay earnable"
+        )
+        XCTAssertEqual(
+            today?.earnableDrops.contains { $0.name == "Sushi Nessie Gun Charm" },
+            true,
+            "so the campaign survives its pack being claimed"
+        )
+        XCTAssertEqual(
+            merged.first { $0.id == "md4" }?.drops.first { $0.id == "charm-md4" }?.isClaimed,
+            true,
+            "the match day that actually awarded it still reads as claimed"
+        )
+    }
+
+    /// A benefit belonging to exactly one campaign needs no attribution and behaves as it
+    /// always has — the overwhelmingly common case.
+    func testAnUnsharedBenefitStillMarksItsDropClaimed() {
+        let only = campaign(drops: [
+            Drop(id: "only", name: "Stormlash", requiredMinutes: 60, benefitID: "unique-benefit")
+        ])
+        let snapshot = InventorySnapshot(
+            accountId: "1",
+            benefitIDs: ["unique-benefit"],
+            progress: [],
+            discoveredCampaigns: []
+        )
+
+        XCTAssertTrue(DropsService.mergeInventory(snapshot, into: [only])[0].drops[0].isClaimed)
+    }
+
+    /// Twitch dating an award poorly must not forfeit a reward. A redundant claim attempt is
+    /// refused harmlessly; a wrong "claimed" loses the drop for good.
+    func testAnUndatedSharedBenefitLeavesTheRewardEarnable() {
+        let start = Date().addingTimeInterval(-60 * 60)
+        let end = start.addingTimeInterval(20 * 60 * 60)
+        let a = algsMatchDay(id: "a", charmDropId: "charm-a", packBenefit: "p_a", start: start, end: end)
+        let b = algsMatchDay(id: "b", charmDropId: "charm-b", packBenefit: "p_b", start: start, end: end)
+
+        let snapshot = InventorySnapshot(
+            accountId: "1",
+            benefitIDs: [sharedCharmBenefit],
+            benefitAwardedAt: [:],
+            progress: [],
+            discoveredCampaigns: []
+        )
+
+        let merged = DropsService.mergeInventory(snapshot, into: [a, b])
+
+        XCTAssertTrue(merged.allSatisfy { campaign in
+            campaign.drops.contains { $0.name.contains("Nessie") && !$0.isClaimed }
+        })
+    }
+
     private func makeClient(persistsCampaignCaches: Bool = false) -> TwitchAPIClient {
         TwitchAPIClient(
             authService: TwitchAuthService(clientId: "test", tokenStore: InMemoryTokenStore()),
