@@ -7,14 +7,24 @@ public enum CampaignService {
     /// - Parameters:
     ///   - apiClient: The authenticated API client to use for the fetch.
     ///   - inventoryService: The account-specific inventory service for enrichment.
-    /// - Returns: Array of enriched Campaign objects.
+    /// - Returns: The enriched campaigns and the inventory snapshot they were merged against.
+    ///   The snapshot is returned rather than re-read by the caller so that every decision in
+    ///   one refresh — enrichment, and the caller's own preservation pass — is made against
+    ///   the same account state.
     public static func fetchCampaigns(
         using apiClient: TwitchAPIClient,
-        inventoryService: InventoryService
-    ) async throws -> [Campaign] {
+        inventoryService: InventoryService,
+        forceInventoryRefresh: Bool = false
+    ) async throws -> (campaigns: [Campaign], inventory: InventorySnapshot) {
         // Parallelize fetching campaigns and inventory to speed up discovery
         async let campaignsTask = apiClient.fetchDropCampaigns()
         async let inventoryTask: InventorySnapshot = {
+            if forceInventoryRefresh {
+                // The post-claim campaign refresh must not reconcile restored definitions
+                // against a pre-claim snapshot. A forced inventory failure is safer to
+                // surface than to make a mining decision from stale claimed state.
+                return try await inventoryService.fetchInventory(forceRefresh: true)
+            }
             do {
                 return try await inventoryService.fetchInventory()
             } catch {
@@ -44,7 +54,16 @@ public enum CampaignService {
             }
         }
 
-        return DropsService.mergeInventory(snapshot, into: allCampaigns)
+        // Inventory can be the sole source for campaigns omitted by the dashboard. Route
+        // those entities through the same refresh policy too; otherwise reconciliation only
+        // protects dashboard-backed campaigns.
+        var reconciled: [Campaign] = []
+        reconciled.reserveCapacity(allCampaigns.count)
+        for campaign in allCampaigns {
+            reconciled.append(await apiClient.reconcilingCampaign(campaign))
+        }
+
+        return (DropsService.mergeInventory(snapshot, into: reconciled), snapshot)
     }
 
     /// Combines the broad dashboard campaign with account-specific Inventory metadata.

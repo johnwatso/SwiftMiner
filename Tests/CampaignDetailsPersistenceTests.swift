@@ -117,6 +117,44 @@ final class CampaignDetailsPersistenceTests: XCTestCase {
         XCTAssertEqual(contents.linkStates[detailsKey("unlinked")]?.isAccountConnected, false)
     }
 
+    func testPreReconciliationDetailsAreInvalidatedOnUpgrade() throws {
+        struct LegacyEnvelope: Encodable {
+            let savedAt: Date
+            let details: [String: CampaignDetailsDiskCache.DetailsEntry]
+            let linkStates: [String: CampaignDetailsDiskCache.LinkStateEntry]
+            let approvedChannels: [String: CampaignDetailsDiskCache.ApprovedChannelsEntry]
+        }
+
+        let expiry = Date().addingTimeInterval(600)
+        let legacy = LegacyEnvelope(
+            savedAt: Date(),
+            details: [
+                detailsKey("campaign-1"): .init(
+                    campaign: makeCampaign(id: "campaign-1", connected: true),
+                    expiresAt: expiry
+                )
+            ],
+            linkStates: [
+                detailsKey("campaign-1"): .init(isAccountConnected: true, expiresAt: expiry)
+            ],
+            approvedChannels: [:]
+        )
+        let directory = FileManager.default.urls(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask
+        ).first!
+            .appendingPathComponent("com.swiftminer", isDirectory: true)
+            .appendingPathComponent("campaign-details", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent("\(login).json")
+        try JSONEncoder().encode(legacy).write(to: url, options: .atomic)
+
+        let restored = CampaignDetailsDiskCache.load(userLogin: login)
+
+        XCTAssertTrue(restored.details.isEmpty, "legacy details need one fresh post-upgrade fetch")
+        XCTAssertEqual(restored.linkStates[detailsKey("campaign-1")]?.isAccountConnected, true)
+    }
+
     func testChangingLoginDropsPreviousAccountsInMemoryCaches() async throws {
         let campaign = makeCampaign(id: "campaign-1", connected: true)
         let expiry = Date().addingTimeInterval(600)

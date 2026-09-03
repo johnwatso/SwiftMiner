@@ -12,7 +12,21 @@ public actor DropsService {
     /// Coalesces the mining loop and account-state UI when both request the same
     /// cold campaign data at launch. Actor reentrancy would otherwise allow both
     /// callers to trigger a complete campaign-detail fan-out.
-    private var campaignsRefreshTask: Task<[Campaign], Error>?
+    private struct CampaignRefreshResult: Sendable {
+        let campaigns: [Campaign]
+        let preservedIDs: Set<String>
+    }
+
+    private struct CampaignRefresh: Sendable {
+        let id: UUID
+        let isForced: Bool
+        let task: Task<CampaignRefreshResult, Error>
+    }
+
+    private var campaignsRefresh: CampaignRefresh?
+    /// Campaigns retained from the previous mining snapshot because both current Twitch
+    /// lists omitted them while their known window and unfinished work are still active.
+    private var preservedMissingCampaignIds: Set<String> = []
 
     public init(apiClient: TwitchAPIClient, inventoryService: InventoryService? = nil) {
         self.apiClient = apiClient
@@ -39,28 +53,89 @@ public actor DropsService {
             return campaignsCache
         }
 
-        if let campaignsRefreshTask {
-            return try await campaignsRefreshTask.value
+        // A post-claim forced refresh must not join a normal refresh that may reuse a
+        // pre-claim inventory snapshot. Normal readers can safely join a forced refresh.
+        let refresh: CampaignRefresh
+        if let current = campaignsRefresh,
+           !forceRefresh || current.isForced {
+            refresh = current
+        } else {
+            let refreshID = UUID()
+            let remembered = campaignsCache
+            let task = Task {
+                let (fetched, snapshot) = try await CampaignService.fetchCampaigns(
+                    using: apiClient,
+                    inventoryService: inventoryService,
+                    forceInventoryRefresh: forceRefresh
+                )
+                let preservation = Self.preservingMissingActiveCampaigns(
+                    fetched: fetched,
+                    remembered: remembered,
+                    inventory: snapshot
+                )
+                return CampaignRefreshResult(
+                    campaigns: preservation.campaigns,
+                    preservedIDs: preservation.preservedIDs
+                )
+            }
+            refresh = CampaignRefresh(id: refreshID, isForced: forceRefresh, task: task)
+            campaignsRefresh = refresh
         }
-
-        let refreshTask = Task {
-            try await CampaignService.fetchCampaigns(
-                using: apiClient,
-                inventoryService: inventoryService
-            )
-        }
-        campaignsRefreshTask = refreshTask
 
         do {
-            let enriched = try await refreshTask.value
-            campaignsRefreshTask = nil
-            campaignsCache = enriched
-            lastCacheUpdate = Date()
-            return enriched
+            let result = try await refresh.task.value
+            // Only the currently registered generation may update actor state. A forced
+            // post-claim refresh can supersede a normal in-flight read while that read's
+            // original caller is still awaiting it.
+            if campaignsRefresh?.id == refresh.id {
+                campaignsRefresh = nil
+                for campaign in result.campaigns
+                    where result.preservedIDs.contains(campaign.id)
+                    && !preservedMissingCampaignIds.contains(campaign.id) {
+                    Logger.campaigns.warning(
+                        "Campaign missing from dashboard and inventory while still active; preserving last known state: \(campaign.name)"
+                    )
+                }
+                preservedMissingCampaignIds = result.preservedIDs
+                campaignsCache = result.campaigns
+                lastCacheUpdate = Date()
+            }
+            return result.campaigns
         } catch {
-            campaignsRefreshTask = nil
+            if campaignsRefresh?.id == refresh.id {
+                campaignsRefresh = nil
+            }
             throw error
         }
+    }
+
+    /// A field-level reconciliation policy cannot run when Twitch omits the entire entity.
+    /// Keep a previously known campaign until its window closes or inventory confirms every
+    /// drop claimed. Normal channel selection still requires a positive AvailableDrops
+    /// verification; the existing all-verification-requests-failed fallback remains bounded
+    /// by the miner's stall handling.
+    internal static func preservingMissingActiveCampaigns(
+        fetched: [Campaign],
+        remembered: [Campaign],
+        inventory: InventorySnapshot?
+    ) -> (campaigns: [Campaign], preservedIDs: Set<String>) {
+        let fetchedIDs = Set(fetched.map(\.id))
+        let refreshedRemembered = inventory.map { mergeInventory($0, into: remembered) } ?? remembered
+        let preserved = refreshedRemembered.filter { campaign in
+            // Clause order is load-bearing. `isFullyComplete` is `drops.allSatisfy` and is
+            // therefore vacuously true for an empty drop list, so without the `drops.isEmpty`
+            // check first, a campaign that lost its drops — the exact case this preserves —
+            // would read as finished and be dropped.
+            !fetchedIDs.contains(campaign.id)
+                && campaign.isTimeActive
+                && !campaign.drops.isEmpty
+                && !campaign.isFullyComplete
+        }
+
+        return (
+            CampaignMergeEngine.deduplicatedByID(fetched + preserved),
+            Set(preserved.map(\.id))
+        )
     }
 
     /// Get active campaigns (within time window, linked, and has earnable drops)

@@ -114,8 +114,8 @@ final class CampaignRefreshPolicyTests: XCTestCase {
         let result = CampaignRefreshPolicy.reconcile(
             fetched: healthy,
             remembered: RememberedCampaignFacts(
-                drops: [Drop(id: "old", name: "Stale", requiredMinutes: 15)],
-                channels: [Channel(id: "9", login: "stale", displayName: "Stale")],
+                drops: healthy.drops,
+                channels: healthy.channels,
                 isAccountConnected: true,
                 allowIsEnabled: true
             )
@@ -141,6 +141,31 @@ final class CampaignRefreshPolicyTests: XCTestCase {
         XCTAssertEqual(result.campaign.channels.map(\.login), ["algs1_team1"])
     }
 
+    func testAPartialDropResponseKeepsEveryRememberedTier() {
+        let pack = Drop(id: "pack", name: "APEX Pack", requiredMinutes: 15)
+        let charm = Drop(id: "charm", name: "Sushi Nessie Gun Charm", requiredMinutes: 60)
+
+        let result = CampaignRefreshPolicy.reconcile(
+            fetched: campaign(drops: [pack]),
+            remembered: RememberedCampaignFacts(drops: [pack, charm])
+        )
+
+        XCTAssertEqual(result.campaign.drops.map(\.id), ["pack", "charm"])
+        XCTAssertEqual(result.repaired, [.drops])
+    }
+
+    func testAPartialACLKeepsEveryRememberedChannel() {
+        let second = Channel(id: "2", login: "algs1_team2", displayName: "ALGS 2")
+
+        let result = CampaignRefreshPolicy.reconcile(
+            fetched: campaign(channels: [acl[0]], allowIsEnabled: true),
+            remembered: RememberedCampaignFacts(channels: [acl[0], second], allowIsEnabled: true)
+        )
+
+        XCTAssertEqual(result.campaign.channels.map(\.login), ["algs1_team1", "algs1_team2"])
+        XCTAssertEqual(result.repaired, [.channels])
+    }
+
     /// A campaign that genuinely opened up must not be re-restricted to channels it no
     /// longer needs.
     func testAnUnrestrictedCampaignDoesNotGetAnOldACLBack() {
@@ -152,6 +177,31 @@ final class CampaignRefreshPolicyTests: XCTestCase {
         )
 
         XCTAssertTrue(result.campaign.channels.isEmpty)
+    }
+
+    func testAnExplicitOpenAnswerDiscardsAContradictoryACL() {
+        let contradictory = campaign(channels: acl, allowIsEnabled: false)
+
+        let result = CampaignRefreshPolicy.reconcile(
+            fetched: contradictory,
+            remembered: RememberedCampaignFacts(channels: acl, allowIsEnabled: true)
+        )
+
+        XCTAssertTrue(result.campaign.channels.isEmpty)
+        XCTAssertEqual(result.repaired, [.channels])
+    }
+
+    func testAMissingRestrictionFlagKeepsTheLastExplicitFalse() {
+        let silent = campaign(channels: [], allowIsEnabled: nil)
+
+        let result = CampaignRefreshPolicy.reconcile(
+            fetched: silent,
+            remembered: RememberedCampaignFacts(channels: acl, allowIsEnabled: false)
+        )
+
+        XCTAssertEqual(result.campaign.allowIsEnabled, false)
+        XCTAssertTrue(result.campaign.channels.isEmpty)
+        XCTAssertEqual(result.repaired, [.allowIsEnabled])
     }
 
     /// Nothing remembered means nothing to restore — a genuinely empty campaign stays empty.

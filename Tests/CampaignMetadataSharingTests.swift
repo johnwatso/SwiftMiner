@@ -56,6 +56,10 @@ final class CampaignMetadataSharingTests: XCTestCase {
         XCTAssertEqual(shared.drops.count, 1)
         XCTAssertFalse(shared.drops[0].isClaimed)
         XCTAssertNil(shared.drops[0].progress)
+        // Prioritisation is one miner's preference, not a fact about the campaign. This test
+        // built a prioritised source from the start but never checked the field, so the one
+        // piece of per-miner state that was actually being copied through went unnoticed.
+        XCTAssertFalse(shared.isPrioritised)
 
         // Campaign-global facts must survive, or the cache would be useless.
         XCTAssertEqual(shared.name, "Season 4 Launch")
@@ -231,6 +235,30 @@ final class CampaignMetadataSharingTests: XCTestCase {
         XCTAssertTrue(silent.hasChannelRestrictions)
     }
 
+    func testAnExplicitOpenAnswerReplacesTheRememberedRestriction() async {
+        let client = TwitchAPIClient(
+            authService: TwitchAuthService(clientId: "test", tokenStore: InMemoryTokenStore()),
+            clientId: "test",
+            persistsCampaignCaches: false
+        )
+
+        _ = await client.reconcilingCampaign(
+            Self.campaign(
+                channels: [Channel(id: "1", login: "ow_esports", displayName: "OWCS")],
+                allowIsEnabled: true
+            )
+        )
+        _ = await client.reconcilingCampaign(
+            Self.campaign(channels: [], allowIsEnabled: false)
+        )
+        let laterOmission = await client.reconcilingCampaign(
+            Self.campaign(channels: [], allowIsEnabled: nil)
+        )
+
+        XCTAssertEqual(laterOmission.allowIsEnabled, false)
+        XCTAssertTrue(laterOmission.channels.isEmpty)
+    }
+
     func testFreshDashboardWindowWinsOverCachedCampaignDetails() {
         let dashboardStart = Date(timeIntervalSince1970: 1_800_000_000)
         let dashboardEnd = Date(timeIntervalSince1970: 1_800_100_000)
@@ -298,6 +326,30 @@ final class CampaignMetadataSharingTests: XCTestCase {
         XCTAssertEqual(expiration, linkStateExpiration)
     }
 
+    /// Prioritisation is a per-miner preference, not a fact about the campaign, and the
+    /// cross-account cache must not carry it between miners.
+    func testSharedMetadataCarriesNoPerMinerState() {
+        var prioritised = campaign(connected: true)
+        prioritised = Campaign(
+            id: prioritised.id,
+            name: prioritised.name,
+            game: prioritised.game,
+            status: prioritised.status,
+            startDate: prioritised.startDate,
+            endDate: prioritised.endDate,
+            drops: prioritised.drops,
+            channels: prioritised.channels,
+            isAccountConnected: true,
+            allowIsEnabled: prioritised.allowIsEnabled,
+            isPrioritised: true
+        )
+
+        let shared = TwitchAPIClient.sharedCampaignMetadata(from: prioritised)
+
+        XCTAssertFalse(shared.isPrioritised, "one miner's priority list must not reach another")
+        XCTAssertFalse(shared.isAccountConnected, "link state stays account-specific")
+    }
+
     func testDashboardConfirmedLinkageUsesNormalDetailsLifetime() {
         let now = Date(timeIntervalSince1970: 1_700_000_000)
 
@@ -309,5 +361,46 @@ final class CampaignMetadataSharingTests: XCTestCase {
         )
 
         XCTAssertEqual(expiration, now.addingTimeInterval(20 * 60))
+    }
+
+    /// A details entry may outlive the link observation stored with it, but never carries that
+    /// entry's link answer past its own window. Discarding the whole entry instead would send
+    /// every dashboard-unlinked campaign to an uncoalesced network fetch every twenty minutes.
+    func testAnExpiredLinkObservationCannotServeAStaleLinkedAnswer() {
+        let cachedAsLinked = campaign(connected: true)
+
+        let served = TwitchAPIClient.applyingCurrentLinkState(
+            to: cachedAsLinked,
+            basicCampaign: campaign(connected: false),
+            knownLinkState: nil
+        )
+
+        XCTAssertFalse(served.isAccountConnected, "an expired observation must not keep the link alive")
+        XCTAssertEqual(served.id, cachedAsLinked.id, "the rest of the cached entry is still served")
+    }
+
+    func testACurrentDashboardOrLiveObservationRestoresTheLink() {
+        let cachedAsUnlinked = campaign(connected: false)
+        let live = TwitchAPIClient.CampaignLinkStateEntry(
+            isAccountConnected: true,
+            expiresAt: Date().addingTimeInterval(10 * 60)
+        )
+
+        XCTAssertTrue(
+            TwitchAPIClient.applyingCurrentLinkState(
+                to: cachedAsUnlinked,
+                basicCampaign: campaign(connected: true),
+                knownLinkState: nil
+            ).isAccountConnected,
+            "the dashboard is refetched every cycle and is account-specific truth"
+        )
+        XCTAssertTrue(
+            TwitchAPIClient.applyingCurrentLinkState(
+                to: cachedAsUnlinked,
+                basicCampaign: campaign(connected: false),
+                knownLinkState: live
+            ).isAccountConnected,
+            "a link observation inside its own window still answers for the account"
+        )
     }
 }

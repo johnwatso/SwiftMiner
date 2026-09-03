@@ -24,6 +24,8 @@ final class CampaignDropRetentionTests: XCTestCase {
     private func campaign(
         drops: [Drop],
         isAccountConnected: Bool = true,
+        channels: [Channel] = [],
+        allowIsEnabled: Bool? = nil,
         endDate: Date = Date().addingTimeInterval(21 * 60 * 60)
     ) -> Campaign {
         Campaign(
@@ -34,8 +36,9 @@ final class CampaignDropRetentionTests: XCTestCase {
             startDate: Date().addingTimeInterval(-20 * 60),
             endDate: endDate,
             drops: drops,
-            channels: [],
-            isAccountConnected: isAccountConnected
+            channels: channels,
+            isAccountConnected: isAccountConnected,
+            allowIsEnabled: allowIsEnabled
         )
     }
 
@@ -53,6 +56,32 @@ final class CampaignDropRetentionTests: XCTestCase {
         let stripped = await client.reconcilingCampaign(campaign(drops: []))
 
         XCTAssertEqual(stripped.drops.map(\.name), ["APEX Pack", "Sushi Nessie Gun Charm"])
+    }
+
+    func testRememberedCampaignFactsSurviveClaimInvalidationAndRestart() async {
+        let acl = [Channel(id: "1", login: "algs", displayName: "ALGS")]
+        let first = makeClient(persistsCampaignCaches: true)
+        await first.setUserLogin(userLogin)
+        _ = await first.reconcilingCampaign(campaign(
+            drops: algsDrops,
+            channels: acl,
+            allowIsEnabled: true
+        ))
+        await first.persistCampaignCachesIfNeeded()
+        await first.invalidateCampaignDetailsAfterClaim()
+
+        let relaunched = makeClient(persistsCampaignCaches: true)
+        await relaunched.setUserLogin(userLogin)
+        await relaunched.loadPersistedCampaignCachesIfNeeded()
+        let repaired = await relaunched.reconcilingCampaign(campaign(
+            drops: [],
+            channels: [],
+            allowIsEnabled: nil
+        ))
+
+        XCTAssertEqual(repaired.drops.map(\.id), ["pack", "charm"])
+        XCTAssertEqual(repaired.allowIsEnabled, true)
+        XCTAssertEqual(repaired.channels.map(\.login), ["algs"])
     }
 
     /// Without the drops the campaign is not mineable at all — this is the filter that
@@ -169,11 +198,72 @@ final class CampaignDropRetentionTests: XCTestCase {
         ))
     }
 
-    private func makeClient() -> TwitchAPIClient {
+    func testAnActiveCampaignMissingFromTheNewResponseStillProducesAWarning() {
+        let previous = campaign(drops: algsDrops)
+
+        let summary = MinerEngine.abandonedCampaignSummary(
+            previousCampaignId: previous.id,
+            previousCampaign: previous,
+            in: [],
+            candidates: []
+        )
+
+        XCTAssertTrue(summary?.contains(previous.name) == true)
+    }
+
+    func testMissingActiveCampaignIsPreservedUntilItsWindowEnds() {
+        let active = campaign(drops: algsDrops)
+        let result = DropsService.preservingMissingActiveCampaigns(
+            fetched: [],
+            remembered: [active],
+            inventory: nil
+        )
+
+        XCTAssertEqual(result.campaigns.map(\.id), [active.id])
+        XCTAssertEqual(result.preservedIDs, Set([active.id]))
+    }
+
+    func testMissingCampaignIsNotPreservedAfterInventoryConfirmsCompletion() {
+        let drops = [
+            Drop(id: "pack", name: "APEX Pack", requiredMinutes: 15, benefitID: "benefit-pack"),
+            Drop(id: "charm", name: "Sushi Nessie Gun Charm", requiredMinutes: 60, benefitID: "benefit-charm")
+        ]
+        let snapshot = InventorySnapshot(
+            accountId: "1",
+            benefitIDs: ["benefit-pack", "benefit-charm"],
+            progress: []
+        )
+
+        let result = DropsService.preservingMissingActiveCampaigns(
+            fetched: [],
+            remembered: [campaign(drops: drops)],
+            inventory: snapshot
+        )
+
+        XCTAssertTrue(result.campaigns.isEmpty)
+        XCTAssertTrue(result.preservedIDs.isEmpty)
+    }
+
+    func testMalformedDashboardWindowIsRejectedInsteadOfExpiringAtNow() async {
+        let client = makeClient()
+        let malformed: [String: Any] = [
+            "id": "algs-md6",
+            "name": "ALGS Split 2 PL MD 6",
+            "status": "ACTIVE",
+            "startAt": "not-a-date",
+            "game": ["id": "511224", "displayName": "Apex Legends"]
+        ]
+
+        let parsed = await client.parseBasicCampaign(from: malformed)
+
+        XCTAssertNil(parsed)
+    }
+
+    private func makeClient(persistsCampaignCaches: Bool = false) -> TwitchAPIClient {
         TwitchAPIClient(
             authService: TwitchAuthService(clientId: "test", tokenStore: InMemoryTokenStore()),
             clientId: "test",
-            persistsCampaignCaches: false
+            persistsCampaignCaches: persistsCampaignCaches
         )
     }
 }

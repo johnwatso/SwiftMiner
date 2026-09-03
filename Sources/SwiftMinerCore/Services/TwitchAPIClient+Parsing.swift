@@ -133,8 +133,8 @@ extension TwitchAPIClient {
     }
 
     /// Parse basic campaign from ViewerDropsDashboard (no drops)
-    func parseBasicCampaign(from campaignDict: [String: Any]) -> Campaign {
-        let id = campaignDict["id"] as? String ?? ""
+    func parseBasicCampaign(from campaignDict: [String: Any]) -> Campaign? {
+        guard let id = campaignDict["id"] as? String, !id.isEmpty else { return nil }
         let name = campaignDict["name"] as? String ?? ""
         
         let gameDict = campaignDict["game"] as? [String: Any] ?? [:]
@@ -143,8 +143,18 @@ extension TwitchAPIClient {
         let statusDict = campaignDict["status"] as? String ?? "ACTIVE"
         let status = CampaignStatus(rawValue: statusDict) ?? .active
         
-        let startAt = parseDate(campaignDict["startAt"] as? String ?? "") ?? Date()
-        let endAt = parseDate(campaignDict["endAt"] as? String ?? "") ?? Date()
+        // A missing date is not a new campaign window. Using Date() here makes endAt
+        // immediately stale by the time candidate selection runs and silently retires an
+        // otherwise active campaign. Reject the malformed shell; the mining service retains
+        // a previously known active copy, while inventory can still supply a complete one.
+        guard let startAtString = campaignDict["startAt"] as? String,
+              let endAtString = campaignDict["endAt"] as? String,
+              let startAt = parseDate(startAtString),
+              let endAt = parseDate(endAtString),
+              endAt > startAt else {
+            Logger.api.warning("ViewerDropsDashboard returned an invalid campaign window for \(name) (\(id)); ignoring that shell.")
+            return nil
+        }
         
         // Extract isAccountConnected from self field
         let selfDict = campaignDict["self"] as? [String: Any]
