@@ -49,8 +49,8 @@ final class CampaignDropRetentionTests: XCTestCase {
         let client = makeClient()
         await client.setUserLogin(userLogin)
 
-        _ = await client.reinstatingKnownDrops(campaign(drops: algsDrops))
-        let stripped = await client.reinstatingKnownDrops(campaign(drops: []))
+        _ = await client.reconcilingCampaign(campaign(drops: algsDrops))
+        let stripped = await client.reconcilingCampaign(campaign(drops: []))
 
         XCTAssertEqual(stripped.drops.map(\.name), ["APEX Pack", "Sushi Nessie Gun Charm"])
     }
@@ -68,8 +68,8 @@ final class CampaignDropRetentionTests: XCTestCase {
         let client = makeClient()
         await client.setUserLogin(userLogin)
 
-        _ = await client.reinstatingKnownDrops(campaign(drops: algsDrops))
-        let ended = await client.reinstatingKnownDrops(campaign(
+        _ = await client.reconcilingCampaign(campaign(drops: algsDrops))
+        let ended = await client.reconcilingCampaign(campaign(
             drops: [],
             endDate: Date().addingTimeInterval(-60)
         ))
@@ -87,8 +87,8 @@ final class CampaignDropRetentionTests: XCTestCase {
             Drop(id: "pack", name: "APEX Pack", requiredMinutes: 15, benefitID: "benefit-pack"),
             Drop(id: "charm", name: "Sushi Nessie Gun Charm", requiredMinutes: 60, benefitID: "benefit-charm")
         ]
-        _ = await client.reinstatingKnownDrops(campaign(drops: claimable))
-        let restored = await client.reinstatingKnownDrops(campaign(drops: []))
+        _ = await client.reconcilingCampaign(campaign(drops: claimable))
+        let restored = await client.reconcilingCampaign(campaign(drops: []))
 
         let snapshot = InventorySnapshot(
             accountId: "1",
@@ -112,7 +112,7 @@ final class CampaignDropRetentionTests: XCTestCase {
         let cacheKey = TwitchAPIClient.cacheKey("campaign-details", userLogin, "algs-md6")
 
         await client.rememberLinkState(isAccountConnected: true, cacheKey: cacheKey)
-        let denied = await client.reinstatingKnownLinkState(
+        let denied = await client.reconcilingCampaign(
             campaign(drops: algsDrops, isAccountConnected: false),
             cacheKey: cacheKey
         )
@@ -126,7 +126,7 @@ final class CampaignDropRetentionTests: XCTestCase {
         await client.setUserLogin(userLogin)
         let cacheKey = TwitchAPIClient.cacheKey("campaign-details", userLogin, "algs-md6")
 
-        let denied = await client.reinstatingKnownLinkState(
+        let denied = await client.reconcilingCampaign(
             campaign(drops: algsDrops, isAccountConnected: false),
             cacheKey: cacheKey
         )
