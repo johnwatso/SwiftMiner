@@ -176,12 +176,9 @@ struct OverviewView: View {
     @State var customArtworkImportGame: Game?
     @State var isShowingArtworkImporter = false
     @State var isMinerStatusLegendPresented = false
-    /// Drag state for reordering the prioritised rail. Stored here because an
-    /// extension cannot declare stored properties; the reordering itself lives in
-    /// OverviewView+CampaignFeed.swift.
-    @State var activePriorityDragIndex: Int?
-    @State var projectedPriorityDropIndex: Int?
-    @State var activePriorityDragProgress: CGFloat = 0
+    /// Whether the priority queue is in reorder mode. Drag state itself belongs to
+    /// `PriorityQueueRail`; only the mode is shared with the section's header button.
+    @State var isReorderingPriorityQueue = false
 
     var campaigns: [CampaignViewData] { visibleCampaigns }
 

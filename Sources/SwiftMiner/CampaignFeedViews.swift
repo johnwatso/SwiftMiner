@@ -21,7 +21,7 @@ enum CampaignCardProminence {
     case compact
 
     var size: CGSize {
-        CGSize(width: 186, height: 286)
+        CGSize(width: 170, height: 264)
     }
 
     var artworkHeight: CGFloat {
@@ -117,6 +117,11 @@ struct CampaignRailItem: Identifiable {
     let showsLiveMotion: Bool
     var usesCustomArtwork = false
     var game: Game? = nil
+    /// The one line of drop state the priority queue shows under the title.
+    var dropState: PriorityQueueDropState? = nil
+    /// Whether this card stands for a stored priority preference. Only those can be
+    /// reordered — an unpinned campaign has no slot in the saved order to move.
+    var isPriorityPinned = false
 }
 
 
@@ -124,6 +129,10 @@ struct CampaignFeedCard: View {
     let item: CampaignRailItem
     let prominence: CampaignCardProminence
     let onUploadCustomArtwork: (Game) -> Void
+    /// Opens the prioritised/excluded game sheet. Nil where no sheet is available.
+    var onManageGames: (() -> Void)? = nil
+    /// Queue position markings. Nil for any rail that is not the priority queue.
+    var priority: PriorityQueueDecoration? = nil
     @State private var isHovering = false
 
     private var settings: Settings {
@@ -134,7 +143,20 @@ struct CampaignFeedCard: View {
         item.isPlaceholder && item.showsLiveMotion
     }
 
+    /// Priority-queue cards are artwork first: no title, no slab, and dimming that
+    /// steps back to let more of the artwork through.
+    private var isQueueCard: Bool { priority != nil }
+
     private var artworkDimmingStops: [Color] {
+        if isQueueCard {
+            return [
+                .clear,
+                Color.black.opacity(0.02),
+                Color.black.opacity(0.07),
+                Color.black.opacity(item.usesCustomArtwork ? 0.12 : 0.18)
+            ]
+        }
+
         if item.usesCustomArtwork {
             return [
                 .clear,
@@ -199,6 +221,20 @@ struct CampaignFeedCard: View {
         item.gameName
     }
 
+    /// The drop status a queue card actually draws. Nothing to report means nothing
+    /// is drawn — no chip, no scrim, no reserved footer.
+    private var queueDropState: PriorityQueueDropState? {
+        guard let dropState = item.dropState, dropState.isWorthShowing else { return nil }
+        return dropState
+    }
+
+    private var accessibilityValue: String {
+        if let dropState = item.dropState {
+            return dropState.accessibilityDescription
+        }
+        return item.campaignName.isEmpty ? item.progressText : item.campaignName
+    }
+
     var body: some View {
         ZStack(alignment: .bottomLeading) {
             CampaignArtworkBackground(
@@ -260,35 +296,80 @@ struct CampaignFeedCard: View {
                     )
                 }
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(item.gameName)
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .lineLimit(2)
-            }
-            .padding(.horizontal, 14)
-            .padding(.top, 12)
-            .padding(.bottom, 16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(alignment: .bottomLeading) {
-                // Material slab treatment for all cards
-                if usesStandbyMotionStyle {
-                    Rectangle()
-                        .fill(.ultraThinMaterial.opacity(0.6))
-                        .overlay(alignment: .top) {
-                            Color.white.opacity(0.1)
-                                .frame(height: 1)
-                        }
-                } else {
-                    Rectangle()
-                        .fill(.thinMaterial.opacity(0.35))
-                        .overlay(alignment: .top) {
-                            Color.white.opacity(0.08)
-                                .frame(height: 1)
-                        }
+            if isQueueCard {
+                // The artwork already names the game, so a queue card carries no title.
+                // Only a live drop status appears, and only then is there a short scrim
+                // under it — otherwise the artwork runs to the bottom edge.
+                if let dropState = queueDropState {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear, location: 0),
+                            .init(color: Color.black.opacity(0.16), location: 0.4),
+                            .init(color: Color.black.opacity(0.44), location: 1)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: prominence.size.height * 0.24)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .allowsHitTesting(false)
+                    .zIndex(1)
+
+                    PriorityQueueDropLabel(state: dropState)
+                        .padding(PriorityQueueCardMarkings.inset)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                        .allowsHitTesting(false)
+                        .zIndex(2)
                 }
+            } else {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(item.gameName)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                        .truncationMode(.tail)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if let dropState = item.dropState {
+                        PriorityQueueDropLabel(state: dropState)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.top, 10)
+                .padding(.bottom, 12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(alignment: .bottomLeading) {
+                    // Material slab treatment for cards outside the priority queue,
+                    // which carry their contrast in the chip above instead.
+                    if usesStandbyMotionStyle {
+                        Rectangle()
+                            .fill(.ultraThinMaterial.opacity(0.6))
+                            .overlay(alignment: .top) {
+                                Color.white.opacity(0.1)
+                                    .frame(height: 1)
+                            }
+                    } else {
+                        Rectangle()
+                            .fill(.thinMaterial.opacity(0.35))
+                            .overlay(alignment: .top) {
+                                Color.white.opacity(0.08)
+                                    .frame(height: 1)
+                            }
+                    }
+                }
+                .zIndex(2)
             }
-            .zIndex(2)
+
+            if let priority {
+                PriorityQueueCardMarkings(decoration: priority)
+                    .frame(
+                        width: prominence.size.width,
+                        height: prominence.size.height,
+                        alignment: .topLeading
+                    )
+                    .zIndex(3)
+            }
         }
         .frame(width: prominence.size.width, height: prominence.size.height, alignment: .topLeading)
         .clipShape(RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
@@ -296,7 +377,14 @@ struct CampaignFeedCard: View {
             RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
                 .strokeBorder(.white.opacity(item.visualState == .watching ? 0.22 : 0.12), lineWidth: 1)
         }
-        .opacity(cardOpacity)
+        .overlay {
+            if let accent = priority?.accentOutline {
+                RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
+                    .strokeBorder(accent.color, lineWidth: accent.width)
+                    .shadow(color: accent.glow, radius: 6)
+            }
+        }
+        .opacity(cardOpacity * (priority?.contentOpacity ?? 1))
         .saturation(cardSaturation)
         .brightness(item.visualState == .watching ? 0.04 : (isHovering ? 0.015 : 0))
         .scaleEffect(isHovering ? 1.03 : 1)
@@ -307,7 +395,8 @@ struct CampaignFeedCard: View {
         .animation(.easeInOut(duration: 0.7), value: usesStandbyMotionStyle)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityTitle)
-        .accessibilityValue(item.campaignName.isEmpty ? item.progressText : item.campaignName)
+        .accessibilityValue(accessibilityValue)
+        .help(isQueueCard ? item.gameName : "")
         .onHover { hovering in
             isHovering = hovering
         }
@@ -341,6 +430,18 @@ struct CampaignFeedCard: View {
                             title: "Remove Game",
                             subtitle: "Remove this game from the prioritised list.",
                             systemImage: "trash"
+                        )
+                    }
+                }
+
+                if let onManageGames {
+                    Button {
+                        onManageGames()
+                    } label: {
+                        GameActionMenuLabel(
+                            title: "Manage Games\u{2026}",
+                            subtitle: "Add or exclude games in the priority list.",
+                            systemImage: "slider.horizontal.3"
                         )
                     }
                 }
@@ -383,6 +484,10 @@ struct ReorderableCampaignFeedCard: View {
     let onDragProjectionChanged: (Int, Int, CGFloat) -> Void
     let onDragEnded: () -> Void
     let onMoveItem: ((CampaignRailItem, Int) -> Void)?
+    /// Opens the prioritised/excluded game sheet. Nil where no sheet is available.
+    var onManageGames: (() -> Void)? = nil
+    /// Queue position markings. Nil for any rail that is not the priority queue.
+    var priority: PriorityQueueDecoration? = nil
     @State private var dragOffset: CGFloat = 0
 
     private var travelDistance: CGFloat {
@@ -439,7 +544,9 @@ struct ReorderableCampaignFeedCard: View {
         CampaignFeedCard(
             item: item,
             prominence: prominence,
-            onUploadCustomArtwork: onUploadCustomArtwork
+            onUploadCustomArtwork: onUploadCustomArtwork,
+            onManageGames: onManageGames,
+            priority: priority
         )
     }
 
@@ -997,5 +1104,379 @@ private extension URL {
         }
 
         return URL(string: resolved) ?? self
+    }
+}
+
+// MARK: - Priority Queue
+
+/// The single line of drop state the priority queue shows under a game title.
+///
+/// Deliberately coarse. Campaign progress, watched minutes, and per-miner next
+/// actions belong to Miners and Drops — Overview only answers "is there anything
+/// to earn here right now?".
+struct PriorityQueueDropState: Equatable {
+    enum Tone: Equatable {
+        /// A miner is on this game right now.
+        case active
+        /// Rewards are outstanding on a mineable campaign.
+        case available
+        /// Nothing to earn at the moment.
+        case idle
+    }
+
+    let tone: Tone
+    let label: String
+
+    var color: Color {
+        switch tone {
+        case .active, .available:
+            return .green
+        case .idle:
+            // Muted, not warning-coloured: the game is still on the user's list.
+            return Color.white.opacity(0.45)
+        }
+    }
+
+    /// Whether this state earns space on a card. "No drops" does not: the absence of
+    /// the indicator is the message.
+    var isWorthShowing: Bool { tone != .idle }
+
+    var accessibilityDescription: String {
+        switch tone {
+        case .active:
+            return "\(label) — being mined now"
+        case .available:
+            return "\(label) available"
+        case .idle:
+            return "No drops available right now"
+        }
+    }
+}
+
+struct PriorityQueueDropLabel: View {
+    let state: PriorityQueueDropState
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Circle()
+                .fill(state.color)
+                .frame(width: 6, height: 6)
+                .shadow(color: state.color.opacity(state.tone == .idle ? 0 : 0.5), radius: 3)
+
+            Text(state.label)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.white.opacity(0.9))
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
+        .background {
+            RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
+                .fill(.ultraThinMaterial)
+            RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
+                .fill(Color.black.opacity(0.3))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.1), lineWidth: 1)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(state.accessibilityDescription)
+    }
+}
+
+/// What a card shows about its place in the queue: its number, whether it leads,
+/// and whether the queue is currently being reordered.
+struct PriorityQueueDecoration: Equatable {
+    let rank: Int
+    let isTopPriority: Bool
+    let isReordering: Bool
+    /// False for a card that has no stored priority slot to move.
+    let canReorder: Bool
+
+    var accentOutline: (color: Color, width: CGFloat, glow: Color)? {
+        if isReordering && canReorder {
+            return (Color.accentColor.opacity(0.7), 1.2, .clear)
+        }
+        if isTopPriority {
+            return (Color.green.opacity(0.45), 1.2, Color.green.opacity(0.16))
+        }
+        return nil
+    }
+
+    /// Cards that cannot take part fade back while the queue is being reordered.
+    var contentOpacity: Double {
+        isReordering && !canReorder ? 0.55 : 1
+    }
+}
+
+/// Queue position markings drawn over the artwork: the rank, the leader's badge,
+/// and the grip that only appears while reordering.
+struct PriorityQueueCardMarkings: View {
+    let decoration: PriorityQueueDecoration
+
+    /// Shared with the drop chip so every marking sits the same distance in.
+    static let inset: CGFloat = 10
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            rankBadge
+                .padding(Self.inset)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+
+            if decoration.isTopPriority {
+                topBadge
+                    .padding(Self.inset)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+            }
+
+            if decoration.isReordering && decoration.canReorder {
+                gripBadge
+                    .padding(Self.inset)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
+    private var rankBadge: some View {
+        let isTop = decoration.isTopPriority
+        return Text("\(decoration.rank)")
+            .font(.system(size: isTop ? 11 : 10, weight: .semibold, design: .rounded))
+            .monospacedDigit()
+            .foregroundStyle(isTop ? Color.green : Color.white.opacity(0.8))
+            .frame(width: isTop ? 20 : 18, height: isTop ? 20 : 18)
+            .background {
+                Circle().fill(.ultraThinMaterial)
+                Circle().fill(Color.black.opacity(isTop ? 0.34 : 0.3))
+            }
+            .overlay {
+                Circle()
+                    .strokeBorder(
+                        isTop ? Color.green.opacity(0.45) : Color.white.opacity(0.14),
+                        lineWidth: 1
+                    )
+            }
+            .shadow(color: .black.opacity(isTop ? 0.3 : 0.22), radius: isTop ? 3 : 2, y: 1)
+    }
+
+    private var topBadge: some View {
+        Text("TOP")
+            .font(.system(size: 8, weight: .bold, design: .rounded))
+            .tracking(0.4)
+            .foregroundStyle(Color.green.opacity(0.8))
+            .padding(.horizontal, 4.5)
+            .padding(.vertical, 2)
+            .background {
+                Capsule().fill(.ultraThinMaterial)
+                Capsule().fill(Color.black.opacity(0.26))
+            }
+            .overlay {
+                Capsule().strokeBorder(Color.green.opacity(0.3), lineWidth: 1)
+            }
+            .shadow(color: .black.opacity(0.22), radius: 2, y: 1)
+    }
+
+    private var gripBadge: some View {
+        Image(systemName: "line.3.horizontal")
+            .font(.system(size: 9, weight: .semibold))
+            .foregroundStyle(Color.white.opacity(0.9))
+            .frame(width: 20, height: 16)
+            .background {
+                Capsule().fill(.ultraThinMaterial)
+                Capsule().fill(Color.black.opacity(0.34))
+            }
+            .overlay {
+                Capsule().strokeBorder(Color.white.opacity(0.22), lineWidth: 1)
+            }
+    }
+}
+
+/// Overview's priority rail: one non-wrapping row of game cards in global priority
+/// order, scrolled rather than wrapped so the order stays readable left to right.
+struct PriorityQueueRail: View {
+    let items: [CampaignRailItem]
+    let prominence: CampaignCardProminence
+    let isReordering: Bool
+    let onUploadCustomArtwork: (Game) -> Void
+    let onManageGames: () -> Void
+    let onMoveItem: (CampaignRailItem, Int) -> Void
+
+    @State private var activeDragIndex: Int?
+    @State private var projectedDropIndex: Int?
+    @State private var activeDragProgress: CGFloat = 0
+    @State private var viewportWidth: CGFloat = 0
+    @State private var scrollOffset: CGFloat = 0
+    @State private var isHoveringRail = false
+
+    private static let coordinateSpace = "priorityQueueRail"
+    /// Room for the hover scale so clipping the row does not shave the card edges.
+    private static let contentInset: CGFloat = 6
+
+    private var step: CGFloat { prominence.size.width + prominence.spacing }
+
+    private var contentWidth: CGFloat {
+        guard !items.isEmpty else { return 0 }
+        return (CGFloat(items.count) * step) - prominence.spacing
+    }
+
+    private var maximumOffset: CGFloat {
+        max(contentWidth - viewportWidth + (Self.contentInset * 2), 0)
+    }
+
+    private var canScrollBack: Bool { maximumOffset > 1 && scrollOffset > 2 }
+    private var canScrollForward: Bool { maximumOffset > 1 && scrollOffset < maximumOffset - 2 }
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(alignment: .top, spacing: prominence.spacing) {
+                    ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                        ReorderableCampaignFeedCard(
+                            item: item,
+                            index: index,
+                            itemCount: items.count,
+                            prominence: prominence,
+                            activeDragIndex: activeDragIndex,
+                            projectedDropIndex: projectedDropIndex,
+                            activeDragProgress: activeDragProgress,
+                            onUploadCustomArtwork: onUploadCustomArtwork,
+                            onDragProjectionChanged: updateDragProjection,
+                            onDragEnded: clearDragProjection,
+                            onMoveItem: isReordering && item.isPriorityPinned ? onMoveItem : nil,
+                            onManageGames: onManageGames,
+                            priority: PriorityQueueDecoration(
+                                rank: index + 1,
+                                isTopPriority: index == 0,
+                                isReordering: isReordering,
+                                canReorder: item.isPriorityPinned
+                            )
+                        )
+                        .id(item.id)
+                    }
+                }
+                .padding(.horizontal, Self.contentInset)
+                .padding(.vertical, Self.contentInset)
+                .background {
+                    GeometryReader { geometry in
+                        Color.clear.preference(
+                            key: PriorityQueueRailOffsetKey.self,
+                            value: -geometry.frame(in: .named(Self.coordinateSpace)).minX
+                        )
+                    }
+                }
+            }
+            .coordinateSpace(.named(Self.coordinateSpace))
+            .onPreferenceChange(PriorityQueueRailOffsetKey.self) { offset in
+                scrollOffset = offset
+            }
+            .background {
+                GeometryReader { geometry in
+                    Color.clear
+                        .onAppear { viewportWidth = geometry.size.width }
+                        .onChange(of: geometry.size.width) { _, width in viewportWidth = width }
+                }
+            }
+            .overlay(alignment: .leading) {
+                if canScrollBack {
+                    scrollButton(systemImage: "chevron.left", label: "Scroll priority queue back") {
+                        scroll(by: -1, proxy: proxy)
+                    }
+                }
+            }
+            .overlay(alignment: .trailing) {
+                if canScrollForward {
+                    scrollButton(systemImage: "chevron.right", label: "Scroll priority queue forward") {
+                        scroll(by: 1, proxy: proxy)
+                    }
+                }
+            }
+            // A quiet rail rather than a panel: just enough surface to read the row
+            // as one queue instead of cards floating in the page.
+            .padding(.horizontal, 8)
+            .padding(.top, 9)
+            .padding(.bottom, 12)
+            .background {
+                RoundedRectangle(cornerRadius: GlassRadius.large, style: .continuous)
+                    .fill(Color.primary.opacity(0.03))
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: GlassRadius.large, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+            }
+        }
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) { isHoveringRail = hovering }
+        }
+        .animation(.easeInOut(duration: 0.18), value: canScrollBack)
+        .animation(.easeInOut(duration: 0.18), value: canScrollForward)
+    }
+
+    private func scrollButton(
+        systemImage: String,
+        label: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(width: 24, height: 24)
+                .background {
+                    Circle().fill(.ultraThinMaterial)
+                    Circle().fill(Color.black.opacity(0.22))
+                }
+                .overlay {
+                    Circle().strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
+                }
+                .shadow(color: .black.opacity(0.28), radius: 4, y: 1)
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 4)
+        .opacity(isHoveringRail ? 1 : 0.55)
+        .accessibilityLabel(label)
+    }
+
+    /// Pages by whole cards so the row always settles on a card edge.
+    private func scroll(by direction: Int, proxy: ScrollViewProxy) {
+        guard !items.isEmpty else { return }
+        let perPage = max(Int((viewportWidth + prominence.spacing) / step), 1)
+        let currentIndex = Int((scrollOffset / step).rounded())
+        let target = min(max(currentIndex + (direction * perPage), 0), items.count - 1)
+        withAnimation(.easeInOut(duration: 0.28)) {
+            proxy.scrollTo(items[target].id, anchor: .leading)
+        }
+    }
+
+    private func updateDragProjection(activeIndex: Int, projectedIndex: Int, progress: CGFloat) {
+        guard activeDragIndex != activeIndex
+                || projectedDropIndex != projectedIndex
+                || activeDragProgress != progress else {
+            return
+        }
+
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            activeDragIndex = activeIndex
+            projectedDropIndex = projectedIndex
+            activeDragProgress = progress
+        }
+    }
+
+    private func clearDragProjection() {
+        withAnimation(.interactiveSpring(response: 0.24, dampingFraction: 0.88, blendDuration: 0.08)) {
+            activeDragIndex = nil
+            projectedDropIndex = nil
+            activeDragProgress = 0
+        }
+    }
+}
+
+private struct PriorityQueueRailOffsetKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }

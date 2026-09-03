@@ -15,13 +15,7 @@ extension OverviewView {
         let items = displayedPrioritisedFeedItems
         return VStack(alignment: .leading, spacing: 24) {
             if !items.isEmpty {
-                campaignRailSection(
-                    title: "Prioritised",
-                    items: items,
-                    prominence: .standard,
-                    showsEditButton: true,
-                    layout: .grid
-                )
+                priorityQueueSection(items: items)
             } else {
                 addPrioritisedGameSection
             }
@@ -29,9 +23,67 @@ extension OverviewView {
         .padding(.vertical, 2)
     }
 
+    /// The global game order, and only that. What each miner is doing now and what it
+    /// is likely to pick up next stays in Miners — this section must not restate it.
+    private func priorityQueueSection(items: [CampaignRailItem]) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                sectionHeading(
+                    "Priority Queue",
+                    subtitle: "Global game priority \u{00B7} Miner-specific next actions appear in Miners"
+                )
+
+                Spacer()
+
+                priorityQueueControls(canReorder: items.contains(where: \.isPriorityPinned))
+            }
+
+            PriorityQueueRail(
+                items: items,
+                prominence: .standard,
+                isReordering: isReorderingPriorityQueue,
+                onUploadCustomArtwork: presentCustomArtworkImporter(for:),
+                onManageGames: { isShowingGameManagement = true },
+                onMoveItem: movePrioritisedItem
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func priorityQueueControls(canReorder: Bool) -> some View {
+        Group {
+            if isReorderingPriorityQueue {
+                Button {
+                    setPriorityQueueReordering(false)
+                } label: {
+                    Label("Done", systemImage: "checkmark")
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .help("Finish reordering")
+            } else {
+                Button {
+                    setPriorityQueueReordering(true)
+                } label: {
+                    Label("Reorder", systemImage: "arrow.left.arrow.right")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(!canReorder)
+                .help("Drag the cards to change global game priority")
+            }
+        }
+    }
+
+    private func setPriorityQueueReordering(_ isReordering: Bool) {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            isReorderingPriorityQueue = isReordering
+        }
+    }
+
     private var addPrioritisedGameSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            sectionHeading("Prioritised")
+            sectionHeading("Priority Queue")
 
             MaterialEmptyStatePanel(
                 "No prioritised games",
@@ -49,93 +101,6 @@ extension OverviewView {
         }
     }
 
-    @ViewBuilder
-    private func campaignRailSection(
-        title: String,
-        items: [CampaignRailItem],
-        prominence: CampaignCardProminence,
-        showsEditButton: Bool = false,
-        layout: CampaignRailLayout = .horizontal,
-        onMoveItem: ((CampaignRailItem, Int) -> Void)? = nil
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .firstTextBaseline) {
-                sectionHeading(title)
-
-                Spacer()
-
-                if showsEditButton {
-                    Button {
-                        isShowingGameManagement = true
-                    } label: {
-                        Label("Edit", systemImage: "slider.horizontal.3")
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                }
-            }
-
-            switch layout {
-            case .horizontal:
-                ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(alignment: .top, spacing: prominence.spacing) {
-                        ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                            ReorderableCampaignFeedCard(
-                                item: item,
-                                index: index,
-                                itemCount: items.count,
-                                prominence: prominence,
-                                activeDragIndex: activePriorityDragIndex,
-                                projectedDropIndex: projectedPriorityDropIndex,
-                                activeDragProgress: activePriorityDragProgress,
-                                onUploadCustomArtwork: presentCustomArtworkImporter(for:),
-                                onDragProjectionChanged: updatePriorityDragProjection,
-                                onDragEnded: clearPriorityDragProjection,
-                                onMoveItem: onMoveItem
-                            )
-                        }
-                    }
-                    .padding(.horizontal, 2)
-                    .padding(.vertical, 6)
-                }
-                .scrollClipDisabled()
-            case .staggered:
-                StaggeredCampaignRail(
-                    items: items,
-                    prominence: prominence,
-                    onUploadCustomArtwork: presentCustomArtworkImporter(for:)
-                )
-                .padding(.horizontal, 2)
-                .padding(.vertical, 6)
-            case .grid:
-                LazyVGrid(
-                    columns: [
-                        GridItem(
-                            .adaptive(
-                                minimum: prominence.size.width,
-                                maximum: prominence.size.width
-                            ),
-                            spacing: prominence.spacing,
-                            alignment: .top
-                        )
-                    ],
-                    alignment: .leading,
-                    spacing: prominence.spacing
-                ) {
-                    ForEach(items) { item in
-                        CampaignFeedCard(
-                            item: item,
-                            prominence: prominence,
-                                    onUploadCustomArtwork: presentCustomArtworkImporter(for:)
-                        )
-                    }
-                }
-                .padding(.horizontal, 2)
-                .padding(.vertical, 6)
-            }
-        }
-    }
-
     private var preferredGames: [GamePreference] {
         settings.gamePreferences.filter { $0.state == .preferred }
     }
@@ -146,6 +111,7 @@ extension OverviewView {
     private struct CampaignFeedContext {
         let preferences: GameMatchIndex
         let watched: WatchedCampaignIndex
+        let dropStates: PriorityQueueDropIndex
     }
 
     /// Campaigns a miner is currently watching, resolved from one pass over the miners
@@ -210,13 +176,15 @@ extension OverviewView {
     }
 
     private func makeFeedContext() -> CampaignFeedContext {
-        CampaignFeedContext(
+        let watched = WatchedCampaignIndex(miners: navigation.minerManager.miners)
+        return CampaignFeedContext(
             preferences: GameMatchIndex(
                 gamePreferences: settings.gamePreferences,
                 priorityGames: settings.priorityGames,
                 excludedGames: settings.excludedGames
             ),
-            watched: WatchedCampaignIndex(miners: navigation.minerManager.miners)
+            watched: watched,
+            dropStates: PriorityQueueDropIndex(campaigns: campaigns) { watched.isWatched($0) }
         )
     }
 
@@ -283,11 +251,18 @@ extension OverviewView {
             }) {
                 let campaign = campaignPool[poolIndex]
                 usedCampaignIds.insert(campaign.id)
-                items.append(makeRailItem(for: campaign, section: .prioritised, context: context))
+                items.append(
+                    makeRailItem(
+                        for: campaign,
+                        section: .prioritised,
+                        context: context,
+                        isPriorityPinned: true
+                    )
+                )
             } else {
                 let artwork = artworkIndex ?? makeArtworkIndex()
                 artworkIndex = artwork
-                items.append(makePreferredGameItem(preference, artwork: artwork))
+                items.append(makePreferredGameItem(preference, artwork: artwork, context: context))
             }
         }
 
@@ -306,7 +281,8 @@ extension OverviewView {
     private func makeRailItem(
         for campaign: CampaignViewData,
         section: CampaignFeedSection,
-        context: CampaignFeedContext
+        context: CampaignFeedContext,
+        isPriorityPinned: Bool = false
     ) -> CampaignRailItem {
         var state = visualState(for: campaign, watched: context.watched)
         if state == .idle && context.watched.isWatched(campaign) {
@@ -331,7 +307,9 @@ extension OverviewView {
             isPlaceholder: false,
             showsLiveMotion: section == .active && (state == .watching || state == .inProgress || state == .claimable),
             usesCustomArtwork: preference?.customArtworkURL != nil,
-            game: game
+            game: game,
+            dropState: context.dropStates.state(gameId: campaign.gameId, gameName: campaign.gameName),
+            isPriorityPinned: isPriorityPinned
         )
     }
 
@@ -366,7 +344,8 @@ extension OverviewView {
 
     private func makePreferredGameItem(
         _ preference: GamePreference,
-        artwork: OverviewArtworkResolver.ArtworkIndex
+        artwork: OverviewArtworkResolver.ArtworkIndex,
+        context: CampaignFeedContext
     ) -> CampaignRailItem {
         // This item is built precisely because the game has no *eligible* campaign,
         // but an ineligible one (completed, unlinked) usually still exists and
@@ -393,7 +372,12 @@ extension OverviewView {
             isPlaceholder: false,
             showsLiveMotion: false,
             usesCustomArtwork: preference.customArtworkURL != nil,
-            game: Game(id: preference.gameId, name: preference.gameName, boxArtURL: artworkURL)
+            game: Game(id: preference.gameId, name: preference.gameName, boxArtURL: artworkURL),
+            dropState: context.dropStates.state(
+                gameId: preference.gameId,
+                gameName: preference.gameName
+            ),
+            isPriorityPinned: true
         )
     }
 
@@ -417,30 +401,6 @@ extension OverviewView {
             )
         }
         navigation.minerManager.updatePriorityGames(resolving: { settings.priorityGames(forAccountId: $0.accountId) })
-    }
-
-    private func updatePriorityDragProjection(activeIndex: Int, projectedIndex: Int, progress: CGFloat) {
-        guard activePriorityDragIndex != activeIndex
-                || projectedPriorityDropIndex != projectedIndex
-                || activePriorityDragProgress != progress else {
-            return
-        }
-
-        var transaction = Transaction()
-        transaction.disablesAnimations = true
-        withTransaction(transaction) {
-            activePriorityDragIndex = activeIndex
-            projectedPriorityDropIndex = projectedIndex
-            activePriorityDragProgress = progress
-        }
-    }
-
-    private func clearPriorityDragProjection() {
-        withAnimation(.interactiveSpring(response: 0.24, dampingFraction: 0.88, blendDuration: 0.08)) {
-            activePriorityDragIndex = nil
-            projectedPriorityDropIndex = nil
-            activePriorityDragProgress = 0
-        }
     }
 
     private func preferenceMatches(_ preference: GamePreference, game: Game) -> Bool {
@@ -530,5 +490,81 @@ extension OverviewView {
                 showsLiveMotion: false
             )
         }
+    }
+}
+
+/// Per-game drop state for the Overview priority queue, resolved in one pass over
+/// the campaign list rather than once per card.
+///
+/// The question this answers is deliberately small: is a miner on this game right
+/// now, and if not, is there anything left to earn? Campaign-level detail belongs
+/// to Miners and Drops.
+struct PriorityQueueDropIndex {
+    private struct Counts {
+        var activeCampaigns = 0
+        var remainingRewards = 0
+    }
+
+    private let countsByKey: [String: Counts]
+
+    init(
+        campaigns: [CampaignViewData],
+        now: Date = Date(),
+        isWatched: (CampaignViewData) -> Bool
+    ) {
+        var countsByKey: [String: Counts] = [:]
+        for campaign in campaigns {
+            let key = Self.key(gameId: campaign.gameId, gameName: campaign.gameName)
+            guard !key.isEmpty else { continue }
+            var counts = countsByKey[key] ?? Counts()
+
+            if isWatched(campaign) {
+                counts.activeCampaigns += 1
+            }
+
+            // The same "mineable right now" test Overview's active campaign count uses.
+            if campaign.isAccountConnected,
+               campaign.startDate <= now,
+               campaign.endDate > now,
+               !campaign.isCompleted {
+                counts.remainingRewards += campaign.overviewRemainingRewardCount
+            }
+
+            countsByKey[key] = counts
+        }
+        self.countsByKey = countsByKey
+    }
+
+    func state(gameId: String?, gameName: String) -> PriorityQueueDropState {
+        let counts = countsByKey[Self.key(gameId: gameId, gameName: gameName)] ?? Counts()
+
+        if counts.activeCampaigns > 0 {
+            return PriorityQueueDropState(tone: .active, label: "\(counts.activeCampaigns) active")
+        }
+
+        if counts.remainingRewards > 0 {
+            let noun = counts.remainingRewards == 1 ? "drop" : "drops"
+            return PriorityQueueDropState(
+                tone: .available,
+                label: "\(counts.remainingRewards) \(noun)"
+            )
+        }
+
+        return PriorityQueueDropState(tone: .idle, label: "No drops")
+    }
+
+    /// One canonical key per game, matching how the feed dedupes cards: the name
+    /// reduced to lowercased alphanumerics, falling back to the game id.
+    private static func key(gameId: String?, gameName: String) -> String {
+        let comparable = String(
+            gameName.lowercased().unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) }
+        )
+        if !comparable.isEmpty {
+            return "name:" + comparable
+        }
+        if let gameId, !gameId.isEmpty {
+            return "id:" + gameId
+        }
+        return ""
     }
 }
