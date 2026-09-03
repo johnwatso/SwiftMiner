@@ -3,18 +3,18 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Game Priorities, Exclusions & Failover Streamers - SwiftMiner Help</title>
-    <meta name="description" content="Learn how SwiftMiner game priorities, exclusions, mining strategies, account-specific priorities, and failover streamers affect Twitch Drops mining.">
+    <title>Game Priorities, Exclusions & Fallback Streamers - SwiftMiner Help</title>
+    <meta name="description" content="Learn how SwiftMiner game priorities, exclusions, mining strategies, account-specific priorities, and fallback streamers affect Twitch Drops mining.">
     <link rel="canonical" href="https://swiftminer.app/help/game-rules/">
     <meta property="og:type" content="article">
     <meta property="og:site_name" content="SwiftMiner">
     <meta property="og:url" content="https://swiftminer.app/help/game-rules/">
-    <meta property="og:title" content="SwiftMiner Game Rules & Failover Streamers">
+    <meta property="og:title" content="SwiftMiner Game Rules & Fallback Streamers">
     <meta property="og:description" content="A detailed guide to priorities, exclusions, mining strategies, and stall-only backup streamers in SwiftMiner.">
     <meta property="og:image" content="https://swiftminer.app/assets/landing/og-image.jpg">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="SwiftMiner Game Rules & Failover Streamers">
-    <meta name="twitter:description" content="Understand exactly how SwiftMiner chooses games and when it uses a failover streamer.">
+    <meta name="twitter:title" content="SwiftMiner Game Rules & Fallback Streamers">
+    <meta name="twitter:description" content="Understand exactly how SwiftMiner chooses games and when it uses a fallback streamer.">
     <meta name="twitter:image" content="https://swiftminer.app/assets/landing/og-image.jpg">
     <script type="application/ld+json">
     {"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"SwiftMiner","item":"https://swiftminer.app/"},{"@type":"ListItem","position":2,"name":"Help","item":"https://swiftminer.app/help/"},{"@type":"ListItem","position":3,"name":"Game Rules","item":"https://swiftminer.app/help/game-rules/"}]}
@@ -56,7 +56,7 @@
         </div>
 
         <header class="article-header">
-            <h1>Game Priorities, Exclusions &amp; Failover Streamers</h1>
+            <h1>Game Priorities, Exclusions &amp; Fallback Streamers</h1>
             <p class="article-intro">Game Rules control which Twitch Drops SwiftMiner prefers, which games it must ignore, and which trusted streamer it can try if progress for a game genuinely stalls.</p>
             <div class="search-wrap" style="margin-top: 1.5rem; max-width: 100%;">
                 <i class="ph-bold ph-magnifying-glass" style="position: absolute; top: 50%; left: 1.1rem; transform: translateY(-50%); color: var(--muted);"></i>
@@ -66,11 +66,11 @@
 
         <div class="kb-grid">
             <main class="kb-content">
-                <p>Open <strong>Settings &gt; Mining &gt; Manage Game Rules</strong>, or use the game-rule controls from the Overview. Each saved game can be set to <strong>Prioritise</strong> or <strong>Exclude</strong>. A prioritised game can also have one optional failover streamer.</p>
+                <p>Open <strong>Settings &gt; Mining &gt; Manage Game Rules</strong>, or use the game-rule controls from the Overview. One sheet holds both lists: each saved game carries a rule of <strong>Prioritised</strong> or <strong>Excluded</strong>, and changing it moves the game between sections. A prioritised game can also have one optional fallback streamer, tucked behind the game&rsquo;s own disclosure.</p>
 
                 <div class="callout info">
                     <strong>The short version</strong>
-                    <p>Prioritise changes selection order. Exclude removes a game from mining. A failover streamer is a stall-recovery target, not the stream SwiftMiner normally starts with.</p>
+                    <p>Prioritise changes selection order. Exclude removes a game from mining. A fallback streamer is a stall-recovery target, not the stream SwiftMiner normally starts with.</p>
                 </div>
 
                 <h2 id="how-selection-works">How SwiftMiner Chooses What to Mine</h2>
@@ -80,7 +80,7 @@
                         <source srcset="../assets/img/game-rules-dark.webp" media="(prefers-color-scheme: dark)">
                         <img src="../assets/img/game-rules-light.webp" alt="SwiftMiner Game Rules sheet" loading="lazy" decoding="async">
                     </picture>
-                    <div class="screenshot-caption">The Game Rules sheet holds priorities, exclusions and per-game failover streamers in one place.</div>
+                    <div class="screenshot-caption">The Game Rules sheet holds priorities, exclusions and per-game fallback streamers in one place.</div>
                 </div>
 
                 <p>SwiftMiner then looks for a live channel that is actually advertising the selected campaign. A channel merely playing the same game is not enough: Twitch can run several campaigns for one game, including campaigns restricted to particular channels or rewards that require paid subscriptions.</p>
@@ -152,44 +152,44 @@
                     <li>Changing a rule can trigger a campaign rescan, but an active miner may take a short moment to settle onto its new target.</li>
                 </ul>
 
-                <h2 id="failover-streamers">Failover Streamers</h2>
-                <p>A failover streamer is an optional backup channel attached to a specific game rule. It exists for a narrow recovery case: SwiftMiner selected a valid stream, started watching, and later determined that reward progress genuinely stalled.</p>
+                <h2 id="failover-streamers">Fallback Streamers</h2>
+                <p>A fallback streamer is an optional backup channel attached to a specific game rule. It exists for a narrow recovery case: SwiftMiner selected a valid stream, started watching, and later determined that reward progress genuinely stalled.</p>
 
                 <div class="callout info">
-                    <strong>A failover streamer is not a preferred streamer</strong>
-                    <p>SwiftMiner performs its normal campaign and channel selection first. It does not start on the failover streamer simply because that streamer is online.</p>
+                    <strong>A fallback streamer is not a preferred streamer</strong>
+                    <p>SwiftMiner performs its normal campaign and channel selection first. It does not start on the fallback streamer simply because that streamer is online.</p>
                 </div>
 
-                <h3>When the failover is used</h3>
-                <p>When progress appears stalled, SwiftMiner first refreshes Twitch inventory to check whether rewards were claimed elsewhere or whether local state was simply behind. If there is no external progress to reconcile, SwiftMiner can consider the configured failover for that game.</p>
+                <h3>When the fallback is used</h3>
+                <p>When progress appears stalled, SwiftMiner first refreshes Twitch inventory to check whether rewards were claimed elsewhere or whether local state was simply behind. If there is no external progress to reconcile, SwiftMiner can consider the configured fallback for that game.</p>
                 <p>Before switching, SwiftMiner verifies all of the following:</p>
                 <ul>
                     <li>The configured Twitch channel is currently live.</li>
                     <li>The channel is advertising the exact campaign SwiftMiner is mining.</li>
                     <li>The channel is not the same channel that just stalled.</li>
-                    <li>The failover is not currently in its cooldown period.</li>
+                    <li>The fallback is not currently in its cooldown period.</li>
                 </ul>
                 <p>If any check fails, SwiftMiner falls back to its normal channel-switching behavior. It does not wait indefinitely for the backup streamer.</p>
 
                 <h3>How to configure one</h3>
                 <ol class="steps-list">
                     <li>Open <strong>Settings &gt; Mining &gt; Manage Game Rules</strong>.</li>
-                    <li>Add the game and set it to <strong>Prioritise</strong> or <strong>Exclude</strong>. Failover is most useful on prioritised games you actively want to complete.</li>
-                    <li>Enter a Twitch login in the <strong>Failover streamer</strong> field. You may enter <code>streamername</code>, <code>@streamername</code>, or a Twitch channel URL.</li>
-                    <li>Press Return or select the checkmark to save it.</li>
+                    <li>Add the game and set its rule to <strong>Prioritised</strong>. A fallback applies only to prioritised games, and is most useful on ones you actively want to complete.</li>
+                    <li>Click the game&rsquo;s name to expand it, revealing the <strong>Fallback streamer</strong> field. You may enter <code>streamername</code>, <code>@streamername</code>, or a Twitch channel URL.</li>
+                    <li>Press Return or select <strong>Set</strong> to save it. Once saved, the game lists its fallback beneath the name, and the button becomes <strong>Clear</strong>.</li>
                 </ol>
                 <p>SwiftMiner normalises the entry to the channel login. Display names, capitalisation, an <code>@</code> prefix, URL query strings, and trailing channel paths are removed where possible.</p>
 
-                <h3>Choosing a useful failover streamer</h3>
+                <h3>Choosing a useful fallback streamer</h3>
                 <ul>
                     <li>Choose a streamer who regularly participates in Drops campaigns for that game.</li>
                     <li>Prefer a reliable channel with long broadcasts during campaign periods.</li>
                     <li>For channel-restricted campaigns, use an officially approved channel.</li>
                     <li>Do not assume “Drops Enabled” means every campaign for the game is active on that channel.</li>
-                    <li>One game rule supports one failover streamer at a time.</li>
+                    <li>One game rule supports one fallback streamer at a time.</li>
                 </ul>
 
-                <h2 id="failover-problems">Why a Failover May Not Be Used</h2>
+                <h2 id="failover-problems">Why a Fallback May Not Be Used</h2>
                 <div class="kb-table-wrap">
                     <table>
                         <thead>
@@ -201,7 +201,7 @@
                         <tbody>
                             <tr>
                                 <td><strong>The channel is offline</strong></td>
-                                <td>Skips the failover and continues normal channel recovery.</td>
+                                <td>Skips the fallback and continues normal channel recovery.</td>
                             </tr>
                             <tr>
                                 <td><strong>Wrong campaign</strong></td>
@@ -212,20 +212,20 @@
                                 <td>Does not use the channel to mine a watch-time campaign that is not actually active there.</td>
                             </tr>
                             <tr>
-                                <td><strong>The failover also stalled</strong></td>
+                                <td><strong>The fallback also stalled</strong></td>
                                 <td>Places that game-and-channel combination on a ten-minute cooldown before it can be considered again.</td>
                             </tr>
                             <tr>
                                 <td><strong>No confirmed progress stall</strong></td>
-                                <td>Leaves normal selection in place. The failover is not used for preference alone.</td>
+                                <td>Leaves normal selection in place. The fallback is not used for preference alone.</td>
                             </tr>
                             <tr>
                                 <td><strong>The game is excluded</strong></td>
-                                <td>The campaign never reaches normal mining selection, so its failover is not used.</td>
+                                <td>The campaign never reaches normal mining selection, so its fallback is not used.</td>
                             </tr>
                             <tr>
                                 <td><strong>Twitch returns incomplete data</strong></td>
-                                <td>May reject the failover temporarily and retry through later recovery or campaign scans.</td>
+                                <td>May reject the fallback temporarily and retry through later recovery or campaign scans.</td>
                             </tr>
                         </tbody>
                     </table>
@@ -233,15 +233,15 @@
 
                 <h2 id="interaction-with-stream-options">How It Interacts with Other Stream Options</h2>
                 <ul>
-                    <li><strong>Stream Override:</strong> A manual override takes control of streamer selection and is checked before normal selection. Failover behavior does not replace an active override.</li>
-                    <li><strong>Prioritise followed and subscribed streamers:</strong> This influences normal channel ranking. A game failover remains a separate stall-recovery target.</li>
-                    <li><strong>Spread miners across streams:</strong> This tries to distribute accounts during normal selection. A verified failover can still move a miner to its configured backup when that miner stalls.</li>
-                    <li><strong>Stall recovery:</strong> Failover streamers complement progress-stall handling. Broader miner health recovery may also refresh, restart, or re-authenticate a miner depending on the failure.</li>
+                    <li><strong>Stream Override:</strong> A manual override takes control of streamer selection and is checked before normal selection. Fallback behavior does not replace an active override.</li>
+                    <li><strong>Prioritise followed and subscribed streamers:</strong> This influences normal channel ranking. A game fallback remains a separate stall-recovery target.</li>
+                    <li><strong>Spread miners across streams:</strong> This tries to distribute accounts during normal selection. A verified fallback can still move a miner to its configured backup when that miner stalls.</li>
+                    <li><strong>Stall recovery:</strong> Fallback streamers complement progress-stall handling. Broader miner health recovery may also refresh, restart, or re-authenticate a miner depending on the failure.</li>
                 </ul>
 
                 <h2 id="recommended-setups">Recommended Setups</h2>
                 <h3>A few favourite games</h3>
-                <p>Use <strong>Prefer prioritised games</strong>, order your favourites, and add failovers only for games whose campaigns are important enough to warrant a known backup channel.</p>
+                <p>Use <strong>Prefer prioritised games</strong>, order your favourites, and add fallbacks only for games whose campaigns are important enough to warrant a known backup channel.</p>
 
                 <h3>Mine anything before it expires</h3>
                 <p>Use <strong>Smart</strong>. Priorities remain useful as tie-breakers, while campaigns ending sooner generally remain ahead. Exclude games you never want.</p>
@@ -258,7 +258,7 @@
                     <li><strong>An excluded game still appears in history:</strong> Exclusions stop mining selection; they do not erase cached or completed campaign records.</li>
                     <li><strong>The wrong priority wins:</strong> Check the mining strategy. Smart favors the campaign ending soonest before using priority order.</li>
                     <li><strong>A personal priority is below another game:</strong> Review the miner's personal list, the global list, and whether <em>Use global priorities</em> is enabled.</li>
-                    <li><strong>The failover never activates:</strong> It may not have reached the genuine-stall threshold, or the channel may be offline, on the wrong campaign, identical to the current stream, or cooling down.</li>
+                    <li><strong>The fallback never activates:</strong> It may not have reached the genuine-stall threshold, or the channel may be offline, on the wrong campaign, identical to the current stream, or cooling down.</li>
                     <li><strong>Progress still does not move:</strong> Avoid watching Twitch with the same account elsewhere, confirm required publisher links, and review the Activity Log for channel-verification and stall messages.</li>
                 </ul>
 
@@ -276,8 +276,8 @@
                         <li><a href="#prioritised-games" class="toc-link">Prioritised games</a></li>
                         <li><a href="#account-priorities" class="toc-link">Account priorities</a></li>
                         <li><a href="#excluded-games" class="toc-link">Excluded games</a></li>
-                        <li><a href="#failover-streamers" class="toc-link">Failover streamers</a></li>
-                        <li><a href="#failover-problems" class="toc-link">Failover problems</a></li>
+                        <li><a href="#failover-streamers" class="toc-link">Fallback streamers</a></li>
+                        <li><a href="#failover-problems" class="toc-link">Fallback problems</a></li>
                         <li><a href="#interaction-with-stream-options" class="toc-link">Other stream options</a></li>
                         <li><a href="#recommended-setups" class="toc-link">Recommended setups</a></li>
                         <li><a href="#troubleshooting" class="toc-link">Troubleshooting</a></li>

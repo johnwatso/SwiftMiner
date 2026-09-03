@@ -27,6 +27,12 @@ struct GamePreferencesSection: View {
 struct GameSearchField: View {
     var settings: Settings
     let minerManager: MinerManager
+    var selectionState: PreferenceState = .preferred
+    /// Placeholder for the search field; the unified Game Rules sheet phrases it as an add action.
+    var placeholder: String = "Search games\u{2026}"
+    /// When true each suggestion offers both Prioritise and Exclude, so the user never has to
+    /// decide which list they are managing before searching.
+    var offersBothStates: Bool = false
     @State private var searchText = ""
     @State private var showSuggestions = false
     @State private var availableGames: [Game] = []
@@ -152,7 +158,7 @@ struct GameSearchField: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            TextField("Search games\u{2026}", text: $searchText)
+            TextField(placeholder, text: $searchText)
                 .textFieldStyle(.roundedBorder)
                 .focused($isSearchFocused)
                 .onChange(of: searchText) { _, newValue in
@@ -245,7 +251,7 @@ struct GameSearchField: View {
                             }
 
                             if shouldShowNoActiveDropsMessage {
-                                Text("No drops currently running for \"\(searchQuery)\". Keep it prioritized and SwiftMiner will mine any linked-account drops when they go live.")
+                                Text(noActiveDropsMessage)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                     .padding(.horizontal, 8)
@@ -253,8 +259,13 @@ struct GameSearchField: View {
                             }
 
                             ForEach(allSuggestions.prefix(10)) { game in
-                                GameSuggestionRow(game: game, hasActiveDrops: hasActiveDrops(for: game)) {
-                                    settings.addGamePreference(game, state: .preferred)
+                                GameSuggestionRow(
+                                    game: game,
+                                    hasActiveDrops: hasActiveDrops(for: game),
+                                    defaultState: selectionState,
+                                    offersBothStates: offersBothStates
+                                ) { state in
+                                    settings.addGamePreference(game, state: state)
                                     searchText = ""
                                     showSuggestions = false
                                     twitchSearchResults = []
@@ -354,12 +365,12 @@ struct GameSearchField: View {
             switch twitchError {
             case .tokenExpired:
                 return (
-                    "No current drops found for \"\(query)\" right now. Keep it prioritized and SwiftMiner will mine any linked-account drops when they go live.",
+                    noCurrentDropsMessage(for: query),
                     true
                 )
             case .authenticationFailed:
                 return (
-                    "No current drops found for \"\(query)\" right now. Keep it prioritized and SwiftMiner will mine any linked-account drops when they go live.",
+                    noCurrentDropsMessage(for: query),
                     true
                 )
             default:
@@ -367,6 +378,20 @@ struct GameSearchField: View {
             }
         }
         return ("Couldn’t search Twitch right now. Please retry.", false)
+    }
+
+    private var noActiveDropsMessage: String {
+        noCurrentDropsMessage(for: searchQuery)
+    }
+
+    private func noCurrentDropsMessage(for query: String) -> String {
+        if offersBothStates {
+            return "No drops currently running for \"\(query)\". You can still add a rule for it now."
+        }
+        if selectionState == .excluded {
+            return "No drops currently running for \"\(query)\". You can still exclude it from mining."
+        }
+        return "No drops currently running for \"\(query)\". Keep it prioritised and SwiftMiner will mine matching drops when they go live."
     }
 
     private func isCancellationError(_ error: Error) -> Bool {
@@ -424,32 +449,57 @@ struct GameSearchField: View {
 struct GameSuggestionRow: View {
     let game: Game
     let hasActiveDrops: Bool
-    let onSelect: () -> Void
+    var defaultState: PreferenceState = .preferred
+    var offersBothStates: Bool = false
+    let onSelect: (PreferenceState) -> Void
 
     var body: some View {
-        Button(action: onSelect) {
+        if offersBothStates {
+            // Two explicit actions rather than a row-wide click: the sheet manages both
+            // lists at once, so "which list does this land in?" must not be implicit.
             HStack(spacing: 8) {
-                AsyncImage(url: game.boxArtURL) { image in
-                    image.resizable().aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    RoundedRectangle(cornerRadius: GlassRadius.subtle, style: .continuous)
-                        .fill(.quaternary)
-                }
-                .frame(width: 24, height: 32)
-                .clipShape(RoundedRectangle(cornerRadius: GlassRadius.subtle, style: .continuous))
+                label
 
-                Text(game.name)
-                    .lineLimit(1)
+                Spacer(minLength: 8)
 
-                AvailabilityBadge(hasActiveDrops: hasActiveDrops)
-
-                Spacer()
+                Button("Prioritise") { onSelect(.preferred) }
+                Button("Exclude") { onSelect(.excluded) }
             }
+            .controlSize(.small)
             .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .contentShape(Rectangle())
+            .padding(.vertical, 5)
+        } else {
+            Button {
+                onSelect(defaultState)
+            } label: {
+                HStack(spacing: 8) {
+                    label
+                    Spacer()
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
+    }
+
+    private var label: some View {
+        HStack(spacing: 8) {
+            AsyncImage(url: game.boxArtURL) { image in
+                image.resizable().aspectRatio(contentMode: .fill)
+            } placeholder: {
+                RoundedRectangle(cornerRadius: GlassRadius.subtle, style: .continuous)
+                    .fill(.quaternary)
+            }
+            .frame(width: 24, height: 32)
+            .clipShape(RoundedRectangle(cornerRadius: GlassRadius.subtle, style: .continuous))
+
+            Text(game.name)
+                .lineLimit(1)
+
+            AvailabilityBadge(hasActiveDrops: hasActiveDrops)
+        }
     }
 }
 

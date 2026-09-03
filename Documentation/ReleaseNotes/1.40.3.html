@@ -4,7 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SwiftMiner 1.40.3 - Release Notes</title>
-  <meta name="description" content="Release notes for SwiftMiner 1.40.3: reliable Discord profile pictures after SwiftBot starts.">
+  <meta name="description" content="Release notes for SwiftMiner 1.40.3: the complete SwiftMiner 1.40 series, including integrated Discord accounts, dependable profile pictures, clearer actions, and installation fixes.">
+  <meta name="release-notes:rollup-series" content="1.40">
   <link rel="canonical" href="https://swiftminer.app/release-notes/1.40.3.html">
   <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
@@ -26,14 +27,59 @@
 <body>
   <main>
     <h1>SwiftMiner 1.40.3</h1>
-    <p class="meta">Version 1.40.3 &middot; Build 2026090216</p>
-    <p class="intro">This hotfix makes Discord profile pictures dependable immediately after SwiftBot starts.</p>
+    <p class="meta">Version 1.40.3 &middot; Build 2026090310</p>
+    <p class="intro">The complete SwiftMiner 1.40 series: Discord now belongs to each miner, action messages lead to the right place, profile pictures recover reliably, and downloaded updates install cleanly.</p>
 
     <section>
-      <h2>&#128029; Discord Profile Picture Fixes</h2>
+      <h2>&#128279; Discord Belongs to Each Miner</h2>
       <ul>
-        <li>Linked accounts now receive their real Discord profile picture without waiting for that member to trigger a new Discord event.</li>
-        <li>Discord's generated placeholder is no longer treated as a selected profile picture; SwiftMiner uses the account's Twitch picture until the real Discord avatar is available.</li>
+        <li>The separate Discord sidebar has been replaced by a Discord section on each miner, keeping linking, account health, message history, resending, and welcome messages with the account they affect.</li>
+        <li>Collapsed sections show the linked account, current health, and message count; expanding one reveals recent messages and all account controls.</li>
+        <li>Not linked, unavailable, missing from SwiftBot, and failed delivery are now distinct states instead of variations of the same generic warning.</li>
+        <li>Pending items say when their own reminder was delivered and when automatic reminders are disabled.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#128100; Dependable Profile Pictures</h2>
+      <ul>
+        <li>Picture-source changes apply immediately in Settings, Miners, and the web dashboard, while temporary network failures no longer erase a working Twitch picture.</li>
+        <li>Discord pictures recover automatically when SwiftMiner and SwiftBot start together or when SwiftBot experiences a short-lived directory or connection failure.</li>
+        <li>Linked accounts receive their real Discord picture without waiting for that member to trigger a new Discord event.</li>
+        <li>Discord's generated placeholder is no longer treated as a selected picture; SwiftMiner uses the account's Twitch picture until the real Discord avatar is available.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#128073; Clearer Actions and Campaign State</h2>
+      <ul>
+        <li>Discord messages that require action now open the exact miner, campaign, account connection, or completed-drops page that resolves the problem.</li>
+        <li>Account-link reminders remain visible consistently in Needs Attention, Pending, and the sidebar count.</li>
+        <li>Claimed rewards waiting for a game-account link are described as undeliverable, rather than incorrectly saying the drops still need to be earned.</li>
+        <li>Subscription requirements, missing account links, and other known causes are stated directly, with a new guide for paid-subscription Drops.</li>
+        <li>Mining Settings now provides separate entry points for managing prioritised and excluded games.</li>
+        <li>Duplicate campaigns occasionally returned by Twitch are safely consolidated instead of crashing SwiftMiner while campaign status is calculated.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#128202; Diagnostics That Are Ready When Needed</h2>
+      <ul>
+        <li>SwiftMiner now keeps lightweight CPU and memory measurements automatically, alongside the existing seven-day earning ledger, and includes both in diagnostic reports without requiring advance setup.</li>
+        <li>Performance reports distinguish the initial two-minute startup workload from steady-state mining, making cold-launch request bursts easier to interpret.</li>
+        <li>Followed-streamer prioritisation can recover after an account receives a new access token instead of remaining unavailable until SwiftMiner is relaunched.</li>
+        <li>Followed-streamer prioritisation is now labelled accurately; SwiftMiner does not claim to detect paid channel subscriptions.</li>
+        <li>The obsolete debug link-requirement bypass has been removed now that missing game-account links are handled as delivery warnings during normal mining.</li>
+        <li>Legacy cache-clearing and full-settings reset controls have been removed from Advanced Settings.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#128230; Installation Fixes</h2>
+      <ul>
+        <li>A downloaded copy now locates the correct original app when macOS launches it through App Translocation, even if an older SwiftMiner is already installed.</li>
+        <li><strong>Move to Applications</strong> safely replaces an existing copy and relaunches the newly installed app.</li>
+        <li>Unsigned development builds keep their integration secrets separate from release credentials, avoiding repeated Keychain prompts during launch.</li>
       </ul>
     </section>
   </main>

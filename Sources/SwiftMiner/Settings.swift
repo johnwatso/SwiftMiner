@@ -79,10 +79,10 @@ public final class Settings {
     // MARK: - Secret Access
     //
     // Bearer credentials (the SwiftBot pairing secret, the local API key, the dashboard's
-    // Twitch client secret) go to the Keychain rather than the defaults plist, which is
-    // readable by anything running as the user. Reads still fall back to `appStorageStore`
-    // for a build that has not run `SecretStore.migrateIfNeeded` yet, so an upgrade never
-    // loses a working configuration.
+    // Twitch client secret) go to the Keychain in release builds. Unsigned DEBUG builds use
+    // isolated debug-only defaults so changing the app's code identity does not produce a
+    // Keychain authorization prompt for every observed-property read. Release reads still fall
+    // back to `appStorageStore` until `SecretStore.migrateIfNeeded` completes.
 
     static func readSecret(_ key: SecretStore.Key) -> String {
         SecretStore.read(key, legacyDefaults: appStorageStore) ?? ""
@@ -91,8 +91,10 @@ public final class Settings {
     static func writeSecret(_ key: SecretStore.Key, _ value: String) {
         do {
             try SecretStore.write(key, value)
+            #if !DEBUG
             // Clear any legacy plaintext copy so the two can never disagree.
             appStorageStore.removeObject(forKey: key.rawValue)
+            #endif
         } catch {
             // Losing the value outright would break the integration; keep it working and say so.
             Logger.storage.error("Could not save \(key.rawValue) to the Keychain: \(error.localizedDescription)")
@@ -180,21 +182,6 @@ public final class Settings {
     public static let defaultLogEntries = 5_000
     public static let minLogEntries = 1_000
 
-    /// Diagnostic: when on, SwiftMiner samples its own CPU/memory usage so the
-    /// Advanced "Resource Usage" popup can show averages. Off by default; nothing
-    /// is sampled unless enabled, so there is no cost for normal use.
-    public var monitorResourceUsage: Bool {
-        get {
-            access(keyPath: \.monitorResourceUsage)
-            return Self.read("monitorResourceUsage", default: false)
-        }
-        set {
-            withMutation(keyPath: \.monitorResourceUsage) {
-                Self.write("monitorResourceUsage", newValue)
-            }
-        }
-    }
-    
     /// Legacy preference retained for users upgrading from the old boolean setting.
     public var minimizeToMenuBar: Bool {
         get {
@@ -300,7 +287,7 @@ public final class Settings {
         }
     }
 
-    /// Whether followed or subscribed streamers should be preferred during channel selection.
+    /// Whether followed streamers should be preferred during channel selection.
     public var prioritiseFollowedStreamers: Bool {
         get {
             access(keyPath: \.prioritiseFollowedStreamers)
@@ -600,23 +587,6 @@ public final class Settings {
     private static var defaultEventFilters: Set<EventFilter> {
         [.mining, .heartbeats, .drops, .warnings, .errors, .discord, .audit, .updates, .system]
     }
-
-#if DEBUG
-    /// Bypass account-link/eligibility gates so the miner watches a random live channel
-    /// for any time-active campaign. For exercising the watch pipeline only — drops
-    /// won't actually credit for unlinked accounts.
-    public var debugBypassLinkRequirement: Bool {
-        get {
-            access(keyPath: \.debugBypassLinkRequirement)
-            return Self.read("debugBypassLinkRequirement", default: false)
-        }
-        set {
-            withMutation(keyPath: \.debugBypassLinkRequirement) {
-                Self.write("debugBypassLinkRequirement", newValue)
-            }
-        }
-    }
-#endif
 
     /// Preferred stream quality (for future use)
     public var preferredQuality: StreamQuality {
@@ -1277,7 +1247,6 @@ public final class Settings {
         logLevel = .info
         showLogConsole = true
         maxLogEntries = Self.defaultLogEntries
-        monitorResourceUsage = false
         minimizeToMenuBar = false
         appPresenceMode = .dockOnly
         autoStartOnLaunch = false
@@ -1326,9 +1295,6 @@ public final class Settings {
         twitchAvatarsData = "{}"
         accountAvatarSourcesData = "{}"
         ignoredWarningsData = "[]"
-#if DEBUG
-        debugBypassLinkRequirement = false
-#endif
     }
 
     public func allowsOperatorNotifications(at date: Date = Date(), calendar: Calendar = .current) -> Bool {

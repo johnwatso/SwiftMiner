@@ -411,9 +411,6 @@ public final class MinerManager {
     public var prioritiseFollowedStreamers: Bool = false
     public var antiStallRecoveryEnabled: Bool = true
     public var failoverStreamers: [GameFailoverStreamer] = []
-    /// Debug-only: broadcast to every engine to bypass link/eligibility gates. Stored here
-    /// so engines attached later (e.g. newly added accounts) pick up the current value.
-    public var debugBypassLinkRequirement: Bool = false
     /// Scoped warnings: [accountId: Set<gameId>]
     var ignoredAccountLinkWarnings: [String: Set<String>] = [:]
 
@@ -522,7 +519,7 @@ public final class MinerManager {
         }
     }
 
-    /// Broadcast followed/subscribed streamer channel ranking to all active engines.
+    /// Broadcast followed-streamer channel ranking to all active engines.
     public func updateFollowedStreamerPriority(enabled: Bool) async {
         self.prioritiseFollowedStreamers = enabled
         for engine in engines.values {
@@ -585,15 +582,6 @@ public final class MinerManager {
         } else {
             antiStallMonitorTask?.cancel()
             antiStallMonitorTask = nil
-        }
-    }
-
-    /// Debug-only: broadcast the link-bypass flag to every engine. Stored so engines
-    /// added later (new accounts during a session) pick up the current value on start.
-    public func setDebugBypassLinkRequirement(_ enabled: Bool) async {
-        self.debugBypassLinkRequirement = enabled
-        for engine in engines.values {
-            await engine.setDebugBypassLinkRequirement(enabled)
         }
     }
 
@@ -1150,7 +1138,6 @@ public final class MinerManager {
         )
         await engine.setStreamOverride(login: miner.streamOverrideLogin)
         await engine.updateMiningStrategy(strategy)
-        await engine.setDebugBypassLinkRequirement(debugBypassLinkRequirement)
 
         // Update status and sync priority games
         await dataCoordinator.updateAccountNeedsAuth(accountId: miner.accountId, needsAuth: false)

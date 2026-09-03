@@ -54,6 +54,18 @@ final class SettingsBackupTests: XCTestCase {
         XCTAssertTrue(settings.webDashboardDiscordOAuthEnabled)
     }
 
+    func testWebDashboardLocalPasswordRoundTripsAndFollowsUsernameChanges() throws {
+        try settings.saveWebDashboardLocalPassword("first-password", username: "admin")
+        XCTAssertEqual(settings.webDashboardLocalPassword(), "first-password")
+
+        try settings.saveWebDashboardLocalPassword("second-password", username: "operator")
+        settings.webDashboardLocalUsername = "operator"
+
+        XCTAssertEqual(settings.webDashboardLocalPassword(), "second-password")
+        settings.webDashboardLocalUsername = "admin"
+        XCTAssertNil(settings.webDashboardLocalPassword())
+    }
+
     func testWebDashboardURLRequiresHTTPSOutsideTheLocalNetwork() {
         XCTAssertEqual(
             Settings.normalizedWebDashboardURL(from: "swiftminer.example.com"),

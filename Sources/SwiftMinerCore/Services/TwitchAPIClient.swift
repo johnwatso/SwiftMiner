@@ -394,13 +394,22 @@ public actor TwitchAPIClient {
 
     /// Update the access token
     public func updateAccessToken(_ token: String) {
-        self.accessToken = token
+        guard token != accessToken else { return }
+        accessToken = token
+
+        // A token rejection only describes the previous auth context. A later refresh or
+        // re-authentication may carry the Helix scopes needed for followed-channel lookup,
+        // so let the new token try once instead of silently disabling the preference until
+        // the app is relaunched.
+        followedChannelIdsByUser.removeAll(keepingCapacity: true)
+        followedChannelLookupRetryAt.removeAll(keepingCapacity: true)
+        followedChannelLookupUnavailable.removeAll(keepingCapacity: true)
     }
 
     /// Get current access token from auth service (also used by MinerEngine for PubSub auth)
     public func getAccessToken() async throws -> String {
         let token = try await authService.refreshTokenIfNeeded()
-        accessToken = token
+        updateAccessToken(token)
         return token
     }
 
@@ -475,11 +484,8 @@ public actor TwitchAPIClient {
 
     /// Returns followed-channel state between the authenticated user and candidate broadcasters.
     ///
-    /// Subscription status used to be fetched once per candidate channel. A single popular game
-    /// can expose dozens of channels, so five miners could enqueue hundreds of non-critical REST
-    /// calls ahead of miners that were still discovering campaigns. The user-facing preference is
-    /// specifically to prioritise followed streamers; one paginated followed-channel request is
-    /// sufficient to honour it without blocking startup on subscription enrichment.
+    /// A single popular game can expose dozens of channels, so use one paginated followed-channel
+    /// request for the authenticated user instead of issuing a request per candidate broadcaster.
     public func getChannelRelationships(userId: String, broadcasterIds: [String]) async -> [String: ChannelRelationship] {
         let uniqueIds = Array(Set(broadcasterIds.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }))
         guard !userId.isEmpty, !uniqueIds.isEmpty else { return [:] }
@@ -510,8 +516,7 @@ public actor TwitchAPIClient {
 
         for broadcasterId in uniqueIds {
             relationships[broadcasterId] = ChannelRelationship(
-                isFollowed: followedIds.contains(broadcasterId),
-                isSubscribed: false
+                isFollowed: followedIds.contains(broadcasterId)
             )
         }
 
@@ -1029,7 +1034,7 @@ public actor TwitchAPIClient {
     /// Force-refreshes OAuth token after a 401/tokenExpired response and syncs local caches.
     private func refreshAccessTokenAfterExpiry() async throws -> String {
         let refreshedToken = try await authService.forceRefreshToken()
-        accessToken = refreshedToken
+        updateAccessToken(refreshedToken)
         // Integrity token is bound to auth context; force re-fetch after token rotation.
         integrityToken = nil
         integrityTokenExpiry = .distantPast

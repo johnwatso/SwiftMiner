@@ -9,8 +9,10 @@ import Security
 /// in the user's preferences plist, where another process running as that user — and any backup
 /// or sync of that folder — could read them.
 ///
-/// They live in the login Keychain instead, one `kSecClassGenericPassword` item per key,
-/// mirroring the pattern already used for the dashboard's local password.
+/// Release builds keep them in the login Keychain, one `kSecClassGenericPassword` item per key,
+/// mirroring the pattern already used for the dashboard's local password. Unsigned DEBUG builds
+/// use separate, debug-prefixed defaults instead: their changing code identity would otherwise
+/// make macOS request Keychain authorization repeatedly during normal development.
 ///
 /// Reads fall back to `UserDefaults` for values written by older builds, and `migrateIfNeeded`
 /// moves those into the Keychain and clears the plaintext copy on first launch.
@@ -29,6 +31,12 @@ public enum SecretStore {
 
     private static let logger = Logger.storage
 
+    #if DEBUG
+    /// Kept separate from the legacy keys so a release build can never migrate a development
+    /// credential into the production Keychain.
+    private static let debugDefaultsPrefix = "SwiftMinerDebugSecret."
+    #endif
+
     /// Tests must never touch — or leave items in — the developer's real login Keychain, so
     /// they get a process-local store instead. Mirrors `Settings.appStorageStore`.
     private static let testStore = TestSecretBox()
@@ -40,9 +48,23 @@ public enum SecretStore {
     /// `defaults`, when given, is consulted only if the Keychain has no item — a build that has
     /// not run `migrateIfNeeded` yet must not lose its configuration.
     public static func read(_ key: Key, legacyDefaults defaults: UserDefaults? = nil) -> String? {
+        if SwiftMinerRuntime.isRunningTests {
+            if let value = testStore.get(key.rawValue), !value.isEmpty { return value }
+            if let legacy = defaults?.string(forKey: key.rawValue), !legacy.isEmpty { return legacy }
+            return nil
+        }
+
+        #if DEBUG
+        if let value = UserDefaults.standard.string(forKey: debugDefaultsKey(key)), !value.isEmpty {
+            return value
+        }
+        if let legacy = defaults?.string(forKey: key.rawValue), !legacy.isEmpty { return legacy }
+        return nil
+        #else
         if let value = readKeychain(key), !value.isEmpty { return value }
         if let legacy = defaults?.string(forKey: key.rawValue), !legacy.isEmpty { return legacy }
         return nil
+        #endif
     }
 
     /// Stores `value`, or removes the item when `value` is empty.
@@ -57,6 +79,9 @@ public enum SecretStore {
             return
         }
 
+        #if DEBUG
+        UserDefaults.standard.set(value, forKey: debugDefaultsKey(key))
+        #else
         let data = Data(value.utf8)
         let status = SecItemUpdate(query(key) as CFDictionary, [kSecValueData as String: data] as CFDictionary)
         if status == errSecSuccess { return }
@@ -71,6 +96,7 @@ public enum SecretStore {
         guard addStatus == errSecSuccess else {
             throw keychainError(addStatus, operation: "save", key: key)
         }
+        #endif
     }
 
     public static func delete(_ key: Key) {
@@ -78,7 +104,11 @@ public enum SecretStore {
             testStore.set(key.rawValue, nil)
             return
         }
+        #if DEBUG
+        UserDefaults.standard.removeObject(forKey: debugDefaultsKey(key))
+        #else
         SecItemDelete(query(key) as CFDictionary)
+        #endif
     }
 
     // MARK: - Migration
@@ -90,6 +120,11 @@ public enum SecretStore {
     /// write has succeeded.
     @discardableResult
     public static func migrateIfNeeded(defaults: UserDefaults = .standard) -> Int {
+        #if DEBUG
+        // Tests still exercise the release migration semantics against `testStore` below.
+        guard SwiftMinerRuntime.isRunningTests else { return 0 }
+        #endif
+
         var migrated = 0
         for key in Key.allCases {
             guard let legacy = defaults.string(forKey: key.rawValue), !legacy.isEmpty else { continue }
@@ -128,6 +163,12 @@ public enum SecretStore {
               let data = item as? Data else { return nil }
         return String(data: data, encoding: .utf8)
     }
+
+    #if DEBUG
+    private static func debugDefaultsKey(_ key: Key) -> String {
+        debugDefaultsPrefix + key.rawValue
+    }
+    #endif
 
     private static func query(_ key: Key) -> [String: Any] {
         [

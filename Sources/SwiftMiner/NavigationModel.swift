@@ -833,7 +833,7 @@ public final class NavigationModel {
         }
         if !SwiftMinerRuntime.isRunningTests {
             startSwiftBotStateSync()
-            startResourceUsageMonitoringIfEnabled()
+            startResourceUsageMonitoring()
         }
 
         // Wire DM event production — lightweight event emission, notification decisions stay in SwiftBot

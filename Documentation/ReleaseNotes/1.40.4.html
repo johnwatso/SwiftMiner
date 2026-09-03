@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SwiftMiner 1.40.4 - Release Notes</title>
+  <meta name="description" content="Release notes for SwiftMiner 1.40.4: prioritised and excluded games in a single Game Rules sheet, a Game Priority summary in Mining settings, and legacy fallback streamers moved behind a per-game disclosure.">
+  <link rel="canonical" href="https://swiftminer.app/release-notes/1.40.4.html">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <style>
+    :root { color-scheme: light dark; }
+    body { margin: 0; padding: 32px 20px 48px; font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f4f6f8; color: #0f1720; }
+    main { max-width: 760px; margin: 0 auto; padding: 28px; border-radius: 22px; background: rgba(255, 255, 255, .86); box-shadow: 0 20px 60px rgba(15, 23, 32, .10); border: 1px solid rgba(82, 96, 109, .12); }
+    h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
+    .meta { color: #52606d; font-size: 14px; }
+    .intro { margin: 0 0 24px; color: #384454; }
+    section { margin: 18px 0 0; padding: 18px 18px 14px; border: 1px solid rgba(82, 96, 109, .18); border-radius: 16px; border-left: 5px solid #7b4bd9; background: rgba(255, 255, 255, .42); }
+    h2 { margin: 0 0 4px; color: #7b4bd9; font-size: 18px; }
+    ul { margin: 12px 0 0; padding-left: 22px; }
+    li { margin: 0 0 8px; }
+    @media (prefers-color-scheme: dark) { body { background: #0b1015; color: #edf2f7; } main { background: rgba(15, 23, 32, .88); border-color: rgba(159, 176, 194, .14); } .meta { color: #9fb0c2; } .intro { color: #c8d3df; } section { border-color: rgba(159, 176, 194, .18); background: rgba(255, 255, 255, .04); } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>SwiftMiner 1.40.4</h1>
+    <p class="meta">Version 1.40.4 &middot; Build 2026090311</p>
+    <p class="intro">Prioritised and excluded games now share one Game Rules sheet, Mining settings opens on a Game Priority summary, and the legacy fallback streamer steps out of the way until it is actually needed.</p>
+
+    <section>
+      <h2>&#127919; One Place for Game Rules</h2>
+      <ul>
+        <li>Prioritised and excluded games are now managed in a single Game Rules sheet. The separate Prioritised Games and Excluded Games sheets offered the same controls twice and let a game be moved between the lists anyway.</li>
+        <li>Searching adds a game directly as prioritised or excluded, so there is no longer a list to choose before looking a game up.</li>
+        <li>Every game carries a rule of Prioritised or Excluded. Changing that rule moves the game into the matching section and leaves its position in the priority order intact.</li>
+        <li>Both sections collapse, so a long priority list no longer pushes exclusions below the visible area.</li>
+        <li>Rows are quieter: artwork, name and current rule lead, with reordering and removal kept secondary to them.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#11088; Game Priority at a Glance</h2>
+      <ul>
+        <li>Mining settings now opens on a Game Priority summary showing how many games are prioritised and how many are excluded, with one Manage Game Rules entry point beneath it.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#129529; Fallback Streamers Out of the Way</h2>
+      <ul>
+        <li>The fallback streamer is a legacy feature and no longer occupies a row on every prioritised game. A game mentions its fallback only when one is actually configured.</li>
+        <li>The field now sits behind each game's own disclosure, with a single action beside it: Set while a new login is being entered, Clear once one is saved.</li>
+        <li>Changing a prioritised game to Excluded hides its fallback without discarding it. Switching the game back to Prioritised restores what was configured.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

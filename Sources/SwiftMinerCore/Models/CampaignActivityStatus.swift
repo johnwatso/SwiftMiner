@@ -56,7 +56,8 @@ extension Campaign {
         }
 
         let statesByDropId = Dictionary(
-            uniqueKeysWithValues: (miner.stateStore?.dropStates ?? []).map { ($0.dropId, $0) }
+            (miner.stateStore?.dropStates ?? []).map { ($0.dropId, $0) },
+            uniquingKeysWith: DropState.preferred
         )
         let allDropsComplete = !drops.isEmpty && drops.allSatisfy { drop in
             if drop.isClaimed { return true }

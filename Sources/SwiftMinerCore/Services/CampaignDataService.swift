@@ -379,7 +379,7 @@ enum CampaignDiskCache {
             return ([], nil)
         }
 
-        return (envelope.campaigns, envelope.savedAt)
+        return (CampaignMergeEngine.deduplicatedByID(envelope.campaigns), envelope.savedAt)
     }
     
     /// Check if cache is valid (exists, correct version, not expired).

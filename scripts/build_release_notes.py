@@ -64,6 +64,10 @@ INDEX_HEAD = """<!doctype html>
     h2 { margin: 28px 0 6px; font-size: 20px; }
     .summary { margin: 0 0 4px; color: #384454; }
     .build { margin: 0 0 20px; color: #52606d; font-size: 13px; }
+    .series-history { margin: 2px 0 24px; padding: 12px 16px 2px; border: 1px solid rgba(82, 96, 109, 0.18); border-radius: 14px; }
+    .series-history summary { cursor: pointer; color: #384454; font-weight: 600; }
+    .series-history h2 { margin-top: 20px; font-size: 18px; }
+    .series-history .build { margin-bottom: 16px; }
     a { color: #0a67a3; text-decoration: none; }
     a:hover { text-decoration: underline; }
     @media (prefers-color-scheme: dark) {
@@ -75,6 +79,8 @@ INDEX_HEAD = """<!doctype html>
       .meta { color: #9fb0c2; }
       .summary { color: #c8d3df; }
       .build { color: #9fb0c2; }
+      .series-history { border-color: rgba(159, 176, 194, 0.18); }
+      .series-history summary { color: #c8d3df; }
       a { color: #73c3ff; }
     }
   </style>
@@ -101,6 +107,7 @@ class ReleaseNote:
         self.build = self._build(markup)
         self.emoji = self._emoji(markup)
         self.title = self._title(markup)
+        self.rollup_series = self._rollup_series(markup)
         self.section_count = len(re.findall(r"<section[\s>]", markup))
 
     @staticmethod
@@ -148,6 +155,13 @@ class ReleaseNote:
         text = self._text(inner)
         glyphs = re.match(r"([^\w\s]+)", text)
         return glyphs.group(1) if glyphs else ""
+
+    def _rollup_series(self, markup: str) -> str:
+        marker = re.search(
+            r'<meta\s+name="release-notes:rollup-series"\s+content="([^"]+)"\s*/?>',
+            markup,
+        )
+        return marker.group(1) if marker else ""
 
     @property
     def sort_key(self) -> tuple[int, ...]:
@@ -202,17 +216,47 @@ def load_notes(notes_dir: Path, curated_dir: Path | None = None) -> list[Release
     return sorted(notes, key=lambda note: note.sort_key, reverse=True)
 
 
+def render_index_entry(note: ReleaseNote, indent: str = "    ") -> list[str]:
+    prefix = f"{note.emoji} " if note.emoji else ""
+    lines = [
+        f'{indent}<h2>{prefix}<a href="./{note.filename}">Version {html.escape(note.version)}</a></h2>\n'
+    ]
+    if note.summary:
+        lines.append(f'{indent}<p class="summary">{html.escape(note.summary)}</p>\n')
+    if note.build:
+        lines.append(f'{indent}<p class="build">Build {html.escape(note.build)}</p>\n')
+    return lines
+
+
 def render_index(notes: list[ReleaseNote]) -> str:
     lines = [INDEX_HEAD]
+    grouped: set[str] = set()
     for note in notes:
-        prefix = f"{note.emoji} " if note.emoji else ""
-        lines.append(
-            f'    <h2>{prefix}<a href="./{note.filename}">Version {html.escape(note.version)}</a></h2>\n'
-        )
-        if note.summary:
-            lines.append(f'    <p class="summary">{html.escape(note.summary)}</p>\n')
-        if note.build:
-            lines.append(f'    <p class="build">Build {html.escape(note.build)}</p>\n')
+        if note.filename in grouped:
+            continue
+
+        lines.extend(render_index_entry(note))
+        if note.rollup_series:
+            series_prefix = f"{note.rollup_series}."
+            earlier = [
+                candidate
+                for candidate in notes
+                if candidate.filename != note.filename
+                and (candidate.version == note.rollup_series or candidate.version.startswith(series_prefix))
+                # Strictly older only. Without this a point release published after the
+                # rollup (1.40.4 after the 1.40.3 series page) is emitted at top level
+                # and then swallowed into the rollup's details, appearing twice.
+                and candidate.sort_key < note.sort_key
+            ]
+            if earlier:
+                lines.append('    <details class="series-history">\n')
+                lines.append(
+                    f"      <summary>Previous {html.escape(note.rollup_series)} releases ({len(earlier)})</summary>\n"
+                )
+                for candidate in earlier:
+                    lines.extend(render_index_entry(candidate, indent="      "))
+                    grouped.add(candidate.filename)
+                lines.append("    </details>\n")
     lines.append(INDEX_TAIL)
     return "".join(lines)
 

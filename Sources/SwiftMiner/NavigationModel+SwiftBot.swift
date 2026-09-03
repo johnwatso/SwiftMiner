@@ -408,17 +408,8 @@ extension NavigationModel {
         }
     }
 
-    /// Start/stop the resource-usage diagnostic to match the current setting.
-    /// Called at launch and whenever the Advanced toggle changes.
-    func startResourceUsageMonitoringIfEnabled() {
-        setResourceUsageMonitoring(enabled: Settings.shared.monitorResourceUsage)
-    }
-
-    func setResourceUsageMonitoring(enabled: Bool) {
-        if enabled {
-            resourceUsageMonitor.start()
-        } else {
-            resourceUsageMonitor.stop()
-        }
+    /// Start the process-wide resource diagnostic for the lifetime of the app.
+    func startResourceUsageMonitoring() {
+        resourceUsageMonitor.start()
     }
 }
