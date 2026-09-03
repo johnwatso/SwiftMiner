@@ -107,8 +107,7 @@ extension TwitchAPIClient {
                                 basicCampaign: campaign
                             )
                             let merged = Self.mergeBasicCampaign(campaign, withDetails: details)
-                            let withChannels = await self.reinstatingKnownApprovedChannels(merged)
-                            campaign = await self.reinstatingKnownDrops(withChannels)
+                            campaign = await self.reconcilingCampaign(merged)
                         } catch {
                             Logger.api.error("Failed to fetch details for campaign \(campaign.id): \(error)")
                         }
@@ -304,10 +303,7 @@ extension TwitchAPIClient {
             campaignId: campaignId,
             userLogin: userLogin
         )
-        let campaign = reinstatingKnownLinkState(
-            reinstatingKnownDrops(fetched),
-            cacheKey: cacheKey
-        )
+        let campaign = reconcilingCampaign(fetched, cacheKey: cacheKey)
         cacheCampaignDetailsForAccount(campaign, cacheKey: cacheKey)
         await SharedTwitchLookupCache.shared.storeCampaignMetadata(
             Self.sharedCampaignMetadata(from: campaign),
@@ -362,14 +358,14 @@ extension TwitchAPIClient {
 
     /// Remembers what a fetch established about this account's link to a campaign, so later
     /// cycles can take the shared metadata path without losing that answer — and so a single
-    /// contrary response cannot unlink a campaign outright. See `reinstatingKnownLinkState`.
+    /// contrary response cannot unlink a campaign outright. See `CampaignRefreshPolicy`.
     func rememberLinkState(isAccountConnected: Bool, cacheKey: String) {
         Self.pruneCache(
             &campaignLinkStateByKey,
             maxEntries: maxCampaignDetailsCacheEntries,
             expiresAt: { $0.expiresAt }
         )
-        // An unchanged answer keeps the deadline it already had. `reinstatingKnownLinkState`
+        // An unchanged answer keeps the deadline it already had. `CampaignRefreshPolicy`
         // runs before this, so a reinstated `true` arrives here looking like a fresh one —
         // re-arming the window on it would let a campaign hold a link forever and break the
         // twenty-minute unlink contract `campaignLinkStateTTL` documents. The window
@@ -405,17 +401,48 @@ extension TwitchAPIClient {
         return min(normalExpiration, knownLinkStateExpiresAt)
     }
 
-    /// Combine ViewerDropsDashboard's broad metadata with DropCampaignDetails' richer,
-    /// account-specific fields. Details is authoritative for link state, drops, ACL, and
-    /// time/status data, while the dashboard can still carry artwork that details omits.
-    /// Remembers a campaign's approved-channel list, and puts it back when a later fetch
-    /// returns the campaign still restricted but with no channels to probe.
+    /// Reconciles a freshly fetched campaign against everything this client already knows
+    /// about it, then records the result as the new baseline.
     ///
-    /// Twitch returning an empty ACL is not a claim that the restriction was lifted: the
-    /// allow flag stays set. Treating it as "no channels" leaves the campaign verifiable
-    /// only through the public directory, which does not list the channels these campaigns
-    /// run on — so an esports window passes with the campaign visible but unmineable.
-    func reinstatingKnownApprovedChannels(_ campaign: Campaign) -> Campaign {
+    /// This is the only place that decides what happens when a refresh disagrees with what
+    /// we had. The rules live in `CampaignMiningGate.refreshPolicy`; this function supplies
+    /// the remembered facts and stores the good ones. Doing it in one place is the point:
+    /// the same rule had previously been written out four separate times, once per outage,
+    /// and the fields nobody had been burned by yet were left unprotected.
+    ///
+    /// Called on every campaign every refresh — cache hit or miss — and again before a
+    /// network response is cached, so a degraded answer is repaired rather than pinned for
+    /// the four-hour `campaignDetailsCacheTTL`.
+    func reconcilingCampaign(_ campaign: Campaign, cacheKey: String? = nil) -> Campaign {
+        let linkStateKey = cacheKey ?? Self.cacheKey("campaign-details", userLogin, campaign.id)
+        let rememberedLink = campaignLinkStateByKey[linkStateKey]
+            .flatMap { $0.expiresAt > Date() ? $0.isAccountConnected : nil }
+
+        let result = CampaignRefreshPolicy.reconcile(
+            fetched: campaign,
+            remembered: RememberedCampaignFacts(
+                drops: lastKnownCampaignDrops[campaign.id]?.drops,
+                channels: lastKnownApprovedChannels[campaign.id],
+                isAccountConnected: rememberedLink,
+                allowIsEnabled: lastKnownCampaignDrops[campaign.id]?.allowIsEnabled
+            )
+        )
+
+        if result.describesRepair {
+            let gates = result.repaired.map(\.rawValue).joined(separator: ", ")
+            Logger.api.info(
+                "[CampaignDetails] \(campaign.name) came back missing \(gates) for \(userLogin); restored from the last good answer."
+            )
+        }
+
+        remember(result.campaign)
+        return result.campaign
+    }
+
+    /// Stores the parts of a campaign worth defending on a later refresh. Only better
+    /// answers are recorded — an empty list never overwrites a list we already have, which
+    /// is what makes the remembered copy a floor rather than a mirror of the last response.
+    private func remember(_ campaign: Campaign) {
         if !campaign.channels.isEmpty {
             // A list we did not have before is exactly what a future launch needs, so make
             // sure the cycle writes it out rather than relying on some other change to.
@@ -424,77 +451,26 @@ extension TwitchAPIClient {
             }
             lastKnownApprovedChannels[campaign.id] = campaign.channels
             lastKnownApprovedChannelExpiry[campaign.id] = campaign.endDate
-            return campaign
         }
 
-        guard campaign.hasUnresolvedChannelRestrictions,
-              let remembered = lastKnownApprovedChannels[campaign.id],
-              !remembered.isEmpty else { return campaign }
+        let rememberedAllow = lastKnownCampaignDrops[campaign.id]?.allowIsEnabled
+        let drops = campaign.drops.isEmpty
+            ? lastKnownCampaignDrops[campaign.id]?.drops ?? []
+            : campaign.drops
+        let allowIsEnabled = campaign.allowIsEnabled == true ? true : rememberedAllow
 
-        Logger.api.info(
-            "[CampaignDetails] \(campaign.name) came back restricted with no approved channels; reusing the \(remembered.count) last seen."
+        guard !drops.isEmpty || allowIsEnabled != nil else { return }
+
+        Self.pruneCache(
+            &lastKnownCampaignDrops,
+            maxEntries: maxCampaignDetailsCacheEntries,
+            expiresAt: { $0.expiresAt }
         )
-        return campaign.withChannels(remembered)
-    }
-
-    /// Remembers a campaign's drop list, and puts it back when a later fetch returns the
-    /// campaign still time-active but carrying no drops.
-    ///
-    /// `DropCampaignDetails` is the only source of drops — `ViewerDropsDashboard` never
-    /// carries them — so a response that omits `timeBasedDrops` leaves the campaign with an
-    /// empty list, which reads to `candidateCampaigns` as "nothing to mine here" and takes
-    /// the campaign out of mining for the whole `detailsCacheTTL` window. Twitch does not
-    /// signal completion that way: a finished campaign returns its drops with `isClaimed`
-    /// set, so an empty list is a lost response, not an answer.
-    ///
-    /// Reinstating a remembered list cannot resurrect claimed drops, because claimed state
-    /// is recomputed from inventory benefit IDs every time — `DropsService.mergeInventory`
-    /// assigns `isClaimed` from the snapshot and ignores whatever the drop carried.
-    func reinstatingKnownDrops(_ campaign: Campaign) -> Campaign {
-        if !campaign.drops.isEmpty {
-            Self.pruneCache(
-                &lastKnownCampaignDrops,
-                maxEntries: maxCampaignDetailsCacheEntries,
-                expiresAt: { $0.expiresAt }
-            )
-            lastKnownCampaignDrops[campaign.id] = RememberedDropsEntry(
-                drops: campaign.drops,
-                expiresAt: campaign.endDate
-            )
-            return campaign
-        }
-
-        guard campaign.isTimeActive,
-              let remembered = lastKnownCampaignDrops[campaign.id],
-              !remembered.drops.isEmpty else { return campaign }
-
-        Logger.api.info(
-            "[CampaignDetails] \(campaign.name) came back with no drops while still active; reusing the \(remembered.drops.count) last seen."
+        lastKnownCampaignDrops[campaign.id] = RememberedCampaignEntry(
+            drops: drops,
+            allowIsEnabled: allowIsEnabled,
+            expiresAt: campaign.endDate
         )
-        return campaign.withDrops(remembered.drops)
-    }
-
-    /// Keeps an account's confirmed link to a campaign from being erased by a single
-    /// `isAccountConnected: false` response.
-    ///
-    /// Link state decides mining directly: an unlinked campaign whose game is not
-    /// prioritised is filtered as `unlinked_not_prioritised` and never attempted. Twitch
-    /// can answer `false` transiently — notably on the forced refetch that follows a claim,
-    /// once `invalidateCampaignDetailsAfterClaim()` has dropped the cached answer — and
-    /// that one response would otherwise be cached for hours.
-    ///
-    /// The remembered answer is bounded by `campaignLinkStateTTL`, so a genuine unlink is
-    /// still picked up inside twenty minutes, which is the contract that constant documents.
-    func reinstatingKnownLinkState(_ campaign: Campaign, cacheKey: String) -> Campaign {
-        guard !campaign.isAccountConnected,
-              let remembered = campaignLinkStateByKey[cacheKey],
-              remembered.expiresAt > Date(),
-              remembered.isAccountConnected else { return campaign }
-
-        Logger.api.info(
-            "[CampaignDetails] \(campaign.name) came back unlinked for \(userLogin) within the link-state window; keeping the confirmed link."
-        )
-        return campaign.withAccountConnected(true)
     }
 
     /// Approved-channel lists worth writing out: the campaign's own end date bounds how

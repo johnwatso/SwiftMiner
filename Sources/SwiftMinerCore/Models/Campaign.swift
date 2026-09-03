@@ -454,7 +454,7 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
 
     /// Twitch says the campaign is restricted, but did not provide a usable ACL.
     /// A copy carrying a different approved-channel list. Used to reinstate an ACL Twitch
-    /// returned once and then omitted; see `TwitchAPIClient.reinstatingKnownApprovedChannels`.
+    /// returned once and then omitted; see `CampaignRefreshPolicy`.
     public func withChannels(_ channels: [Channel]) -> Campaign {
         Campaign(
             id: id,
@@ -472,7 +472,7 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
     }
 
     /// A copy carrying a different drop list. Used to reinstate drops Twitch returned once
-    /// and then omitted; see `TwitchAPIClient.reinstatingKnownDrops`.
+    /// and then omitted; see `CampaignRefreshPolicy`.
     public func withDrops(_ drops: [Drop]) -> Campaign {
         Campaign(
             id: id,
@@ -489,8 +489,26 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
         )
     }
 
+    /// A copy carrying a different restriction flag. Used to keep a restriction Twitch
+    /// declared once and then omitted; see `CampaignRefreshPolicy`.
+    public func withAllowIsEnabled(_ allowIsEnabled: Bool?) -> Campaign {
+        Campaign(
+            id: id,
+            name: name,
+            game: game,
+            status: status,
+            startDate: startDate,
+            endDate: endDate,
+            drops: drops,
+            channels: channels,
+            isAccountConnected: isAccountConnected,
+            allowIsEnabled: allowIsEnabled,
+            isPrioritised: isPrioritised
+        )
+    }
+
     /// A copy carrying a different account-link state. Used to keep a link Twitch confirmed
-    /// once and then denied; see `TwitchAPIClient.reinstatingKnownLinkState`.
+    /// once and then denied; see `CampaignRefreshPolicy`.
     public func withAccountConnected(_ isAccountConnected: Bool) -> Campaign {
         Campaign(
             id: id,

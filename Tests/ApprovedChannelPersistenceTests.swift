@@ -125,14 +125,14 @@ final class ApprovedChannelPersistenceTests: XCTestCase {
     func testAClientRestoresAndReinstatesAcrossARestart() async {
         let first = makeClient()
         await first.setUserLogin(userLogin)
-        _ = await first.reinstatingKnownApprovedChannels(campaign(channels: owcs))
+        _ = await first.reconcilingCampaign(campaign(channels: owcs))
         await first.persistCampaignCachesIfNeeded()
 
         // A new client is a new launch: nothing in memory.
         let second = makeClient()
         await second.setUserLogin(userLogin)
         await second.loadPersistedCampaignCachesIfNeeded()
-        let omitted = await second.reinstatingKnownApprovedChannels(campaign(channels: []))
+        let omitted = await second.reconcilingCampaign(campaign(channels: []))
 
         XCTAssertEqual(omitted.channels.map(\.login), ["ow_esports"])
     }
@@ -154,7 +154,7 @@ final class ApprovedChannelPersistenceTests: XCTestCase {
         let client = makeClient()
         await client.setUserLogin(userLogin)
         await client.loadPersistedCampaignCachesIfNeeded()
-        _ = await client.reinstatingKnownApprovedChannels(campaign(
+        _ = await client.reconcilingCampaign(campaign(
             id: "campaign-2",
             channels: [Channel(id: "67890", login: "ow_esports_2", displayName: "OWCS 2")]
         ))

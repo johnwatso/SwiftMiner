@@ -176,18 +176,24 @@ final class CampaignMetadataSharingTests: XCTestCase {
         )
         let channels = [Channel(id: "1", login: "ow_esports", displayName: "OWCS")]
 
-        let withACL = await client.reinstatingKnownApprovedChannels(
+        let withACL = await client.reconcilingCampaign(
             Self.campaign(channels: channels, allowIsEnabled: true)
         )
         XCTAssertEqual(withACL.channels.map(\.login), ["ow_esports"])
 
-        let withoutACL = await client.reinstatingKnownApprovedChannels(
+        let withoutACL = await client.reconcilingCampaign(
             Self.campaign(channels: [], allowIsEnabled: true)
         )
         XCTAssertEqual(withoutACL.channels.map(\.login), ["ow_esports"])
     }
 
-    /// A campaign that is simply open to everyone must not inherit a list from anywhere.
+    /// A campaign Twitch says is open to everyone must not inherit a list from anywhere.
+    ///
+    /// Narrowed from "not flagged restricted" to "explicitly flagged unrestricted" once the
+    /// ALGS campaigns showed what the other case costs: those arrived with `allowIsEnabled`
+    /// absent, SwiftMiner read the silence as open, and mined them from the public directory
+    /// on channels that could never credit the drop. `false` is an answer and is obeyed;
+    /// `nil` is a missing field and no longer overrides what we already knew.
     func testAnUnrestrictedCampaignIsNeverGivenChannels() async {
         let client = TwitchAPIClient(
             authService: TwitchAuthService(clientId: "test", tokenStore: InMemoryTokenStore()),
@@ -195,14 +201,34 @@ final class CampaignMetadataSharingTests: XCTestCase {
             persistsCampaignCaches: false
         )
 
-        _ = await client.reinstatingKnownApprovedChannels(
+        _ = await client.reconcilingCampaign(
             Self.campaign(channels: [Channel(id: "1", login: "ow_esports", displayName: "OWCS")], allowIsEnabled: true)
         )
-        let open = await client.reinstatingKnownApprovedChannels(
-            Self.campaign(channels: [], allowIsEnabled: nil)
+        let open = await client.reconcilingCampaign(
+            Self.campaign(channels: [], allowIsEnabled: false)
         )
 
         XCTAssertTrue(open.channels.isEmpty)
+    }
+
+    /// The other half of that distinction: an absent flag is not a statement, so a campaign
+    /// known to be restricted keeps its ACL rather than falling back to the public directory.
+    func testACampaignWhoseRestrictionFlagWentMissingKeepsItsChannels() async {
+        let client = TwitchAPIClient(
+            authService: TwitchAuthService(clientId: "test", tokenStore: InMemoryTokenStore()),
+            clientId: "test",
+            persistsCampaignCaches: false
+        )
+
+        _ = await client.reconcilingCampaign(
+            Self.campaign(channels: [Channel(id: "1", login: "ow_esports", displayName: "OWCS")], allowIsEnabled: true)
+        )
+        let silent = await client.reconcilingCampaign(
+            Self.campaign(channels: [], allowIsEnabled: nil)
+        )
+
+        XCTAssertEqual(silent.channels.map(\.login), ["ow_esports"])
+        XCTAssertTrue(silent.hasChannelRestrictions)
     }
 
     func testFreshDashboardWindowWinsOverCachedCampaignDetails() {

@@ -220,9 +220,11 @@ public actor TwitchAPIClient {
         let expiresAt: Date
     }
 
-    /// A campaign's last known drop list, kept until the campaign itself ends.
-    struct RememberedDropsEntry {
+    /// A campaign's last known campaign-global facts, kept until the campaign itself ends.
+    /// These are the `.neverRegress` gates that are not already stored elsewhere.
+    struct RememberedCampaignEntry {
         let drops: [Drop]
+        let allowIsEnabled: Bool?
         let expiresAt: Date
     }
 
@@ -348,7 +350,7 @@ public actor TwitchAPIClient {
     /// campaign returns its drops with `isClaimed` set. So drops, once seen, are remembered
     /// and reinstated. Reinstating a stale list is safe because claimed state is recomputed
     /// from inventory benefit IDs on every merge — see `DropsService.mergeInventory`.
-    var lastKnownCampaignDrops: [String: RememberedDropsEntry] = [:]
+    var lastKnownCampaignDrops: [String: RememberedCampaignEntry] = [:]
 
     var lastKnownClaimedBenefits: [String: ClaimedBenefit] = [:]
 
