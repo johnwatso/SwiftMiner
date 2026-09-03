@@ -471,6 +471,42 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
         )
     }
 
+    /// A copy carrying a different drop list. Used to reinstate drops Twitch returned once
+    /// and then omitted; see `TwitchAPIClient.reinstatingKnownDrops`.
+    public func withDrops(_ drops: [Drop]) -> Campaign {
+        Campaign(
+            id: id,
+            name: name,
+            game: game,
+            status: status,
+            startDate: startDate,
+            endDate: endDate,
+            drops: drops,
+            channels: channels,
+            isAccountConnected: isAccountConnected,
+            allowIsEnabled: allowIsEnabled,
+            isPrioritised: isPrioritised
+        )
+    }
+
+    /// A copy carrying a different account-link state. Used to keep a link Twitch confirmed
+    /// once and then denied; see `TwitchAPIClient.reinstatingKnownLinkState`.
+    public func withAccountConnected(_ isAccountConnected: Bool) -> Campaign {
+        Campaign(
+            id: id,
+            name: name,
+            game: game,
+            status: status,
+            startDate: startDate,
+            endDate: endDate,
+            drops: drops,
+            channels: channels,
+            isAccountConnected: isAccountConnected,
+            allowIsEnabled: allowIsEnabled,
+            isPrioritised: isPrioritised
+        )
+    }
+
     public var hasUnresolvedChannelRestrictions: Bool {
         allowIsEnabled == true && channels.isEmpty
     }

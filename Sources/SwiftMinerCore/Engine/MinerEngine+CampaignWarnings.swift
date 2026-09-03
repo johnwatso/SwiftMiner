@@ -139,6 +139,43 @@ extension MinerEngine {
         return "Campaigns: \(totalCampaigns) total, \(candidates.count) account-eligible\(suffix)"
     }
 
+    /// Describes a campaign the miner was actively working that has just stopped being a
+    /// candidate, in terms of the fields that decide candidacy.
+    ///
+    /// `campaignRefreshSummary` and `[CampaignSelect]` both report counts, so a campaign
+    /// that quietly leaves the set is invisible: the ALGS Split 2 PL charm was lost over
+    /// three consecutive match days before anything in the log said which campaign had
+    /// gone or what it had lost. Returns nil when there is nothing to report — no previous
+    /// campaign, still a candidate, or legitimately finished.
+    static func abandonedCampaignSummary(
+        previousCampaignId: String?,
+        in allCampaigns: [Campaign],
+        candidates: [Campaign]
+    ) -> String? {
+        guard let previousCampaignId,
+              !candidates.contains(where: { $0.id == previousCampaignId }),
+              let campaign = allCampaigns.first(where: { $0.id == previousCampaignId })
+        else { return nil }
+
+        // A campaign whose window closed, or whose drops are all claimed, was not abandoned.
+        // `isFullyComplete` is vacuously true for a campaign with no drops, and that is the
+        // headline case here — a campaign that lost its drop list, not one that finished.
+        guard campaign.isTimeActive,
+              campaign.drops.isEmpty || !campaign.isFullyComplete
+        else { return nil }
+
+        let facts = [
+            "drops=\(campaign.drops.count)",
+            "eligible=\(campaign.eligibleDrops.count)",
+            "earnable=\(campaign.earnableDrops.count)",
+            "linked=\(campaign.isAccountConnected)",
+            "status=\(campaign.status.rawValue)",
+            "ends=\(campaign.endDate.formatted(.iso8601))"
+        ].joined(separator: " ")
+
+        return "Campaign \"\(campaign.name)\" (\(campaign.gameName)) left the candidate set while still active — \(facts)"
+    }
+
     static func performanceCycleSummary(_ timing: PerformanceDiagnostics.MiningCycleTiming) -> String {
         var parts = [
             "[Perf] cycle \(timing.outcome):",

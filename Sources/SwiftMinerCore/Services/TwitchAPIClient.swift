@@ -220,6 +220,12 @@ public actor TwitchAPIClient {
         let expiresAt: Date
     }
 
+    /// A campaign's last known drop list, kept until the campaign itself ends.
+    struct RememberedDropsEntry {
+        let drops: [Drop]
+        let expiresAt: Date
+    }
+
     private struct SlugCandidatesCacheEntry {
         let slugs: [String]
         let expiresAt: Date
@@ -321,6 +327,29 @@ public actor TwitchAPIClient {
     var lastKnownApprovedChannels: [String: [Channel]] = [:]
     /// When each remembered list stops mattering — the campaign's own end date.
     var lastKnownApprovedChannelExpiry: [String: Date] = [:]
+
+    /// The last non-empty drop list seen for a campaign, keyed by campaign id.
+    ///
+    /// `ViewerDropsDashboard` never carries drops — `parseBasicCampaign` returns an empty
+    /// list — so a campaign's drops come from `DropCampaignDetails` alone. When that
+    /// response omits `timeBasedDrops`, `mergeBasicCampaign` has nothing to fall back on
+    /// and the campaign ends up with no drops at all. A campaign with no drops fails
+    /// `canAttemptMining`, so `candidateCampaigns` filters it as `no_eligible_drops` and
+    /// the miner stops mining it — silently, because nothing names the campaign that left.
+    ///
+    /// That is not a hypothetical. On 2026-08-29 and 2026-08-30 the ALGS Split 2 PL
+    /// campaigns dropped out of mining within one refresh of claiming their 15-minute
+    /// APEX Pack, stranding the 60-minute Sushi Nessie Gun Charm at 18/60 with ~21 hours
+    /// of the campaign window left. Claiming calls `invalidateCampaignDetailsAfterClaim()`,
+    /// which forces a fresh `DropCampaignDetails` fetch, and whatever that fetch returns is
+    /// then cached for `detailsCacheTTL` — four hours for a campaign with no ACL of its own.
+    ///
+    /// An empty drop list is never Twitch saying "there is nothing left here": a finished
+    /// campaign returns its drops with `isClaimed` set. So drops, once seen, are remembered
+    /// and reinstated. Reinstating a stale list is safe because claimed state is recomputed
+    /// from inventory benefit IDs on every merge — see `DropsService.mergeInventory`.
+    var lastKnownCampaignDrops: [String: RememberedDropsEntry] = [:]
+
     var lastKnownClaimedBenefits: [String: ClaimedBenefit] = [:]
 
     /// Campaigns parsed from the most recent inventory `dropCampaignsInProgress` response.
@@ -338,6 +367,7 @@ public actor TwitchAPIClient {
         campaignDetailsByKey.removeAll(keepingCapacity: true)
         lastKnownApprovedChannels.removeAll(keepingCapacity: true)
         lastKnownApprovedChannelExpiry.removeAll(keepingCapacity: true)
+        lastKnownCampaignDrops.removeAll(keepingCapacity: true)
         campaignLinkStateByKey.removeAll(keepingCapacity: true)
         campaignCachesNeedPersisting = false
         self.userLogin = login

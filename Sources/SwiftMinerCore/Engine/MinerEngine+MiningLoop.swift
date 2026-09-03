@@ -45,6 +45,10 @@ extension MinerEngine {
                 onStatusChange?(.fetchingCampaigns)
                 log("Fetching active campaigns...")
 
+                // What this miner was working before the refresh, so a campaign that stops
+                // being a candidate can be named rather than just lowering a count.
+                let previouslyMinedCampaignId = session?.currentCampaignId
+
                 // 1. Fetch all campaigns (single call — avoids double API hit).
                 var perfStartedAt = Date()
                 var allEnriched = try await dropsService.fetchCampaigns()
@@ -96,6 +100,16 @@ extension MinerEngine {
                     )
                     perfCandidateCount = candidates.count
                     onCampaignUpdate?(candidates)
+                }
+
+                // Claiming forces a details refetch, and a degraded response there is how a
+                // campaign we were earning in disappears mid-window. Say so out loud.
+                if let abandoned = Self.abandonedCampaignSummary(
+                    previousCampaignId: previouslyMinedCampaignId,
+                    in: allEnriched,
+                    candidates: candidates
+                ) {
+                    log("Warning: \(abandoned)")
                 }
 
                 // 3. Find the best account-eligible campaign that also has a live channel.
