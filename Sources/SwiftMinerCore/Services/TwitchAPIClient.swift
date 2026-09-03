@@ -352,6 +352,45 @@ public actor TwitchAPIClient {
     /// from inventory benefit IDs on every merge — see `DropsService.mergeInventory`.
     var lastKnownCampaignDrops: [String: RememberedCampaignEntry] = [:]
 
+    /// Campaign repairs made since the miner last drained them, keyed by campaign id.
+    ///
+    /// `reconcilingCampaign` logs each repair to `Logger.api`, which does not reach the
+    /// user-facing activity log and therefore never appears in a diagnostic export — the same
+    /// blindness that let the ALGS charm be lost three days running. The miner drains this
+    /// after each refresh so the save is visible where the loss would have been.
+    private(set) var recentCampaignRepairs: [String: [CampaignMiningGate]] = [:]
+    private(set) var recentRejectedShellCount = 0
+
+    /// What the last refresh had to repair or discard, for the miner to report.
+    public struct CampaignRefreshDiagnostics: Sendable {
+        public let repairs: [String: [CampaignMiningGate]]
+        public let rejectedShells: Int
+
+        public var isEmpty: Bool { repairs.isEmpty && rejectedShells == 0 }
+    }
+
+    func recordCampaignRepair(campaignId: String, gates: [CampaignMiningGate]) {
+        guard !gates.isEmpty else { return }
+        recentCampaignRepairs[campaignId] = gates
+    }
+
+    func recordRejectedCampaignShells(_ count: Int) {
+        guard count > 0 else { return }
+        recentRejectedShellCount += count
+    }
+
+    /// Returns and clears what has been recorded since the last call.
+    public func drainCampaignRefreshDiagnostics() -> CampaignRefreshDiagnostics {
+        defer {
+            recentCampaignRepairs.removeAll(keepingCapacity: true)
+            recentRejectedShellCount = 0
+        }
+        return CampaignRefreshDiagnostics(
+            repairs: recentCampaignRepairs,
+            rejectedShells: recentRejectedShellCount
+        )
+    }
+
     var lastKnownClaimedBenefits: [String: ClaimedBenefit] = [:]
 
     /// Campaigns parsed from the most recent inventory `dropCampaignsInProgress` response.
@@ -817,8 +856,12 @@ public actor TwitchAPIClient {
             drops: drops,
             channels: campaign.channels,
             isAccountConnected: false,
+            // Prioritisation is this miner's own preference, not a fact about the campaign.
+            // It is always false at this layer today — the dashboard parser never sets it —
+            // but copying it into a cross-account cache would silently make that a per-miner
+            // answer served to every other miner the moment anything upstream starts setting it.
             allowIsEnabled: campaign.allowIsEnabled,
-            isPrioritised: campaign.isPrioritised
+            isPrioritised: false
         )
     }
 

@@ -484,6 +484,116 @@ final class ServiceTests: XCTestCase {
         XCTAssertTrue(campaign.isMiningEligible)
     }
 
+    func testDegradedConnectedDetailsAreReconciledBeforeSharedAndAccountCaches() async throws {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        let startDate = Date().addingTimeInterval(-3600)
+        let endDate = Date().addingTimeInterval(3600)
+        let startAt = formatter.string(from: startDate)
+        let endAt = formatter.string(from: endDate)
+        let campaignId = "reconciled-cache-\(UUID().uuidString)"
+        let operations = StringRequestRecorder()
+
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+
+            if request.url?.path == "/integrity" {
+                return (response, #"{"token":"integrity-token","expiration":4102444800000}"#.data(using: .utf8)!)
+            }
+
+            let body = (try? JSONSerialization.jsonObject(with: request.httpBody ?? Data())) as? [String: Any]
+            let operationName = body?["operationName"] as? String ?? ""
+            operations.append(operationName)
+
+            switch operationName {
+            case "ViewerDropsDashboard":
+                let json = """
+                {
+                  "data": {
+                    "currentUser": {
+                      "dropCampaigns": [{
+                        "id": "\(campaignId)",
+                        "name": "Reconciled Cache Campaign",
+                        "status": "ACTIVE",
+                        "startAt": "\(startAt)",
+                        "endAt": "\(endAt)",
+                        "self": { "isAccountConnected": true },
+                        "game": { "id": "game", "displayName": "Apex Legends" }
+                      }]
+                    }
+                  }
+                }
+                """
+                return (response, json.data(using: .utf8)!)
+
+            case "DropCampaignDetails":
+                let json = """
+                {
+                  "data": {
+                    "user": {
+                      "dropCampaign": {
+                        "id": "\(campaignId)",
+                        "name": "Reconciled Cache Campaign",
+                        "status": "ACTIVE",
+                        "startAt": "\(startAt)",
+                        "endAt": "\(endAt)",
+                        "self": { "isAccountConnected": true },
+                        "allow": { "isEnabled": false, "channels": null },
+                        "game": { "id": "game", "displayName": "Apex Legends" }
+                      }
+                    }
+                  }
+                }
+                """
+                return (response, json.data(using: .utf8)!)
+
+            default:
+                return (response, #"{"data":{}}"#.data(using: .utf8)!)
+            }
+        }
+
+        let remembered = Campaign(
+            id: campaignId,
+            name: "Reconciled Cache Campaign",
+            game: Game(id: "game", name: "Apex Legends"),
+            startDate: startDate,
+            endDate: endDate,
+            drops: [Drop(id: "charm", name: "Sushi Nessie Gun Charm", requiredMinutes: 60)],
+            isAccountConnected: true,
+            allowIsEnabled: false
+        )
+        await apiClient.setUserLogin("cache-owner")
+        _ = await apiClient.reconcilingCampaign(remembered)
+
+        let ownerCampaigns = try await apiClient.fetchDropCampaigns()
+        XCTAssertEqual(ownerCampaigns.first?.drops.map(\.id), ["charm"])
+
+        let ownerCache = await apiClient.campaignDetailsByKey
+        let ownerKey = TwitchAPIClient.cacheKey("campaign-details", "cache-owner", campaignId)
+        XCTAssertEqual(ownerCache[ownerKey]?.campaign.drops.map(\.id), ["charm"])
+
+        let secondClient = TwitchAPIClient(
+            authService: authService,
+            clientId: "test_client",
+            session: mockSession,
+            persistsCampaignCaches: false
+        )
+        await secondClient.setUserLogin("cache-reader")
+        let readerCampaigns = try await secondClient.fetchDropCampaigns()
+
+        XCTAssertEqual(readerCampaigns.first?.drops.map(\.id), ["charm"])
+        XCTAssertEqual(
+            operations.recordedValues.filter { $0 == "DropCampaignDetails" }.count,
+            1,
+            "the second account should receive the reconciled shared copy"
+        )
+    }
+
     func testFetchDropCampaignsParsesNameOnlyApprovedChannel() async throws {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
@@ -779,6 +889,111 @@ final class ServiceTests: XCTestCase {
             operations.recordedValues.filter { $0 == "ViewerDropsDashboard" }.count,
             1,
             "concurrent launch consumers must share one campaign fan-out"
+        )
+    }
+
+    func testCoalescedCampaignRefreshesBothReceivePreservedMissingCampaign() async throws {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        let startAt = formatter.string(from: Date().addingTimeInterval(-3600))
+        let endAt = formatter.string(from: Date().addingTimeInterval(3600))
+        let campaignId = "coalesced-preservation-\(UUID().uuidString)"
+        let operations = StringRequestRecorder()
+
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+
+            if request.url?.path == "/integrity" {
+                return (response, #"{"token":"integrity-token","expiration":4102444800000}"#.data(using: .utf8)!)
+            }
+
+            let body = (try? JSONSerialization.jsonObject(with: request.httpBody ?? Data())) as? [String: Any]
+            let operationName = body?["operationName"] as? String ?? ""
+            operations.append(operationName)
+
+            if operationName == "ViewerDropsDashboard" {
+                Thread.sleep(forTimeInterval: 0.05)
+                let dashboardFetchCount = operations.count(of: "ViewerDropsDashboard")
+                if dashboardFetchCount == 1 {
+                    let json = """
+                    {
+                      "data": {
+                        "currentUser": {
+                          "dropCampaigns": [{
+                            "id": "\(campaignId)",
+                            "name": "Preserved Campaign",
+                            "status": "ACTIVE",
+                            "startAt": "\(startAt)",
+                            "endAt": "\(endAt)",
+                            "self": { "isAccountConnected": true },
+                            "game": { "id": "game", "displayName": "Apex Legends" }
+                          }]
+                        }
+                      }
+                    }
+                    """
+                    return (response, json.data(using: .utf8)!)
+                }
+                return (response, #"{"data":{"currentUser":{"dropCampaigns":[]}}}"#.data(using: .utf8)!)
+            }
+
+            if operationName == "DropCampaignDetails" {
+                let json = """
+                {
+                  "data": {
+                    "user": {
+                      "dropCampaign": {
+                        "id": "\(campaignId)",
+                        "name": "Preserved Campaign",
+                        "status": "ACTIVE",
+                        "startAt": "\(startAt)",
+                        "endAt": "\(endAt)",
+                        "self": { "isAccountConnected": true },
+                        "allow": { "isEnabled": false, "channels": null },
+                        "game": { "id": "game", "displayName": "Apex Legends" },
+                        "timeBasedDrops": [{
+                          "id": "drop",
+                          "name": "Sushi Nessie Gun Charm",
+                          "requiredMinutesWatched": 60,
+                          "benefitEdges": [{
+                            "benefit": {
+                              "id": "benefit",
+                              "name": "Sushi Nessie Gun Charm",
+                              "distributionType": "DIRECT_ENTITLEMENT"
+                            }
+                          }]
+                        }]
+                      }
+                    }
+                  }
+                }
+                """
+                return (response, json.data(using: .utf8)!)
+            }
+
+            return (response, #"{"data":{}}"#.data(using: .utf8)!)
+        }
+
+        await apiClient.setUserLogin("coalesced-preservation")
+        let dropsService = DropsService(apiClient: apiClient)
+        let initial = try await dropsService.fetchCampaigns(forceRefresh: true)
+        XCTAssertEqual(initial.map(\.id), [campaignId])
+
+        async let first = dropsService.fetchCampaigns(forceRefresh: true)
+        async let second = dropsService.fetchCampaigns(forceRefresh: true)
+        let results = try await (first, second)
+
+        XCTAssertEqual(results.0.map(\.id), [campaignId])
+        XCTAssertEqual(results.1.map(\.id), [campaignId])
+        XCTAssertEqual(
+            operations.recordedValues.filter { $0 == "ViewerDropsDashboard" }.count,
+            2,
+            "both callers should join one refresh and receive its preservation result"
         )
     }
 
@@ -1129,6 +1344,12 @@ private final class StringRequestRecorder: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return values
+    }
+
+    func count(of value: String) -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return values.lazy.filter { $0 == value }.count
     }
 }
 

@@ -48,6 +48,9 @@ extension MinerEngine {
                 // What this miner was working before the refresh, so a campaign that stops
                 // being a candidate can be named rather than just lowering a count.
                 let previouslyMinedCampaignId = session?.currentCampaignId
+                let previouslyMinedCampaign = previouslyMinedCampaignId.flatMap { id in
+                    allCampaigns.first(where: { $0.id == id })
+                }
 
                 // 1. Fetch all campaigns (single call — avoids double API hit).
                 var perfStartedAt = Date()
@@ -102,10 +105,31 @@ extension MinerEngine {
                     onCampaignUpdate?(candidates)
                 }
 
+                // Surface repairs where the loss would have shown. A repair on the campaign
+                // this miner is working is the save actually happening — it names the field
+                // Twitch dropped, which is the evidence the ALGS investigation never had.
+                let refreshDiagnostics = await apiClient.drainCampaignRefreshDiagnostics()
+                if !refreshDiagnostics.isEmpty {
+                    let repairs = refreshDiagnostics.repairs
+                    if let workedId = previouslyMinedCampaignId, let gates = repairs[workedId] {
+                        let name = allEnriched.first(where: { $0.id == workedId })?.name ?? workedId
+                        log("Repaired \"\(name)\": Twitch omitted \(gates.map(\.rawValue).joined(separator: ", ")); restored from the last good answer.")
+                    }
+                    let workedRepairCount = previouslyMinedCampaignId.flatMap { repairs[$0] } == nil ? 0 : 1
+                    let others = repairs.count - workedRepairCount
+                    if others > 0 {
+                        log("Repaired \(others) other campaign(s) that came back missing fields Twitch had sent before.")
+                    }
+                    if refreshDiagnostics.rejectedShells > 0 {
+                        log("Warning: ignored \(refreshDiagnostics.rejectedShells) campaign(s) Twitch listed with an unusable window.")
+                    }
+                }
+
                 // Claiming forces a details refetch, and a degraded response there is how a
                 // campaign we were earning in disappears mid-window. Say so out loud.
                 if let abandoned = Self.abandonedCampaignSummary(
                     previousCampaignId: previouslyMinedCampaignId,
+                    previousCampaign: previouslyMinedCampaign,
                     in: allEnriched,
                     candidates: candidates
                 ) {
@@ -547,7 +571,18 @@ extension MinerEngine {
                             // If the current campaign no longer exists in the API response,
                             // clear it from session state and rescan immediately.
                             if !fetched.contains(where: { $0.id == campaign.id }) {
-                                log("Warning: Campaign '\(campaign.name)' no longer returned by API — clearing and rescanning.")
+                                let warning = Self.abandonedCampaignSummary(
+                                    previousCampaignId: campaign.id,
+                                    previousCampaign: campaign,
+                                    in: fetched,
+                                    candidates: candidateCampaigns(
+                                        from: fetched,
+                                        priorityGames: priorityGames,
+                                        excludedGames: excludedGames,
+                                        strategy: miningStrategy
+                                    )
+                                ) ?? "Campaign '\(campaign.name)' no longer returned by API — clearing and rescanning."
+                                log("Warning: \(warning)")
                                 session?.currentCampaignId = nil
                                 shouldSwitchChannel = true
                             } else if let bestCampaign = candidateCampaigns(
@@ -593,17 +628,30 @@ extension MinerEngine {
                     // campaign from the mineable set, rescan now.
                     if runtimeClock.elapsedSeconds(since: lastClaimCheck) >= claimCheckSeconds {
                         lastClaimCheck = runtimeClock.nowNanoseconds()
+                        let campaignBeforeClaimSync = session?.currentCampaignId.flatMap { id in
+                            allCampaigns.first(where: { $0.id == id })
+                        }
                         _ = await claimReadyDrops()
                         if streamOverrideLogin == nil, let currentCampaignId = session?.currentCampaignId {
-                            let currentStillMineable = candidateCampaigns(
+                            let claimSyncCandidates = candidateCampaigns(
                                 from: allCampaigns,
                                 priorityGames: priorityGames,
                                 excludedGames: excludedGames,
                                 strategy: miningStrategy
-                            ).contains { $0.id == currentCampaignId }
+                            )
+                            let currentStillMineable = claimSyncCandidates.contains { $0.id == currentCampaignId }
 
                             if !currentStillMineable {
-                                log("Current campaign is no longer mineable after claim sync. Switching target.")
+                                if let abandoned = Self.abandonedCampaignSummary(
+                                    previousCampaignId: currentCampaignId,
+                                    previousCampaign: campaignBeforeClaimSync,
+                                    in: allCampaigns,
+                                    candidates: claimSyncCandidates
+                                ) {
+                                    log("Warning: \(abandoned)")
+                                } else {
+                                    log("Current campaign is no longer mineable after claim sync. Switching target.")
+                                }
                                 shouldSwitchChannel = true
                             }
                         }

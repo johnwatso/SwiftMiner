@@ -22,6 +22,7 @@ enum CampaignDetailsDiskCache {
     private static let directoryName = "com.swiftminer"
     private static let folderName = "campaign-details"
     static let maxApprovedChannelEntries = 600
+    static let maxRememberedCampaignEntries = 600
 
     struct DetailsEntry: Codable {
         let campaign: Campaign
@@ -46,14 +47,35 @@ enum CampaignDetailsDiskCache {
         let expiresAt: Date
     }
 
+    /// Campaign-global fields that must survive longer than a details-cache entry. A claim
+    /// deliberately invalidates account-specific details, but it must not erase the last
+    /// complete drop definition or the last explicit restriction answer needed to repair
+    /// the response that follows.
+    struct RememberedCampaignEntry: Codable {
+        let drops: [Drop]
+        let allowIsEnabled: Bool?
+        let expiresAt: Date
+    }
+
     struct Contents {
         let details: [String: DetailsEntry]
         let linkStates: [String: LinkStateEntry]
         let approvedChannels: [String: ApprovedChannelsEntry]
+        let rememberedCampaigns: [String: RememberedCampaignEntry]
 
-        var isEmpty: Bool { details.isEmpty && linkStates.isEmpty && approvedChannels.isEmpty }
+        var isEmpty: Bool {
+            details.isEmpty
+                && linkStates.isEmpty
+                && approvedChannels.isEmpty
+                && rememberedCampaigns.isEmpty
+        }
 
-        static let empty = Contents(details: [:], linkStates: [:], approvedChannels: [:])
+        static let empty = Contents(
+            details: [:],
+            linkStates: [:],
+            approvedChannels: [:],
+            rememberedCampaigns: [:]
+        )
     }
 
     private struct Envelope: Codable {
@@ -62,6 +84,8 @@ enum CampaignDetailsDiskCache {
         let linkStates: [String: LinkStateEntry]
         /// Absent in files written before approved channels were persisted.
         let approvedChannels: [String: ApprovedChannelsEntry]?
+        /// Absent in files written before refresh reconciliation was persisted.
+        let rememberedCampaigns: [String: RememberedCampaignEntry]?
     }
 
     /// Twitch logins are `[a-zA-Z0-9_]`, but the value reaches us from the API, so it is
@@ -92,6 +116,7 @@ enum CampaignDetailsDiskCache {
         details: [String: DetailsEntry],
         linkStates: [String: LinkStateEntry],
         approvedChannels: [String: ApprovedChannelsEntry] = [:],
+        rememberedCampaigns: [String: RememberedCampaignEntry] = [:],
         userLogin: String
     ) {
         guard let url = fileURL(userLogin: userLogin) else { return }
@@ -109,7 +134,17 @@ enum CampaignDetailsDiskCache {
                 .prefix(maxApprovedChannelEntries)
                 .map { ($0.key, $0.value) }
         )
-        guard !liveDetails.isEmpty || !liveLinkStates.isEmpty || !liveApprovedChannels.isEmpty else {
+        let liveRememberedCampaigns = Dictionary(
+            uniqueKeysWithValues: rememberedCampaigns
+                .filter { $0.value.expiresAt > now }
+                .sorted { $0.value.expiresAt > $1.value.expiresAt }
+                .prefix(maxRememberedCampaignEntries)
+                .map { ($0.key, $0.value) }
+        )
+        guard !liveDetails.isEmpty
+                || !liveLinkStates.isEmpty
+                || !liveApprovedChannels.isEmpty
+                || !liveRememberedCampaigns.isEmpty else {
             try? FileManager.default.removeItem(at: url)
             return
         }
@@ -119,7 +154,8 @@ enum CampaignDetailsDiskCache {
                 savedAt: now,
                 details: liveDetails,
                 linkStates: liveLinkStates,
-                approvedChannels: liveApprovedChannels
+                approvedChannels: liveApprovedChannels,
+                rememberedCampaigns: liveRememberedCampaigns
             )
             let data = try JSONEncoder().encode(envelope)
             try data.write(to: url, options: .atomic)
@@ -136,10 +172,22 @@ enum CampaignDetailsDiskCache {
         }
 
         let now = Date()
-        let details = envelope.details.filter { $0.value.expiresAt > now }
+        // A file from before refresh reconciliation has no remembered baseline. Its details
+        // entry may itself be the degraded four-hour answer this fix is intended to stop, so
+        // force one fresh lookup on upgrade instead of carrying that risk forward. The
+        // shorter-lived link observations and independently persisted ACLs remain useful.
+        let details = envelope.rememberedCampaigns == nil
+            ? [:]
+            : envelope.details.filter { $0.value.expiresAt > now }
         let linkStates = envelope.linkStates.filter { $0.value.expiresAt > now }
         let approvedChannels = (envelope.approvedChannels ?? [:]).filter { $0.value.expiresAt > now }
-        return Contents(details: details, linkStates: linkStates, approvedChannels: approvedChannels)
+        let rememberedCampaigns = (envelope.rememberedCampaigns ?? [:]).filter { $0.value.expiresAt > now }
+        return Contents(
+            details: details,
+            linkStates: linkStates,
+            approvedChannels: approvedChannels,
+            rememberedCampaigns: rememberedCampaigns
+        )
     }
 
     static func clear(userLogin: String) {

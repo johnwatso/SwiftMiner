@@ -75,6 +75,9 @@ extension TwitchAPIClient {
             guard drop["id"] as? String != nil else { return nil }
             return parseBasicCampaign(from: drop)
         }
+        // A rejected shell is a campaign Twitch listed that we cannot act on. Count it for the
+        // miner to report; `Logger.api` alone never reaches a diagnostic export.
+        recordRejectedCampaignShells(drops.count - parsedCampaigns.count)
         let basicCampaigns = CampaignMergeEngine.deduplicatedByID(parsedCampaigns)
         if basicCampaigns.count != parsedCampaigns.count {
             Logger.campaigns.warning(
@@ -129,6 +132,10 @@ extension TwitchAPIClient {
         }
 
         let campaigns = enrichedActive + inactiveCampaigns
+        // Once per refresh, not once per campaign. `remember()` runs for every campaign in the
+        // fan-out, and pruning there is O(cache) each time — ~600 entries × ~100 campaigns per
+        // account per cycle, for a bound that only needs checking when the cycle ends.
+        pruneRememberedCampaignFacts()
         persistCampaignCachesIfNeeded()
         await traceGQLDebug { "[TwitchAPIClient] fetchDropCampaigns: \(campaigns.count) parsed successfully" }
         return campaigns
@@ -165,6 +172,13 @@ extension TwitchAPIClient {
                 expiresAt: entry.expiresAt
             )
         }
+        for (campaignId, entry) in contents.rememberedCampaigns where lastKnownCampaignDrops[campaignId] == nil {
+            lastKnownCampaignDrops[campaignId] = RememberedCampaignEntry(
+                drops: entry.drops,
+                allowIsEnabled: entry.allowIsEnabled,
+                expiresAt: entry.expiresAt
+            )
+        }
 
         Self.pruneCache(
             &campaignDetailsByKey,
@@ -176,11 +190,17 @@ extension TwitchAPIClient {
             maxEntries: maxCampaignDetailsCacheEntries,
             expiresAt: { $0.expiresAt }
         )
+        Self.pruneCache(
+            &lastKnownCampaignDrops,
+            maxEntries: maxCampaignDetailsCacheEntries,
+            expiresAt: { $0.expiresAt }
+        )
 
         let restoredDetails = campaignDetailsByKey.count
         let restoredLinkStates = campaignLinkStateByKey.count
+        let restoredCampaignFacts = lastKnownCampaignDrops.count
         Logger.campaigns.info(
-            "[CampaignDetailsDiskCache] Restored \(restoredDetails) campaign details, \(restoredLinkStates) link states"
+            "[CampaignDetailsDiskCache] Restored \(restoredDetails) campaign details, \(restoredLinkStates) link states, \(restoredCampaignFacts) remembered campaign facts"
         )
     }
 
@@ -202,6 +222,13 @@ extension TwitchAPIClient {
                 )
             },
             approvedChannels: approvedChannelsForPersistence(),
+            rememberedCampaigns: lastKnownCampaignDrops.mapValues {
+                CampaignDetailsDiskCache.RememberedCampaignEntry(
+                    drops: $0.drops,
+                    allowIsEnabled: $0.allowIsEnabled,
+                    expiresAt: $0.expiresAt
+                )
+            },
             userLogin: userLogin
         )
     }
@@ -227,9 +254,29 @@ extension TwitchAPIClient {
         loadPersistedCampaignCachesIfNeeded()
         let cacheKey = Self.cacheKey("campaign-details", userLogin, campaignId)
         let now = Date()
+        let knownLinkState = campaignLinkStateByKey[cacheKey].flatMap { $0.expiresAt > now ? $0 : nil }
+        // Details outlive mutable account linkage, but only one field of a details entry is
+        // account-specific. Drops, the ACL, the window and status are campaign-global and stay
+        // good for the full `detailsCacheTTL`; `isAccountConnected` answers to the much shorter
+        // `campaignLinkStateTTL`. So re-derive that one field on the way out rather than
+        // discarding the entry.
+        //
+        // Discarding it instead costs far more than it looks: for a campaign the dashboard
+        // reports unlinked — ~83 of ~97 time-active campaigns per account on John's estate —
+        // every subsequent path is also gated on link state, so the request falls through to an
+        // uncoalesced network fetch, per account, every twenty minutes. Measured against the
+        // live diagnostics that is roughly 12x the observed `DropCampaignDetails` rate, on the
+        // operation already carrying ~52 minutes of cumulative rate-limit wait. A throttled or
+        // failed details fetch is one of the ways a degraded response arrives, so paying that
+        // to avoid a stale link answer raises the odds of the failure this whole path exists
+        // to survive.
         if let cached = campaignDetailsByKey[cacheKey], cached.expiresAt > now {
             await traceGQLDebug { "[TwitchAPIClient] DropCampaignDetails cache hit for \(campaignId)" }
-            return cached.campaign
+            return Self.applyingCurrentLinkState(
+                to: cached.campaign,
+                basicCampaign: basicCampaign,
+                knownLinkState: knownLinkState
+            )
         }
         // The cross-miner cache holds only campaign-global metadata; the account-specific
         // parts are supplied here. Everything except link state comes from `basicCampaign`,
@@ -240,18 +287,18 @@ extension TwitchAPIClient {
         // us. Without that, serving shared metadata could silently downgrade a linked
         // campaign to unlinked and drop it out of mining.
         let sharedKey = Self.cacheKey("campaign-metadata", campaignId)
-        let knownLinkState = campaignLinkStateByKey[cacheKey].flatMap { $0.expiresAt > now ? $0 : nil }
         if let basicCampaign,
            basicCampaign.isAccountConnected || knownLinkState != nil,
            let shared = await SharedTwitchLookupCache.shared.campaignMetadata(for: sharedKey, now: now) {
             // Mirrors `mergeBasicCampaign`'s `details || basic`, with the remembered fetch
             // standing in for details.
-            let campaign = Self.campaign(
+            let reconstructed = Self.campaign(
                 fromSharedMetadata: shared,
                 accountContext: basicCampaign,
                 isAccountConnected: basicCampaign.isAccountConnected
                     || (knownLinkState?.isAccountConnected ?? false)
             )
+            let campaign = reconcilingCampaign(reconstructed, cacheKey: cacheKey)
             campaignDetailsByKey[cacheKey] = CampaignDetailsCacheEntry(
                 campaign: campaign,
                 expiresAt: Self.sharedCampaignDetailsExpiration(
@@ -275,18 +322,28 @@ extension TwitchAPIClient {
                 for: sharedKey,
                 ttl: sharedCampaignMetadataTTL
             ) { [self] in
-                try await fetchCampaignDetailsFromNetwork(
+                let fetched = try await fetchCampaignDetailsFromNetwork(
                     campaignId: campaignId,
                     userLogin: userLogin
                 )
+                // The shared resolver writes the loader result to its six-hour cache before
+                // returning it. Reconcile inside the loader so no degraded global metadata is
+                // ever published for another account to consume.
+                return await reconcilingCampaign(fetched, cacheKey: cacheKey)
             }
-            let campaign = resolution.loadedByCaller
+            var accountCampaign = resolution.loadedByCaller
                 ? resolution.campaign
                 : Self.campaign(
                     fromSharedMetadata: resolution.campaign,
                     accountContext: basicCampaign,
                     isAccountConnected: true
                 )
+            // A current dashboard confirmation is account-specific truth even if the details
+            // response omitted its self field.
+            if !accountCampaign.isAccountConnected {
+                accountCampaign = accountCampaign.withAccountConnected(true)
+            }
+            let campaign = reconcilingCampaign(accountCampaign, cacheKey: cacheKey)
             cacheCampaignDetailsForAccount(campaign, cacheKey: cacheKey)
             await traceGQLDebug {
                 resolution.loadedByCaller
@@ -401,6 +458,25 @@ extension TwitchAPIClient {
         return min(normalExpiration, knownLinkStateExpiresAt)
     }
 
+    /// Global detail metadata is slow-moving; its embedded account linkage is not.
+    ///
+    /// A cached details entry may therefore be served past `campaignLinkStateTTL`, but never
+    /// with the link answer it was stored with. This restates the entry's account-specific
+    /// field from the only two sources entitled to answer for it: the dashboard, refetched
+    /// every cycle, and a link observation still inside its own window. When neither confirms
+    /// a link, the entry is served unlinked — which is what an expired observation means.
+    nonisolated static func applyingCurrentLinkState(
+        to campaign: Campaign,
+        basicCampaign: Campaign?,
+        knownLinkState: CampaignLinkStateEntry?
+    ) -> Campaign {
+        let linked = (basicCampaign?.isAccountConnected ?? false)
+            || (knownLinkState?.isAccountConnected ?? false)
+        return linked == campaign.isAccountConnected
+            ? campaign
+            : campaign.withAccountConnected(linked)
+    }
+
     /// Reconciles a freshly fetched campaign against everything this client already knows
     /// about it, then records the result as the new baseline.
     ///
@@ -433,6 +509,7 @@ extension TwitchAPIClient {
             Logger.api.info(
                 "[CampaignDetails] \(campaign.name) came back missing \(gates) for \(userLogin); restored from the last good answer."
             )
+            recordCampaignRepair(campaignId: campaign.id, gates: result.repaired)
         }
 
         remember(result.campaign)
@@ -453,24 +530,66 @@ extension TwitchAPIClient {
             lastKnownApprovedChannelExpiry[campaign.id] = campaign.endDate
         }
 
+        if campaign.allowIsEnabled == false {
+            let removedChannels = lastKnownApprovedChannels.removeValue(forKey: campaign.id) != nil
+            let removedExpiry = lastKnownApprovedChannelExpiry.removeValue(forKey: campaign.id) != nil
+            if removedChannels || removedExpiry {
+                campaignCachesNeedPersisting = true
+            }
+        }
+
         let rememberedAllow = lastKnownCampaignDrops[campaign.id]?.allowIsEnabled
         let drops = campaign.drops.isEmpty
             ? lastKnownCampaignDrops[campaign.id]?.drops ?? []
             : campaign.drops
-        let allowIsEnabled = campaign.allowIsEnabled == true ? true : rememberedAllow
+        let allowIsEnabled = campaign.allowIsEnabled ?? rememberedAllow
 
         guard !drops.isEmpty || allowIsEnabled != nil else { return }
 
+        let entry = RememberedCampaignEntry(
+            drops: drops,
+            allowIsEnabled: allowIsEnabled,
+            expiresAt: campaign.endDate
+        )
+        let existing = lastKnownCampaignDrops[campaign.id]
+        // Compare definitions, not whole values. `Drop: Equatable` is synthesised over
+        // `progress` and `isClaimed`, which change every minute on the campaign being mined,
+        // so comparing entries directly would mark the cache dirty on essentially every
+        // refresh and rewrite a multi-megabyte file per account per cycle. Only a changed
+        // definition is worth a write; progress is never read back from this store.
+        if existing == nil
+            || existing?.allowIsEnabled != entry.allowIsEnabled
+            || existing?.expiresAt != entry.expiresAt
+            || !Self.haveMatchingDefinitions(existing?.drops ?? [], entry.drops) {
+            campaignCachesNeedPersisting = true
+        }
+        lastKnownCampaignDrops[campaign.id] = entry
+    }
+
+    /// Keeps the remembered-facts store inside its bound. Called once at the end of a refresh.
+    func pruneRememberedCampaignFacts() {
         Self.pruneCache(
             &lastKnownCampaignDrops,
             maxEntries: maxCampaignDetailsCacheEntries,
             expiresAt: { $0.expiresAt }
         )
-        lastKnownCampaignDrops[campaign.id] = RememberedCampaignEntry(
-            drops: drops,
-            allowIsEnabled: allowIsEnabled,
-            expiresAt: campaign.endDate
-        )
+    }
+
+    /// Whether two drop lists describe the same rewards on the same terms. Deliberately blind
+    /// to per-account progress and claim state, which are recomputed from inventory on every
+    /// merge and have no business deciding whether a definition cache is stale.
+    nonisolated static func haveMatchingDefinitions(_ lhs: [Drop], _ rhs: [Drop]) -> Bool {
+        guard lhs.count == rhs.count else { return false }
+        return zip(lhs, rhs).allSatisfy { a, b in
+            a.id == b.id
+                && a.name == b.name
+                && a.requiredMinutes == b.requiredMinutes
+                && a.benefitIds == b.benefitIds
+                && a.preconditionDrops == b.preconditionDrops
+                && a.requiredSubs == b.requiredSubs
+                && a.dropStartDate == b.dropStartDate
+                && a.dropEndDate == b.dropEndDate
+        }
     }
 
     /// Approved-channel lists worth writing out: the campaign's own end date bounds how

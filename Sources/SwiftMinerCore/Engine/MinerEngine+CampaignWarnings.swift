@@ -149,12 +149,14 @@ extension MinerEngine {
     /// campaign, still a candidate, or legitimately finished.
     static func abandonedCampaignSummary(
         previousCampaignId: String?,
+        previousCampaign: Campaign? = nil,
         in allCampaigns: [Campaign],
         candidates: [Campaign]
     ) -> String? {
         guard let previousCampaignId,
               !candidates.contains(where: { $0.id == previousCampaignId }),
               let campaign = allCampaigns.first(where: { $0.id == previousCampaignId })
+                ?? previousCampaign.flatMap({ $0.id == previousCampaignId ? $0 : nil })
         else { return nil }
 
         // A campaign whose window closed, or whose drops are all claimed, was not abandoned.

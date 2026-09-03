@@ -18,8 +18,8 @@ public enum CampaignMiningGate: String, CaseIterable, Sendable {
     case endDate
     case drops
     case isAccountConnected
-    case channels
     case allowIsEnabled
+    case channels
 
     /// What to do when a refresh disagrees with what we already knew.
     public enum RefreshPolicy: Sendable {
@@ -114,52 +114,105 @@ public enum CampaignRefreshPolicy {
         var campaign = fetched
         var repaired: [CampaignMiningGate] = []
 
-        // `status`, `startDate`, `endDate` are `.trustNewest`: nothing to do. They arrive
-        // from the dashboard on every refresh, and `mergeBasicCampaign` already prefers that
-        // copy over cached details for exactly this reason.
+        // Keep the implementation exhaustive as well as the policy declaration. Adding a
+        // gate must add its reconciliation here; classifying a property alone is not enough.
+        // `allCases` follows declaration order, which deliberately restores the restriction
+        // flag before reconciling its approved-channel list.
+        for gate in CampaignMiningGate.allCases {
+            switch gate {
+            case .status, .startDate, .endDate:
+                // These values come from a validated dashboard shell on every refresh.
+                precondition(gate.refreshPolicy == .trustNewest)
 
-        // Restriction flag first: the approved-channel rule below reads it.
-        //
-        // `allowIsEnabled` has three states and only two of them are answers. `false` is
-        // Twitch saying the campaign is open to everyone, and it is obeyed — a campaign that
-        // genuinely opened up must not stay restricted. `nil` is the field being absent,
-        // which says nothing at all, and treating that silence as "open" is what let the
-        // ALGS campaigns be mined from the public directory: SwiftMiner watched an ordinary
-        // Apex streamer that could never credit the drop, and the campaign took the
-        // four-hour `campaignDetailsCacheTTL` instead of the twenty-minute restricted one.
-        if campaign.allowIsEnabled == nil, remembered.allowIsEnabled == true {
-            campaign = campaign.withAllowIsEnabled(true)
-            repaired.append(.allowIsEnabled)
-        }
+            case .allowIsEnabled:
+                precondition(gate.refreshPolicy == .neverRegress)
+                // Both true and false are answers. Nil means Twitch omitted the field, so
+                // retain whichever explicit answer was most recently observed.
+                if campaign.allowIsEnabled == nil,
+                   let allowIsEnabled = remembered.allowIsEnabled {
+                    campaign = campaign.withAllowIsEnabled(allowIsEnabled)
+                    repaired.append(.allowIsEnabled)
+                }
 
-        // An empty drop list is never Twitch reporting completion: a finished campaign
-        // returns its drops with `isClaimed` set. On a campaign whose window has closed
-        // there is nothing left to protect, so leave it alone.
-        if campaign.drops.isEmpty,
-           campaign.isTimeActive,
-           let drops = remembered.drops,
-           !drops.isEmpty {
-            campaign = campaign.withDrops(drops)
-            repaired.append(.drops)
-        }
+            case .drops:
+                precondition(gate.refreshPolicy == .neverRegress)
+                // Campaign definitions are stable for the campaign window. Restore missing
+                // members as well as an entirely missing list; a response containing only
+                // one tier must not erase another unfinished tier.
+                if campaign.isTimeActive,
+                   let rememberedDrops = remembered.drops,
+                   !rememberedDrops.isEmpty {
+                    let mergedDrops = neverRegressingDrops(
+                        fetched: campaign.drops,
+                        remembered: rememberedDrops
+                    )
+                    if mergedDrops != campaign.drops {
+                        campaign = campaign.withDrops(mergedDrops)
+                        repaired.append(.drops)
+                    }
+                }
 
-        // Only reinstate an ACL onto a campaign Twitch still flags as restricted. A campaign
-        // that genuinely opened up must not be re-restricted to channels it no longer needs.
-        if campaign.hasUnresolvedChannelRestrictions,
-           let channels = remembered.channels,
-           !channels.isEmpty {
-            campaign = campaign.withChannels(channels)
-            repaired.append(.channels)
-        }
+            case .isAccountConnected:
+                precondition(gate.refreshPolicy == .neverRegress)
+                // The caller bounds the remembered answer with campaignLinkStateTTL.
+                if !campaign.isAccountConnected, remembered.isAccountConnected == true {
+                    campaign = campaign.withAccountConnected(true)
+                    repaired.append(.isAccountConnected)
+                }
 
-        // An unlinked campaign whose game is not prioritised is never attempted, so one
-        // contrary answer is enough to retire it. The caller bounds how long a remembered
-        // link stays usable — see `campaignLinkStateTTL` — so a real unlink still lands.
-        if !campaign.isAccountConnected, remembered.isAccountConnected == true {
-            campaign = campaign.withAccountConnected(true)
-            repaired.append(.isAccountConnected)
+            case .channels:
+                precondition(gate.refreshPolicy == .neverRegress)
+                // An explicit false above opens the campaign and suppresses both remembered
+                // and contradictory returned ACL members. Otherwise retain missing members
+                // of a restriction Twitch still reports.
+                if campaign.allowIsEnabled == false {
+                    if !campaign.channels.isEmpty {
+                        campaign = campaign.withChannels([])
+                        repaired.append(.channels)
+                    }
+                } else if campaign.hasChannelRestrictions,
+                          let rememberedChannels = remembered.channels,
+                          !rememberedChannels.isEmpty {
+                    let mergedChannels = neverRegressingChannels(
+                        fetched: campaign.channels,
+                        remembered: rememberedChannels
+                    )
+                    if mergedChannels != campaign.channels {
+                        campaign = campaign.withChannels(mergedChannels)
+                        repaired.append(.channels)
+                    }
+                }
+            }
         }
 
         return Reconciliation(campaign: campaign, repaired: repaired)
+    }
+
+    private static func neverRegressingDrops(fetched: [Drop], remembered: [Drop]) -> [Drop] {
+        let fetchedIDs = Set(fetched.map(\.id))
+        guard remembered.contains(where: { !fetchedIDs.contains($0.id) }) else { return fetched }
+
+        let fetchedByID = Dictionary(fetched.map { ($0.id, $0) }, uniquingKeysWith: { newest, _ in newest })
+        let rememberedIDs = Set(remembered.map(\.id))
+        return remembered.map { fetchedByID[$0.id] ?? $0 }
+            + fetched.filter { !rememberedIDs.contains($0.id) }
+    }
+
+    private static func neverRegressingChannels(fetched: [Channel], remembered: [Channel]) -> [Channel] {
+        func identity(_ channel: Channel) -> String {
+            let login = channel.login.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return login.isEmpty ? channel.id.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() : login
+        }
+
+        let fetchedIdentities = Set(fetched.map(identity))
+        guard remembered.contains(where: { !fetchedIdentities.contains(identity($0)) }) else { return fetched }
+
+        let fetchedByIdentity = Dictionary(
+            fetched.map { (identity($0), $0) },
+            uniquingKeysWith: { newest, _ in newest }
+        )
+        let rememberedIdentities = Set(remembered.map(identity))
+        return remembered.map { fetchedByIdentity[identity($0)] ?? $0 }
+            + fetched.filter { !rememberedIdentities.contains(identity($0)) }
     }
 }
