@@ -106,9 +106,9 @@ extension TwitchAPIClient {
                                 userLogin: self.userLogin,
                                 basicCampaign: campaign
                             )
-                            campaign = await self.reinstatingKnownApprovedChannels(
-                                Self.mergeBasicCampaign(campaign, withDetails: details)
-                            )
+                            let merged = Self.mergeBasicCampaign(campaign, withDetails: details)
+                            let withChannels = await self.reinstatingKnownApprovedChannels(merged)
+                            campaign = await self.reinstatingKnownDrops(withChannels)
                         } catch {
                             Logger.api.error("Failed to fetch details for campaign \(campaign.id): \(error)")
                         }
@@ -297,9 +297,16 @@ extension TwitchAPIClient {
             return campaign
         }
 
-        let campaign = try await fetchCampaignDetailsFromNetwork(
+        // Repair the response before it is cached. `detailsCacheTTL` is four hours for a
+        // campaign with no ACL of its own, so a single degraded answer stored here takes the
+        // campaign out of mining for that whole window — and out of the persisted cache too.
+        let fetched = try await fetchCampaignDetailsFromNetwork(
             campaignId: campaignId,
             userLogin: userLogin
+        )
+        let campaign = reinstatingKnownLinkState(
+            reinstatingKnownDrops(fetched),
+            cacheKey: cacheKey
         )
         cacheCampaignDetailsForAccount(campaign, cacheKey: cacheKey)
         await SharedTwitchLookupCache.shared.storeCampaignMetadata(
@@ -350,16 +357,34 @@ extension TwitchAPIClient {
             campaign: campaign,
             expiresAt: Date().addingTimeInterval(detailsCacheTTL(for: campaign))
         )
-        // Remember what this fetch established about the account's link state, so later
-        // cycles can take the shared metadata path without losing that answer.
+        rememberLinkState(isAccountConnected: campaign.isAccountConnected, cacheKey: cacheKey)
+    }
+
+    /// Remembers what a fetch established about this account's link to a campaign, so later
+    /// cycles can take the shared metadata path without losing that answer — and so a single
+    /// contrary response cannot unlink a campaign outright. See `reinstatingKnownLinkState`.
+    func rememberLinkState(isAccountConnected: Bool, cacheKey: String) {
         Self.pruneCache(
             &campaignLinkStateByKey,
             maxEntries: maxCampaignDetailsCacheEntries,
             expiresAt: { $0.expiresAt }
         )
+        // An unchanged answer keeps the deadline it already had. `reinstatingKnownLinkState`
+        // runs before this, so a reinstated `true` arrives here looking like a fresh one —
+        // re-arming the window on it would let a campaign hold a link forever and break the
+        // twenty-minute unlink contract `campaignLinkStateTTL` documents. The window
+        // therefore runs from the last answer that actually changed.
+        let now = Date()
+        var expiresAt = now.addingTimeInterval(campaignLinkStateTTL)
+        if let existing = campaignLinkStateByKey[cacheKey],
+           existing.isAccountConnected == isAccountConnected,
+           existing.expiresAt > now {
+            expiresAt = existing.expiresAt
+        }
+
         campaignLinkStateByKey[cacheKey] = CampaignLinkStateEntry(
-            isAccountConnected: campaign.isAccountConnected,
-            expiresAt: Date().addingTimeInterval(campaignLinkStateTTL)
+            isAccountConnected: isAccountConnected,
+            expiresAt: expiresAt
         )
         campaignCachesNeedPersisting = true
     }
@@ -410,6 +435,66 @@ extension TwitchAPIClient {
             "[CampaignDetails] \(campaign.name) came back restricted with no approved channels; reusing the \(remembered.count) last seen."
         )
         return campaign.withChannels(remembered)
+    }
+
+    /// Remembers a campaign's drop list, and puts it back when a later fetch returns the
+    /// campaign still time-active but carrying no drops.
+    ///
+    /// `DropCampaignDetails` is the only source of drops — `ViewerDropsDashboard` never
+    /// carries them — so a response that omits `timeBasedDrops` leaves the campaign with an
+    /// empty list, which reads to `candidateCampaigns` as "nothing to mine here" and takes
+    /// the campaign out of mining for the whole `detailsCacheTTL` window. Twitch does not
+    /// signal completion that way: a finished campaign returns its drops with `isClaimed`
+    /// set, so an empty list is a lost response, not an answer.
+    ///
+    /// Reinstating a remembered list cannot resurrect claimed drops, because claimed state
+    /// is recomputed from inventory benefit IDs every time — `DropsService.mergeInventory`
+    /// assigns `isClaimed` from the snapshot and ignores whatever the drop carried.
+    func reinstatingKnownDrops(_ campaign: Campaign) -> Campaign {
+        if !campaign.drops.isEmpty {
+            Self.pruneCache(
+                &lastKnownCampaignDrops,
+                maxEntries: maxCampaignDetailsCacheEntries,
+                expiresAt: { $0.expiresAt }
+            )
+            lastKnownCampaignDrops[campaign.id] = RememberedDropsEntry(
+                drops: campaign.drops,
+                expiresAt: campaign.endDate
+            )
+            return campaign
+        }
+
+        guard campaign.isTimeActive,
+              let remembered = lastKnownCampaignDrops[campaign.id],
+              !remembered.drops.isEmpty else { return campaign }
+
+        Logger.api.info(
+            "[CampaignDetails] \(campaign.name) came back with no drops while still active; reusing the \(remembered.drops.count) last seen."
+        )
+        return campaign.withDrops(remembered.drops)
+    }
+
+    /// Keeps an account's confirmed link to a campaign from being erased by a single
+    /// `isAccountConnected: false` response.
+    ///
+    /// Link state decides mining directly: an unlinked campaign whose game is not
+    /// prioritised is filtered as `unlinked_not_prioritised` and never attempted. Twitch
+    /// can answer `false` transiently — notably on the forced refetch that follows a claim,
+    /// once `invalidateCampaignDetailsAfterClaim()` has dropped the cached answer — and
+    /// that one response would otherwise be cached for hours.
+    ///
+    /// The remembered answer is bounded by `campaignLinkStateTTL`, so a genuine unlink is
+    /// still picked up inside twenty minutes, which is the contract that constant documents.
+    func reinstatingKnownLinkState(_ campaign: Campaign, cacheKey: String) -> Campaign {
+        guard !campaign.isAccountConnected,
+              let remembered = campaignLinkStateByKey[cacheKey],
+              remembered.expiresAt > Date(),
+              remembered.isAccountConnected else { return campaign }
+
+        Logger.api.info(
+            "[CampaignDetails] \(campaign.name) came back unlinked for \(userLogin) within the link-state window; keeping the confirmed link."
+        )
+        return campaign.withAccountConnected(true)
     }
 
     /// Approved-channel lists worth writing out: the campaign's own end date bounds how
