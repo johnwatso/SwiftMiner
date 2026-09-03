@@ -133,7 +133,7 @@ final class ServiceTests: XCTestCase {
         XCTAssertEqual(MockURLProtocol.lastRequest?.url?.path, "/helix/users")
     }
 
-    func testFollowedChannelRankingDoesNotFanOutSubscriptionRequests() async throws {
+    func testFollowedChannelRankingUsesOnePaginatedLookup() async throws {
         let requestedPaths = StringRequestRecorder()
         MockURLProtocol.requestHandler = { request in
             requestedPaths.append(request.url?.path ?? "")
@@ -166,6 +166,51 @@ final class ServiceTests: XCTestCase {
         XCTAssertEqual(relationships["followed"], ChannelRelationship(isFollowed: true))
         XCTAssertEqual(relationships["not-followed"], ChannelRelationship())
         XCTAssertEqual(requestedPaths.recordedValues, ["/helix/channels/followed"])
+    }
+
+    func testChangedAccessTokenRetriesFollowLookupRejectedByPreviousToken() async throws {
+        let requestedPaths = StringRequestRecorder()
+        MockURLProtocol.requestHandler = { request in
+            requestedPaths.append(request.url?.path ?? "")
+            let attempt = requestedPaths.recordedValues.count
+            let status = attempt == 1 ? 403 : 200
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: status,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            let body = attempt == 1
+                ? #"{"message":"Forbidden"}"#
+                : #"{"data":[{"broadcaster_id":"followed","broadcaster_login":"followed_streamer","broadcaster_name":"Followed Streamer"}],"pagination":{}}"#
+            return (response, Data(body.utf8))
+        }
+
+        await apiClient.updateAccessToken("old-token")
+        let rejected = await apiClient.getChannelRelationships(
+            userId: "viewer",
+            broadcasterIds: ["followed"]
+        )
+        XCTAssertTrue(rejected.isEmpty)
+
+        // Reusing the same token stays suppressed so channel selection cannot hammer a
+        // permanently unsupported endpoint.
+        await apiClient.updateAccessToken("old-token")
+        let stillSuppressed = await apiClient.getChannelRelationships(
+            userId: "viewer",
+            broadcasterIds: ["followed"]
+        )
+        XCTAssertTrue(stillSuppressed.isEmpty)
+        XCTAssertEqual(requestedPaths.recordedValues.count, 1)
+
+        await apiClient.updateAccessToken("new-token")
+        let recovered = await apiClient.getChannelRelationships(
+            userId: "viewer",
+            broadcasterIds: ["followed"]
+        )
+
+        XCTAssertEqual(recovered["followed"], ChannelRelationship(isFollowed: true))
+        XCTAssertEqual(requestedPaths.recordedValues, ["/helix/channels/followed", "/helix/channels/followed"])
     }
 
     func testGetChannelByLoginResolvesNumericId() async throws {

@@ -127,8 +127,24 @@ public actor PerformanceDiagnostics {
         public let maxEndToEndSeconds: TimeInterval
     }
 
+    /// Aggregate work split between launch activity and the normal recurring loop. This keeps
+    /// a cold-start request burst from making an otherwise quiet steady state look expensive.
+    public struct WorkloadPhaseSummary: Sendable, Equatable {
+        public let requestCount: Int
+        public let requestFailureCount: Int
+        public let averageRequestSeconds: TimeInterval
+        public let maxRequestSeconds: TimeInterval
+        public let miningCycleCount: Int
+        public let averageMiningCycleSeconds: TimeInterval
+        public let maxMiningCycleSeconds: TimeInterval
+    }
+
     public struct Snapshot: Sendable, Equatable {
+        public let collectionStartedAt: Date
         public let generatedAt: Date
+        public let startupWindowSeconds: TimeInterval
+        public let startup: WorkloadPhaseSummary
+        public let steadyState: WorkloadPhaseSummary
         public let requestOperations: [RequestOperation]
         public let slowRequests: [RecentRequest]
         public let miningCycles: [MiningCycleSummary]
@@ -190,11 +206,24 @@ public actor PerformanceDiagnostics {
         var maxEndToEndSeconds: TimeInterval = 0
     }
 
+    private struct WorkloadPhaseAccumulator {
+        var requestCount = 0
+        var requestFailureCount = 0
+        var totalRequestSeconds: TimeInterval = 0
+        var maxRequestSeconds: TimeInterval = 0
+        var miningCycleCount = 0
+        var totalMiningCycleSeconds: TimeInterval = 0
+        var maxMiningCycleSeconds: TimeInterval = 0
+    }
+
+    private var collectionStartedAt = Date()
     private var requestsByOperation: [String: RequestAccumulator] = [:]
     private var slowRequests: [RecentRequest] = []
     private var miningByMiner: [String: MiningAccumulator] = [:]
     private var transportByHost: [String: TransportAccumulator] = [:]
     private var eventOutbox = EventOutboxAccumulator()
+    private var startupWorkload = WorkloadPhaseAccumulator()
+    private var steadyStateWorkload = WorkloadPhaseAccumulator()
     private var transportRecordOrder: UInt64 = 0
 
     private let maxLatencySamplesPerOperation = 200
@@ -204,15 +233,19 @@ public actor PerformanceDiagnostics {
     private let maxTransportHosts = 20
     private let maxTransportSamplesPerHost = 200
     private let maxProtocolsPerHost = 8
+    private let startupWindowSeconds: TimeInterval = 2 * 60
 
     private init() {}
 
-    public func reset() {
+    public func reset(startedAt: Date = Date()) {
+        collectionStartedAt = startedAt
         requestsByOperation.removeAll(keepingCapacity: true)
         slowRequests.removeAll(keepingCapacity: true)
         miningByMiner.removeAll(keepingCapacity: true)
         transportByHost.removeAll(keepingCapacity: true)
         eventOutbox = EventOutboxAccumulator()
+        startupWorkload = WorkloadPhaseAccumulator()
+        steadyStateWorkload = WorkloadPhaseAccumulator()
         transportRecordOrder = 0
     }
 
@@ -249,6 +282,8 @@ public actor PerformanceDiagnostics {
         accumulator.lastAt = finishedAt
         accumulator.lastError = error
         requestsByOperation[key] = accumulator
+
+        recordRequestPhase(duration: duration, succeeded: succeeded, finishedAt: finishedAt)
 
         let recent = RecentRequest(
             operation: key,
@@ -334,6 +369,7 @@ public actor PerformanceDiagnostics {
             accumulator.slowCycles.removeLast(accumulator.slowCycles.count - maxSlowCyclesPerMiner)
         }
         miningByMiner[key] = accumulator
+        recordMiningCyclePhase(duration: max(0, timing.totalSeconds), finishedAt: timing.finishedAt)
     }
 
     public func recordEventOutboxQueue(
@@ -475,12 +511,72 @@ public actor PerformanceDiagnostics {
         }
 
         return Snapshot(
+            collectionStartedAt: collectionStartedAt,
             generatedAt: Date(),
+            startupWindowSeconds: startupWindowSeconds,
+            startup: Self.phaseSummary(startupWorkload),
+            steadyState: Self.phaseSummary(steadyStateWorkload),
             requestOperations: requestOperations,
             slowRequests: slowRequests,
             miningCycles: miningCycles,
             transportHosts: transportHosts,
             eventOutbox: outboxSummary
+        )
+    }
+
+    private func recordRequestPhase(duration: TimeInterval, succeeded: Bool, finishedAt: Date) {
+        if isStartup(finishedAt) {
+            Self.recordRequest(duration: duration, succeeded: succeeded, in: &startupWorkload)
+        } else {
+            Self.recordRequest(duration: duration, succeeded: succeeded, in: &steadyStateWorkload)
+        }
+    }
+
+    private func recordMiningCyclePhase(duration: TimeInterval, finishedAt: Date) {
+        if isStartup(finishedAt) {
+            Self.recordMiningCycle(duration: duration, in: &startupWorkload)
+        } else {
+            Self.recordMiningCycle(duration: duration, in: &steadyStateWorkload)
+        }
+    }
+
+    private func isStartup(_ date: Date) -> Bool {
+        date < collectionStartedAt.addingTimeInterval(startupWindowSeconds)
+    }
+
+    private static func recordRequest(
+        duration: TimeInterval,
+        succeeded: Bool,
+        in accumulator: inout WorkloadPhaseAccumulator
+    ) {
+        accumulator.requestCount += 1
+        accumulator.requestFailureCount += succeeded ? 0 : 1
+        accumulator.totalRequestSeconds += duration
+        accumulator.maxRequestSeconds = max(accumulator.maxRequestSeconds, duration)
+    }
+
+    private static func recordMiningCycle(
+        duration: TimeInterval,
+        in accumulator: inout WorkloadPhaseAccumulator
+    ) {
+        accumulator.miningCycleCount += 1
+        accumulator.totalMiningCycleSeconds += duration
+        accumulator.maxMiningCycleSeconds = max(accumulator.maxMiningCycleSeconds, duration)
+    }
+
+    private static func phaseSummary(_ accumulator: WorkloadPhaseAccumulator) -> WorkloadPhaseSummary {
+        WorkloadPhaseSummary(
+            requestCount: accumulator.requestCount,
+            requestFailureCount: accumulator.requestFailureCount,
+            averageRequestSeconds: accumulator.requestCount == 0
+                ? 0
+                : accumulator.totalRequestSeconds / Double(accumulator.requestCount),
+            maxRequestSeconds: accumulator.maxRequestSeconds,
+            miningCycleCount: accumulator.miningCycleCount,
+            averageMiningCycleSeconds: accumulator.miningCycleCount == 0
+                ? 0
+                : accumulator.totalMiningCycleSeconds / Double(accumulator.miningCycleCount),
+            maxMiningCycleSeconds: accumulator.maxMiningCycleSeconds
         )
     }
 

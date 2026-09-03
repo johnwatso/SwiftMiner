@@ -129,7 +129,8 @@ struct MinerOperatorPresentation {
         guard !timedDrops.isEmpty else { return nil }
 
         let states = Dictionary(
-            uniqueKeysWithValues: (miner.stateStore?.dropStates ?? []).map { ($0.dropId, $0) }
+            (miner.stateStore?.dropStates ?? []).map { ($0.dropId, $0) },
+            uniquingKeysWith: DropState.preferred
         )
 
         var current = 0

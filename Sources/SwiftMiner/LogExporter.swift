@@ -323,6 +323,11 @@ enum LogExporter {
             }
             out += "\n"
         }
+        guard usage.sampleCount > 0 else {
+            out += "  cpu=not measured yet\n"
+            out += "  memory=not measured yet\n"
+            return out
+        }
         if let firstSampleAt = usage.firstSampleAt,
            let lastSampleAt = usage.lastSampleAt {
             out += "  sampleWindow=\(formatter.string(from: firstSampleAt))...\(formatter.string(from: lastSampleAt))"
@@ -362,7 +367,16 @@ enum LogExporter {
             return "Runtime metrics: unavailable\n"
         }
 
-        var out = "Runtime metrics: generated=\(formatter.string(from: performance.generatedAt))\n"
+        let collectionDuration = max(0, reference.timeIntervalSince(performance.collectionStartedAt))
+        var out = "Runtime metrics: collectedSince=\(formatter.string(from: performance.collectionStartedAt))"
+        out += " duration=\(formatDuration(collectionDuration))"
+        out += " generated=\(formatter.string(from: performance.generatedAt))\n"
+        out += "Workload phases:\n"
+        out += renderWorkloadPhase(
+            "startup (first \(formatDuration(performance.startupWindowSeconds)))",
+            performance.startup
+        )
+        out += renderWorkloadPhase("steady-state", performance.steadyState)
         if performance.requestOperations.isEmpty {
             out += "Twitch requests: none recorded\n"
         } else {
@@ -455,6 +469,23 @@ enum LogExporter {
             }
         }
         return out
+    }
+
+    private static func renderWorkloadPhase(
+        _ label: String,
+        _ phase: PerformanceDiagnostics.WorkloadPhaseSummary
+    ) -> String {
+        var out = "  \(label): requests=\(phase.requestCount) failures=\(phase.requestFailureCount)"
+        if phase.requestCount > 0 {
+            out += " avg=\(formatPerfDuration(phase.averageRequestSeconds))"
+            out += " max=\(formatPerfDuration(phase.maxRequestSeconds))"
+        }
+        out += " miningCycles=\(phase.miningCycleCount)"
+        if phase.miningCycleCount > 0 {
+            out += " cycleAvg=\(formatPerfDuration(phase.averageMiningCycleSeconds))"
+            out += " cycleMax=\(formatPerfDuration(phase.maxMiningCycleSeconds))"
+        }
+        return out + "\n"
     }
 
     private static func renderMiningCycle(

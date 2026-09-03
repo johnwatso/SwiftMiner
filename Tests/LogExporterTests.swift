@@ -163,7 +163,7 @@ final class LogExporterTests: XCTestCase {
 
     func testReportIncludesPerformanceDiagnostics() async {
         let now = Date(timeIntervalSince1970: 1_730_000_500)
-        await PerformanceDiagnostics.shared.reset()
+        await PerformanceDiagnostics.shared.reset(startedAt: now.addingTimeInterval(-180))
         await PerformanceDiagnostics.shared.recordRequest(
             operation: "ViewerDropsDashboard",
             durationSeconds: 1.25,
@@ -255,6 +255,10 @@ final class LogExporterTests: XCTestCase {
 
         XCTAssertTrue(report.contains("=== Performance Diagnostics ==="))
         XCTAssertTrue(report.contains("Resource usage: monitoring=true samples=2"))
+        XCTAssertTrue(report.contains("Runtime metrics: collectedSince="))
+        XCTAssertTrue(report.contains("duration=3m0s"))
+        XCTAssertTrue(report.contains("startup (first 2m0s): requests=0 failures=0 miningCycles=1 cycleAvg=2.00s cycleMax=2.00s"))
+        XCTAssertTrue(report.contains("steady-state: requests=1 failures=0 avg=1.25s max=1.25s miningCycles=0"))
         XCTAssertTrue(report.contains("cpu current=12.25% avg=8.50% peak=24.00%"))
         XCTAssertTrue(report.contains("memory current=130.00 MB avg=125.00 MB peak=132.00 MB delta=+4.00 MB growth=+16.00 MB/hour"))
         XCTAssertTrue(report.contains("ViewerDropsDashboard: count=1 ok=1 fail=0 avg=1.25s p95=1.25s max=1.25s retries=1 rateLimitWait=200ms"))
@@ -265,6 +269,35 @@ final class LogExporterTests: XCTestCase {
         XCTAssertTrue(report.contains("deliveries: attempts=1 ok=1 retryable=0 terminal=0 networkAvg=250ms networkMax=250ms endToEndAvg=120.00s endToEndMax=120.00s"))
 
         await PerformanceDiagnostics.shared.reset()
+    }
+
+    func testReportDoesNotPresentMissingResourceSamplesAsZeroUsage() {
+        let now = Date(timeIntervalSince1970: 1_730_000_500)
+        let usage = ResourceUsageMonitor.Diagnostics(
+            isRunning: true,
+            startedAt: now,
+            durationSeconds: 0,
+            sampleCount: 0,
+            currentCPUPercent: 0,
+            averageCPUPercent: 0,
+            peakCPUPercent: 0,
+            currentMemoryBytes: 0,
+            averageMemoryBytes: 0,
+            peakMemoryBytes: 0,
+            firstSampleAt: nil,
+            lastSampleAt: nil,
+            memoryDeltaBytes: nil,
+            memoryGrowthMBPerHour: nil,
+            topCPUSamples: [],
+            topMemorySamples: []
+        )
+
+        let report = LogExporter.buildReport(snapshot(resourceUsage: usage), now: now)
+
+        XCTAssertTrue(report.contains("cpu=not measured yet"))
+        XCTAssertTrue(report.contains("memory=not measured yet"))
+        XCTAssertFalse(report.contains("cpu current=0.00%"))
+        XCTAssertFalse(report.contains("memory current=0.00 MB"))
     }
 
     func testTransportDiagnosticsKeepOnlyBoundedTimingSamples() async {

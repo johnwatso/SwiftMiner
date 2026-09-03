@@ -70,23 +70,13 @@ extension MinerEngine {
         await notificationService?.configure(enabled: showClaimNotifications)
     }
 
-    /// Debug-only toggle. When enabled, the miner ignores account-link/eligibility gates
-    /// and picks a random live channel for any time-active campaign. For testing only.
-    public func setDebugBypassLinkRequirement(_ enabled: Bool) {
-        if debugBypassLinkRequirement != enabled {
-            log(enabled ? "Debug: bypassing link requirement — will watch any live channel" : "Debug: link requirement re-enabled")
-        }
-        debugBypassLinkRequirement = enabled
-        shouldRescanCampaigns = true
-    }
-
     /// Update the prioritised games list.
     public func updatePriorityGames(_ priorityGames: [String]) {
         self.priorityGames = priorityGames
         // Waking the engine might be desired, but periodic refresh will handle it too.
     }
 
-    /// Update followed/subscribed streamer channel ranking without restarting the engine.
+    /// Update followed-streamer channel ranking without restarting the engine.
     public func updateFollowedStreamerPriority(enabled: Bool) {
         self.prioritiseFollowedStreamers = enabled
         shouldRescanCampaigns = true

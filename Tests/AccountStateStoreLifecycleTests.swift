@@ -81,4 +81,28 @@ final class AccountStateStoreLifecycleTests: XCTestCase {
         store.stop()
         XCTAssertNil(store.refreshTask, "stop() must cancel and clear the refresh task")
     }
+
+    @MainActor
+    func testSeedCoalescesDuplicateCampaignDrops() {
+        let store = makeStore()
+        let drop = Drop(
+            id: "b71b1551-919c-11f1-9d83-0a58a9feac02",
+            name: "Week 3: gamescom 2026 mission",
+            requiredMinutes: 60
+        )
+        let campaign = Campaign(
+            id: "8cfe655c-5209-46e4-ac4a-244cfc7abbbc",
+            name: "15.7 WOWS Channel Drop",
+            game: Game(id: "game", name: "World of Warships"),
+            status: .active,
+            startDate: Date().addingTimeInterval(-60),
+            endDate: Date().addingTimeInterval(3_600),
+            drops: [drop],
+            isAccountConnected: true
+        )
+
+        store.seed(from: [campaign, campaign])
+
+        XCTAssertEqual(store.dropStates.map(\.dropId), [drop.id])
+    }
 }

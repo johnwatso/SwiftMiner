@@ -138,10 +138,10 @@ const searchIndex = [
     snippet: "Configure reward claiming, anti-stall recovery, duplicate stream prevention, and stream selection priority."
   },
   {
-    title: "Game Rules & Failover Streamers",
+    title: "Game Rules & Fallback Streamers",
     url: "game-rules/",
     category: "Settings",
-    keywords: "game rules priorities priority prioritise prioritized exclusions exclude failover backup streamer stalled progress mining strategy smart only selected account global ordering",
+    keywords: "game rules priorities priority prioritise prioritized exclusions exclude fallback backup streamer stalled progress mining strategy smart only selected account global ordering",
     snippet: "Learn how SwiftMiner orders games, applies exclusions, combines account and global priorities, and verifies backup streamers after stalls."
   },
   {
@@ -152,10 +152,10 @@ const searchIndex = [
     snippet: "Why some Twitch Drops campaigns cannot be earned by watch time alone, and what SwiftMiner does about them."
   },
   {
-    title: "Configure a Failover Streamer",
+    title: "Configure a Fallback Streamer",
     url: "game-rules/#failover-streamers",
     category: "Settings",
-    keywords: "failover streamer backup channel twitch login url offline exact campaign stall cooldown ten minutes verify",
+    keywords: "fallback streamer backup channel twitch login url offline exact campaign stall cooldown ten minutes verify",
     snippet: "Configure a game-specific backup channel and understand when SwiftMiner will—or will not—switch to it."
   },
   {

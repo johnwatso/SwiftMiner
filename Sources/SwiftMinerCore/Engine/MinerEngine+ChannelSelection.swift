@@ -435,20 +435,6 @@ extension MinerEngine {
             return nil
         }
 
-        // Debug bypass: skip GQL verification and grab the top live channel paired with a
-        // random candidate. Purely for exercising the watch pipeline in testing.
-        if debugBypassLinkRequirement, !liveChannels.isEmpty {
-            let bestLive = liveChannels
-                .sorted { ($0.viewerCount ?? 0) > ($1.viewerCount ?? 0) }
-                .first!
-            let resolved = await resolveChannelIdIfNeeded(bestLive)
-            let randomCandidate = candidates.randomElement() ?? primary
-            log("[ChannelSelect]   Debug bypass: picking \(resolved.displayName) for random candidate \(randomCandidate.name)")
-            currentChannelName = resolved.displayName
-            currentChannelId = resolved.id
-            return MiningChannelSelection(campaign: randomCandidate, channel: resolved, wasVerified: true)
-        }
-
         let relationshipRanks = await followedStreamerRanks(for: liveChannels)
 
         // Note: every channel here belongs to the same game (this function is called per game),

@@ -393,7 +393,7 @@ struct AccountSettingsAccountRow: View {
 struct MiningSettingsView: View {
     @Bindable var settings: Settings
     @Environment(NavigationModel.self) private var navigation
-    @State private var isShowingGameManagement = false
+    @State private var isShowingGameRules = false
 
     var body: some View {
         Form {
@@ -422,39 +422,108 @@ struct MiningSettingsView: View {
                     }
                 SettingsSecondaryText("Allows Twitch IRL-category campaigns to be treated as special earn-anywhere drops. Turn this off to skip IRL campaigns.")
 
-                Toggle("Prioritise followed and subscribed streamers", isOn: $settings.prioritiseFollowedStreamers)
+                Toggle("Prioritise followed streamers", isOn: $settings.prioritiseFollowedStreamers)
                     .onChange(of: settings.prioritiseFollowedStreamers) { _, newValue in
                         Task { await navigation.minerManager.updateFollowedStreamerPriority(enabled: newValue) }
                     }
-                SettingsSecondaryText("When a followed or subscribed streamer is live and verified for a matching campaign, SwiftMiner chooses subscribed channels first, then followed channels, before falling back to normal stream ranking.")
+                SettingsSecondaryText("When a followed streamer is live and verified for a matching campaign, SwiftMiner chooses it before falling back to normal stream ranking.")
             } header: {
                 Text("Strategy")
             }
 
             Section {
-                Button("Manage Game Rules\u{2026}") {
-                    isShowingGameManagement = true
+                SettingsSecondaryText("Control which games SwiftMiner prioritises or avoids.")
+
+                gameRuleSummary
+
+                Button {
+                    isShowingGameRules = true
+                } label: {
+                    HStack {
+                        Text("Manage Game Rules\u{2026}")
+                            .foregroundStyle(.primary)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .contentShape(Rectangle())
                 }
-                
-                if let count = gameCountText {
-                    Text("\(count) rules active.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                .buttonStyle(.plain)
             } header: {
-                Text("Game Rules")
+                Text("Game Priority")
             }
         }
         .formStyle(.grouped)
         .padding(.horizontal, 24)
         .padding(.bottom, 20)
         .padding(.top, 10)
-        .sheet(isPresented: $isShowingGameManagement) {
+        .sheet(isPresented: $isShowingGameRules) {
             GamePreferenceManagementView(
                 settings: settings,
                 minerManager: navigation.minerManager
             )
         }
+    }
+
+    /// At-a-glance counts, so the common question ("how many rules do I have?") needs no sheet.
+    private var gameRuleSummary: some View {
+        HStack(spacing: 0) {
+            gameRuleCount(
+                count: prioritisedGameCount,
+                symbol: "star",
+                tint: .accentColor,
+                singular: "Prioritised game",
+                plural: "Prioritised games"
+            )
+
+            Divider()
+                .frame(height: 34)
+                .padding(.horizontal, 14)
+
+            gameRuleCount(
+                count: excludedGameCount,
+                symbol: "minus.circle",
+                tint: .red,
+                singular: "Excluded game",
+                plural: "Excluded games"
+            )
+
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func gameRuleCount(
+        count: Int,
+        symbol: String,
+        tint: Color,
+        singular: String,
+        plural: String
+    ) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: symbol)
+                .font(.title3)
+                .foregroundStyle(tint)
+
+            VStack(alignment: .leading, spacing: 0) {
+                Text("\(count)")
+                    .font(.title3.weight(.semibold))
+                    .monospacedDigit()
+                Text(count == 1 ? singular : plural)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var prioritisedGameCount: Int {
+        settings.gamePreferences.count { $0.state == .preferred }
+    }
+
+    private var excludedGameCount: Int {
+        settings.gamePreferences.count { $0.state == .excluded }
     }
 
     private var strategyDetailText: String {
@@ -466,12 +535,6 @@ struct MiningSettingsView: View {
         case .onlyPriority:
             return "Ignore non-prioritised campaigns entirely."
         }
-    }
-
-    private var gameCountText: String? {
-        let count = settings.gamePreferences.count
-        guard count > 0 else { return nil }
-        return "\(count)"
     }
 
     private func refreshMiningPreferences() async {

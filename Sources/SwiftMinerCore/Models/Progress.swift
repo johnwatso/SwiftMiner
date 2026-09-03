@@ -121,6 +121,39 @@ public struct DropState: Codable, Sendable, Equatable, Identifiable {
     public var minutesRemaining: Int {
         max(0, requiredMinutes - progressMinutes)
     }
+
+    /// Chooses the most useful state when Twitch returns the same drop more than once.
+    /// Claimed state is authoritative, followed by the greatest observed progress and
+    /// finally the newest sample.
+    public static func preferred(_ current: DropState, _ candidate: DropState) -> DropState {
+        if current.isClaimed != candidate.isClaimed {
+            return candidate.isClaimed ? candidate : current
+        }
+        if current.progressMinutes != candidate.progressMinutes {
+            return candidate.progressMinutes > current.progressMinutes ? candidate : current
+        }
+        if current.isEligible != candidate.isEligible {
+            return candidate.isEligible ? candidate : current
+        }
+        return candidate.lastUpdated > current.lastUpdated ? candidate : current
+    }
+
+    /// Removes duplicate drop IDs while preserving their first-seen order.
+    public static func deduplicatedByDropID(_ states: [DropState]) -> [DropState] {
+        var result: [DropState] = []
+        var indexByDropID: [String: Int] = [:]
+
+        for state in states {
+            if let index = indexByDropID[state.dropId] {
+                result[index] = preferred(result[index], state)
+            } else {
+                indexByDropID[state.dropId] = result.count
+                result.append(state)
+            }
+        }
+
+        return result
+    }
 }
 
 /// Derived drop status (Phase 5 Refinement).

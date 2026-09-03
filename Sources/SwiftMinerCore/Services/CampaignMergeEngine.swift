@@ -19,11 +19,13 @@ public enum CampaignMergeEngine {
         // This protects against transient API failures or empty responses clearing the UI.
         guard !fresh.isEmpty else {
             Logger.campaigns.warning("API returned empty results; preserving entire cache.")
-            return cached
+            return deduplicatedByID(cached)
         }
         
-        var merged = fresh
-        let freshIds = Set(fresh.map { $0.id })
+        let uniqueFresh = deduplicatedByID(fresh)
+        let uniqueCached = deduplicatedByID(cached)
+        var merged = uniqueFresh
+        let freshIds = Set(uniqueFresh.map { $0.id })
 
         // ViewerDropsDashboard deliberately contains no time-based drop details.
         // While a campaign is active, Twitch follows it with a details lookup. Once
@@ -31,10 +33,10 @@ public enum CampaignMergeEngine {
         // shell. Preserve the cached reward metadata so Ended can still show the
         // drop artwork. It lives in the normal per-account campaign cache and is
         // therefore removed along with the campaign by the usual retention cleanup.
-        let cachedByID = Dictionary(cached.map { ($0.id, $0) }, uniquingKeysWith: {
+        let cachedByID = Dictionary(uniqueCached.map { ($0.id, $0) }, uniquingKeysWith: {
             $0.drops.count >= $1.drops.count ? $0 : $1
         })
-        merged = fresh.map { freshCampaign in
+        merged = uniqueFresh.map { freshCampaign in
             guard let cachedCampaign = cachedByID[freshCampaign.id] else {
                 return freshCampaign
             }
@@ -45,7 +47,7 @@ public enum CampaignMergeEngine {
         }
         
         // Preserve campaigns NOT in the fresh response if they meet preservation rules.
-        for cachedCampaign in cached {
+        for cachedCampaign in uniqueCached {
             if !freshIds.contains(cachedCampaign.id) {
                 if shouldPreserve(cachedCampaign, inventory: inventory) {
                     Logger.campaigns.info("Preserving campaign not in API: \(cachedCampaign.name)")
@@ -57,6 +59,33 @@ public enum CampaignMergeEngine {
         }
         
         return merged
+    }
+
+    /// Twitch occasionally repeats a dashboard campaign. Keep the original order
+    /// while retaining whichever copy carries the richer drop/channel payload.
+    static func deduplicatedByID(_ campaigns: [Campaign]) -> [Campaign] {
+        var result: [Campaign] = []
+        var indexByID: [String: Int] = [:]
+
+        for campaign in campaigns {
+            if let index = indexByID[campaign.id] {
+                let current = result[index]
+                if campaign.drops.count > current.drops.count
+                    || (campaign.drops.count == current.drops.count
+                        && campaign.channels.count > current.channels.count)
+                    || (campaign.drops.count == current.drops.count
+                        && campaign.channels.count == current.channels.count
+                        && campaign.isAccountConnected
+                        && !current.isAccountConnected) {
+                    result[index] = campaign
+                }
+            } else {
+                indexByID[campaign.id] = result.count
+                result.append(campaign)
+            }
+        }
+
+        return result
     }
 
     private static func preserveCachedDropsIfNeeded(

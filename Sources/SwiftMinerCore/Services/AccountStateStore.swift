@@ -95,7 +95,7 @@ public final class AccountStateStore: Identifiable {
     public func seed(from campaigns: [Campaign]) {
         guard dropStates.isEmpty else { return }
 
-        dropStates = campaigns.flatMap { campaign in
+        let seededStates = campaigns.flatMap { campaign in
             campaign.drops.map { drop in
                 DropState(
                     dropId: drop.id,
@@ -108,6 +108,7 @@ public final class AccountStateStore: Identifiable {
                 )
             }
         }
+        dropStates = DropState.deduplicatedByDropID(seededStates)
     }
 
     // MARK: - Refresh

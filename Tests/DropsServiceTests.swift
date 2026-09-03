@@ -3,6 +3,39 @@ import XCTest
 
 final class DropsServiceTests: XCTestCase {
 
+    func testDropStateDeduplicationKeepsTheMostCompleteStateAndOriginalOrder() {
+        let older = Date().addingTimeInterval(-60)
+        let states = [
+            DropState(
+                dropId: "duplicate",
+                accountId: "account",
+                progressMinutes: 45,
+                requiredMinutes: 60,
+                isClaimed: false,
+                lastUpdated: older
+            ),
+            DropState(
+                dropId: "other",
+                accountId: "account",
+                progressMinutes: 10,
+                requiredMinutes: 30,
+                isClaimed: false
+            ),
+            DropState(
+                dropId: "duplicate",
+                accountId: "account",
+                progressMinutes: 0,
+                requiredMinutes: 60,
+                isClaimed: true
+            )
+        ]
+
+        let deduplicated = DropState.deduplicatedByDropID(states)
+
+        XCTAssertEqual(deduplicated.map(\.dropId), ["duplicate", "other"])
+        XCTAssertTrue(deduplicated[0].isClaimed)
+    }
+
     func testMergeInventoryCoalescesDuplicateProgressRecords() {
         let drop = Drop(id: "drop", name: "Drop", requiredMinutes: 60, benefitID: "benefit")
         let campaign = Campaign(

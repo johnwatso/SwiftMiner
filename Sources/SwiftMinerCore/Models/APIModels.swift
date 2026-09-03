@@ -112,17 +112,13 @@ public struct FollowedChannelsResponse: Codable, Sendable {
 
 public struct ChannelRelationship: Sendable, Equatable {
     public let isFollowed: Bool
-    public let isSubscribed: Bool
 
-    public init(isFollowed: Bool = false, isSubscribed: Bool = false) {
+    public init(isFollowed: Bool = false) {
         self.isFollowed = isFollowed
-        self.isSubscribed = isSubscribed
     }
 
     public var rank: Int {
-        if isSubscribed { return 2 }
-        if isFollowed { return 1 }
-        return 0
+        isFollowed ? 1 : 0
     }
 }
 

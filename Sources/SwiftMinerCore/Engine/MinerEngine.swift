@@ -381,10 +381,6 @@ public actor MinerEngine {
     /// drop campaigns are active on their channel (pure "watch them anyway" session).
     var streamOverrideWatchOnly: Bool = false
     var channelAssignmentAvoidanceProvider: (@Sendable (_ campaignId: String, _ viableChannelCount: Int) async -> Set<String>)?
-    /// Debug-only: when true, accepts any time-active campaign and picks any live channel
-    /// without requiring account linkage or GQL drop verification. Exercises the watch
-    /// pipeline for testing; drops won't credit for unlinked accounts.
-    var debugBypassLinkRequirement: Bool = false
 
     struct PendingFailoverTarget: Sendable {
         let campaignId: String

@@ -97,7 +97,7 @@ public actor DropsService {
         }
         let enriched = Self.mergeInventory(snapshot, into: campaigns)
 
-        return enriched.flatMap { campaign in
+        let states = enriched.flatMap { campaign in
             campaign.drops.map { drop in
                 let progress = drop.progress
                 let state = DropState(
@@ -113,6 +113,7 @@ public actor DropsService {
                 return state
             }
         }
+        return DropState.deduplicatedByDropID(states)
     }
 
     /// Merges inventory progress into campaigns using Twitch inventory benefit IDs

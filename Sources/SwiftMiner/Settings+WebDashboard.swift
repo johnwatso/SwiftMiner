@@ -158,7 +158,7 @@ extension Settings {
     }
 
     /// Twitch OAuth application client secret used for web sign-in.
-    /// Held in the Keychain, not `UserDefaults` — see `Settings.readSecret`.
+    /// Held in the Keychain in release builds; DEBUG uses isolated local storage.
     public var webDashboardTwitchClientSecret: String {
         get {
             access(keyPath: \.webDashboardTwitchClientSecret)
@@ -214,6 +214,9 @@ extension Settings {
     }
 
     private static let webDashboardLocalPasswordService = "com.swiftminer.app.web-dashboard.local-password"
+    #if DEBUG
+    private static let debugWebDashboardLocalPasswordPrefix = "SwiftMinerDebugWebDashboardLocalPassword."
+    #endif
 
     public func webDashboardLocalPassword() -> String? {
         Self.readWebDashboardLocalPassword(username: webDashboardLocalUsername)
@@ -296,6 +299,9 @@ extension Settings {
         let cleanUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanUsername.isEmpty else { return nil }
 
+        #if DEBUG
+        return appStorageStore.string(forKey: debugWebDashboardLocalPasswordKey(username: cleanUsername))
+        #else
         var query = webDashboardLocalPasswordQuery(username: cleanUsername)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -304,9 +310,13 @@ extension Settings {
         let status = SecItemCopyMatching(query as CFDictionary, &item)
         guard status == errSecSuccess, let data = item as? Data else { return nil }
         return String(data: data, encoding: .utf8)
+        #endif
     }
 
     private static func writeWebDashboardLocalPassword(_ password: String, username: String) throws {
+        #if DEBUG
+        appStorageStore.set(password, forKey: debugWebDashboardLocalPasswordKey(username: username))
+        #else
         let data = Data(password.utf8)
         let query = webDashboardLocalPasswordQuery(username: username)
         let update: [String: Any] = [kSecValueData as String: data]
@@ -324,13 +334,24 @@ extension Settings {
         guard addStatus == errSecSuccess else {
             throw keychainError(addStatus, operation: "save")
         }
+        #endif
     }
 
     private static func deleteWebDashboardLocalPassword(username: String) {
         let cleanUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanUsername.isEmpty else { return }
+        #if DEBUG
+        appStorageStore.removeObject(forKey: debugWebDashboardLocalPasswordKey(username: cleanUsername))
+        #else
         SecItemDelete(webDashboardLocalPasswordQuery(username: cleanUsername) as CFDictionary)
+        #endif
     }
+
+    #if DEBUG
+    private static func debugWebDashboardLocalPasswordKey(username: String) -> String {
+        debugWebDashboardLocalPasswordPrefix + username
+    }
+    #endif
 
     private static func webDashboardLocalPasswordQuery(username: String) -> [String: Any] {
         [

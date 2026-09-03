@@ -71,9 +71,15 @@ extension TwitchAPIClient {
         await traceGQLDebug { "[TwitchAPIClient] fetchDropCampaigns: \(dropsCount) raw campaigns from API" }
         
         // Build basic campaigns first, then only fetch details for time-active ones
-        let basicCampaigns = drops.compactMap { drop -> Campaign? in
+        let parsedCampaigns = drops.compactMap { drop -> Campaign? in
             guard drop["id"] as? String != nil else { return nil }
             return parseBasicCampaign(from: drop)
+        }
+        let basicCampaigns = CampaignMergeEngine.deduplicatedByID(parsedCampaigns)
+        if basicCampaigns.count != parsedCampaigns.count {
+            Logger.campaigns.warning(
+                "ViewerDropsDashboard returned \(parsedCampaigns.count - basicCampaigns.count) duplicate campaign(s)"
+            )
         }
 
         let activeCampaigns = basicCampaigns.filter { $0.isActive }

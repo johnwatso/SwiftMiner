@@ -51,11 +51,9 @@ enum ProcessResourceSampler {
     }
 }
 
-/// Opt-in diagnostic that accumulates this app's average/peak CPU and memory
-/// usage while enabled, for surfacing in a small Advanced popup. It does nothing
-/// (and starts no timer) unless `start()` is called, so it adds zero cost to the
-/// normal app. CPU% is expressed relative to a single core, matching Activity
-/// Monitor (it can exceed 100% when multiple threads are busy).
+/// Always-on diagnostic that accumulates this app's average/peak CPU and memory
+/// usage for diagnostic exports. CPU% is expressed relative to a single core,
+/// matching Activity Monitor (it can exceed 100% when multiple threads are busy).
 @MainActor
 @Observable
 final class ResourceUsageMonitor {

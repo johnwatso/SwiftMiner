@@ -451,4 +451,29 @@ final class CampaignStateTests: XCTestCase {
         )
         XCTAssertEqual(ranked.first?.id, "c-live")
     }
+
+    func testCampaignMergeCoalescesDuplicateFreshCampaigns() {
+        let sparse = Campaign(
+            id: "duplicate", name: "Campaign", game: game, status: .active,
+            startDate: now.addingTimeInterval(-3600), endDate: now.addingTimeInterval(3600),
+            drops: []
+        )
+        let richer = Campaign(
+            id: "duplicate", name: "Campaign", game: game, status: .active,
+            startDate: now.addingTimeInterval(-3600), endDate: now.addingTimeInterval(3600),
+            drops: [Drop(id: "drop", name: "Reward", requiredMinutes: 60)],
+            isAccountConnected: true
+        )
+
+        let merged = CampaignMergeEngine.merge(
+            fresh: [sparse, richer],
+            cached: [],
+            inventory: nil
+        )
+
+        XCTAssertEqual(merged.count, 1)
+        XCTAssertEqual(merged.first?.id, "duplicate")
+        XCTAssertEqual(merged.first?.drops.map(\.id), ["drop"])
+        XCTAssertTrue(merged.first?.isAccountConnected ?? false)
+    }
 }
