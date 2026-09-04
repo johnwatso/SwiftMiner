@@ -379,6 +379,101 @@ final class CampaignDropRetentionTests: XCTestCase {
         })
     }
 
+    /// R6S S2 2026, live on 2026-09-03. One campaign, three tiers all named "Esports Pack"
+    /// and all carrying the same benefit ID. Claiming the 60-minute tier put that benefit in
+    /// inventory, every tier read as claimed, the campaign had no eligible drops left, and it
+    /// left the candidate set two minutes after the claim — with the 180-minute tier at
+    /// 63 minutes and the 360-minute tier at 62.
+    ///
+    /// Twitch still listed both unfinished tiers in inventory, unclaimed, so the per-drop
+    /// record settles which tier the benefit actually paid for.
+    func testClaimingOneTierDoesNotClaimTheRestOfTheCampaign() {
+        let sharedPack = "r6s-esports-pack-benefit"
+        let start = Date().addingTimeInterval(-3 * 60 * 60)
+        let campaign = Campaign(
+            id: "r6s-s2",
+            name: "R6S S2 2026",
+            game: Game(id: "460630", name: "Rainbow Six Siege"),
+            status: .active,
+            startDate: start,
+            endDate: Date().addingTimeInterval(25 * 60 * 60),
+            drops: [
+                Drop(id: "tier-60", name: "Esports Pack", requiredMinutes: 60, benefitID: sharedPack),
+                Drop(id: "tier-180", name: "Esports Pack", requiredMinutes: 180, benefitID: sharedPack),
+                Drop(id: "tier-360", name: "Esports Pack", requiredMinutes: 360, benefitID: sharedPack)
+            ],
+            channels: [],
+            isAccountConnected: true
+        )
+
+        let snapshot = InventorySnapshot(
+            accountId: "1",
+            benefitIDs: [sharedPack],
+            benefitAwardedAt: [sharedPack: Date().addingTimeInterval(-2 * 60)],
+            // Twitch drops the claimed 60-minute tier from its in-progress list and keeps
+            // reporting the two that are still running.
+            progress: [
+                Progress(
+                    id: "p-180",
+                    dropId: "tier-180",
+                    dropName: "Esports Pack",
+                    campaignId: "r6s-s2",
+                    currentMinutes: 63,
+                    requiredMinutes: 180,
+                    isClaimed: false
+                ),
+                Progress(
+                    id: "p-360",
+                    dropId: "tier-360",
+                    dropName: "Esports Pack",
+                    campaignId: "r6s-s2",
+                    currentMinutes: 62,
+                    requiredMinutes: 360,
+                    isClaimed: false
+                )
+            ],
+            discoveredCampaigns: []
+        )
+
+        let merged = DropsService.mergeInventory(snapshot, into: [campaign])[0]
+        func claimed(_ dropId: String) -> Bool? {
+            merged.drops.first { $0.id == dropId }?.isClaimed
+        }
+
+        XCTAssertEqual(claimed("tier-60"), true, "the tier the benefit actually paid for")
+        XCTAssertEqual(claimed("tier-180"), false, "still 63/180 and must stay earnable")
+        XCTAssertEqual(claimed("tier-360"), false, "still 62/360 and must stay earnable")
+        XCTAssertEqual(merged.earnableDrops.count, 2)
+        XCTAssertTrue(merged.canAttemptMining, "the campaign must not fall to no_eligible_drops")
+    }
+
+    /// Two tiers sharing a benefit where neither has been claimed: nothing in inventory, so
+    /// nothing is claimed and both stay earnable.
+    func testSharedTiersStayEarnableBeforeAnythingIsClaimed() {
+        let sharedPack = "pack-benefit"
+        let campaign = Campaign(
+            id: "c",
+            name: "Two Tier",
+            game: Game(id: "1", name: "Game"),
+            status: .active,
+            startDate: Date().addingTimeInterval(-3600),
+            endDate: Date().addingTimeInterval(3600),
+            drops: [
+                Drop(id: "a", name: "Pack", requiredMinutes: 60, benefitID: sharedPack),
+                Drop(id: "b", name: "Pack", requiredMinutes: 180, benefitID: sharedPack)
+            ],
+            channels: [],
+            isAccountConnected: true
+        )
+
+        let merged = DropsService.mergeInventory(
+            InventorySnapshot(accountId: "1", benefitIDs: [], progress: [], discoveredCampaigns: []),
+            into: [campaign]
+        )[0]
+
+        XCTAssertEqual(merged.earnableDrops.count, 2)
+    }
+
     private func makeClient(persistsCampaignCaches: Bool = false) -> TwitchAPIClient {
         TwitchAPIClient(
             authService: TwitchAuthService(clientId: "test", tokenStore: InMemoryTokenStore()),

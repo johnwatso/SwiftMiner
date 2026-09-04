@@ -205,18 +205,20 @@ public actor DropsService {
             uniquingKeysWith: Self.preferredProgress
         )
 
-        // Benefit IDs Twitch offers in more than one campaign. Presence in inventory proves
-        // such a benefit was awarded somewhere, never that it was awarded *here*.
-        var campaignsPerBenefit: [String: Int] = [:]
+        // Benefit IDs carried by more than one drop. Presence in inventory proves such a
+        // benefit was awarded somewhere; it never proves *this* drop is the one that awarded
+        // it. Counted per drop rather than per campaign because Twitch shares a benefit both
+        // ways: across campaigns (the same charm on each day of an event) and across tiers of
+        // a single campaign (Rainbow Six offering "Esports Pack" at 60, 180 and 360 minutes).
+        var dropsPerBenefit: [String: Set<String>] = [:]
         for campaign in campaigns {
-            var seen = Set<String>()
             for drop in campaign.drops {
-                for benefitId in Self.knownBenefitIds(of: drop) where seen.insert(benefitId).inserted {
-                    campaignsPerBenefit[benefitId, default: 0] += 1
+                for benefitId in Self.knownBenefitIds(of: drop) {
+                    dropsPerBenefit[benefitId, default: []].insert(drop.id)
                 }
             }
         }
-        let ambiguousBenefitIds = Set(campaignsPerBenefit.filter { $0.value > 1 }.keys)
+        let ambiguousBenefitIds = Set(dropsPerBenefit.filter { $0.value.count > 1 }.keys)
 
         return campaigns.map { campaign in
             var updated = campaign
@@ -232,15 +234,21 @@ public actor DropsService {
                 // the moment its other reward was claimed. That is how the ALGS Split 2 PL
                 // charm was lost on three consecutive days.
                 //
-                // A shared benefit is therefore attributed by award time, which does identify
-                // the campaign that granted it. When Twitch dates it poorly, or the award
-                // predates this campaign, the reward is treated as still earnable: a
-                // redundant claim attempt is refused harmlessly, whereas a wrong "claimed"
-                // silently forfeits the reward.
+                // A shared benefit is therefore resolved per drop instead. Inventory keeps a
+                // record per drop id, and drop ids are unique where benefit IDs are not, so
+                // that record settles it: Rainbow Six's 180- and 360-minute tiers were both
+                // sitting in inventory unclaimed and mid-progress at the moment the
+                // 60-minute tier was claimed. Failing that — Twitch drops a claimed drop from
+                // its in-progress list — the award time identifies the campaign whose window
+                // contains it.
+                //
+                // Anything still unresolved leaves the reward earnable. A redundant claim
+                // attempt is refused harmlessly; a wrong "claimed" forfeits the reward.
                 let knownBenefitIds = Self.knownBenefitIds(of: drop)
                 let claimedFromInventory = knownBenefitIds.contains { benefitId in
                     guard snapshot.benefitIDs.contains(benefitId) else { return false }
                     guard ambiguousBenefitIds.contains(benefitId) else { return true }
+                    if let record = progressByDropId[drop.id] { return record.isClaimed }
                     guard let awardedAt = snapshot.benefitAwardedAt[benefitId] else { return false }
                     return awardedAt >= campaign.startDate && awardedAt <= campaign.endDate
                 }
