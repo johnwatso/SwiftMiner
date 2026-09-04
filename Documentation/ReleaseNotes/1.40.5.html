@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SwiftMiner 1.40.5 - Release Notes</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { margin: 0; padding: 32px 20px 48px; font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f4f6f8; color: #0f1720; }
+    main { max-width: 760px; margin: 0 auto; padding: 28px; border-radius: 22px; background: rgba(255, 255, 255, .86); border: 1px solid rgba(15, 23, 32, .08); box-shadow: 0 20px 60px rgba(15, 23, 32, .10); }
+    h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
+    h2 { margin: 0 0 8px; font-size: 20px; line-height: 1.2; }
+    .meta { margin: 0 0 18px; color: #52606d; font-size: 14px; }
+    .intro { margin: 0 0 24px; color: #384454; }
+    section { margin: 0 0 20px; padding: 18px 20px; border: 1px solid rgba(15, 23, 32, .08); border-radius: 16px; background: rgba(255, 255, 255, .5); }
+    ul { margin: 0; padding-left: 20px; }
+    li { margin: 0 0 8px; }
+    a { color: #0a67a3; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    @media (prefers-color-scheme: dark) { body { background: #0b1015; color: #edf2f7; } main { background: rgba(15, 23, 32, .88); border-color: rgba(159, 176, 194, .14); } .meta { color: #9fb0c2; } .intro { color: #c8d3df; } section { border-color: rgba(159, 176, 194, .18); background: rgba(255, 255, 255, .04); } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>SwiftMiner 1.40.5</h1>
+    <p class="meta">Version 1.40.5 &middot; Build 2026090414</p>
+    <p class="intro">1.40.4 stopped a reward claimed in one campaign counting as claimed in another. This finishes the job: it no longer counts as claimed in the <em>same</em> campaign&rsquo;s other tiers either. Overview&rsquo;s prioritised games also become a proper priority queue.</p>
+
+    <section>
+      <h2>&#128029; Bug fixes</h2>
+      <ul>
+        <li>Claiming one tier of a campaign no longer claims the rest of it. A campaign that offers the same reward at several watch times &mdash; an hour, three hours, six hours &mdash; gives every tier the same identifier, and 1.40.4 only knew to be careful when that identifier was shared between <em>different</em> campaigns. Claiming the first tier therefore marked all of them collected, left the campaign with nothing to earn, and dropped it from mining about two minutes later. One live campaign was abandoned this way with its remaining tiers sitting at 63 of 180 minutes and 62 of 360.</li>
+        <li>Rewards sharing an identifier are now told apart by the record Twitch keeps against each individual reward, which is unique where the identifier is not. Where that cannot settle it, the time the reward was granted decides which campaign earned it, and anything still unresolved is treated as worth earning &mdash; a needless claim attempt costs nothing, while a wrong &ldquo;already collected&rdquo; forfeits the reward.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#11088; Overview&rsquo;s Priority Queue</h2>
+      <ul>
+        <li>The prioritised games section is now a Priority Queue and says so, with global game priority distinguished from the miner-specific next actions that belong in Miners. Cards carry a rank badge, and the leader is marked TOP rather than NEXT, because the highest global priority is not a promise about any one miner&rsquo;s next campaign.</li>
+        <li>One horizontal row that scrolls rather than wrapping, with paging chevrons when it overflows, so the order visibly means something. Cards are smaller and artwork-only, keeping the game name in the accessibility label and tooltip, and a game with nothing to earn shows no chip at all.</li>
+      </ul>
+    </section>
+
+    <p class="meta"><a href="./index.html">All release notes</a></p>
+  </main>
+</body>
+</html>
