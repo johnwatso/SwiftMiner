@@ -701,11 +701,13 @@ public actor WebDashboardRoutes {
             let provider: String
             let csrfToken: String
             let allowsOperatorAccountRemoval: Bool
+            let appVersion: String?
 
             enum CodingKeys: String, CodingKey {
                 case provider
                 case csrfToken
                 case allowsOperatorAccountRemoval = "allows_operator_account_removal"
+                case appVersion = "app_version"
             }
         }
         #if DEBUG
@@ -716,9 +718,20 @@ public actor WebDashboardRoutes {
         return .json(Info(
             provider: s.principalType,
             csrfToken: s.csrfToken,
-            allowsOperatorAccountRemoval: allowsOperatorAccountRemoval
+            allowsOperatorAccountRemoval: allowsOperatorAccountRemoval,
+            appVersion: Self.runningAppVersion
         ))
     }
+
+    /// The marketing version of whatever process is serving the dashboard. In
+    /// the app this is SwiftMiner's own version; running the service standalone
+    /// there is no Info.plist to read, so the footer simply omits it rather
+    /// than inventing a number.
+    static let runningAppVersion: String? = {
+        let value = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }()
 
     /// Human-readable name for a session's principal, for audit entries.
     private func actorName(_ s: WebSessionRecord) async -> String {

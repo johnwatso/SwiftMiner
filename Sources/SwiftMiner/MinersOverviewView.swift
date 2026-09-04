@@ -570,14 +570,8 @@ struct MinersOverviewView: View {
     // MARK: - Priorities
 
     private func miningType(for miner: MinerManager.ManagedMiner) -> (title: String, symbol: String) {
-        switch settings.prioritySource(forAccountId: miner.accountId) {
-        case .global:
-            return ("Global", "globe")
-        case .globalAndPersonal:
-            return ("Global + Personal", "point.3.connected.trianglepath.dotted")
-        case .personal:
-            return ("Personal", "person")
-        }
+        let source = settings.prioritySource(forAccountId: miner.accountId)
+        return (source.displayName, source.symbolName)
     }
 
     private func resetPrioritiesToGlobal(for miner: MinerManager.ManagedMiner) {

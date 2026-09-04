@@ -145,7 +145,7 @@
                                 <td>Your global list only. The miner follows the house queue and ignores anything in its own personal list.</td>
                             </tr>
                             <tr>
-                                <td><strong>Global + Personal</strong></td>
+                                <td><strong>Hybrid</strong></td>
                                 <td>The miner's personal games first, in their order, then your global games appended after them. Duplicates are collapsed to their earliest position.</td>
                             </tr>
                             <tr>
@@ -156,12 +156,12 @@
                     </table>
                 </div>
 
-                <p>A new miner starts in <strong>Global</strong>. The first time its owner prioritises a game, it moves to <strong>Global + Personal</strong> automatically, so their pick goes to the front without silently dropping your house list. Nobody has to understand the modes to get a sensible result.</p>
+                <p>A new miner starts in <strong>Global</strong>. The first time its owner prioritises a game, it moves to <strong>Hybrid</strong> automatically, so their pick goes to the front without silently dropping your house list. Nobody has to understand the modes to get a sensible result.</p>
 
                 <p>Worked example. Your global list is <em>Rust, Sea of Thieves, ARK</em>. A hosted miner's personal list is <em>ARK, Rust Legacy</em>.</p>
                 <ul>
                     <li><strong>Global:</strong> Rust → Sea of Thieves → ARK</li>
-                    <li><strong>Global + Personal:</strong> ARK → Rust Legacy → Rust → Sea of Thieves <em>(ARK appears once, at its earliest position)</em></li>
+                    <li><strong>Hybrid:</strong> ARK → Rust Legacy → Rust → Sea of Thieves <em>(ARK appears once, at its earliest position)</em></li>
                     <li><strong>Personal:</strong> ARK → Rust Legacy</li>
                 </ul>
 
@@ -231,7 +231,7 @@
                     <li><strong>An idle or waiting miner</strong> re-selects on the next scan, normally within seconds of the refresh.</li>
                     <li><strong>A miner mid-drop</strong> keeps its current campaign if the active drop is within ten minutes of completing, rather than throwing away banked minutes. The exception is a preempting campaign whose own window closes within the hour, which is allowed to take over.</li>
                     <li><strong>Otherwise</strong> the active watch loop re-evaluates campaigns about every five minutes, so a new top priority that is live is usually picked up inside that window.</li>
-                    <li><strong>A global list edit</strong> reaches every miner in Global or Global + Personal mode at once; miners in Personal mode are untouched.</li>
+                    <li><strong>A global list edit</strong> reaches every miner in Global or Hybrid mode at once; miners in Personal mode are untouched.</li>
                 </ul>
                 <p>Tell people to expect "within a few minutes", not "instantly". A miner that is happily earning is deliberately reluctant to move.</p>
 
@@ -252,13 +252,13 @@
                 <p>Leave every miner in <strong>Global</strong> and use <strong>Prefer prioritised games</strong>. You curate one list, everyone gets the same rewards, and support questions collapse to one place. Best for a small group farming the same games.</p>
 
                 <h3>House queue with personal picks</h3>
-                <p>Keep <strong>Prefer prioritised games</strong> and let people move themselves to <strong>Global + Personal</strong> by prioritising anything on the dashboard. Their picks lead, your list catches everything after. This is the setup most groups end up in.</p>
+                <p>Keep <strong>Prefer prioritised games</strong> and let people move themselves to <strong>Hybrid</strong> by prioritising anything on the dashboard. Their picks lead, your list catches everything after. This is the setup most groups end up in.</p>
 
                 <h3>Everyone farms their own thing</h3>
                 <p>Put miners in <strong>Personal</strong> mode and keep the global list short, for exclusions and fallbacks rather than ordering. Expect to answer "why is my miner idle" more often, and avoid <strong>Only prioritised games</strong> here unless every list is well maintained.</p>
 
                 <h3>Pushing a limited-time campaign</h3>
-                <p>Put the game at the top of the global list. Remember it will not reach miners in <strong>Personal</strong> mode: either message those owners, or temporarily switch them to <strong>Global + Personal</strong> from the Miners view, which preserves their personal list underneath.</p>
+                <p>Put the game at the top of the global list. Remember it will not reach miners in <strong>Personal</strong> mode: either message those owners, or temporarily switch them to <strong>Hybrid</strong> from the Miners view, which preserves their personal list underneath.</p>
 
                 <h3>Several miners on one game</h3>
                 <p>Enable <strong>Spread miners across streams</strong> in Settings &gt; Mining. Twitch counts one watch session per account, so separate accounts on the same campaign are fine; spreading them across channels simply reduces the blast radius when one stream ends.</p>

@@ -488,11 +488,7 @@ public final class NavigationModel {
     }
 
     private static func prioritySourceTitle(_ source: Settings.AccountPrioritySource) -> String {
-        switch source {
-        case .global: return "Global"
-        case .globalAndPersonal: return "Mixed"
-        case .personal: return "Personal"
-        }
+        source.displayName
     }
 
     /// Fetches SwiftBot's tunnel domain so the Web tab only needs a subdomain.

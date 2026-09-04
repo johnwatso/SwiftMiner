@@ -102,7 +102,7 @@ final class AccountPriorityGamesTests: XCTestCase {
         )
 
         XCTAssertEqual(messages, [
-            "sorbertman changed priority mode from Global to Mixed",
+            "sorbertman changed priority mode from Global to Hybrid",
             "sorbertman added New Game to their priority list",
             "sorbertman removed Old Game from their priority list"
         ])
