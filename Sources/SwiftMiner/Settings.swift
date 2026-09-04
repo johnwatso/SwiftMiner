@@ -17,6 +17,39 @@ public final class Settings {
         case global
         case globalAndPersonal
         case personal
+
+        /// Canonical user-facing name, shared by the app and the web dashboard
+        /// so neither can drift into its own wording. The raw values are
+        /// deliberately left alone: they are persisted, sent over the API and
+        /// echoed by SwiftBot, and this is a presentation change only.
+        public var displayName: String {
+            switch self {
+            case .global: return "Global"
+            case .globalAndPersonal: return "Hybrid"
+            case .personal: return "Personal"
+            }
+        }
+
+        /// The name with its noun, for headings and summaries.
+        public var displayTitle: String { "\(displayName) Priorities" }
+
+        /// One line on what the mode actually does. Hybrid is an order, not a
+        /// blend, so the wording says which list wins.
+        public var summary: String {
+            switch self {
+            case .global: return "Uses the operator’s shared priority list."
+            case .globalAndPersonal: return "Your priorities first, then Global."
+            case .personal: return "Uses only your own priorities."
+            }
+        }
+
+        public var symbolName: String {
+            switch self {
+            case .global: return "globe"
+            case .globalAndPersonal: return "point.3.connected.trianglepath.dotted"
+            case .personal: return "person"
+            }
+        }
     }
     
     // MARK: - Shared Instance

@@ -12,6 +12,12 @@ extension WebDashboardAssets {
     let includeGlobalPriorities = true;
     let prioritySource = 'global';
     let globalPrioritiesModalOpen = false;
+    let campaignsModalOpen = false;
+    let campaignsModalFocusId = null;
+    let prioritySourcePickerOpen = false;
+    let personalAddOpen = false;
+    let personalMenuIndex = null;
+    let completedDropsModalOpen = false;
     let prioritiesModalOpen = false;
     let activityModalOpen = false;
     var exclusionsModalOpen = false;
@@ -162,6 +168,16 @@ extension WebDashboardAssets {
       if (h >= 1) return 'ends in ' + h + 'h';
       return 'ends in ' + Math.max(1, Math.floor(ms / 60000)) + 'm';
     }
+    function endsInPhrase(iso) {
+      if (!iso) return '';
+      const ms = new Date(iso) - Date.now();
+      if (isNaN(ms) || ms <= 0) return '';
+      const plural = (n, word) => n + ' ' + word + (n === 1 ? '' : 's');
+      const h = Math.floor(ms / 3600000);
+      if (h >= 48) return 'Ends in ' + plural(Math.floor(h / 24), 'day');
+      if (h >= 1) return 'Ends in ' + plural(h, 'hour');
+      return 'Ends in ' + plural(Math.max(1, Math.floor(ms / 60000)), 'minute');
+    }
     function agoText(iso) {
       if (!iso) return '';
       const ms = Date.now() - new Date(iso);
@@ -207,12 +223,14 @@ extension WebDashboardAssets {
       const hasAuthenticationIssue = (p.issues || []).some(is => /auth|link_account|account_not_linked/i.test(String(is.type || '') + ' ' + String(is.action || '')));
       if (diagnostics.isRunning === false && p.state !== 'notConfigured') {
         return {
+          kind: 'offline',
           headline: 'Offline', subtitle: 'SwiftMiner is not currently running for this account.', color: '#8e8e93',
           icon: `<svg class="status-svg" viewBox="0 0 24 24" fill="none" stroke="#8e8e93" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v10"></path><path d="M5.64 5.64a9 9 0 1 0 12.73 0"></path></svg>`
         };
       }
       if (diagnostics.isStalled || diagnostics.health === 'stalled') {
         return {
+          kind: 'error',
           headline: 'Error', subtitle: diagnostics.statusLabel || 'Mining has stopped making progress and needs attention.', color: '#ff453a',
           icon: `<svg class="status-svg" viewBox="0 0 24 24" fill="none" stroke="#ff453a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4"></path><path d="M12 16h.01"></path></svg>`
         };
@@ -221,6 +239,7 @@ extension WebDashboardAssets {
         if (p.activeCampaign) {
           const streamer = p.activeCampaign.currentChannelName;
           return {
+            kind: 'mining',
             headline: 'Mining',
             subtitle: streamer ? 'Watching ' + streamer + ' for ' + p.activeCampaign.game : 'Earning drops for ' + p.activeCampaign.game,
             color: '#34c759',
@@ -231,6 +250,7 @@ extension WebDashboardAssets {
           };
         } else {
           return {
+            kind: 'waiting',
             headline: 'Waiting for stream',
             subtitle: 'No participating channels are live right now.',
             color: '#56bcff',
@@ -244,6 +264,7 @@ extension WebDashboardAssets {
       } else if (p.state === 'blocked') {
         const hasUnlinked = hasAuthenticationIssue;
         return {
+          kind: 'blocked',
           headline: hasUnlinked ? 'Authentication required' : 'Needs attention',
           subtitle: p.issues && p.issues.length ? p.issues[0].message : 'Link your account to earn drops.',
           color: '#ff9f0a',
@@ -254,8 +275,9 @@ extension WebDashboardAssets {
         };
       } else if (p.state === 'idle') {
         return {
+          kind: 'idle',
           headline: 'Up to Date',
-          subtitle: 'All currently available drops are completed.',
+          subtitle: 'All currently available drops are complete.',
           color: '#34c759',
           icon: `<svg class="status-svg" viewBox="0 0 24 24" fill="none" stroke="#34c759" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
@@ -264,6 +286,7 @@ extension WebDashboardAssets {
         };
       } else {
         return {
+          kind: 'notConfigured',
           headline: 'Authentication required',
           subtitle: SESSION && SESSION.provider === 'discord' ? 'Link Twitch to start mining.' : 'Ask the operator to finish setup.',
           color: '#8e8e93',
@@ -313,7 +336,7 @@ extension WebDashboardAssets {
             </span>
             <div>
               <div class="up-to-date-title">Up to Date</div>
-              <div class="up-to-date-detail">All currently available drops are completed.</div>
+              <div class="up-to-date-detail">All currently available drops are complete.</div>
             </div>
           </div>
         `;
@@ -336,36 +359,170 @@ extension WebDashboardAssets {
       `;
     }
 
-    function heroStateCard(p) {
-      const cfg = getStatusConfig(p);
-      const accId = p.account && p.account.twitchAccountId ? String(p.account.twitchAccountId) : '';
-
-      return `
-        <div class="hero-card">
-          <div class="hero-header" style="align-items: center; justify-content: space-between; width: 100%;">
-            <div style="display: flex; align-items: center; gap: 16px;">
-              <div class="status-icon-container" style="background-color: ${cfg.color}1e; --icon-bg: ${cfg.color}1a;">
-                ${cfg.icon}
-              </div>
-              <div class="hero-info">
-                <h2 class="hero-headline">${esc(cfg.headline)}</h2>
-                ${cfg.subtitle ? `<p class="hero-subtitle">${esc(cfg.subtitle)}</p>` : ''}
-              </div>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px;margin-left:auto;flex-shrink:0">
-              ${accId ? `<button class="btn-secondary refresh-btn" data-account-id="${esc(accId)}" style="padding: 6px 12px; font-size: 12px; height: 28px; line-height: 1; flex-shrink: 0;">Refresh</button>` : ''}
-            </div>
-          </div>
-        </div>
-      `;
+    /// Reward-bearing detail for the campaign in progress. `ActiveCampaign`
+    /// only carries the game, so the campaign's own name comes from the
+    /// campaign list when it has loaded and is skipped when it has not.
+    function activeCampaignTitle(p) {
+      const c = p.activeCampaign;
+      if (!c) return '';
+      const match = CAMPAIGNS.find(item => String(item.campaignId || '') === String(c.campaignId || ''));
+      const name = match && match.campaignName;
+      return name && String(name).toLowerCase() !== String(c.game).toLowerCase()
+        ? `${esc(c.game)} — ${esc(name)}`
+        : esc(c.game);
     }
 
-    function progressCard(p) {
-      // The primary status panel already communicates the completed state and
-      // offers Refresh. Repeating it below adds no new information.
-      if (p.state === 'idle') return '';
+    /// "34 min remaining" when the campaign is measured in minutes, and the raw
+    /// tally otherwise — some campaigns count other units. The percentage is
+    /// rendered beside the bar, so it is deliberately not repeated here.
+    function progressSummary(pr) {
+      const pct = Math.max(0, Math.min(100, Number(pr.pct || 0)));
+      const current = Number(pr.current || 0);
+      const required = Number(pr.required || 0);
+      const unit = String(pr.unit || '');
+      if (pct >= 100) return 'Ready to claim';
+      const left = required - current;
+      if (left > 0 && /^min/i.test(unit)) return `${left} min remaining`;
+      if (left > 0 && unit) return `${left} ${unit} remaining`;
+      return `${current} / ${required} ${unit}`.trim();
+    }
+
+    /// One adaptive surface for "what is my miner doing, and what happens
+    /// next?". Mining, a known next campaign, a miner-level problem and the
+    /// idle case are the same card in different shapes — never two cards saying
+    /// the same thing twice. Campaign-specific blockers stay in their own
+    /// conditional cards below.
+    function minerStateCard(p) {
       const cfg = getStatusConfig(p);
-      return `<div class="card"><div class="label" style="margin-bottom:12px">Progress</div>${progressStateCard(p, cfg, 'background:transparent;border:none;padding:0')}</div>`;
+      const accId = p.account && p.account.twitchAccountId ? String(p.account.twitchAccountId) : '';
+      const refresh = accId
+        ? `<button class="btn-secondary status-refresh refresh-btn" data-account-id="${esc(accId)}">
+             <svg class="refresh-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3.2-6.9"></path><path d="M21 4v5h-5"></path></svg>
+             <span class="refresh-label">Refresh</span>
+           </button>`
+        : '';
+      // A deep link to the campaign list lands here: this card is now where the
+      // portal says anything about what is being or about to be mined.
+      const open = `<section class="card status-card" id="route-campaigns" style="--status-color:${cfg.color}" aria-label="Miner state">`;
+
+      // Problem states keep the plain status shape and their own semantics —
+      // there is no "next" worth promising while the miner cannot mine.
+      const problem = cfg.kind === 'offline' || cfg.kind === 'error'
+        || cfg.kind === 'blocked' || cfg.kind === 'notConfigured';
+      if (problem || (!p.activeCampaign && cfg.kind === 'waiting')) {
+        return `${open}
+          <div class="status-head">
+            <span class="status-icon-container" aria-hidden="true">${cfg.icon}</span>
+            <div class="status-card-copy">
+              <h3>${esc(cfg.headline)}</h3>
+              ${cfg.subtitle ? `<p>${esc(cfg.subtitle)}</p>` : ''}
+            </div>
+            ${refresh}
+          </div>
+        </section>`;
+      }
+
+      // Currently mining: the strongest state, because it is the literal answer
+      // to what the miner is doing.
+      if (p.activeCampaign) {
+        const c = p.activeCampaign;
+        const pr = c.progress || {};
+        const pct = Math.max(0, Math.min(100, Number(pr.pct || 0)));
+        const done = pct >= 100;
+        const channel = c.currentChannelName ? `Watching ${esc(c.currentChannelName)}` : '';
+        const ends = endsInPhrase(c.endsAt);
+        return `${open}
+          <div class="state-head">
+            <span class="state-eyebrow live">Currently mining</span>
+            ${refresh}
+          </div>
+          <div class="state-feature" data-campaign-id="${esc(c.campaignId || '')}">
+            <img class="state-art" alt="" data-game="${esc(c.game)}" data-art="${esc(c.boxArtURL || '')}">
+            <div class="state-feature-copy">
+              <div class="state-title">${activeCampaignTitle(p)}</div>
+              <div class="state-bar-row">
+                <div class="bar"><i style="width:${pct}%${done ? ';background:linear-gradient(90deg, var(--green), #30d158);box-shadow:0 0 12px rgba(52,199,89,0.45);' : ''}"></i></div>
+                <span class="state-pct${done ? ' done' : ''}">${pct}%</span>
+              </div>
+              <div class="state-meta">
+                <div>
+                  <div class="state-progress${done ? ' done' : ''}">${esc(progressSummary(pr))}</div>
+                  ${ends ? `<div class="state-detail">${esc(ends)}</div>` : ''}
+                </div>
+                ${channel ? `<span class="state-watching">${channel}</span>` : ''}
+              </div>
+            </div>
+          </div>
+        </section>`;
+      }
+
+      const decision = upNextDecision(p);
+
+      // A named next campaign turns the same card into Up Next.
+      if (decision.kind === 'campaign') {
+        const c = decision.campaign;
+        const ends = endsInPhrase(c.endsAt);
+        return `${open}
+          <div class="state-head">
+            <span class="state-eyebrow">Up next</span>
+            ${refresh}
+          </div>
+          <div class="state-feature" data-campaign-id="${esc(c.campaignId || '')}">
+            <img class="state-art" alt="" data-game="${esc(c.game)}" data-art="${esc(c.boxArtURL || '')}">
+            <div class="state-feature-copy">
+              <div class="state-title">${esc(c.game)}</div>
+              <div class="state-detail">Next eligible campaign · ${esc(upNextReason(p, c.game))}</div>
+              ${ends ? `<div class="state-detail">${esc(ends)}</div>` : ''}
+            </div>
+          </div>
+          <div class="section-foot">
+            <button class="text-action" id="viewcampaigns" data-focus-campaign="${esc(c.campaignId || '')}" type="button">View campaign →</button>
+          </div>
+        </section>`;
+      }
+
+      // Eligible campaigns exist but nothing ranks them, so the miner has not
+      // made a choice we can report. Say that rather than picking one.
+      if (decision.kind === 'unranked') {
+        return `${open}
+          <div class="state-head">
+            <span class="state-eyebrow">Up next</span>
+            ${refresh}
+          </div>
+          <div class="status-head">
+            <span class="status-icon-container" style="background:rgba(86,188,255,0.15)" aria-hidden="true">
+              <svg class="status-svg" viewBox="0 0 24 24" fill="none" stroke="var(--blue-a)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
+            </span>
+            <div class="status-card-copy">
+              <h3>${decision.count} eligible ${decision.count === 1 ? 'campaign' : 'campaigns'}</h3>
+              <p>None of them are on this miner’s priority list, so SwiftMiner will pick one as channels go live.</p>
+            </div>
+          </div>
+          <div class="section-foot">
+            <button class="text-action" id="viewcampaigns" type="button">View all campaigns →</button>
+          </div>
+        </section>`;
+      }
+
+      // Nothing to mine and nothing waiting: one compact green card, with no
+      // second heading repeating it.
+      const checked = agoText(
+        (p.diagnostics && (p.diagnostics.lastCampaignRefreshAt || p.diagnostics.lastSuccessfulPollAt)) || ''
+      );
+      const upcoming = decision.upcoming;
+      const starts = upcoming ? dateLabel(upcoming.startsAt, 'starts') : '';
+      return `${open}
+        <div class="status-head">
+          <span class="status-icon-container" aria-hidden="true">${cfg.icon}</span>
+          <div class="status-card-copy">
+            <h3>${esc(cfg.headline)}</h3>
+            <p>Nothing waiting to be mined. SwiftMiner will automatically resume when an eligible drop becomes available.</p>
+            ${upcoming && starts ? `<p class="state-detail">Next known campaign: ${esc(upcoming.game)} ${esc(starts)}.</p>` : ''}
+          </div>
+          ${refresh}
+        </div>
+        ${checked ? `<div class="state-checked">Last checked ${esc(checked)}</div>` : ''}
+      </section>`;
     }
 
     function customProfileImageURL(...urls) {
@@ -423,12 +580,16 @@ extension WebDashboardAssets {
       const twitchAvatar = profileImageURL
         ? `<img src="${esc(profileImageURL)}" alt="" referrerpolicy="no-referrer">`
         : twitchIcon;
+      // A row rather than a centred portrait: the account still leads the page,
+      // but the status card now starts within the first screen.
       return `
         <section class="miner-identity" id="route-identity" aria-label="Twitch account">
           <div class="miner-avatar">${twitchAvatar}</div>
-          <h2>${esc(accountDisplayName(acc) || 'Twitch account')}</h2>
-          ${accountSecondaryName(acc) ? `<p class="miner-handle">${esc(accountSecondaryName(acc))}</p>` : ''}
-          <p class="miner-linked${acc.twitchAccountId ? '' : ' unlinked'}">${acc.twitchAccountId ? 'Twitch connected' : 'Twitch not connected'}</p>
+          <div class="miner-identity-copy">
+            <h2>${esc(accountDisplayName(acc) || 'Twitch account')}</h2>
+            ${accountSecondaryName(acc) ? `<p class="miner-handle">${esc(accountSecondaryName(acc))}${twitchIcon}</p>` : ''}
+            <p class="miner-linked${acc.twitchAccountId ? '' : ' unlinked'}">${acc.twitchAccountId ? 'Twitch connected' : 'Twitch not connected'}</p>
+          </div>
         </section>
       `;
     }
@@ -500,6 +661,7 @@ extension WebDashboardAssets {
     function renderOnboarding(p) {
       PROJ = p;
       personal = [];
+      setNavBack('');
       $('app').innerHTML = onboardingHTML();
       wireActivation();
     }
@@ -526,7 +688,15 @@ extension WebDashboardAssets {
       if (!p.issues || !p.issues.length) return '';
       let rows = '';
       for (const is of p.issues) rows += `<div class="issue-row"><span class="issue-icon" aria-hidden="true">!</span><div class="issue-body"><div>${esc(is.message || is.type)}</div>${issueButtons(is)}</div></div>`;
-      return `<div class="card" id="route-issues"><div class="label">Needs attention</div>${rows}</div>`;
+      return `<section class="card section-card exception-card" id="route-issues" aria-label="Needs attention">
+        <div class="section-head">
+          <span class="section-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"></path><path d="M12 9v4M12 17h.01"></path></svg>
+          </span>
+          <div class="section-title"><h3>Needs attention</h3></div>
+        </div>
+        <div>${rows}</div>
+      </section>`;
     }
 
     function globalPriorityGames(p) {
@@ -543,28 +713,66 @@ extension WebDashboardAssets {
       return typeof url === 'string' && url.toLowerCase().startsWith('https://') ? url : '';
     }
 
-    function globalCard(p) {
-      const source = p.prioritySource || (p.includesGlobalPriorityGames === false ? 'personal' : 'global');
-      if (source === 'personal') {
-        return `<div class="card"><div class="label">Global priorities</div>
-          <div class="muted" style="font-size:13px">This miner uses only its personal priorities.</div></div>`;
-      }
-      const global = globalPriorityGames(p);
-      if (!global.length) return '';
-      let artwork = '';
-      global.slice(0, 4).forEach(g => { artwork += `<img alt="" data-game="${esc(g)}" data-art="${esc(priorityArtworkURL(p, g))}">`; });
-      const detail = source === 'global'
-        ? 'Used by this miner.'
-        : 'Set by the operator for every miner. Personal priorities run first.';
-      return `<div class="card"><div class="label">Global priorities</div>
-        <button class="global-priorities-link" id="viewglobalpriorities" type="button" aria-label="View global priorities">
-          <div class="global-priority-artwork">${artwork}</div>
-          <div class="global-priority-copy">
-            <div class="global-priority-title">View Global Priorities</div>
-            <div class="global-priority-detail">${global.length} ${global.length === 1 ? 'game' : 'games'} · ${detail}</div>
+    function prioritySourceOf(p) {
+      return (p && p.prioritySource) || (p && p.includesGlobalPriorityGames === false ? 'personal' : 'global');
+    }
+
+    /// The games this miner's configuration actually queues, so the preview
+    /// shows the effective list rather than always the operator's one.
+    function priorityPreviewGames(p) {
+      const source = prioritySourceOf(p);
+      if (source === 'personal') return (p.personalPriorityGames || []).slice();
+      if (source === 'globalAndPersonal') return (p.priorityGames || []).slice();
+      return globalPriorityGames(p);
+    }
+
+    /// A compact strip: four tiles and a "+N" for the rest. This is a preview of
+    /// a list, not the list, so it never grows past five tiles.
+    function priorityPreview(p) {
+      const games = priorityPreviewGames(p);
+      if (!games.length) return '';
+      let tiles = '';
+      games.slice(0, 4).forEach(g => { tiles += `<img alt="" data-game="${esc(g)}" data-art="${esc(priorityArtworkURL(p, g))}">`; });
+      const extra = games.length - Math.min(4, games.length);
+      if (extra) tiles += `<span class="priority-art-more" aria-hidden="true">+${extra}</span>`;
+      const source = prioritySourceOf(p);
+      const globalCount = globalPriorityGames(p).length;
+      const personalCount = (p.personalPriorityGames || []).length;
+      const count = source === 'globalAndPersonal'
+        ? `${globalCount} global · ${personalCount} personal`
+        : `${games.length} ${games.length === 1 ? 'game' : 'games'}`;
+      const managed = source === 'global'
+        ? 'Managed by your operator'
+        : source === 'personal' ? 'Managed by you' : 'Your priorities run first';
+      return `
+        <div class="priority-preview">
+          <div class="global-priority-artwork">${tiles}</div>
+          <div class="priority-preview-copy">
+            <div class="priority-preview-count">${esc(count)}</div>
+            <div class="priority-preview-more">${esc(managed)}</div>
           </div>
-          <span class="global-priority-chevron" aria-hidden="true">›</span>
-        </button></div>`;
+        </div>
+      `;
+    }
+
+    /// Reading of the current source: a name and an icon, not a control.
+    function prioritySourceSummary(source) {
+      if (source === 'personal') {
+        return {
+          name: 'Personal Priorities',
+          icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg>`
+        };
+      }
+      if (source === 'globalAndPersonal') {
+        return {
+          name: 'Hybrid Priorities',
+          icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5 9-5Z"></path><path d="m3 13 9 5 9-5"></path></svg>`
+        };
+      }
+      return {
+        name: 'Global Priorities',
+        icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18"></path><path d="M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18Z"></path></svg>`
+      };
     }
 
     function globalPrioritiesModal(p) {
@@ -616,74 +824,164 @@ extension WebDashboardAssets {
       return Number(p && p.configuredMinerCount || 0) > 1;
     }
 
+    /// Artwork for a personal entry: the projection's own map first, then the
+    /// campaign list, and hydrateArt falls back to the CDN guess after that.
+    function personalArtworkURL(p, game) {
+      return priorityArtworkURL(p, game) || campaignArtworkURL(game);
+    }
+
+    /// Move / remove for one row. Move Up is disabled at the top, Move Down at
+    /// the bottom, and both when there is nothing to reorder against.
+    function rowMenu(i, count) {
+      const first = i === 0;
+      const last = i === count - 1;
+      const single = count <= 1;
+      return `<div class="row-menu" role="menu">
+        <button class="row-menu-item" role="menuitem" data-row-move="up" ${first || single ? 'disabled' : ''}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"></path></svg>
+          Move Up
+        </button>
+        <button class="row-menu-item" role="menuitem" data-row-move="down" ${last || single ? 'disabled' : ''}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M6 13l6 6 6-6"></path></svg>
+          Move Down
+        </button>
+        <div class="row-menu-sep" role="separator"></div>
+        <button class="row-menu-item danger" role="menuitem" data-row-remove>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"></path></svg>
+          Remove from Priorities
+        </button>
+      </div>`;
+    }
+
+    /// This miner's own priority list, as an ordered queue rather than a bag of
+    /// tags: position *is* priority here, so it is numbered and reorderable.
+    /// Rendered inside the Priorities card and replaced in place by
+    /// refreshPersonalDOM while a save is in flight.
     function personalCard(p) {
       const source = prioritySource || 'global';
-      // With a single miner using global priorities, there is no per-account
-      // choice or personal list to edit, so showing an empty editor is noise.
-      if (!hasMultipleConfiguredMiners(p) && source === 'global') return '';
-      const helper = source === 'global'
-        ? 'Use the operator’s shared priority list. Your miner will still claim every drop linked to this account.'
-        : source === 'globalAndPersonal'
-          ? 'Use your priorities first, then the shared list.'
-          : 'Use only the priorities for this miner.';
-      const sourcePicker = hasMultipleConfiguredMiners(p) ? `
-        <div class="priority-source toggle-copy" style="margin-bottom:12px">
-          <span class="toggle-title">Priority Source</span>
-          <div class="segmented" role="radiogroup" aria-label="Priority source" style="margin-top:8px">
-            <button type="button" data-priority-source="global" class="${source === 'global' ? 'active' : ''}" role="radio" aria-checked="${source === 'global'}" title="Use global priorities">Global</button>
-            <button type="button" data-priority-source="globalAndPersonal" class="${source === 'globalAndPersonal' ? 'active' : ''}" role="radio" aria-checked="${source === 'globalAndPersonal'}" title="Use global and personal priorities">Global + Personal</button>
-            <button type="button" data-priority-source="personal" class="${source === 'personal' ? 'active' : ''}" role="radio" aria-checked="${source === 'personal'}" title="Use personal priorities">Personal</button>
-          </div>
-          <span class="muted" style="display:block;font-size:12px;margin-top:8px">${helper}</span>
-        </div>` : '';
-      let items = '';
+      if (source === 'global') return '';
+      const count = personal.length;
+      const reorderable = count > 1;
+      let rows = '';
       personal.forEach((g, i) => {
-        items += `
-          <span class="priority-chip" data-i="${i}">
-            <span class="star" aria-hidden="true"></span>
-            <span>${esc(g)}</span>
-            <button class="remove-btn del" aria-label="Remove ${esc(g)}">×</button>
-          </span>
-        `;
+        rows += `
+          <li class="priority-row" data-i="${i}"${reorderable ? ' draggable="true"' : ''}>
+            <span class="priority-rank">${i + 1}</span>
+            <img class="priority-row-art" alt="" data-game="${esc(g)}" data-art="${esc(personalArtworkURL(p, g))}">
+            <span class="priority-row-name">${esc(g)}</span>
+            <button class="priority-row-btn priority-row-menu-btn" type="button" data-menu-i="${i}"
+                    aria-label="Actions for ${esc(g)}" aria-haspopup="menu" aria-expanded="${personalMenuIndex === i}">
+              <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"></circle><circle cx="12" cy="12" r="1.7"></circle><circle cx="19" cy="12" r="1.7"></circle></svg>
+            </button>
+            ${personalMenuIndex === i ? rowMenu(i, count) : ''}
+          </li>`;
       });
-      const personalEditor = source === 'global' && hasMultipleConfiguredMiners(p)
-        ? '<div class="muted" style="font-size:13px">Choose Global + Personal or Personal to edit this miner’s priorities. Your miner will still claim every drop linked to this account.</div>'
-        : `<div class="priorities-flow" id="priorities-flow">
-            ${items || '<span class="muted" style="font-size:13px">No personal priorities yet — add a game below.</span>'}
-          </div>
-          <div class="addrow">
-            <input id="addgame" placeholder="Add a game…" autocapitalize="words" autocomplete="off" list="gamesuggest">
-            <button class="btn-primary" id="addbtn">Add</button>
-          </div>
-          <datalist id="gamesuggest"></datalist>`;
-      return `<div class="card">
-        <div class="label">Your priorities</div>
-        ${sourcePicker}
-        ${personalEditor}
+      // The picker is only on screen while it is being used; the rest of the
+      // time, adding a game is one quiet line.
+      const adder = personalAddOpen
+        ? `<div class="priority-add-open">
+             <input id="addgame" placeholder="Search for a game…" autocapitalize="words" autocomplete="off" list="gamesuggest" aria-label="Search for a game to prioritise">
+             <button class="priority-add-cancel" id="canceladdgame" type="button">Cancel</button>
+           </div>
+           <div class="priority-results" id="priority-results"></div>`
+        : `<button class="priority-add" id="openaddgame" type="button">
+             <span class="priority-add-plus" aria-hidden="true">+</span> Add game
+           </button>`;
+      return `<div class="priority-personal" id="priorities-personal">
+        <div class="priority-personal-head">
+          <span class="priority-personal-label">Your priorities</span>
+          ${count ? `<span class="section-note">${count} ${count === 1 ? 'game' : 'games'}</span>` : ''}
+        </div>
+        ${rows ? `<ol class="priority-rows" id="priority-rows">${rows}</ol>` : '<div class="priority-empty">No personal priorities added.</div>'}
+        ${adder}
+        <datalist id="gamesuggest"></datalist>
         <div class="savemsg" id="savemsg"></div>
       </div>`;
     }
 
-    function exclusionsCard(p) {
+    /// Exclusions are the other half of "how has this miner been told to
+    /// choose", so they belong in the Priorities card — but they are a per-miner
+    /// rule, and a miner on the shared list has none of its own to show. They
+    /// are summarised rather than listed as rows: an exclusion has no rank.
+    function exclusionsRow(p) {
       if (!(p && p.account && p.account.twitchAccountId)) return '';
-      const source = p.prioritySource || (p.includesGlobalPriorityGames === false ? 'personal' : 'global');
-      // Exclusions are a per-miner rule. When this miner follows the shared
-      // Global configuration, there is no local configuration to inspect or edit.
-      if (source === 'global') return '';
+      if (prioritySourceOf(p) === 'global') return '';
       const games = p.excludedGames || [];
       const summary = games.length
-        ? games.map(esc).join(', ')
+        ? `${games.length} ${games.length === 1 ? 'game' : 'games'} excluded`
         : 'No games excluded for this miner.';
-      return `<div class="card">
-        <div class="label">Excluded games</div>
-        <div class="row" style="align-items:flex-start;justify-content:space-between;gap:16px">
-          <div style="flex:1;min-width:0">
-            <div class="name">Skip selected games</div>
-            <div class="muted" style="font-size:13px;margin-top:4px">${summary}</div>
-          </div>
-          <button class="btn-secondary" id="manageexclusions" type="button">Manage</button>
+      return `<div class="priority-exclusions">
+        <div class="priority-exclusions-head">
+          <span class="priority-personal-label">Excluded games</span>
+          <button class="text-action" id="manageexclusions" type="button">Manage</button>
         </div>
+        <div class="priority-exclusions-detail" title="${esc(games.join(', '))}">${esc(summary)}</div>
       </div>`;
+    }
+
+    /// "How has SwiftMiner been told to choose what to mine?" — one card for the
+    /// source, the shared list and this miner's own additions, instead of three
+    /// cards describing one decision.
+    function prioritiesCard(p) {
+      const source = prioritySourceOf(p);
+      const editable = hasMultipleConfiguredMiners(p);
+      const explainer = source === 'global'
+        ? 'This miner follows the operator’s shared priority list.'
+        : source === 'globalAndPersonal'
+          ? 'Your priorities run first, then SwiftMiner falls back to the operator’s shared list.'
+          : 'This miner uses only its own priority list.';
+      // Summary first: the source is stated, and the three-way control only
+      // appears once the reader asks to change it.
+      const summary = prioritySourceSummary(source);
+      const option = (value, name, detail) => {
+        const chosen = source === value;
+        return `<button type="button" class="source-option${chosen ? ' active' : ''}" data-priority-source="${value}" role="radio" aria-checked="${chosen}" title="${esc(detail)}">
+          <span class="source-option-icon" aria-hidden="true">${prioritySourceSummary(value).icon}</span>
+          <span class="source-option-copy">
+            <span class="source-option-name">${esc(name)}</span>
+            <span class="source-option-detail">${esc(detail)}</span>
+          </span>
+        </button>`;
+      };
+      const controls = prioritySourcePickerOpen ? `
+          <div class="source-options" role="radiogroup" aria-label="Priority Source">
+            ${option('global', 'Global', 'Uses the operator’s shared priorities.')}
+            ${option('globalAndPersonal', 'Hybrid', 'Your priorities first, then Global.')}
+            ${option('personal', 'Personal', 'Uses only your priorities.')}
+          </div>` : '';
+      const picker = `
+        <div class="priority-source">
+          <span class="toggle-title">Priority source</span>
+          <div class="priority-source-row">
+            <span class="priority-source-icon" aria-hidden="true">${summary.icon}</span>
+            <span class="priority-source-name">${esc(summary.name)}</span>
+            ${editable ? `<button class="btn-secondary priority-source-change" id="changeprioritysource" type="button" aria-expanded="${prioritySourcePickerOpen}">${prioritySourcePickerOpen ? 'Done' : 'Change'}</button>` : ''}
+          </div>
+          ${controls}
+        </div>`;
+      const preview = priorityPreview(p);
+      const viewLink = source === 'personal' || !globalPriorityGames(p).length ? '' : `
+        <div class="section-foot">
+          <button class="text-action" id="viewglobalpriorities" type="button" aria-label="View Global Priorities">View priorities →</button>
+        </div>`;
+      return `<section class="card section-card priorities-card" id="route-priorities" aria-label="Priorities">
+        <div class="section-head">
+          <span class="section-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+          </span>
+          <div class="section-title"><h3>Priorities</h3></div>
+        </div>
+        <div class="priorities-split">
+          <div class="priorities-explainer">
+            <p>${explainer}</p>
+            ${preview}
+          </div>
+          ${picker}
+        </div>
+        ${personalCard(p)}
+        ${exclusionsRow(p)}
+        ${viewLink}
+      </section>`;
     }
 
     function campaignArtworkURL(game) {
@@ -782,10 +1080,62 @@ extension WebDashboardAssets {
       }
     }
 
-    function upNextCard(p) {
-      const campaigns = CAMPAIGNS.filter(c => !c.requiresSubscription).slice(0, 6);
-      if (!campaigns.length) return '';
+    /// What SwiftMiner will actually do next, as far as the projection can say.
+    /// A campaign is only named when it is eligible right now *and* the priority
+    /// list ranks it — anything less is reported as waiting rather than guessed
+    /// at, because this card must not imply a decision the miner has not made.
+    function upNextDecision(p) {
+      // A stopped miner is not about to choose anything, whatever the campaign
+      // list says.
+      if (p.diagnostics && p.diagnostics.isRunning === false) return { kind: 'stopped' };
+      const excluded = new Set((p.excludedGames || []).map(g => String(g).toLowerCase()));
+      // Games the projection is already reporting an issue for (an unlinked game
+      // account, say) cannot be mined right now, so naming one as next would be
+      // a guess the miner would not act on.
+      const blocked = new Set((p.issues || []).map(is => String(is.game || '').toLowerCase()).filter(Boolean));
+      const activeGame = p.activeCampaign ? String(p.activeCampaign.game || '').toLowerCase() : '';
+      const eligible = CAMPAIGNS.filter(c => !c.requiresSubscription).filter(c => {
+        if (c.status !== 'available') return false;
+        const game = String(c.game || '').toLowerCase();
+        if (!game || game === activeGame || excluded.has(game) || blocked.has(game)) return false;
+        return Number(c.claimedDrops || 0) < Number(c.dropCount || 0);
+      });
+      if (!eligible.length) {
+        const upcoming = CAMPAIGNS
+          .filter(c => !c.requiresSubscription && c.status !== 'available' && c.startsAt)
+          .sort((a, b) => new Date(a.startsAt) - new Date(b.startsAt))[0];
+        return { kind: 'none', upcoming: upcoming || null };
+      }
+      const ranking = new Map();
+      (p.priorityGames || []).forEach((g, i) => {
+        const key = String(g).toLowerCase();
+        if (!ranking.has(key)) ranking.set(key, i);
+      });
+      let best = null;
+      for (const c of eligible) {
+        const rank = ranking.get(String(c.game || '').toLowerCase());
+        if (rank === undefined) continue;
+        if (!best || rank < best.rank) best = { rank: rank, campaign: c };
+      }
+      if (!best) return { kind: 'unranked', count: eligible.length };
+      return { kind: 'campaign', campaign: best.campaign };
+    }
+
+    /// Which list the pick came from, so the card explains the decision instead
+    /// of only announcing it.
+    function upNextReason(p, game) {
+      const source = prioritySourceOf(p);
+      const isPersonal = (p.personalPriorityGames || []).some(g => String(g).toLowerCase() === String(game).toLowerCase());
+      if (source === 'personal') return 'Your priority';
+      if (source === 'globalAndPersonal' && isPersonal) return 'Your priority';
+      return 'Global priority';
+    }
+
+    /// The browsable campaign list, moved off the overview but kept whole — it
+    /// is still where a game gets prioritised from.
+    function campaignsModal(p) {
       const accountId = p && p.account && p.account.twitchAccountId;
+      const campaigns = CAMPAIGNS.filter(c => !c.requiresSubscription);
       let rows = '';
       for (const c of campaigns) {
         const active = c.status === 'available';
@@ -801,7 +1151,49 @@ extension WebDashboardAssets {
           <button class="btn-secondary campaign-priority" data-game="${esc(c.game)}" ${accountId ? '' : 'disabled'}>${personal.some(g => g.toLowerCase() === String(c.game || '').toLowerCase()) ? 'Prioritised' : 'Prioritise'}</button>
         </div>`;
       }
-      return `<div class="card" id="route-campaigns"><div class="label">Up next</div><div class="campaign-list">${rows}</div>${accountId ? '' : '<div class="muted" style="font-size:12px;margin-top:10px">Link Twitch before setting priorities.</div>'}</div>`;
+      return `<div class="modal-backdrop" id="campaignsmodal">
+        <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="campaignstitle" tabindex="-1">
+          <div class="modal-header">
+            <div class="copy">
+              <div class="modal-title" id="campaignstitle">Campaigns</div>
+              <div class="modal-subtitle">Every campaign SwiftMiner can currently mine for this account.</div>
+            </div>
+            <button class="btn-secondary" id="closecampaigns" type="button">Close</button>
+          </div>
+          <div class="campaign-list">${rows || '<div class="muted">No campaigns are available right now.</div>'}</div>
+          ${accountId ? '' : '<div class="muted" style="font-size:12px;margin-top:10px">Link Twitch before setting priorities.</div>'}
+        </section>
+      </div>`;
+    }
+
+    function closeCampaignsModal() {
+      campaignsModalOpen = false;
+      campaignsModalFocusId = null;
+      render(PROJ);
+    }
+
+    function wireCampaignsModal() {
+      const open = $('viewcampaigns');
+      if (open) open.addEventListener('click', () => {
+        campaignsModalFocusId = open.dataset.focusCampaign || null;
+        campaignsModalOpen = true;
+        render(PROJ);
+      });
+      const modal = $('campaignsmodal');
+      if (!modal) return;
+      const dialog = modal.querySelector('[role="dialog"]');
+      if (dialog) dialog.focus();
+      if (campaignsModalFocusId) {
+        const row = modal.querySelector('[data-campaign-id="' + cssEscape(campaignsModalFocusId) + '"]');
+        if (row) {
+          row.scrollIntoView({ block: 'center' });
+          row.classList.add('route-focus');
+          window.setTimeout(() => row.classList.remove('route-focus'), 2600);
+        }
+      }
+      $('closecampaigns').addEventListener('click', closeCampaignsModal);
+      modal.addEventListener('click', event => { if (event.target === modal) closeCampaignsModal(); });
+      modal.addEventListener('keydown', event => { if (event.key === 'Escape') closeCampaignsModal(); });
     }
 
     function subscriptionRequiredCard() {
@@ -821,30 +1213,97 @@ extension WebDashboardAssets {
           <span class="campaign-gate">Needs Sub</span>
         </div>`;
       }
-      return `<div class="card" id="route-subscription"><div class="label">Subscription required</div><div class="campaign-list">${rows}</div></div>`;
+      return `<section class="card section-card exception-card" id="route-subscription" aria-label="Subscription required">
+        <div class="section-head">
+          <span class="section-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="10" width="18" height="11" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg>
+          </span>
+          <div class="section-title"><h3>Subscription required</h3></div>
+          <span class="section-note">${campaigns.length} ${campaigns.length === 1 ? 'campaign' : 'campaigns'}</span>
+        </div>
+        <div class="campaign-list">${rows}</div>
+      </section>`;
     }
 
+    function completedTitle(c) {
+      return c.campaignName && String(c.campaignName).toLowerCase() !== String(c.game).toLowerCase()
+        ? `${esc(c.game)} — ${esc(c.campaignName)}`
+        : esc(c.game);
+    }
+
+    function completedRow(c) {
+      const claimed = Number(c.claimedDrops || 0);
+      const total = Number(c.totalDrops || 0);
+      const complete = total > 0 && claimed >= total;
+      const when = agoText(c.completedAt);
+      return `<div class="completed-row">
+        <img class="completed-art" alt="" data-game="${esc(c.game)}" data-art="${esc(c.boxArtURL || '')}">
+        <div class="completed-copy">
+          <div class="completed-title">${completedTitle(c)}</div>
+          ${when ? `<div class="completed-when">${esc(when)}</div>` : ''}
+        </div>
+        <span class="completed-tally">${claimed} / ${total}</span>
+        <span class="completed-check" style="${complete ? '' : 'color:var(--muted);background:rgba(255,255,255,0.08)'}" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg>
+        </span>
+      </div>`;
+    }
+
+    /// The most recent completions only. The full history is a click away
+    /// rather than the tallest thing on the page.
     function dropsCard(p) {
       const recents = p.recentCompletedCampaigns || [];
       const dropsThisWeek = Number(p.dropsClaimedThisWeek || 0);
       if (!recents.length && !dropsThisWeek) return '';
-      let rows = '';
-      for (const c of recents) {
-        const title = c.campaignName && c.campaignName.toLowerCase() !== c.game.toLowerCase()
-          ? `${esc(c.game)} — ${esc(c.campaignName)}` : esc(c.game);
-        rows += `<div class="drop"><img class="icon" alt="" data-game="${esc(c.game)}" data-art="${esc(c.boxArtURL || '')}">
-          <div class="t"><div class="reward">${title}</div>
-          <div class="muted" style="font-size:12px">${esc(c.claimedDrops)} / ${esc(c.totalDrops)} drops claimed${agoText(c.completedAt) ? ' · ' + agoText(c.completedAt) : ''}</div></div></div>`;
-      }
-      const count = `${dropsThisWeek} ${dropsThisWeek === 1 ? 'drop' : 'drops'} this week`;
+      const shown = recents.slice(0, 4);
+      const rows = shown.map(completedRow).join('');
+      const countLabel = `${dropsThisWeek} this week`;
+      const countTitle = `${dropsThisWeek} ${dropsThisWeek === 1 ? 'drop' : 'drops'} claimed this week`;
       const empty = rows ? '' : '<div class="empty-activity">No campaign completions to show yet.</div>';
-      return `<section class="card" id="route-drops" aria-label="Completed drops">
-        <div class="detail-section-header">
-          <div class="label">Completed Drops</div>
-          <div class="completed-count">${count}</div>
+      return `<section class="card section-card" id="route-drops" aria-label="Recent completed drops">
+        <div class="section-head">
+          <span class="section-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="m8.5 12 2.5 2.5 4.5-5"></path></svg>
+          </span>
+          <div class="section-title"><h3>Recent Completed Drops</h3></div>
+          <span class="section-note" title="${esc(countTitle)}" aria-label="${esc(countTitle)}">${esc(countLabel)}</span>
         </div>
-        ${rows || empty}
+        <div class="completed-list">${rows || empty}</div>
+        ${recents.length > shown.length ? `<div class="section-foot"><button class="text-action" id="viewalldrops" type="button">View all completed drops →</button></div>` : ''}
       </section>`;
+    }
+
+    function completedDropsModal(p) {
+      const rows = (p.recentCompletedCampaigns || []).map(completedRow).join('');
+      return `<div class="modal-backdrop" id="completeddropsmodal">
+        <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="completeddropstitle" tabindex="-1">
+          <div class="modal-header">
+            <div class="copy">
+              <div class="modal-title" id="completeddropstitle">Completed drops</div>
+              <div class="modal-subtitle">Every campaign this miner has finished.</div>
+            </div>
+            <button class="btn-secondary" id="closecompleteddrops" type="button">Close</button>
+          </div>
+          <div class="completed-list">${rows || '<div class="muted">No campaign completions to show yet.</div>'}</div>
+        </section>
+      </div>`;
+    }
+
+    function closeCompletedDropsModal() {
+      completedDropsModalOpen = false;
+      render(PROJ);
+    }
+
+    function wireCompletedDrops() {
+      const open = $('viewalldrops');
+      if (open) open.addEventListener('click', () => { completedDropsModalOpen = true; render(PROJ); });
+      const modal = $('completeddropsmodal');
+      if (!modal) return;
+      const dialog = modal.querySelector('[role="dialog"]');
+      if (dialog) dialog.focus();
+      $('closecompleteddrops').addEventListener('click', closeCompletedDropsModal);
+      modal.addEventListener('click', event => { if (event.target === modal) closeCompletedDropsModal(); });
+      modal.addEventListener('keydown', event => { if (event.key === 'Escape') closeCompletedDropsModal(); });
     }
 
     function operatorBackCard(p) {
@@ -855,14 +1314,16 @@ extension WebDashboardAssets {
     function accountRemovalCard(p) {
       if (!SESSION || !(p && p.account && p.account.twitchAccountId)) return '';
       if (SESSION.provider === 'local' && !SESSION.allows_operator_account_removal) return '';
-      return `<section class="card">
-        <div class="label">Account</div>
-        <div class="row" style="align-items:flex-start;justify-content:space-between;gap:16px">
-          <div style="flex:1;min-width:0">
-            <div class="name">Remove account</div>
-            <div class="muted" style="font-size:13px;margin-top:4px">Stops mining, removes this account from SwiftMiner, and revokes its Twitch authorization.</div>
-          </div>
+      return `<section class="card section-card danger-card" aria-label="Remove account">
+        <div class="section-head">
+          <span class="section-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7.5v5.5M12 16.5h.01"></path></svg>
+          </span>
+          <div class="section-title"><h3>Remove account</h3></div>
           <button class="btn-secondary btn-danger-outline" id="removeaccount" data-remove-account-id="${esc(p.account.twitchAccountId)}" type="button">Remove</button>
+        </div>
+        <div class="section-body">
+          <p>Stops mining, removes this account from SwiftMiner, and revokes its Twitch authorization.</p>
         </div>
       </section>`;
     }
@@ -958,23 +1419,35 @@ extension WebDashboardAssets {
       personal = (p.personalPriorityGames || []).slice();
       prioritySource = p.prioritySource || (p.includesGlobalPriorityGames === false ? 'personal' : 'global');
       includeGlobalPriorities = prioritySource !== 'personal';
-      $('app').innerHTML = `<main class="miner-detail">${operatorBackCard(p)}${minerIdentity(p)}${heroStateCard(p)}${progressCard(p)}${activationCard(p)}${issuesCard(p)}${subscriptionRequiredCard()}${upNextCard(p)}${globalCard(p)}${personalCard(p)}${exclusionsCard(p)}${dropsCard(p)}${accountRemovalCard(p)}${globalPrioritiesModalOpen ? globalPrioritiesModal(p) : ''}${exclusionsModalOpen ? exclusionsModal(p) : ''}${accountRemovalModalOpen ? accountRemovalModal() : ''}</main>`;
+      // Account → what it is doing → what it will do next → why → what it has
+      // done → the one destructive action, in that order and nothing repeated.
+      $('app').innerHTML = `<main class="miner-detail">${minerIdentity(p)}${minerStateCard(p)}${activationCard(p)}${prioritiesCard(p)}${issuesCard(p)}${subscriptionRequiredCard()}${dropsCard(p)}${accountRemovalCard(p)}${globalPrioritiesModalOpen ? globalPrioritiesModal(p) : ''}${campaignsModalOpen ? campaignsModal(p) : ''}${completedDropsModalOpen ? completedDropsModal(p) : ''}${exclusionsModalOpen ? exclusionsModal(p) : ''}${accountRemovalModalOpen ? accountRemovalModal() : ''}</main>`;
+      setNavBack(operatorBackCard(p));
       hydrateArt();
       wireActivation();
       wireOperatorBack();
       wireIssues();
       wireCampaigns();
       wirePersonal();
+      wirePrioritySource();
       const viewGlobalPriorities = $('viewglobalpriorities');
       if (viewGlobalPriorities) viewGlobalPriorities.addEventListener('click', () => {
         globalPrioritiesModalOpen = true;
         render(PROJ);
       });
       wireGlobalPrioritiesModal();
+      wireCampaignsModal();
+      wireCompletedDrops();
       wireExclusions();
       wireAccountRemoval();
       fillGameOptions();
       applyRoute();
+    }
+
+    /// "All Miners" belongs to the page chrome, not the content column.
+    function setNavBack(html) {
+      const slot = $('navback');
+      if (slot) slot.innerHTML = html || '';
     }
 
     function hydrateArt(root = document) {
@@ -990,40 +1463,176 @@ extension WebDashboardAssets {
       });
     }
 
+    function movePersonal(from, to) {
+      if (from === to || from < 0 || to < 0 || from >= personal.length || to >= personal.length) return;
+      const [moved] = personal.splice(from, 1);
+      personal.splice(to, 0, moved);
+      commit();
+    }
+
+    /// Up to eight matches, so the picker stays a picker rather than a list of
+    /// every game Twitch has ever run a campaign for.
+    function personalSearchResults(query) {
+      const needle = String(query || '').trim().toLowerCase();
+      if (!needle) return [];
+      const taken = new Set(personal.map(g => g.toLowerCase()));
+      return GAMES.filter(g => {
+        const key = String(g).toLowerCase();
+        return key.includes(needle) && !taken.has(key);
+      }).slice(0, 8);
+    }
+
+    function renderPersonalResults() {
+      const box = $('priority-results');
+      const input = $('addgame');
+      if (!box || !input) return;
+      const matches = personalSearchResults(input.value);
+      if (!matches.length) {
+        box.innerHTML = input.value.trim()
+          ? '<div class="priority-empty">No matching games. Press Enter to add it anyway.</div>'
+          : '';
+        return;
+      }
+      box.innerHTML = matches.map(g => `<button class="priority-result" data-add-game="${esc(g)}" type="button">
+        <img class="priority-row-art" alt="" data-game="${esc(g)}" data-art="${esc(personalArtworkURL(PROJ, g))}">
+        <span class="priority-row-name">${esc(g)}</span>
+      </button>`).join('');
+      hydrateArt(box);
+      box.querySelectorAll('[data-add-game]').forEach(btn => {
+        btn.addEventListener('click', () => addPersonalGame(btn.dataset.addGame, 'append'));
+      });
+    }
+
     function wirePersonal() {
-      const flow = $('priorities-flow');
+      const rows = $('priority-rows');
+      if (rows) {
+        rows.querySelectorAll('.priority-row-menu-btn').forEach(btn => {
+          btn.addEventListener('click', event => {
+            event.stopPropagation();
+            const i = Number(btn.dataset.menuI);
+            personalMenuIndex = personalMenuIndex === i ? null : i;
+            refreshPersonalDOM('', '');
+          });
+        });
+        const openMenu = rows.querySelector('.row-menu');
+        if (openMenu) {
+          const first = openMenu.querySelector('.row-menu-item:not([disabled])');
+          if (first) first.focus();
+          openMenu.addEventListener('keydown', event => {
+            if (event.key !== 'Escape') return;
+            personalMenuIndex = null;
+            refreshPersonalDOM('', '');
+          });
+          const from = personalMenuIndex;
+          openMenu.querySelectorAll('[data-row-move]').forEach(item => {
+            item.addEventListener('click', () => {
+              personalMenuIndex = null;
+              movePersonal(from, item.dataset.rowMove === 'up' ? from - 1 : from + 1);
+            });
+          });
+          const remove = openMenu.querySelector('[data-row-remove]');
+          if (remove) remove.addEventListener('click', () => {
+            personalMenuIndex = null;
+            personal.splice(from, 1);
+            commit();
+          });
+        }
+        let dragIndex = null;
+        rows.querySelectorAll('.priority-row').forEach(row => {
+          row.addEventListener('dragstart', event => {
+            dragIndex = Number(row.dataset.i);
+            row.classList.add('dragging');
+            if (event.dataTransfer) {
+              event.dataTransfer.effectAllowed = 'move';
+              // Firefox refuses to start a drag without payload.
+              event.dataTransfer.setData('text/plain', String(dragIndex));
+            }
+          });
+          row.addEventListener('dragend', () => {
+            dragIndex = null;
+            rows.querySelectorAll('.priority-row').forEach(r => r.classList.remove('dragging', 'drag-over'));
+          });
+          row.addEventListener('dragover', event => {
+            if (dragIndex === null) return;
+            event.preventDefault();
+            if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+            row.classList.add('drag-over');
+          });
+          row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
+          row.addEventListener('drop', event => {
+            event.preventDefault();
+            row.classList.remove('drag-over');
+            if (dragIndex === null) return;
+            const to = Number(row.dataset.i);
+            const from = dragIndex;
+            dragIndex = null;
+            movePersonal(from, to);
+          });
+        });
+      }
+
+      const open = $('openaddgame');
+      if (open) open.addEventListener('click', () => {
+        personalAddOpen = true;
+        refreshPersonalDOM('', '');
+        const input = $('addgame');
+        if (input) input.focus();
+      });
+      const cancel = $('canceladdgame');
+      if (cancel) cancel.addEventListener('click', () => {
+        personalAddOpen = false;
+        refreshPersonalDOM('', '');
+      });
+
+      const input = $('addgame');
+      if (!input) return;
+      input.addEventListener('input', renderPersonalResults);
+      input.addEventListener('keydown', event => {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          personalAddOpen = false;
+          refreshPersonalDOM('', '');
+          return;
+        }
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        // A name that matched nothing is still allowed: campaigns appear before
+        // the game list catches up.
+        const first = personalSearchResults(input.value)[0];
+        addPersonalGame(first || input.value, 'append');
+      });
+      renderPersonalResults();
+    }
+
+    /// Wired once per full render: neither the disclosure button nor the source
+    /// buttons are replaced by the in-place personal-list refresh, so wiring
+    /// them there would stack a second listener on every save.
+    function wirePrioritySource() {
+      const change = $('changeprioritysource');
+      if (change) change.addEventListener('click', () => {
+        prioritySourcePickerOpen = !prioritySourcePickerOpen;
+        render(PROJ);
+      });
       document.querySelectorAll('[data-priority-source]').forEach(btn => {
         btn.addEventListener('click', () => {
           prioritySource = btn.dataset.prioritySource || 'global';
           includeGlobalPriorities = prioritySource !== 'personal';
+          prioritySourcePickerOpen = false;
           commit();
         });
       });
-      if (!flow) return;
-      flow.addEventListener('click', (e) => {
-        const item = e.target.closest('.priority-chip'); if (!item) return;
-        const i = Number(item.dataset.i);
-        if (e.target.closest('.del')) { personal.splice(i, 1); commit(); }
-      });
-      const input = $('addgame');
-      if (!input) return;
-      const add = () => {
-        const name = input.value.trim();
-        if (!name) return;
-        if (personal.some(g => g.toLowerCase() === name.toLowerCase())) { input.value = ''; return; }
-        personal.push(name); input.value = '';
-        if (prioritySource === 'global') prioritySource = 'globalAndPersonal';
-        commit();
-      };
-      $('addbtn').addEventListener('click', add);
-      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
     }
 
-    function addPersonalGame(name) {
+    function addPersonalGame(name, placement) {
       name = String(name || '').trim();
       if (!name) return;
-      if (!personal.some(g => g.toLowerCase() === name.toLowerCase())) personal.unshift(name);
+      if (!personal.some(g => g.toLowerCase() === name.toLowerCase())) {
+        // "Prioritise" means top of the queue; the picker appends, because the
+        // reader chose a game, not a rank.
+        if (placement === 'append') personal.push(name); else personal.unshift(name);
+      }
       if (prioritySource === 'global') prioritySource = 'globalAndPersonal';
+      personalAddOpen = false;
       commit();
     }
 
@@ -1115,11 +1724,14 @@ extension WebDashboardAssets {
     }
 
     function refreshPersonalDOM(message, cls) {
-      const cards = personalCard(PROJ);
+      const current = $('priorities-personal');
+      if (!current) return;
       const wrapper = document.createElement('div');
-      wrapper.innerHTML = cards;
-      const old = $('priorities-flow') && $('priorities-flow').closest('.card');
-      if (old) old.replaceWith(wrapper.firstElementChild);
+      wrapper.innerHTML = personalCard(PROJ);
+      const next = wrapper.firstElementChild;
+      if (!next) return;
+      current.replaceWith(next);
+      hydrateArt(next);
       wirePersonal();
       fillGameOptions();
       const msg = $('savemsg');
@@ -1200,6 +1812,7 @@ extension WebDashboardAssets {
       }
 
       if (accountRemovalModalOpen) html += accountRemovalModal();
+      setNavBack('');
       $('app').innerHTML = html;
       hydrateArt();
       wireOperatorOverview();
@@ -1281,6 +1894,7 @@ extension WebDashboardAssets {
         const session = await sr.json();
         SESSION = session;
         CSRF = session.csrfToken;
+        updateFooter();
         if (!GAMES.length) loadGames();
         const campaignsReady = loadCampaigns();
         const pr = await api('/me/projection');
@@ -1339,6 +1953,17 @@ extension WebDashboardAssets {
       }
     }
 
+    /// Understated version/attribution line. The version comes from whatever
+    /// process is serving the dashboard, so it is simply left out when the
+    /// service runs standalone and has no bundle version to report.
+    function updateFooter() {
+      const el = $('footer-meta');
+      if (!el) return;
+      const raw = SESSION && typeof SESSION.app_version === 'string' ? SESSION.app_version.trim() : '';
+      const version = raw.replace(/^v/i, '');
+      el.textContent = `© ${new Date().getFullYear()} SwiftMiner` + (version ? ` · v${version}` : '');
+    }
+
     let GAMES = [];
     // These two only populate suggestion lists, so a failure degrades to an empty picker
     // rather than a broken page — but it should not be indistinguishable from "no games".
@@ -1373,6 +1998,13 @@ extension WebDashboardAssets {
       dl.innerHTML = GAMES.map(g => `<option value="${esc(g)}"></option>`).join('');
     }
 
+    document.addEventListener('click', (e) => {
+      if (personalMenuIndex === null) return;
+      if (e.target.closest('.row-menu') || e.target.closest('.priority-row-menu-btn')) return;
+      personalMenuIndex = null;
+      refreshPersonalDOM('', '');
+    });
+
     document.addEventListener('click', async (e) => {
       const btn = e.target.closest('.refresh-btn');
       if (!btn) return;
@@ -1382,8 +2014,10 @@ extension WebDashboardAssets {
       const accountId = btn.dataset.accountId;
       if (!accountId) return;
       
-      const originalText = btn.textContent;
-      btn.textContent = 'Refreshed';
+      // Keep the glyph: only the label swaps while the refresh is in flight.
+      const label = btn.querySelector('.refresh-label') || btn;
+      const originalText = label.textContent;
+      label.textContent = 'Refreshed';
       btn.disabled = true;
       
       try {
@@ -1400,7 +2034,7 @@ extension WebDashboardAssets {
       } catch (err) {
         alert('Failed to trigger refresh: ' + err.message);
       } finally {
-        btn.textContent = originalText;
+        label.textContent = originalText;
         btn.disabled = false;
       }
     });
