@@ -28,10 +28,7 @@ extension OverviewView {
     private func priorityQueueSection(items: [CampaignRailItem]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                sectionHeading(
-                    "Priority Queue",
-                    subtitle: "Global game priority \u{00B7} Miner-specific next actions appear in Miners"
-                )
+                sectionHeading("Priority Queue")
 
                 Spacer()
 

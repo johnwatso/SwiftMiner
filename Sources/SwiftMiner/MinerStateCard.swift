@@ -360,18 +360,28 @@ struct MinerActivityCard: View {
                 currentActivity(snap: snap)
             }
 
-            Divider()
-                .opacity(0.45)
+            if let next = snap.upNext {
+                Divider()
+                    .opacity(0.45)
 
-            VStack(alignment: .leading, spacing: 6) {
-                ActivityLabel("Up Next", color: .secondary)
-                if let next = snap.upNext {
+                VStack(alignment: .leading, spacing: 6) {
+                    ActivityLabel("Up Next", color: .secondary)
                     nextActivity(next)
-                } else {
+                }
+                .opacity(0.82)
+            } else if isExpanded {
+                // Miners is the authoritative detail view, so there it still says that
+                // nothing is queued. Overview drops the section instead of reserving a
+                // third of a card to say nothing.
+                Divider()
+                    .opacity(0.45)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    ActivityLabel("Up Next", color: .secondary)
                     emptyNextActivity
                 }
+                .opacity(0.82)
             }
-            .opacity(0.82)
 
             if prominence == .expanded, !snap.blockedPriority.isEmpty {
                 Divider()
@@ -381,10 +391,13 @@ struct MinerActivityCard: View {
             }
         }
         .padding(isExpanded ? 18 : 16)
+        // No fixed height: an idle card is as short as what it has to say. Filling the
+        // grid row's height keeps every card in a row the same height as the busiest
+        // one, while topLeading keeps the quiet ones' content at the top rather than
+        // stretched down the card.
         .frame(
             maxWidth: .infinity,
-            minHeight: prominence == .compact ? 264 : nil,
-            maxHeight: prominence == .compact ? 264 : nil,
+            maxHeight: prominence == .compact ? .infinity : nil,
             alignment: .topLeading
         )
         .glassCard()
