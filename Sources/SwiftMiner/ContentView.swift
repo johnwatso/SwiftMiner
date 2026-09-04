@@ -261,125 +261,145 @@ struct MinerStatusLegendPopover: View {
         let description: String
     }
 
-    private var entries: [StatusEntry] {
+    /// Statuses grouped by what they ask of the reader. Every entry here is a state
+    /// `currentActivityItem` can actually produce — states the engine cannot reach
+    /// do not belong in a legend, and near-identical states are described once.
+    private struct StatusGroup {
+        let title: String
+        let entries: [StatusEntry]
+    }
+
+    private var groups: [StatusGroup] {
         [
-            StatusEntry(
-                symbol: "bolt.fill",
-                paletteColors: nil,
-                monoColor: .green,
-                title: "Watching",
-                description: "Actively watching a live stream and earning drops."
+            StatusGroup(
+                title: "Mining",
+                entries: [
+                    StatusEntry(
+                        symbol: "bolt.fill",
+                        paletteColors: nil,
+                        monoColor: .green,
+                        title: "Watching",
+                        description: "Actively watching a live stream and earning drops."
+                    ),
+                    StatusEntry(
+                        symbol: "person.fill.viewfinder",
+                        paletteColors: nil,
+                        monoColor: .indigo,
+                        title: "Stream Override",
+                        description: "Pinned to one streamer you chose, until that stream goes offline."
+                    )
+                ]
             ),
-            StatusEntry(
-                symbol: "gift.fill",
-                paletteColors: nil,
-                monoColor: .purple,
-                title: "Claiming Reward",
-                description: "A completed drop is being claimed from Twitch."
+            StatusGroup(
+                title: "Working on it",
+                entries: [
+                    StatusEntry(
+                        symbol: "arrow.clockwise",
+                        paletteColors: nil,
+                        monoColor: .blue,
+                        title: "Updating",
+                        description: "Refreshing campaigns and verified drop progress from Twitch."
+                    ),
+                    StatusEntry(
+                        symbol: "antenna.radiowaves.left.and.right",
+                        paletteColors: nil,
+                        monoColor: .cyan,
+                        title: "Looking for Streams",
+                        description: "Eligible campaigns found — waiting for a live channel to become available."
+                    ),
+                    StatusEntry(
+                        symbol: "arrow.triangle.2.circlepath",
+                        paletteColors: nil,
+                        monoColor: .orange,
+                        title: "Reconnecting",
+                        description: "Starting up, refreshing the Twitch session, or rebuilding the worker after a stall. Nothing to do."
+                    )
+                ]
             ),
-            StatusEntry(
-                symbol: "arrow.clockwise",
-                paletteColors: nil,
-                monoColor: .blue,
-                title: "Updating",
-                description: "Refreshing campaigns and verified drop progress from Twitch."
+            StatusGroup(
+                title: "Standby",
+                entries: [
+                    StatusEntry(
+                        symbol: "calendar.badge.checkmark",
+                        paletteColors: (.green, .red),
+                        monoColor: .green,
+                        title: "Up to Date",
+                        description: "No drops left to earn right now. The miner is standing by."
+                    ),
+                    StatusEntry(
+                        symbol: "stop.circle.fill",
+                        paletteColors: nil,
+                        monoColor: .secondary,
+                        title: "Stopped",
+                        description: "This miner is not running. Start it to check for and earn drops."
+                    )
+                ]
             ),
-            StatusEntry(
-                symbol: "antenna.radiowaves.left.and.right",
-                paletteColors: nil,
-                monoColor: .cyan,
-                title: "Looking for Streams",
-                description: "Eligible campaigns found — waiting for a live channel to become available."
-            ),
-            StatusEntry(
-                symbol: "calendar.badge.checkmark",
-                paletteColors: (.green, .red),
-                monoColor: .green,
-                title: "Up to Date",
-                description: "No drops left to earn right now. The miner is standing by."
-            ),
-            StatusEntry(
-                symbol: "clock.badge.exclamationmark",
-                paletteColors: (.red, Color(nsColor: .labelColor)),
-                monoColor: .yellow,
-                title: "No Recent Activity",
-                description: "Worker is running but hasn't reported a liveness signal yet."
-            ),
-            StatusEntry(
-                symbol: "wrench.and.screwdriver.fill",
-                paletteColors: nil,
-                monoColor: .orange,
-                title: "Recovering",
-                description: "Restarting the miner and rebuilding Twitch subscriptions after a stall."
-            ),
-            StatusEntry(
-                symbol: "bolt.horizontal.circle.fill",
-                paletteColors: nil,
-                monoColor: .red,
-                title: "Miner Unresponsive",
-                description: "This miner stopped receiving Twitch activity while others are still active."
-            ),
-            StatusEntry(
-                symbol: SystemSymbolCompatibility.resolvedName(for: "personalhotspot.slash"),
-                paletteColors: nil,
-                monoColor: .orange,
-                title: "Account Not Linked",
-                description: "The game account must be connected on Twitch before drops can be earned."
-            ),
-            StatusEntry(
-                symbol: "person.crop.circle.badge.exclamationmark",
-                paletteColors: nil,
-                monoColor: .orange,
-                title: "Authentication Expired",
-                description: "Twitch credentials have expired. Re-link the account to resume."
-            ),
-            StatusEntry(
-                symbol: "arrow.triangle.2.circlepath",
-                paletteColors: nil,
-                monoColor: .orange,
-                title: "Reconnecting",
-                description: "Refreshing the Twitch session after a token or network interruption."
-            ),
-            StatusEntry(
-                symbol: "exclamationmark.triangle.fill",
-                paletteColors: nil,
-                monoColor: .red,
-                title: "Error",
-                description: "Something went wrong. Check the Activity Log for details."
-            ),
+            StatusGroup(
+                title: "Needs you",
+                entries: [
+                    StatusEntry(
+                        symbol: SystemSymbolCompatibility.resolvedName(for: "personalhotspot.slash"),
+                        paletteColors: nil,
+                        monoColor: .orange,
+                        title: "Account Not Linked",
+                        description: "The game account must be connected on Twitch before drops can be earned."
+                    ),
+                    StatusEntry(
+                        symbol: "person.crop.circle.badge.exclamationmark",
+                        paletteColors: nil,
+                        monoColor: .orange,
+                        title: "Authentication Expired",
+                        description: "Twitch credentials have expired. Re-link the account to resume."
+                    ),
+                    StatusEntry(
+                        symbol: "exclamationmark.triangle.fill",
+                        paletteColors: nil,
+                        monoColor: .red,
+                        title: "Needs Attention",
+                        description: "An error, a miner that stopped receiving Twitch activity, or one that has not reported in. Check the Activity Log."
+                    )
+                ]
+            )
         ]
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 16) {
             Text("Miner Card Statuses")
                 .font(.headline)
 
-            VStack(alignment: .leading, spacing: 11) {
-                ForEach(Array(entries.enumerated()), id: \.offset) { _, entry in
-                    HStack(alignment: .top, spacing: 10) {
-                        Group {
-                            if let (primary, secondary) = entry.paletteColors {
-                                Image(systemName: entry.symbol)
-                                    .symbolRenderingMode(.palette)
-                                    .foregroundStyle(primary, secondary)
-                            } else {
-                                Image(systemName: entry.symbol)
-                                    .foregroundStyle(entry.monoColor)
+            ForEach(Array(groups.enumerated()), id: \.offset) { _, group in
+                VStack(alignment: .leading, spacing: 11) {
+                    Text(group.title.uppercased())
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.tertiary)
+
+                    ForEach(Array(group.entries.enumerated()), id: \.offset) { _, entry in
+                        HStack(alignment: .top, spacing: 10) {
+                            Group {
+                                if let (primary, secondary) = entry.paletteColors {
+                                    Image(systemName: entry.symbol)
+                                        .symbolRenderingMode(.palette)
+                                        .foregroundStyle(primary, secondary)
+                                } else {
+                                    Image(systemName: entry.symbol)
+                                        .foregroundStyle(entry.monoColor)
+                                }
                             }
-                        }
-                        .font(.system(size: 14, weight: .semibold))
-                        .frame(width: 20, alignment: .center)
+                            .font(.system(size: 14, weight: .semibold))
+                            .frame(width: 20, alignment: .center)
 
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(entry.title)
-                                .font(.system(size: 13, weight: .semibold))
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(entry.title)
+                                    .font(.system(size: 13, weight: .semibold))
 
-                            Text(entry.description)
-                                .font(.system(size: 12))
-                                .foregroundStyle(.secondary)
-                                .lineSpacing(1.5)
-                                .fixedSize(horizontal: false, vertical: true)
+                                Text(entry.description)
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.secondary)
+                                    .lineSpacing(1.5)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                         }
                     }
                 }

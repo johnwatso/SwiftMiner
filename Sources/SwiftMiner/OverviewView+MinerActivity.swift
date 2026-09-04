@@ -65,8 +65,11 @@ extension OverviewView {
         }
     }
 
+    /// Wide enough that a card stays readable, narrow enough that five miners sit on
+    /// one row at a typical Overview width. Miners have no meaningful order, so the
+    /// grid wraps beyond that rather than scrolling.
     private var minerActivityColumns: [GridItem] {
-        [GridItem(.adaptive(minimum: 300), spacing: 14, alignment: .top)]
+        [GridItem(.adaptive(minimum: 244), spacing: 14, alignment: .top)]
     }
 
     var activeCampaignCount: Int {

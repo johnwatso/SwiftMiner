@@ -382,6 +382,11 @@ struct CampaignFeedCard: View {
                 RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
                     .strokeBorder(accent.color, lineWidth: accent.width)
                     .shadow(color: accent.glow, radius: 6)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
+                            .inset(by: accent.width)
+                            .strokeBorder(Color.black.opacity(0.22), lineWidth: 1)
+                    }
             }
         }
         .opacity(cardOpacity * (priority?.contentOpacity ?? 1))
@@ -1172,13 +1177,11 @@ struct PriorityQueueDropLabel: View {
         .padding(.vertical, 4)
         .background {
             RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
-                .fill(.ultraThinMaterial)
-            RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
-                .fill(Color.black.opacity(0.3))
+                .fill(Color.black.opacity(0.48))
         }
         .overlay {
             RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.1), lineWidth: 1)
+                .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(state.accessibilityDescription)
@@ -1196,10 +1199,10 @@ struct PriorityQueueDecoration: Equatable {
 
     var accentOutline: (color: Color, width: CGFloat, glow: Color)? {
         if isReordering && canReorder {
-            return (Color.accentColor.opacity(0.7), 1.2, .clear)
+            return (Color.accentColor.opacity(0.8), 1.4, .clear)
         }
         if isTopPriority {
-            return (Color.green.opacity(0.45), 1.2, Color.green.opacity(0.16))
+            return (Color.green.opacity(0.7), 1.4, Color.green.opacity(0.2))
         }
         return nil
     }
@@ -1247,13 +1250,12 @@ struct PriorityQueueCardMarkings: View {
             .foregroundStyle(isTop ? Color.green : Color.white.opacity(0.8))
             .frame(width: isTop ? 20 : 18, height: isTop ? 20 : 18)
             .background {
-                Circle().fill(.ultraThinMaterial)
-                Circle().fill(Color.black.opacity(isTop ? 0.34 : 0.3))
+                Circle().fill(Color.black.opacity(isTop ? 0.55 : 0.5))
             }
             .overlay {
                 Circle()
                     .strokeBorder(
-                        isTop ? Color.green.opacity(0.45) : Color.white.opacity(0.14),
+                        isTop ? Color.green.opacity(0.5) : Color.white.opacity(0.2),
                         lineWidth: 1
                     )
             }
@@ -1264,17 +1266,16 @@ struct PriorityQueueCardMarkings: View {
         Text("TOP")
             .font(.system(size: 8, weight: .bold, design: .rounded))
             .tracking(0.4)
-            .foregroundStyle(Color.green.opacity(0.8))
+            .foregroundStyle(Color.green.opacity(0.85))
             .padding(.horizontal, 4.5)
             .padding(.vertical, 2)
             .background {
-                Capsule().fill(.ultraThinMaterial)
-                Capsule().fill(Color.black.opacity(0.26))
+                Capsule().fill(Color.black.opacity(0.44))
             }
             .overlay {
                 Capsule().strokeBorder(Color.green.opacity(0.3), lineWidth: 1)
             }
-            .shadow(color: .black.opacity(0.22), radius: 2, y: 1)
+            .shadow(color: .black.opacity(0.18), radius: 2, y: 1)
     }
 
     private var gripBadge: some View {
@@ -1283,8 +1284,7 @@ struct PriorityQueueCardMarkings: View {
             .foregroundStyle(Color.white.opacity(0.9))
             .frame(width: 20, height: 16)
             .background {
-                Capsule().fill(.ultraThinMaterial)
-                Capsule().fill(Color.black.opacity(0.34))
+                Capsule().fill(Color.black.opacity(0.5))
             }
             .overlay {
                 Capsule().strokeBorder(Color.white.opacity(0.22), lineWidth: 1)
@@ -1423,13 +1423,12 @@ struct PriorityQueueRail: View {
                 .foregroundStyle(.primary)
                 .frame(width: 24, height: 24)
                 .background {
-                    Circle().fill(.ultraThinMaterial)
-                    Circle().fill(Color.black.opacity(0.22))
+                    Circle().fill(.regularMaterial)
                 }
                 .overlay {
-                    Circle().strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
+                    Circle().strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
                 }
-                .shadow(color: .black.opacity(0.28), radius: 4, y: 1)
+                .shadow(color: .black.opacity(0.2), radius: 4, y: 1)
         }
         .buttonStyle(.plain)
         .padding(.horizontal, 4)
