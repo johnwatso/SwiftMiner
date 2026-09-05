@@ -848,7 +848,6 @@ struct ReminderDMButton: View {
             }
         }
         .tahoeButtonStyle()
-        .controlSize(.small)
         .disabled(!isAvailable || state == .sending)
         .help(isAvailable ? "Send this reminder to the miner's linked Discord account" : unavailableReason)
         .accessibilityHint(isAvailable ? "Sends this reminder through SwiftBot" : unavailableReason)
@@ -905,7 +904,6 @@ struct PendingItemRow: View {
                             .labelStyle(.titleAndIcon)
                     }
                     .tahoeButtonStyle()
-                    .controlSize(.small)
                 }
 
                 ReminderDMButton(
@@ -920,8 +918,10 @@ struct PendingItemRow: View {
                         .labelStyle(.titleAndIcon)
                 }
                 .tahoeButtonStyle()
-                .controlSize(.small)
             }
+            // One size for the whole row, so the reminder button cannot drift from
+            // the two beside it.
+            .controlSize(.small)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
