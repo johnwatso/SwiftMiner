@@ -65,11 +65,15 @@ struct AnimatedStatusIcon: View {
     var weight: Font.Weight = .semibold
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.controlActiveState) private var controlActiveState
 
     @State private var triggerBounce = false
 
     var body: some View {
         let isAnimated = !reduceMotion
+        // Continuous activity indicators serve the foreground window. Stop them
+        // while the app is inactive, without replaying completed status transitions.
+        let allowsContinuousMotion = isAnimated && controlActiveState != .inactive
         
         Group {
             if symbol == "checkmark.circle.fill" {
@@ -125,7 +129,7 @@ struct AnimatedStatusIcon: View {
                     .font(.system(size: size, weight: weight))
                     .foregroundStyle(color)
                 
-                if isAnimated {
+                if allowsContinuousMotion {
                     // Mirror the macOS "searching for Wi-Fi" feel: the radio bands fill
                     // outward and reset (cumulative, not a bouncing single highlight), at a
                     // slow, deliberate pace rather than the default fast cycle.
@@ -138,7 +142,7 @@ struct AnimatedStatusIcon: View {
                     .font(.system(size: size, weight: weight))
                     .foregroundStyle(color)
                 
-                if isAnimated {
+                if allowsContinuousMotion {
                     base.symbolEffect(.pulse, options: .repeating)
                 } else {
                     base
@@ -151,14 +155,14 @@ struct AnimatedStatusIcon: View {
                     color: color,
                     size: size,
                     weight: weight,
-                    isAnimated: isAnimated
+                    isAnimated: allowsContinuousMotion
                 )
             } else if symbol == "bolt.fill" || symbol == "bolt.circle.fill" {
                 let base = Image(systemName: symbol)
                     .font(.system(size: size, weight: weight))
                     .foregroundStyle(color)
 
-                if isAnimated {
+                if allowsContinuousMotion {
                     base.symbolEffect(.pulse, options: .repeating.speed(0.7))
                 } else {
                     base
@@ -177,7 +181,7 @@ struct AnimatedStatusIcon: View {
                     base
                 }
             } else if symbol == "arrow.triangle.2.circlepath" || symbol == "arrow.clockwise" {
-                if isAnimated {
+                if allowsContinuousMotion {
                     ReconnectingSpinnerView(symbol: symbol, size: size, weight: weight, color: color)
                 } else {
                     Image(systemName: symbol)

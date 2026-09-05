@@ -112,8 +112,11 @@ class ReleaseNote:
 
     @staticmethod
     def _text(markup: str) -> str:
+        """Plain text of a fragment. Entities are resolved here because every caller
+        feeds the result back through `html.escape`, and a curated intro written with
+        `&rsquo;` would otherwise reach the index as a literal `&amp;rsquo;`."""
         without_tags = re.sub(r"<[^>]+>", " ", markup)
-        return re.sub(r"\s+", " ", without_tags).strip()
+        return html.unescape(re.sub(r"\s+", " ", without_tags).strip())
 
     def _title(self, markup: str) -> str:
         heading = re.search(r"<h1[^>]*>(.*?)</h1>", markup, re.DOTALL)

@@ -189,6 +189,56 @@ final class AccountLinkDeliveryTests: XCTestCase {
         ))
     }
 
+    // MARK: - Grouped Drops card
+
+    func testUnfinishedCampaignStateOutranksCompletedUnlinkedStateInGroupedCard() {
+        for unfinishedStatus in [AccountMiningStatus.needsAuth, .blocked, .mining, .ready] {
+            XCTAssertLessThan(
+                dropsCardAccountStatusPriority(unfinishedStatus),
+                dropsCardAccountStatusPriority(.claimedUnlinked),
+                "an older completed campaign must not hide \(unfinishedStatus.rawValue) work"
+            )
+        }
+    }
+
+    func testOneClaimedTierDoesNotMakeGroupedCardAwaitDelivery() {
+        let partiallyClaimed = AccountState(
+            accountId: "account-1",
+            username: "ruffcrumble",
+            initials: "RU",
+            miningStatus: .blocked,
+            claimedDropCount: 1,
+            progressFraction: 0.60
+        )
+
+        XCTAssertFalse(isDropsCardClaimedButNotLinked(partiallyClaimed))
+        XCTAssertFalse(isDropsCardCompleted(partiallyClaimed))
+    }
+
+    func testCompletedUnlinkedStateStillAwaitsDelivery() {
+        let explicit = AccountState(
+            accountId: "account-1",
+            username: "ruffcrumble",
+            initials: "RU",
+            miningStatus: .claimedUnlinked,
+            claimedDropCount: 1,
+            progressFraction: 1
+        )
+        let legacy = AccountState(
+            accountId: "account-2",
+            username: "sorbertman",
+            initials: "SO",
+            miningStatus: .blocked,
+            claimedDropCount: 1,
+            progressFraction: 0.995
+        )
+
+        XCTAssertTrue(isDropsCardClaimedButNotLinked(explicit))
+        XCTAssertTrue(isDropsCardClaimedButNotLinked(legacy))
+        XCTAssertTrue(isDropsCardCompleted(explicit))
+        XCTAssertTrue(isDropsCardCompleted(legacy))
+    }
+
     // MARK: - Fixtures
 
     private func issue(awaitingDelivery: Bool) -> PrioritisedLinkIssue {

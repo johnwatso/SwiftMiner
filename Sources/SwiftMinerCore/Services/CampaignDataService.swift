@@ -33,6 +33,7 @@ public actor CampaignDataService {
     private var lastInventoryLoad: Date?
     private var lastCleanupDate: Date?
     private var cachedCampaigns: [Campaign]?
+    private var viewDataCache = CampaignViewDataCache()
     private var refreshTask: Task<Void, Never>?
     private var lastCampaignPersistenceAt: Date?
     /// Cleanup runs at most once per day to avoid unnecessary disk writes.
@@ -55,15 +56,7 @@ public actor CampaignDataService {
     /// Get all campaigns as UI-ready view data.
     /// Returns cached data immediately if available, then refreshes in background.
     public func getAllCampaigns() async -> [CampaignViewData] {
-        // Try to get cached campaigns
-        let cachedCampaigns = loadCachedCampaigns()
-        let cachedInventory = await inventoryService.currentSnapshot()
-
-        // Map to view data using cached data
-        let viewData = CampaignMapper.map(
-            campaigns: cachedCampaigns,
-            inventory: cachedInventory
-        )
+        let viewData = await currentViewDataSnapshot().all
 
         // Trigger background refresh if cache is stale
         if shouldRefreshCampaigns() || shouldRefreshInventory() {
@@ -94,24 +87,14 @@ public actor CampaignDataService {
     /// Get a single campaign by ID as UI-ready view data.
     /// Returns nil if campaign not found in cache or API.
     public func getCampaign(id: String) async -> CampaignViewData? {
-        // Check cache first
-        let cached = loadCachedCampaigns()
-        if let campaign = cached.first(where: { $0.id == id }) {
-            let inventory = await inventoryService.currentSnapshot()
-            return CampaignMapper.mapSingle(campaign: campaign, inventory: inventory)
+        if let campaign = await currentViewDataSnapshot().byID[id] {
+            return campaign
         }
 
         // If not in cache, try to refresh
         await refresh()
 
-        // Check again after refresh
-        let refreshed = loadCachedCampaigns()
-        guard let campaign = refreshed.first(where: { $0.id == id }) else {
-            return nil
-        }
-        
-        let inventory = await inventoryService.currentSnapshot()
-        return CampaignMapper.mapSingle(campaign: campaign, inventory: inventory)
+        return await currentViewDataSnapshot().byID[id]
     }
     
     /// Check if a specific drop is claimed using benefit ID.
@@ -126,20 +109,14 @@ public actor CampaignDataService {
     /// This is the synchronous entry point for app launch / UI binding.
     /// NOTE: This applies the curated feed filter (excludes .irrelevant campaigns).
     public func currentCampaigns() async -> [CampaignViewData] {
-        let cached = loadCachedCampaigns()
-        let inventory = await inventoryService.currentSnapshot()
-        let composed = CampaignMapper.composeFeed(from: CampaignMapper.map(campaigns: cached, inventory: inventory))
-        return composed
+        await currentViewDataSnapshot().feed
     }
     
     /// Returns ALL cached campaigns without filtering.
     /// Use this for the "All" tab to show complete campaign history.
     /// This includes campaigns that would be excluded from the curated feed.
     public func allCampaigns() async -> [CampaignViewData] {
-        let cached = loadCachedCampaigns()
-        let inventory = await inventoryService.currentSnapshot()
-        // Don't use composeFeed() — return all campaigns including .irrelevant
-        return CampaignMapper.map(campaigns: cached, inventory: inventory)
+        await currentViewDataSnapshot().all
     }
 
     /// Performs an async fetch + merge, then updates the disk cache.
@@ -237,6 +214,7 @@ public actor CampaignDataService {
         CampaignDiskCache.clear(accountId: accountId)
         await inventoryService.clearCache()
         cachedCampaigns = nil
+        viewDataCache = CampaignViewDataCache()
         lastCampaignPersistenceAt = nil
         lastCampaignLoad = nil
         lastInventoryLoad = nil
@@ -250,6 +228,11 @@ public actor CampaignDataService {
     }
     
     // MARK: - Private: Cache Management
+
+    private func currentViewDataSnapshot() async -> CampaignViewDataCache.Snapshot {
+        let inventory = await inventoryService.currentSnapshot()
+        return viewDataCache.snapshot(campaigns: loadCachedCampaigns(), inventory: inventory)
+    }
     
     private func loadCachedCampaigns() -> [Campaign] {
         // Always load cached campaigns — the cache is never invalidated by age alone.
@@ -289,6 +272,85 @@ public actor CampaignDataService {
     private func shouldInvalidateCampaignCache() -> Bool {
         // Check if cache envelope indicates stale data
         !CampaignDiskCache.isValid(accountId: accountId, maxAge: Self.campaignCacheDuration)
+    }
+}
+
+/// Reuses the complete per-account reconciliation for list, feed, and detail reads.
+/// Keeping the full collection together is essential: benefit IDs can be reused by
+/// different campaigns as well as by multiple tiers within one campaign.
+struct CampaignViewDataCache {
+    final class Snapshot: Sendable {
+        let all: [CampaignViewData]
+        let feed: [CampaignViewData]
+        let byID: [String: CampaignViewData]
+
+        init(campaigns: [Campaign], inventory: InventorySnapshot?) {
+            let all = CampaignMapper.map(campaigns: campaigns, inventory: inventory)
+            self.all = all
+            feed = CampaignMapper.composeFeed(from: all)
+            byID = Dictionary(all.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        }
+    }
+
+    private struct Entry {
+        let campaigns: [Campaign]
+        let inventory: InventorySnapshot?
+        let createdAt: Date
+        let validUntil: Date
+        let snapshot: Snapshot
+    }
+
+    private var entry: Entry?
+
+    mutating func snapshot(
+        campaigns: [Campaign],
+        inventory: InventorySnapshot?,
+        now: Date = Date()
+    ) -> Snapshot {
+        if let entry,
+           now >= entry.createdAt,
+           now < entry.validUntil,
+           campaigns == entry.campaigns,
+           Self.sameInventoryContent(inventory, entry.inventory) {
+            return entry.snapshot
+        }
+
+        let snapshot = Snapshot(campaigns: campaigns, inventory: inventory)
+        // Date-based status and relevance must advance even when Twitch's data is
+        // unchanged. Include an exact boundary so the next read also reevaluates
+        // predicates that use a strict comparison just after that instant.
+        var validUntil = Date.distantFuture
+        for campaign in campaigns {
+            for boundary in [campaign.startDate, campaign.endDate] where boundary >= now {
+                validUntil = min(validUntil, boundary)
+            }
+        }
+        entry = Entry(
+            campaigns: campaigns,
+            inventory: inventory,
+            createdAt: now,
+            validUntil: validUntil,
+            snapshot: snapshot
+        )
+        return snapshot
+    }
+
+    private static func sameInventoryContent(_ lhs: InventorySnapshot?, _ rhs: InventorySnapshot?) -> Bool {
+        switch (lhs, rhs) {
+        case (.none, .none):
+            return true
+        case let (.some(lhs), .some(rhs)):
+            // Award timestamps affect attribution of shared benefits. Observation
+            // timestamps do not affect the UI, including duplicate progress records
+            // whose claim flag and watched minutes are already equal.
+            return lhs.accountId == rhs.accountId
+                && lhs.benefitIDs == rhs.benefitIDs
+                && lhs.benefitAwardedAt == rhs.benefitAwardedAt
+                && lhs.progress.count == rhs.progress.count
+                && zip(lhs.progress, rhs.progress).allSatisfy { $0.isPersistenceEquivalent(to: $1) }
+        default:
+            return false
+        }
     }
 }
 

@@ -338,6 +338,13 @@ final class CampaignDropRetentionTests: XCTestCase {
             true,
             "the match day that actually awarded it still reads as claimed"
         )
+
+        let mapped = CampaignMapper.map(campaigns: [md4, md6], inventory: snapshot)
+        XCTAssertEqual(
+            mapped.first { $0.id == "md6" }?.drops.first { $0.id == "charm-md6" }?.isClaimed,
+            false,
+            "the Drops UI must use the same cross-campaign attribution as the miner"
+        )
     }
 
     /// A benefit belonging to exactly one campaign needs no attribution and behaves as it
@@ -445,6 +452,19 @@ final class CampaignDropRetentionTests: XCTestCase {
         XCTAssertEqual(claimed("tier-360"), false, "still 62/360 and must stay earnable")
         XCTAssertEqual(merged.earnableDrops.count, 2)
         XCTAssertTrue(merged.canAttemptMining, "the campaign must not fall to no_eligible_drops")
+
+        let viewData = CampaignMapper.map(campaigns: [campaign], inventory: snapshot)[0]
+        func displayedDrop(_ dropId: String) -> DropViewData? {
+            viewData.drops.first { $0.id == dropId }
+        }
+
+        XCTAssertEqual(viewData.dropsClaimed, 1, "the Drops UI must show only the paid tier as claimed")
+        XCTAssertFalse(viewData.isClaimed, "the Drops UI must keep the campaign in progress")
+        XCTAssertEqual(displayedDrop("tier-60")?.isClaimed, true)
+        XCTAssertEqual(displayedDrop("tier-180")?.isClaimed, false)
+        XCTAssertEqual(displayedDrop("tier-180")?.currentMinutes, 63)
+        XCTAssertEqual(displayedDrop("tier-360")?.isClaimed, false)
+        XCTAssertEqual(displayedDrop("tier-360")?.currentMinutes, 62)
     }
 
     /// Two tiers sharing a benefit where neither has been claimed: nothing in inventory, so

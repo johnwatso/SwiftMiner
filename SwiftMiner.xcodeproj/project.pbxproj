@@ -98,6 +98,7 @@
 		67EBA86CF010B9AA03CC9283 /* AccountLinkDeliveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D3A71B013A7CD5372F5BF6F /* AccountLinkDeliveryTests.swift */; };
 		684EB4275963160CDAECA967 /* SparkleConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19C66F8182D8FB572197B2EC /* SparkleConfigTests.swift */; };
 		68E24E9AD5F109B1513A1099 /* CampaignView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B27F8A9F37F60E7246A380FB /* CampaignView.swift */; };
+		69EC6D3D5E2DCA9EFBFA98E6 /* CampaignViewDataCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBE5136CD4548E8A446F3BF7 /* CampaignViewDataCacheTests.swift */; };
 		6B0B2191E7BE04136DD14985 /* MinerSupervisor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5B111F33F9BAEDF35E4BD16 /* MinerSupervisor.swift */; };
 		6B9B9D439587D9FDA426CD17 /* LegacySteamArtworkCleanup.swift in Sources */ = {isa = PBXBuildFile; fileRef = C72CB08835BE78B9F1EEE2DB /* LegacySteamArtworkCleanup.swift */; };
 		6E3286C5962EC2ED6F8168EE /* MinerEngine+ChannelSelection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70331D88C14DE8680BE6EAE1 /* MinerEngine+ChannelSelection.swift */; };
@@ -114,6 +115,7 @@
 		7CDC0528B7FE59F8756FFC72 /* Campaign.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6C4D73F0D9BE5537D245A73 /* Campaign.swift */; };
 		7DF44A97293F3825BC006F7C /* MinerManager+GameState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D15B4A8E728CF157B9C0866 /* MinerManager+GameState.swift */; };
 		7E402CB3D782A91832915A52 /* CampaignMetadataSharingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2CF7310267C5DADE83E23CE /* CampaignMetadataSharingTests.swift */; };
+		7FD7052F9AEE5FE29984CDF6 /* MinerStatePublicationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FD0314ADE0B514D1123204B /* MinerStatePublicationTests.swift */; };
 		802FA8EC02560A28823938FA /* CampaignViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C67E7250E0A8C61154B61CBB /* CampaignViews.swift */; };
 		80BF3A0AF309839A57255411 /* LogRedactor.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF414565BE5F618A1909D947 /* LogRedactor.swift */; };
 		812443DB837ACE81CF97CCB8 /* TwitchAvatarStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD3A3FA3D2C53873D6817D19 /* TwitchAvatarStore.swift */; };
@@ -374,7 +376,7 @@
 		36C4B40CA1A00C6AB1960760 /* MinerEngine+Callbacks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MinerEngine+Callbacks.swift"; sourceTree = "<group>"; };
 		3890500ACC8AE036BC125962 /* UnattendedIncidentNotificationServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnattendedIncidentNotificationServiceTests.swift; sourceTree = "<group>"; };
 		395BAF086C00772CB356A508 /* MinerSchedulingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinerSchedulingTests.swift; sourceTree = "<group>"; };
-		3ABC7C3BDCE6B1CE8756DA5A /* SwiftMinerServiceTool */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = text; path = SwiftMinerServiceTool; sourceTree = BUILT_PRODUCTS_DIR; };
+		3ABC7C3BDCE6B1CE8756DA5A /* SwiftMinerServiceTool */ = {isa = PBXFileReference; includeInIndex = 0; path = SwiftMinerServiceTool; sourceTree = BUILT_PRODUCTS_DIR; };
 		3AC5F2BA81633C5B76678925 /* CampaignViewData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignViewData.swift; sourceTree = "<group>"; };
 		3C27A208494D4653B30FCCB7 /* WebDashboardAppScript.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebDashboardAppScript.swift; sourceTree = "<group>"; };
 		3C67349DAA237D14A6C21D75 /* PubSubClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PubSubClient.swift; sourceTree = "<group>"; };
@@ -417,6 +419,7 @@
 		66D3CD478576ED0783BFEED7 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		6E08A9966225179B652AC9C8 /* DropsMinerCampaignFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropsMinerCampaignFilter.swift; sourceTree = "<group>"; };
 		6E3DEEF3F6DA2049777E3722 /* DropsMinerCampaignFilterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropsMinerCampaignFilterTests.swift; sourceTree = "<group>"; };
+		6FD0314ADE0B514D1123204B /* MinerStatePublicationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinerStatePublicationTests.swift; sourceTree = "<group>"; };
 		70331D88C14DE8680BE6EAE1 /* MinerEngine+ChannelSelection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MinerEngine+ChannelSelection.swift"; sourceTree = "<group>"; };
 		703A0B41A5D6897C4E31F17D /* LogExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogExporter.swift; sourceTree = "<group>"; };
 		71FA5DF07B124B51C6C833B4 /* TwitchClientFingerprint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwitchClientFingerprint.swift; sourceTree = "<group>"; };
@@ -426,7 +429,7 @@
 		7A5BB01DA1C922DCEF69AD69 /* MinerManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinerManager.swift; sourceTree = "<group>"; };
 		7AEFBBEA28C3C08733DCB98A /* UnattendedHealthStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnattendedHealthStore.swift; sourceTree = "<group>"; };
 		7BBB8613168AE0A29515BD3E /* CampaignDetailsPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignDetailsPersistenceTests.swift; sourceTree = "<group>"; };
-		7C7DCDFEAD0FB5F4149126DB /* DiscordMarkOfficial.svg */ = {isa = PBXFileReference; lastKnownFileType = text; path = DiscordMarkOfficial.svg; sourceTree = "<group>"; };
+		7C7DCDFEAD0FB5F4149126DB /* DiscordMarkOfficial.svg */ = {isa = PBXFileReference; path = DiscordMarkOfficial.svg; sourceTree = "<group>"; };
 		7CAC406A470B4B2EDE847A9E /* Account.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Account.swift; sourceTree = "<group>"; };
 		7CE5B3372E6DE02DFFFB7CDE /* Logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logger.swift; sourceTree = "<group>"; };
 		7D36AD669AFD2B0D62398C28 /* CampaignDropRetentionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignDropRetentionTests.swift; sourceTree = "<group>"; };
@@ -495,6 +498,7 @@
 		C67E7250E0A8C61154B61CBB /* CampaignViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignViews.swift; sourceTree = "<group>"; };
 		C72CB08835BE78B9F1EEE2DB /* LegacySteamArtworkCleanup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacySteamArtworkCleanup.swift; sourceTree = "<group>"; };
 		CA4CEDB6297B13DCF0FDD8A7 /* DropEventsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropEventsService.swift; sourceTree = "<group>"; };
+		CBE5136CD4548E8A446F3BF7 /* CampaignViewDataCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignViewDataCacheTests.swift; sourceTree = "<group>"; };
 		CC5245BAB7E806A37EEB9901 /* MinersOverviewComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinersOverviewComponents.swift; sourceTree = "<group>"; };
 		CD5023EC681D53196C9F4350 /* PrimaryStateResolverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrimaryStateResolverTests.swift; sourceTree = "<group>"; };
 		CEF247F1E20923EFA7310FF7 /* GameMatchIndexTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameMatchIndexTests.swift; sourceTree = "<group>"; };
@@ -503,7 +507,7 @@
 		D12899BD6300ED21BCE6187E /* CampaignMergeEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignMergeEngine.swift; sourceTree = "<group>"; };
 		D227823A0CF0DEDA834B486B /* DropsServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropsServiceTests.swift; sourceTree = "<group>"; };
 		D3674D197B60A0404ACB40DE /* KeychainAccountStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainAccountStoreTests.swift; sourceTree = "<group>"; };
-		D566A4967EB868FA5FD84FED /* SparklePublisher */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = text; path = SparklePublisher; sourceTree = BUILT_PRODUCTS_DIR; };
+		D566A4967EB868FA5FD84FED /* SparklePublisher */ = {isa = PBXFileReference; includeInIndex = 0; path = SparklePublisher; sourceTree = BUILT_PRODUCTS_DIR; };
 		D63DD2453DBBB48ACAC9F2A8 /* AppMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppMetrics.swift; sourceTree = "<group>"; };
 		D66BADBB509C6B9B573607A7 /* AdminLinkingTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminLinkingTypes.swift; sourceTree = "<group>"; };
 		D7CF370FB28AF15B644BAD3E /* MinerHealthCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinerHealthCard.swift; sourceTree = "<group>"; };
@@ -905,6 +909,7 @@
 				14758565BD5B2AE9BCB30772 /* CampaignRefreshPolicyTests.swift */,
 				E3C6E1FF09A07505FAF56FDF /* CampaignStateTests.swift */,
 				573073692F55774FD9E03776 /* CampaignTabRoutingTests.swift */,
+				CBE5136CD4548E8A446F3BF7 /* CampaignViewDataCacheTests.swift */,
 				A174CB07DBB49229CB2E6678 /* ChannelLivenessCacheTests.swift */,
 				AA337D3B4BF522E65F51DB29 /* ClaimServiceTests.swift */,
 				9801029B6FF0AE01627EE293 /* DiscordAPIRoutesTests.swift */,
@@ -928,6 +933,7 @@
 				DE2BCE3055439E2EEE026D0C /* MinerHealthSnapshotTests.swift */,
 				395BAF086C00772CB356A508 /* MinerSchedulingTests.swift */,
 				E59E184954577C2546E1721B /* MinerStateConsistencyTests.swift */,
+				6FD0314ADE0B514D1123204B /* MinerStatePublicationTests.swift */,
 				B49AD6618BBB1B989E52153A /* MinerSupervisorTests.swift */,
 				AF13F08E80FAC638D0E25E6B /* MiningReliabilityChaosTests.swift */,
 				1FBB668242441418AE670CC4 /* ModelTests.swift */,
@@ -1422,6 +1428,7 @@
 				3F326065762FAD968E609B1F /* CampaignRefreshPolicyTests.swift in Sources */,
 				374303964418BDD39C426435 /* CampaignStateTests.swift in Sources */,
 				2D011D07DA750AF66BFC2C25 /* CampaignTabRoutingTests.swift in Sources */,
+				69EC6D3D5E2DCA9EFBFA98E6 /* CampaignViewDataCacheTests.swift in Sources */,
 				B5B0F32E53B7AE0C8F300E5F /* ChannelLivenessCacheTests.swift in Sources */,
 				D421E764CC96327AB1098DCF /* ClaimServiceTests.swift in Sources */,
 				5141441F6902625727F1E4B5 /* DMPreviewPayloadTests.swift in Sources */,
@@ -1445,6 +1452,7 @@
 				9E22D6B864FBD034644E5473 /* MinerHealthSnapshotTests.swift in Sources */,
 				A59C41A3071F5DAF49E6BC83 /* MinerSchedulingTests.swift in Sources */,
 				5CAB6B6719145827104E700E /* MinerStateConsistencyTests.swift in Sources */,
+				7FD7052F9AEE5FE29984CDF6 /* MinerStatePublicationTests.swift in Sources */,
 				67BD7A9833B4D30B801F8997 /* MinerSupervisorTests.swift in Sources */,
 				282470A799B0647FB7FB4CB3 /* MiningReliabilityChaosTests.swift in Sources */,
 				3B331F247AA238C86D43C625 /* ModelTests.swift in Sources */,
@@ -1567,7 +1575,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026090415;
+				CURRENT_PROJECT_VERSION = 2026090610;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;
@@ -1578,7 +1586,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.40.5;
+				MARKETING_VERSION = 1.40.6;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -1728,7 +1736,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026090415;
+				CURRENT_PROJECT_VERSION = 2026090610;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;
@@ -1739,7 +1747,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.40.5;
+				MARKETING_VERSION = 1.40.6;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
