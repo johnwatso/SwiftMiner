@@ -28,7 +28,7 @@
 <body>
   <main>
     <h1>SwiftMiner 1.40.6</h1>
-    <p class="meta">Version 1.40.6 &middot; Build 2026090511</p>
+    <p class="meta">Version 1.40.6 &middot; Build 2026090520</p>
     <p class="intro">1.40.5 taught mining to tell apart campaign tiers that share a reward identifier. The Drops page now does the same, so what you see there matches what SwiftMiner is actually still earning &mdash; and the app does noticeably less work to show it.</p>
 
     <section>
@@ -36,6 +36,15 @@
       <ul>
         <li>The Drops page now uses the same per-reward reconciliation as mining, instead of independently treating a shared identifier as proof that every matching tier was collected. Unfinished tiers keep their real watch progress and no longer show green claimed checks.</li>
         <li>When several live-window campaigns for one game share a Drops card, the subtitle now says that more campaigns are included. An older completed reward &mdash; or merely claiming the first tier of the current campaign &mdash; can no longer make the whole group read &ldquo;claimed &middot; not linked&rdquo; while rewards remain unfinished.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#127920; A Cleaner Reward Shelf</h2>
+      <ul>
+        <li>Reward art arrives from Twitch at assorted shapes and sizes, which left the Drops shelf looking ragged. Each reward now sits in a shared, slightly larger well: square artwork fills it edge to edge, and anything taller or wider is fitted inside it rather than cropped.</li>
+        <li>The claimed tick sits inside its reward instead of over the corner, and the watch time has moved out from on top of the artwork to a compact label underneath, so nothing covers a reward any more.</li>
+        <li>Hovering a reward shows its name and description as an ordinary tooltip. It used to open a panel that covered the rewards either side of it to repeat the artwork, claim state and watch time already on the card.</li>
       </ul>
     </section>
 
