@@ -318,7 +318,7 @@ struct GameCampaignDeckCard: View {
                 // Reward Shelf directly beneath metadata
                 if !drops.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
-                        LazyHStack(spacing: 8) {
+                        LazyHStack(alignment: .top, spacing: 12) {
                             ForEach(drops) { drop in
                                 BeautifulRewardCard(drop: drop)
                             }
@@ -434,48 +434,15 @@ struct BeautifulRewardCard: View {
     let drop: DropViewData
     @State private var isHovered = false
 
+    /// Deliberately smaller than the 120x160 game artwork, so each card keeps one
+    /// dominant image, but large enough to read mixed reward shapes at a glance.
+    private let wellSize: CGFloat = 88
+    private let wellRadius: CGFloat = 12
+
     var body: some View {
-        ZStack(alignment: .center) {
-            // Main image thumbnail
-            Group {
-                if let url = drop.imageURL?.highResolutionArtworkURL {
-                    AsyncImage(url: url) { image in
-                        image
-                            .resizable()
-                            .interpolation(.high)
-                            .scaledToFill()
-                    } placeholder: {
-                        placeholderArtwork
-                    }
-                } else {
-                    placeholderArtwork
-                }
-            }
-            .frame(width: 76, height: 76)
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .shadow(color: .black.opacity(isHovered ? 0.15 : 0.10), radius: isHovered ? 6 : 4, y: isHovered ? 3 : 2)
-            .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(isHovered ? .white.opacity(0.20) : .white.opacity(0.08), lineWidth: 1)
-            }
-
-            if drop.isClaimed {
-                statusBadge("checkmark", color: .green, glyphSize: 10)
-            } else if drop.isSubscriptionRequired {
-                statusBadge("creditcard.fill", color: .pink, glyphSize: 9)
-            } else if drop.isClaimable {
-                statusBadge("sparkles", color: .orange, glyphSize: 10)
-            }
-
-            // Duration Overlay Badge (Bottom Right)
-            Text(drop.isSubscriptionRequired && !drop.isClaimed ? "Sub" : "\(drop.requiredMinutes)m")
-                .font(.system(size: 8, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 4.5)
-                .padding(.vertical, 2.5)
-                .background((drop.isSubscriptionRequired && !drop.isClaimed ? Color.pink : Color.black).opacity(drop.isSubscriptionRequired && !drop.isClaimed ? 0.84 : 0.68), in: RoundedRectangle(cornerRadius: 4.5, style: .continuous))
-                .frame(width: 76, height: 76, alignment: .bottomTrailing)
-                .padding(4)
+        VStack(spacing: 6) {
+            rewardWell
+            durationLabel
         }
         .scaleEffect(isHovered ? 1.03 : 1.0)
         .animation(.easeOut(duration: 0.15), value: isHovered)
@@ -485,17 +452,78 @@ struct BeautifulRewardCard: View {
         .help(helpText)
     }
 
-    /// A solid disc reads clearly over artwork on its own. The frosted ring this used
-    /// to sit in only drew a second edge around the glyph.
-    private func statusBadge(_ symbol: String, color: Color, glyphSize: CGFloat) -> some View {
+    /// Twitch reward art arrives at assorted aspect ratios with transparent bounds, so a
+    /// bare thumbnail leaves the row looking ragged. Each reward is fitted — never
+    /// cropped — inside a shared well, and it is the well, not the artwork, that aligns
+    /// the row. The fill sits just above the card behind it; any heavier and the shelf
+    /// reads as a row of nested cards.
+    private var rewardWell: some View {
+        artwork
+            .padding(10)
+            .frame(width: wellSize, height: wellSize)
+            .background(
+                RoundedRectangle(cornerRadius: wellRadius, style: .continuous)
+                    .fill(.white.opacity(isHovered ? 0.10 : 0.06))
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: wellRadius, style: .continuous)
+                    .strokeBorder(.white.opacity(isHovered ? 0.16 : 0.08), lineWidth: 1)
+            }
+            .overlay(alignment: .topTrailing) {
+                statusBadge.padding(5)
+            }
+    }
+
+    private var artwork: some View {
+        Group {
+            if let url = drop.imageURL?.highResolutionArtworkURL {
+                AsyncImage(url: url) { image in
+                    image
+                        .resizable()
+                        .interpolation(.high)
+                        .scaledToFit()
+                } placeholder: {
+                    placeholderArtwork
+                }
+            } else {
+                placeholderArtwork
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var statusBadge: some View {
+        if drop.isClaimed {
+            badge("checkmark", color: .green, glyphSize: 9)
+        } else if drop.isSubscriptionRequired {
+            badge("creditcard.fill", color: .pink, glyphSize: 8)
+        } else if drop.isClaimable {
+            badge("sparkles", color: .orange, glyphSize: 9)
+        }
+    }
+
+    /// A solid disc reads clearly on its own. The frosted ring this used to sit in only
+    /// drew a second edge around the glyph.
+    private func badge(_ symbol: String, color: Color, glyphSize: CGFloat) -> some View {
         Image(systemName: symbol)
             .font(.system(size: glyphSize, weight: .bold))
             .foregroundStyle(.white)
-            .frame(width: 18, height: 18)
+            .frame(width: 16, height: 16)
             .background(Circle().fill(color))
-            .shadow(color: .black.opacity(0.12), radius: 2)
-            .frame(width: 76, height: 76, alignment: .topTrailing)
-            .padding(4)
+            .shadow(color: .black.opacity(0.25), radius: 2)
+    }
+
+    /// Sits under the well rather than over the art, so nothing covers a reward.
+    private var durationLabel: some View {
+        let needsSubscription = drop.isSubscriptionRequired && !drop.isClaimed
+        return HStack(spacing: 3) {
+            Image(systemName: needsSubscription ? "creditcard.fill" : "timer")
+                .font(.system(size: 8, weight: .semibold))
+            Text(needsSubscription ? "Sub" : "\(drop.requiredMinutes)m")
+                .font(.system(size: 10, weight: .medium, design: .rounded))
+        }
+        .foregroundStyle(needsSubscription ? AnyShapeStyle(Color.pink) : AnyShapeStyle(.secondary))
+        .lineLimit(1)
     }
 
     /// The card already shows the artwork, the claim state and the required minutes.
@@ -518,14 +546,11 @@ struct BeautifulRewardCard: View {
         return "Locked"
     }
 
+    /// The well already supplies the surface, so the placeholder is just the glyph.
     private var placeholderArtwork: some View {
-        RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .fill(.thinMaterial)
-            .overlay {
-                Image(systemName: rewardIcon)
-                    .font(.system(size: 24, weight: .medium))
-                    .foregroundStyle(.secondary)
-            }
+        Image(systemName: rewardIcon)
+            .font(.system(size: 24, weight: .medium))
+            .foregroundStyle(.secondary)
     }
 
     private var rewardIcon: String {
