@@ -13,9 +13,11 @@ public enum CampaignMapper {
         campaigns: [Campaign],
         inventory: InventorySnapshot?
     ) -> [CampaignViewData] {
-        return campaigns.map { campaign in
-            mapSingle(campaign: campaign, inventory: inventory)
-        }
+        let reconciled = inventory.map {
+            DropsService.mergeInventory($0, into: campaigns, logClaims: false)
+        } ?? campaigns
+
+        return reconciled.map(mapReconciledCampaign)
     }
     
     /// Maps a single Campaign to UI-ready CampaignViewData.
@@ -23,15 +25,22 @@ public enum CampaignMapper {
         campaign: Campaign,
         inventory: InventorySnapshot?
     ) -> CampaignViewData {
+        let reconciled = inventory.flatMap {
+            DropsService.mergeInventory($0, into: [campaign], logClaims: false).first
+        } ?? campaign
+
+        return mapReconciledCampaign(reconciled)
+    }
+
+    /// Converts a campaign whose per-drop claim and progress state has already been
+    /// reconciled with inventory. Keeping this step shared with the miner prevents the UI
+    /// from reinterpreting a reused benefit ID as proof that every matching tier was claimed.
+    private static func mapReconciledCampaign(_ campaign: Campaign) -> CampaignViewData {
         let totalDrops = campaign.drops.count
-        
-        // SOURCE OF TRUTH: Claimed state is determined SOLELY by benefit IDs in the inventory snapshot.
-        // progress.isClaimed is transient and unreliable, so it is intentionally NOT used.
-        let claimedDrops = campaign.drops.filter { drop in
-            drop.benefitIds.contains { bid in
-                inventory?.benefitIDs.contains(bid) ?? false
-            }
-        }
+
+        // DropsService.mergeInventory has already combined inventory benefit IDs with
+        // per-drop progress records, including Twitch's reused-benefit edge cases.
+        let claimedDrops = campaign.drops.filter(\.isClaimed)
         
         let claimedCount = claimedDrops.count
         let allClaimed = (claimedCount == totalDrops && totalDrops > 0)
@@ -43,17 +52,11 @@ public enum CampaignMapper {
         for drop in campaign.drops {
             let req = Double(drop.requiredMinutes)
             var current: Double = 0.0
-            
-            if let prog = inventory?.progress.first(where: { $0.dropId == drop.id }) {
+
+            if let prog = drop.progress {
                 current = Double(min(prog.currentMinutes, drop.requiredMinutes))
-            } else {
-                // If claimed via benefit but no progress entry, treat as 100%
-                let isClaimedByBenefit = drop.benefitIds.contains { bid in
-                    inventory?.benefitIDs.contains(bid) ?? false
-                }
-                if isClaimedByBenefit {
-                    current = req
-                }
+            } else if drop.isClaimed {
+                current = req
             }
             
             let dropProgress = (req > 0) ? (current / req) : 0.0
@@ -66,13 +69,11 @@ public enum CampaignMapper {
         
         // Map individual drops to UI-ready view data
         let dropViewData: [DropViewData] = campaign.drops.map { drop in
-            let isClaimed = drop.benefitIds.contains { bid in
-                inventory?.benefitIDs.contains(bid) ?? false
-            }
-            
+            let isClaimed = drop.isClaimed
+
             var currentMinutes = 0
             var dropProgress = 0.0
-            if let prog = inventory?.progress.first(where: { $0.dropId == drop.id }) {
+            if let prog = drop.progress {
                 currentMinutes = min(prog.currentMinutes, drop.requiredMinutes)
             } else if isClaimed {
                 currentMinutes = drop.requiredMinutes

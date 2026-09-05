@@ -260,8 +260,7 @@ struct CampaignMinerInspectorPopover: View {
     }
 
     private func isClaimedButNotLinked(_ account: AccountState) -> Bool {
-        account.miningStatus == .claimedUnlinked
-            || (account.miningStatus == .blocked && (account.claimedDropCount > 0 || (account.progressFraction ?? 0) >= 0.995))
+        isDropsCardClaimedButNotLinked(account)
     }
 }
 

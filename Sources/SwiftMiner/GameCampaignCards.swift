@@ -3,6 +3,37 @@ import SwiftUI
 import SwiftMinerCore
 import CoreImage
 
+/// A grouped game card can contain an unfinished campaign and an older campaign whose
+/// reward is already claimed but still inside its advertised window. The unfinished state
+/// must win; otherwise the whole game card falsely reads "claimed · not linked".
+func dropsCardAccountStatusPriority(_ status: AccountMiningStatus) -> Int {
+    switch status {
+    case .needsAuth: return 0
+    case .blocked: return 1
+    case .mining: return 2
+    case .ready: return 3
+    case .claimedUnlinked: return 4
+    case .claimed: return 5
+    case .idle: return 6
+    }
+}
+
+/// `claimedDropCount > 0` means a campaign has started paying out, not that it is finished.
+/// Keep the near-complete fallback for older snapshots that predate `claimedUnlinked`, but do
+/// not let one claimed tier turn a partially complete campaign into a delivery-only state.
+func isDropsCardClaimedButNotLinked(_ account: AccountState) -> Bool {
+    account.miningStatus == .claimedUnlinked
+        || (account.miningStatus == .blocked && (account.progressFraction ?? 0) >= 0.995)
+}
+
+/// Completion is a campaign-level state. A non-zero claimed count only proves that one
+/// reward tier completed, which is not enough for a grouped card to say the miner is done.
+func isDropsCardCompleted(_ account: AccountState) -> Bool {
+    account.miningStatus == .claimed
+        || account.miningStatus == .claimedUnlinked
+        || (account.progressFraction ?? 0) >= 0.995
+}
+
 // MARK: - Grouped Game Card
 struct GameCampaignDeckCard: View {
     let group: GameAggregate
@@ -41,19 +72,9 @@ struct GameCampaignDeckCard: View {
             }
         }
 
-        let statusOrder: [AccountMiningStatus: Int] = [
-            .needsAuth: 0,
-            .claimedUnlinked: 1,
-            .blocked: 2,
-            .mining: 3,
-            .ready: 4,
-            .claimed: 5,
-            .idle: 6
-        ]
-
         let sorted = mergedStates.values.sorted {
-            let lhsOrder = statusOrder[$0.miningStatus] ?? Int.max
-            let rhsOrder = statusOrder[$1.miningStatus] ?? Int.max
+            let lhsOrder = dropsCardAccountStatusPriority($0.miningStatus)
+            let rhsOrder = dropsCardAccountStatusPriority($1.miningStatus)
             if lhsOrder != rhsOrder {
                 return lhsOrder < rhsOrder
             }
@@ -80,12 +101,7 @@ struct GameCampaignDeckCard: View {
             selectedAccountId == nil || account.accountId == selectedAccountId
         }
 
-        return accountStates.filter { account in
-            account.miningStatus == .claimed
-                || account.miningStatus == .claimedUnlinked
-                || account.claimedDropCount > 0
-                || (account.progressFraction ?? 0) >= 0.995
-        }.count
+        return accountStates.filter(isDropsCardCompleted).count
     }
 
     private var hasSubscriptionRequiredRewards: Bool {
@@ -98,18 +114,8 @@ struct GameCampaignDeckCard: View {
     }
 
     private func preferredAccountState(_ lhs: AccountState, _ rhs: AccountState) -> AccountState {
-        let statusOrder: [AccountMiningStatus: Int] = [
-            .needsAuth: 0,
-            .claimedUnlinked: 1,
-            .blocked: 2,
-            .mining: 3,
-            .ready: 4,
-            .claimed: 5,
-            .idle: 6
-        ]
-
-        let lhsOrder = statusOrder[lhs.miningStatus] ?? Int.max
-        let rhsOrder = statusOrder[rhs.miningStatus] ?? Int.max
+        let lhsOrder = dropsCardAccountStatusPriority(lhs.miningStatus)
+        let rhsOrder = dropsCardAccountStatusPriority(rhs.miningStatus)
 
         if lhsOrder != rhsOrder {
             return lhsOrder < rhsOrder ? lhs : rhs
@@ -197,8 +203,7 @@ struct GameCampaignDeckCard: View {
     }
 
     private func isClaimedButNotLinked(_ account: AccountState) -> Bool {
-        account.miningStatus == .claimedUnlinked
-            || (account.miningStatus == .blocked && (account.claimedDropCount > 0 || (account.progressFraction ?? 0) >= 0.995))
+        isDropsCardClaimedButNotLinked(account)
     }
 
     private var aggregateStatusColor: Color {
@@ -264,7 +269,12 @@ struct GameCampaignDeckCard: View {
                         .lineLimit(1)
 
                     if let firstCampaign = group.campaigns.first?.campaign {
-                        Text(firstCampaign.campaignName)
+                        let additionalCampaignCount = group.campaigns.count - 1
+                        Text(
+                            additionalCampaignCount > 0
+                                ? "\(firstCampaign.campaignName) + \(additionalCampaignCount) more"
+                                : firstCampaign.campaignName
+                        )
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -308,7 +318,7 @@ struct GameCampaignDeckCard: View {
                 // Reward Shelf directly beneath metadata
                 if !drops.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
-                        LazyHStack(spacing: 8) {
+                        LazyHStack(alignment: .top, spacing: 12) {
                             ForEach(drops) { drop in
                                 BeautifulRewardCard(drop: drop)
                             }
@@ -423,104 +433,138 @@ struct GameArtworkCard: View {
 struct BeautifulRewardCard: View {
     let drop: DropViewData
     @State private var isHovered = false
+    @State private var loadedArtwork: LoadedCampaignArtwork?
+
+    /// Deliberately smaller than the 120x160 game artwork, so each card keeps one
+    /// dominant image, but large enough to read mixed reward shapes at a glance.
+    private let wellSize: CGFloat = 88
+    private let wellRadius: CGFloat = 12
+
+    private var resolvedURL: URL? {
+        drop.imageURL?.highResolutionArtworkURL
+    }
+
+    private var artworkImage: NSImage? {
+        guard loadedArtwork?.url == resolvedURL else { return nil }
+        return loadedArtwork?.image
+    }
+
+    /// Square reward art carries its own background, so fitting it inside the well's
+    /// padding drew a box inside a box. Let it fill instead — at equal sides there is
+    /// nothing to crop. The tolerance keeps any near-square art within a few percent of
+    /// a side, so nothing meaningfully off-square is ever cropped to fit.
+    private var artworkFillsWell: Bool {
+        guard let size = artworkImage?.size, size.width > 0, size.height > 0 else { return false }
+        return abs((size.width / size.height) - 1) <= 0.06
+    }
 
     var body: some View {
-        ZStack(alignment: .center) {
-            // Main image thumbnail
-            Group {
-                if let url = drop.imageURL?.highResolutionArtworkURL {
-                    AsyncImage(url: url) { image in
-                        image
-                            .resizable()
-                            .interpolation(.high)
-                            .scaledToFill()
-                    } placeholder: {
-                        placeholderArtwork
-                    }
-                } else {
-                    placeholderArtwork
-                }
-            }
-            .frame(width: 76, height: 76)
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .shadow(color: .black.opacity(isHovered ? 0.15 : 0.10), radius: isHovered ? 6 : 4, y: isHovered ? 3 : 2)
-            .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(isHovered ? .white.opacity(0.20) : .white.opacity(0.08), lineWidth: 1)
-            }
-
-            // Completion checkmark (Frosted Glass Outer Circle, Apple Photos selection style)
-            if drop.isClaimed {
-                ZStack {
-                    Circle()
-                        .fill(.ultraThinMaterial)
-                        .frame(width: 18, height: 18)
-                        .shadow(color: .black.opacity(0.12), radius: 2)
-
-                    Circle()
-                        .fill(Color.green)
-                        .frame(width: 13, height: 13)
-
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 7.5, weight: .bold))
-                        .foregroundStyle(.white)
-                }
-                .frame(width: 76, height: 76, alignment: .topTrailing)
-                .padding(4)
-            } else if drop.isSubscriptionRequired {
-                ZStack {
-                    Circle()
-                        .fill(.ultraThinMaterial)
-                        .frame(width: 18, height: 18)
-                        .shadow(color: .black.opacity(0.12), radius: 2)
-
-                    Circle()
-                        .fill(Color.pink)
-                        .frame(width: 13, height: 13)
-
-                    Image(systemName: "creditcard.fill")
-                        .font(.system(size: 6.5, weight: .bold))
-                        .foregroundStyle(.white)
-                }
-                .frame(width: 76, height: 76, alignment: .topTrailing)
-                .padding(4)
-            } else if drop.isClaimable {
-                ZStack {
-                    Circle()
-                        .fill(.ultraThinMaterial)
-                        .frame(width: 18, height: 18)
-                        .shadow(color: .black.opacity(0.12), radius: 2)
-                    
-                    Circle()
-                        .fill(Color.orange)
-                        .frame(width: 13, height: 13)
-                    
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 7.5, weight: .bold))
-                        .foregroundStyle(.white)
-                }
-                .frame(width: 76, height: 76, alignment: .topTrailing)
-                .padding(4)
-            }
-
-            // Duration Overlay Badge (Bottom Right)
-            Text(drop.isSubscriptionRequired && !drop.isClaimed ? "Sub" : "\(drop.requiredMinutes)m")
-                .font(.system(size: 8, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 4.5)
-                .padding(.vertical, 2.5)
-                .background((drop.isSubscriptionRequired && !drop.isClaimed ? Color.pink : Color.black).opacity(drop.isSubscriptionRequired && !drop.isClaimed ? 0.84 : 0.68), in: RoundedRectangle(cornerRadius: 4.5, style: .continuous))
-                .frame(width: 76, height: 76, alignment: .bottomTrailing)
-                .padding(4)
+        VStack(spacing: 6) {
+            rewardWell
+            durationLabel
         }
-        .scaleEffect(isHovered ? 1.03 : 1.0)
-        .animation(.easeOut(duration: 0.15), value: isHovered)
         .onHover { hovering in
             isHovered = hovering
         }
-        .popover(isPresented: $isHovered, arrowEdge: .top) {
-            BeautifulRewardHoverCard(drop: drop)
+        .help(helpText)
+        .task(id: resolvedURL) {
+            guard let resolvedURL else {
+                loadedArtwork = nil
+                return
+            }
+            let image = await CampaignArtworkCache.shared.image(for: resolvedURL)
+            guard !Task.isCancelled else { return }
+            loadedArtwork = image.map { LoadedCampaignArtwork(url: resolvedURL, image: $0) }
         }
+    }
+
+    /// Hovering brightens the well in place. It used to scale the whole tile, which moved
+    /// the artwork under the pointer for what is only a tooltip target.
+    ///
+    /// Twitch reward art arrives at assorted aspect ratios with transparent bounds, so a
+    /// bare thumbnail leaves the row looking ragged. Each reward is fitted — never
+    /// cropped — inside a shared well, and it is the well, not the artwork, that aligns
+    /// the row. The fill sits just above the card behind it; any heavier and the shelf
+    /// reads as a row of nested cards.
+    private var rewardWell: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: wellRadius, style: .continuous)
+                .fill(.white.opacity(isHovered ? 0.10 : 0.06))
+
+            artwork
+        }
+        .frame(width: wellSize, height: wellSize)
+        .clipShape(RoundedRectangle(cornerRadius: wellRadius, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: wellRadius, style: .continuous)
+                .strokeBorder(.white.opacity(isHovered ? 0.16 : 0.08), lineWidth: 1)
+        }
+        .overlay(alignment: .topTrailing) {
+            statusBadge.padding(5)
+        }
+    }
+
+    /// Loaded through the shared campaign artwork cache rather than `AsyncImage`, both to
+    /// reuse the memory and disk cache the rest of the app fills and because the decoded
+    /// image is what tells us whether this reward is square.
+    @ViewBuilder
+    private var artwork: some View {
+        if let artworkImage {
+            Image(nsImage: artworkImage)
+                .resizable()
+                .interpolation(.high)
+                .aspectRatio(contentMode: artworkFillsWell ? .fill : .fit)
+                .padding(artworkFillsWell ? 0 : 10)
+        } else {
+            placeholderArtwork.padding(10)
+        }
+    }
+
+    @ViewBuilder
+    private var statusBadge: some View {
+        if drop.isClaimed {
+            badge("checkmark", color: .green, glyphSize: 9)
+        } else if drop.isSubscriptionRequired {
+            badge("creditcard.fill", color: .pink, glyphSize: 8)
+        } else if drop.isClaimable {
+            badge("sparkles", color: .orange, glyphSize: 9)
+        }
+    }
+
+    /// A solid disc reads clearly on its own. The frosted ring this used to sit in only
+    /// drew a second edge around the glyph.
+    private func badge(_ symbol: String, color: Color, glyphSize: CGFloat) -> some View {
+        Image(systemName: symbol)
+            .font(.system(size: glyphSize, weight: .bold))
+            .foregroundStyle(.white)
+            .frame(width: 16, height: 16)
+            .background(Circle().fill(color))
+            .shadow(color: .black.opacity(0.25), radius: 2)
+    }
+
+    /// Sits under the well rather than over the art, so nothing covers a reward.
+    private var durationLabel: some View {
+        let needsSubscription = drop.isSubscriptionRequired && !drop.isClaimed
+        return HStack(spacing: 3) {
+            Image(systemName: needsSubscription ? "creditcard.fill" : "timer")
+                .font(.system(size: 8, weight: .semibold))
+            Text(needsSubscription ? "Sub" : "\(drop.requiredMinutes)m")
+                .font(.system(size: 10, weight: .medium, design: .rounded))
+        }
+        .foregroundStyle(needsSubscription ? AnyShapeStyle(Color.pink) : AnyShapeStyle(.secondary))
+        .lineLimit(1)
+    }
+
+    /// The card already shows the artwork, the claim state and the required minutes.
+    /// Only the reward's name and description are worth surfacing on hover, so this is
+    /// a tooltip rather than a popover covering the cards around it.
+    private var helpText: String {
+        var lines = ["\(drop.name) — \(statusTitle)"]
+        if let description = drop.description, !description.isEmpty {
+            lines.append(description)
+        }
+        lines.append("Requires \(drop.requiredMinutes) min")
+        return lines.joined(separator: "\n")
     }
 
     private var statusTitle: String {
@@ -531,14 +575,11 @@ struct BeautifulRewardCard: View {
         return "Locked"
     }
 
+    /// The well already supplies the surface, so the placeholder is just the glyph.
     private var placeholderArtwork: some View {
-        RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .fill(.thinMaterial)
-            .overlay {
-                Image(systemName: rewardIcon)
-                    .font(.system(size: 24, weight: .medium))
-                    .foregroundStyle(.secondary)
-            }
+        Image(systemName: rewardIcon)
+            .font(.system(size: 24, weight: .medium))
+            .foregroundStyle(.secondary)
     }
 
     private var rewardIcon: String {
@@ -553,75 +594,6 @@ struct BeautifulRewardCard: View {
 struct CardStatusSummary {
     let title: String
     let icon: String
-}
-
-// MARK: - Premium Frosted Hover Card Popover
-struct BeautifulRewardHoverCard: View {
-    let drop: DropViewData
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                // Tiny reward artwork preview!
-                if let url = drop.imageURL?.highResolutionArtworkURL {
-                    AsyncImage(url: url) { image in
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    } placeholder: {
-                        RoundedRectangle(cornerRadius: 6).fill(.secondary.opacity(0.2))
-                    }
-                    .frame(width: 32, height: 32)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                }
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(drop.name)
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                    
-                    Text(statusText)
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(statusColor)
-                }
-            }
-            
-            if let desc = drop.description, !desc.isEmpty {
-                Text(desc)
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(3)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            
-            HStack(spacing: 4) {
-                Image(systemName: "clock")
-                    .font(.system(size: 9))
-                Text("Required: \(drop.requiredMinutes) min")
-                    .font(.system(size: 9, weight: .medium))
-            }
-            .foregroundStyle(.secondary.opacity(0.8))
-        }
-        .padding(12)
-        .frame(width: 200)
-    }
-
-    private var statusText: String {
-        if drop.isClaimed { return "Claimed" }
-        if drop.isClaimable { return "Ready to Claim" }
-        if drop.isSubscriptionRequired { return "Needs Paid Sub" }
-        if drop.progress > 0 { return "Mining (\(Int(drop.progress * 100))%)" }
-        return "Locked"
-    }
-
-    private var statusColor: Color {
-        if drop.isClaimed { return .green }
-        if drop.isClaimable { return .orange }
-        if drop.isSubscriptionRequired { return .pink }
-        if drop.progress > 0 { return .blue }
-        return .secondary
-    }
 }
 
 private extension TimeInterval {

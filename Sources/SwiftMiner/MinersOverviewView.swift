@@ -480,7 +480,7 @@ struct MinersOverviewView: View {
 
             HStack(spacing: 8) {
                 if let action = attention.action {
-                    Button(action.title) {
+                    Button {
                         switch action {
                         case .reconnect:
                             startLinkAccountFlow(for: miner)
@@ -489,6 +489,9 @@ struct MinersOverviewView: View {
                         case .openTwitchDrops:
                             openTwitchDropsInventory()
                         }
+                    } label: {
+                        Label(action.title, systemImage: action.systemImage)
+                            .labelStyle(.titleAndIcon)
                     }
                     .tahoeButtonStyle()
                 }
@@ -515,13 +518,19 @@ struct MinersOverviewView: View {
                 // banner and the list cannot disagree about whether an item is silenced, and
                 // the item stays in Pending with a "Remind me" button to undo it.
                 if let dismissal = attention.dismissal {
-                    Button("Dismiss") {
+                    Button {
                         dismissAttention(dismissal, for: miner)
+                    } label: {
+                        Label("Dismiss", systemImage: "bell.slash")
+                            .labelStyle(.titleAndIcon)
                     }
                     .tahoeButtonStyle()
                     .accessibilityHint("Stops this reminder for this miner. Restore it from the Pending list.")
                 }
             }
+            // The reminder button used to force .small while the two beside it took the
+            // default size, so the banner's row of three came out uneven.
+            .controlSize(.regular)
         }
         .padding(16)
         .tahoeCard(tint: .red.opacity(0.08))

@@ -125,6 +125,11 @@ public actor PerformanceDiagnostics {
         public let maxNetworkSeconds: TimeInterval
         public let averageEndToEndSeconds: TimeInterval
         public let maxEndToEndSeconds: TimeInterval
+        /// Why the most recent delivery failed. Carries a status code or transport
+        /// error code only — never a URL, body, or header, any of which can hold
+        /// the signing secret or user data.
+        public let lastFailure: String?
+        public let lastFailureAt: Date?
     }
 
     /// Aggregate work split between launch activity and the normal recurring loop. This keeps
@@ -204,6 +209,8 @@ public actor PerformanceDiagnostics {
         var maxNetworkSeconds: TimeInterval = 0
         var totalEndToEndSeconds: TimeInterval = 0
         var maxEndToEndSeconds: TimeInterval = 0
+        var lastFailure: String?
+        var lastFailureAt: Date?
     }
 
     private struct WorkloadPhaseAccumulator {
@@ -396,7 +403,8 @@ public actor PerformanceDiagnostics {
         networkSeconds: TimeInterval,
         queuedAt: Date,
         outcome: EventOutboxDeliveryOutcome,
-        finishedAt: Date = Date()
+        finishedAt: Date = Date(),
+        failure: String? = nil
     ) {
         let networkDuration = max(0, networkSeconds)
         let endToEndDuration = max(0, finishedAt.timeIntervalSince(queuedAt))
@@ -413,6 +421,10 @@ public actor PerformanceDiagnostics {
         eventOutbox.maxNetworkSeconds = max(eventOutbox.maxNetworkSeconds, networkDuration)
         eventOutbox.totalEndToEndSeconds += endToEndDuration
         eventOutbox.maxEndToEndSeconds = max(eventOutbox.maxEndToEndSeconds, endToEndDuration)
+        if let failure {
+            eventOutbox.lastFailure = failure
+            eventOutbox.lastFailureAt = finishedAt
+        }
     }
 
     public func totalRequestCount() -> Int {
@@ -506,7 +518,9 @@ public actor PerformanceDiagnostics {
                 averageEndToEndSeconds: eventOutbox.deliveryAttemptCount == 0
                     ? 0
                     : eventOutbox.totalEndToEndSeconds / Double(eventOutbox.deliveryAttemptCount),
-                maxEndToEndSeconds: eventOutbox.maxEndToEndSeconds
+                maxEndToEndSeconds: eventOutbox.maxEndToEndSeconds,
+                lastFailure: eventOutbox.lastFailure,
+                lastFailureAt: eventOutbox.lastFailureAt
             )
         }
 

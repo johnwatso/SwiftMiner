@@ -44,6 +44,59 @@ final class ServiceTests: XCTestCase {
         }
     }
 
+    /// Twitch registers persisted queries per edge node, so one node can miss a hash the
+    /// rest of the fleet serves. A single miss must not be reported as "update the app".
+    func testPersistedQueryMissOnOneEdgeIsRetriedRatherThanCalledIncompatible() async throws {
+        let attempts = Counter()
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            let body = attempts.next() == 1
+                ? #"{"errors":[{"message":"PersistedQueryNotFound"}]}"#
+                : #"{"data":{"currentUser":{"dropCampaigns":[]}}}"#
+            return (response, Data(body.utf8))
+        }
+
+        let campaigns = try await apiClient.fetchDropCampaigns()
+
+        XCTAssertEqual(campaigns.count, 0)
+        XCTAssertEqual(attempts.value, 2, "The miss should have been retried exactly once")
+    }
+
+    /// A hash Twitch has genuinely retired fails identically every time, so the client
+    /// must stop spending a full retry budget on it once it has proven that.
+    func testRepeatedlyMissingPersistedQueryStopsBeingRetried() async throws {
+        let attempts = Counter()
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            _ = attempts.next()
+            return (response, Data(#"{"errors":[{"message":"PersistedQueryNotFound"}]}"#.utf8))
+        }
+
+        func failingCallRequestCount() async -> Int {
+            let before = attempts.value
+            do {
+                _ = try await apiClient.fetchDropCampaigns()
+                XCTFail("A retired persisted query must still surface as a compatibility issue")
+            } catch let error as TwitchMinerError {
+                XCTAssertTrue(error.isTwitchAPICompatibilityIssue)
+            } catch {
+                XCTFail("Unexpected error \(error)")
+            }
+            return attempts.value - before
+        }
+
+        let provingCall = await failingCallRequestCount()
+        let laterCall = await failingCallRequestCount()
+
+        // The first call spends its retry budget establishing that the hash is dead.
+        // Every call after that gives up on the first miss instead of paying for it again.
+        XCTAssertGreaterThan(provingCall, laterCall)
+    }
+
     func testMissingInventoryShapeIsFlaggedAsTwitchCompatibilityIssue() async throws {
         MockURLProtocol.stubResponseData = #"{"data":{"currentUser":{}}}"#.data(using: .utf8)
 
@@ -1418,4 +1471,22 @@ class MockURLProtocol: URLProtocol {
     }
     
     override func stopLoading() {}
+}
+
+/// Counts handler invocations across the concurrent URLProtocol callbacks.
+final class Counter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    /// Increments and returns the new count.
+    func next() -> Int {
+        lock.lock(); defer { lock.unlock() }
+        count += 1
+        return count
+    }
+
+    var value: Int {
+        lock.lock(); defer { lock.unlock() }
+        return count
+    }
 }

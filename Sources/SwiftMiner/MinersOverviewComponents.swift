@@ -832,23 +832,30 @@ struct ReminderDMButton: View {
 
     var body: some View {
         Button(action: action) {
-            switch state {
-            case .idle:
-                Label("Send Reminder", systemImage: "paperplane")
-            case .sending:
-                HStack(spacing: 5) {
-                    ProgressView()
-                        .controlSize(.mini)
-                    Text("Sending…")
+            // Hidden copies of the longest states reserve their width, so the button
+            // keeps one size as it moves through sending, sent and failed instead of
+            // resizing and shifting everything beside it.
+            ZStack {
+                Label("Reminder Sent", systemImage: "checkmark").hidden()
+                Label("Retry Reminder", systemImage: "arrow.clockwise").hidden()
+
+                switch state {
+                case .idle:
+                    Label("Send Reminder", systemImage: "paperplane")
+                case .sending:
+                    HStack(spacing: 5) {
+                        ProgressView()
+                            .controlSize(.mini)
+                        Text("Sending…")
+                    }
+                case .sent:
+                    Label("Reminder Sent", systemImage: "checkmark")
+                case .failed:
+                    Label("Retry Reminder", systemImage: "arrow.clockwise")
                 }
-            case .sent:
-                Label("Reminder Sent", systemImage: "checkmark")
-            case .failed:
-                Label("Retry Reminder", systemImage: "arrow.clockwise")
             }
         }
         .tahoeButtonStyle()
-        .controlSize(.small)
         .disabled(!isAvailable || state == .sending)
         .help(isAvailable ? "Send this reminder to the miner's linked Discord account" : unavailableReason)
         .accessibilityHint(isAvailable ? "Sends this reminder through SwiftBot" : unavailableReason)
@@ -905,7 +912,6 @@ struct PendingItemRow: View {
                             .labelStyle(.titleAndIcon)
                     }
                     .tahoeButtonStyle()
-                    .controlSize(.small)
                 }
 
                 ReminderDMButton(
@@ -916,12 +922,19 @@ struct PendingItemRow: View {
                 )
 
                 Button(action: onAction) {
-                    Label(item.actionTitle, systemImage: item.actionSystemImage)
-                        .labelStyle(.titleAndIcon)
+                    ZStack {
+                        Label("Remind me", systemImage: "bell").hidden()
+                        Label("Dismiss", systemImage: "bell.slash").hidden()
+
+                        Label(item.actionTitle, systemImage: item.actionSystemImage)
+                            .labelStyle(.titleAndIcon)
+                    }
                 }
                 .tahoeButtonStyle()
-                .controlSize(.small)
             }
+            // One size for the whole row, so the reminder button cannot drift from
+            // the two beside it.
+            .controlSize(.small)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)

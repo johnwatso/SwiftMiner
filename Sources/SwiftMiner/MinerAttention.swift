@@ -186,6 +186,16 @@ struct MinerAttentionIssue: Equatable {
             case .openTwitchDrops: return "Open Twitch Drops"
             }
         }
+
+        /// Shares the Pending list's symbols so the same act carries the same icon
+        /// whether it is offered by the banner or by the row below it.
+        var systemImage: String {
+            switch self {
+            case .reconnect: return "person.badge.key"
+            case .restart: return "arrow.clockwise"
+            case .openTwitchDrops: return "arrow.up.right.square"
+            }
+        }
     }
 
     /// The mute that silences this issue, for the ones the user is allowed to turn off.
