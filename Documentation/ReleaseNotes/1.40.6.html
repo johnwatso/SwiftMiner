@@ -29,23 +29,26 @@
   <main>
     <h1>SwiftMiner 1.40.6</h1>
     <p class="meta">Version 1.40.6 &middot; Build 2026090610</p>
-    <p class="intro">1.40.5 taught mining to tell apart campaign tiers that share a reward identifier. The Drops page now does the same, so what you see there matches what SwiftMiner is actually still earning &mdash; and the app does noticeably less work to show it.</p>
+    <p class="intro">1.40.5 taught mining to tell apart campaign tiers that share a reward identifier. The Drops page now does the same, so what you see there matches what SwiftMiner is actually still earning. Alongside that, the reward shelf is rebuilt around a consistent well, a passing Twitch hiccup no longer claims SwiftMiner is out of date, and the app does noticeably less work while you are not looking at it.</p>
 
     <section>
       <h2>&#128029; Bug fixes</h2>
       <ul>
-        <li>A drop reward that Twitch briefly failed to recognise no longer reports that SwiftMiner needs updating. Twitch registers these lookups per server, so one server can miss a request the rest of the fleet answers normally; SwiftMiner now retries before concluding anything is wrong, and only says an update is needed once a lookup has genuinely stopped working.</li>
         <li>The Drops page now uses the same per-reward reconciliation as mining, instead of independently treating a shared identifier as proof that every matching tier was collected. Unfinished tiers keep their real watch progress and no longer show green claimed checks.</li>
         <li>When several live-window campaigns for one game share a Drops card, the subtitle now says that more campaigns are included. An older completed reward &mdash; or merely claiming the first tier of the current campaign &mdash; can no longer make the whole group read &ldquo;claimed &middot; not linked&rdquo; while rewards remain unfinished.</li>
+        <li>A drop lookup that Twitch briefly failed to recognise no longer reports that SwiftMiner needs updating. Twitch registers these lookups per server, so a single server can miss a request the rest of the fleet answers normally &mdash; over one day that affected sixteen of 2,338 inventory checks while the other 2,322 succeeded, and every one of the sixteen told you to update the app. SwiftMiner now retries before concluding anything is wrong, and only reports that an update is needed once a lookup has genuinely stopped working, at which point it stops spending retries on it.</li>
+        <li>The three buttons in a miner&rsquo;s Needs attention banner are the same size again. Send Reminder set its own size regardless of where it was placed, so it came out smaller than the Open Twitch Drops and Dismiss buttons beside it. Those two also gain the icons the same actions already carry in the Pending list below.</li>
+        <li>Pending rows no longer sit at different horizontal positions depending on what their last button says. The buttons are aligned to the right edge, so the narrower &ldquo;Dismiss&rdquo; label pushed its whole row about twenty points across from the rows ending in &ldquo;Remind me&rdquo;. Send Reminder also holds its width as it moves through sending, sent and failed, instead of shifting the buttons beside it mid&#8209;send.</li>
       </ul>
     </section>
 
     <section>
-      <h2>&#127920; A Cleaner Reward Shelf</h2>
+      <h2>&#127873; A Cleaner Reward Shelf</h2>
       <ul>
-        <li>Reward art arrives from Twitch at assorted shapes and sizes, which left the Drops shelf looking ragged. Each reward now sits in a shared, slightly larger well: square artwork fills it edge to edge, and anything taller or wider is fitted inside it rather than cropped.</li>
-        <li>The claimed tick sits inside its reward instead of over the corner, and the watch time has moved out from on top of the artwork to a compact label underneath, so nothing covers a reward any more.</li>
-        <li>Hovering a reward shows its name and description as an ordinary tooltip. It used to open a panel that covered the rewards either side of it to repeat the artwork, claim state and watch time already on the card.</li>
+        <li>Reward art arrives from Twitch at assorted shapes and sizes, often with transparent edges, which left a row of bare thumbnails looking ragged. Each reward now sits in a shared, slightly larger well. Artwork that is square fills it edge to edge &mdash; that art carries its own background, and inset inside the well it read as a box within a box &mdash; while anything taller or wider is fitted inside the well rather than cropped. The game&rsquo;s own artwork remains the largest image on the card.</li>
+        <li>The claimed tick sits inside its reward, anchored to the top-right corner rather than floating over the tile edge, and the watch time has moved out from on top of the artwork to a compact label underneath with a small timer symbol. Nothing covers a reward any more.</li>
+        <li>Hovering a reward shows its name and description as an ordinary tooltip. It previously opened a panel that covered the rewards either side of it in order to repeat the artwork, claim state and watch time already shown on the card.</li>
+        <li>The status badges are a single solid disc instead of a disc set inside a frosted ring, which drew a second edge around the tick. Rewards also no longer grow under the pointer: the tile scaled up on hover, which moved the artwork you were pointing at.</li>
       </ul>
     </section>
 
@@ -53,9 +56,16 @@
       <h2>&#9889; Quieter When You Are Not Looking</h2>
       <ul>
         <li>The Drops page used to rebuild every campaign&rsquo;s reconciled state separately for the list, the curated feed and each card you opened. It now reconciles an account once and shares that result, re-running only when Twitch&rsquo;s data changes or a campaign window opens or closes.</li>
-        <li>Live activity timers, pulsing dots and status-icon animations stop while SwiftMiner is in the background, and pick up where they belong when you come back. A window you are not looking at no longer animates at full rate.</li>
+        <li>Live activity timers, pulsing dots and status-icon animations stop while SwiftMiner is in the background, and pick up where they belong when you come back. A window you are not looking at no longer animates at full rate. An animated card background that had been unreachable since April was removed outright.</li>
         <li>Repeated engine reports that say nothing new no longer redraw the miner views. Screens refresh when a miner&rsquo;s state actually changes, not on every poll.</li>
-        <li>Webhook delivery no longer wakes every ten seconds to look at an empty queue. It sleeps until an event is queued or a retry is genuinely due.</li>
+        <li>Webhook delivery no longer wakes every ten seconds to look at an empty queue; it sleeps until an event is queued or a retry is genuinely due. Retries are now scheduled so that an older event waiting out a long backoff cannot hide newer events whose retry has already come due, a Retry-After asked for by the receiver is honoured, and one unreachable endpoint no longer spends the retry budget of every event queued behind it.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#128269; Easier to Diagnose</h2>
+      <ul>
+        <li>The diagnostic report now says why a webhook delivery failed rather than only that it did, which is the difference between an endpoint that is switched off and one that is refusing your credentials &mdash; the two call for opposite responses. Only the status or transport code is recorded: response bodies, addresses and error text can carry the signing secret or user data.</li>
       </ul>
     </section>
 
