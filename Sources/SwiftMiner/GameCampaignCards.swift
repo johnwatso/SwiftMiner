@@ -463,8 +463,6 @@ struct BeautifulRewardCard: View {
             rewardWell
             durationLabel
         }
-        .scaleEffect(isHovered ? 1.03 : 1.0)
-        .animation(.easeOut(duration: 0.15), value: isHovered)
         .onHover { hovering in
             isHovered = hovering
         }
@@ -480,6 +478,9 @@ struct BeautifulRewardCard: View {
         }
     }
 
+    /// Hovering brightens the well in place. It used to scale the whole tile, which moved
+    /// the artwork under the pointer for what is only a tooltip target.
+    ///
     /// Twitch reward art arrives at assorted aspect ratios with transparent bounds, so a
     /// bare thumbnail leaves the row looking ragged. Each reward is fitted — never
     /// cropped — inside a shared well, and it is the well, not the artwork, that aligns
