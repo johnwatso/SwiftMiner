@@ -139,10 +139,6 @@ struct CampaignFeedCard: View {
         Settings.shared
     }
 
-    private var usesStandbyMotionStyle: Bool {
-        item.isPlaceholder && item.showsLiveMotion
-    }
-
     /// Priority-queue cards are artwork first: no title, no slab, and dimming that
     /// steps back to let more of the artwork through.
     private var isQueueCard: Bool { priority != nil }
@@ -240,20 +236,14 @@ struct CampaignFeedCard: View {
             CampaignArtworkBackground(
                 url: item.artworkURL,
                 title: item.gameName,
-                tint: item.tint,
-                useGhostArtworkPlaceholder: usesStandbyMotionStyle
+                tint: item.tint
             )
             .frame(width: prominence.size.width, height: prominence.size.height)
             .clipped()
 
             if item.showsLiveMotion {
-                if usesStandbyMotionStyle {
-                    CampaignStandbyMotionOverlay(tint: item.tint)
-                        .opacity(0.68)
-                } else {
-                    CampaignCardMotionOverlay(tint: item.tint)
-                        .opacity(0.5)
-                }
+                CampaignCardMotionOverlay(tint: item.tint)
+                    .opacity(0.5)
             }
 
             LinearGradient(
@@ -264,29 +254,15 @@ struct CampaignFeedCard: View {
 
             Rectangle()
                 .fill(
-                    usesStandbyMotionStyle
-                        ? AnyShapeStyle(
-                            LinearGradient(
-                                colors: [
-                                    Color.white.opacity(0),
-                                    Color.white.opacity(0.012),
-                                    Color.black.opacity(0.08)
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                        : AnyShapeStyle(
-                            LinearGradient(
-                                colors: [
-                                    item.tint.opacity(0),
-                                    item.tint.opacity(item.usesCustomArtwork ? 0 : 0.08),
-                                    item.tint.opacity(item.usesCustomArtwork ? 0 : 0.18)
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
+                    LinearGradient(
+                        colors: [
+                            item.tint.opacity(0),
+                            item.tint.opacity(item.usesCustomArtwork ? 0 : 0.08),
+                            item.tint.opacity(item.usesCustomArtwork ? 0 : 0.18)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
                 )
                 .mask(alignment: .bottom) {
                     LinearGradient(
@@ -342,21 +318,12 @@ struct CampaignFeedCard: View {
                 .background(alignment: .bottomLeading) {
                     // Material slab treatment for cards outside the priority queue,
                     // which carry their contrast in the chip above instead.
-                    if usesStandbyMotionStyle {
-                        Rectangle()
-                            .fill(.ultraThinMaterial.opacity(0.6))
-                            .overlay(alignment: .top) {
-                                Color.white.opacity(0.1)
-                                    .frame(height: 1)
-                            }
-                    } else {
-                        Rectangle()
-                            .fill(.thinMaterial.opacity(0.35))
-                            .overlay(alignment: .top) {
-                                Color.white.opacity(0.08)
-                                    .frame(height: 1)
-                            }
-                    }
+                    Rectangle()
+                        .fill(.thinMaterial.opacity(0.35))
+                        .overlay(alignment: .top) {
+                            Color.white.opacity(0.08)
+                                .frame(height: 1)
+                        }
                 }
                 .zIndex(2)
             }
@@ -397,7 +364,6 @@ struct CampaignFeedCard: View {
                 radius: item.visualState == .watching ? 10 : (isHovering ? 8 : 3), 
                 y: item.visualState == .watching ? 5 : (isHovering ? 4 : 1))
         .animation(.easeInOut(duration: 0.2), value: isHovering)
-        .animation(.easeInOut(duration: 0.7), value: usesStandbyMotionStyle)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityTitle)
         .accessibilityValue(accessibilityValue)
@@ -676,113 +642,6 @@ struct CampaignCardMotionOverlay: View {
     }
 }
 
-struct CampaignStandbyMotionOverlay: View {
-    let tint: Color
-    // A 12fps drift is visually smooth at this scale while halving compositor work.
-    // Pause it when inactive or when the user requests reduced motion.
-    @Environment(\.controlActiveState) private var controlActiveState
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 12, paused: controlActiveState == .inactive || reduceMotion)) { context in
-            let t = context.date.timeIntervalSinceReferenceDate
-
-            // Hue cycling (full cycle every 30s)
-            let hueBase = (t * 0.033).truncatingRemainder(dividingBy: 1.0)
-            
-            // Noticeable but smooth multi-sinusoidal drift
-            let driftX = 70 * sin(t * 0.12) + 30 * cos(t * 0.18)
-            let driftY = 30 * cos(t * 0.08) + 15 * sin(t * 0.15)
-            
-            // Dynamic colors cycling through hues - boosted saturation and brightness for "fun" look
-            let color1 = Color(hue: hueBase, saturation: 0.85, brightness: 0.95)
-            let color2 = Color(hue: (hueBase + 0.33).truncatingRemainder(dividingBy: 1.0), saturation: 0.80, brightness: 0.90)
-            let color3 = Color(hue: (hueBase + 0.66).truncatingRemainder(dividingBy: 1.0), saturation: 0.75, brightness: 0.85)
-            let highlight = Color(hue: (hueBase + 0.15).truncatingRemainder(dividingBy: 1.0), saturation: 0.50, brightness: 1.0)
-
-            ZStack {
-                // Background base - deeper version of the primary cycling color
-                Color(hue: hueBase, saturation: 0.90, brightness: 0.30)
-
-                // 3 Overlapping vibrant soft shapes cycling colors
-                GhostArtworkShape(color: color1.opacity(0.7), size: CGSize(width: 280, height: 240))
-                    .offset(
-                        x: -80 + driftX * 0.7,
-                        y: -40 + driftY * 0.9
-                    )
-                    .scaleEffect(1.0 + 0.06 * sin(t * 0.14))
-
-                GhostArtworkShape(color: color2.opacity(0.6), size: CGSize(width: 220, height: 260))
-                    .offset(
-                        x: 20 + driftX,
-                        y: 30 + driftY * 1.1
-                    )
-                    .scaleEffect(1.0 - 0.04 * cos(t * 0.11))
-
-                GhostArtworkShape(color: color3.opacity(0.55), size: CGSize(width: 240, height: 200))
-                    .offset(
-                        x: 90 + driftX * 1.3,
-                        y: 70 + driftY * 1.4
-                    )
-                    .scaleEffect(1.0 + 0.03 * sin(t * 0.09))
-                
-                // Extra warm "light leak" highlight
-                GhostArtworkShape(color: highlight.opacity(0.22), size: CGSize(width: 200, height: 160))
-                    .offset(
-                        x: 40 + 50 * sin(t * 0.08),
-                        y: -60 + 40 * cos(t * 0.06)
-                    )
-                    .blur(radius: 60)
-
-                // Depth & Polish
-                LinearGradient(
-                    colors: [
-                        Color.white.opacity(0.18), // Glass top highlight
-                        .clear,
-                        Color.black.opacity(0.25)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .blendMode(.overlay)
-
-                // Subtle vignette
-                RadialGradient(
-                    colors: [.clear, Color.black.opacity(0.15)],
-                    center: .center,
-                    startRadius: 90,
-                    endRadius: 320
-                )
-                .blendMode(.multiply)
-            }
-        }
-        .mask {
-            RoundedRectangle(cornerRadius: GlassRadius.artwork, style: .continuous)
-        }
-        .blendMode(.screen)
-    }
-}
-
-struct GhostArtworkShape: View {
-    let color: Color
-    let size: CGSize
-
-    var body: some View {
-        UnevenRoundedRectangle(
-            topLeadingRadius: size.width * 0.34,
-            bottomLeadingRadius: size.width * 0.18,
-            bottomTrailingRadius: size.width * 0.32,
-            topTrailingRadius: size.width * 0.12,
-            style: .continuous
-        )
-        .fill(color)
-        .frame(width: size.width, height: size.height)
-        .rotationEffect(.degrees(-18))
-        .blur(radius: 42)
-        .blendMode(.screen)
-    }
-}
-
 struct GameActionMenuLabel: View {
     let title: String
     var subtitle: String? = nil
@@ -945,7 +804,6 @@ struct CampaignArtworkBackground: View {
     let url: URL?
     let title: String
     let tint: Color
-    var useGhostArtworkPlaceholder = false
 
     @State private var loadedArtwork: LoadedCampaignArtwork?
     @State private var failedArtworkURL: URL?
@@ -1019,48 +877,11 @@ struct CampaignArtworkBackground: View {
     }
 
     private var placeholder: some View {
-        Group {
-            if useGhostArtworkPlaceholder {
-                ZStack {
-                    // Match the deeper base
-                    Color(red: 0.12, green: 0.11, blue: 0.28)
-
-                    GhostArtworkShape(color: Color(hue: 0.0, saturation: 0.85, brightness: 0.95).opacity(0.5), size: CGSize(width: 250, height: 210))
-                        .offset(x: -70, y: 8)
-
-                    GhostArtworkShape(color: Color(hue: 0.33, saturation: 0.80, brightness: 0.90).opacity(0.45), size: CGSize(width: 184, height: 244))
-                        .offset(x: 8, y: 48)
-
-                    GhostArtworkShape(color: Color(hue: 0.66, saturation: 0.75, brightness: 0.85).opacity(0.4), size: CGSize(width: 208, height: 154))
-                        .offset(x: 102, y: 94)
-
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.15),
-                            Color.clear,
-                            Color.black.opacity(0.18)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                    .blendMode(.overlay)
-
-                    RadialGradient(
-                        colors: [.clear, Color.black.opacity(0.12)],
-                        center: .center,
-                        startRadius: 60,
-                        endRadius: 280
-                    )
-                    .blendMode(.multiply)
-                }
-            } else {
-                LinearGradient(
-                    colors: [tint.opacity(0.85), tint.opacity(0.45), Color.black.opacity(0.45)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            }
-        }
+        LinearGradient(
+            colors: [tint.opacity(0.85), tint.opacity(0.45), Color.black.opacity(0.45)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
     }
 }
 
