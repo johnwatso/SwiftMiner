@@ -245,6 +245,28 @@ final class EventEmitterServiceTests: XCTestCase {
         XCTAssertEqual(snapshot.eventOutbox?.retryableFailureCount, 0)
     }
 
+    /// A diagnostic report that says delivery failed but never why cannot distinguish an
+    /// offline endpoint from a rejected credential — the two call for opposite responses.
+    func testDeliveryFailureReasonReachesDiagnosticsWithoutLeakingTheEndpoint() async throws {
+        let manager = try await makeOutboxDatabase()
+        try await manager.execute("""
+        INSERT INTO event_outbox (id, event_type, payload, status)
+        VALUES ('rejected', 'system.test', '{}', 'pending');
+        """)
+        let session = makeOutboxSession { request in
+            (HTTPURLResponse(url: request.url!, statusCode: 401, httpVersion: nil, headerFields: nil)!, Data())
+        }
+        await makeOutboxService(manager: manager, session: session).pollOnce()
+
+        let snapshot = await PerformanceDiagnostics.shared.snapshot()
+        let outbox = try XCTUnwrap(snapshot.eventOutbox)
+        XCTAssertEqual(outbox.lastFailure, "HTTP 401")
+        XCTAssertNotNil(outbox.lastFailureAt)
+        // A 401 is the endpoint refusing us, not a blip, so it must not be retried.
+        XCTAssertEqual(outbox.terminalFailureCount, 1)
+        XCTAssertEqual(outbox.retryableFailureCount, 0)
+    }
+
     func testEnqueueWakesIdleOutboxAndConfigurationWakesDisabledOutbox() async throws {
         let manager = try await makeOutboxDatabase()
         let delivered = expectation(description: "new event delivered without waiting for fallback scan")

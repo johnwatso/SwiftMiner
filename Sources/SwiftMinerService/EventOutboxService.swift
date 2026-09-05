@@ -351,7 +351,8 @@ public actor EventOutboxService {
             networkSeconds: deliveryFinishedAt.timeIntervalSince(deliveryStartedAt),
             queuedAt: event.createdAt,
             outcome: diagnosticOutcome,
-            finishedAt: deliveryFinishedAt
+            finishedAt: deliveryFinishedAt,
+            failure: outcome.failureReason
         )
         // One failing endpoint should not burn the retry budget of every queued
         // event in a burst. Keep untouched events queued until the endpoint recovers.
@@ -360,7 +361,7 @@ public actor EventOutboxService {
             case .success:
                 consecutiveEndpointFailures = 0
                 endpointRetryAt = nil
-            case .retryable(let retryAfter):
+            case .retryable(let retryAfter, _):
                 consecutiveEndpointFailures += 1
                 let index = min(consecutiveEndpointFailures - 1, Self.backoffIntervals.count - 1)
                 let delay = max(min(3_600, Self.backoffIntervals[index]), retryAfter ?? 0)
@@ -383,12 +384,24 @@ public actor EventOutboxService {
 
     private enum DeliveryOutcome: Equatable {
         case success
-        case retryable(retryAfter: TimeInterval? = nil)
-        case terminal
+        case retryable(retryAfter: TimeInterval? = nil, reason: String? = nil)
+        case terminal(reason: String? = nil)
+
+        /// Status or transport code only. Response bodies, endpoint URLs and error
+        /// descriptions can carry credentials or user data, so none of them reach here.
+        var failureReason: String? {
+            switch self {
+            case .success: return nil
+            case .retryable(_, let reason): return reason
+            case .terminal(let reason): return reason
+            }
+        }
     }
 
     private func attemptDelivery(event: OutboxRow, to webhookURL: URL) async -> DeliveryOutcome {
-        guard let payloadData = event.payload.data(using: .utf8) else { return .terminal }
+        guard let payloadData = event.payload.data(using: .utf8) else {
+            return .terminal(reason: "payload was not valid UTF-8")
+        }
 
         let timestamp = Int(Date().timeIntervalSince1970)
         let signature = sign(body: payloadData, timestamp: timestamp)
@@ -408,7 +421,7 @@ public actor EventOutboxService {
             let (_, response) = try await urlSession.data(for: request)
             guard let http = response as? HTTPURLResponse else {
                 Logger.storage.warning("Event delivery failed: non-HTTP response")
-                return .retryable()
+                return .retryable(reason: "non-HTTP response")
             }
             let code = http.statusCode
             if (200..<300).contains(code) || code == 409 { return .success }
@@ -416,12 +429,16 @@ public actor EventOutboxService {
             // can contain credentials/user data. Log only a numeric status/code.
             Logger.storage.warning("Event delivery failed: HTTP \(code)")
             if code == 408 || code == 429 || (500..<600).contains(code) {
-                return .retryable(retryAfter: Self.retryAfterDelay(http.value(forHTTPHeaderField: "Retry-After")))
+                return .retryable(
+                    retryAfter: Self.retryAfterDelay(http.value(forHTTPHeaderField: "Retry-After")),
+                    reason: "HTTP \(code)"
+                )
             }
-            return .terminal
+            return .terminal(reason: "HTTP \(code)")
         } catch {
-            Logger.storage.warning("Event delivery failed: transport error code \((error as NSError).code)")
-            return .retryable()
+            let code = (error as NSError).code
+            Logger.storage.warning("Event delivery failed: transport error code \(code)")
+            return .retryable(reason: "transport error \(code)")
         }
     }
 
