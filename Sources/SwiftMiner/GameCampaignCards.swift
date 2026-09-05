@@ -3,6 +3,37 @@ import SwiftUI
 import SwiftMinerCore
 import CoreImage
 
+/// A grouped game card can contain an unfinished campaign and an older campaign whose
+/// reward is already claimed but still inside its advertised window. The unfinished state
+/// must win; otherwise the whole game card falsely reads "claimed · not linked".
+func dropsCardAccountStatusPriority(_ status: AccountMiningStatus) -> Int {
+    switch status {
+    case .needsAuth: return 0
+    case .blocked: return 1
+    case .mining: return 2
+    case .ready: return 3
+    case .claimedUnlinked: return 4
+    case .claimed: return 5
+    case .idle: return 6
+    }
+}
+
+/// `claimedDropCount > 0` means a campaign has started paying out, not that it is finished.
+/// Keep the near-complete fallback for older snapshots that predate `claimedUnlinked`, but do
+/// not let one claimed tier turn a partially complete campaign into a delivery-only state.
+func isDropsCardClaimedButNotLinked(_ account: AccountState) -> Bool {
+    account.miningStatus == .claimedUnlinked
+        || (account.miningStatus == .blocked && (account.progressFraction ?? 0) >= 0.995)
+}
+
+/// Completion is a campaign-level state. A non-zero claimed count only proves that one
+/// reward tier completed, which is not enough for a grouped card to say the miner is done.
+func isDropsCardCompleted(_ account: AccountState) -> Bool {
+    account.miningStatus == .claimed
+        || account.miningStatus == .claimedUnlinked
+        || (account.progressFraction ?? 0) >= 0.995
+}
+
 // MARK: - Grouped Game Card
 struct GameCampaignDeckCard: View {
     let group: GameAggregate
@@ -41,19 +72,9 @@ struct GameCampaignDeckCard: View {
             }
         }
 
-        let statusOrder: [AccountMiningStatus: Int] = [
-            .needsAuth: 0,
-            .claimedUnlinked: 1,
-            .blocked: 2,
-            .mining: 3,
-            .ready: 4,
-            .claimed: 5,
-            .idle: 6
-        ]
-
         let sorted = mergedStates.values.sorted {
-            let lhsOrder = statusOrder[$0.miningStatus] ?? Int.max
-            let rhsOrder = statusOrder[$1.miningStatus] ?? Int.max
+            let lhsOrder = dropsCardAccountStatusPriority($0.miningStatus)
+            let rhsOrder = dropsCardAccountStatusPriority($1.miningStatus)
             if lhsOrder != rhsOrder {
                 return lhsOrder < rhsOrder
             }
@@ -80,12 +101,7 @@ struct GameCampaignDeckCard: View {
             selectedAccountId == nil || account.accountId == selectedAccountId
         }
 
-        return accountStates.filter { account in
-            account.miningStatus == .claimed
-                || account.miningStatus == .claimedUnlinked
-                || account.claimedDropCount > 0
-                || (account.progressFraction ?? 0) >= 0.995
-        }.count
+        return accountStates.filter(isDropsCardCompleted).count
     }
 
     private var hasSubscriptionRequiredRewards: Bool {
@@ -98,18 +114,8 @@ struct GameCampaignDeckCard: View {
     }
 
     private func preferredAccountState(_ lhs: AccountState, _ rhs: AccountState) -> AccountState {
-        let statusOrder: [AccountMiningStatus: Int] = [
-            .needsAuth: 0,
-            .claimedUnlinked: 1,
-            .blocked: 2,
-            .mining: 3,
-            .ready: 4,
-            .claimed: 5,
-            .idle: 6
-        ]
-
-        let lhsOrder = statusOrder[lhs.miningStatus] ?? Int.max
-        let rhsOrder = statusOrder[rhs.miningStatus] ?? Int.max
+        let lhsOrder = dropsCardAccountStatusPriority(lhs.miningStatus)
+        let rhsOrder = dropsCardAccountStatusPriority(rhs.miningStatus)
 
         if lhsOrder != rhsOrder {
             return lhsOrder < rhsOrder ? lhs : rhs
@@ -197,8 +203,7 @@ struct GameCampaignDeckCard: View {
     }
 
     private func isClaimedButNotLinked(_ account: AccountState) -> Bool {
-        account.miningStatus == .claimedUnlinked
-            || (account.miningStatus == .blocked && (account.claimedDropCount > 0 || (account.progressFraction ?? 0) >= 0.995))
+        isDropsCardClaimedButNotLinked(account)
     }
 
     private var aggregateStatusColor: Color {
@@ -264,7 +269,12 @@ struct GameCampaignDeckCard: View {
                         .lineLimit(1)
 
                     if let firstCampaign = group.campaigns.first?.campaign {
-                        Text(firstCampaign.campaignName)
+                        let additionalCampaignCount = group.campaigns.count - 1
+                        Text(
+                            additionalCampaignCount > 0
+                                ? "\(firstCampaign.campaignName) + \(additionalCampaignCount) more"
+                                : firstCampaign.campaignName
+                        )
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)

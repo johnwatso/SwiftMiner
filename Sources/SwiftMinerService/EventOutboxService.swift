@@ -5,7 +5,8 @@ import SwiftMinerCore
 
 // MARK: - EventOutboxService
 
-/// Polls `event_outbox` for pending events and delivers them to the configured
+/// Delivers `event_outbox` events when enqueued or due for retry, with a bounded
+/// fallback scan for other SQLite writers. Sends to the configured
 /// webhook URL using HMAC-SHA256 signed HTTP POST requests.
 public actor EventOutboxService {
 
@@ -14,10 +15,27 @@ public actor EventOutboxService {
     private var hmacSecret: String
     private let urlSession: URLSession
     private var pollingTask: Task<Void, Never>?
+    private var sleepTask: Task<Void, Never>?
+    private var enqueueObserver: NSObjectProtocol?
+    private var runID: UUID?
+    private var wakeRevision: UInt64 = 0
+    private var endpointRetryAt: Date?
+    private var consecutiveEndpointFailures = 0
+    private var isDelivering = false
+
+    static let eventEnqueued = Notification.Name("SwiftMiner.eventOutboxEnqueued")
+    static let fallbackInterval: TimeInterval = 60
 
     // Backoff per retry_count (index = attempt number after first failure)
     fileprivate static let backoffIntervals: [TimeInterval] = [30, 120, 600, 3_600, 21_600, 86_400]
     private static let maxRetries = backoffIntervals.count
+
+    // Use the same expression for fetching and scheduling so rows cannot be hidden
+    // behind a LIMIT while a different event's longer backoff is still running.
+    private static let retryDelaySQL = "CASE " + backoffIntervals.enumerated().map {
+        "WHEN retry_count <= \($0.offset + 1) THEN \(Int($0.element))"
+    }.joined(separator: " ") + " ELSE \(Int(backoffIntervals.last!)) END"
+    private static let retryDueSQL = "COALESCE(unixepoch(last_attempt) + (\(retryDelaySQL)), 0)"
 
     public init(
         manager: SQLiteManager,
@@ -32,20 +50,42 @@ public actor EventOutboxService {
     }
 
     public func updateConfig(webhookURL: URL?, hmacSecret: String) {
+        let changed = self.webhookURL != webhookURL || self.hmacSecret != hmacSecret
         self.webhookURL = webhookURL
         self.hmacSecret = hmacSecret
+        if changed {
+            endpointRetryAt = nil
+            consecutiveEndpointFailures = 0
+            wake()
+        }
     }
 
     public func start() {
         guard pollingTask == nil else { return }
+        let id = UUID()
+        runID = id
+        enqueueObserver = NotificationCenter.default.addObserver(
+            forName: Self.eventEnqueued,
+            object: manager,
+            queue: nil
+        ) { [weak self] _ in
+            Task { await self?.wake() }
+        }
         pollingTask = Task {
-            await self.runPollingLoop()
+            await self.runPollingLoop(id: id)
         }
     }
 
     public func stop() {
         pollingTask?.cancel()
         pollingTask = nil
+        runID = nil
+        sleepTask?.cancel()
+        sleepTask = nil
+        if let enqueueObserver {
+            NotificationCenter.default.removeObserver(enqueueObserver)
+            self.enqueueObserver = nil
+        }
     }
 
     /// Sends a one-off test event to the webhook URL.
@@ -66,30 +106,65 @@ public actor EventOutboxService {
 
     // MARK: - Polling loop
 
-    private func runPollingLoop() async {
-        while !Task.isCancelled {
-            await pollAndDeliver()
-            try? await Task.sleep(for: .seconds(10))
+    private func wake() {
+        wakeRevision &+= 1
+        sleepTask?.cancel()
+    }
+
+    private func runPollingLoop(id: UUID) async {
+        while !Task.isCancelled, runID == id {
+            let revision = wakeRevision
+            let nextDueAt = await pollAndDeliver()
+            guard !Task.isCancelled, runID == id else { return }
+            // An enqueue/config change during delivery must not be lost just
+            // because there wasn't yet a sleep task to cancel.
+            guard revision == wakeRevision else { continue }
+            let delay = Self.nextPollDelay(
+                now: Date(), nextDueAt: nextDueAt,
+                endpointRetryAt: endpointRetryAt, isConfigured: webhookURL != nil
+            )
+            let sleeper = Task<Void, Never> {
+                do { try await Task.sleep(for: .seconds(delay)) } catch { }
+            }
+            sleepTask = sleeper
+            await sleeper.value
+            guard runID == id else { return }
+            sleepTask = nil
         }
     }
 
-    private func pollAndDeliver() async {
+    static func nextPollDelay(
+        now: Date, nextDueAt: Date?, endpointRetryAt: Date?, isConfigured: Bool
+    ) -> TimeInterval {
+        guard isConfigured else { return fallbackInterval }
+        let due = max(nextDueAt ?? now.addingTimeInterval(fallbackInterval), endpointRetryAt ?? now)
+        return min(fallbackInterval, max(0.1, due.timeIntervalSince(now)))
+    }
+
+    private func pollAndDeliver() async -> Date? {
+        guard !isDelivering else { return nil }
+        isDelivering = true
+        defer { isDelivering = false }
         guard let webhookURL else {
-            await recordQueueObservation()
-            return
+            return await recordQueueObservation()
         }
-        let events = await fetchDeliverableEvents()
-        for event in events {
-            guard !Task.isCancelled else { return }
-            await deliver(event: event, to: webhookURL)
+        if endpointRetryAt.map({ $0 > Date() }) != true {
+            let events = await fetchDeliverableEvents()
+            for event in events {
+                guard !Task.isCancelled else { return nil }
+                // Configuration can change while an HTTP request is in flight.
+                guard self.webhookURL == webhookURL else { break }
+                await deliver(event: event, to: webhookURL)
+                if endpointRetryAt.map({ $0 > Date() }) == true { break }
+            }
         }
-        await recordQueueObservation()
+        return await recordQueueObservation()
     }
 
     /// Performs one queue observation and delivery pass. Kept internal for deterministic
     /// integration tests and for callers that need an immediate flush after configuration.
     func pollOnce() async {
-        await pollAndDeliver()
+        _ = await pollAndDeliver()
     }
 
     // MARK: - Fetch
@@ -121,12 +196,14 @@ public actor EventOutboxService {
                     throw eventOutboxSQLiteError(db, operation: "read pending events")
                 }
 
-                // Retryable events — include all, filter by backoff window in Swift
+                // Filter before limiting: an older, long-backoff row must not
+                // prevent a newer row whose short backoff has elapsed from retrying.
                 let retryableSql = """
                 SELECT id, event_type, payload, retry_count, idempotency_key, last_attempt, created_at
                 FROM event_outbox
                 WHERE status = 'failed_retryable'
-                ORDER BY last_attempt ASC
+                  AND \(Self.retryDueSQL) <= unixepoch('now')
+                ORDER BY \(Self.retryDueSQL) ASC
                 LIMIT 20;
                 """
                 var retryStmt: OpaquePointer?
@@ -136,7 +213,7 @@ public actor EventOutboxService {
                 defer { sqlite3_finalize(retryStmt) }
                 var retryableStep = sqlite3_step(retryStmt)
                 while retryableStep == SQLITE_ROW {
-                    if let row = OutboxRow(statement: retryStmt), row.isBackoffElapsed {
+                    if let row = OutboxRow(statement: retryStmt) {
                         rows.append(row)
                     }
                     retryableStep = sqlite3_step(retryStmt)
@@ -181,7 +258,11 @@ public actor EventOutboxService {
         do {
             return try await manager.query { db in
                 let sql = """
-                SELECT status, COUNT(*), MIN(created_at)
+                SELECT status, COUNT(*), MIN(created_at), MIN(CASE status
+                    WHEN 'pending' THEN 0
+                    WHEN 'failed_retryable' THEN \(Self.retryDueSQL)
+                    WHEN 'delivering' THEN COALESCE(unixepoch(last_attempt) + 300, 0)
+                    ELSE NULL END)
                 FROM event_outbox
                 GROUP BY status;
                 """
@@ -200,6 +281,10 @@ public actor EventOutboxService {
                     }
                     let status = String(cString: statusPointer)
                     let count = Int(sqlite3_column_int64(stmt, 1))
+                    if sqlite3_column_type(stmt, 3) != SQLITE_NULL {
+                        let dueAt = Date(timeIntervalSince1970: sqlite3_column_double(stmt, 3))
+                        observation.nextDueAt = observation.nextDueAt.map { min($0, dueAt) } ?? dueAt
+                    }
                     let oldest = sqlite3_column_text(stmt, 2).flatMap {
                         parseEventOutboxSQLiteDate(String(cString: $0))
                     }
@@ -234,8 +319,8 @@ public actor EventOutboxService {
         }
     }
 
-    private func recordQueueObservation() async {
-        guard let observation = await fetchQueueObservation() else { return }
+    private func recordQueueObservation() async -> Date? {
+        guard let observation = await fetchQueueObservation() else { return nil }
         await PerformanceDiagnostics.shared.recordEventOutboxQueue(
             pendingCount: observation.pendingCount,
             deliveringCount: observation.deliveringCount,
@@ -244,6 +329,7 @@ public actor EventOutboxService {
             sentCount: observation.sentCount,
             oldestUndeliveredAt: observation.oldestUndeliveredAt
         )
+        return observation.nextDueAt
     }
 
     // MARK: - Delivery
@@ -252,11 +338,13 @@ public actor EventOutboxService {
         await updateStatus(id: event.id, status: "delivering")
 
         let deliveryStartedAt = Date()
+        let configurationSecret = hmacSecret
         let outcome = await attemptDelivery(event: event, to: webhookURL)
         let deliveryFinishedAt = Date()
+        let newRetryCount = event.retryCount + 1
         let diagnosticOutcome: PerformanceDiagnostics.EventOutboxDeliveryOutcome = switch outcome {
         case .success: .succeeded
-        case .retryable: .retryableFailure
+        case .retryable: newRetryCount >= Self.maxRetries ? .terminalFailure : .retryableFailure
         case .terminal: .terminalFailure
         }
         await PerformanceDiagnostics.shared.recordEventOutboxDelivery(
@@ -265,7 +353,22 @@ public actor EventOutboxService {
             outcome: diagnosticOutcome,
             finishedAt: deliveryFinishedAt
         )
-        let newRetryCount = event.retryCount + 1
+        // One failing endpoint should not burn the retry budget of every queued
+        // event in a burst. Keep untouched events queued until the endpoint recovers.
+        if self.webhookURL == webhookURL, hmacSecret == configurationSecret {
+            switch outcome {
+            case .success:
+                consecutiveEndpointFailures = 0
+                endpointRetryAt = nil
+            case .retryable(let retryAfter):
+                consecutiveEndpointFailures += 1
+                let index = min(consecutiveEndpointFailures - 1, Self.backoffIntervals.count - 1)
+                let delay = max(min(3_600, Self.backoffIntervals[index]), retryAfter ?? 0)
+                endpointRetryAt = deliveryFinishedAt.addingTimeInterval(delay)
+            case .terminal:
+                break
+            }
+        }
 
         switch outcome {
         case .success:
@@ -278,7 +381,11 @@ public actor EventOutboxService {
         }
     }
 
-    private enum DeliveryOutcome { case success, retryable, terminal }
+    private enum DeliveryOutcome: Equatable {
+        case success
+        case retryable(retryAfter: TimeInterval? = nil)
+        case terminal
+    }
 
     private func attemptDelivery(event: OutboxRow, to webhookURL: URL) async -> DeliveryOutcome {
         guard let payloadData = event.payload.data(using: .utf8) else { return .terminal }
@@ -299,14 +406,37 @@ public actor EventOutboxService {
 
         do {
             let (_, response) = try await urlSession.data(for: request)
-            guard let http = response as? HTTPURLResponse else { return .retryable }
+            guard let http = response as? HTTPURLResponse else {
+                Logger.storage.warning("Event delivery failed: non-HTTP response")
+                return .retryable()
+            }
             let code = http.statusCode
             if (200..<300).contains(code) || code == 409 { return .success }
-            if code == 408 || code == 429 || (500..<600).contains(code) { return .retryable }
+            // Response bodies, endpoint URLs, request payloads and error descriptions
+            // can contain credentials/user data. Log only a numeric status/code.
+            Logger.storage.warning("Event delivery failed: HTTP \(code)")
+            if code == 408 || code == 429 || (500..<600).contains(code) {
+                return .retryable(retryAfter: Self.retryAfterDelay(http.value(forHTTPHeaderField: "Retry-After")))
+            }
             return .terminal
         } catch {
-            return .retryable
+            Logger.storage.warning("Event delivery failed: transport error code \((error as NSError).code)")
+            return .retryable()
         }
+    }
+
+    static func retryAfterDelay(_ header: String?, now: Date = Date()) -> TimeInterval? {
+        guard let header else { return nil }
+        let value = header.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let seconds = TimeInterval(value), seconds.isFinite, seconds >= 0 {
+            return min(seconds, 86_400)
+        }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss z"
+        guard let date = formatter.date(from: value) else { return nil }
+        return min(86_400, max(0, date.timeIntervalSince(now)))
     }
 
     // MARK: - Signing
@@ -413,12 +543,6 @@ private struct OutboxRow {
         }
     }
 
-    var isBackoffElapsed: Bool {
-        guard let lastAttempt else { return true }
-        let index = min(retryCount - 1, EventOutboxService.backoffIntervals.count - 1)
-        let interval = EventOutboxService.backoffIntervals[max(0, index)]
-        return Date().timeIntervalSince(lastAttempt) >= interval
-    }
 }
 
 private struct OutboxQueueObservation: Sendable {
@@ -428,6 +552,7 @@ private struct OutboxQueueObservation: Sendable {
     var terminalCount = 0
     var sentCount = 0
     var oldestUndeliveredAt: Date?
+    var nextDueAt: Date?
 
     mutating func includeUndelivered(_ date: Date?) {
         guard let date else { return }

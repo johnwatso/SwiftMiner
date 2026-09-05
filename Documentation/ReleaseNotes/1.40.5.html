@@ -4,6 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SwiftMiner 1.40.5 - Release Notes</title>
+  <meta name="description" content="Release notes for SwiftMiner 1.40.5: claiming one tier of a campaign no longer claims the rest, Overview's prioritised games become a priority queue with higher-contrast cards, and the web dashboard's miner page is rebuilt around one adaptive state card.">
+  <link rel="canonical" href="https://swiftminer.app/release-notes/1.40.5.html">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
   <style>
     :root { color-scheme: light dark; }
     body { margin: 0; padding: 32px 20px 48px; font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f4f6f8; color: #0f1720; }
@@ -23,8 +28,8 @@
 <body>
   <main>
     <h1>SwiftMiner 1.40.5</h1>
-    <p class="meta">Version 1.40.5 &middot; Build 2026090414</p>
-    <p class="intro">1.40.4 stopped a reward claimed in one campaign counting as claimed in another. This finishes the job: it no longer counts as claimed in the <em>same</em> campaign&rsquo;s other tiers either. Overview&rsquo;s prioritised games also become a proper priority queue.</p>
+    <p class="meta">Version 1.40.5 &middot; Build 2026090415</p>
+    <p class="intro">1.40.4 stopped a reward claimed in one campaign counting as claimed in another. This finishes the job: it no longer counts as claimed in the <em>same</em> campaign&rsquo;s other tiers either. Overview&rsquo;s prioritised games become a proper priority queue, its cards read as cards again, and the web dashboard&rsquo;s miner page is rebuilt around a single state card.</p>
 
     <section>
       <h2>&#128029; Bug fixes</h2>
@@ -39,6 +44,28 @@
       <ul>
         <li>The prioritised games section is now a Priority Queue and says so, with global game priority distinguished from the miner-specific next actions that belong in Miners. Cards carry a rank badge, and the leader is marked TOP rather than NEXT, because the highest global priority is not a promise about any one miner&rsquo;s next campaign.</li>
         <li>One horizontal row that scrolls rather than wrapping, with paging chevrons when it overflows, so the order visibly means something. Cards are smaller and artwork-only, keeping the game name in the accessibility label and tooltip, and a game with nothing to earn shows no chip at all.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#127912; Overview Cards Read as Cards</h2>
+      <ul>
+        <li>Overview&rsquo;s cards leaned on a thin material over a translucent fill, which washed them out against the window behind. They now sit on a solid wash with firmer strokes, so a card has an edge and the rank badges, TOP pill and drop labels stay legible over artwork.</li>
+        <li>The Up Next block no longer reserves a third of a card to say nothing. Overview omits the section when there is nothing queued, and Miners &mdash; the detail view that can answer the question properly &mdash; still states it.</li>
+        <li>Miner cards lose their fixed height and fill the grid row instead, so an idle card is only as tall as what it has to say, and five miners fit on one row.</li>
+        <li>The status legend is grouped by what each state asks of you, and lists only the states a miner can actually reach. Stream Override is explained, and the near-identical startup, session-refresh and post-stall states are described once as Reconnecting.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#128421; A Rebuilt Miner Dashboard on the Web</h2>
+      <ul>
+        <li>The web dashboard&rsquo;s per-miner page read as a settings form: a tall profile, a status banner, a separate Up Next card repeating it, and three cards describing one priority decision. It is now a status read, top to bottom &mdash; the account, what the miner is doing, how it chooses, what is blocking it, and what it finished.</li>
+        <li>One adaptive state card replaces the status banner and the Up Next card. It takes the shape the moment calls for: Currently Mining with artwork, progress, channel and countdown; Up Next; a miner-level problem; or a compact &ldquo;Up to Date&rdquo;. An idle miner no longer says the same thing twice in two cards.</li>
+        <li>Up Next names a campaign only when it can genuinely be ranked &mdash; eligible now, not sub-gated, not excluded, not already raising an issue, and the miner running. Anything short of that reports as waiting instead of guessing.</li>
+        <li>Priorities is a single card, summary first, with the source named and its three-way control disclosed on demand. Personal priorities are an ordered, numbered queue with artwork, and reordering and removal sit behind a per-row menu.</li>
+        <li>Completed drops show the four most recent, with the full history behind a link. The account header is more compact, exception cards appear only when they apply, and the footer reports the version the running process actually has.</li>
+        <li>The Global + Personal priority source is now called Hybrid everywhere &mdash; the app, the dashboard and the operator-priorities help page. Direct messages used to call the same setting &ldquo;Mixed&rdquo;. The stored and API values are unchanged, so configured miners keep their setting.</li>
       </ul>
     </section>
 
