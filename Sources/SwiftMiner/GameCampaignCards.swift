@@ -433,11 +433,30 @@ struct GameArtworkCard: View {
 struct BeautifulRewardCard: View {
     let drop: DropViewData
     @State private var isHovered = false
+    @State private var loadedArtwork: LoadedCampaignArtwork?
 
     /// Deliberately smaller than the 120x160 game artwork, so each card keeps one
     /// dominant image, but large enough to read mixed reward shapes at a glance.
     private let wellSize: CGFloat = 88
     private let wellRadius: CGFloat = 12
+
+    private var resolvedURL: URL? {
+        drop.imageURL?.highResolutionArtworkURL
+    }
+
+    private var artworkImage: NSImage? {
+        guard loadedArtwork?.url == resolvedURL else { return nil }
+        return loadedArtwork?.image
+    }
+
+    /// Square reward art carries its own background, so fitting it inside the well's
+    /// padding drew a box inside a box. Let it fill instead — at equal sides there is
+    /// nothing to crop. The tolerance keeps any near-square art within a few percent of
+    /// a side, so nothing meaningfully off-square is ever cropped to fit.
+    private var artworkFillsWell: Bool {
+        guard let size = artworkImage?.size, size.width > 0, size.height > 0 else { return false }
+        return abs((size.width / size.height) - 1) <= 0.06
+    }
 
     var body: some View {
         VStack(spacing: 6) {
@@ -450,6 +469,15 @@ struct BeautifulRewardCard: View {
             isHovered = hovering
         }
         .help(helpText)
+        .task(id: resolvedURL) {
+            guard let resolvedURL else {
+                loadedArtwork = nil
+                return
+            }
+            let image = await CampaignArtworkCache.shared.image(for: resolvedURL)
+            guard !Task.isCancelled else { return }
+            loadedArtwork = image.map { LoadedCampaignArtwork(url: resolvedURL, image: $0) }
+        }
     }
 
     /// Twitch reward art arrives at assorted aspect ratios with transparent bounds, so a
@@ -458,36 +486,36 @@ struct BeautifulRewardCard: View {
     /// the row. The fill sits just above the card behind it; any heavier and the shelf
     /// reads as a row of nested cards.
     private var rewardWell: some View {
-        artwork
-            .padding(10)
-            .frame(width: wellSize, height: wellSize)
-            .background(
-                RoundedRectangle(cornerRadius: wellRadius, style: .continuous)
-                    .fill(.white.opacity(isHovered ? 0.10 : 0.06))
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: wellRadius, style: .continuous)
-                    .strokeBorder(.white.opacity(isHovered ? 0.16 : 0.08), lineWidth: 1)
-            }
-            .overlay(alignment: .topTrailing) {
-                statusBadge.padding(5)
-            }
+        ZStack {
+            RoundedRectangle(cornerRadius: wellRadius, style: .continuous)
+                .fill(.white.opacity(isHovered ? 0.10 : 0.06))
+
+            artwork
+        }
+        .frame(width: wellSize, height: wellSize)
+        .clipShape(RoundedRectangle(cornerRadius: wellRadius, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: wellRadius, style: .continuous)
+                .strokeBorder(.white.opacity(isHovered ? 0.16 : 0.08), lineWidth: 1)
+        }
+        .overlay(alignment: .topTrailing) {
+            statusBadge.padding(5)
+        }
     }
 
+    /// Loaded through the shared campaign artwork cache rather than `AsyncImage`, both to
+    /// reuse the memory and disk cache the rest of the app fills and because the decoded
+    /// image is what tells us whether this reward is square.
+    @ViewBuilder
     private var artwork: some View {
-        Group {
-            if let url = drop.imageURL?.highResolutionArtworkURL {
-                AsyncImage(url: url) { image in
-                    image
-                        .resizable()
-                        .interpolation(.high)
-                        .scaledToFit()
-                } placeholder: {
-                    placeholderArtwork
-                }
-            } else {
-                placeholderArtwork
-            }
+        if let artworkImage {
+            Image(nsImage: artworkImage)
+                .resizable()
+                .interpolation(.high)
+                .aspectRatio(contentMode: artworkFillsWell ? .fill : .fit)
+                .padding(artworkFillsWell ? 0 : 10)
+        } else {
+            placeholderArtwork.padding(10)
         }
     }
 
