@@ -178,6 +178,14 @@ public actor TwitchAPIClient {
     private var integrityToken: String?
     private var integrityTokenExpiry: Date = .distantPast
 
+    /// Operations whose persisted-query hash failed on every attempt, and when.
+    /// A hash Twitch has genuinely retired fails the same way every time, so retrying
+    /// it would simply triple the traffic to a call that cannot succeed.
+    private var exhaustedPersistedQueries: [String: Date] = [:]
+    /// How long an operation stays marked before it is worth a full retry again, in
+    /// case Twitch re-registers the hash.
+    private static let persistedQueryRetrySuppression: TimeInterval = 1_800
+
     /// Authenticated user's login name — used as channelLogin in DropCampaignDetails
     var userLogin: String = ""
 
@@ -1166,22 +1174,51 @@ public actor TwitchAPIClient {
                 case 200..<300:
                     // GQL errors arrive as HTTP 200 with a body-level error array.
                     // Detect PersistedQueryNotFound so callers get a clear signal.
+                    var persistedQueryMissing = false
                     if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                        let errors = json["errors"] as? [[String: Any]] {
                         for gqlError in errors {
                             if let msg = gqlError["message"] as? String {
                                 if msg.contains("PersistedQueryNotFound") {
-                                    Logger.api.error("[GQL] PersistedQueryNotFound for \(operationName)")
-                                    throw TwitchMinerError.twitchAPICompatibility(
-                                        operation: operationName,
-                                        reason: "Twitch no longer recognises this persisted query."
-                                    )
+                                    persistedQueryMissing = true
+                                } else {
+                                    // Log other GQL errors too
+                                    Logger.api.warning("[GQL] Error: \(msg)")
                                 }
-                                // Log other GQL errors too
-                                Logger.api.warning("[GQL] Error: \(msg)")
                             }
                         }
                     }
+
+                    if persistedQueryMissing {
+                        // Twitch registers persisted queries per edge node, so a hash the
+                        // rest of the fleet accepts can miss on the one node that answered.
+                        // Treating the first miss as "this app is out of date" told the user
+                        // to update over an operation that succeeds thousands of times an
+                        // hour, so retry before believing it.
+                        let compatibility = TwitchMinerError.twitchAPICompatibility(
+                            operation: operationName,
+                            reason: "Twitch no longer recognises this persisted query."
+                        )
+                        let isKnownExhausted = exhaustedPersistedQueries[operationName].map {
+                            Date().timeIntervalSince($0) < Self.persistedQueryRetrySuppression
+                        } ?? false
+
+                        guard attempt < maxAttempts, !isKnownExhausted else {
+                            if !isKnownExhausted {
+                                exhaustedPersistedQueries[operationName] = Date()
+                            }
+                            Logger.api.error("[GQL] PersistedQueryNotFound for \(operationName) after \(attempt) attempt(s)")
+                            throw compatibility
+                        }
+
+                        let delay = retryDelay(for: attempt)
+                        Logger.api.warning("[GQL] PersistedQueryNotFound for \(operationName) (attempt \(attempt)/\(maxAttempts)); retrying in \(String(format: "%.1f", delay))s")
+                        try await sleepBeforeRetry(delay)
+                        lastError = compatibility
+                        continue
+                    }
+
+                    exhaustedPersistedQueries[operationName] = nil
                     return RequestResult(
                         data: data,
                         retryCount: attempt - 1,

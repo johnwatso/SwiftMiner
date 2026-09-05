@@ -452,7 +452,14 @@ enum LogExporter {
             out += " observed=\(formatter.string(from: outbox.observedAt))\n"
             out += "  deliveries: attempts=\(outbox.deliveryAttemptCount) ok=\(outbox.successfulDeliveryCount) retryable=\(outbox.retryableFailureCount) terminal=\(outbox.terminalFailureCount)"
             out += " networkAvg=\(formatPerfDuration(outbox.averageNetworkSeconds)) networkMax=\(formatPerfDuration(outbox.maxNetworkSeconds))"
-            out += " endToEndAvg=\(formatPerfDuration(outbox.averageEndToEndSeconds)) endToEndMax=\(formatPerfDuration(outbox.maxEndToEndSeconds))\n"
+            out += " endToEndAvg=\(formatPerfDuration(outbox.averageEndToEndSeconds)) endToEndMax=\(formatPerfDuration(outbox.maxEndToEndSeconds))"
+            if let lastFailure = outbox.lastFailure {
+                out += " lastError=\"\(lastFailure)\""
+                if let lastFailureAt = outbox.lastFailureAt {
+                    out += " lastErrorAt=\(formatter.string(from: lastFailureAt))"
+                }
+            }
+            out += "\n"
         }
 
         if performance.miningCycles.isEmpty {
