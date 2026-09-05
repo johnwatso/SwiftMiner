@@ -1565,29 +1565,41 @@ struct MinerLiveActivityTimerView: View {
     let accent: Color
     var label: String? = nil
 
+    @Environment(\.controlActiveState) private var controlActiveState
+
     var body: some View {
-        TimelineView(.periodic(from: anchor, by: 1)) { context in
-            let elapsed = max(0, context.date.timeIntervalSince(anchor))
-            HStack(spacing: 5) {
-                PulsingActivityDot(color: accent)
+        if controlActiveState == .inactive {
+            // No second-by-second layout work is needed in the background. The
+            // foreground timeline recomputes elapsed time from the original anchor.
+            timerContent(at: Date())
+        } else {
+            TimelineView(.periodic(from: anchor, by: 1)) { context in
+                timerContent(at: context.date)
+            }
+        }
+    }
 
-                Image(systemName: "timer")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.tertiary)
+    private func timerContent(at date: Date) -> some View {
+        let elapsed = max(0, date.timeIntervalSince(anchor))
+        return HStack(spacing: 5) {
+            PulsingActivityDot(color: accent)
 
-                if let label {
-                    Text(label)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+            Image(systemName: "timer")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.tertiary)
 
-                Text(Self.formatElapsed(elapsed))
-                    .font(.caption.weight(.medium).monospacedDigit())
+            if let label {
+                Text(label)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            .padding(.top, 2)
-            .accessibilityLabel("\(label ?? "Active") for \(Self.formatElapsed(elapsed))")
+
+            Text(Self.formatElapsed(elapsed))
+                .font(.caption.weight(.medium).monospacedDigit())
+                .foregroundStyle(.secondary)
         }
+        .padding(.top, 2)
+        .accessibilityLabel("\(label ?? "Active") for \(Self.formatElapsed(elapsed))")
     }
 
     static func formatElapsed(_ interval: TimeInterval) -> String {
@@ -1605,15 +1617,26 @@ struct MinerLiveActivityTimerView: View {
 /// A small dot that gently pulses to signal the miner is alive and working.
 private struct PulsingActivityDot: View {
     let color: Color
-    @State private var pulsing = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.controlActiveState) private var controlActiveState
 
     var body: some View {
+        if reduceMotion || controlActiveState == .inactive {
+            dot
+        } else {
+            dot.phaseAnimator([false, true]) { content, pulsing in
+                content
+                    .opacity(pulsing ? 0.3 : 1.0)
+                    .scaleEffect(pulsing ? 0.82 : 1.0)
+            } animation: { _ in
+                .easeInOut(duration: 0.9)
+            }
+        }
+    }
+
+    private var dot: some View {
         Circle()
             .fill(color)
             .frame(width: 7, height: 7)
-            .opacity(pulsing ? 0.3 : 1.0)
-            .scaleEffect(pulsing ? 0.82 : 1.0)
-            .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: pulsing)
-            .onAppear { pulsing = true }
     }
 }

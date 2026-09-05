@@ -484,7 +484,8 @@ extension MinerManager {
     ) {
         guard let index = miners.firstIndex(where: { $0.id == minerId }) else { return }
 
-        var miner = miners[index]
+        let previous = miners[index]
+        var miner = previous
         if let status = status {
             if status != miner.status { miner.statusChangedAt = Date() }
             miner.status = status
@@ -504,6 +505,18 @@ extension MinerManager {
         if let needsAuth = needsAuth { miner.needsAuth = needsAuth }
         if let priorityGames = priorityGames { miner.priorityGames = priorityGames }
         if let ownerId = ownerDiscordId { miner.ownerDiscordId = ownerId }
+
+        // Repeated engine snapshots still count as successful polls in the supervisor,
+        // but should not invalidate every view that observes the miners collection.
+        guard miner.status != previous.status
+            || miner.currentCampaign != previous.currentCampaign
+            || miner.currentCampaignId != previous.currentCampaignId
+            || miner.allCampaigns != previous.allCampaigns
+            || miner.campaignsAreProvisional != previous.campaignsAreProvisional
+            || miner.isRunning != previous.isRunning
+            || miner.needsAuth != previous.needsAuth
+            || miner.priorityGames != previous.priorityGames
+            || miner.ownerDiscordId != previous.ownerDiscordId else { return }
 
         miners[index] = miner
         onMinersChanged?()

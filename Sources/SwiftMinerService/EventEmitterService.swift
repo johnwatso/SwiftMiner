@@ -204,7 +204,7 @@ public actor EventEmitterService {
             return
         }
         do {
-            try await manager.execute { db in
+            let inserted = try await manager.execute { db in
                 let sql = """
                 INSERT OR IGNORE INTO event_outbox (id, event_type, payload, idempotency_key, status)
                 VALUES (?, ?, ?, ?, 'pending');
@@ -221,6 +221,10 @@ public actor EventEmitterService {
                 guard sqlite3_step(stmt) == SQLITE_DONE else {
                     throw eventEmitterSQLiteError(db, operation: "insert outbox event")
                 }
+                return sqlite3_changes(db) > 0
+            }
+            if inserted {
+                NotificationCenter.default.post(name: EventOutboxService.eventEnqueued, object: manager)
             }
         } catch {
             Logger.storage.error("Failed to persist outbox event \(envelope.eventType): \(error.localizedDescription)")

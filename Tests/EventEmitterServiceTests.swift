@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 import SQLite3
 import XCTest
 import SwiftMinerCore
@@ -160,5 +161,175 @@ final class EventEmitterServiceTests: XCTestCase {
             return String(cString: value)
         }
         XCTAssertEqual(deliveredStatus, "sent")
+    }
+
+    func testDueRetryIsNotHiddenBehindTwentyWaitingRowsAndKeepsSignedPayload() async throws {
+        let manager = try await makeOutboxDatabase()
+        try await manager.execute("""
+        WITH RECURSIVE numbers(n) AS (VALUES(1) UNION ALL SELECT n + 1 FROM numbers WHERE n < 21)
+        INSERT INTO event_outbox (id, event_type, payload, status, retry_count, last_attempt)
+        SELECT 'waiting-' || n, 'system.test', '{}', 'failed_retryable', 5, datetime('now', '-2 hours')
+        FROM numbers;
+        INSERT INTO event_outbox (id, event_type, payload, idempotency_key, status, retry_count, last_attempt)
+        VALUES ('due', 'system.test', '{"idempotency":"unchanged"}', 'due-key', 'failed_retryable', 1, datetime('now', '-1 minute'));
+        """)
+        let session = makeOutboxSession { request in
+            XCTAssertEqual(request.value(forHTTPHeaderField: "X-SwiftMiner-Event-Id"), "due")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "X-SwiftMiner-Delivery-Attempt"), "2")
+            let body = try XCTUnwrap(request.httpBody)
+            XCTAssertEqual(String(data: body, encoding: .utf8), #"{"idempotency":"unchanged"}"#)
+            let timestamp = try XCTUnwrap(request.value(forHTTPHeaderField: "X-SwiftMiner-Timestamp"))
+            let message = Data("\(timestamp).\(String(decoding: body, as: UTF8.self))".utf8)
+            let signature = HMAC<SHA256>.authenticationCode(for: message, using: SymmetricKey(data: Data("test-secret".utf8)))
+            XCTAssertEqual(request.value(forHTTPHeaderField: "X-SwiftMiner-Signature"),
+                           "v1=" + signature.map { String(format: "%02x", $0) }.joined())
+            return (HTTPURLResponse(url: request.url!, statusCode: 409, httpVersion: nil, headerFields: nil)!, Data())
+        }
+        let service = makeOutboxService(manager: manager, session: session)
+        await service.pollOnce()
+
+        let snapshot = await PerformanceDiagnostics.shared.snapshot()
+        XCTAssertEqual(snapshot.eventOutbox?.sentCount, 1)
+        XCTAssertEqual(snapshot.eventOutbox?.retryableCount, 21)
+        XCTAssertEqual(snapshot.eventOutbox?.deliveryAttemptCount, 1)
+    }
+
+    func testEndpointOutagePausesBatchWithoutConsumingOtherEventsRetriesAndConfigRecovers() async throws {
+        let manager = try await makeOutboxDatabase()
+        try await manager.execute("""
+        INSERT INTO event_outbox (id, event_type, payload, status)
+        VALUES ('one', 'system.test', '{}', 'pending'),
+               ('two', 'system.test', '{}', 'pending'),
+               ('three', 'system.test', '{}', 'pending');
+        """)
+        let session = makeOutboxSession { request in
+            let status = request.value(forHTTPHeaderField: "X-SwiftMiner-Event-Id") == "one" ? 503 : 204
+            return (HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil,
+                                    headerFields: ["Retry-After": "120"])!, Data())
+        }
+        let service = makeOutboxService(manager: manager, session: session)
+        await service.pollOnce()
+        await service.pollOnce()
+
+        var snapshot = await PerformanceDiagnostics.shared.snapshot()
+        XCTAssertEqual(snapshot.eventOutbox?.deliveryAttemptCount, 1)
+        XCTAssertEqual(snapshot.eventOutbox?.pendingCount, 2)
+        XCTAssertEqual(snapshot.eventOutbox?.retryableCount, 1)
+
+        MockURLProtocol.requestHandler = { request in
+            (HTTPURLResponse(url: request.url!, statusCode: 204, httpVersion: nil, headerFields: nil)!, Data())
+        }
+        try await manager.execute("UPDATE event_outbox SET last_attempt = datetime('now', '-1 minute') WHERE status = 'failed_retryable';")
+        await service.updateConfig(webhookURL: URL(string: "https://swiftminer.example.com/events"), hmacSecret: "updated-secret")
+        await service.pollOnce()
+        snapshot = await PerformanceDiagnostics.shared.snapshot()
+        XCTAssertEqual(snapshot.eventOutbox?.deliveryAttemptCount, 4)
+        XCTAssertEqual(snapshot.eventOutbox?.sentCount, 3)
+        XCTAssertEqual(snapshot.eventOutbox?.retryableCount, 0)
+        XCTAssertEqual(snapshot.eventOutbox?.terminalCount, 0)
+    }
+
+    func testExhaustedRetryCountsAsTerminalFailure() async throws {
+        let manager = try await makeOutboxDatabase()
+        try await manager.execute("""
+        INSERT INTO event_outbox (id, event_type, payload, status, retry_count, last_attempt)
+        VALUES ('exhausted', 'system.test', '{}', 'failed_retryable', 5, datetime('now', '-7 hours'));
+        """)
+        let session = makeOutboxSession { request in
+            (HTTPURLResponse(url: request.url!, statusCode: 503, httpVersion: nil, headerFields: nil)!, Data())
+        }
+        await makeOutboxService(manager: manager, session: session).pollOnce()
+        let snapshot = await PerformanceDiagnostics.shared.snapshot()
+        XCTAssertEqual(snapshot.eventOutbox?.terminalCount, 1)
+        XCTAssertEqual(snapshot.eventOutbox?.terminalFailureCount, 1)
+        XCTAssertEqual(snapshot.eventOutbox?.retryableFailureCount, 0)
+    }
+
+    func testEnqueueWakesIdleOutboxAndConfigurationWakesDisabledOutbox() async throws {
+        let manager = try await makeOutboxDatabase()
+        let delivered = expectation(description: "new event delivered without waiting for fallback scan")
+        let session = makeOutboxSession { request in
+            delivered.fulfill()
+            return (HTTPURLResponse(url: request.url!, statusCode: 204, httpVersion: nil, headerFields: nil)!, Data())
+        }
+        let service = makeOutboxService(manager: manager, session: session)
+        addTeardownBlock { await service.stop() }
+        await service.start()
+        try await waitForOutboxObservation()
+        await EventEmitterService(manager: manager).emitUserDropClaimed(discordUserId: "user", dropId: "drop")
+        await fulfillment(of: [delivered], timeout: 2)
+        await service.stop()
+
+        await PerformanceDiagnostics.shared.reset()
+        let disabledService = EventOutboxService(manager: manager, webhookURL: nil, hmacSecret: "test-secret", urlSession: session)
+        addTeardownBlock { await disabledService.stop() }
+        await disabledService.start()
+        try await waitForOutboxObservation()
+        await EventEmitterService(manager: manager).emitUserDropClaimed(discordUserId: "user", dropId: "second-drop")
+        let enabledDelivery = expectation(description: "configuration change triggers delivery")
+        MockURLProtocol.requestHandler = { request in
+            enabledDelivery.fulfill()
+            return (HTTPURLResponse(url: request.url!, statusCode: 204, httpVersion: nil, headerFields: nil)!, Data())
+        }
+        await disabledService.updateConfig(webhookURL: URL(string: "https://swiftminer.example.com/events"), hmacSecret: "test-secret")
+        await fulfillment(of: [enabledDelivery], timeout: 2)
+        await disabledService.stop()
+    }
+
+    func testOutboxSchedulerSleepsUntilUsefulWorkWithBoundedExternalWriterFallback() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        XCTAssertEqual(EventOutboxService.nextPollDelay(now: now, nextDueAt: nil, endpointRetryAt: nil, isConfigured: true), 60)
+        XCTAssertEqual(EventOutboxService.nextPollDelay(now: now, nextDueAt: now, endpointRetryAt: nil, isConfigured: false), 60)
+        XCTAssertEqual(EventOutboxService.nextPollDelay(now: now, nextDueAt: now.addingTimeInterval(12), endpointRetryAt: nil, isConfigured: true), 12)
+        XCTAssertEqual(EventOutboxService.nextPollDelay(now: now, nextDueAt: now, endpointRetryAt: now.addingTimeInterval(30), isConfigured: true), 30)
+        XCTAssertEqual(EventOutboxService.nextPollDelay(now: now, nextDueAt: now.addingTimeInterval(600), endpointRetryAt: nil, isConfigured: true), 60)
+        XCTAssertEqual(EventOutboxService.nextPollDelay(now: now, nextDueAt: now, endpointRetryAt: nil, isConfigured: true), 0.1)
+        XCTAssertEqual(EventOutboxService.retryAfterDelay("120", now: now), 120)
+        XCTAssertEqual(EventOutboxService.retryAfterDelay("Fri, 15 Jan 2027 08:02:00 GMT", now: now), 120)
+        XCTAssertNil(EventOutboxService.retryAfterDelay("invalid", now: now))
+        XCTAssertNil(EventOutboxService.retryAfterDelay("-1", now: now))
+    }
+
+    private func makeOutboxDatabase() async throws -> SQLiteManager {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("SwiftMiner-Outbox-\(UUID().uuidString).sqlite")
+        let manager = SQLiteManager(databaseURL: url)
+        try await manager.open()
+        await PerformanceDiagnostics.shared.reset()
+        addTeardownBlock {
+            await PerformanceDiagnostics.shared.reset()
+            await manager.close()
+            try? FileManager.default.removeItem(at: url)
+        }
+        return manager
+    }
+
+    private func makeOutboxSession(
+        handler: @escaping (URLRequest) throws -> (HTTPURLResponse, Data)
+    ) -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        MockURLProtocol.requestHandler = handler
+        addTeardownBlock {
+            MockURLProtocol.requestHandler = nil
+            session.invalidateAndCancel()
+        }
+        return session
+    }
+
+    private func makeOutboxService(manager: SQLiteManager, session: URLSession) -> EventOutboxService {
+        EventOutboxService(manager: manager, webhookURL: URL(string: "https://swiftminer.example.com/events"),
+                           hmacSecret: "test-secret", urlSession: session)
+    }
+
+    private func waitForOutboxObservation() async throws {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        while await PerformanceDiagnostics.shared.snapshot().eventOutbox == nil {
+            guard ContinuousClock.now < deadline else {
+                XCTFail("Outbox did not finish its initial scan")
+                return
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
     }
 }

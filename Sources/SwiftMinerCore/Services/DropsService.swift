@@ -195,7 +195,8 @@ public actor DropsService {
     /// as the SOLE source of truth for claimed state.
     internal static func mergeInventory(
         _ snapshot: InventorySnapshot,
-        into campaigns: [Campaign]
+        into campaigns: [Campaign],
+        logClaims: Bool = true
     ) -> [Campaign] {
         // Twitch can return more than one progress record for a drop. Preserve
         // the most useful record instead of allowing a duplicate response to
@@ -280,7 +281,7 @@ public actor DropsService {
                     d.progress = nil
                 }
 
-                if claimedFromInventory {
+                if claimedFromInventory && logClaims {
                     Logger.campaigns.info("mergeInventory: '\(drop.name)' → CLAIMED via inventory benefit ID \(drop.benefitID)")
                 }
                 return d

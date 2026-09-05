@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SwiftMiner 1.40.6 - Release Notes</title>
+  <meta name="description" content="Release notes for SwiftMiner 1.40.6: the Drops page tells apart campaign tiers that share a reward identifier, so unfinished tiers keep their real watch progress and a grouped card no longer reads as claimed.">
+  <link rel="canonical" href="https://swiftminer.app/release-notes/1.40.6.html">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <style>
+    :root { color-scheme: light dark; }
+    body { margin: 0; padding: 32px 20px 48px; font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f4f6f8; color: #0f1720; }
+    main { max-width: 760px; margin: 0 auto; padding: 28px; border-radius: 22px; background: rgba(255, 255, 255, .86); border: 1px solid rgba(15, 23, 32, .08); box-shadow: 0 20px 60px rgba(15, 23, 32, .10); }
+    h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
+    h2 { margin: 0 0 8px; font-size: 20px; line-height: 1.2; }
+    .meta { margin: 0 0 18px; color: #52606d; font-size: 14px; }
+    .intro { margin: 0 0 24px; color: #384454; }
+    section { margin: 0 0 20px; padding: 18px 20px; border: 1px solid rgba(15, 23, 32, .08); border-radius: 16px; background: rgba(255, 255, 255, .5); }
+    ul { margin: 0; padding-left: 20px; }
+    li { margin: 0 0 8px; }
+    a { color: #0a67a3; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    @media (prefers-color-scheme: dark) { body { background: #0b1015; color: #edf2f7; } main { background: rgba(15, 23, 32, .88); border-color: rgba(159, 176, 194, .14); } .meta { color: #9fb0c2; } .intro { color: #c8d3df; } section { border-color: rgba(159, 176, 194, .18); background: rgba(255, 255, 255, .04); } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>SwiftMiner 1.40.6</h1>
+    <p class="meta">Version 1.40.6 &middot; Build 2026090511</p>
+    <p class="intro">1.40.5 taught mining to tell apart campaign tiers that share a reward identifier. The Drops page now does the same, so what you see there matches what SwiftMiner is actually still earning &mdash; and the app does noticeably less work to show it.</p>
+
+    <section>
+      <h2>&#128029; Bug fixes</h2>
+      <ul>
+        <li>The Drops page now uses the same per-reward reconciliation as mining, instead of independently treating a shared identifier as proof that every matching tier was collected. Unfinished tiers keep their real watch progress and no longer show green claimed checks.</li>
+        <li>When several live-window campaigns for one game share a Drops card, the subtitle now says that more campaigns are included. An older completed reward &mdash; or merely claiming the first tier of the current campaign &mdash; can no longer make the whole group read &ldquo;claimed &middot; not linked&rdquo; while rewards remain unfinished.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#9889; Quieter When You Are Not Looking</h2>
+      <ul>
+        <li>The Drops page used to rebuild every campaign&rsquo;s reconciled state separately for the list, the curated feed and each card you opened. It now reconciles an account once and shares that result, re-running only when Twitch&rsquo;s data changes or a campaign window opens or closes.</li>
+        <li>Live activity timers, pulsing dots and status-icon animations stop while SwiftMiner is in the background, and pick up where they belong when you come back. A window you are not looking at no longer animates at full rate.</li>
+        <li>Repeated engine reports that say nothing new no longer redraw the miner views. Screens refresh when a miner&rsquo;s state actually changes, not on every poll.</li>
+        <li>Webhook delivery no longer wakes every ten seconds to look at an empty queue. It sleeps until an event is queued or a retry is genuinely due.</li>
+      </ul>
+    </section>
+
+    <p class="meta"><a href="./index.html">All release notes</a></p>
+  </main>
+</body>
+</html>
