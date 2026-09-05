@@ -459,58 +459,12 @@ struct BeautifulRewardCard: View {
                     .strokeBorder(isHovered ? .white.opacity(0.20) : .white.opacity(0.08), lineWidth: 1)
             }
 
-            // Completion checkmark (Frosted Glass Outer Circle, Apple Photos selection style)
             if drop.isClaimed {
-                ZStack {
-                    Circle()
-                        .fill(.ultraThinMaterial)
-                        .frame(width: 18, height: 18)
-                        .shadow(color: .black.opacity(0.12), radius: 2)
-
-                    Circle()
-                        .fill(Color.green)
-                        .frame(width: 13, height: 13)
-
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 7.5, weight: .bold))
-                        .foregroundStyle(.white)
-                }
-                .frame(width: 76, height: 76, alignment: .topTrailing)
-                .padding(4)
+                statusBadge("checkmark", color: .green, glyphSize: 10)
             } else if drop.isSubscriptionRequired {
-                ZStack {
-                    Circle()
-                        .fill(.ultraThinMaterial)
-                        .frame(width: 18, height: 18)
-                        .shadow(color: .black.opacity(0.12), radius: 2)
-
-                    Circle()
-                        .fill(Color.pink)
-                        .frame(width: 13, height: 13)
-
-                    Image(systemName: "creditcard.fill")
-                        .font(.system(size: 6.5, weight: .bold))
-                        .foregroundStyle(.white)
-                }
-                .frame(width: 76, height: 76, alignment: .topTrailing)
-                .padding(4)
+                statusBadge("creditcard.fill", color: .pink, glyphSize: 9)
             } else if drop.isClaimable {
-                ZStack {
-                    Circle()
-                        .fill(.ultraThinMaterial)
-                        .frame(width: 18, height: 18)
-                        .shadow(color: .black.opacity(0.12), radius: 2)
-                    
-                    Circle()
-                        .fill(Color.orange)
-                        .frame(width: 13, height: 13)
-                    
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 7.5, weight: .bold))
-                        .foregroundStyle(.white)
-                }
-                .frame(width: 76, height: 76, alignment: .topTrailing)
-                .padding(4)
+                statusBadge("sparkles", color: .orange, glyphSize: 10)
             }
 
             // Duration Overlay Badge (Bottom Right)
@@ -528,9 +482,32 @@ struct BeautifulRewardCard: View {
         .onHover { hovering in
             isHovered = hovering
         }
-        .popover(isPresented: $isHovered, arrowEdge: .top) {
-            BeautifulRewardHoverCard(drop: drop)
+        .help(helpText)
+    }
+
+    /// A solid disc reads clearly over artwork on its own. The frosted ring this used
+    /// to sit in only drew a second edge around the glyph.
+    private func statusBadge(_ symbol: String, color: Color, glyphSize: CGFloat) -> some View {
+        Image(systemName: symbol)
+            .font(.system(size: glyphSize, weight: .bold))
+            .foregroundStyle(.white)
+            .frame(width: 18, height: 18)
+            .background(Circle().fill(color))
+            .shadow(color: .black.opacity(0.12), radius: 2)
+            .frame(width: 76, height: 76, alignment: .topTrailing)
+            .padding(4)
+    }
+
+    /// The card already shows the artwork, the claim state and the required minutes.
+    /// Only the reward's name and description are worth surfacing on hover, so this is
+    /// a tooltip rather than a popover covering the cards around it.
+    private var helpText: String {
+        var lines = ["\(drop.name) — \(statusTitle)"]
+        if let description = drop.description, !description.isEmpty {
+            lines.append(description)
         }
+        lines.append("Requires \(drop.requiredMinutes) min")
+        return lines.joined(separator: "\n")
     }
 
     private var statusTitle: String {
@@ -563,75 +540,6 @@ struct BeautifulRewardCard: View {
 struct CardStatusSummary {
     let title: String
     let icon: String
-}
-
-// MARK: - Premium Frosted Hover Card Popover
-struct BeautifulRewardHoverCard: View {
-    let drop: DropViewData
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                // Tiny reward artwork preview!
-                if let url = drop.imageURL?.highResolutionArtworkURL {
-                    AsyncImage(url: url) { image in
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    } placeholder: {
-                        RoundedRectangle(cornerRadius: 6).fill(.secondary.opacity(0.2))
-                    }
-                    .frame(width: 32, height: 32)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                }
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(drop.name)
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                    
-                    Text(statusText)
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(statusColor)
-                }
-            }
-            
-            if let desc = drop.description, !desc.isEmpty {
-                Text(desc)
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(3)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            
-            HStack(spacing: 4) {
-                Image(systemName: "clock")
-                    .font(.system(size: 9))
-                Text("Required: \(drop.requiredMinutes) min")
-                    .font(.system(size: 9, weight: .medium))
-            }
-            .foregroundStyle(.secondary.opacity(0.8))
-        }
-        .padding(12)
-        .frame(width: 200)
-    }
-
-    private var statusText: String {
-        if drop.isClaimed { return "Claimed" }
-        if drop.isClaimable { return "Ready to Claim" }
-        if drop.isSubscriptionRequired { return "Needs Paid Sub" }
-        if drop.progress > 0 { return "Mining (\(Int(drop.progress * 100))%)" }
-        return "Locked"
-    }
-
-    private var statusColor: Color {
-        if drop.isClaimed { return .green }
-        if drop.isClaimable { return .orange }
-        if drop.isSubscriptionRequired { return .pink }
-        if drop.progress > 0 { return .blue }
-        return .secondary
-    }
 }
 
 private extension TimeInterval {
