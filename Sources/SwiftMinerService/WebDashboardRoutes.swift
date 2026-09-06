@@ -702,12 +702,14 @@ public actor WebDashboardRoutes {
             let csrfToken: String
             let allowsOperatorAccountRemoval: Bool
             let appVersion: String?
+            let engineVersion: String
 
             enum CodingKeys: String, CodingKey {
                 case provider
                 case csrfToken
                 case allowsOperatorAccountRemoval = "allows_operator_account_removal"
                 case appVersion = "app_version"
+                case engineVersion = "engine_version"
             }
         }
         #if DEBUG
@@ -719,7 +721,8 @@ public actor WebDashboardRoutes {
             provider: s.principalType,
             csrfToken: s.csrfToken,
             allowsOperatorAccountRemoval: allowsOperatorAccountRemoval,
-            appVersion: Self.runningAppVersion
+            appVersion: Self.runningAppVersion,
+            engineVersion: MinerEngineVersion.current
         ))
     }
 

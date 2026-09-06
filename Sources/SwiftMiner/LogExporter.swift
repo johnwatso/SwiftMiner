@@ -164,6 +164,7 @@ enum LogExporter {
         out += "=== SwiftMiner Diagnostic Report ===\n"
         out += "Generated: \(iso.string(from: snapshot.generatedAt))\n"
         out += "App: \(snapshot.appVersion) (build \(snapshot.appBuild))\n"
+        out += "Engine: \(MinerEngineVersion.current) (updated \(MinerEngineVersion.updated))\n"
         out += "OS: \(snapshot.osVersion) · arch \(snapshot.arch)\n"
         out += "\n"
 

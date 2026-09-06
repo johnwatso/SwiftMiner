@@ -453,6 +453,17 @@ struct MiningSettingsView: View {
             } header: {
                 Text("Game Priority")
             }
+
+            Section {
+                LabeledContent("Version") {
+                    Text(MinerEngineVersion.current)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+                SettingsSecondaryText("Updated \(MinerEngineVersion.updated). The engine version moves only when the mining logic itself changes, so it lags the app version.")
+            } header: {
+                Text("Mining Engine")
+            }
         }
         .formStyle(.grouped)
         .padding(.horizontal, 24)

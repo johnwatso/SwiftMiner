@@ -362,7 +362,18 @@ struct MinerApp: App {
         paragraphStyle.alignment = .center
         paragraphStyle.lineSpacing = 3
 
+        // Sits directly under the app version, because the two answer different
+        // questions: which build is installed, and whether the mining logic in it
+        // has moved.
         let credits = NSMutableAttributedString(
+            string: "\(MinerEngineVersion.label)\n",
+            attributes: [
+                .font: NSFont.systemFont(ofSize: 11),
+                .foregroundColor: NSColor.secondaryLabelColor,
+                .paragraphStyle: paragraphStyle
+            ]
+        )
+        credits.append(NSAttributedString(
             string: "swiftminer.app",
             attributes: [
                 .font: NSFont.systemFont(ofSize: 11),
@@ -370,7 +381,7 @@ struct MinerApp: App {
                 .link: websiteURL,
                 .paragraphStyle: paragraphStyle
             ]
-        )
+        ))
         credits.append(NSAttributedString(
             string: "\nMade in NZ ",
             attributes: [

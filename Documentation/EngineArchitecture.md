@@ -2,6 +2,8 @@
 
 SwiftMinerCore is built around actor-isolated mining engines. A single `MinerEngine` manages one Twitch account. `MinerManager` owns one engine per account and presents a consolidated, main-actor-safe view to the macOS app.
 
+This document describes how the engine is put together. For what changed in it and when, see [EngineChangelog.md](EngineChangelog.md), which tracks the version reported by `MinerEngineVersion`.
+
 ## MinerEngine
 
 `MinerEngine` is an actor that owns the mutable mining state for one account.
