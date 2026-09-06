@@ -24,7 +24,7 @@ public final class Settings {
         /// echoed by SwiftBot, and this is a presentation change only.
         public var displayName: String {
             switch self {
-            case .global: return "Global"
+            case .global: return "Shared"
             case .globalAndPersonal: return "Hybrid"
             case .personal: return "Personal"
             }
@@ -37,8 +37,8 @@ public final class Settings {
         /// blend, so the wording says which list wins.
         public var summary: String {
             switch self {
-            case .global: return "Uses the operator’s shared priority list."
-            case .globalAndPersonal: return "Your priorities first, then Global."
+            case .global: return "Uses the shared priority list."
+            case .globalAndPersonal: return "Your priorities first, then Shared."
             case .personal: return "Uses only your own priorities."
             }
         }

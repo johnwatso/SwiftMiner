@@ -106,6 +106,31 @@ final class NavigationProjectionStateProvider: ProjectionStateProvider, @uncheck
         }
     }
 
+    /// The person whose shared (global) priority list every miner on this host
+    /// falls back to: the account marked as operator in the app. SwiftBot's
+    /// Discord handle wins when the operator is linked, because that is the
+    /// name a miner already knows them by; the Twitch login is the fallback.
+    func sharedPriorityOwner() async -> DiscordUserProjection.PriorityOwner? {
+        await MainActor.run {
+            guard let model else { return nil }
+            let miners = model.minerManager.miners
+            // The flagged operator when there is one. Otherwise only a
+            // single-miner host can answer this without guessing: on a host
+            // with several accounts and nobody marked, naming one of them
+            // would be an invention, so the dashboard falls back to generic
+            // copy instead.
+            let candidate = miners.first(where: { $0.isOperator }) ?? (miners.count == 1 ? miners.first : nil)
+            guard let operatorMiner = candidate else { return nil }
+            let discordUser = operatorMiner.ownerDiscordId.flatMap { model.discordUsersById[$0] }
+            let discordDisplayName = operatorMiner.ownerDiscordId.flatMap { model.discordDisplayNamesById[$0] }
+            return DiscordUserProjection.PriorityOwner.resolve(
+                discordUsername: discordUser?.username,
+                discordDisplayName: discordUser?.displayName ?? discordDisplayName,
+                twitchUsername: operatorMiner.username
+            )
+        }
+    }
+
     // MARK: - Twitch-principal variants (keyed by mined account id)
 
     func activeCampaign(forTwitchAccount accountId: String) async -> DiscordUserProjection.ActiveCampaign? {

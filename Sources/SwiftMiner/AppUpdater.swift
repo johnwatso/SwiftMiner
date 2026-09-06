@@ -43,7 +43,10 @@ final class AppUpdater: NSObject, ObservableObject {
     @Published private(set) var automaticallyDownloadsUpdates = false
 
 #if canImport(Sparkle)
-    private var updaterController: SPUStandardUpdaterController?
+    private var sparkleUpdater: SPUUpdater?
+    /// Held because `SPUUpdater` only weakly relates to its user driver's delegate,
+    /// and because this is the object that carries our tidied "up to date" copy.
+    private var sparkleUserDriver: SPUStandardUserDriver?
     private var automaticChecksObservation: NSKeyValueObservation?
     private var automaticDownloadsObservation: NSKeyValueObservation?
 #endif
@@ -84,15 +87,34 @@ final class AppUpdater: NSObject, ObservableObject {
 
 #if canImport(Sparkle)
         if configured {
-            updaterController = SPUStandardUpdaterController(
-                startingUpdater: true,
-                updaterDelegate: self,
-                userDriverDelegate: nil
+            // Built by hand rather than with SPUStandardUpdaterController so the
+            // user driver can be ours — see UpToDateUserDriver.
+            let userDriver = UpToDateUserDriver(hostBundle: bundle, delegate: nil)
+            let updater = SPUUpdater(
+                hostBundle: bundle,
+                applicationBundle: bundle,
+                userDriver: userDriver,
+                delegate: self
             )
-            observeAutomaticUpdatePreferences()
-            canCheckForUpdates = true
+            sparkleUserDriver = userDriver
+            sparkleUpdater = updater
+
+            do {
+                try updater.start()
+                observeAutomaticUpdatePreferences()
+                canCheckForUpdates = true
+            } catch {
+                // `isConfigured` stays true: the feed URL and key *are* set, and
+                // flipping it would show the "set SUFeedURL and SUPublicEDKey"
+                // hint for a failure that has nothing to do with them. Disabled
+                // update controls are the signal instead.
+                sparkleUpdater = nil
+                sparkleUserDriver = nil
+                canCheckForUpdates = false
+            }
         } else {
-            updaterController = nil
+            sparkleUpdater = nil
+            sparkleUserDriver = nil
             canCheckForUpdates = false
             automaticallyChecksForUpdates = false
             automaticallyDownloadsUpdates = false
@@ -106,13 +128,13 @@ final class AppUpdater: NSObject, ObservableObject {
 
     func checkForUpdates() {
 #if canImport(Sparkle)
-        updaterController?.checkForUpdates(nil)
+        sparkleUpdater?.checkForUpdates()
 #endif
     }
 
     func checkForUpdatesInBackground() {
 #if canImport(Sparkle)
-        updaterController?.updater.checkForUpdatesInBackground()
+        sparkleUpdater?.checkForUpdatesInBackground()
 #endif
     }
 
@@ -122,7 +144,7 @@ final class AppUpdater: NSObject, ObservableObject {
 
     func setAutomaticallyChecksForUpdates(_ isEnabled: Bool) {
 #if canImport(Sparkle)
-        updaterController?.updater.automaticallyChecksForUpdates = isEnabled
+        sparkleUpdater?.automaticallyChecksForUpdates = isEnabled
 #endif
         automaticallyChecksForUpdates = isEnabled
         updateAutoCheckLoop()
@@ -130,14 +152,14 @@ final class AppUpdater: NSObject, ObservableObject {
 
     func setAutomaticallyDownloadsUpdates(_ isEnabled: Bool) {
 #if canImport(Sparkle)
-        updaterController?.updater.automaticallyDownloadsUpdates = isEnabled
+        sparkleUpdater?.automaticallyDownloadsUpdates = isEnabled
 #endif
         automaticallyDownloadsUpdates = isEnabled
     }
 
 #if canImport(Sparkle)
     private func observeAutomaticUpdatePreferences() {
-        guard let updater = updaterController?.updater else { return }
+        guard let updater = sparkleUpdater else { return }
 
         automaticChecksObservation = updater.observe(
             \.automaticallyChecksForUpdates,

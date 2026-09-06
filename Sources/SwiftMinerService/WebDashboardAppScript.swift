@@ -14,7 +14,7 @@ extension WebDashboardAssets {
     let globalPrioritiesModalOpen = false;
     let campaignsModalOpen = false;
     let campaignsModalFocusId = null;
-    let prioritySourcePickerOpen = false;
+    let prioritySourceMenuClose = null;
     let personalAddOpen = false;
     let personalMenuIndex = null;
     let completedDropsModalOpen = false;
@@ -288,7 +288,9 @@ extension WebDashboardAssets {
         return {
           kind: 'notConfigured',
           headline: 'Authentication required',
-          subtitle: SESSION && SESSION.provider === 'discord' ? 'Link Twitch to start mining.' : 'Ask the operator to finish setup.',
+          subtitle: SESSION && SESSION.provider === 'discord'
+            ? 'Link Twitch to start mining.'
+            : (sharedPriorityHandle(p) ? `Ask ${sharedPriorityHandle(p)} to finish setting this miner up.` : 'Ask whoever set up SwiftMiner to finish setting this miner up.'),
           color: '#8e8e93',
           icon: `<svg class="status-svg" viewBox="0 0 24 24" fill="none" stroke="#8e8e93" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="10"></circle>
@@ -504,24 +506,24 @@ extension WebDashboardAssets {
         </section>`;
       }
 
-      // Nothing to mine and nothing waiting: one compact green card, with no
-      // second heading repeating it.
+      // Nothing to mine and nothing waiting: status information rather than a
+      // feature section, so it is one slim strip — headline, one line of
+      // detail, and the way back to a fresh reading.
       const checked = agoText(
         (p.diagnostics && (p.diagnostics.lastCampaignRefreshAt || p.diagnostics.lastSuccessfulPollAt)) || ''
       );
       const upcoming = decision.upcoming;
       const starts = upcoming ? dateLabel(upcoming.startsAt, 'starts') : '';
-      return `${open}
-        <div class="status-head">
-          <span class="status-icon-container" aria-hidden="true">${cfg.icon}</span>
-          <div class="status-card-copy">
-            <h3>${esc(cfg.headline)}</h3>
-            <p>Nothing waiting to be mined. SwiftMiner will automatically resume when an eligible drop becomes available.</p>
-            ${upcoming && starts ? `<p class="state-detail">Next known campaign: ${esc(upcoming.game)} ${esc(starts)}.</p>` : ''}
-          </div>
-          ${refresh}
+      const detail = ['Nothing waiting to be mined'];
+      if (checked) detail.push('Checked ' + checked);
+      if (upcoming && starts) detail.push('Next: ' + upcoming.game + ' ' + starts);
+      return `<section class="card status-card status-strip" id="route-campaigns" style="--status-color:${cfg.color}" aria-label="Miner state">
+        <span class="status-strip-icon" aria-hidden="true">${cfg.icon}</span>
+        <div class="status-strip-copy">
+          <h3>${esc(cfg.headline)}</h3>
+          <p title="${esc(detail.join(' · '))}">${esc(detail.join(' · '))}</p>
         </div>
-        ${checked ? `<div class="state-checked">Last checked ${esc(checked)}</div>` : ''}
+        ${refresh}
       </section>`;
     }
 
@@ -717,6 +719,33 @@ extension WebDashboardAssets {
       return (p && p.prioritySource) || (p && p.includesGlobalPriorityGames === false ? 'personal' : 'global');
     }
 
+    /// The one place the dashboard turns the shared list's owner into words.
+    /// The projection has already picked the identity — SwiftBot / Discord
+    /// first, the Twitch login second — so this only decides how to write it,
+    /// and returns '' when nobody can be named rather than an empty "@".
+    function sharedPriorityHandle(p) {
+      const owner = p && p.sharedPriorityOwner;
+      const handle = owner && typeof owner.handle === 'string' ? owner.handle.trim() : '';
+      return handle ? '@' + handle.replace(/^@+/, '') : '';
+    }
+
+    /// Attribution for a shared list: a person, never "your operator".
+    function sharedPriorityAttribution(p) {
+      const handle = sharedPriorityHandle(p);
+      return handle ? `Set by ${handle}` : 'Using shared priorities';
+    }
+
+    /// Menu copy for the three sources. Each names the person whose list is
+    /// involved, and falls back to "shared" when there is no name to use.
+    function prioritySourceOptions(p) {
+      const handle = sharedPriorityHandle(p);
+      return [
+        { value: 'global', name: 'Shared', detail: handle ? `Uses priorities set by ${handle}` : 'Uses shared priorities' },
+        { value: 'globalAndPersonal', name: 'Hybrid', detail: handle ? `Your priorities first, then ${handle}’s` : 'Your priorities first, then shared' },
+        { value: 'personal', name: 'Personal', detail: 'Only your priorities' }
+      ];
+    }
+
     /// The games this miner's configuration actually queues, so the preview
     /// shows the effective list rather than always the operator's one.
     function priorityPreviewGames(p) {
@@ -726,51 +755,72 @@ extension WebDashboardAssets {
       return globalPriorityGames(p);
     }
 
-    /// A compact strip: four tiles and a "+N" for the rest. This is a preview of
-    /// a list, not the list, so it never grows past five tiles.
+    /// How many tiles the strip shows at each width. It stays a single row
+    /// whatever the list length, so the count has to follow the column: the
+    /// desktop column fits eight, the phone column four.
+    const PRIORITY_PREVIEW_TILES = { wide: 8, narrow: 4 };
+
+    /// A compact strip: as many tiles as the column fits, a "+N" for the rest,
+    /// and the count and attribution sitting directly under it so the artwork
+    /// reads as part of the card rather than a detached banner. This is a
+    /// preview of a list, not the list.
+    ///
+    /// Both widths are rendered and CSS picks between them — including the two
+    /// "+N" labels, which count different remainders. That keeps the strip a
+    /// pure layout decision: no resize listener, and no re-render flash when a
+    /// window crosses the breakpoint.
     function priorityPreview(p) {
       const games = priorityPreviewGames(p);
       if (!games.length) return '';
+      const { wide, narrow } = PRIORITY_PREVIEW_TILES;
       let tiles = '';
-      games.slice(0, 4).forEach(g => { tiles += `<img alt="" data-game="${esc(g)}" data-art="${esc(priorityArtworkURL(p, g))}">`; });
-      const extra = games.length - Math.min(4, games.length);
-      if (extra) tiles += `<span class="priority-art-more" aria-hidden="true">+${extra}</span>`;
+      games.slice(0, wide).forEach((g, i) => {
+        const cls = i < narrow ? '' : ' class="priority-art-wide"';
+        tiles += `<img${cls} alt="" data-game="${esc(g)}" data-art="${esc(priorityArtworkURL(p, g))}">`;
+      });
+      const overflow = (limit, at) => {
+        const extra = games.length - Math.min(limit, games.length);
+        return extra ? `<span class="priority-art-more ${at}" aria-hidden="true">+${extra}</span>` : '';
+      };
+      tiles += overflow(narrow, 'at-narrow') + overflow(wide, 'at-wide');
       const source = prioritySourceOf(p);
       const globalCount = globalPriorityGames(p).length;
       const personalCount = (p.personalPriorityGames || []).length;
       const count = source === 'globalAndPersonal'
-        ? `${globalCount} global · ${personalCount} personal`
+        ? `${globalCount} shared · ${personalCount} personal`
         : `${games.length} ${games.length === 1 ? 'game' : 'games'}`;
-      const managed = source === 'global'
-        ? 'Managed by your operator'
-        : source === 'personal' ? 'Managed by you' : 'Your priorities run first';
+      const attribution = source === 'personal' ? '' : sharedPriorityAttribution(p);
       return `
         <div class="priority-preview">
-          <div class="global-priority-artwork">${tiles}</div>
-          <div class="priority-preview-copy">
-            <div class="priority-preview-count">${esc(count)}</div>
-            <div class="priority-preview-more">${esc(managed)}</div>
+          <div class="global-priority-artwork" aria-hidden="true">${tiles}</div>
+          <div class="priority-preview-meta">
+            <span class="priority-preview-count">${esc(count)}</span>
+            ${attribution ? `<span class="priority-preview-attribution">${esc(attribution)}</span>` : ''}
           </div>
         </div>
       `;
     }
 
-    /// Reading of the current source: a name and an icon, not a control.
+    /// Reading of the current source: a name and an icon, not a control. The
+    /// long name titles the menu; the short one labels the compact button.
     function prioritySourceSummary(source) {
       if (source === 'personal') {
         return {
+          short: 'Personal',
           name: 'Personal Priorities',
           icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg>`
         };
       }
       if (source === 'globalAndPersonal') {
         return {
+          short: 'Hybrid',
           name: 'Hybrid Priorities',
           icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5 9-5Z"></path><path d="m3 13 9 5 9-5"></path></svg>`
         };
       }
       return {
-        name: 'Global Priorities',
+        short: 'Shared',
+        name: 'Shared Priorities',
         icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18"></path><path d="M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18Z"></path></svg>`
       };
     }
@@ -783,7 +833,7 @@ extension WebDashboardAssets {
           <img class="boxart" alt="" data-game="${esc(game)}" data-art="${esc(priorityArtworkURL(p, game))}">
           <div class="copy">
             <div class="title">${esc(game)}</div>
-            <div class="details">Global priority ${index + 1}</div>
+            <div class="details">Shared priority ${index + 1}</div>
           </div>
         </div>`;
       });
@@ -791,8 +841,8 @@ extension WebDashboardAssets {
           <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="globalprioritiestitle" tabindex="-1">
             <div class="modal-header">
               <div class="copy">
-                <div class="modal-title" id="globalprioritiestitle">Global Priorities</div>
-                <div class="modal-subtitle">Shared by miners that use global priorities.</div>
+                <div class="modal-title" id="globalprioritiestitle">Shared Priorities</div>
+                <div class="modal-subtitle">The list every miner following Shared priorities mines from.</div>
               </div>
               <button class="btn-secondary" id="closeglobalpriorities" type="button">Close</button>
             </div>
@@ -926,43 +976,54 @@ extension WebDashboardAssets {
       const source = prioritySourceOf(p);
       const editable = hasMultipleConfiguredMiners(p);
       const explainer = source === 'global'
-        ? 'This miner follows the operator’s shared priority list.'
+        ? 'Your miner is following shared priorities.'
         : source === 'globalAndPersonal'
-          ? 'Your priorities run first, then SwiftMiner falls back to the operator’s shared list.'
-          : 'This miner uses only its own priority list.';
-      // Summary first: the source is stated, and the three-way control only
-      // appears once the reader asks to change it.
+          ? 'Your priorities run first, then the shared list.'
+          : 'Your miner uses only your own list.';
       const summary = prioritySourceSummary(source);
+      const check = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg>`;
       const option = (value, name, detail) => {
         const chosen = source === value;
-        return `<button type="button" class="source-option${chosen ? ' active' : ''}" data-priority-source="${value}" role="radio" aria-checked="${chosen}" title="${esc(detail)}">
+        return `<button type="button" class="source-option${chosen ? ' active' : ''}" data-priority-source="${value}" role="menuitemradio" aria-checked="${chosen}">
           <span class="source-option-icon" aria-hidden="true">${prioritySourceSummary(value).icon}</span>
           <span class="source-option-copy">
             <span class="source-option-name">${esc(name)}</span>
             <span class="source-option-detail">${esc(detail)}</span>
           </span>
+          <span class="source-option-check" aria-hidden="true">${chosen ? check : ''}</span>
         </button>`;
       };
-      const controls = prioritySourcePickerOpen ? `
-          <div class="source-options" role="radiogroup" aria-label="Priority Source">
-            ${option('global', 'Global', 'Uses the operator’s shared priorities.')}
-            ${option('globalAndPersonal', 'Hybrid', 'Your priorities first, then Global.')}
-            ${option('personal', 'Personal', 'Uses only your priorities.')}
-          </div>` : '';
+      // A layered menu, rendered up front and revealed in place: changing the
+      // source must never resize the card or push the page around under the
+      // reader's cursor.
+      const options = prioritySourceOptions(p);
+      const menu = `<div class="source-menu" id="prioritysourcemenu" role="menu" aria-label="Priority Source" hidden>
+            ${option('global', options[0].name, options[0].detail)}
+            ${option('globalAndPersonal', options[1].name, options[1].detail)}
+            ${option('personal', options[2].name, options[2].detail)}
+          </div>`;
       const picker = `
         <div class="priority-source">
-          <span class="toggle-title">Priority source</span>
-          <div class="priority-source-row">
-            <span class="priority-source-icon" aria-hidden="true">${summary.icon}</span>
-            <span class="priority-source-name">${esc(summary.name)}</span>
-            ${editable ? `<button class="btn-secondary priority-source-change" id="changeprioritysource" type="button" aria-expanded="${prioritySourcePickerOpen}">${prioritySourcePickerOpen ? 'Done' : 'Change'}</button>` : ''}
-          </div>
-          ${controls}
+          <span class="priority-source-label" id="prioritysourcelabel">Priority Source</span>
+          ${editable
+            ? `<button class="priority-source-btn" id="changeprioritysource" type="button"
+                       aria-haspopup="menu" aria-expanded="false" aria-describedby="prioritysourcelabel">
+                 <span class="priority-source-icon" aria-hidden="true">${summary.icon}</span>
+                 <span class="priority-source-name">${esc(summary.short)}</span>
+                 <span class="priority-source-caret" aria-hidden="true">
+                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
+                 </span>
+               </button>
+               ${menu}`
+            : `<span class="priority-source-static">
+                 <span class="priority-source-icon" aria-hidden="true">${summary.icon}</span>
+                 <span class="priority-source-name">${esc(summary.short)}</span>
+               </span>`}
         </div>`;
       const preview = priorityPreview(p);
       const viewLink = source === 'personal' || !globalPriorityGames(p).length ? '' : `
         <div class="section-foot">
-          <button class="text-action" id="viewglobalpriorities" type="button" aria-label="View Global Priorities">View priorities →</button>
+          <button class="text-action" id="viewglobalpriorities" type="button" aria-label="View shared priorities">View priorities →</button>
         </div>`;
       return `<section class="card section-card priorities-card" id="route-priorities" aria-label="Priorities">
         <div class="section-head">
@@ -970,13 +1031,11 @@ extension WebDashboardAssets {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
           </span>
           <div class="section-title"><h3>Priorities</h3></div>
-        </div>
-        <div class="priorities-split">
-          <div class="priorities-explainer">
-            <p>${explainer}</p>
-            ${preview}
-          </div>
           ${picker}
+        </div>
+        <div class="priorities-body">
+          <p class="priorities-explainer">${explainer}</p>
+          ${preview}
         </div>
         ${personalCard(p)}
         ${exclusionsRow(p)}
@@ -1128,7 +1187,7 @@ extension WebDashboardAssets {
       const isPersonal = (p.personalPriorityGames || []).some(g => String(g).toLowerCase() === String(game).toLowerCase());
       if (source === 'personal') return 'Your priority';
       if (source === 'globalAndPersonal' && isPersonal) return 'Your priority';
-      return 'Global priority';
+      return 'Shared priority';
     }
 
     /// The browsable campaign list, moved off the overview but kept whole — it
@@ -1257,7 +1316,7 @@ extension WebDashboardAssets {
       if (!recents.length && !dropsThisWeek) return '';
       const shown = recents.slice(0, 4);
       const rows = shown.map(completedRow).join('');
-      const countLabel = `${dropsThisWeek} this week`;
+      const countLabel = `${dropsThisWeek} ${dropsThisWeek === 1 ? 'drop' : 'drops'} this week`;
       const countTitle = `${dropsThisWeek} ${dropsThisWeek === 1 ? 'drop' : 'drops'} claimed this week`;
       const empty = rows ? '' : '<div class="empty-activity">No campaign completions to show yet.</div>';
       return `<section class="card section-card" id="route-drops" aria-label="Recent completed drops">
@@ -1314,17 +1373,17 @@ extension WebDashboardAssets {
     function accountRemovalCard(p) {
       if (!SESSION || !(p && p.account && p.account.twitchAccountId)) return '';
       if (SESSION.provider === 'local' && !SESSION.allows_operator_account_removal) return '';
-      return `<section class="card section-card danger-card" aria-label="Remove account">
-        <div class="section-head">
-          <span class="section-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7.5v5.5M12 16.5h.01"></path></svg>
-          </span>
-          <div class="section-title"><h3>Remove account</h3></div>
-          <button class="btn-secondary btn-danger-outline" id="removeaccount" data-remove-account-id="${esc(p.account.twitchAccountId)}" type="button">Remove</button>
-        </div>
-        <div class="section-body">
+      // A danger zone, not a feature: red is spent on the icon, the label and
+      // the button, and nothing else competes with the cards above it.
+      return `<section class="danger-row" aria-label="Remove account">
+        <span class="danger-row-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7.5v5.5M12 16.5h.01"></path></svg>
+        </span>
+        <div class="danger-row-copy">
+          <h3>Remove account</h3>
           <p>Stops mining, removes this account from SwiftMiner, and revokes its Twitch authorization.</p>
         </div>
+        <button class="btn-secondary btn-danger-outline" id="removeaccount" data-remove-account-id="${esc(p.account.twitchAccountId)}" type="button">Remove</button>
       </section>`;
     }
 
@@ -1412,6 +1471,9 @@ extension WebDashboardAssets {
 
     function render(p) {
       PROJ = p;
+      // A re-render replaces the menu's nodes; close it first so its document
+      // listeners are not left pointing at detached elements.
+      if (prioritySourceMenuClose) prioritySourceMenuClose();
       if (needsOnboarding(p)) {
         renderOnboarding(p);
         return;
@@ -1604,20 +1666,66 @@ extension WebDashboardAssets {
       renderPersonalResults();
     }
 
-    /// Wired once per full render: neither the disclosure button nor the source
+    /// Wired once per full render: neither the menu button nor the source
     /// buttons are replaced by the in-place personal-list refresh, so wiring
     /// them there would stack a second listener on every save.
+    ///
+    /// The menu is a layer, not a panel. It is already in the DOM and only
+    /// revealed, so opening it moves nothing: the card keeps its height and the
+    /// cards below it stay where the reader left them. The card is lifted while
+    /// it is open, because every card is its own stacking context and a later
+    /// sibling would otherwise paint over the menu.
     function wirePrioritySource() {
-      const change = $('changeprioritysource');
-      if (change) change.addEventListener('click', () => {
-        prioritySourcePickerOpen = !prioritySourcePickerOpen;
-        render(PROJ);
-      });
+      const trigger = $('changeprioritysource');
+      const menu = $('prioritysourcemenu');
+      if (trigger && menu) {
+        const card = trigger.closest('.priorities-card');
+        const items = () => Array.from(menu.querySelectorAll('[data-priority-source]'));
+        const onPointerDown = (event) => {
+          if (menu.contains(event.target) || trigger.contains(event.target)) return;
+          closeMenu(false);
+        };
+        const onKeydown = (event) => {
+          if (event.key === 'Escape') { event.stopPropagation(); closeMenu(true); return; }
+          if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+          const list = items();
+          if (!list.length) return;
+          event.preventDefault();
+          const at = list.indexOf(document.activeElement);
+          const next = event.key === 'ArrowDown'
+            ? (at < 0 ? 0 : (at + 1) % list.length)
+            : (at <= 0 ? list.length - 1 : at - 1);
+          list[next].focus();
+        };
+        const closeMenu = (returnFocus) => {
+          if (menu.hidden) return;
+          menu.hidden = true;
+          trigger.setAttribute('aria-expanded', 'false');
+          if (card) card.classList.remove('menu-open');
+          document.removeEventListener('mousedown', onPointerDown, true);
+          document.removeEventListener('keydown', onKeydown, true);
+          prioritySourceMenuClose = null;
+          if (returnFocus) trigger.focus();
+        };
+        const openMenu = () => {
+          menu.hidden = false;
+          trigger.setAttribute('aria-expanded', 'true');
+          if (card) card.classList.add('menu-open');
+          document.addEventListener('mousedown', onPointerDown, true);
+          document.addEventListener('keydown', onKeydown, true);
+          prioritySourceMenuClose = () => closeMenu(false);
+          const chosen = menu.querySelector('[aria-checked="true"]') || items()[0];
+          if (chosen) chosen.focus();
+        };
+        trigger.addEventListener('click', () => {
+          if (menu.hidden) openMenu(); else closeMenu(true);
+        });
+      }
       document.querySelectorAll('[data-priority-source]').forEach(btn => {
         btn.addEventListener('click', () => {
           prioritySource = btn.dataset.prioritySource || 'global';
           includeGlobalPriorities = prioritySource !== 'personal';
-          prioritySourcePickerOpen = false;
+          if (prioritySourceMenuClose) prioritySourceMenuClose();
           commit();
         });
       });
@@ -1872,6 +1980,38 @@ extension WebDashboardAssets {
 
     // ---------- bootstrap ----------
 
+    function wireAccountMenu() {
+      const trigger = $('accountmenubtn');
+      const menu = $('accountmenu');
+      if (!trigger || !menu) return;
+      const onPointerDown = (event) => {
+        if (menu.contains(event.target) || trigger.contains(event.target)) return;
+        close(false);
+      };
+      const onKeydown = (event) => {
+        if (event.key !== 'Escape') return;
+        event.stopPropagation();
+        close(true);
+      };
+      const close = (returnFocus) => {
+        if (menu.hidden) return;
+        menu.hidden = true;
+        trigger.setAttribute('aria-expanded', 'false');
+        document.removeEventListener('mousedown', onPointerDown, true);
+        document.removeEventListener('keydown', onKeydown, true);
+        if (returnFocus) trigger.focus();
+      };
+      const open = () => {
+        menu.hidden = false;
+        trigger.setAttribute('aria-expanded', 'true');
+        document.addEventListener('mousedown', onPointerDown, true);
+        document.addEventListener('keydown', onKeydown, true);
+        const first = menu.querySelector('button');
+        if (first) first.focus();
+      };
+      trigger.addEventListener('click', () => { if (menu.hidden) open(); else close(true); });
+    }
+
     async function doLogout(accountRemoved = false) {
       await api('/logout', { method: 'POST' });
       location.href = accountRemoved ? '/login?account_removed=1' : '/login';
@@ -2067,6 +2207,9 @@ extension WebDashboardAssets {
     const hdr = $('hdrlogo');
     if (hdr) hideOnError(hdr);
     $('signout').addEventListener('click', doLogout);
+    // Signing out is account context, not a page action: it rests in the
+    // profile menu rather than sitting in the chrome as a standing button.
+    wireAccountMenu();
     startLoadingCopy();
     ROUTE = parseRoute();
     load();

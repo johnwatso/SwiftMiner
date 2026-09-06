@@ -433,7 +433,7 @@ private struct MinerPriorityResetMenu: View {
             Button(role: .destructive) {
                 onResetPrioritiesToGlobal()
             } label: {
-                Label("Reset to Global", systemImage: "arrow.counterclockwise")
+                Label("Reset to Shared", systemImage: "arrow.counterclockwise")
             }
         } label: {
             MinerStatusCell(
