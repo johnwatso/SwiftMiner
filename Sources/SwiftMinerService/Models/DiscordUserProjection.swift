@@ -26,6 +26,10 @@ public struct DiscordUserProjection: Codable, Sendable {
     public let excludedGames: [String]
     /// Total configured miners on this SwiftMiner host. Used to hide multi-miner-only controls.
     public let configuredMinerCount: Int
+    /// Who set the shared priority list this host mines from. Clients attribute
+    /// the list to this person rather than to "the operator"; nil when nobody
+    /// can be named, which is the cue to fall back to generic copy.
+    public let sharedPriorityOwner: PriorityOwner?
     /// Live health details for browser triage. Nil when the miner is not available.
     public let diagnostics: Diagnostics?
 
@@ -45,6 +49,7 @@ public struct DiscordUserProjection: Codable, Sendable {
         prioritySource: String = "global",
         excludedGames: [String] = [],
         configuredMinerCount: Int = 1,
+        sharedPriorityOwner: PriorityOwner? = nil,
         diagnostics: Diagnostics? = nil
     ) {
         self.discordUserId = discordUserId
@@ -62,7 +67,51 @@ public struct DiscordUserProjection: Codable, Sendable {
         self.prioritySource = prioritySource
         self.excludedGames = excludedGames
         self.configuredMinerCount = configuredMinerCount
+        self.sharedPriorityOwner = sharedPriorityOwner
         self.diagnostics = diagnostics
+    }
+
+    /// The person whose shared priority list a miner follows, resolved to one
+    /// handle a reader would recognise. Discord wins over Twitch when both are
+    /// known, because a miner reached this dashboard through Discord.
+    public struct PriorityOwner: Codable, Sendable, Equatable {
+        public enum Source: String, Codable, Sendable {
+            case discord
+            case twitch
+        }
+
+        /// The handle without a leading `@`. Never an internal identifier.
+        public let handle: String
+        public let source: Source
+
+        public init(handle: String, source: Source) {
+            self.handle = handle
+            self.source = source
+        }
+
+        /// The single place the fallback order lives: SwiftBot / Discord
+        /// identity first, the Twitch login second, and nothing at all when
+        /// neither is known so callers can use generic copy instead of an
+        /// empty `@`.
+        public static func resolve(
+            discordUsername: String? = nil,
+            discordDisplayName: String? = nil,
+            twitchUsername: String? = nil
+        ) -> PriorityOwner? {
+            func clean(_ value: String?) -> String? {
+                let trimmed = value?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "@"))
+                return (trimmed?.isEmpty ?? true) ? nil : trimmed
+            }
+            if let discord = clean(discordUsername) ?? clean(discordDisplayName) {
+                return PriorityOwner(handle: discord, source: .discord)
+            }
+            if let twitch = clean(twitchUsername) {
+                return PriorityOwner(handle: twitch, source: .twitch)
+            }
+            return nil
+        }
     }
 
     public enum ProjectionState: String, Codable, Sendable {

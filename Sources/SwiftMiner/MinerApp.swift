@@ -221,7 +221,7 @@ struct MinerApp: App {
         .commands {
             CommandGroup(replacing: .appInfo) {
                 Button("About SwiftMiner") {
-                    showAboutPanel()
+                    AboutWindowController.shared.show(updater: updater)
                 }
 
                 Divider()
@@ -353,56 +353,6 @@ struct MinerApp: App {
         default:
             break
         }
-    }
-
-    @MainActor
-    private func showAboutPanel() {
-        let websiteURL = URL(string: "https://swiftminer.app")!
-        let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.alignment = .center
-        paragraphStyle.lineSpacing = 3
-
-        // Sits directly under the app version, because the two answer different
-        // questions: which build is installed, and whether the mining logic in it
-        // has moved.
-        let credits = NSMutableAttributedString(
-            string: "\(MinerEngineVersion.label)\n",
-            attributes: [
-                .font: NSFont.systemFont(ofSize: 11),
-                .foregroundColor: NSColor.secondaryLabelColor,
-                .paragraphStyle: paragraphStyle
-            ]
-        )
-        credits.append(NSAttributedString(
-            string: "swiftminer.app",
-            attributes: [
-                .font: NSFont.systemFont(ofSize: 11),
-                .foregroundColor: NSColor.linkColor,
-                .link: websiteURL,
-                .paragraphStyle: paragraphStyle
-            ]
-        ))
-        credits.append(NSAttributedString(
-            string: "\nMade in NZ ",
-            attributes: [
-                .font: NSFont.systemFont(ofSize: 11),
-                .foregroundColor: NSColor.secondaryLabelColor,
-                .paragraphStyle: paragraphStyle
-            ]
-        ))
-
-        let heartAttachment = NSTextAttachment()
-        let heartConfiguration = NSImage.SymbolConfiguration(pointSize: 11, weight: .medium)
-            .applying(NSImage.SymbolConfiguration(hierarchicalColor: .systemRed))
-        heartAttachment.image = NSImage(
-            systemSymbolName: "heart.fill",
-            accessibilityDescription: "Love"
-        )?.withSymbolConfiguration(heartConfiguration)
-        heartAttachment.bounds = CGRect(x: 0, y: -2, width: 12, height: 12)
-        credits.append(NSAttributedString(attachment: heartAttachment))
-
-        NSApp.orderFrontStandardAboutPanel(options: [.credits: credits])
-        NSApp.activate(ignoringOtherApps: true)
     }
 
     @MainActor

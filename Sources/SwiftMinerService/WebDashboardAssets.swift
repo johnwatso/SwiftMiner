@@ -30,13 +30,15 @@ enum WebDashboardAssets {
         }
         * { box-sizing: border-box; }
         body {
-          margin: 0; min-height: 100vh; padding: 0 16px 48px;
+          margin: 0; min-height: 100vh; padding: 0 24px 48px;
           font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif;
           font-size: 15px; color: var(--text);
           background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
           background-attachment: fixed;
         }
-        .shell { max-width: 692px; margin: 0 auto; }
+        /* Desktop gets a wider column and real margins around it; the layout
+           stays one focused column, never a multi-column dashboard. */
+        .shell { max-width: 720px; margin: 0 auto; }
         header {
           display: flex; align-items: center; gap: 10px; padding: 12px 2px 10px;
         }
@@ -48,17 +50,46 @@ enum WebDashboardAssets {
         header img { width: 34px; height: 34px; }
         header h1 { margin: 0; font-size: 19px; letter-spacing: -0.02em; }
         header .spacer { flex: 1; }
+        /* Signing out is account context rather than a page action, so it sits
+           behind a small profile button instead of a standing top-level one. */
+        .account-menu { position: relative; z-index: 80; }
+        .account-menu-btn {
+          display: inline-flex; align-items: center; gap: 3px; padding: 6px 8px;
+          border: 1px solid transparent; border-radius: 10px; cursor: pointer;
+          color: var(--muted); background: transparent;
+        }
+        .account-menu-btn svg { width: 18px; height: 18px; }
+        .account-menu-btn .account-menu-caret { width: 13px; height: 13px; opacity: 0.8; }
+        .account-menu-btn:hover, .account-menu-btn[aria-expanded="true"] {
+          color: var(--text); border-color: var(--glass-stroke); background: rgba(255,255,255,0.06);
+        }
+        .account-menu-btn:focus-visible { outline: 2px solid rgba(145,70,255,0.5); outline-offset: 2px; }
+        .account-menu-pop {
+          position: absolute; top: calc(100% + 6px); right: 0; z-index: 80; min-width: 168px;
+          display: flex; flex-direction: column; padding: 5px; border-radius: 12px;
+          border: 1px solid var(--glass-stroke); background: rgba(32, 26, 54, 0.98);
+          box-shadow: 0 16px 38px rgba(0,0,0,0.46);
+        }
+        .account-menu-item {
+          padding: 8px 10px; border: 0; border-radius: 8px; color: var(--text); text-align: left;
+          background: transparent; cursor: pointer; font: 550 13px/1.2 inherit; font-family: inherit;
+        }
+        /* `display: flex/grid` on a menu would otherwise beat the UA's
+           `[hidden] { display: none }`, leaving both menus permanently open. */
+        .account-menu-pop[hidden], .source-menu[hidden] { display: none; }
+        .account-menu-item:hover { background: rgba(145,70,255,0.20); }
+        .account-menu-item:focus-visible { outline: 2px solid rgba(145,70,255,0.5); outline-offset: -2px; }
         .ghost {
           font: 600 13px/1 inherit; font-family: inherit; color: var(--text); cursor: pointer;
           padding: 9px 14px; border-radius: 11px; border: 1px solid var(--glass-stroke);
           background: linear-gradient(180deg, var(--glass-top), var(--glass-bottom));
         }
         .card {
-          background: rgba(28, 23, 48, 0.62);
-          border: 1px solid rgba(255, 255, 255, 0.11); border-radius: 18px;
-          box-shadow: 0 10px 26px rgba(0, 0, 0, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+          background: rgba(24, 19, 43, 0.72);
+          border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 18px;
+          box-shadow: 0 12px 30px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.07);
           backdrop-filter: blur(20px) saturate(1.4); -webkit-backdrop-filter: blur(20px) saturate(1.4);
-          padding: 16px 18px; margin: 0 0 14px;
+          padding: 17px 20px; margin: 0 0 14px;
           animation: rise 0.4s cubic-bezier(0.21,1,0.27,1) both;
         }
         .miner-card {
@@ -188,15 +219,24 @@ enum WebDashboardAssets {
           border: 1px solid var(--glass-stroke); box-shadow: 0 8px 20px rgba(0,0,0,0.30);
           background: linear-gradient(135deg, var(--bg-c), var(--bg-b));
         }
-        .global-priority-artwork { display: flex; flex: none; }
+        .global-priority-artwork { display: flex; flex-wrap: wrap; gap: 8px; }
         .global-priority-artwork img, .priority-art-more {
-          width: 54px; height: 54px; margin-left: -11px; border-radius: 13px; object-fit: cover;
-          border: 2px solid var(--glass-stroke); background: var(--field);
+          width: 56px; height: 56px; flex: none; border-radius: 13px; object-fit: cover;
+          border: 1px solid var(--glass-stroke); background: var(--field);
         }
-        .global-priority-artwork > :first-child { margin-left: 0; }
         .priority-art-more {
           display: grid; place-items: center; color: var(--muted);
-          font-size: 12.5px; font-weight: 700; background: rgba(38, 32, 60, 0.96);
+          font-size: 13px; font-weight: 700; background: rgba(255,255,255,0.05);
+        }
+        /* The strip carries both widths' tiles and both "+N" labels; only one
+           set is ever on screen, so it refills as the column grows without a
+           resize listener re-rendering the card. */
+        @media (max-width: 679px) {
+          .global-priority-artwork .priority-art-wide,
+          .global-priority-artwork .priority-art-more.at-wide { display: none; }
+        }
+        @media (min-width: 680px) {
+          .global-priority-artwork .priority-art-more.at-narrow { display: none; }
         }
         .modal-backdrop {
           position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 24px;
@@ -540,7 +580,7 @@ enum WebDashboardAssets {
         .priority-result:hover, .priority-result:focus-visible { background: rgba(145,70,255,0.14); outline: none; }
 
         /* Miner detail: a quiet, single-column account view rather than a dashboard. */
-        .miner-detail { display: flex; flex-direction: column; gap: 15px; padding-bottom: 6px; }
+        .miner-detail { display: flex; flex-direction: column; gap: 18px; padding-bottom: 6px; }
         .miner-detail > * { margin: 0; }
         .detail-back {
           display: inline-flex; align-items: center; gap: 6px; min-height: 30px;
@@ -586,6 +626,21 @@ enum WebDashboardAssets {
         .status-card-copy { flex: 1; min-width: 0; }
         .status-card-copy h3 { margin: 2px 0 4px; font-size: 18px; letter-spacing: -0.015em; }
         .status-card-copy p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.4; }
+        /* Up to date is status information, not a feature section: one slim
+           strip, tall enough to read and no taller. */
+        .status-strip { flex-direction: row; align-items: center; gap: 12px; padding: 12px 16px 12px 14px; }
+        .status-strip-icon {
+          width: 30px; height: 30px; flex: none; display: grid; place-items: center; border-radius: 50%;
+          background: color-mix(in srgb, var(--status-color) 15%, transparent);
+        }
+        .status-strip-icon .status-svg { width: 17px; height: 17px; }
+        .status-strip-copy { flex: 1; min-width: 0; }
+        .status-strip-copy h3 { margin: 0; font-size: 15px; letter-spacing: -0.015em; }
+        .status-strip-copy p {
+          margin: 2px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.35;
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+
         /* Refresh is a way back to a fresh reading, not the point of the card. */
         .status-refresh {
           flex: none; display: inline-flex; align-items: center; gap: 6px;
@@ -601,9 +656,7 @@ enum WebDashboardAssets {
         .section-title { flex: 1; min-width: 0; display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
         .section-title h3 { margin: 0; font-size: 16px; letter-spacing: -0.015em; }
         .section-note { color: var(--muted); font-size: 12px; font-weight: 600; white-space: nowrap; }
-        .section-foot { display: flex; justify-content: flex-end; }
-        .section-body { padding-left: 45px; }
-        .section-body p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
+        .section-foot { display: flex; justify-content: flex-end; margin-top: -5px; }
         /* Currently mining / Up next: the same card in its featured shape, led
            by an eyebrow instead of a status headline because the artwork and
            title already say what the state is. */
@@ -634,42 +687,64 @@ enum WebDashboardAssets {
         .state-checked { color: var(--muted); font-size: 11.5px; }
 
         /* Priorities: one card for source, the shared list and this miner's own. */
-        .priorities-card { gap: 12px; }
-        .priorities-split { display: flex; align-items: flex-start; gap: 22px; }
-        .priorities-explainer { flex: 1; min-width: 0; }
-        .priorities-explainer p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
-        /* An inset panel, so the source reads as a stated fact about this miner
-           rather than a form the page is asking you to fill in. */
-        .priority-source {
-          flex: none; width: 264px; padding: 13px 14px; border-radius: 14px;
-          background: rgba(255,255,255,0.04); border: 1px solid var(--glass-stroke);
+        .priorities-card { gap: 13px; }
+        .priorities-card .section-head { align-items: flex-start; }
+        .priorities-card .section-title { padding-top: 7px; }
+        .priorities-body { display: flex; flex-direction: column; gap: 12px; }
+        .priorities-explainer { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
+        /* The source is a compact control, not a panel: a label and one button
+           that opens a layer. Nothing here grows when it is used. */
+        .priority-source { position: relative; flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
+        .priority-source-label { color: var(--muted); font-size: 10.5px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; }
+        .priority-source-btn, .priority-source-static {
+          display: inline-flex; align-items: center; gap: 7px; min-height: 32px; padding: 0 10px;
+          border: 1px solid var(--glass-stroke); border-radius: 10px; color: var(--text);
+          background: linear-gradient(180deg, var(--glass-top), var(--glass-bottom));
+          font: 650 13px/1 inherit; font-family: inherit;
         }
-        .priority-source .toggle-title { color: var(--muted); font-size: 12px; font-weight: 600; }
-        .priority-source-row { display: flex; align-items: center; gap: 10px; margin-top: 9px; }
-        .priority-source-icon { flex: none; display: inline-grid; width: 19px; height: 19px; place-items: center; color: #c8b4ff; }
-        .priority-source-icon svg { width: 17px; height: 17px; }
-        /* The longest source name wraps rather than truncating: a clipped
-           "Personal Priorit…" would hide the very thing the panel states. */
-        .priority-source-name { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 700; line-height: 1.25; }
-        .priority-source-change { flex: none; min-height: 30px; padding: 0 11px; font-size: 12px; }
-        .source-options { display: flex; flex-direction: column; gap: 3px; margin-top: 11px; }
+        .priority-source-btn { cursor: pointer; }
+        .priority-source-btn:hover, .priority-source-btn[aria-expanded="true"] { border-color: rgba(145,70,255,0.45); }
+        .priority-source-btn:focus-visible { outline: 2px solid rgba(145,70,255,0.5); outline-offset: 2px; }
+        .priority-source-icon { flex: none; display: inline-grid; width: 16px; height: 16px; place-items: center; color: #c8b4ff; }
+        .priority-source-icon svg { width: 16px; height: 16px; }
+        .priority-source-name { white-space: nowrap; }
+        .priority-source-caret { flex: none; display: inline-grid; width: 13px; height: 13px; place-items: center; color: var(--muted); }
+        .priority-source-caret svg { width: 13px; height: 13px; }
+        /* The menu floats over the page. Every card is its own stacking context
+           (they all carry a backdrop filter), so the card is lifted while the
+           menu is open — otherwise Recent Completed Drops would paint over it. */
+        .priorities-card.menu-open { position: relative; z-index: 70; }
+        .source-menu {
+          position: absolute; top: calc(100% + 8px); right: 0; z-index: 70; width: 296px; max-width: 78vw;
+          display: flex; flex-direction: column; gap: 2px; padding: 6px; border-radius: 14px;
+          border: 1px solid var(--glass-stroke); background: rgba(32, 26, 54, 0.98);
+          box-shadow: 0 20px 44px rgba(0,0,0,0.50);
+          backdrop-filter: blur(20px) saturate(1.4); -webkit-backdrop-filter: blur(20px) saturate(1.4);
+        }
         .source-option {
-          display: flex; align-items: flex-start; gap: 9px; padding: 8px 9px; border-radius: 10px;
+          display: flex; align-items: flex-start; gap: 9px; padding: 9px 10px; border-radius: 10px;
           border: 1px solid transparent; color: var(--text); text-align: left;
           background: transparent; cursor: pointer; font: inherit; font-family: inherit;
         }
         .source-option:hover { background: rgba(255,255,255,0.05); }
         .source-option.active { border-color: rgba(145,70,255,0.42); background: rgba(145,70,255,0.14); }
-        .source-option:focus-visible { outline: 2px solid rgba(145,70,255,0.5); outline-offset: 1px; }
+        .source-option:focus-visible { outline: 2px solid rgba(145,70,255,0.5); outline-offset: -2px; }
         .source-option-icon { flex: none; display: inline-grid; width: 17px; height: 17px; margin-top: 1px; place-items: center; color: #c8b4ff; }
         .source-option-icon svg { width: 15px; height: 15px; }
-        .source-option-copy { min-width: 0; }
+        .source-option-copy { flex: 1; min-width: 0; }
         .source-option-name { display: block; font-size: 13px; font-weight: 650; }
         .source-option-detail { display: block; margin-top: 2px; color: var(--muted); font-size: 11.5px; line-height: 1.35; }
-        .priority-preview { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; margin-top: 13px; }
-        .priority-preview-copy { flex: 1 1 118px; min-width: 118px; }
+        .source-option-check { flex: none; display: inline-grid; width: 15px; height: 15px; margin-top: 2px; place-items: center; color: #c8b4ff; }
+        .source-option-check svg { width: 14px; height: 14px; }
+        /* Artwork is the anchor: a spaced row of tiles with the count and the
+           attribution directly beneath it, so the two read as one block. */
+        .priority-preview { display: flex; flex-direction: column; gap: 9px; }
+        /* Count then attribution, stacked: the count already uses a middle dot
+           in the hybrid case, so a second one between them would read as part
+           of the same list. */
+        .priority-preview-meta { display: flex; flex-direction: column; gap: 2px; }
         .priority-preview-count { font-size: 13.5px; font-weight: 650; }
-        .priority-preview-more { margin-top: 2px; color: var(--muted); font-size: 11.5px; line-height: 1.35; }
+        .priority-preview-attribution { color: var(--muted); font-size: 12.5px; }
         .priority-personal { border-top: 1px solid var(--glass-stroke); padding-top: 14px; }
         .priority-personal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
         .priority-personal-label { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; }
@@ -685,18 +760,35 @@ enum WebDashboardAssets {
         .exception-card .section-note { color: var(--orange); }
 
         /* Recent completed drops: a short receipt, not a history table. */
-        .completed-row { display: flex; align-items: center; gap: 11px; padding: 9px 0; border-top: 1px solid var(--glass-stroke); }
+        .completed-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid var(--glass-stroke); }
         .completed-row:first-child { border-top: none; padding-top: 0; }
-        .completed-art { width: 32px; height: 42px; flex: none; border-radius: 7px; object-fit: cover; border: 1px solid var(--glass-stroke); background: var(--field); }
+        .completed-row:last-child { padding-bottom: 0; }
+        .completed-art { width: 38px; height: 50px; flex: none; border-radius: 8px; object-fit: cover; border: 1px solid var(--glass-stroke); background: var(--field); }
         .completed-copy { flex: 1; min-width: 0; }
         .completed-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; font-weight: 600; }
         .completed-when { margin-top: 2px; color: var(--muted); font-size: 11.5px; }
-        .completed-tally { flex: none; color: var(--muted); font-size: 12.5px; font-weight: 650; font-variant-numeric: tabular-nums; }
+        /* Tally and check share a fixed right-hand column so the rows line up
+           however wide the titles run. */
+        .completed-tally { flex: none; min-width: 46px; text-align: right; color: var(--muted); font-size: 12.5px; font-weight: 650; font-variant-numeric: tabular-nums; }
         .completed-check { width: 19px; height: 19px; flex: none; display: grid; place-items: center; border-radius: 50%; color: var(--green); background: rgba(52,199,89,0.16); }
         .completed-check svg { width: 12px; height: 12px; }
         .completed-list { display: flex; flex-direction: column; }
 
-        /* Account removal: separated from the miner controls, quietly red. */
+        /* Account removal: a danger-zone row at the foot of the page. Red is
+           spent on the icon, the label and the button — the surface itself
+           stays quieter than the cards it sits under. */
+        .danger-row {
+          display: flex; align-items: center; gap: 12px; padding: 12px 16px;
+          border: 1px solid rgba(201,45,39,0.22); border-radius: 14px;
+          background: rgba(255,255,255,0.02);
+        }
+        .danger-row-icon { flex: none; display: inline-grid; width: 22px; height: 22px; place-items: center; color: #ff8a83; }
+        .danger-row-icon svg { width: 20px; height: 20px; }
+        .danger-row-copy { flex: 1; min-width: 0; }
+        .danger-row-copy h3 { margin: 0; font-size: 13.5px; font-weight: 650; letter-spacing: -0.01em; color: #ff8a83; }
+        .danger-row-copy p { margin: 2px 0 0; color: var(--muted); font-size: 12px; line-height: 1.4; }
+        .danger-row .btn-danger-outline { flex: none; min-height: 30px; padding: 0 12px; font-size: 12px; }
+        /* Still used by the operator overview's per-miner rows. */
         .danger-card { border-color: rgba(201,45,39,0.34); background: rgba(60, 20, 26, 0.42); }
         .danger-card .section-icon { color: #ff8a83; background: rgba(201,45,39,0.18); }
         .danger-card .section-title h3 { color: #ff8a83; }
@@ -710,11 +802,19 @@ enum WebDashboardAssets {
         .portal-footer .sep { color: rgba(255,255,255,0.20); }
 
         @media (max-width: 620px) {
-          .priorities-split { flex-direction: column; gap: 13px; }
-          .priority-source { width: 100%; }
-          .section-body { padding-left: 0; }
+          body { padding: 0 14px 48px; }
+          /* Narrow enough that one line would drop "Checked …" entirely. */
+          .status-strip-copy p { white-space: normal; }
+          /* The source control drops under the title rather than squeezing it. */
+          .priorities-card .section-head { flex-wrap: wrap; }
+          .priorities-card .section-title { padding-top: 0; }
+          .priority-source { width: 100%; flex-direction: row; align-items: center; gap: 9px; }
+          .source-menu { right: auto; left: 0; }
+          .danger-row { align-items: flex-start; flex-wrap: wrap; }
         }
         @media (max-width: 420px) {
+          /* Five slots have to fit the phone column without wrapping. */
+          .global-priority-artwork img, .priority-art-more { width: 50px; height: 50px; border-radius: 12px; }
           /* The countdown should not break across lines to make room for the
              channel name; stack them instead. */
           .state-meta { flex-direction: column; align-items: flex-start; gap: 4px; }
@@ -733,7 +833,16 @@ enum WebDashboardAssets {
           <h1>SwiftMiner</h1>
           <span id="navback"></span>
           <span class="spacer"></span>
-          <button class="ghost" id="signout">Sign out</button>
+          <div class="account-menu">
+            <button class="account-menu-btn" id="accountmenubtn" type="button"
+                    aria-haspopup="menu" aria-expanded="false" aria-label="Account menu">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.4"></circle><path d="M4.6 20a7.6 7.6 0 0 1 14.8 0"></path></svg>
+              <svg class="account-menu-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+            </button>
+            <div class="account-menu-pop" id="accountmenu" role="menu" aria-label="Account" hidden>
+              <button class="account-menu-item" id="signout" type="button" role="menuitem">Sign out</button>
+            </div>
+          </div>
         </header>
         <div id="app">
           <div class="card loading-card" role="status" aria-live="polite">

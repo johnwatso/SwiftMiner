@@ -48,6 +48,10 @@ public protocol ProjectionStateProvider: Sendable {
     func excludedGames(forTwitchAccount accountId: String) async -> [String]
     /// Returns live health details for a mined Twitch account, if available.
     func diagnostics(forTwitchAccount accountId: String) async -> DiscordUserProjection.Diagnostics?
+    /// The person whose shared (global) priority list this host mines from.
+    /// Host-wide rather than per-miner: there is one shared list. Nil when no
+    /// identity is known, which leaves clients on generic copy.
+    func sharedPriorityOwner() async -> DiscordUserProjection.PriorityOwner?
 }
 
 public extension ProjectionStateProvider {
@@ -67,6 +71,7 @@ public extension ProjectionStateProvider {
     func excludedGames(forTwitchAccount accountId: String) async -> [String] { [] }
     func diagnostics(for discordUserId: String) async -> DiscordUserProjection.Diagnostics? { nil }
     func diagnostics(forTwitchAccount accountId: String) async -> DiscordUserProjection.Diagnostics? { nil }
+    func sharedPriorityOwner() async -> DiscordUserProjection.PriorityOwner? { nil }
 }
 
 /// Default no-op provider. All state is derived from DB queries alone.
@@ -81,6 +86,7 @@ public struct DefaultProjectionStateProvider: ProjectionStateProvider {
     public func prioritySource(for discordUserId: String) async -> String { "global" }
     public func excludedGames(for discordUserId: String) async -> [String] { [] }
     public func diagnostics(for discordUserId: String) async -> DiscordUserProjection.Diagnostics? { nil }
+    public func sharedPriorityOwner() async -> DiscordUserProjection.PriorityOwner? { nil }
 }
 
 // MARK: - Builder
@@ -175,6 +181,7 @@ public actor DiscordProjectionBuilder {
             diagnostics = await stateProvider.diagnostics(for: discordUserId)
         }
         let dmState = await fetchDMState(discordUserId: discordUserId)
+        let sharedPriorityOwner = await resolvedSharedPriorityOwner()
 
         let state: DiscordUserProjection.ProjectionState
         if let providerState {
@@ -205,6 +212,7 @@ public actor DiscordProjectionBuilder {
             prioritySource: prioritySource,
             excludedGames: excludedGames,
             configuredMinerCount: configuredMinerCount,
+            sharedPriorityOwner: sharedPriorityOwner,
             diagnostics: diagnostics
         )
     }
@@ -246,6 +254,7 @@ public actor DiscordProjectionBuilder {
         let prioritySource = await stateProvider.prioritySource(forTwitchAccount: twitchId)
         let excludedGames = await stateProvider.excludedGames(forTwitchAccount: twitchId)
         let diagnostics = await stateProvider.diagnostics(forTwitchAccount: twitchId)
+        let sharedPriorityOwner = await resolvedSharedPriorityOwner()
 
         let state: DiscordUserProjection.ProjectionState
         if let providerState = await stateProvider.projectionState(forTwitchAccount: twitchId) {
@@ -274,8 +283,19 @@ public actor DiscordProjectionBuilder {
             prioritySource: prioritySource,
             excludedGames: excludedGames,
             configuredMinerCount: configuredMinerCount,
+            sharedPriorityOwner: sharedPriorityOwner,
             diagnostics: diagnostics
         )
+    }
+
+    /// Who the shared priority list belongs to. The app answers this from its
+    /// live state (including the operator's Discord identity, which only the
+    /// app knows); a standalone service falls back to the operator account's
+    /// Twitch login, and to nothing at all when no operator is designated.
+    private func resolvedSharedPriorityOwner() async -> DiscordUserProjection.PriorityOwner? {
+        if let provided = await stateProvider.sharedPriorityOwner() { return provided }
+        guard let account = await manager.operatorAccount() else { return nil }
+        return DiscordUserProjection.PriorityOwner.resolve(twitchUsername: account.username)
     }
 
     // MARK: - DB Queries

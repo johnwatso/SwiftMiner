@@ -644,6 +644,36 @@ public actor SQLiteManager {
         return (username, owner)
     }
 
+    /// Identity of the account flagged as this host's operator.
+    public struct OperatorAccount: Sendable {
+        public let twitchId: String
+        public let username: String
+        public let ownerDiscordId: String?
+    }
+
+    /// The account flagged as this host's operator, if one is designated.
+    /// At most one row carries `is_operator`, so this is the closest thing the
+    /// database has to "who runs this SwiftMiner" — which is who the shared
+    /// priority list belongs to.
+    public func operatorAccount() async -> OperatorAccount? {
+        do {
+            return try await query { db in
+                let sql = "SELECT twitch_id, username, owner_discord_id FROM twitch_accounts WHERE is_operator = 1 LIMIT 1;"
+                var stmt: OpaquePointer?
+                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
+                defer { sqlite3_finalize(stmt) }
+                guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
+                let twitchId = sqlite3_column_text(stmt, 0).map { String(cString: $0) } ?? ""
+                guard !twitchId.isEmpty else { return nil }
+                let username = sqlite3_column_text(stmt, 1).map { String(cString: $0) } ?? ""
+                let owner = sqlite3_column_text(stmt, 2).map { String(cString: $0) }
+                return OperatorAccount(twitchId: twitchId, username: username, ownerDiscordId: owner)
+            }
+        } catch {
+            return nil
+        }
+    }
+
     public func isOperatorTwitchAccount(twitchId: String) async -> Bool {
         do {
             return try await query { db in

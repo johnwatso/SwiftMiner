@@ -427,32 +427,96 @@ final class WebDashboardSecurityTests: XCTestCase {
         XCTAssertTrue(WebDashboardAssets.appJS.contains("Number(p && p.configuredMinerCount || 0) > 1"))
         XCTAssertTrue(WebDashboardAssets.appJS.contains("Priority Source"))
         XCTAssertTrue(WebDashboardAssets.appJS.contains("data-priority-source=\"${value}\""))
-        XCTAssertTrue(WebDashboardAssets.appJS.contains("option('global', 'Global'"))
-        XCTAssertTrue(WebDashboardAssets.appJS.contains("option('globalAndPersonal', 'Hybrid'"))
-        XCTAssertTrue(WebDashboardAssets.appJS.contains("option('personal', 'Personal'"))
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("option('global', options[0].name, options[0].detail)"))
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("option('globalAndPersonal', options[1].name, options[1].detail)"))
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("option('personal', options[2].name, options[2].detail)"))
         XCTAssertTrue(WebDashboardAssets.appJS.contains("personalCard(p)"))
     }
 
     /// Priorities states the current configuration and keeps the three-way
-    /// control behind "Change" — a rarely-touched setting should not sit on the
-    /// page competing with miner status.
+    /// control behind one compact button — a rarely-touched setting should not
+    /// sit on the page competing with miner status.
     func testPrioritySourceIsSummaryFirstWithProgressiveDisclosure() {
         let js = WebDashboardAssets.appJS
         XCTAssertTrue(js.contains("function prioritySourceSummary(source)"))
-        XCTAssertTrue(js.contains("Global Priorities"))
+        XCTAssertTrue(js.contains("Shared Priorities"))
         XCTAssertTrue(js.contains("Personal Priorities"))
         XCTAssertTrue(js.contains("Hybrid Priorities"))
-        XCTAssertTrue(js.contains("Managed by your operator"))
-        XCTAssertTrue(js.contains("Managed by you"))
+        // The button carries the short name; the card carries the attribution.
+        XCTAssertTrue(js.contains("short: 'Shared'"))
+        XCTAssertTrue(js.contains("short: 'Hybrid'"))
+        XCTAssertTrue(js.contains("short: 'Personal'"))
         XCTAssertTrue(js.contains("id=\"changeprioritysource\""))
-        // The control only exists once the reader asks for it.
-        XCTAssertTrue(js.contains("const controls = prioritySourcePickerOpen ?"))
         // Change and View priorities stay distinct actions.
         XCTAssertTrue(js.contains("View priorities →"))
         // Wired on full render only, or the in-place personal refresh would
         // stack a second listener on each save.
         XCTAssertTrue(js.contains("function wirePrioritySource()"))
         XCTAssertFalse(js.contains("mode-badge"))
+    }
+
+    /// The source control opens as a layer over the page. An inline panel that
+    /// grows the card is the regression this catches: it shifts everything
+    /// below it while the reader is aiming at an option.
+    func testPrioritySourceOpensAsALayeredMenuWithoutResizingTheCard() {
+        let js = WebDashboardAssets.appJS
+        let css = WebDashboardAssets.appHTML
+        // Rendered up front and revealed, never conditionally built into flow.
+        XCTAssertTrue(js.contains("id=\"prioritysourcemenu\" role=\"menu\""))
+        XCTAssertTrue(js.contains("menu.hidden = false;"))
+        XCTAssertFalse(js.contains("prioritySourcePickerOpen"))
+        // Dismissal: outside click, Escape, and choosing an option.
+        XCTAssertTrue(js.contains("document.addEventListener('mousedown', onPointerDown, true)"))
+        XCTAssertTrue(js.contains("if (event.key === 'Escape') { event.stopPropagation(); closeMenu(true); return; }"))
+        XCTAssertTrue(js.contains("if (prioritySourceMenuClose) prioritySourceMenuClose();"))
+        // Keyboard: the options are reachable without a pointer.
+        XCTAssertTrue(js.contains("event.key !== 'ArrowDown' && event.key !== 'ArrowUp'"))
+        XCTAssertTrue(js.contains("role=\"menuitemradio\""))
+        XCTAssertTrue(js.contains("aria-checked=\"${chosen}\""))
+        // It has to paint above the cards that follow it, which are each their
+        // own stacking context.
+        XCTAssertTrue(css.contains(".priorities-card.menu-open { position: relative; z-index: 70; }"))
+        XCTAssertTrue(css.contains(".source-menu {"))
+        XCTAssertTrue(css.contains("position: absolute; top: calc(100% + 8px); right: 0; z-index: 70;"))
+    }
+
+    /// Shared priorities are attributed to the person who set them. "Operator"
+    /// is internal vocabulary and must not reach a reader.
+    func testSharedPrioritiesAreAttributedToAPersonNotAnOperator() {
+        let js = WebDashboardAssets.appJS
+        XCTAssertTrue(js.contains("function sharedPriorityHandle(p)"))
+        XCTAssertTrue(js.contains("p.sharedPriorityOwner"))
+        XCTAssertTrue(js.contains("`Set by ${handle}`"))
+        // No name to use is not a reason to print a bare "@".
+        XCTAssertTrue(js.contains("'Using shared priorities'"))
+        XCTAssertTrue(js.contains("Uses priorities set by ${handle}"))
+        XCTAssertTrue(js.contains("Your priorities first, then ${handle}’s"))
+        XCTAssertTrue(js.contains("Only your priorities"))
+        XCTAssertFalse(js.contains("Managed by your operator"))
+        XCTAssertFalse(js.contains("operator’s shared"))
+        XCTAssertFalse(js.contains("Based on what"))
+    }
+
+    /// Identity resolution lives in one place: Discord first, Twitch second,
+    /// and nothing at all rather than an empty handle.
+    func testPriorityOwnerResolutionPrefersDiscordThenTwitch() {
+        typealias Owner = DiscordUserProjection.PriorityOwner
+        XCTAssertEqual(
+            Owner.resolve(discordUsername: "jonwatso", discordDisplayName: "John", twitchUsername: "jonwatso_tv"),
+            Owner(handle: "jonwatso", source: .discord)
+        )
+        XCTAssertEqual(
+            Owner.resolve(discordDisplayName: "John", twitchUsername: "jonwatso_tv"),
+            Owner(handle: "John", source: .discord)
+        )
+        XCTAssertEqual(
+            Owner.resolve(twitchUsername: "jonwatso_tv"),
+            Owner(handle: "jonwatso_tv", source: .twitch)
+        )
+        // A leading @ from either service is not doubled up by the client.
+        XCTAssertEqual(Owner.resolve(discordUsername: "@jonwatso")?.handle, "jonwatso")
+        XCTAssertNil(Owner.resolve(discordUsername: "  ", twitchUsername: ""))
+        XCTAssertNil(Owner.resolve())
     }
 
     /// "Hybrid" is the canonical user-facing name for the personal-then-global
@@ -464,7 +528,7 @@ final class WebDashboardSecurityTests: XCTestCase {
 
         XCTAssertEqual(Settings.AccountPrioritySource.globalAndPersonal.displayName, "Hybrid")
         XCTAssertEqual(Settings.AccountPrioritySource.globalAndPersonal.displayTitle, "Hybrid Priorities")
-        XCTAssertEqual(Settings.AccountPrioritySource.global.displayName, "Global")
+        XCTAssertEqual(Settings.AccountPrioritySource.global.displayName, "Shared")
         XCTAssertEqual(Settings.AccountPrioritySource.personal.displayName, "Personal")
         // The persisted / API representation is untouched.
         XCTAssertEqual(Settings.AccountPrioritySource.globalAndPersonal.rawValue, "globalAndPersonal")
@@ -474,18 +538,22 @@ final class WebDashboardSecurityTests: XCTestCase {
             "an existing miner's stored mode must still decode"
         )
 
+        // The mode is called Shared on both surfaces; "global" survives only as
+        // the persisted raw value.
+        XCTAssertFalse(js.contains("name: 'Global'"))
+        XCTAssertFalse(js.contains("Global Priorities"))
         // Neither surface may still say "Global + Personal" to a reader.
         XCTAssertFalse(js.contains("Global + Personal"))
         // The value sent to the API is still the old identifier.
-        XCTAssertTrue(js.contains("option('globalAndPersonal', 'Hybrid'"))
+        XCTAssertTrue(js.contains("name: 'Hybrid'"))
         XCTAssertTrue(js.contains("prioritySource = 'globalAndPersonal'"))
 
         // Hybrid is an order, not a blend: the copy has to say which wins.
-        XCTAssertTrue(js.contains("Your priorities first, then Global."))
-        XCTAssertTrue(js.contains("Your priorities run first"))
+        XCTAssertTrue(js.contains("Your priorities first, then ${handle}’s"))
+        XCTAssertTrue(js.contains("Your priorities run first, then the shared list."))
         XCTAssertEqual(
             Settings.AccountPrioritySource.globalAndPersonal.summary,
-            "Your priorities first, then Global."
+            "Your priorities first, then Shared."
         )
     }
 
@@ -547,9 +615,20 @@ final class WebDashboardSecurityTests: XCTestCase {
         XCTAssertTrue(js.contains("function priorityPreviewGames(p)"))
         XCTAssertTrue(js.contains("if (source === 'personal') return (p.personalPriorityGames || []).slice();"))
         XCTAssertTrue(js.contains("if (source === 'globalAndPersonal') return (p.priorityGames || []).slice();"))
-        XCTAssertTrue(js.contains("games.slice(0, 4).forEach"))
+        XCTAssertTrue(js.contains("games.slice(0, wide).forEach"))
+        // The strip fills the column it is in rather than a fixed four, and
+        // both widths ship in the markup so CSS alone decides between them —
+        // including the two "+N" labels, which count different remainders.
+        XCTAssertTrue(js.contains("const PRIORITY_PREVIEW_TILES = { wide: 8, narrow: 4 };"))
+        XCTAssertTrue(js.contains("overflow(narrow, 'at-narrow') + overflow(wide, 'at-wide')"))
+        XCTAssertTrue(WebDashboardAssets.appHTML.contains(".global-priority-artwork .priority-art-wide,"))
+        XCTAssertTrue(WebDashboardAssets.appHTML.contains(".global-priority-artwork .priority-art-more.at-narrow { display: none; }"))
+        // No resize handling: the strip must not re-render the card.
+        XCTAssertFalse(js.contains("addEventListener('resize'"))
         XCTAssertTrue(js.contains("priority-art-more"))
-        XCTAssertTrue(js.contains("global · ${personalCount} personal"))
+        XCTAssertTrue(js.contains("shared · ${personalCount} personal"))
+        // The count and the attribution sit under the artwork, not beside it.
+        XCTAssertTrue(js.contains("class=\"priority-preview-meta\""))
     }
 
     func testIdleDashboardUsesUpToDateStateInsteadOfAnEmptyProgressBar() {
@@ -557,8 +636,11 @@ final class WebDashboardSecurityTests: XCTestCase {
         XCTAssertTrue(WebDashboardAssets.appJS.contains("Up to Date"))
         // The status card carries progress only when there is a campaign in
         // progress, so an idle miner never gets an empty bar under its headline.
-        XCTAssertTrue(WebDashboardAssets.appJS.contains("Nothing waiting to be mined."))
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("Nothing waiting to be mined"))
         XCTAssertFalse(WebDashboardAssets.appJS.contains("Idle - no campaigns"))
+        // Idle is a slim strip: headline, one line of detail, and Refresh.
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("card status-card status-strip"))
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("detail.push('Checked ' + checked)"))
     }
 
     /// The miner page is a status read, top to bottom: who → what now → what
@@ -588,8 +670,8 @@ final class WebDashboardSecurityTests: XCTestCase {
         // The four shapes.
         XCTAssertTrue(js.contains("Currently mining"))
         XCTAssertTrue(js.contains("Up next"))
-        XCTAssertTrue(js.contains("Nothing waiting to be mined."))
-        XCTAssertTrue(js.contains("Last checked"))
+        XCTAssertTrue(js.contains("Nothing waiting to be mined"))
+        XCTAssertTrue(js.contains("Checked ' + checked"))
         // Idle says it once: no second heading under the green card.
         XCTAssertFalse(js.contains("Nothing waiting</div>"))
         // Problem states never promise a next campaign.
@@ -605,7 +687,7 @@ final class WebDashboardSecurityTests: XCTestCase {
         XCTAssertTrue(js.contains("if (!best) return { kind: 'unranked', count: eligible.length };"))
         XCTAssertTrue(js.contains("Nothing waiting"))
         XCTAssertTrue(js.contains("Next eligible campaign · ${esc(upNextReason(p, c.game))}"))
-        XCTAssertTrue(js.contains("return 'Global priority';"))
+        XCTAssertTrue(js.contains("return 'Shared priority';"))
         XCTAssertTrue(js.contains("return 'Your priority';"))
         // A stopped miner is about to pick nothing, and a game the projection is
         // already raising an issue for cannot honestly be called next.
@@ -653,7 +735,7 @@ final class WebDashboardSecurityTests: XCTestCase {
         XCTAssertTrue(WebDashboardAssets.appJS.contains("function priorityArtworkURL(p, game)"))
         XCTAssertTrue(WebDashboardAssets.appJS.contains("priorityGameArtwork"))
         XCTAssertTrue(WebDashboardAssets.appJS.contains("global-priority-artwork"))
-        XCTAssertTrue(WebDashboardAssets.appJS.contains("View Global Priorities"))
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("View shared priorities"))
         XCTAssertTrue(WebDashboardAssets.appJS.contains("function globalPrioritiesModal(p)"))
         XCTAssertTrue(WebDashboardAssets.appJS.contains("aria-modal=\"true\""))
     }
@@ -664,6 +746,8 @@ final class WebDashboardSecurityTests: XCTestCase {
         XCTAssertTrue(WebDashboardAssets.appJS.contains("Completed Drops"))
         XCTAssertTrue(WebDashboardAssets.appJS.contains("class=\"miner-identity-copy\""))
         XCTAssertTrue(WebDashboardAssets.appJS.contains("dropsThisWeek === 1 ? 'drop' : 'drops'"))
+        // The count says what it counts.
+        XCTAssertTrue(WebDashboardAssets.appJS.contains("${dropsThisWeek} ${dropsThisWeek === 1 ? 'drop' : 'drops'} this week"))
         XCTAssertFalse(WebDashboardAssets.appJS.contains("Drops Claimed This Week"))
     }
 
