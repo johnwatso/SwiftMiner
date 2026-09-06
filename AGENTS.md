@@ -80,6 +80,21 @@ When updating the build number:
   - Any visible build references should match the generated build number.
 - If the marketing version changes, make sure release-note links and filenames follow the new version.
 
+### Engine versioning
+
+`MinerEngineVersion` in `Sources/SwiftMinerCore/Engine/MinerEngineVersion.swift` stamps the mining engine itself. Unlike `MARKETING_VERSION`, it is **agent-owned**: bump it as part of the change, without asking the user first.
+
+Bump it whenever a change to `Sources/SwiftMinerCore/Engine/` alters mining behaviour — scheduling, channel selection, drop progress, claiming, campaign handling, the watch loop, worker lifecycle, or the operational events those emit. Comment-only edits, log-string rewording, and formatting do not count.
+
+- **Minor** (`4.14` → `4.15`) for an ordinary engine change. This is nearly always the right bump; one per change that lands, not one per file touched.
+- **Major** (`4.x` → `5.0`) only for a structural era: a new decomposition of the engine files, or a rewrite of how workers are supervised or driven. Call a major bump out explicitly in the final notes.
+- Always set `updated` to the current local date (`yyyy-MM-dd`) in the same edit, and add the era to the doc comment's history list when bumping the major.
+- **Add an entry at the top of `Documentation/EngineChangelog.md` in the same edit** — `- **<version>** · <date> · \`<short hash>\` — <what changed and why>`. The hash is only known after committing, so write the entry with the rest of the change and fill the hash in immediately after (`git commit --amend` is fine). One entry per version; a version with no entry defeats the point of the number.
+
+Describe the change the way a release note would: what behaviour moved and what it fixes, not which functions were touched. The changelog is the answer to "what is in the engine I'm running", so an entry that only says "refactor" is not worth writing.
+
+The version is read by the engine start log line, the diagnostic report header, the About panel, Settings → Mining, and the web dashboard footer. Nothing else needs updating when it moves.
+
 ### Curated release notes and GitHub Releases
 
 The polished, curated release notes are authoritative. ShipHook may create a generic

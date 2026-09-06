@@ -1961,7 +1961,12 @@ extension WebDashboardAssets {
       if (!el) return;
       const raw = SESSION && typeof SESSION.app_version === 'string' ? SESSION.app_version.trim() : '';
       const version = raw.replace(/^v/i, '');
-      el.textContent = `© ${new Date().getFullYear()} SwiftMiner` + (version ? ` · v${version}` : '');
+      // The engine version is compiled into the service, so unlike the bundle
+      // version it is always present, standalone or not.
+      const engine = SESSION && typeof SESSION.engine_version === 'string' ? SESSION.engine_version.trim() : '';
+      el.textContent = `© ${new Date().getFullYear()} SwiftMiner`
+        + (version ? ` · v${version}` : '')
+        + (engine ? ` · engine ${engine}` : '');
     }
 
     let GAMES = [];

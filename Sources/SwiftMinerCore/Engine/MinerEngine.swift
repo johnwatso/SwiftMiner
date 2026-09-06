@@ -690,7 +690,7 @@ public actor MinerEngine {
         onOperationalEvent?(.workerStarted(taskID: workerTaskID))
 
         onStatusChange?(.authenticating)
-        log("Starting SwiftMinerCore...")
+        log("Starting SwiftMinerCore — engine \(MinerEngineVersion.summary)")
 
         // Use pre-loaded account if available, otherwise try keychain.
         // Load even if the token appears expired — refreshTokenIfNeeded() will
