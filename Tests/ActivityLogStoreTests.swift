@@ -418,6 +418,65 @@ final class ActivityLogStoreTests: XCTestCase {
         XCTAssertTrue(warningPage.entries.isEmpty)
     }
 
+    /// A stall window is only useful read whole: the alarm, the inventory it read, and
+    /// the recovery it chose. They used to scatter across Warnings, Mining and System,
+    /// so per-category retention evicted the decision within a day and left a log saying
+    /// something went wrong but never what was done about it.
+    @MainActor
+    func testAntiStallWindowFilesEveryLineUnderWarnings() {
+        let tag = MinerEngine.antiStallLogTag
+        let window: [(String, EventLevel)] = [
+            ("\(tag) Progress stalled for 15 mins. Refreshing inventory to check for external claims...", .warning),
+            ("\(tag) Inventory refreshed: 530 claimed benefits, 18 in-progress drops", .info),
+            ("\(tag) 1 drop(s) were claimed externally. Updating local state, resetting stall counter.", .info),
+            ("\(tag) Inventory confirmed new progress during stall recovery. Keeping the current channel.", .info),
+            ("\(tag) Progress genuinely stalled. Switching to failover streamer @someone for Rainbow Six Siege.", .info),
+            ("\(tag) Progress genuinely stalled (no external claims detected). Switching channel.", .info),
+            ("\(tag) Campaign \"R6S S2 2026 1\" stalled 3x with no progress and no external claims; skipping it for 30m and looking for other work.", .info),
+            ("\(tag) Warning: Inventory refresh failed: timed out. Switching channel as fallback.", .warning)
+        ]
+
+        for (message, level) in window {
+            let entry = EventEntry(message: message, level: level)
+            XCTAssertEqual(
+                primaryEventFilter(for: entry),
+                .warnings,
+                "anti-stall line filed away from its window: \(message)"
+            )
+        }
+    }
+
+    @MainActor
+    func testAntiStallWindowSurvivesAFloodOfRoutineChatter() {
+        let tag = MinerEngine.antiStallLogTag
+        let start = Date()
+
+        func categorised(_ message: String, level: EventLevel, at offset: TimeInterval) -> EventEntry {
+            let base = EventEntry(timestamp: start.addingTimeInterval(offset), message: message, level: level)
+            return base.withCategory(primaryEventFilter(for: base).rawValue)
+        }
+
+        // The window happens first, then a day of the chatter that used to bury it.
+        var entries = [
+            categorised("\(tag) Progress stalled for 15 mins. Refreshing inventory to check for external claims...", level: .warning, at: 0),
+            categorised("\(tag) Inventory refreshed: 530 claimed benefits, 18 in-progress drops", level: .info, at: 1),
+            categorised("\(tag) Progress genuinely stalled (no external claims detected). Switching channel.", level: .info, at: 2)
+        ]
+        for index in 0..<400 {
+            let offset = TimeInterval(100 + index)
+            entries.append(categorised("Selected channel someone for Rainbow Six Siege", level: .info, at: offset))
+            entries.append(categorised("Started watching rainbow6", level: .info, at: offset))
+            entries.append(categorised("Maintenance: Token validated/refreshed", level: .info, at: offset))
+        }
+
+        let retained = NavigationModel.applyRetention(to: entries, maxEntries: 50, perCategoryFloor: 5)
+        let survivors = Set(retained.map(\.message))
+
+        for line in entries.prefix(3).map(\.message) {
+            XCTAssertTrue(survivors.contains(line), "retention evicted part of the stall window: \(line)")
+        }
+    }
+
     func testUpdateCompletionNotificationUsesIndependentCategory() {
         let update = NavigationModel.CompletedUpdate(
             previousVersion: "1.31",

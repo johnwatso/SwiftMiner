@@ -61,6 +61,11 @@ public final class MinerManager {
         public var lastCampaignRefreshAt: Date?
         /// When this miner last banked verified drop progress. `nil` until it earns anything.
         public var lastDropProgressAt: Date?
+        /// When an idle miner will next look for work, while it is waiting. `nil` whenever it
+        /// is not in that wait. Idle with nothing eligible is the common state now, and it
+        /// publishes nothing for minutes at a time, so this is what lets the UI say the miner
+        /// is waiting rather than leaving a frozen row the user has to poke to trust.
+        public var nextCampaignCheckAt: Date?
         /// When the current worker started. Survives the routine status churn of mining.
         public var workerStartedAt: Date?
         public var workerState: MinerWorkerState = .idle

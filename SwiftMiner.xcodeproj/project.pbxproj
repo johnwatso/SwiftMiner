@@ -99,6 +99,7 @@
 		67EBA86CF010B9AA03CC9283 /* AccountLinkDeliveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D3A71B013A7CD5372F5BF6F /* AccountLinkDeliveryTests.swift */; };
 		684EB4275963160CDAECA967 /* SparkleConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19C66F8182D8FB572197B2EC /* SparkleConfigTests.swift */; };
 		68E24E9AD5F109B1513A1099 /* CampaignView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B27F8A9F37F60E7246A380FB /* CampaignView.swift */; };
+		691D24C0CE69743D636B78BB /* IdleSignOfLifeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 401204D63B3DD71670C4C32A /* IdleSignOfLifeTests.swift */; };
 		69EC6D3D5E2DCA9EFBFA98E6 /* CampaignViewDataCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBE5136CD4548E8A446F3BF7 /* CampaignViewDataCacheTests.swift */; };
 		6B0B2191E7BE04136DD14985 /* MinerSupervisor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5B111F33F9BAEDF35E4BD16 /* MinerSupervisor.swift */; };
 		6B9B9D439587D9FDA426CD17 /* LegacySteamArtworkCleanup.swift in Sources */ = {isa = PBXBuildFile; fileRef = C72CB08835BE78B9F1EEE2DB /* LegacySteamArtworkCleanup.swift */; };
@@ -387,6 +388,7 @@
 		3C27A208494D4653B30FCCB7 /* WebDashboardAppScript.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebDashboardAppScript.swift; sourceTree = "<group>"; };
 		3C67349DAA237D14A6C21D75 /* PubSubClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PubSubClient.swift; sourceTree = "<group>"; };
 		3E87C19EE96031768AE0DBE4 /* Settings+GamePreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Settings+GamePreferences.swift"; sourceTree = "<group>"; };
+		401204D63B3DD71670C4C32A /* IdleSignOfLifeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdleSignOfLifeTests.swift; sourceTree = "<group>"; };
 		40FBB48E5544E325179C696C /* EarningLedgerStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EarningLedgerStoreTests.swift; sourceTree = "<group>"; };
 		41472EDA22183F56029E12DB /* WarningSuppressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WarningSuppressionTests.swift; sourceTree = "<group>"; };
 		41D6E3EDBE9FEE60A15BCD57 /* GameAggregateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameAggregateTests.swift; sourceTree = "<group>"; };
@@ -936,6 +938,7 @@
 				FFD9C80952F08A4D35F7005A /* EventEmitterServiceTests.swift */,
 				41D6E3EDBE9FEE60A15BCD57 /* GameAggregateTests.swift */,
 				CEF247F1E20923EFA7310FF7 /* GameMatchIndexTests.swift */,
+				401204D63B3DD71670C4C32A /* IdleSignOfLifeTests.swift */,
 				D3674D197B60A0404ACB40DE /* KeychainAccountStoreTests.swift */,
 				B6C699D919FF9FA3106CB659 /* LegacyAccountMigratorTests.swift */,
 				637C207EE3AF4206DA9F2C8F /* LogExporterTests.swift */,
@@ -1460,6 +1463,7 @@
 				1B50F77DD72FFD1C737A7ADB /* EventEmitterServiceTests.swift in Sources */,
 				2B503A529D384687C95757EC /* GameAggregateTests.swift in Sources */,
 				02CCA331ADD516C85B99DD92 /* GameMatchIndexTests.swift in Sources */,
+				691D24C0CE69743D636B78BB /* IdleSignOfLifeTests.swift in Sources */,
 				C67CDEF2767FE8F285D04C8F /* KeychainAccountStoreTests.swift in Sources */,
 				FBF849B4B3BF782439BF16F9 /* LegacyAccountMigratorTests.swift in Sources */,
 				0DA97EF00308C1F2837F3394 /* LogExporterTests.swift in Sources */,
@@ -1595,7 +1599,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026090709;
+				CURRENT_PROJECT_VERSION = 2026090714;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;
@@ -1756,7 +1760,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026090709;
+				CURRENT_PROJECT_VERSION = 2026090714;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;

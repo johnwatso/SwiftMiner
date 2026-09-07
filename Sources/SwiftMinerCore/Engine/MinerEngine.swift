@@ -65,6 +65,11 @@ public actor MinerEngine {
         case realtimeEventsOffline(detail: String)
         /// Real-time drop events came back after a reported outage.
         case realtimeEventsRestored
+        /// The miner found nothing to work and is sleeping until the given time. With no
+        /// eligible campaigns nothing else publishes for minutes at a stretch, so the UI
+        /// has nothing to show that the miner is still alive — it reads as frozen, and the
+        /// only way to find out otherwise was to click it. `nil` when a cycle starts.
+        case idleUntil(Date?)
     }
 
     static func classifyIssue(_ error: Error) -> (IssueCategory, String) {
@@ -195,6 +200,16 @@ public actor MinerEngine {
     /// Maximum extra minutes allowed before assuming mining is stalled (matches TDM)
     static let maxExtraMinutes = 15
 
+    /// Marks every line a stall window emits — the alarm, the inventory it read, and the
+    /// recovery it chose. Activity Log retention keeps the newest N entries *per category*,
+    /// so an untagged window scattered across categories: the "Progress stalled" alarm
+    /// filed under Warnings and survived, while the lines saying what the recovery actually
+    /// decided filed under Mining and System and were evicted by routine chatter within a
+    /// day. Diagnosing a stall then meant reading a log that says something went wrong and
+    /// never says what was done about it. One tag files the whole window together.
+    /// Stripped from display text like every other `[Tag]`.
+    static let antiStallLogTag = "[AntiStall]"
+
     /// Consecutive genuine stall windows (no verified progress, no external
     /// claim) per campaign. Reset whenever the campaign makes real progress.
     var consecutiveStallsByCampaign: [String: Int] = [:]
@@ -224,16 +239,18 @@ public actor MinerEngine {
         isUnverified && emptyPolls >= limit
     }
 
-    static func externallyClaimedDrops(
+    /// Drops an inventory merge newly settled as claimed, given what was unclaimed before it.
+    ///
+    /// Stall recovery asks this instead of re-testing raw benefit IDs. `DropsService.mergeInventory`
+    /// is the only place allowed to decide what "claimed" means, because a benefit ID shared across
+    /// tiers of one campaign proves a benefit was awarded somewhere and never that a particular tier
+    /// awarded it. A second, looser reading of the same IDs disagreed with that verdict and reported
+    /// phantom external claims that could never clear.
+    static func newlyClaimedDrops(
         in drops: [Drop],
-        snapshot: InventorySnapshot
+        unclaimedBeforeMerge: Set<String>
     ) -> [Drop] {
-        drops.filter { drop in
-            let benefitIDs = drop.benefitIds.isEmpty
-                ? (drop.benefitID.isEmpty ? [] : [drop.benefitID])
-                : drop.benefitIds
-            return !drop.isClaimed && benefitIDs.contains { snapshot.benefitIDs.contains($0) }
-        }
+        drops.filter { $0.isClaimed && unclaimedBeforeMerge.contains($0.id) }
     }
 
     func resetProgressStallClock(at date: Date = Date()) {

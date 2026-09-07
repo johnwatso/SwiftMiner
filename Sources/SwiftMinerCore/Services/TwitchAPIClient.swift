@@ -204,6 +204,12 @@ public actor TwitchAPIClient {
     /// is permanently unanswerable, and each attempt costs a doomed token refresh. Give up for
     /// the session rather than rediscovering it every five minutes for every account.
     private var followedChannelLookupUnavailable: Set<String> = []
+    /// Follow-state availability changes waiting to be reported, keyed by user. Degrading
+    /// quietly is right for channel ranking and wrong for the user: `prioritiseFollowedStreamers`
+    /// stays switched on in Settings while doing nothing, and the only account of why went to
+    /// `Logger.api`, which never reaches the Activity Log. Recorded on transitions only, so the
+    /// log says it once per change rather than once per selection cycle.
+    private var pendingFollowLookupNotices: [String: FollowLookupNotice] = [:]
 
     struct CampaignDetailsCacheEntry {
         let campaign: Campaign
@@ -576,17 +582,33 @@ public actor TwitchAPIClient {
             return [:]
         }
 
+        // Non-nil here means the backoff has expired and this is a retry, so the previous
+        // answer was a failure. Read it before the await, which clears it on success.
+        let wasDegraded = followedChannelLookupRetryAt[userId] != nil
+
         let followedIds: Set<String>
         do {
             followedIds = try await getFollowedChannelIds(userId: userId)
             followedChannelLookupRetryAt[userId] = nil
+            if wasDegraded {
+                pendingFollowLookupNotices[userId] = .recovered
+            }
         } catch {
             if Self.isPermanentFollowLookupRejection(error) {
                 followedChannelLookupUnavailable.insert(userId)
+                pendingFollowLookupNotices[userId] = .unavailableForSession(reason: error.localizedDescription)
                 Logger.api.info("Twitch will not serve follow state for this session; ranking channels without it from now on: \(error.localizedDescription)")
             } else {
                 followedChannelLookupRetryAt[userId] = Date().addingTimeInterval(followedChannelLookupBackoff)
                 let backoffMinutes = Int(followedChannelLookupBackoff / 60)
+                // Only on the way into the degraded state. Every later retry fails the same
+                // way, and repeating it each backoff window would bury the first report.
+                if !wasDegraded {
+                    pendingFollowLookupNotices[userId] = .backingOff(
+                        minutes: backoffMinutes,
+                        reason: error.localizedDescription
+                    )
+                }
                 Logger.api.info("Follow lookup unavailable; ranking channels without follow state for \(backoffMinutes)m: \(error.localizedDescription)")
             }
             return [:]
@@ -600,6 +622,39 @@ public actor TwitchAPIClient {
         }
 
         return relationships
+    }
+
+    /// A change in whether Twitch will answer for follow state, phrased for the Activity Log.
+    ///
+    /// `prioritiseFollowedStreamers` is a setting the user turned on, so it going inert is
+    /// something they are entitled to know about — silently ranking without follow state is
+    /// the right behaviour and the wrong secret.
+    public enum FollowLookupNotice: Sendable, Equatable {
+        /// Twitch refuses this session's token for the follow endpoint — typically a session
+        /// authenticated without the Helix follow scope. Not retried again this run.
+        case unavailableForSession(reason: String)
+        /// A transport or server-side failure. Retried once the backoff expires.
+        case backingOff(minutes: Int, reason: String)
+        /// Follow state is being served again after a failure.
+        case recovered
+
+        /// Warning-level wording where the setting is inert, plain where it recovered.
+        /// `MinerEngine.log` derives the Activity Log level from this text.
+        public var logMessage: String {
+            switch self {
+            case .unavailableForSession(let reason):
+                return "Warning: Followed-streamer prioritisation is off for this account — Twitch will not serve follow state for this session (\(reason)). Channels are ranked without it until the account is signed in again."
+            case .backingOff(let minutes, let reason):
+                return "Warning: Followed-streamer prioritisation paused for \(minutes)m — the follow lookup failed (\(reason)). Channels are ranked without follow state meanwhile."
+            case .recovered:
+                return "Followed-streamer prioritisation is working again."
+            }
+        }
+    }
+
+    /// Returns and clears the follow-state availability change recorded for this user, if any.
+    public func drainFollowLookupNotice(userId: String) -> FollowLookupNotice? {
+        pendingFollowLookupNotices.removeValue(forKey: userId)
     }
 
     /// A rejection no amount of retrying will change: the session's token is not accepted for

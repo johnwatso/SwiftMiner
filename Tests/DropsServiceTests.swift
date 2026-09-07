@@ -179,7 +179,10 @@ final class DropsServiceTests: XCTestCase {
         XCTAssertFalse(updatedDrop.isClaimed, "Drop should NOT be claimed")
     }
 
-    func testExternalClaimDetectionUsesAllBenefitIDsAndIsIdempotentAfterMerge() {
+    /// A real external claim — made in the Twitch UI or on another device — is the merge
+    /// changing its mind about a drop, and stall recovery must see it so it does not switch
+    /// away from a campaign that is still earning.
+    func testExternalClaimIsDetectedAsTheMergeSettlingADropClaimed() {
         let newlyClaimed = Drop(
             id: "new",
             name: "Newly claimed",
@@ -194,18 +197,6 @@ final class DropsServiceTests: XCTestCase {
             benefitID: "old-benefit"
         )
         alreadyClaimed.isClaimed = true
-        let snapshot = InventorySnapshot(
-            accountId: "account",
-            benefitIDs: ["secondary", "old-benefit"],
-            progress: []
-        )
-
-        let detected = MinerEngine.externallyClaimedDrops(
-            in: [newlyClaimed, alreadyClaimed],
-            snapshot: snapshot
-        )
-        XCTAssertEqual(detected.map(\.id), ["new"])
-
         let campaign = Campaign(
             id: "campaign",
             name: "Campaign",
@@ -215,7 +206,85 @@ final class DropsServiceTests: XCTestCase {
             endDate: Date().addingTimeInterval(3600),
             drops: [newlyClaimed, alreadyClaimed]
         )
+        let snapshot = InventorySnapshot(
+            accountId: "account",
+            benefitIDs: ["secondary", "old-benefit"],
+            progress: []
+        )
+
+        let unclaimedBefore = Set(campaign.drops.filter { !$0.isClaimed }.map(\.id))
         let merged = DropsService.mergeInventory(snapshot, into: [campaign])
-        XCTAssertTrue(MinerEngine.externallyClaimedDrops(in: merged[0].drops, snapshot: snapshot).isEmpty)
+        let detected = MinerEngine.newlyClaimedDrops(
+            in: merged[0].drops,
+            unclaimedBeforeMerge: unclaimedBefore
+        )
+        XCTAssertEqual(detected.map(\.id), ["new"])
+
+        // Idempotent: a second window over the same already-merged state finds nothing new.
+        let afterMerge = Set(merged[0].drops.filter { !$0.isClaimed }.map(\.id))
+        let again = DropsService.mergeInventory(snapshot, into: merged)
+        XCTAssertTrue(
+            MinerEngine.newlyClaimedDrops(in: again[0].drops, unclaimedBeforeMerge: afterMerge).isEmpty
+        )
+    }
+
+    /// Regression: Rainbow Six offers "Esports Pack" at 60, 180 and 360 minutes on one shared
+    /// benefit ID. Claiming the 60 puts that ID in inventory while the 360 is still being earned.
+    /// Testing the raw benefit IDs called the 360 externally claimed, and because `mergeInventory`
+    /// correctly refuses to mark it claimed, the phantom recurred every 15-minute stall window and
+    /// reset the counter forever — anti-stall recovery could never run, and miners logged hours of
+    /// watching with nothing credited. The unclaimed tier must read as a stall, not a claim.
+    func testSharedBenefitAcrossTiersIsNotReportedAsAnExternalClaim() {
+        var claimedTier = Drop(
+            id: "tier-60",
+            name: "Esports Pack",
+            requiredMinutes: 60,
+            benefitID: "esports-pack",
+            benefitIds: ["esports-pack"]
+        )
+        claimedTier.isClaimed = true
+        let earningTier = Drop(
+            id: "tier-360",
+            name: "Esports Pack",
+            requiredMinutes: 360,
+            benefitID: "esports-pack",
+            benefitIds: ["esports-pack"]
+        )
+        let campaign = Campaign(
+            id: "r6s",
+            name: "R6S S2 2026 1",
+            game: Game(id: "rainbow6", name: "Rainbow Six Siege"),
+            status: .active,
+            startDate: Date().addingTimeInterval(-3600),
+            endDate: Date().addingTimeInterval(3600),
+            drops: [claimedTier, earningTier]
+        )
+        let snapshot = InventorySnapshot(
+            accountId: "account",
+            benefitIDs: ["esports-pack"],
+            progress: [
+                Progress(
+                    id: "p-360",
+                    dropId: "tier-360",
+                    dropName: "Esports Pack",
+                    campaignId: "r6s",
+                    currentMinutes: 295,
+                    requiredMinutes: 360,
+                    isClaimed: false
+                )
+            ]
+        )
+
+        let unclaimedBefore = Set(campaign.drops.filter { !$0.isClaimed }.map(\.id))
+        let merged = DropsService.mergeInventory(snapshot, into: [campaign])
+
+        XCTAssertFalse(
+            merged[0].drops.first { $0.id == "tier-360" }?.isClaimed ?? true,
+            "an unclaimed tier sharing a benefit ID must not be marked claimed"
+        )
+        XCTAssertTrue(
+            MinerEngine.newlyClaimedDrops(in: merged[0].drops, unclaimedBeforeMerge: unclaimedBefore).isEmpty,
+            "a shared benefit ID must not read as an external claim, or stall recovery never runs"
+        )
     }
 }

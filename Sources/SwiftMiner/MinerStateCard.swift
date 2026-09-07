@@ -519,6 +519,10 @@ struct MinerActivityCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            if let deadline = nextCheckDeadline {
+                MinerNextCheckView(deadline: deadline, lastCheckedAt: miner.lastCampaignRefreshAt)
+            }
+
             // A known drop already shows cumulative watched time across every source.
             // Keep the session-only stopwatch for pure watch overrides, where no drop total exists.
             if snap.now.progressFraction == nil, let anchor = liveActivityAnchor {
@@ -538,6 +542,15 @@ struct MinerActivityCard: View {
         guard miner.isRunning, !miner.needsAuth, !miner.isStalled, miner.isHealthy else { return nil }
         guard miner.status == .watching else { return nil }
         return miner.statusChangedAt
+    }
+
+    /// When an idle miner will next look for work, if it is waiting and the wait has not
+    /// already elapsed. Anything the user should act on — unresponsive, recovering, needing
+    /// auth — has its own wording and must not be softened into "waiting, all fine".
+    private var nextCheckDeadline: Date? {
+        guard miner.isRunning, !miner.needsAuth, !miner.isStalled, !miner.workerState.isRecovering else { return nil }
+        guard let deadline = miner.nextCampaignCheckAt, deadline > Date() else { return nil }
+        return deadline
     }
 
     private func nextActivity(_ item: MinerActivityItem) -> some View {
@@ -1555,6 +1568,43 @@ struct MinerActivityItem: Identifiable {
     var progressFraction: Double? = nil
     var campaignId: String? = nil
     var requiresAccountLink: Bool = false
+}
+
+/// "Next check in 3 minutes" for a miner idle with nothing eligible to mine.
+///
+/// That is the ordinary state now, not the exception, and the engine publishes nothing at
+/// all while it waits — so the row sat perfectly still for minutes and read as stuck. The
+/// reported symptom was exactly that: clicking a miner to find out whether it was alive,
+/// which forced an off-cadence refresh and made the click look like the cure.
+///
+/// `Text(_:style:.relative)` counts down on its own, so an idle miner pays for no timer.
+struct MinerNextCheckView: View {
+    let deadline: Date
+    let lastCheckedAt: Date?
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "clock")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.tertiary)
+
+            (Text("Next check in ") + Text(deadline, style: .relative))
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .help(helpText)
+    }
+
+    private var helpText: String {
+        guard let lastCheckedAt else {
+            return "This miner has nothing eligible to mine and is waiting for the next campaign check."
+        }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .full
+        let checked = formatter.localizedString(for: lastCheckedAt, relativeTo: Date())
+        return "Nothing eligible to mine. Campaigns were last checked \(checked)."
+    }
 }
 
 /// A shared live-session clock used anywhere miner activity is presented.
