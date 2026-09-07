@@ -46,8 +46,29 @@ struct ContentView: View {
 
             detailView
                 .id(navigation.selectedItem ?? .overview)
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    if showsGlobalStatusBar {
+                        // Reserve the floating control's footprint so a page's
+                        // last row can be scrolled clear of it rather than
+                        // living permanently underneath.
+                        Color.clear
+                            .frame(height: GlobalStatusBar.reservedHeight)
+                            .allowsHitTesting(false)
+                    }
+                }
+        }
+        .overlay(alignment: .bottom) {
+            // Hosted here rather than in Overview: the global heartbeat belongs
+            // to the whole app, and follows the user between tabs.
+            GlobalStatusBar()
         }
         .animation(nil, value: navigation.selectedItem)
+    }
+
+    /// The control reports on miners, so it stays out of the way until there is
+    /// at least one — and the space it would occupy stays out of the way too.
+    private var showsGlobalStatusBar: Bool {
+        !SwiftMinerFleet.displayedMiners(from: navigation.minerManager.miners).isEmpty
     }
 
     @ViewBuilder
@@ -165,11 +186,12 @@ enum OverviewArtworkResolver {
 
 struct OverviewView: View {
     @Environment(NavigationModel.self) var navigation
+    @Environment(\.accessibilityReduceMotion) var reduceMotion
     var settings: Settings { .shared }
     @State var overviewCampaigns: [CampaignViewData] = []
     /// `overviewCampaigns` with excluded games removed. Held rather than derived because
-    /// the feed, the system-state banner, the activity section, and artwork resolution all
-    /// read it, and each read used to re-run a locale comparison against every exclusion.
+    /// the feed, the activity section, and artwork resolution all read it, and each read
+    /// used to re-run a locale comparison against every exclusion.
     @State var visibleCampaigns: [CampaignViewData] = []
     @State var isRefreshing = false
     @State var isShowingGameManagement = false
@@ -185,9 +207,7 @@ struct OverviewView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                if !navigation.minerManager.miners.isEmpty {
-                    systemStateBanner
-                }
+                pageHeader
                 minerActivitySection
                 campaignFeedSection
             }
@@ -410,6 +430,23 @@ struct MinerStatusLegendPopover: View {
     }
 }
 
+    /// The page's own anchor, now that no banner sits above the content. The
+    /// window title says "Overview" too, but a title bar is chrome — this is
+    /// where the page starts, and it gives the top of the column something to
+    /// hang the whitespace on.
+    var pageHeader: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Overview")
+                .font(.largeTitle.weight(.bold))
+
+            Text("See what your miners are up to.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityAddTraits(.isHeader)
+    }
+
     @ViewBuilder
     func sectionHeading(_ title: String) -> some View {
         Text(title)
@@ -510,6 +547,44 @@ enum OverviewSystemState: Equatable {
         }
     }
 
+    /// The same states in one glanceable line, for the floating status control
+    /// where `subtitle`'s full sentence would not fit. A shorter phrasing of the
+    /// same verdict, never a different one.
+    var compactSubtitle: String {
+        switch self {
+        case .idleNoEligibleCampaigns:
+            return "Nothing to mine right now"
+        case .idleAllCampaignsCompleted:
+            return "All campaigns earned"
+        case .waitingForLiveStream:
+            return "Checking channels"
+        case .waitingRefreshingCampaigns:
+            return "Checking campaigns"
+        case .waitingAuthenticating:
+            return "Reconnecting to Twitch"
+        case .recovering:
+            return "Restarting a miner"
+        case .minerUnresponsive:
+            return "Miner not responding"
+        case .noRecentActivity:
+            return "No recent activity"
+        case .blockedAccountNotLinked(let minerName, let blockedCount):
+            if minerName != nil {
+                return "Account not linked"
+            }
+            return "\(blockedCount) need linking"
+        case .blockedAuthenticationExpired:
+            return "Authentication expired"
+        case .blockedNeedsAttention:
+            return "Check Activity Log"
+        case .mining(let activeMinerCount, let totalMinerCount):
+            if activeMinerCount == totalMinerCount {
+                return activeMinerCount == 1 ? "1 miner active" : "\(activeMinerCount) miners active"
+            }
+            return "\(activeMinerCount) of \(totalMinerCount) active"
+        }
+    }
+
     var symbol: String {
         switch self {
         case .idleNoEligibleCampaigns:
@@ -568,125 +643,27 @@ enum OverviewSystemState: Equatable {
         }
     }
 
-    var action: OverviewSystemAction? {
+    /// Whether relinking an account is what clears this state.
+    ///
+    /// The only remediation the status dock offers. It once also carried "View
+    /// Drops" and "View Schedule", but those were shortcuts to pages the sidebar
+    /// already reaches — navigation, not remediation, and no business on a
+    /// status surface. Relinking has nowhere else to be reached from here.
+    var needsAccountLink: Bool {
         switch self {
-        case .idleNoEligibleCampaigns, .idleAllCampaignsCompleted:
-            return .viewDrops
-        case .waitingForLiveStream, .waitingAuthenticating, .recovering:
-            return .viewSchedule
-        case .waitingRefreshingCampaigns:
-            return nil
-        case .minerUnresponsive, .noRecentActivity:
-            return nil
         case .blockedAccountNotLinked, .blockedAuthenticationExpired, .blockedNeedsAttention:
-            return .linkAccount
-        case .mining:
-            return nil
+            return true
+        case .idleNoEligibleCampaigns,
+             .idleAllCampaignsCompleted,
+             .waitingForLiveStream,
+             .waitingRefreshingCampaigns,
+             .waitingAuthenticating,
+             .minerUnresponsive,
+             .recovering,
+             .noRecentActivity,
+             .mining:
+            return false
         }
-    }
-}
-
-enum OverviewSystemAction {
-    case viewDrops
-    case viewSchedule
-    case linkAccount
-
-    var title: String {
-        switch self {
-        case .viewDrops:
-            return "View Drops"
-        case .viewSchedule:
-            return "View Schedule"
-        case .linkAccount:
-            return "Link Account"
-        }
-    }
-}
-
-struct OverviewSystemStateBanner: View {
-    let state: OverviewSystemState
-    let fleet: MinerFleetStatus
-    let onAction: (OverviewSystemAction) -> Void
-
-    private var statusIconSize: CGFloat {
-        // The composed bolt is already enlarged inside AnimatedStatusIcon so its narrow
-        // glyph and overhanging badge carry the same visual weight as wider symbols.
-        // Give every other overview symbol the same optical 15% lift while leaving the
-        // mining symbol at the size that established the target proportions.
-        switch state.symbol {
-        case "bolt.badge.checkmark.fill",
-             "bolt.trianglebadge.exclamationmark.fill",
-             "bolt.badge.clock.fill":
-            return 16
-        default:
-            return 16 * 1.15
-        }
-    }
-
-    var body: some View {
-        HStack(spacing: 14) {
-            AnimatedStatusIcon(symbol: state.symbol, color: state.color, size: statusIconSize, weight: .semibold)
-                .frame(width: 38, height: 38, alignment: .center)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(state.title)
-                    .font(.headline.weight(.semibold))
-
-                Text(state.subtitle)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Spacer(minLength: 18)
-
-            // Same cluster the Miners tab shows per miner, carrying fleet-wide
-            // values. Drops its labels before it drops cells when space is
-            // tight, so the grouping survives at every width.
-            ViewThatFits(in: .horizontal) {
-                fleetCluster(showsLabels: true)
-                fleetCluster(showsLabels: false)
-            }
-
-            if let action = state.action {
-                Button {
-                    onAction(action)
-                } label: {
-                    Text(action.title)
-                        .font(.subheadline.weight(.semibold))
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .tint(state.color)
-            }
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        // Match the corner radius of the Miner Activity cards below, which use
-        // `.glassCard()` (default radius 18).
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(.white.opacity(0.10), lineWidth: 1)
-        }
-    }
-
-    private func fleetCluster(showsLabels: Bool) -> some View {
-        MinerStatusCluster(
-            uptimeStart: fleet.uptimeStart,
-            lastPollAt: fleet.lastPollAt,
-            healthTitle: fleet.healthTitle,
-            healthSymbol: fleet.healthSymbol,
-            healthTint: fleet.healthTint,
-            uptimeLabel: "Avg Uptime",
-            lastPollLabel: "Avg Last Poll",
-            healthLabel: "Squad Health",
-            showsLabels: showsLabels,
-            // Wider than the per-miner cluster: these labels carry the "Avg" and
-            // "Squad" qualifiers and must stay on one line.
-            cellWidth: 136
-        )
     }
 }
 

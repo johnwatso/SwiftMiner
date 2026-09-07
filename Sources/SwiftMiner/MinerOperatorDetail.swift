@@ -332,6 +332,13 @@ struct MinerStatusCluster: View {
     var showsLabels: Bool = true
     /// Widen when the labels are longer than the per-miner defaults.
     var cellWidth: CGFloat = 118
+    /// Draws the grouped box around the cells. Off when the cluster already sits
+    /// on a surface of its own — the floating status dock — where a second boxed
+    /// background would be a card within a card.
+    var showsContainer: Bool = true
+    /// Firms up the hairlines between cells. A stock `Divider` reads fine
+    /// against the grouped box, but all but disappears on glass.
+    var usesProminentSeparators: Bool = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -401,20 +408,33 @@ struct MinerStatusCluster: View {
             }
         }
         .frame(height: showsLabels ? 44 : 34)
-        .background(
-            .background.secondary,
-            in: RoundedRectangle(cornerRadius: TahoeMetrics.nested, style: .continuous)
-        )
+        .background {
+            if showsContainer {
+                RoundedRectangle(cornerRadius: TahoeMetrics.nested, style: .continuous)
+                    .fill(.background.secondary)
+            }
+        }
         .overlay {
-            RoundedRectangle(cornerRadius: TahoeMetrics.nested, style: .continuous)
-                .strokeBorder(.separator.opacity(0.22), lineWidth: 1)
-                .allowsHitTesting(false)
+            if showsContainer {
+                RoundedRectangle(cornerRadius: TahoeMetrics.nested, style: .continuous)
+                    .strokeBorder(.separator.opacity(0.22), lineWidth: 1)
+                    .allowsHitTesting(false)
+            }
         }
         .accessibilityElement(children: .contain)
     }
 
+    @ViewBuilder
     private var cellDivider: some View {
-        Divider().frame(height: 22)
+        if usesProminentSeparators {
+            // Deliberately short of a full-strength rule: enough to part the
+            // sections on a translucent surface, not enough to draw the eye.
+            Rectangle()
+                .fill(.primary.opacity(0.13))
+                .frame(width: 1, height: 28)
+        } else {
+            Divider().frame(height: 22)
+        }
     }
 }
 

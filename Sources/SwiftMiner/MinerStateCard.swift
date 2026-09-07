@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftMinerCore
+import AppKit
 
 /// A unified hero card that represents the resolved PrimaryState of a miner.
 /// Replaces legacy status badges and scattered state labels with a single story.
@@ -320,6 +321,7 @@ struct MinerActivityCard: View {
     var onClearStreamOverride: (() -> Void)? = nil
 
     @Environment(NavigationModel.self) private var navigation
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var settings: Settings { .shared }
     @State private var activityRefreshPulse = Date()
     @State private var streamOverrideEditor: MinerStreamOverridePresentation?
@@ -401,6 +403,14 @@ struct MinerActivityCard: View {
             alignment: .topLeading
         )
         .glassCard()
+        // Card content arrives from polling, not from anything the user did, so
+        // a status change used to resize this card — and shove every card and
+        // section below it — between one frame and the next. Settling on the
+        // new shape instead makes the change something the eye can follow.
+        .animation(
+            reduceMotion ? nil : .smooth(duration: 0.34),
+            value: MinerActivityCardLayout(snap)
+        )
         .contentShape(RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
         .onTapGesture {
             onSelect?()
@@ -493,22 +503,56 @@ struct MinerActivityCard: View {
 
     private func currentActivity(snap: MinerActivitySnapshot) -> some View {
         VStack(alignment: .leading, spacing: isExpanded ? 4 : 6) {
-            Text(snap.now.title)
-                .font(.title3.weight(.semibold))
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
+            // Game and campaign lead; the drop's own artwork sits opposite them
+            // so the card keeps one identity per side and the progress bar below
+            // still spans the full width.
+            HStack(alignment: .top, spacing: 10) {
+                VStack(alignment: .leading, spacing: isExpanded ? 4 : 6) {
+                    Text(snap.now.title)
+                        .font(.title3.weight(.semibold))
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
 
-            if let subtitle = snap.now.subtitle {
-                Text(subtitle)
-                    .font(isExpanded ? .callout : .subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
+                    if let subtitle = snap.now.subtitle {
+                        Text(subtitle)
+                            .font(isExpanded ? .callout : .subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                Spacer(minLength: 0)
+
+                if let artworkURL = snap.now.artworkURL {
+                    MinerActivityArtwork(url: artworkURL, size: isExpanded ? 54 : 46)
+                }
             }
 
             if let progress = snap.now.progressFraction {
-                AnimatedLinearProgressView(value: progress, tint: effectiveAccent(snap.now.accent))
-                    .padding(.top, isExpanded ? 0 : 2)
+                HStack(spacing: 8) {
+                    AnimatedLinearProgressView(value: progress, tint: effectiveAccent(snap.now.accent))
+
+                    // Reads as the bar's own value rather than metadata below
+                    // it, and comes off the same fraction the bar is drawn
+                    // from, so the two can never disagree. The fixed width
+                    // keeps every card's bar ending on the same line.
+                    if let percent = snap.now.progressPercent {
+                        Text("\(percent)%")
+                            .font(.caption.weight(.semibold))
+                            .monospacedDigit()
+                            .foregroundStyle(effectiveAccent(snap.now.accent))
+                            .frame(width: 32, alignment: .trailing)
+                            // Rolls to the new figure alongside the bar's own
+                            // sweep rather than snapping while the bar glides.
+                            .contentTransition(.numericText())
+                            .animation(
+                                reduceMotion ? nil : .smooth(duration: 0.4),
+                                value: percent
+                            )
+                    }
+                }
+                .padding(.top, isExpanded ? 0 : 2)
             }
 
             if let detail = snap.now.detail {
@@ -626,6 +670,88 @@ struct MinerActivityCard: View {
         }
     }
 
+}
+
+/// Everything about a snapshot that changes a miner card's shape.
+///
+/// Deliberately not the whole snapshot, and deliberately not the progress
+/// fraction: the bar and the percentage animate themselves, and keying the whole
+/// card off a value that ticks constantly would leave it permanently in motion.
+/// What belongs here is structure — which sections exist, and what the lines of
+/// text say — because those are what change the card's height and shove
+/// everything below it.
+private struct MinerActivityCardLayout: Equatable {
+    let nowID: String
+    let title: String
+    let subtitle: String?
+    let detail: String?
+    let hasProgress: Bool
+    let hasArtwork: Bool
+    let upNextID: String?
+    let upNextTitle: String?
+    let blockedCount: Int
+
+    init(_ snapshot: MinerActivitySnapshot) {
+        nowID = snapshot.now.id
+        title = snapshot.now.title
+        subtitle = snapshot.now.subtitle
+        detail = snapshot.now.detail
+        hasProgress = snapshot.now.progressFraction != nil
+        hasArtwork = snapshot.now.artworkURL != nil
+        upNextID = snapshot.upNext?.id
+        upNextTitle = snapshot.upNext?.title
+        blockedCount = snapshot.blockedPriority.count
+    }
+}
+
+/// The artwork for the drop a miner is currently progressing.
+///
+/// Loads through the shared campaign artwork cache — the same memory/disk store
+/// the Drops feed reads — so a card costs no extra fetch. Nothing is drawn until
+/// an image is actually available: a drop Twitch published no art for simply has
+/// no thumbnail rather than a broken frame.
+struct MinerActivityArtwork: View {
+    let url: URL?
+    var size: CGFloat = 46
+
+    @State private var loadedArtwork: LoadedCampaignArtwork?
+
+    private var resolvedURL: URL? { url?.highResolutionArtworkURL }
+
+    private var displayedImage: NSImage? {
+        guard loadedArtwork?.url == resolvedURL else { return nil }
+        return loadedArtwork?.image
+    }
+
+    var body: some View {
+        Group {
+            if let displayedImage {
+                Image(nsImage: displayedImage)
+                    .resizable()
+                    .interpolation(.high)
+                    // Reward art is square, box art is portrait; fitting keeps
+                    // either one honest rather than cropping it to a badge.
+                    .aspectRatio(contentMode: .fit)
+            } else {
+                // Holds the slot while the image loads so the card does not
+                // reflow underneath the user.
+                Color.clear
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: GlassRadius.artwork, style: .continuous))
+        .task(id: resolvedURL) {
+            guard let resolvedURL else {
+                loadedArtwork = nil
+                return
+            }
+
+            let image = await CampaignArtworkCache.shared.image(for: resolvedURL)
+            guard !Task.isCancelled else { return }
+            loadedArtwork = image.map { LoadedCampaignArtwork(url: resolvedURL, image: $0) }
+        }
+        .accessibilityHidden(true)
+    }
 }
 
 private struct ActivityLabel: View {
@@ -900,7 +1026,8 @@ struct MinerActivitySnapshot {
                     symbol: "person.fill.viewfinder",
                     accent: .indigo,
                     progressFraction: progress?.fraction,
-                    campaignId: campaign.id
+                    campaignId: campaign.id,
+                    artworkURL: progress?.artworkURL ?? campaign.game.boxArtURL
                 )
             }
 
@@ -928,7 +1055,8 @@ struct MinerActivitySnapshot {
                 symbol: "bolt.fill",
                 accent: .green,
                 progressFraction: progress?.fraction,
-                campaignId: campaign.id
+                campaignId: campaign.id,
+                artworkURL: progress?.artworkURL ?? campaign.game.boxArtURL
             )
         }
 
@@ -940,7 +1068,9 @@ struct MinerActivitySnapshot {
                 detail: "Claiming completed reward",
                 symbol: "gift.fill",
                 accent: .purple,
-                campaignId: campaign.id
+                campaignId: campaign.id,
+                artworkURL: activeDropProgress(for: campaign, miner: miner)?.artworkURL
+                    ?? campaign.game.boxArtURL
             )
         }
 
@@ -1147,11 +1277,22 @@ struct MinerActivitySnapshot {
         campaign.drops.contains { !$0.isClaimed }
     }
 
+    /// The drop a miner is currently working towards, with the artwork that
+    /// represents it — the reward image where Twitch published one, the game's
+    /// box art otherwise.
+    struct ActiveDropProgress {
+        let dropName: String
+        let fraction: Double
+        let currentMinutes: Int
+        let requiredMinutes: Int
+        let artworkURL: URL?
+    }
+
     @MainActor
     private static func activeDropProgress(
         for campaign: Campaign,
         miner: MinerManager.ManagedMiner
-    ) -> (dropName: String, fraction: Double, currentMinutes: Int, requiredMinutes: Int)? {
+    ) -> ActiveDropProgress? {
         guard let drop = campaign.drops.first(where: { !$0.isClaimed && !$0.isClaimable })
             ?? campaign.drops.first(where: { !$0.isClaimed }) else {
             return nil
@@ -1161,30 +1302,31 @@ struct MinerActivitySnapshot {
         let currentMinutes = max(dropState?.progressMinutes ?? 0, drop.progress?.currentMinutes ?? 0)
         let requiredMinutes = max(dropState?.requiredMinutes ?? 0, drop.progress?.requiredMinutes ?? drop.requiredMinutes)
         let dropName = drop.progress?.dropName.isEmpty == false ? drop.progress?.dropName ?? drop.name : drop.name
+        let artworkURL = drop.imageURL ?? campaign.game.boxArtURL
 
         guard requiredMinutes > 0 else {
-            return (
+            return ActiveDropProgress(
                 dropName: dropName,
                 fraction: 0,
                 currentMinutes: 0,
-                requiredMinutes: 0
+                requiredMinutes: 0,
+                artworkURL: artworkURL
             )
         }
 
         let fraction = min(1.0, max(0.0, Double(currentMinutes) / Double(requiredMinutes)))
-        return (
+        return ActiveDropProgress(
             dropName: dropName,
             fraction: fraction,
             currentMinutes: currentMinutes,
-            requiredMinutes: requiredMinutes
+            requiredMinutes: requiredMinutes,
+            artworkURL: artworkURL
         )
     }
 
     /// Uses Twitch's cumulative per-drop total, reconciled with the miner's persisted ledger.
     /// This is intentionally not tied to the current channel or watch session.
-    private static func watchedTimeDetail(
-        for progress: (dropName: String, fraction: Double, currentMinutes: Int, requiredMinutes: Int)
-    ) -> String {
+    private static func watchedTimeDetail(for progress: ActiveDropProgress) -> String {
         guard progress.requiredMinutes > 0 else {
             return "\(progress.dropName) · watching eligible stream"
         }
@@ -1568,6 +1710,20 @@ struct MinerActivityItem: Identifiable {
     var progressFraction: Double? = nil
     var campaignId: String? = nil
     var requiresAccountLink: Bool = false
+    /// Artwork for the drop this item is progressing — the reward image Twitch
+    /// published for it, falling back to the game's box art. Nil where there is
+    /// no drop to picture, such as a stopped or unresponsive miner.
+    var artworkURL: URL? = nil
+
+    /// `progressFraction` as a whole percent for display beside the bar.
+    ///
+    /// Held back from 100% until the drop is genuinely complete: 299 of 300
+    /// minutes rounds to 100 and would read as finished a minute early.
+    var progressPercent: Int? {
+        guard let progressFraction else { return nil }
+        guard progressFraction < 1 else { return 100 }
+        return min(99, max(0, Int((progressFraction * 100).rounded())))
+    }
 }
 
 /// "Next check in 3 minutes" for a miner idle with nothing eligible to mine.
