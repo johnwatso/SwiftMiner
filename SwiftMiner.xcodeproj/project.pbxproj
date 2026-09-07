@@ -89,6 +89,7 @@
 		5AD4546E54265260DEDF087C /* WebDashboardAppScript.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C27A208494D4653B30FCCB7 /* WebDashboardAppScript.swift */; };
 		5B26594BEDC158A0769682AB /* CrashSentinel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87DA7758FAC012A62B587018 /* CrashSentinel.swift */; };
 		5C73106DFFF460DF8CDB6B44 /* SwiftMinerCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 758AF13E9334C95906C1A325 /* SwiftMinerCore.swift */; };
+		5C9C015AB5D0821028185BC8 /* GlobalStatusBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 785FE7DC18CBE689F3317BFD /* GlobalStatusBar.swift */; };
 		5CAB6B6719145827104E700E /* MinerStateConsistencyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E59E184954577C2546E1721B /* MinerStateConsistencyTests.swift */; };
 		5D719D19813209223BA476F9 /* Progress.swift in Sources */ = {isa = PBXBuildFile; fileRef = E226CD7402250468FFD4C2DF /* Progress.swift */; };
 		5FCB29AB39702C89A1B9369F /* DiscordMarkOfficial.svg in Resources */ = {isa = PBXBuildFile; fileRef = 7C7DCDFEAD0FB5F4149126DB /* DiscordMarkOfficial.svg */; };
@@ -435,6 +436,7 @@
 		73CC30EE7E88151928E8140C /* GameMatchIndex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameMatchIndex.swift; sourceTree = "<group>"; };
 		7559E3ABB6B9BA9EDAFCA012 /* NavigationProjectionStateProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationProjectionStateProvider.swift; sourceTree = "<group>"; };
 		758AF13E9334C95906C1A325 /* SwiftMinerCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftMinerCore.swift; sourceTree = "<group>"; };
+		785FE7DC18CBE689F3317BFD /* GlobalStatusBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalStatusBar.swift; sourceTree = "<group>"; };
 		7A5BB01DA1C922DCEF69AD69 /* MinerManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinerManager.swift; sourceTree = "<group>"; };
 		7AEFBBEA28C3C08733DCB98A /* UnattendedHealthStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnattendedHealthStore.swift; sourceTree = "<group>"; };
 		7BBB8613168AE0A29515BD3E /* CampaignDetailsPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignDetailsPersistenceTests.swift; sourceTree = "<group>"; };
@@ -753,6 +755,7 @@
 				0374A8D7AF4EC4089222CA3B /* GamePreferenceManagementView.swift */,
 				877DE35C94E3759F2ECAB592 /* GeneralSettingsPanes.swift */,
 				1C43EA5DBD5E9A09117B9798 /* GitHubIssueReporter.swift */,
+				785FE7DC18CBE689F3317BFD /* GlobalStatusBar.swift */,
 				F50CF1B1050F2BDF27036807 /* IntegrationsSettingsPanes.swift */,
 				C72CB08835BE78B9F1EEE2DB /* LegacySteamArtworkCleanup.swift */,
 				5A79F35AB0C08E6F2BE9A648 /* LiquidGlass.swift */,
@@ -1384,6 +1387,7 @@
 				3409B039878F5812CE36AFB7 /* GamePreferenceManagementView.swift in Sources */,
 				49DF3EDEAD997B383228A000 /* GeneralSettingsPanes.swift in Sources */,
 				74C1EF5D9BDFD32042EAAC2A /* GitHubIssueReporter.swift in Sources */,
+				5C9C015AB5D0821028185BC8 /* GlobalStatusBar.swift in Sources */,
 				072759399B5125E50C265A22 /* IntegrationsSettingsPanes.swift in Sources */,
 				6B9B9D439587D9FDA426CD17 /* LegacySteamArtworkCleanup.swift in Sources */,
 				D765E5CE3F8F85B72C85B2DB /* LiquidGlass.swift in Sources */,
@@ -1599,7 +1603,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026090714;
+				CURRENT_PROJECT_VERSION = 2026090716;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;
@@ -1760,7 +1764,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026090714;
+				CURRENT_PROJECT_VERSION = 2026090716;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;

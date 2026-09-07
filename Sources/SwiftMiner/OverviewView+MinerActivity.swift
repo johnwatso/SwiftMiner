@@ -63,25 +63,20 @@ extension OverviewView {
                 }
             }
         }
+        // A miner arriving or leaving reflows the grid and carries the Priority
+        // Queue below it up or down the page. Each card animates its own
+        // reshaping; this covers the set of cards changing.
+        .animation(
+            reduceMotion ? nil : .smooth(duration: 0.34),
+            value: miners.map(\.id)
+        )
     }
 
-    /// Wide enough that a card stays readable, narrow enough that five miners sit on
-    /// one row at a typical Overview width. Miners have no meaningful order, so the
-    /// grid wraps beyond that rather than scrolling.
+    /// Wide enough that the drop line — reward name, watched and required minutes —
+    /// stays on one line rather than wrapping mid-phrase, narrow enough that four
+    /// miners still sit on one row at a typical Overview width. Miners have no
+    /// meaningful order, so the grid wraps beyond that rather than scrolling.
     private var minerActivityColumns: [GridItem] {
-        [GridItem(.adaptive(minimum: 244), spacing: 14, alignment: .top)]
-    }
-
-    var activeCampaignCount: Int {
-        let now = Date()
-        return campaigns
-            .filter { campaign in
-                campaign.isAccountConnected
-                    && campaign.startDate <= now
-                    && campaign.endDate > now
-                    && !campaign.isCompleted
-                    && campaign.overviewRemainingRewardCount > 0
-            }
-            .count
+        [GridItem(.adaptive(minimum: 268), spacing: 14, alignment: .top)]
     }
 }
