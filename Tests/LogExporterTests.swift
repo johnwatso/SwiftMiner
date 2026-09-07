@@ -144,6 +144,7 @@ final class LogExporterTests: XCTestCase {
             lastEventAt: now.addingTimeInterval(-120),
             lastSuccessfulPollAt: now.addingTimeInterval(-240),
             lastCampaignRefreshAt: now.addingTimeInterval(-360),
+            nextCampaignCheckAt: now.addingTimeInterval(180),
             stallConfidencePercent: 50,
             stallSignals: ["No successful poll in 15m"]
         )
@@ -157,6 +158,9 @@ final class LogExporterTests: XCTestCase {
         XCTAssertTrue(report.contains("lastEventAt=2024-10-27T03:39:40Z (age=2m0s)"))
         XCTAssertTrue(report.contains("lastSuccessfulPollAt=2024-10-27T03:37:40Z (age=4m0s)"))
         XCTAssertTrue(report.contains("lastCampaignRefreshAt=2024-10-27T03:35:40Z (age=6m0s)"))
+        // An idle miner's next check is the difference between "waiting" and "wedged"
+        // when reading an export after the fact.
+        XCTAssertTrue(report.contains("nextCampaignCheckAt=2024-10-27T03:44:40Z"))
         XCTAssertTrue(report.contains("stallConfidence=50% signals=[No successful poll in 15m]"))
         XCTAssertTrue(report.contains("LoH Launch Drops Week 2"))
     }

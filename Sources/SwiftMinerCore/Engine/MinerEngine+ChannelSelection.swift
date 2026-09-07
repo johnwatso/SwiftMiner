@@ -828,6 +828,14 @@ extension MinerEngine {
         guard prioritiseFollowedStreamers, let userId = currentAccount?.id else { return [:] }
         let broadcasterIds = channels.map(\.id).filter { !$0.isEmpty }
         let relationships = await apiClient.getChannelRelationships(userId: userId, broadcasterIds: broadcasterIds)
+
+        // An empty answer here is indistinguishable from "follows nobody", so the client
+        // reports availability changes separately. Without this the setting stayed on in
+        // Settings while doing nothing and said so only to `Logger.api`.
+        if let notice = await apiClient.drainFollowLookupNotice(userId: userId) {
+            log(notice.logMessage)
+        }
+
         return relationships.reduce(into: [String: Int]()) { ranks, pair in
             ranks[Self.normalizedChannelIdentity(pair.key)] = pair.value.rank
         }

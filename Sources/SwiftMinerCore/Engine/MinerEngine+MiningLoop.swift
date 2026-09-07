@@ -161,6 +161,12 @@ extension MinerEngine {
                     shouldRescanCampaigns = false
                     let tickNs: UInt64 = 10 * 1_000_000_000
                     let ticks = Int(waitInterval / tickNs)
+                    // Publish when this miner will next look for work. Nothing else is
+                    // emitted during the wait, so without it the row sits unchanged for
+                    // minutes and gives the user no way to tell idle from stuck.
+                    onOperationalEvent?(.idleUntil(
+                        Date().addingTimeInterval(TimeInterval(waitInterval) / 1_000_000_000)
+                    ))
                     for _ in 0..<ticks {
                         if Task.isCancelled || shouldRescanCampaigns { break }
                         do {
@@ -169,6 +175,7 @@ extension MinerEngine {
                             break
                         }
                     }
+                    onOperationalEvent?(.idleUntil(nil))
                     shouldRescanCampaigns = false
                     continue
                 }
@@ -461,7 +468,7 @@ extension MinerEngine {
                     // While a stream override is active we deliberately stay on the chosen
                     // streamer until they go offline, so progress stalls must not switch channels.
                     if streamOverrideLogin == nil, extraMinutesWatched >= Self.maxExtraMinutes {
-                        log("Progress stalled for \(extraMinutesWatched) mins. Refreshing inventory to check for external claims...")
+                        log("\(Self.antiStallLogTag) Progress stalled for \(extraMinutesWatched) mins. Refreshing inventory to check for external claims...")
                         recordActivityEvent(
                             .stallDetected,
                             "No verified progress for \(extraMinutesWatched) min on \(campaign.name)"
@@ -477,30 +484,49 @@ extension MinerEngine {
                             onOperationalEvent?(.successfulPoll)
                             onOperationalEvent?(.inventoryRefresh)
                             
-                            log("Inventory refreshed: \(freshInventory.benefitIDs.count) claimed benefits, \(freshInventory.progress.count) in-progress drops")
+                            log("\(Self.antiStallLogTag) Inventory refreshed: \(freshInventory.benefitIDs.count) claimed benefits, \(freshInventory.progress.count) in-progress drops")
                             recordActivityEvent(
                                 .inventoryRefreshed,
                                 "Refreshed inventory: \(freshInventory.benefitIDs.count) claimed, \(freshInventory.progress.count) in progress"
                             )
                             
-                            // Check if ANY drop in current campaign was recently claimed
-                            // This handles the case where user claimed via Twitch UI or another device
-                            let campaignDrops = allCampaigns.first { $0.id == session?.currentCampaignId }?.drops ?? []
-                            let newlyClaimedDrops = Self.externallyClaimedDrops(
-                                in: campaignDrops,
-                                snapshot: freshInventory
+                            // Which drops the campaign considered unclaimed before the merge.
+                            // An external claim — made in the Twitch UI or on another device —
+                            // is a drop that leaves this set once the authoritative snapshot is
+                            // merged in.
+                            let unclaimedBeforeMerge = Set(
+                                (allCampaigns.first { $0.id == session?.currentCampaignId }?.drops ?? [])
+                                    .filter { !$0.isClaimed }
+                                    .map(\.id)
                             )
 
                             // Merge the authoritative snapshot before making any recovery decision.
-                            // Without this, the same external claim is rediscovered every stall window.
                             let progressAcknowledged = await acknowledgeInventoryProgress(
                                 freshInventory,
                                 campaignId: campaign.id,
                                 context: "stall recovery"
                             )
-                            
+
+                            // Deliberately a diff across the merge rather than a second reading of
+                            // the raw benefit IDs. `DropsService.mergeInventory` refuses to mark a
+                            // drop claimed when its benefit ID is shared across tiers of one
+                            // campaign — Rainbow Six offers "Esports Pack" at 60, 180 and 360
+                            // minutes on one ID — because presence in inventory proves the benefit
+                            // was awarded somewhere, never that *this* tier awarded it. A raw
+                            // benefit-ID test disagrees with that and reports the unclaimed 360
+                            // tier as newly claimed on the strength of the claimed 60. Since the
+                            // merge then (correctly) never sets `isClaimed`, the same phantom claim
+                            // was rediscovered every window, resetting the stall counter forever:
+                            // the recovery below could not run, and miners sat on channels that
+                            // credited nothing for hours. Reading the merge's own verdict keeps the
+                            // two from ever disagreeing again.
+                            let newlyClaimedDrops = Self.newlyClaimedDrops(
+                                in: allCampaigns.first { $0.id == session?.currentCampaignId }?.drops ?? [],
+                                unclaimedBeforeMerge: unclaimedBeforeMerge
+                            )
+
                             if !newlyClaimedDrops.isEmpty {
-                                log("\(newlyClaimedDrops.count) drop(s) were claimed externally. Updating local state, resetting stall counter.")
+                                log("\(Self.antiStallLogTag) \(newlyClaimedDrops.count) drop(s) were claimed externally. Updating local state, resetting stall counter.")
                                 for drop in newlyClaimedDrops {
                                     _ = progressEventTracker.markClaimed(
                                         campaignId: campaign.id,
@@ -513,7 +539,7 @@ extension MinerEngine {
                                 noteCampaignProgress(campaign.id)
                                 // Don't switch channel - continue mining remaining drops in campaign
                             } else if progressAcknowledged {
-                                log("Inventory confirmed new progress during stall recovery. Keeping the current channel.")
+                                log("\(Self.antiStallLogTag) Inventory confirmed new progress during stall recovery. Keeping the current channel.")
                             } else {
                                 // Genuine stall for this campaign this window — record it so a
                                 // campaign that can never earn (nothing left, unlinked, or a
@@ -527,7 +553,7 @@ extension MinerEngine {
                                 lastSwitchAt = Date()
 
                                 if let failoverChannel = await selectFailoverChannel(for: campaign, currentChannel: channel) {
-                                    log("Progress genuinely stalled. Switching to failover streamer @\(failoverChannel.login) for \(campaign.gameName).")
+                                    log("\(Self.antiStallLogTag) Progress genuinely stalled. Switching to failover streamer @\(failoverChannel.login) for \(campaign.gameName).")
                                     pendingFailoverTarget = PendingFailoverTarget(
                                         campaignId: campaign.id,
                                         streamerLogin: failoverChannel.login
@@ -543,16 +569,16 @@ extension MinerEngine {
                                     )
                                     consecutiveStallsByCampaign[campaign.id] = 0
                                     session?.currentCampaignId = nil
-                                    log("Campaign \"\(campaign.name)\" stalled \(Self.nonEarningStallThreshold)× with no progress and no external claims; skipping it for \(minutes)m and looking for other work.")
+                                    log("\(Self.antiStallLogTag) Campaign \"\(campaign.name)\" stalled \(Self.nonEarningStallThreshold)× with no progress and no external claims; skipping it for \(minutes)m and looking for other work.")
                                     shouldSwitchChannel = true
                                 } else {
-                                    log("Progress genuinely stalled (no external claims detected). Switching channel.")
+                                    log("\(Self.antiStallLogTag) Progress genuinely stalled (no external claims detected). Switching channel.")
                                     shouldSwitchChannel = true
                                 }
                             }
                         } catch {
                             emitIssue(error)
-                            log("Warning: Inventory refresh failed: \(error.localizedDescription). Switching channel as fallback.")
+                            log("\(Self.antiStallLogTag) Warning: Inventory refresh failed: \(error.localizedDescription). Switching channel as fallback.")
                             shouldSwitchChannel = true
                         }
                     }

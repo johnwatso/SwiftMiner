@@ -147,6 +147,8 @@ extension MinerManager {
                     self.recordHealth(.twitchResponseSucceeded(minerID: minerId, at: Date()))
                 case .campaignRefresh:
                     await self.supervisor.recordCampaignRefresh(minerId: minerId)
+                case .idleUntil(let deadline):
+                    self.updateNextCampaignCheck(minerId: minerId, at: deadline)
                 case .authRefreshed:
                     await self.supervisor.recordStateUpdate(minerId: minerId, workerState: .running)
                 case .heartbeat, .stateUpdate:
@@ -524,6 +526,13 @@ extension MinerManager {
     
     func updateMinerStatus(minerId: String, isRunning: Bool, status: MinerStatus) {
         updateMinerStatus(minerId: minerId, status: status, isRunning: isRunning)
+    }
+
+    /// Records when an idle miner will next look for work, or clears it when a cycle starts.
+    func updateNextCampaignCheck(minerId: String, at deadline: Date?) {
+        guard let index = miners.firstIndex(where: { $0.id == minerId }) else { return }
+        guard miners[index].nextCampaignCheckAt != deadline else { return }
+        miners[index].nextCampaignCheckAt = deadline
     }
 
     func updateMinerOperationalMetadata(minerId: String, metadata: MinerOperationalMetadata) {

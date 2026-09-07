@@ -34,6 +34,7 @@ enum LogExporter {
             let lastEventAt: Date?
             let lastSuccessfulPollAt: Date?
             let lastCampaignRefreshAt: Date?
+            let nextCampaignCheckAt: Date?
             let lastDropProgressAt: Date?
             let stallConfidencePercent: Int?
             let stallSignals: [String]
@@ -61,6 +62,7 @@ enum LogExporter {
                 lastEventAt: Date? = nil,
                 lastSuccessfulPollAt: Date? = nil,
                 lastCampaignRefreshAt: Date? = nil,
+                nextCampaignCheckAt: Date? = nil,
                 lastDropProgressAt: Date? = nil,
                 stallConfidencePercent: Int? = nil,
                 stallSignals: [String] = []
@@ -87,6 +89,7 @@ enum LogExporter {
                 self.lastEventAt = lastEventAt
                 self.lastSuccessfulPollAt = lastSuccessfulPollAt
                 self.lastCampaignRefreshAt = lastCampaignRefreshAt
+                self.nextCampaignCheckAt = nextCampaignCheckAt
                 self.lastDropProgressAt = lastDropProgressAt
                 self.stallConfidencePercent = stallConfidencePercent
                 self.stallSignals = stallSignals
@@ -198,7 +201,8 @@ enum LogExporter {
                     formatTimestampField("lastEventAt", miner.lastEventAt, reference: reference, formatter: iso),
                     formatTimestampField("lastSuccessfulPollAt", miner.lastSuccessfulPollAt, reference: reference, formatter: iso),
                     formatTimestampField("lastCampaignRefreshAt", miner.lastCampaignRefreshAt, reference: reference, formatter: iso),
-                    formatTimestampField("lastDropProgressAt", miner.lastDropProgressAt, reference: reference, formatter: iso)
+                    formatTimestampField("lastDropProgressAt", miner.lastDropProgressAt, reference: reference, formatter: iso),
+                    formatTimestampField("nextCampaignCheckAt", miner.nextCampaignCheckAt, reference: reference, formatter: iso)
                 ].compactMap { $0 }
                 if !livenessParts.isEmpty {
                     out += "  \(livenessParts.joined(separator: " "))\n"
@@ -604,6 +608,7 @@ enum LogExporter {
                 lastEventAt: healthSnapshot.lastEventAt,
                 lastSuccessfulPollAt: healthSnapshot.lastSuccessfulPollAt,
                 lastCampaignRefreshAt: healthSnapshot.lastCampaignRefreshAt,
+                nextCampaignCheckAt: m.nextCampaignCheckAt,
                 lastDropProgressAt: healthSnapshot.lastDropProgressAt,
                 stallConfidencePercent: healthSnapshot.stallConfidencePercent,
                 stallSignals: healthSnapshot.stallSignals

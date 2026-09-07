@@ -852,8 +852,12 @@ private func isUpdateEvent(_ text: String) -> Bool {
     text.contains(updateEventTag)
 }
 
+/// Both stall mechanisms: the supervisor's out-of-band recovery, and the engine's own
+/// in-loop anti-stall window. Filing them under one category keeps each window whole —
+/// the alarm and the decision it led to are only useful read together, and per-category
+/// retention evicts them separately otherwise.
 private func isStallRecoveryEvent(_ text: String) -> Bool {
-    text.contains("[supervisor]")
+    text.contains("[supervisor]") || text.contains("[antistall]")
 }
 
 private func stallRecoveryReason(rawSource: String, cleaned: String) -> (title: String, detail: String?) {
