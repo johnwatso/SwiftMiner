@@ -26,7 +26,7 @@
 <body>
   <main>
     <h1>SwiftMiner 1.41</h1>
-    <p class="meta">Version 1.41 &middot; Build 2026090909</p>
+    <p class="meta">Version 1.41 &middot; Build 2026090911</p>
     <p class="intro">Two of the fixes here each cost hours of watching that earned nothing, and both were invisible while they happened &mdash; a miner sitting on a stream that had already ended, and recovery quietly switched off on any campaign whose reward is offered at more than one watch time. The rest of the release is about seeing what the app is doing and arranging it the way you think of it: miners can be put in an order of your choosing, the status dock is yours to place, and every surface that reports a version now also reports which mining engine is running.</p>
 
     <section>
@@ -57,6 +57,7 @@
         <li>Where the dock appears is now yours to choose, in Settings &rsaquo; General: every page, Overview only, or off. The same figures stay available per miner on the Miners tab whichever you pick.</li>
         <li>Squad Health reports Healthy, Recovering, Warning, or Error based on the most severe miner condition. A fleet with nothing to mine still reads Healthy, which keeps operational health separate from activity &mdash; there is nothing wrong with an app that has nothing to do.</li>
         <li>Overview cards hold one shape. Each card keeps the room its progress bar, detail and up-next lines need, whether or not that miner is using them right now, so a miner moving between watching, updating and waiting redraws inside its own card instead of resizing the row and pushing the campaign feed below it up and down. The card stays compact with it: the status heading is gone, what follows reads on a single line, and a campaign name too long for that line is on hover.</li>
+        <li>Overview cards are wider, and read tighter. The game and the campaign under it now sit as one pair: the card used to hold a second line of space beneath the game name whether or not the name needed it, which showed as a gap on every card whose game fits on one line. The drop artwork has gone from the compact card too &mdash; it repeated the game already named beside it, and it was what set the card&rsquo;s height. The fleet now fills the width of the window rather than leaving an empty column at the end of the row.</li>
         <li>A larger Overview heading with its matching outline symbol sits closer to the toolbar, with consistent section spacing and short descriptions for current activity and the order of preferred games.</li>
         <li>Manage Games sits beside Reorder in the priority queue, and Reorder becomes available once there are at least two pinned games to move.</li>
         <li>Priorities that apply to every account are now called <em>shared</em> rather than <em>global</em>, in the app and on the web dashboard. Global read as a scope, when what these really are is a set of preferences an operator keeps on behalf of the squad &mdash; and the dashboard now names the account that owns them, alongside a reworked priority menu, preview tiles, account menu and status strip.</li>
