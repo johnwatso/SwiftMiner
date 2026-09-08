@@ -156,9 +156,7 @@ enum SwiftMinerFleet {
 
 /// Hosts the Overview status banner at the bottom of the content area.
 ///
-/// The banner below is the original component, restored unchanged apart from
-/// its dropped action button — this view only feeds it and anchors it. It is
-/// informational: nothing here is clickable.
+/// This view feeds and anchors the informational banner; nothing here is clickable.
 ///
 /// It lives inside the detail column, attached as a bottom safe-area inset, so
 /// it ends where the content plane ends and the sidebar carries on past it
@@ -188,10 +186,6 @@ struct GlobalStatusBar: View {
         .padding(.top, 10)
         .padding(.bottom, 16)
         .frame(maxWidth: .infinity)
-        // Matches what the detail container paints, so the strip itself is
-        // invisible — it exists only to stop scrolling content showing through
-        // the gutter around the banner.
-        .background(Color(nsColor: .windowBackgroundColor))
         .task { syncCampaigns() }
         .onReceive(NotificationCenter.default.publisher(for: .dropsCampaignsDidUpdate)) { _ in
             syncCampaigns()
@@ -211,8 +205,8 @@ struct GlobalStatusBar: View {
     }
 }
 
-/// Overview's original system-state banner, moved from the top of the page to
-/// the bottom of the window and otherwise left alone.
+/// The system-state banner uses native Liquid Glass on macOS 26 and a material
+/// surface on earlier versions.
 ///
 /// The one omission is the trailing action button ("View Drops", "Link
 /// Account"): the bar reports status and nothing else now, and navigation is
@@ -268,15 +262,25 @@ struct OverviewSystemStateBanner: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        // Match the corner radius of the Miner Activity cards above, which use
-        // `.glassCard()` (default radius 18).
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(.white.opacity(0.10), lineWidth: 1)
-        }
+        .background { statusSurface }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("SwiftMiner status: \(state.title)")
+    }
+
+    @ViewBuilder
+    private var statusSurface: some View {
+        let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
+        if #available(macOS 26, *) {
+            shape
+                .fill(.clear)
+                .glassEffect(.regular, in: shape)
+        } else {
+            shape
+                .fill(.regularMaterial)
+                .overlay {
+                    shape.strokeBorder(.white.opacity(0.10), lineWidth: 1)
+                }
+        }
     }
 
     private func fleetCluster(showsLabels: Bool) -> some View {

@@ -301,6 +301,7 @@ extension MinerEngine {
                 session?.currentCampaignId = campaign.id
                 log("Selected channel: \(channel.displayName)")
                 session?.currentChannelId = channel.id
+                currentChannelLogin = channel.login
                 shouldSwitchChannel = false
 
                 if previousCampaignId != campaign.id {
@@ -353,6 +354,7 @@ extension MinerEngine {
                 var lastGqlPoll = runtimeClock.nowNanoseconds()
                 var lastCampaignReevaluation = runtimeClock.nowNanoseconds()
                 var lastOverrideLiveCheck = runtimeClock.nowNanoseconds()
+                var lastWatchLivenessCheck = runtimeClock.nowNanoseconds()
                 var lastClaimCheck = runtimeClock.nowNanoseconds()
                 var emptyCurrentDropPolls = 0
                 let claimCheckSeconds = Double(claimCheckInterval) / 1_000_000_000
@@ -388,6 +390,48 @@ extension MinerEngine {
                             }
                         } catch {
                             log("Could not verify stream override live state for @\(overrideLogin): \(error.localizedDescription)")
+                        }
+                    }
+
+                    // An ordinary watch session learns its channel has ended from a PubSub
+                    // stream-down, and nothing else. That signal is missed whenever the stream
+                    // ends before the miner subscribes — including the case where selection picks
+                    // a channel the directory has not caught up on yet — and Spade accepts
+                    // heartbeats for a dark channel without complaint, so nothing downstream
+                    // notices either. Left alone a miner sits there for hours earning nothing.
+                    //
+                    // Gated on the progress clock rather than run on a timer: a crediting stream
+                    // reports progress roughly once a minute, so a healthy session never reaches
+                    // this and never spends the request. Only a session already failing to earn
+                    // pays for the check, which is exactly when the answer is worth having.
+                    if streamOverrideLogin == nil,
+                       !channel.login.isEmpty,
+                       progressStallElapsedSeconds() >= Self.watchLivenessRecheckInterval,
+                       runtimeClock.elapsedSeconds(since: lastWatchLivenessCheck) >= Self.watchLivenessRecheckInterval {
+                        lastWatchLivenessCheck = runtimeClock.nowNanoseconds()
+                        do {
+                            if try await apiClient.fetchBroadcastId(channelLogin: channel.login) == nil {
+                                let minutes = Int(progressStallElapsedSeconds() / 60)
+                                log("\(Self.antiStallLogTag) \(channel.displayName) is offline after \(minutes) min without progress. Switching channel.")
+                                recordActivityEvent(
+                                    .stallDetected,
+                                    "Watched channel went offline unnoticed: \(channel.displayName)"
+                                )
+                                await noteChannelOffline(login: channel.login)
+                                lastSwitchReason = .channelWentOffline
+                                lastSwitchAt = Date()
+                                shouldSwitchChannel = true
+                                break
+                            }
+                            onOperationalEvent?(.successfulPoll)
+                            // A live sighting clears any escalated backoff the fleet had built up
+                            // for this login, so it is re-probed at full speed once we leave.
+                            await ChannelLivenessCache.shared.recordLive(login: channel.login)
+                        } catch {
+                            // Inconclusive. Leave the session alone — the stall window below is
+                            // the backstop, and switching on a transport error would punish a
+                            // channel that is still earning.
+                            log("Could not verify live state for \(channel.displayName): \(error.localizedDescription)")
                         }
                     }
 
