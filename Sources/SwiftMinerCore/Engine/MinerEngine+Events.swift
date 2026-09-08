@@ -137,9 +137,28 @@ extension MinerEngine {
             lastSwitchAt = Date()
             shouldSwitchChannel = true
 
+            // Publish the sighting before re-selecting. The game directory lags a stream ending
+            // by seconds to minutes, and the campaign-activity check that follows it reads a
+            // cache, so nothing else in selection knows this channel just went dark: a miner
+            // could — and did — re-pick the channel it had left four seconds earlier and then
+            // heartbeat it for hours. Recording it here makes the very next selection skip it,
+            // for every miner at once.
+            await noteChannelOffline(login: currentChannelLogin)
+
             // Stop current watch session
             await cleanupActiveWatchSession(clearTarget: false)
         }
+    }
+
+    /// Records a first-hand offline sighting of `login` in the fleet-wide liveness cache.
+    ///
+    /// Deliberately the same store the ACL probe writes to, so one miner seeing a stream end
+    /// spares the other four from selecting it. The cache only ever holds *offline* results and
+    /// expires them inside `aclProbeInterval`, so a mistaken sighting costs at most one probe
+    /// interval and can never strand a channel that is actually live.
+    func noteChannelOffline(login: String?) async {
+        guard let login, !login.isEmpty else { return }
+        await ChannelLivenessCache.shared.recordOffline(login: login)
     }
 
     func handleWatchSessionError(_ error: TwitchMinerError) async {
@@ -332,6 +351,7 @@ extension MinerEngine {
             session?.currentChannelId = nil
             currentChannelName = nil
             currentChannelId = nil
+            currentChannelLogin = nil
         }
     }
 

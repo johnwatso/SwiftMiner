@@ -231,6 +231,21 @@ public actor MinerEngine {
     static let unverifiedChannelCooldownInterval: TimeInterval = 10 * 60
     var unverifiedChannelCooldownUntil: [String: UInt64] = [:]
 
+    /// Login of the channel currently being watched, kept alongside `currentChannelId` because
+    /// the liveness cache is keyed by login and a PubSub stream-down only carries the ID.
+    var currentChannelLogin: String?
+
+    /// How long a watch session may go without server-verified progress before its channel's
+    /// liveness is re-checked directly.
+    ///
+    /// A crediting stream reports progress about once a minute, so a healthy session never
+    /// reaches this and never spends the request. It exists for the case PubSub cannot cover:
+    /// the stream-down arriving before the miner subscribed — or not at all — leaving the miner
+    /// heartbeating a dark channel that Spade accepts without complaint. One diagnostic caught
+    /// 132 accepted heartbeats over 2h13m against a channel that had gone offline four seconds
+    /// before it was selected.
+    static let watchLivenessRecheckInterval: TimeInterval = 5 * 60
+
     static func shouldAbandonUnverifiedSelection(
         isUnverified: Bool,
         emptyPolls: Int,

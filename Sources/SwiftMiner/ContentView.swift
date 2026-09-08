@@ -50,11 +50,9 @@ struct ContentView: View {
         }
         // Applied to the container rather than to `detailView`, so the bar is
         // not torn down and rebuilt by that view's `.id` on every tab change.
-        // A safe-area inset rather than an overlay: the bar is chrome, so it
-        // takes its own space at the bottom of the content plane instead of
-        // hovering over content that scrolls beneath it. Living inside the
-        // detail column is what keeps it clear of the sidebar, which carries on
-        // to the window's bottom edge with its own material intact.
+        // The safe-area inset leaves room to scroll the last content above the
+        // bar. Its transparent gutter lets the glass float over the detail
+        // surface, while keeping the sidebar clear.
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if showsGlobalStatusBar {
                 GlobalStatusBar()

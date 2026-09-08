@@ -22,10 +22,10 @@ struct AboutWindow: View {
                 .padding(.horizontal, 24)
                 .padding(.bottom, 22)
 
-            Divider()
-
-            Button("Check for Updates…") {
+            Button {
                 updater.checkForUpdates()
+            } label: {
+                Label("Check for Updates…", systemImage: "arrow.triangle.2.circlepath")
             }
             .disabled(!updater.canCheckForUpdates)
             .padding(.vertical, 14)

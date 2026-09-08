@@ -145,4 +145,87 @@ final class ChannelLivenessCacheTests: XCTestCase {
             XCTAssertTrue(known)
         }
     }
+
+    // MARK: - Directory screening
+
+    private func directoryChannel(_ login: String, viewers: Int = 100) -> Channel {
+        Channel(id: "id-\(login)", login: login, displayName: login, isLive: true, viewerCount: viewers)
+    }
+
+    /// The regression this screening exists for. A stream ending does not immediately leave the
+    /// game directory, and the campaign-activity check that follows reads its own cache, so
+    /// without this the selector could hand back the channel whose stream-down it had just
+    /// handled — observed four seconds after the event, followed by 2h13m of heartbeats to a
+    /// dark channel.
+    func testDirectoryScreeningDropsAChannelJustSeenGoOffline() async {
+        let cache = ChannelLivenessCache()
+        await cache.recordOffline(login: "rainbow6")
+
+        let screened = await MinerEngine.screeningKnownOfflineChannels(
+            [directoryChannel("rainbow6"), directoryChannel("stillup")],
+            cache: cache
+        )
+
+        XCTAssertEqual(screened.kept.map(\.login), ["stillup"])
+        XCTAssertEqual(screened.droppedLogins, ["rainbow6"])
+    }
+
+    func testDirectoryScreeningKeepsChannelsWithNoOfflineSighting() async {
+        let cache = ChannelLivenessCache()
+
+        let screened = await MinerEngine.screeningKnownOfflineChannels(
+            [directoryChannel("one"), directoryChannel("two")],
+            cache: cache
+        )
+
+        XCTAssertEqual(screened.kept.count, 2)
+        XCTAssertTrue(screened.droppedLogins.isEmpty)
+    }
+
+    /// The cache only ever holds offline results and expires them inside one probe interval, so
+    /// a channel that comes back must be selectable again immediately — screening must not be
+    /// able to strand a live stream.
+    func testDirectoryScreeningStopsOnceTheSightingExpires() async {
+        let clock = TestClock()
+        let cache = ChannelLivenessCache(ttl: ChannelLivenessCache.ttl, now: { clock.current })
+        await cache.recordOffline(login: "rainbow6")
+
+        clock.advance(by: MinerEngine.aclProbeInterval)
+
+        let screened = await MinerEngine.screeningKnownOfflineChannels(
+            [directoryChannel("rainbow6")],
+            cache: cache
+        )
+
+        XCTAssertEqual(screened.kept.map(\.login), ["rainbow6"])
+    }
+
+    /// Screening everything away is a valid outcome: a restricted campaign still falls through to
+    /// the ACL probe, and finding no channel beats watching a stream that has ended.
+    func testDirectoryScreeningMayEmptyTheResult() async {
+        let cache = ChannelLivenessCache()
+        await cache.recordOffline(login: "rainbow6")
+
+        let screened = await MinerEngine.screeningKnownOfflineChannels(
+            [directoryChannel("rainbow6")],
+            cache: cache
+        )
+
+        XCTAssertTrue(screened.kept.isEmpty)
+    }
+
+    /// A healthy session reports progress about once a minute, so the watch-loop liveness probe
+    /// must sit far enough out that it never fires on a channel that is crediting.
+    func testWatchLivenessRecheckOnlyFiresWellAfterProgressShouldHaveArrived() {
+        XCTAssertGreaterThanOrEqual(
+            MinerEngine.watchLivenessRecheckInterval,
+            4 * 60,
+            "A crediting stream reports progress roughly once a minute; probing sooner spends requests on healthy sessions"
+        )
+        XCTAssertLessThan(
+            MinerEngine.watchLivenessRecheckInterval,
+            TimeInterval(MinerEngine.maxExtraMinutes * 60),
+            "The probe is meant to catch a dark channel before the stall window does, not after it"
+        )
+    }
 }

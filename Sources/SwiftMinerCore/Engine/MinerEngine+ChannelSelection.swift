@@ -417,7 +417,11 @@ extension MinerEngine {
                 log("[ChannelSelect]   Special Event bypass: no directory channels for '\(gameName)', using ACL list")
                 fetched = candidates.flatMap(\.channels)
             }
-            liveChannels = fetched
+            let screened = await Self.screeningKnownOfflineChannels(fetched)
+            if !screened.droppedLogins.isEmpty {
+                log("[ChannelSelect]   Skipping \(screened.droppedLogins.count) directory channel(s) already seen offline: \(screened.droppedLogins.joined(separator: ", "))")
+            }
+            liveChannels = screened.kept
         } catch {
             log("[ChannelSelect]   Failed to fetch live channels for '\(gameName)': \(error.localizedDescription)")
             // Continue with an empty directory result. Restricted campaigns still get their
@@ -683,6 +687,37 @@ extension MinerEngine {
     static func unverifiedChannelKey(campaignId: String, channel: Channel) -> String {
         let identity = normalizedChannelIdentity(channel.id.isEmpty ? channel.login : channel.id)
         return "\(campaignId)|\(identity)"
+    }
+
+    /// Removes channels the fleet has already seen go offline from a directory result.
+    ///
+    /// Twitch's game directory is a cache: it keeps listing a stream for a while after it ends.
+    /// Nothing downstream catches that — the per-channel campaign check confirms the campaign is
+    /// running there, not that anyone is broadcasting, and it answers from its own cache — so a
+    /// stale row was enough to send a miner back to the channel whose stream-down it had just
+    /// handled. Screening against the liveness cache closes that window using sightings the fleet
+    /// already paid for, and costs no requests of its own.
+    ///
+    /// Only offline sightings are ever cached, and they expire inside `aclProbeInterval`, so this
+    /// can delay picking up a channel that has come back but can never invent one that is dark.
+    /// Dropping every row is a valid outcome: a restricted campaign still falls through to the ACL
+    /// probe below, and finding nothing beats watching a stream that ended.
+    static func screeningKnownOfflineChannels(
+        _ channels: [Channel],
+        cache: ChannelLivenessCache = .shared
+    ) async -> (kept: [Channel], droppedLogins: [String]) {
+        var kept: [Channel] = []
+        var droppedLogins: [String] = []
+        kept.reserveCapacity(channels.count)
+        for channel in channels {
+            let login = channel.login.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !login.isEmpty, await cache.isKnownOffline(login: login) {
+                droppedLogins.append(channel.displayName)
+            } else {
+                kept.append(channel)
+            }
+        }
+        return (kept, droppedLogins)
     }
 
     /// Decides whether channel selection should proceed past the directory lookup.
