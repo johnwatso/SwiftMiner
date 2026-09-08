@@ -50,7 +50,8 @@ extension Settings {
             quietHoursStartMinute: quietHoursStartMinute,
             quietHoursEndMinute: quietHoursEndMinute,
             gamePreferencesData: gamePreferencesData,
-            miningStrategy: miningStrategy.rawValue
+            miningStrategy: miningStrategy.rawValue,
+            statusDockVisibility: statusDockVisibility.rawValue
         )
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
@@ -105,6 +106,11 @@ extension Settings {
         quietHoursEndMinute = normalizedMinute(backup.quietHoursEndMinute)
         gamePreferencesData = backup.gamePreferencesData
         miningStrategy = MiningStrategy(rawValue: backup.miningStrategy) ?? .mineAll
+        // Absent from backups written before the dock existed. Those carry no
+        // preference to honour — the dock had never been on screen — so they
+        // land on the same default a fresh install gets.
+        statusDockVisibility = backup.statusDockVisibility
+            .flatMap(StatusDockVisibility.init(rawValue:)) ?? .overviewOnly
     }
 
     func normalizedMinute(_ minute: Int) -> Int {

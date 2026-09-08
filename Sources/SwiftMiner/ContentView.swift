@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 /// Root view — 2-column NavigationSplitView (Sidebar | Detail)
 struct ContentView: View {
     @Environment(NavigationModel.self) var navigation
+    private var settings: Settings { .shared }
 
     var body: some View {
         @Bindable var nav = navigation
@@ -46,29 +47,31 @@ struct ContentView: View {
 
             detailView
                 .id(navigation.selectedItem ?? .overview)
-                .safeAreaInset(edge: .bottom, spacing: 0) {
-                    if showsGlobalStatusBar {
-                        // Reserve the floating control's footprint so a page's
-                        // last row can be scrolled clear of it rather than
-                        // living permanently underneath.
-                        Color.clear
-                            .frame(height: GlobalStatusBar.reservedHeight)
-                            .allowsHitTesting(false)
-                    }
-                }
         }
-        .overlay(alignment: .bottom) {
-            // Hosted here rather than in Overview: the global heartbeat belongs
-            // to the whole app, and follows the user between tabs.
-            GlobalStatusBar()
+        // Applied to the container rather than to `detailView`, so the bar is
+        // not torn down and rebuilt by that view's `.id` on every tab change.
+        // A safe-area inset rather than an overlay: the bar is chrome, so it
+        // takes its own space at the bottom of the content plane instead of
+        // hovering over content that scrolls beneath it. Living inside the
+        // detail column is what keeps it clear of the sidebar, which carries on
+        // to the window's bottom edge with its own material intact.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if showsGlobalStatusBar {
+                GlobalStatusBar()
+            }
         }
         .animation(nil, value: navigation.selectedItem)
     }
 
-    /// The control reports on miners, so it stays out of the way until there is
-    /// at least one — and the space it would occupy stays out of the way too.
+    /// Whether the bottom status bar belongs on screen right now.
+    ///
+    /// The user's preference decides first; after that the bar reports on
+    /// miners, so it stays out of the way until there is at least one.
     private var showsGlobalStatusBar: Bool {
-        !SwiftMinerFleet.displayedMiners(from: navigation.minerManager.miners).isEmpty
+        guard settings.statusDockVisibility.allows(navigation.selectedItem ?? .overview) else {
+            return false
+        }
+        return !SwiftMinerFleet.displayedMiners(from: navigation.minerManager.miners).isEmpty
     }
 
     @ViewBuilder
@@ -557,44 +560,6 @@ enum OverviewSystemState: Equatable {
         }
     }
 
-    /// The same states in one glanceable line, for the floating status control
-    /// where `subtitle`'s full sentence would not fit. A shorter phrasing of the
-    /// same verdict, never a different one.
-    var compactSubtitle: String {
-        switch self {
-        case .idleNoEligibleCampaigns:
-            return "Nothing to mine right now"
-        case .idleAllCampaignsCompleted:
-            return "All campaigns earned"
-        case .waitingForLiveStream:
-            return "Checking channels"
-        case .waitingRefreshingCampaigns:
-            return "Checking campaigns"
-        case .waitingAuthenticating:
-            return "Reconnecting to Twitch"
-        case .recovering:
-            return "Restarting a miner"
-        case .minerUnresponsive:
-            return "Miner not responding"
-        case .noRecentActivity:
-            return "No recent activity"
-        case .blockedAccountNotLinked(let minerName, let blockedCount):
-            if minerName != nil {
-                return "Account not linked"
-            }
-            return "\(blockedCount) need linking"
-        case .blockedAuthenticationExpired:
-            return "Authentication expired"
-        case .blockedNeedsAttention:
-            return "Check Activity Log"
-        case .mining(let activeMinerCount, let totalMinerCount):
-            if activeMinerCount == totalMinerCount {
-                return activeMinerCount == 1 ? "1 miner active" : "\(activeMinerCount) miners active"
-            }
-            return "\(activeMinerCount) of \(totalMinerCount) active"
-        }
-    }
-
     var symbol: String {
         switch self {
         case .idleNoEligibleCampaigns:
@@ -653,28 +618,6 @@ enum OverviewSystemState: Equatable {
         }
     }
 
-    /// Whether relinking an account is what clears this state.
-    ///
-    /// The only remediation the status dock offers. It once also carried "View
-    /// Drops" and "View Schedule", but those were shortcuts to pages the sidebar
-    /// already reaches — navigation, not remediation, and no business on a
-    /// status surface. Relinking has nowhere else to be reached from here.
-    var needsAccountLink: Bool {
-        switch self {
-        case .blockedAccountNotLinked, .blockedAuthenticationExpired, .blockedNeedsAttention:
-            return true
-        case .idleNoEligibleCampaigns,
-             .idleAllCampaignsCompleted,
-             .waitingForLiveStream,
-             .waitingRefreshingCampaigns,
-             .waitingAuthenticating,
-             .minerUnresponsive,
-             .recovering,
-             .noRecentActivity,
-             .mining:
-            return false
-        }
-    }
 }
 
 // MARK: - Campaign Summary Row
