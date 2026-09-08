@@ -48,6 +48,9 @@ public struct SettingsBackup: Codable, Sendable {
     public let quietHoursEndMinute: Int
     public let gamePreferencesData: String
     public let miningStrategy: String
+    /// Optional: backups written before the floating status dock existed have no
+    /// value, and fall back to showing it everywhere on import.
+    public let statusDockVisibility: String?
 
     public init(
         schemaVersion: Int = 1,
@@ -90,7 +93,8 @@ public struct SettingsBackup: Codable, Sendable {
         quietHoursStartMinute: Int,
         quietHoursEndMinute: Int,
         gamePreferencesData: String,
-        miningStrategy: String
+        miningStrategy: String,
+        statusDockVisibility: String? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.exportedAt = exportedAt
@@ -133,6 +137,7 @@ public struct SettingsBackup: Codable, Sendable {
         self.quietHoursEndMinute = quietHoursEndMinute
         self.gamePreferencesData = gamePreferencesData
         self.miningStrategy = miningStrategy
+        self.statusDockVisibility = statusDockVisibility
     }
 }
 
@@ -207,6 +212,52 @@ public enum AppPresenceMode: String, CaseIterable, Identifiable {
             return false
         case .dockAndMenuBar, .menuBarWhenClosed:
             return true
+        }
+    }
+}
+
+/// Where the floating status dock appears.
+///
+/// The dock answers "what is SwiftMiner doing", which is worth having underfoot
+/// on every page for some people and underfoot in the wrong sense for others.
+public enum StatusDockVisibility: String, CaseIterable, Identifiable, Sendable {
+    case overviewOnly
+    case everywhere
+    case hidden
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .everywhere:
+            return "Every page"
+        case .overviewOnly:
+            return "Overview only"
+        case .hidden:
+            return "Off"
+        }
+    }
+
+    public var detail: String {
+        switch self {
+        case .everywhere:
+            return "Keep mining state, average uptime, average last poll and squad health on screen wherever you are in the app."
+        case .overviewOnly:
+            return "Show the status dock on Overview only, and hide it on Miners, Drops and the Activity Log."
+        case .hidden:
+            return "Never show the status dock. The same figures stay available per miner on the Miners tab."
+        }
+    }
+
+    /// Whether the dock belongs on the given page.
+    public func allows(_ item: NavigationModel.SidebarItem) -> Bool {
+        switch self {
+        case .everywhere:
+            return true
+        case .overviewOnly:
+            return item == .overview
+        case .hidden:
+            return false
         }
     }
 }

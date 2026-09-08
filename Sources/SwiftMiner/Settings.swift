@@ -634,6 +634,22 @@ public final class Settings {
         }
     }
     
+    /// Where the floating status dock appears in the main window.
+    ///
+    /// Defaults to Overview only: the dock repeats what the Miners tab already
+    /// says per miner, so following the user onto every page is opt-in.
+    public var statusDockVisibility: StatusDockVisibility {
+        get {
+            access(keyPath: \.statusDockVisibility)
+            return Self.read("statusDockVisibility", default: .overviewOnly)
+        }
+        set {
+            withMutation(keyPath: \.statusDockVisibility) {
+                Self.write("statusDockVisibility", newValue)
+            }
+        }
+    }
+
     /// Whether to show notifications for drop claims
     public var showClaimNotifications: Bool { // Disabled by default per user request
         get {

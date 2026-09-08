@@ -51,6 +51,13 @@ struct GeneralSettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.red)
                 }
+
+                Picker("Status dock", selection: $settings.statusDockVisibility) {
+                    ForEach(StatusDockVisibility.allCases) { visibility in
+                        Text(visibility.title).tag(visibility)
+                    }
+                }
+                SettingsSecondaryText(settings.statusDockVisibility.detail)
             } header: {
                 Text("Application")
             }
