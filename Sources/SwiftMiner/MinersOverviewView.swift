@@ -28,7 +28,7 @@ struct MinersOverviewView: View {
             return MarketingScreenshotFixture.miners(from: navigation.minerManager.miners)
         }
         #endif
-        return navigation.minerManager.miners
+        return Settings.shared.orderedMiners(navigation.minerManager.miners)
     }
 
     private var selectedMiner: MinerManager.ManagedMiner? {
@@ -272,7 +272,12 @@ struct MinersOverviewView: View {
     /// service. Discord selections automatically fall back to Twitch; callers
     /// draw the initial when neither provider has a usable picture yet.
     private func avatarURL(for miner: MinerManager.ManagedMiner) -> URL? {
-        settings.avatarSource(forAccountId: miner.accountId).resolve(
+#if DEBUG
+        if let url = MarketingScreenshotFixture.avatarURL(forAccountId: miner.accountId) {
+            return url
+        }
+#endif
+        return settings.avatarSource(forAccountId: miner.accountId).resolve(
             discord: discordAvatarURL(for: miner),
             twitch: twitchAvatars.url(forAccountId: miner.accountId)
         )

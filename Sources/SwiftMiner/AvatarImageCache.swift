@@ -215,9 +215,16 @@ struct CachedAvatarImage<Fallback: View>: View {
     /// can keep drawing it.
     @State private var loadedURL: URL?
 
+    private var displayedImage: NSImage? {
+#if DEBUG
+        if let preview = MarketingScreenshotFixture.avatarImage(for: url) { return preview }
+#endif
+        return image
+    }
+
     var body: some View {
         Group {
-            if let image {
+            if let image = displayedImage {
                 Image(nsImage: image)
                     .resizable()
                     .interpolation(.high)
@@ -227,6 +234,9 @@ struct CachedAvatarImage<Fallback: View>: View {
             }
         }
         .task(id: url) {
+#if DEBUG
+            if MarketingScreenshotFixture.avatarImage(for: url) != nil { return }
+#endif
             // Drop the former service's image before loading the new one, so an
             // avatar-source switch doesn't briefly show a stale picture. The task
             // also re-runs on every re-appearance, though, and clearing there

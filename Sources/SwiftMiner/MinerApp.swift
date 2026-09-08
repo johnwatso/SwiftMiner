@@ -405,11 +405,23 @@ final class LaunchContextDelegate: NSObject, NSApplicationDelegate, ObservableOb
         }
 
         previousExitWasUnclean = MainActor.assumeIsolated { CrashSentinel.armAndCheckPreviousExit() }
+
+        MainActor.assumeIsolated { Self.configureWindowChrome() }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         MainActor.assumeIsolated { CrashSentinel.markCleanExit() }
+    }
 
+    /// Window and menu chrome that has to be applied to every window AppKit gives
+    /// us, whoever created it.
+    ///
+    /// This ran from `applicationWillTerminate` — at quit, after the last window
+    /// had already come and gone — so none of it took effect during a session.
+    /// Full screen stayed available on the Settings, What's New and About windows,
+    /// and the View menu it adds stayed in the menu bar.
+    @MainActor
+    private static func configureWindowChrome() {
         // SwiftMiner is single-window by design — disable macOS automatic
         // window tabbing so the Window menu doesn't expose "Show Tab Bar",
         // "Merge All Windows", etc.
@@ -420,9 +432,14 @@ final class LaunchContextDelegate: NSObject, NSApplicationDelegate, ObservableOb
         // menu after stripping `.newItem` / `.saveItem`. Remove both directly
         // from the main menu, and re-strip whenever the menu is rebuilt.
         Self.removeRedundantTopLevelMenus()
+        // Observed on any menu rather than on today's `NSApp.mainMenu`: at launch
+        // SwiftUI may not have installed the main menu yet, and it replaces the
+        // object wholesale when it rebuilds. Restripping the main menu is cheap
+        // and idempotent, so every other menu in the app costs one pass over its
+        // half-dozen top-level items.
         NotificationCenter.default.addObserver(
             forName: NSMenu.didAddItemNotification,
-            object: NSApp.mainMenu,
+            object: nil,
             queue: .main
         ) { _ in
             MainActor.assumeIsolated { Self.removeRedundantTopLevelMenus() }
@@ -439,15 +456,25 @@ final class LaunchContextDelegate: NSObject, NSApplicationDelegate, ObservableOb
             queue: .main
         ) { note in
             guard let window = note.object as? NSWindow else { return }
-            MainActor.assumeIsolated {
-                var behavior = window.collectionBehavior
-                behavior.remove(.fullScreenPrimary)
-                behavior.remove(.fullScreenAuxiliary)
-                behavior.insert(.fullScreenNone)
-                window.collectionBehavior = behavior
-                window.standardWindowButton(.zoomButton)?.isEnabled = true
-            }
+            MainActor.assumeIsolated { Self.disableFullScreen(for: window) }
         }
+
+        // Windows that already exist by the time the app finishes launching —
+        // the main window among them — never post the notification above.
+        for window in NSApp.windows {
+            Self.disableFullScreen(for: window)
+        }
+    }
+
+    @MainActor
+    private static func disableFullScreen(for window: NSWindow) {
+        var behavior = window.collectionBehavior
+        behavior.remove(.fullScreenPrimary)
+        behavior.remove(.fullScreenAuxiliary)
+        behavior.insert(.fullScreenNone)
+        window.collectionBehavior = behavior
+        // The green button stays a zoom button; only its full-screen meaning goes.
+        window.standardWindowButton(.zoomButton)?.isEnabled = true
     }
 
     @MainActor

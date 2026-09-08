@@ -25,15 +25,34 @@ struct EventLogView: View {
     }
 
     private var minerNamesByID: [String: String] {
-        miners.reduce(into: [:]) { names, miner in
+        let real: [String: String] = miners.reduce(into: [:]) { names, miner in
             names[miner.id] = miner.displayName
         }
+#if DEBUG
+        return MarketingScreenshotFixture.minerNames(replacing: real)
+#else
+        return real
+#endif
+    }
+
+    /// The log stream as rendered. In DEBUG under the screenshot fixture the
+    /// account names and dashboard host in the stored text are replaced, since
+    /// nothing else in the fixture reaches free-form log lines.
+    private var displayedEvents: [EventEntry] {
+#if DEBUG
+        let real: [String: String] = miners.reduce(into: [:]) { names, miner in
+            names[miner.id] = miner.displayName
+        }
+        return MarketingScreenshotFixture.sanitisedEvents(navigation.events, realNames: real)
+#else
+        return navigation.events
+#endif
     }
 
     var body: some View {
         let minerNames = minerNamesByID
         let page = activityLogPage(
-            events: navigation.events,
+            events: displayedEvents,
             selectedFilters: selectedFilters,
             selectedMinerID: selectedMinerFilterId == Self.allMinersFilterId ? nil : selectedMinerFilterId,
             searchText: searchText,

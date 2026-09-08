@@ -51,6 +51,9 @@ public struct SettingsBackup: Codable, Sendable {
     /// Optional: backups written before the floating status dock existed have no
     /// value, and fall back to showing it everywhere on import.
     public let statusDockVisibility: String?
+    /// Optional: backups written before miners could be arranged have no value,
+    /// and import as no arrangement at all.
+    public let minerOrderData: String?
 
     public init(
         schemaVersion: Int = 1,
@@ -94,7 +97,8 @@ public struct SettingsBackup: Codable, Sendable {
         quietHoursEndMinute: Int,
         gamePreferencesData: String,
         miningStrategy: String,
-        statusDockVisibility: String? = nil
+        statusDockVisibility: String? = nil,
+        minerOrderData: String? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.exportedAt = exportedAt
@@ -138,6 +142,7 @@ public struct SettingsBackup: Codable, Sendable {
         self.gamePreferencesData = gamePreferencesData
         self.miningStrategy = miningStrategy
         self.statusDockVisibility = statusDockVisibility
+        self.minerOrderData = minerOrderData
     }
 }
 

@@ -51,7 +51,8 @@ extension Settings {
             quietHoursEndMinute: quietHoursEndMinute,
             gamePreferencesData: gamePreferencesData,
             miningStrategy: miningStrategy.rawValue,
-            statusDockVisibility: statusDockVisibility.rawValue
+            statusDockVisibility: statusDockVisibility.rawValue,
+            minerOrderData: minerOrderData
         )
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
@@ -111,6 +112,11 @@ extension Settings {
         // land on the same default a fresh install gets.
         statusDockVisibility = backup.statusDockVisibility
             .flatMap(StatusDockVisibility.init(rawValue:)) ?? .overviewOnly
+        // Absent from backups written before miners could be arranged. The
+        // arrangement is by account id, so importing one onto a machine with
+        // different accounts is harmless — unknown ids never match, and every
+        // miner the order does not mention keeps its place at the end.
+        minerOrderData = backup.minerOrderData ?? "[]"
     }
 
     func normalizedMinute(_ minute: Int) -> Int {

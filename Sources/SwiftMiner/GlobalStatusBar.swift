@@ -18,9 +18,9 @@ enum SwiftMinerFleet {
         if MarketingScreenshotFixture.isEnabled {
             return MarketingScreenshotFixture.miners(from: miners)
         }
-        return demoExpanded(miners)
+        return Settings.shared.orderedMiners(demoExpanded(miners))
         #else
-        return miners
+        return Settings.shared.orderedMiners(miners)
         #endif
     }
 

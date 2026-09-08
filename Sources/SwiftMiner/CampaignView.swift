@@ -25,6 +25,18 @@ struct DropsListView: View {
     }
 
     private var miners: [MinerManager.ManagedMiner] { navigation.minerManager.miners }
+
+    /// The fleet the summary tiles describe. Deliberately separate from `miners`:
+    /// filtering and campaign lookup are keyed by real account ids, so only the
+    /// figures and the leader's name are substituted, never the data behind them.
+    private var summaryMiners: [MinerManager.ManagedMiner] {
+#if DEBUG
+        if MarketingScreenshotFixture.isEnabled {
+            return MarketingScreenshotFixture.miners(from: miners)
+        }
+#endif
+        return miners
+    }
     private var hasAccounts: Bool { !miners.isEmpty }
     private var selectedMinerAccountId: String? {
         selectedMinerFilterId == Self.allMinersFilterId ? nil : selectedMinerFilterId
@@ -388,9 +400,10 @@ struct DropsListView: View {
             // resolves `.claimed`/`.blocked` first, so a campaign one account
             // has finished reads as claimed even while another account mines
             // it. Counting active miners directly keeps this honest.
-            activeMiningCampaignCount: feedCampaigns.filter {
-                !(activityByCampaignId[$0.id]?.activeMiners.isEmpty ?? true)
-            }.count,
+            activeMiningCampaignCount: activeMiningCampaignCount(
+                in: feedCampaigns,
+                activityByCampaignId: activityByCampaignId
+            ),
             rewardsClaimedCount: rewardsClaimedCount,
             topClaimedGame: topClaimedGame(in: feedCampaigns, activityByCampaignId: activityByCampaignId),
             mostActiveMiner: mostActiveMiner(in: feedCampaigns)
@@ -684,7 +697,7 @@ struct DropsListView: View {
         HStack(spacing: 12) {
             DashboardMetricCard(
                 title: "Active miners",
-                value: "\(miners.filter { $0.status == .watching || $0.status == .claiming }.count)",
+                value: "\(summaryMiners.filter { $0.status == .watching || $0.status == .claiming }.count)",
                 detail: "\(context.activeMiningCampaignCount) \(context.activeMiningCampaignCount == 1 ? "campaign" : "campaigns") in motion",
                 tint: .green,
                 systemImage: "person.2.fill"
@@ -709,7 +722,7 @@ struct DropsListView: View {
                 systemImage: "checkmark.circle.fill"
             )
 
-            if miners.count > 1, let leader = context.mostActiveMiner {
+            if summaryMiners.count > 1, let leader = context.mostActiveMiner {
                 DashboardMetricCard(
                     title: "Most active miner",
                     value: leader.name,
@@ -722,10 +735,33 @@ struct DropsListView: View {
         }
     }
 
+    private func activeMiningCampaignCount(
+        in feedCampaigns: [CampaignViewData],
+        activityByCampaignId: [String: CampaignActivitySnapshot]
+    ) -> Int {
+#if DEBUG
+        if MarketingScreenshotFixture.isEnabled {
+            // The tile beside this one counts the fixture fleet, so this has to
+            // come from the same place or the pair contradicts itself — five
+            // miners actively watching, nothing in motion.
+            let mining = summaryMiners.compactMap { miner in
+                miner.status == .watching || miner.status == .claiming
+                    ? miner.currentCampaignId
+                    : nil
+            }
+            return Set(mining).count
+        }
+#endif
+        return feedCampaigns.filter {
+            !(activityByCampaignId[$0.id]?.activeMiners.isEmpty ?? true)
+        }.count
+    }
+
     private func mostActiveMiner(in feedCampaigns: [CampaignViewData]) -> (name: String, count: Int)? {
-        guard miners.count > 1 else { return nil }
+        let ranked = summaryMiners
+        guard ranked.count > 1 else { return nil }
         let claimedCountsByAccount = claimedRewardCountsByAccount(in: feedCampaigns)
-        guard let leader = miners.max(by: { lhs, rhs in
+        guard let leader = ranked.max(by: { lhs, rhs in
             let lhsCount = claimedCountsByAccount[lhs.accountId] ?? lhs.dropsClaimed
             let rhsCount = claimedCountsByAccount[rhs.accountId] ?? rhs.dropsClaimed
             if lhsCount != rhsCount { return lhsCount < rhsCount }

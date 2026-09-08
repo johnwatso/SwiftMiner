@@ -125,12 +125,21 @@ struct MinerDiscordPresentation: Equatable {
         // A username identical to the display name is noise, not information.
         let username = discordUser?.username?.nilIfBlank.flatMap { $0 == name ? nil : $0 }
 
+#if DEBUG
+        // Bundled fixture images are presentation-only; service models continue
+        // to accept HTTPS avatars only.
+        let avatarURL = MarketingScreenshotFixture.discordAvatarURL(forAccountId: miner.accountId)
+            ?? discordUser?.avatarURL
+#else
+        let avatarURL = discordUser?.avatarURL
+#endif
+
         return MinerDiscordPresentation(
             isLinked: isLinked,
             status: status,
             displayName: name,
             username: username,
-            avatarURL: discordUser?.avatarURL,
+            avatarURL: avatarURL,
             lastDM: isLinked ? lastDM : nil,
             messageCount: isLinked ? messageCount : 0
         )
@@ -164,11 +173,11 @@ struct MinerDiscordSection: View {
 
     private var displayedDiscordUser: SwiftBotDiscordUser? {
 #if DEBUG
-        if MarketingScreenshotFixture.isEnabled {
+        if let discordID = MarketingScreenshotFixture.discordID(forAccountId: miner.accountId) {
             return SwiftBotDiscordUser(
-                id: MarketingScreenshotFixture.fakeDiscordId,
-                displayName: "Nova",
-                username: "nova.drops"
+                id: discordID,
+                displayName: miner.username,
+                username: "\(miner.username.lowercased()).drops"
             )
         }
 #endif

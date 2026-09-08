@@ -81,8 +81,8 @@ targets:
         SWIFT_STRICT_CONCURRENCY: complete
         PRODUCT_BUNDLE_IDENTIFIER: com.swiftminer.app
         MACOSX_DEPLOYMENT_TARGET: "14.0"
-        MARKETING_VERSION: "1.40.6"
-        CURRENT_PROJECT_VERSION: "2026090814"
+        MARKETING_VERSION: "1.41"
+        CURRENT_PROJECT_VERSION: "2026090911"
         INFOPLIST_KEY_CFBundleDisplayName: SwiftMiner
         INFOPLIST_KEY_CFBundleName: SwiftMiner
         CODE_SIGN_STYLE: Automatic
@@ -95,6 +95,11 @@ targets:
           - "@executable_path/../Frameworks"
         SPARKLE_FEED_URL: https://johnwatso.github.io/SwiftMiner/appcast.xml
         SPARKLE_PUBLIC_ED_KEY: "rxaJsfCpTKtpqRubSfkJwKnztT5S8RHsdAueuT+jKck="
+      configs:
+        Release:
+          EXCLUDED_SOURCE_FILE_NAMES:
+            - "$(inherited)"
+            - "DebugAvatar*.png"
 
   SwiftMinerService:
     type: library.static
