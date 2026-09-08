@@ -211,9 +211,19 @@ struct OverviewView: View {
                 minerActivitySection
                 campaignFeedSection
             }
-            .padding(24)
+            .animation(
+                reduceMotion ? nil : .smooth(duration: 0.3),
+                value: displayedMiners.map(\.id)
+            )
+            .padding(.horizontal, 24)
+            .padding(.top, 12)
+            .padding(.bottom, 24)
         }
-        .navigationTitle("Overview")
+        // Blank rather than "Overview": `pageHeader` is the page's title now, and
+        // the navigation title renders in the same toolbar row right above it,
+        // which read as the word twice. The other tabs keep theirs — they have
+        // no page header of their own.
+        .navigationTitle("")
         .onReceive(NotificationCenter.default.publisher(for: .dropsCampaignsDidUpdate)) { _ in
             // Miner registration makes the per-account disk caches available after
             // Overview's first task may already have returned empty. Drops listens to
@@ -227,9 +237,19 @@ struct OverviewView: View {
                 Button {
                     Task { await refreshFromOverview() }
                 } label: {
-                    Label("Refresh", systemImage: "arrow.clockwise")
+                    HStack(spacing: 6) {
+                        if isRefreshing {
+                            ProgressView()
+                                .controlSize(.mini)
+                            Text("Refreshing…")
+                        } else {
+                            Label("Restart Miners and Refresh", systemImage: "arrow.clockwise")
+                        }
+                    }
                 }
                 .disabled(isRefreshing)
+                .help("Restart miners and refresh campaign data from Twitch")
+
             }
         }
         .task { await refreshSummary() }
@@ -430,28 +450,18 @@ struct MinerStatusLegendPopover: View {
     }
 }
 
-    /// The page's own anchor, now that no banner sits above the content. The
-    /// window title says "Overview" too, but a title bar is chrome — this is
-    /// where the page starts, and it gives the top of the column something to
-    /// hang the whitespace on.
     var pageHeader: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Overview")
-                .font(.largeTitle.weight(.bold))
-
-            Text("See what your miners are up to.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityAddTraits(.isHeader)
+        Text("Overview")
+            .font(.system(size: 30, weight: .bold))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityAddTraits(.isHeader)
     }
 
     @ViewBuilder
     func sectionHeading(_ title: String) -> some View {
         Text(title)
             .font(.title3.weight(.medium))
-            .padding(.top, 10)
+            .accessibilityAddTraits(.isHeader)
     }
 
     @ViewBuilder
@@ -463,7 +473,7 @@ struct MinerStatusLegendPopover: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
-        .padding(.top, 10)
+        .accessibilityAddTraits(.isHeader)
     }
 }
 
