@@ -372,9 +372,8 @@ struct MinerActivityCard: View {
                 }
                 .opacity(0.82)
             } else if isExpanded {
-                // Miners is the authoritative detail view, so there it still says that
-                // nothing is queued. Overview drops the section instead of reserving a
-                // third of a card to say nothing.
+                // Keep the empty queue explanation in miner details; Overview
+                // only shows this section when there is something coming next.
                 Divider()
                     .opacity(0.45)
 
@@ -393,22 +392,18 @@ struct MinerActivityCard: View {
             }
         }
         .padding(isExpanded ? 18 : 16)
-        // No fixed height: an idle card is as short as what it has to say. Filling the
-        // grid row's height keeps every card in a row the same height as the busiest
-        // one, while topLeading keeps the quiet ones' content at the top rather than
-        // stretched down the card.
+        // Fit the content, matching the tallest card in each grid row without
+        // reserving blank space for activity that is not currently present.
         .frame(
             maxWidth: .infinity,
             maxHeight: prominence == .compact ? .infinity : nil,
             alignment: .topLeading
         )
         .glassCard()
-        // Card content arrives from polling, not from anything the user did, so
-        // a status change used to resize this card — and shove every card and
-        // section below it — between one frame and the next. Settling on the
-        // new shape instead makes the change something the eye can follow.
+        // Overview updates content in place. Only expanded details animate their
+        // changing structure; a polling update must not animate the whole grid.
         .animation(
-            reduceMotion ? nil : .smooth(duration: 0.34),
+            reduceMotion || !isExpanded ? nil : .smooth(duration: 0.34),
             value: MinerActivityCardLayout(snap)
         )
         .contentShape(RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
@@ -509,12 +504,16 @@ struct MinerActivityCard: View {
             HStack(alignment: .top, spacing: 10) {
                 VStack(alignment: .leading, spacing: isExpanded ? 4 : 6) {
                     Text(snap.now.title)
+                        .contentTransition(.opacity)
+                        .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: snap.now.title)
                         .font(.title3.weight(.semibold))
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
 
                     if let subtitle = snap.now.subtitle {
                         Text(subtitle)
+                            .contentTransition(.opacity)
+                            .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: subtitle)
                             .font(isExpanded ? .callout : .subheadline)
                             .foregroundStyle(.secondary)
                             .lineLimit(2)

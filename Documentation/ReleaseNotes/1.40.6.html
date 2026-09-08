@@ -26,8 +26,19 @@
 <body>
   <main>
     <h1>SwiftMiner 1.40.6</h1>
-    <p class="meta">Version 1.40.6 &middot; Build 2026090610</p>
+    <p class="meta">Version 1.40.6 &middot; Build 2026090811</p>
     <p class="intro">1.40.5 taught mining to tell apart campaign tiers that share a reward identifier. The Drops page now does the same, so what you see there matches what SwiftMiner is actually still earning. Alongside that, the reward shelf is rebuilt around a consistent well, a passing Twitch hiccup no longer claims SwiftMiner is out of date, and the app does noticeably less work while you are not looking at it.</p>
+
+    <section>
+      <h2>A Clearer Overview</h2>
+      <ul>
+        <li>Squad Health now reports Healthy, Recovering, Warning, or Error based on the most severe miner condition. A fleet with nothing to mine still shows Healthy, keeping operational health separate from activity.</li>
+        <li>Overview cards fit their current activity, with no reserved blank area and no empty Up Next section. Routine status text fades and progress updates stay local; queue reordering settles without bounce and respects Reduce Motion.</li>
+        <li>A larger Overview heading with its matching outline symbol sits closer to the toolbar. Consistent section spacing and short descriptions clarify current activity and the order of preferred games.</li>
+        <li>Manage Games is now available beside Reorder in the priority queue. Reorder becomes available when there are at least two pinned games to move.</li>
+        <li>The refresh control now explains that it restarts miners and refreshes campaign data, with an indication while the refresh is running.</li>
+      </ul>
+    </section>
 
     <section>
       <h2>&#128029; Bug fixes</h2>

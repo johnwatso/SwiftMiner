@@ -32,8 +32,12 @@ extension OverviewView {
 
                 Spacer()
 
-                priorityQueueControls(canReorder: items.contains(where: \.isPriorityPinned))
+                priorityQueueControls(canReorder: items.filter(\.isPriorityPinned).count > 1)
             }
+
+            Text("Games are prioritised from left to right.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
 
             PriorityQueueRail(
                 items: items,
@@ -48,7 +52,17 @@ extension OverviewView {
 
     @ViewBuilder
     private func priorityQueueControls(canReorder: Bool) -> some View {
-        Group {
+        HStack(spacing: 8) {
+            Button {
+                isShowingGameManagement = true
+            } label: {
+                Label("Manage Games", systemImage: "slider.horizontal.3")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(isReorderingPriorityQueue)
+            .help("Add, remove, or change prioritised games")
+
             if isReorderingPriorityQueue {
                 Button {
                     setPriorityQueueReordering(false)
@@ -73,13 +87,13 @@ extension OverviewView {
     }
 
     private func setPriorityQueueReordering(_ isReordering: Bool) {
-        withAnimation(.easeInOut(duration: 0.18)) {
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.18)) {
             isReorderingPriorityQueue = isReordering
         }
     }
 
     private var addPrioritisedGameSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             sectionHeading("Priority Queue")
 
             MaterialEmptyStatePanel(
@@ -390,7 +404,7 @@ extension OverviewView {
         guard sourceIndex != destinationIndex else { return }
 
         let toOffset = sourceIndex < destinationIndex ? destinationIndex + 1 : destinationIndex
-        withAnimation(.spring(response: 0.32, dampingFraction: 0.84)) {
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.3)) {
             settings.moveGamePreferences(
                 fromOffsets: IndexSet(integer: sourceIndex),
                 toOffset: toOffset,

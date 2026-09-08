@@ -496,7 +496,7 @@ struct MinerFleetStatus {
             return MinerFleetStatus(
                 uptimeStart: nil,
                 lastPollAt: nil,
-                healthTitle: "None",
+                healthTitle: "No Miners",
                 healthSymbol: "person.slash",
                 healthTint: .secondary
             )
@@ -512,37 +512,27 @@ struct MinerFleetStatus {
             return max(0, now.timeIntervalSince(polled))
         }
 
-        let healths = snapshots.map(\.health)
-        // A miner with nothing to mine is idle, not unwell — only genuine fault
-        // states count against the fleet.
-        let okCount = healths.filter { $0 == .mining || $0 == .idle }.count
-        let allOK = okCount == miners.count
-
-        // When nothing is wrong, the symbol and colour follow the word: a fleet
-        // reading "Healthy" should not be tinted by the quietest miner in it.
-        // Once something is wrong, both follow the worst miner — that is the one
-        // worth acting on.
-        let representative: MinerHealthSnapshot.Health
-        if allOK {
-            representative = healths.contains(.mining) ? .mining : .idle
-        } else {
-            representative = healths.min { severity(of: $0) < severity(of: $1) } ?? .idle
-        }
-
-        let title: String
-        if allOK {
-            title = representative == .mining ? "Healthy" : "Idle"
-        } else {
-            title = "\(okCount) of \(miners.count)"
-        }
+        // Fleet health describes operational condition, independently of whether
+        // miners currently have drops to earn. Surface the most severe condition.
+        let representative = snapshots.map(\.health)
+            .min { severity(of: $0) < severity(of: $1) } ?? .idle
 
         return MinerFleetStatus(
             uptimeStart: uptimes.isEmpty ? nil : now.addingTimeInterval(-average(uptimes)),
             lastPollAt: pollAges.isEmpty ? nil : now.addingTimeInterval(-average(pollAges)),
-            healthTitle: title,
+            healthTitle: title(for: representative),
             healthSymbol: symbol(for: representative),
             healthTint: tint(for: representative)
         )
+    }
+
+    static func title(for health: MinerHealthSnapshot.Health) -> String {
+        switch health {
+        case .mining, .idle: return "Healthy"
+        case .recovering: return "Recovering"
+        case .attention: return "Warning"
+        case .stalled, .needsAuth, .blocked: return "Error"
+        }
     }
 
     private static func average(_ values: [TimeInterval]) -> TimeInterval {
@@ -563,8 +553,7 @@ struct MinerFleetStatus {
 
     private static func symbol(for health: MinerHealthSnapshot.Health) -> String {
         switch health {
-        case .mining: return "checkmark.circle.fill"
-        case .idle: return "pause.circle.fill"
+        case .mining, .idle: return "checkmark.circle.fill"
         case .recovering: return "arrow.triangle.2.circlepath.circle.fill"
         case .attention: return "exclamationmark.circle.fill"
         case .stalled: return "exclamationmark.triangle.fill"
@@ -575,11 +564,10 @@ struct MinerFleetStatus {
 
     private static func tint(for health: MinerHealthSnapshot.Health) -> Color {
         switch health {
-        case .mining: return .green
+        case .mining, .idle: return .green
         case .recovering: return .blue
         case .attention: return .orange
         case .stalled, .needsAuth, .blocked: return .red
-        case .idle: return .secondary
         }
     }
 }

@@ -9,7 +9,7 @@ extension OverviewView {
     var minerActivitySection: some View {
         let miners = displayedMiners
 
-        return VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 sectionHeading("Miner Activity")
 
@@ -22,6 +22,7 @@ extension OverviewView {
                 }
                 .buttonStyle(.plain)
                 .help("Explain miner card statuses")
+                .accessibilityLabel("Explain miner statuses")
                 .popover(isPresented: $isMinerStatusLegendPresented, arrowEdge: .top) {
                     MinerStatusLegendPopover()
                 }
@@ -37,6 +38,10 @@ extension OverviewView {
                 .controlSize(.small)
                 .help("Add a Twitch account")
             }
+
+            Text("Current status and progress for each miner.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
 
             if miners.isEmpty {
                 MaterialEmptyStatePanel(
@@ -63,13 +68,6 @@ extension OverviewView {
                 }
             }
         }
-        // A miner arriving or leaving reflows the grid and carries the Priority
-        // Queue below it up or down the page. Each card animates its own
-        // reshaping; this covers the set of cards changing.
-        .animation(
-            reduceMotion ? nil : .smooth(duration: 0.34),
-            value: miners.map(\.id)
-        )
     }
 
     /// Wide enough that the drop line — reward name, watched and required minutes —

@@ -17,6 +17,7 @@ enum SystemSymbolCompatibility {
         "exclamationmark.arrow.trianglehead.counterclockwise.rotate.90": "exclamationmark.arrow.triangle.2.circlepath",
         "gift.slash": "gift.fill",
         "list.bullet.rectangle.stack": "list.bullet.rectangle",
+        "list.dash.header.rectangle": "rectangle.grid.2x2",
         "list.dash.header.rectangle.fill": "rectangle.grid.2x2.fill",
         "person.badge.shield.check.fill": "person.badge.shield.checkmark.fill",
         "personalhotspot.slash": "personalhotspot",

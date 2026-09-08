@@ -126,6 +126,7 @@ struct CampaignRailItem: Identifiable {
 
 
 struct CampaignFeedCard: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let item: CampaignRailItem
     let prominence: CampaignCardProminence
     let onUploadCustomArtwork: (Game) -> Void
@@ -359,11 +360,11 @@ struct CampaignFeedCard: View {
         .opacity(cardOpacity * (priority?.contentOpacity ?? 1))
         .saturation(cardSaturation)
         .brightness(item.visualState == .watching ? 0.04 : (isHovering ? 0.015 : 0))
-        .scaleEffect(isHovering ? 1.03 : 1)
+        .scaleEffect(isHovering && !reduceMotion ? 1.03 : 1)
         .shadow(color: .black.opacity(item.visualState == .watching ? 0.16 : (isHovering ? 0.10 : 0.05)), 
                 radius: item.visualState == .watching ? 10 : (isHovering ? 8 : 3), 
                 y: item.visualState == .watching ? 5 : (isHovering ? 4 : 1))
-        .animation(.easeInOut(duration: 0.2), value: isHovering)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: isHovering)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityTitle)
         .accessibilityValue(accessibilityValue)
@@ -459,6 +460,7 @@ struct ReorderableCampaignFeedCard: View {
     var onManageGames: (() -> Void)? = nil
     /// Queue position markings. Nil for any rail that is not the priority queue.
     var priority: PriorityQueueDecoration? = nil
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var dragOffset: CGFloat = 0
 
     private var travelDistance: CGFloat {
@@ -563,7 +565,7 @@ struct ReorderableCampaignFeedCard: View {
                             }
 
                             onDragEnded()
-                            withAnimation(.interactiveSpring(response: 0.30, dampingFraction: 0.86, blendDuration: 0.08)) {
+                            withAnimation(reduceMotion ? nil : .smooth(duration: 0.3)) {
                                 dragOffset = 0
                             }
                         }
@@ -1123,6 +1125,7 @@ struct PriorityQueueRail: View {
     let onManageGames: () -> Void
     let onMoveItem: (CampaignRailItem, Int) -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var activeDragIndex: Int?
     @State private var projectedDropIndex: Int?
     @State private var activeDragProgress: CGFloat = 0
@@ -1227,10 +1230,10 @@ struct PriorityQueueRail: View {
             }
         }
         .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.15)) { isHoveringRail = hovering }
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.15)) { isHoveringRail = hovering }
         }
-        .animation(.easeInOut(duration: 0.18), value: canScrollBack)
-        .animation(.easeInOut(duration: 0.18), value: canScrollForward)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: canScrollBack)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: canScrollForward)
     }
 
     private func scrollButton(
@@ -1263,7 +1266,7 @@ struct PriorityQueueRail: View {
         let perPage = max(Int((viewportWidth + prominence.spacing) / step), 1)
         let currentIndex = Int((scrollOffset / step).rounded())
         let target = min(max(currentIndex + (direction * perPage), 0), items.count - 1)
-        withAnimation(.easeInOut(duration: 0.28)) {
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.28)) {
             proxy.scrollTo(items[target].id, anchor: .leading)
         }
     }
@@ -1285,7 +1288,7 @@ struct PriorityQueueRail: View {
     }
 
     private func clearDragProjection() {
-        withAnimation(.interactiveSpring(response: 0.24, dampingFraction: 0.88, blendDuration: 0.08)) {
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.3)) {
             activeDragIndex = nil
             projectedDropIndex = nil
             activeDragProgress = 0
