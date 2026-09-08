@@ -663,6 +663,20 @@ public final class Settings {
         }
     }
 
+    /// JSON-encoded account ids in the order the user arranged their miners.
+    /// Ids the fleet no longer has are dropped the next time the order is saved.
+    var minerOrderData: String {
+        get {
+            access(keyPath: \.minerOrderData)
+            return Self.read("minerOrderData", default: "[]")
+        }
+        set {
+            withMutation(keyPath: \.minerOrderData) {
+                Self.write("minerOrderData", newValue)
+            }
+        }
+    }
+
     /// JSON-encoded warnings that should be suppressed.
     /// Format: "accountId:gameId:warningType"
     var ignoredWarningsData: String {
@@ -1344,6 +1358,8 @@ public final class Settings {
         twitchAvatarsData = "{}"
         accountAvatarSourcesData = "{}"
         ignoredWarningsData = "[]"
+        minerOrderData = "[]"
+        statusDockVisibility = .overviewOnly
     }
 
     public func allowsOperatorNotifications(at date: Date = Date(), calendar: Calendar = .current) -> Bool {

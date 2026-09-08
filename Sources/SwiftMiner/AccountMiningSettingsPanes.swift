@@ -11,6 +11,9 @@ import UniformTypeIdentifiers
 /// the two stay aligned without a Grid.
 private enum AccountRowMetrics {
     static let avatar: CGFloat = 40
+    /// Reserved whether or not a fleet is large enough to arrange, so a second
+    /// account appearing does not shift every row sideways.
+    static let gripColumn: CGFloat = 14
     static let operatorColumn: CGFloat = 62
     /// Narrow because the source control is two brand marks, not two words.
     static let pictureColumn: CGFloat = 76
@@ -40,7 +43,19 @@ private struct AccountSourceMark: View {
 
 struct AccountSettingsView: View {
     let navigation: NavigationModel
+    private var settings: Settings { .shared }
     private var twitchAvatars: TwitchAvatarStore { .shared }
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// The account currently being dragged, if any.
+    @State private var draggingAccountId: String?
+
+    /// The fleet in its arranged order — the same order Overview and the Miners
+    /// tab show, since this pane is where that order is edited.
+    private var miners: [MinerManager.ManagedMiner] {
+        settings.orderedMiners(navigation.minerManager.miners)
+    }
 
     var body: some View {
         ScrollView {
@@ -74,24 +89,53 @@ struct AccountSettingsView: View {
 
     @ViewBuilder
     private var accountList: some View {
-        if navigation.minerManager.miners.isEmpty {
+        let miners = self.miners
+
+        if miners.isEmpty {
             SettingsSecondaryText("No accounts connected yet. Add or import an account to start mining.")
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(14)
                 .tahoeCard()
         } else {
+            let orderedIds = miners.map(\.accountId)
+            let canReorder = miners.count > 1
+
             VStack(spacing: 0) {
                 columnCaptions
 
-                ForEach(navigation.minerManager.miners) { miner in
+                ForEach(miners) { miner in
                     Divider()
-                    AccountSettingsAccountRow(miner: miner, navigation: navigation)
+                    AccountSettingsAccountRow(
+                        miner: miner,
+                        navigation: navigation,
+                        canReorder: canReorder,
+                        isDragging: draggingAccountId == miner.accountId
+                    )
+                    .minerReorderable(
+                        id: miner.accountId,
+                        ids: orderedIds,
+                        isEnabled: canReorder,
+                        draggingId: $draggingAccountId,
+                        onReorder: applyOrder
+                    )
                 }
             }
             // Clipped before the card's own background so the tinted caption
             // strip follows the card's rounded top corners.
             .clipShape(RoundedRectangle(cornerRadius: TahoeMetrics.card, style: .continuous))
             .tahoeCard()
+
+            if canReorder {
+                SettingsSecondaryText("Drag a row to change the order miners appear in on Overview and the Miners tab. It does not affect what they mine.")
+            }
+        }
+    }
+
+    /// Saves the whole displayed fleet as the arrangement, which also drops the
+    /// account ids of accounts that have since been removed.
+    private func applyOrder(_ ids: [String]) {
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.24)) {
+            settings.minerOrder = ids
         }
     }
 
@@ -102,7 +146,11 @@ struct AccountSettingsView: View {
         HStack(spacing: AccountRowMetrics.spacing) {
             Text("Account")
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.leading, AccountRowMetrics.avatar + AccountRowMetrics.spacing)
+                .padding(
+                    .leading,
+                    AccountRowMetrics.gripColumn + AccountRowMetrics.spacing
+                        + AccountRowMetrics.avatar + AccountRowMetrics.spacing
+                )
 
             Text("Operator")
                 .frame(width: AccountRowMetrics.operatorColumn, alignment: .center)
@@ -142,20 +190,31 @@ struct AccountSettingsView: View {
 struct AccountSettingsAccountRow: View {
     let miner: MinerManager.ManagedMiner
     let navigation: NavigationModel
+    var canReorder = false
+    var isDragging = false
 
     @State private var nickname: String
     @State private var isRemoveHovered = false
     @State private var isRowHovered = false
     @FocusState private var isNicknameFocused: Bool
 
-    init(miner: MinerManager.ManagedMiner, navigation: NavigationModel) {
+    init(
+        miner: MinerManager.ManagedMiner,
+        navigation: NavigationModel,
+        canReorder: Bool = false,
+        isDragging: Bool = false
+    ) {
         self.miner = miner
         self.navigation = navigation
+        self.canReorder = canReorder
+        self.isDragging = isDragging
         self._nickname = State(initialValue: miner.nickname ?? "")
     }
 
     var body: some View {
         HStack(spacing: AccountRowMetrics.spacing) {
+            dragHandle
+
             profilePicture
 
             VStack(alignment: .leading, spacing: 3) {
@@ -185,10 +244,24 @@ struct AccountSettingsAccountRow: View {
         .padding(.horizontal, AccountRowMetrics.horizontalPadding)
         .padding(.vertical, 9)
         .background(isRowHovered ? Color.primary.opacity(0.04) : .clear)
+        .opacity(isDragging ? 0.4 : 1)
         .onHover { isRowHovered = $0 }
         .onChange(of: miner.nickname) { _, newValue in
             nickname = newValue ?? ""
         }
+    }
+
+    /// Drawn only once there are two accounts to arrange, and faintly until the
+    /// row is under the pointer — the column is held either way, so rows do not
+    /// move when the handle appears.
+    private var dragHandle: some View {
+        Image(systemName: "line.3.horizontal")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.tertiary)
+            .opacity(canReorder ? (isRowHovered ? 1 : 0.45) : 0)
+            .frame(width: AccountRowMetrics.gripColumn)
+            .accessibilityHidden(true)
+            .help("Drag to reorder")
     }
 
     private var operatorToggle: some View {

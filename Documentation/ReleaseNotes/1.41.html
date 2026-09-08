@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SwiftMiner 1.41 - Release Notes</title>
+  <meta name="description" content="Release notes for SwiftMiner 1.41: miners can be arranged in an order of your choosing, the status dock is configurable, and two mining fixes stop miners watching channels that credit nothing.">
+  <link rel="canonical" href="https://swiftminer.app/release-notes/1.41.html">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <style>
+    :root { color-scheme: light dark; }
+    body { margin: 0; padding: 32px 20px 48px; font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f4f6f8; color: #0f1720; }
+    main { max-width: 760px; margin: 0 auto; padding: 28px; border-radius: 22px; background: rgba(255, 255, 255, .86); box-shadow: 0 20px 60px rgba(15, 23, 32, .10); border: 1px solid rgba(82, 96, 109, .12); }
+    h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
+    .meta { color: #52606d; font-size: 14px; }
+    .intro { margin: 0 0 24px; color: #384454; }
+    section { margin: 18px 0 0; padding: 18px 18px 14px; border: 1px solid rgba(82, 96, 109, .18); border-radius: 16px; border-left: 5px solid #7b4bd9; background: rgba(255, 255, 255, .42); }
+    h2 { margin: 0 0 4px; color: #7b4bd9; font-size: 18px; }
+    ul { margin: 12px 0 0; padding-left: 22px; }
+    li { margin: 0 0 8px; }
+    @media (prefers-color-scheme: dark) { body { background: #0b1015; color: #edf2f7; } main { background: rgba(15, 23, 32, .88); border-color: rgba(159, 176, 194, .14); } .meta { color: #9fb0c2; } .intro { color: #c8d3df; } section { border-color: rgba(159, 176, 194, .18); background: rgba(255, 255, 255, .04); } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>SwiftMiner 1.41</h1>
+    <p class="meta">Version 1.41 &middot; Build 2026090909</p>
+    <p class="intro">Two of the fixes here each cost hours of watching that earned nothing, and both were invisible while they happened &mdash; a miner sitting on a stream that had already ended, and recovery quietly switched off on any campaign whose reward is offered at more than one watch time. The rest of the release is about seeing what the app is doing and arranging it the way you think of it: miners can be put in an order of your choosing, the status dock is yours to place, and every surface that reports a version now also reports which mining engine is running.</p>
+
+    <section>
+      <h2>&#128029; Bug fixes</h2>
+      <ul>
+        <li>Miners no longer keep watching a stream that has already ended. Twitch&rsquo;s game directory carries on listing a channel for a while after it goes dark, so a miner could pick the very channel it had just left &mdash; in one case four seconds after the stream ended, then sitting there for more than two hours while Twitch quietly credited nothing. A stream going offline is now shared across every miner the moment it is seen, and channels already known to be dark are skipped when a new one is chosen. As a backstop for an ending nobody saw, a miner that has gone five minutes without earning checks its channel directly and moves on if it is offline.</li>
+        <li>Anti-stall recovery runs again on campaigns whose reward is offered at several watch-time tiers. Twitch gives those tiers one shared identifier, so claiming the 60-minute tier made the 360-minute tier you were still earning look as though it had been claimed somewhere else. Every stall check read that as a fresh claim, reset the counter, and let the miner sit on a channel crediting nothing &mdash; three accounts logged over three hours of exactly that. Recovery now takes its answer from the inventory reconciliation itself, so it switches channel or cools the campaign down as it was always meant to.</li>
+        <li>Full screen is gone from SwiftMiner&rsquo;s windows for good. The app has always been meant to run in one ordinary window, but the code that turns full screen off ran when the app quit rather than when it launched, so it never took effect while you were using it &mdash; the Settings, What&rsquo;s New and About windows could still be taken full screen, and the menu bar kept the item that does it. The same misplaced setup also left macOS window tabbing switched on.</li>
+        <li>A miner with nothing to mine now says when it will next look for work, and its card counts the wait down. It used to go silent between scans, which is the state it spends most of its time in and the one hardest to tell apart from stuck; clicking the miner forced an off-cadence refresh, which made the click look like the cure.</li>
+        <li>When Twitch refuses to serve follow state, the Activity Log now says so. Ranking channels without it is the right fallback, but it happened silently while the followed-streamer preference stayed switched on and inert &mdash; on one day, six of seven lookups failed with nothing on screen to explain why.</li>
+        <li>A stall and the decision it led to are filed together in the Activity Log. They used to land in separate categories where routine chatter evicted the outcome within a day, leaving a log that said something had gone wrong and never said what was done about it.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#128203; Your Fleet, In Your Order</h2>
+      <ul>
+        <li>Miners can now be put in an order of your choosing. Reorder on Overview drags the cards into place, and the same arrangement can be made by dragging rows in Settings &rsaquo; Accounts. Overview, the Miners tab, the account list and the status dock all follow it, and a newly added account joins the end rather than landing in the middle of an arrangement you made.</li>
+        <li>The order is purely presentational: it does not change what any miner mines, or when. Every miner is still scheduled on its own.</li>
+        <li>It travels with your settings backup, and is stored by account, so a miner that is restarted or reconnected keeps its place.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#128202; A Clearer Overview</h2>
+      <ul>
+        <li>The status dock along the bottom keeps mining state, average uptime, average last poll and squad health on screen. It uses Apple&rsquo;s Liquid Glass treatment on macOS 26 and a frosted material on earlier versions, and floats over the page rather than sitting on an opaque strip.</li>
+        <li>Where the dock appears is now yours to choose, in Settings &rsaquo; General: every page, Overview only, or off. The same figures stay available per miner on the Miners tab whichever you pick.</li>
+        <li>Squad Health reports Healthy, Recovering, Warning, or Error based on the most severe miner condition. A fleet with nothing to mine still reads Healthy, which keeps operational health separate from activity &mdash; there is nothing wrong with an app that has nothing to do.</li>
+        <li>Overview cards hold one shape. Each card keeps the room its progress bar, detail and up-next lines need, whether or not that miner is using them right now, so a miner moving between watching, updating and waiting redraws inside its own card instead of resizing the row and pushing the campaign feed below it up and down. The card stays compact with it: the status heading is gone, what follows reads on a single line, and a campaign name too long for that line is on hover.</li>
+        <li>A larger Overview heading with its matching outline symbol sits closer to the toolbar, with consistent section spacing and short descriptions for current activity and the order of preferred games.</li>
+        <li>Manage Games sits beside Reorder in the priority queue, and Reorder becomes available once there are at least two pinned games to move.</li>
+        <li>Priorities that apply to every account are now called <em>shared</em> rather than <em>global</em>, in the app and on the web dashboard. Global read as a scope, when what these really are is a set of preferences an operator keeps on behalf of the squad &mdash; and the dashboard now names the account that owns them, alongside a reworked priority menu, preview tiles, account menu and status strip.</li>
+        <li>The refresh control explains that it restarts miners and refreshes campaign data, and shows that it is working while it runs.</li>
+        <li>Routine status text fades rather than jumping, progress updates stay local to the card that changed, and every one of these transitions respects Reduce Motion.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#128269; Knowing What You Are Running</h2>
+      <ul>
+        <li>SwiftMiner has a proper About window, replacing the standard macOS panel. It carries the version, the build, and the mining engine version with the date it last moved.</li>
+        <li>The mining engine now has a version of its own, separate from the app version. The app version moves for website, documentation and interface work; the engine number moves only when mining behaviour changes. So &ldquo;is that fix actually in the copy I am running?&rdquo; is now answerable &mdash; from the About window, Settings &rsaquo; Mining, the engine&rsquo;s start-up log line, a diagnostic export, or the web dashboard footer. This release runs engine 4.16.</li>
+        <li>Check for Updates is in the About window, and the reply when there is nothing to install is a plain sentence instead of the recovery text Sparkle offers by default.</li>
+      </ul>
+    </section>
+
+    <p class="meta"><a href="./index.html">All release notes</a></p>
+  </main>
+</body>
+</html>

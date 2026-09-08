@@ -354,34 +354,37 @@ struct MinerActivityCard: View {
         // is expensive and was previously recomputed on every access (~10+ times per
         // render, multiplied by every miner card on screen).
         let snap = snapshot
-        return VStack(alignment: .leading, spacing: isExpanded ? 14 : 12) {
+        return VStack(alignment: .leading, spacing: isExpanded ? 14 : 10) {
             header(snap: snap)
 
-            VStack(alignment: .leading, spacing: isExpanded ? 7 : 10) {
-                ActivityLabel("Current Status", color: .secondary)
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 7) {
+                    ActivityLabel("Current Status", color: .secondary)
+                    currentActivity(snap: snap)
+                }
+            } else {
+                // No "Current Status" heading on a compact card: the status is the
+                // largest line on it, and the heading cost a line to say so.
                 currentActivity(snap: snap)
             }
 
-            if let next = snap.upNext {
+            if isExpanded {
                 Divider()
                     .opacity(0.45)
 
                 VStack(alignment: .leading, spacing: 6) {
                     ActivityLabel("Up Next", color: .secondary)
-                    nextActivity(next)
-                }
-                .opacity(0.82)
-            } else if isExpanded {
-                // Keep the empty queue explanation in miner details; Overview
-                // only shows this section when there is something coming next.
-                Divider()
-                    .opacity(0.45)
 
-                VStack(alignment: .leading, spacing: 6) {
-                    ActivityLabel("Up Next", color: .secondary)
-                    emptyNextActivity
+                    if let next = snap.upNext {
+                        nextActivity(next)
+                    } else {
+                        emptyNextActivity
+                    }
                 }
                 .opacity(0.82)
+            } else {
+                compactUpNext(snap.upNext)
+                    .opacity(0.82)
             }
 
             if prominence == .expanded, !snap.blockedPriority.isEmpty {
@@ -391,9 +394,12 @@ struct MinerActivityCard: View {
                 blockedPriorityList(snap: snap)
             }
         }
-        .padding(isExpanded ? 18 : 16)
-        // Fit the content, matching the tallest card in each grid row without
-        // reserving blank space for activity that is not currently present.
+        .padding(isExpanded ? 18 : 14)
+        // Compact cards reserve every slot they can ever fill — progress bar,
+        // detail, live indicator, up next — so a miner changing state redraws
+        // inside its own card instead of resizing the grid row and moving the
+        // rest of the page. Expanded cards own the whole detail pane, where
+        // nothing below them has to hold still, and fit their content.
         .frame(
             maxWidth: .infinity,
             maxHeight: prominence == .compact ? .infinity : nil,
@@ -430,11 +436,20 @@ struct MinerActivityCard: View {
     }
 
     private func header(snap: MinerActivitySnapshot) -> some View {
-        HStack(alignment: .center, spacing: 8) {
-            AnimatedStatusIcon(symbol: snap.now.symbol, color: snap.now.accent, size: 17, weight: .medium)
+        // On Overview the account is what the reader is looking for first, and the
+        // status symbol is how they find the one card that needs them — so both
+        // carry more weight than the status text below. Miner details keeps the
+        // lighter pairing: there the account is already named by the page.
+        HStack(alignment: .center, spacing: isExpanded ? 8 : 9) {
+            AnimatedStatusIcon(
+                symbol: snap.now.symbol,
+                color: snap.now.accent,
+                size: isExpanded ? 17 : 21,
+                weight: isExpanded ? .medium : .bold
+            )
 
             Text(miner.displayName)
-                .font(.title3.weight(.semibold))
+                .font(isExpanded ? .title3.weight(.semibold) : .title2.weight(.bold))
                 .lineLimit(1)
 
             Spacer(minLength: 8)
@@ -501,8 +516,13 @@ struct MinerActivityCard: View {
             // Game and campaign lead; the drop's own artwork sits opposite them
             // so the card keeps one identity per side and the progress bar below
             // still spans the full width.
-            HStack(alignment: .top, spacing: 10) {
-                VStack(alignment: .leading, spacing: isExpanded ? 4 : 6) {
+            HStack(alignment: isExpanded ? .top : .center, spacing: 10) {
+                VStack(alignment: .leading, spacing: isExpanded ? 4 : 2) {
+                    // Game over campaign, set tight like a track's album over its
+                    // artist. Compact used to reserve a second title line to hold
+                    // every card level, but the 46pt artwork opposite already
+                    // floors the row — so the reserved line only ever showed as a
+                    // gap under a one-line game name.
                     Text(snap.now.title)
                         .contentTransition(.opacity)
                         .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: snap.now.title)
@@ -510,71 +530,153 @@ struct MinerActivityCard: View {
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    if let subtitle = snap.now.subtitle {
-                        Text(subtitle)
+                    if isExpanded {
+                        if let subtitle = snap.now.subtitle {
+                            Text(subtitle)
+                                .contentTransition(.opacity)
+                                .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: subtitle)
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    } else {
+                        // One line, reserved. Two lines held the card's shape just
+                        // as well but spent height on a campaign name most cards
+                        // fit anyway; the full text is on hover.
+                        Text(snap.now.subtitle ?? "")
                             .contentTransition(.opacity)
-                            .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: subtitle)
-                            .font(isExpanded ? .callout : .subheadline)
+                            .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: snap.now.subtitle)
+                            .font(.subheadline)
                             .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                            .fixedSize(horizontal: false, vertical: true)
+                            .lineLimit(1, reservesSpace: true)
+                            .help(snap.now.subtitle ?? "")
                     }
                 }
 
                 Spacer(minLength: 0)
 
-                if let artworkURL = snap.now.artworkURL {
-                    MinerActivityArtwork(url: artworkURL, size: isExpanded ? 54 : 46)
+                // Miner details still shows the drop's artwork. The compact card
+                // does not: it repeated what the game name already says, and at
+                // 46pt it set the row's height.
+                //
+                // Dropping it is also what keeps the grid level. The title no
+                // longer reserves a second line, so a card is only taller than
+                // its neighbours if the title wraps — and giving the text the
+                // card's full width is what stops that. At the narrowest column
+                // the grid allows (300 minus 14pt padding either side = 272pt),
+                // the longest status the app can show, "Blocked — Authentication
+                // expired", measures 239.9pt. Anything wordier than roughly that
+                // wraps and stands its card taller than its neighbours.
+                if isExpanded, let artworkURL = snap.now.artworkURL {
+                    MinerActivityArtwork(url: artworkURL, size: 54)
                 }
             }
 
             if let progress = snap.now.progressFraction {
-                HStack(spacing: 8) {
-                    AnimatedLinearProgressView(value: progress, tint: effectiveAccent(snap.now.accent))
-
-                    // Reads as the bar's own value rather than metadata below
-                    // it, and comes off the same fraction the bar is drawn
-                    // from, so the two can never disagree. The fixed width
-                    // keeps every card's bar ending on the same line.
-                    if let percent = snap.now.progressPercent {
-                        Text("\(percent)%")
-                            .font(.caption.weight(.semibold))
-                            .monospacedDigit()
-                            .foregroundStyle(effectiveAccent(snap.now.accent))
-                            .frame(width: 32, alignment: .trailing)
-                            // Rolls to the new figure alongside the bar's own
-                            // sweep rather than snapping while the bar glides.
-                            .contentTransition(.numericText())
-                            .animation(
-                                reduceMotion ? nil : .smooth(duration: 0.4),
-                                value: percent
-                            )
-                    }
-                }
-                .padding(.top, isExpanded ? 0 : 2)
+                progressRow(progress: progress, percent: snap.now.progressPercent, accent: snap.now.accent)
             }
 
             if let detail = snap.now.detail {
                 Text(detail)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(isExpanded ? 1 : 2)
+                    .lineLimit(1)
                     .fixedSize(horizontal: false, vertical: true)
-            }
-
-            if let deadline = nextCheckDeadline {
-                MinerNextCheckView(deadline: deadline, lastCheckedAt: miner.lastCampaignRefreshAt)
+                    .help(isExpanded ? "" : detail)
             }
 
             // A known drop already shows cumulative watched time across every source.
             // Keep the session-only stopwatch for pure watch overrides, where no drop total exists.
-            if snap.now.progressFraction == nil, let anchor = liveActivityAnchor {
+            // Miner details can afford both lines; a compact card has room for one,
+            // and the countdown is the one that answers "is this thing still alive".
+            if isExpanded {
+                if let deadline = nextCheckDeadline {
+                    MinerNextCheckView(deadline: deadline, lastCheckedAt: miner.lastCampaignRefreshAt)
+                }
+
+                if snap.now.progressFraction == nil, let anchor = liveActivityAnchor {
+                    MinerLiveActivityTimerView(
+                        anchor: anchor,
+                        accent: effectiveAccent(snap.now.accent)
+                    )
+                }
+            } else if let deadline = nextCheckDeadline {
+                MinerNextCheckView(deadline: deadline, lastCheckedAt: miner.lastCampaignRefreshAt)
+                    .padding(.top, 2)
+            } else if snap.now.progressFraction == nil, let anchor = liveActivityAnchor {
                 MinerLiveActivityTimerView(
                     anchor: anchor,
                     accent: effectiveAccent(snap.now.accent)
                 )
             }
+
+            if !isExpanded {
+                compactBallast(snap: snap)
+            }
         }
+    }
+
+    /// Hidden copies of the compact rows this miner has nothing to put in,
+    /// parked at the foot of the block.
+    ///
+    /// Reserving each row where it belongs kept the card one height, but an idle
+    /// miner then showed the gap in the middle of its own card, between what it
+    /// was saying and the line below — it read as something failing to load. The
+    /// rows are the same rows, so the height is identical to the pixel; they are
+    /// simply all collected under the content, where the slack reads as the
+    /// card's own bottom margin and every card's footer still lines up.
+    @ViewBuilder
+    private func compactBallast(snap: MinerActivitySnapshot) -> some View {
+        if snap.now.progressFraction == nil {
+            progressRow(progress: 0, percent: 0, accent: snap.now.accent)
+                .hidden()
+        }
+
+        if snap.now.detail == nil {
+            Text(" ")
+                .font(.caption)
+                .lineLimit(1)
+                .hidden()
+        }
+
+        if nextCheckDeadline == nil, snap.now.progressFraction != nil || liveActivityAnchor == nil {
+            Text(" ")
+                .font(.caption.monospacedDigit())
+                .lineLimit(1)
+                .padding(.top, 2)
+                .hidden()
+        }
+    }
+
+    /// The progress bar and its percentage, factored out so the compact card can
+    /// draw the identical row hidden when there is no progress to report. Anything
+    /// that reserves height by guessing at a constant drifts the moment the row's
+    /// own type or spacing changes; this cannot.
+    private func progressRow(progress: Double, percent: Int?, accent: Color) -> some View {
+        HStack(spacing: 8) {
+            AnimatedLinearProgressView(value: progress, tint: effectiveAccent(accent))
+
+            // Reads as the bar's own value rather than metadata below
+            // it, and comes off the same fraction the bar is drawn
+            // from, so the two can never disagree. The fixed width
+            // keeps every card's bar ending on the same line.
+            if let percent {
+                Text("\(percent)%")
+                    .font(.caption.weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(effectiveAccent(accent))
+                    .frame(width: 32, alignment: .trailing)
+                    // Rolls to the new figure alongside the bar's own
+                    // sweep rather than snapping while the bar glides.
+                    .contentTransition(.numericText())
+                    .animation(
+                        reduceMotion ? nil : .smooth(duration: 0.4),
+                        value: percent
+                    )
+            }
+        }
+        .padding(.top, isExpanded ? 0 : 2)
     }
 
     /// When the miner is actively watching a stream, the timestamp the live timer counts from.
@@ -614,7 +716,7 @@ struct MinerActivityCard: View {
                         .lineLimit(1)
                 }
 
-                if prominence == .expanded, let detail = item.detail {
+                if let detail = item.detail {
                     Text(detail)
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
@@ -638,6 +740,33 @@ struct MinerActivityCard: View {
                 .foregroundStyle(.secondary)
 
             Spacer(minLength: 6)
+        }
+    }
+
+    /// Up Next on one line, heading and item together. As a section it cost a
+    /// divider, a heading and two more lines to name a single game — roughly a
+    /// quarter of a compact card. The line is always drawn, so a queue that
+    /// empties still cannot change the card's height.
+    private func compactUpNext(_ item: MinerActivityItem?) -> some View {
+        HStack(spacing: 6) {
+            ActivityLabel("Up Next", color: .secondary)
+
+            if let item {
+                AnimatedStatusIcon(symbol: item.symbol, color: item.accent, size: 9, weight: .semibold)
+                    .frame(width: 14, height: 14)
+
+                Text(item.title)
+                    .font(.caption.weight(.medium))
+                    .lineLimit(1)
+                    .help(item.subtitle ?? item.title)
+            } else {
+                Text("Nothing queued")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
         }
     }
 

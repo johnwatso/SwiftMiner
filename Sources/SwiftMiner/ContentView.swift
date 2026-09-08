@@ -202,6 +202,10 @@ struct OverviewView: View {
     /// Whether the priority queue is in reorder mode. Drag state itself belongs to
     /// `PriorityQueueRail`; only the mode is shared with the section's header button.
     @State var isReorderingPriorityQueue = false
+    /// Whether the miner grid is in reorder mode, and which card is currently
+    /// being carried across it.
+    @State var isReorderingMiners = false
+    @State var draggingMinerId: String?
 
     var campaigns: [CampaignViewData] { visibleCampaigns }
 
@@ -645,16 +649,21 @@ private struct WindowZoomConfigurator: NSViewRepresentable {
         if !coordinator.didConfigure {
             coordinator.didConfigure = true
             window.styleMask.insert(.resizable)
-            window.collectionBehavior.remove([
-                .fullScreenPrimary,
-                .fullScreenAuxiliary,
-                .fullScreenAllowsTiling
-            ])
-            window.collectionBehavior.insert([
-                .fullScreenNone,
-                .fullScreenDisallowsTiling
-            ])
         }
+
+        // Re-applied on every update rather than once: SwiftUI restores its own
+        // collection behaviour when it reconfigures the window, and a window that
+        // regains `.fullScreenPrimary` also puts "Enter Full Screen" back in the
+        // menu bar.
+        window.collectionBehavior.remove([
+            .fullScreenPrimary,
+            .fullScreenAuxiliary,
+            .fullScreenAllowsTiling
+        ])
+        window.collectionBehavior.insert([
+            .fullScreenNone,
+            .fullScreenDisallowsTiling
+        ])
     }
 
     final class Coordinator: NSObject {

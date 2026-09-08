@@ -44,6 +44,33 @@ final class SettingsBackupTests: XCTestCase {
         XCTAssertEqual(settings.swiftBotEndpoint, "http://127.0.0.1:9000")
     }
 
+    func testBackupRoundTripRestoresTheMinerArrangement() throws {
+        settings.minerOrder = ["c", "a", "b"]
+
+        let data = try settings.exportBackupData()
+        settings.resetToDefaults()
+        XCTAssertEqual(settings.minerOrder, [])
+
+        try settings.importBackupData(data)
+        XCTAssertEqual(settings.minerOrder, ["c", "a", "b"])
+    }
+
+    func testABackupWrittenBeforeArrangementsExistedImportsAsNoArrangement() throws {
+        settings.minerOrder = ["c", "a", "b"]
+        let data = try settings.exportBackupData()
+
+        // An older export is exactly this file without the key, so drop it
+        // rather than hand-writing a payload that would drift from the type.
+        var payload = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        XCTAssertNotNil(payload.removeValue(forKey: "minerOrderData"))
+        let older = try JSONSerialization.data(withJSONObject: payload)
+
+        try settings.importBackupData(older)
+        XCTAssertEqual(settings.minerOrder, [])
+    }
+
     func testWebDashboardOAuthProviderSwitchesResetToEnabled() {
         settings.webDashboardTwitchOAuthEnabled = false
         settings.webDashboardDiscordOAuthEnabled = false

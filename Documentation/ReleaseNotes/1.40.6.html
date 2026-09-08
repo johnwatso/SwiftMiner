@@ -26,26 +26,12 @@
 <body>
   <main>
     <h1>SwiftMiner 1.40.6</h1>
-    <p class="meta">Version 1.40.6 &middot; Build 2026090814</p>
+    <p class="meta">Version 1.40.6 &middot; Build 2026090610</p>
     <p class="intro">1.40.5 taught mining to tell apart campaign tiers that share a reward identifier. The Drops page now does the same, so what you see there matches what SwiftMiner is actually still earning. Alongside that, the reward shelf is rebuilt around a consistent well, a passing Twitch hiccup no longer claims SwiftMiner is out of date, and the app does noticeably less work while you are not looking at it.</p>
-
-    <section>
-      <h2>A Clearer Overview</h2>
-      <ul>
-        <li>The bottom status bar now uses Apple&rsquo;s Liquid Glass treatment on macOS 26, with a frosted material surface on earlier versions. The opaque strip behind it is removed so the bar floats over the detail surface.</li>
-        <li>Squad Health now reports Healthy, Recovering, Warning, or Error based on the most severe miner condition. A fleet with nothing to mine still shows Healthy, keeping operational health separate from activity.</li>
-        <li>Overview cards fit their current activity, with no reserved blank area and no empty Up Next section. Routine status text fades and progress updates stay local; queue reordering settles without bounce and respects Reduce Motion.</li>
-        <li>A larger Overview heading with its matching outline symbol sits closer to the toolbar. Consistent section spacing and short descriptions clarify current activity and the order of preferred games.</li>
-        <li>Manage Games is now available beside Reorder in the priority queue. Reorder becomes available when there are at least two pinned games to move.</li>
-        <li>The refresh control now explains that it restarts miners and refreshes campaign data, with an indication while the refresh is running.</li>
-      </ul>
-    </section>
 
     <section>
       <h2>&#128029; Bug fixes</h2>
       <ul>
-        <li>The About window has a cleaner layout without the separator line, and Check for Updates now includes an update symbol.</li>
-        <li>Miners no longer keep watching a stream that has already ended. Twitch&rsquo;s game directory carries on listing a channel for a while after it goes dark, so a miner could pick the very channel it had just left &mdash; in one case four seconds after the stream ended, then sitting there for more than two hours while Twitch quietly credited nothing. A stream going offline is now shared across every miner the moment it is seen, and channels already known to be dark are skipped when a new one is chosen. As a backstop for an ending nobody saw, a miner that has gone five minutes without earning checks its channel directly and moves on if it is offline.</li>
         <li>The Drops page now uses the same per-reward reconciliation as mining, instead of independently treating a shared identifier as proof that every matching tier was collected. Unfinished tiers keep their real watch progress and no longer show green claimed checks.</li>
         <li>When several live-window campaigns for one game share a Drops card, the subtitle now says that more campaigns are included. An older completed reward &mdash; or merely claiming the first tier of the current campaign &mdash; can no longer make the whole group read &ldquo;claimed &middot; not linked&rdquo; while rewards remain unfinished.</li>
         <li>A drop lookup that Twitch briefly failed to recognise no longer reports that SwiftMiner needs updating. Twitch registers these lookups per server, so a single server can miss a request the rest of the fleet answers normally &mdash; over one day that affected sixteen of 2,338 inventory checks while the other 2,322 succeeded, and every one of the sixteen told you to update the app. SwiftMiner now retries before concluding anything is wrong, and only reports that an update is needed once a lookup has genuinely stopped working, at which point it stops spending retries on it.</li>

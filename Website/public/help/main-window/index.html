@@ -85,6 +85,15 @@
                     <li><strong>Miners Summary:</strong> A quick listing of your Twitch accounts, showing which streamer each account is currently watching.</li>
                 </ul>
 
+                <h3 id="reordering-miners">Putting your miners in order</h3>
+                <p>Miners arrive in whatever order the accounts were added, which is rarely the order you think of them in. With two or more connected, click <strong>Reorder</strong> above the miner cards and drag them into the arrangement you want, then click <strong>Done</strong>. The same arrangement can be made by dragging rows in <strong>Settings &rsaquo; Accounts</strong>.</p>
+                <p>Overview, the Miners tab, the account list and the status dock all follow the order you set, and a newly added account joins the end rather than landing in the middle of it. The order is presentational only: every miner is still scheduled on its own, and its position says nothing about what it mines or when.</p>
+
+                <h2 id="status-dock">The Status Dock</h2>
+                <p>The status dock sits along the bottom of the window and reports the fleet as a whole rather than any one miner: how many miners are running, average uptime, average last poll, and <strong>Squad Health</strong>.</p>
+                <p>Squad Health reads <code>Healthy</code>, <code>Recovering</code>, <code>Warning</code>, or <code>Error</code>, taking its reading from the most severe condition across your miners. A fleet with nothing to mine still reads Healthy &mdash; health is about whether the app is working, not whether there is work to do, and a quiet period between campaigns is not a fault.</p>
+                <p>Choose where the dock appears &mdash; every page, Overview only, or off &mdash; under <a href="../settings/#general">Settings &rsaquo; General</a>. With it off, the same figures stay available per miner on the Miners tab.</p>
+
                 <h2 id="miners">Miners Section</h2>
                 <p>The <strong>Miners</strong> tab lists every connected account in detail. Here, you can control individual mining sessions, check the stream health, and see details about the current broadcaster.</p>
 
@@ -148,6 +157,7 @@
                     <h2 class="sidebar-title">On this page</h2>
                     <ul class="toc-list">
                         <li><a href="#overview" class="toc-link">Overview Dashboard</a></li>
+                        <li><a href="#status-dock" class="toc-link">The Status Dock</a></li>
                         <li><a href="#miners" class="toc-link">Miners Section</a></li>
                         <li><a href="#drops" class="toc-link">Drops Section</a></li>
                         <li><a href="#activity-log" class="toc-link">Activity Log</a></li>

@@ -113,6 +113,16 @@
                                 <td>Hide the main window on login launch so it runs quietly in the background. (Only applies to automatic login launches).</td>
                             </tr>
                             <tr>
+                                <td><strong>Status dock</strong></td>
+                                <td>Choose where the status dock along the bottom of the window appears:
+                                    <ul>
+                                        <li><code>Every page</code>: Keep mining state, average uptime, average last poll and squad health on screen wherever you are in the app.</li>
+                                        <li><code>Overview only</code>: Show the dock on Overview, and hide it on Miners, Drops and the Activity Log.</li>
+                                        <li><code>Off</code>: Never show it. The same figures stay available per miner on the Miners tab.</li>
+                                    </ul>
+                                </td>
+                            </tr>
+                            <tr>
                                 <td><strong>Miner pictures</strong></td>
                                 <td>Choose whether a miner's header picture comes from <code>Discord</code> (the account it is linked to) or <code>Twitch</code> (the account it mines with). Whichever you pick, the other service is used when it has no picture, and the miner's initial is shown when neither does.</td>
                             </tr>
@@ -134,6 +144,7 @@
                     <li><strong>Add Account:</strong> Generates a new Twitch device login flow. You can link multiple accounts to farm Drops simultaneously.</li>
                     <li><strong>Reconnect:</strong> If a session expires (showing <code>Needs Auth</code>), click Reconnect to refresh credentials without removing the account history.</li>
                     <li><strong>Remove Account:</strong> Deletes saved credentials for that profile from your macOS Keychain and removes it from SwiftMiner.</li>
+                    <li><strong>Reorder:</strong> With two or more accounts connected, drag a row to change the order your miners appear in. Overview, the Miners tab, the account list and the status dock all follow it. The order is presentational only &mdash; it does not change what any miner mines or when &mdash; and it travels with your settings backup.</li>
                 </ul>
 
                 <h2 id="mining">Mining Settings</h2>
@@ -226,6 +237,15 @@
                 </ul>
                 <p>See <a href="../automatic-updates/">Automatic &amp; Unattended Updates</a> for details about the initial prompt, install timing, and macOS App Management permission.</p>
 
+                <h2 id="versions">Which version am I running?</h2>
+                <p>Open <strong>SwiftMiner &rsaquo; About SwiftMiner</strong>. The About window reports three things, and they move for different reasons:</p>
+                <ul>
+                    <li><strong>Version:</strong> the release you are on, such as 1.41. It moves for interface, website and documentation work as well as for mining changes.</li>
+                    <li><strong>Build:</strong> a timestamp identifying the exact build, useful when reporting a problem.</li>
+                    <li><strong>Mining engine:</strong> a separate number that moves <em>only</em> when mining behaviour itself changes, shown with the date it last did. So if you are wondering whether a particular earning fix is in the copy you are running, this is the number to check &mdash; not the version.</li>
+                </ul>
+                <p>The engine version also appears in <strong>Settings &rsaquo; Mining</strong>, in a diagnostic export, and in the web dashboard footer. <strong>Check for Updates</strong> is in the About window alongside them.</p>
+
             </main>
 
             <aside class="kb-sidebar" aria-label="Sidebar">
@@ -237,6 +257,7 @@
                         <li><a href="#mining" class="toc-link">Mining Settings</a></li>
                         <li><a href="#advanced" class="toc-link">Advanced & Logs</a></li>
                         <li><a href="#updates" class="toc-link">Updates Settings</a></li>
+                        <li><a href="#versions" class="toc-link">Which version am I running?</a></li>
                     </ul>
                 </div>
 

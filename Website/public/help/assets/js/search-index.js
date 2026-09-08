@@ -73,6 +73,20 @@ const searchIndex = [
     snippet: "Track active campaigns, progress, and running miners from the Overview dashboard."
   },
   {
+    title: "Putting your miners in order",
+    url: "main-window/#reordering-miners",
+    category: "Main Window",
+    keywords: "reorder reordering order arrange rearrange drag drop sort miner cards position move account order",
+    snippet: "Drag miner cards on Overview, or rows in Settings, to arrange your miners in the order you want."
+  },
+  {
+    title: "The Status Dock",
+    url: "main-window/#status-dock",
+    category: "Main Window",
+    keywords: "status dock bar bottom squad health healthy recovering warning error uptime average last poll fleet hide show",
+    snippet: "Read fleet-wide mining state, uptime, last poll and Squad Health, and choose where the dock appears."
+  },
+  {
     title: "Miners Section",
     url: "main-window/#miners",
     category: "Main Window",
@@ -129,6 +143,13 @@ const searchIndex = [
     category: "Settings",
     keywords: "accounts setting connect reconnect remove delete twitch log out switch account",
     snippet: "Link new Twitch accounts, re-authenticate sessions, and remove accounts."
+  },
+  {
+    title: "Which version am I running?",
+    url: "settings/#versions",
+    category: "Settings",
+    keywords: "about window version build number mining engine version changelog which version check for updates release",
+    snippet: "Read the app version, build and mining engine version in the About window, and what each one means."
   },
   {
     title: "Mining Behavior Settings",
