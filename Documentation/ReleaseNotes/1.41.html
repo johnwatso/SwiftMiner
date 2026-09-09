@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SwiftMiner 1.41 - Release Notes</title>
-  <meta name="description" content="Release notes for SwiftMiner 1.41: miners can be arranged in an order of your choosing, the status dock is configurable, and two mining fixes stop miners watching channels that credit nothing.">
+  <meta name="description" content="Release notes for SwiftMiner 1.41: share secure friend setup links, arrange miners in your own order, configure the status dock, and avoid channels that credit nothing.">
   <link rel="canonical" href="https://swiftminer.app/release-notes/1.41.html">
   <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
@@ -26,8 +26,8 @@
 <body>
   <main>
     <h1>SwiftMiner 1.41</h1>
-    <p class="meta">Version 1.41 &middot; Build 2026090914</p>
-    <p class="intro">Two of the fixes here each cost hours of watching that earned nothing, and both were invisible while they happened &mdash; a miner sitting on a stream that had already ended, and recovery quietly switched off on any campaign whose reward is offered at more than one watch time. The rest of the release is about seeing what the app is doing and arranging it the way you think of it: miners can be put in an order of your choosing, the status dock is yours to place, and every surface that reports a version now also reports which mining engine is running.</p>
+    <p class="meta">Version 1.41 &middot; Build 2026090915</p>
+    <p class="intro">Two of the fixes here each cost hours of watching that earned nothing, and both were invisible while they happened &mdash; a miner sitting on a stream that had already ended, and recovery quietly switched off on any campaign whose reward is offered at more than one watch time. The rest of the release is about making a multi-account SwiftMiner easier to run: invite a friend without handling their credentials, put miners in an order of your choosing, place the status dock where it belongs, and see which mining engine is running.</p>
 
     <section>
       <h2>&#128029; Bug fixes</h2>
@@ -38,6 +38,15 @@
         <li>A miner with nothing to mine now says when it will next look for work, and its card counts the wait down. It used to go silent between scans, which is the state it spends most of its time in and the one hardest to tell apart from stuck; clicking the miner forced an off-cadence refresh, which made the click look like the cure.</li>
         <li>When Twitch refuses to serve follow state, the Activity Log now says so. Ranking channels without it is the right fallback, but it happened silently while the followed-streamer preference stayed switched on and inert &mdash; on one day, six of seven lookups failed with nothing on screen to explain why.</li>
         <li>A stall and the decision it led to are filed together in the Activity Log. They used to land in separate categories where routine chatter evicted the outcome within a day, leaving a log that said something had gone wrong and never said what was done about it.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#128279; Bring a Friend</h2>
+      <ul>
+        <li>Adding a first Twitch account still goes straight to Twitch. Once SwiftMiner already has an account, Add Account now asks whether the next miner is being set up on this Mac or belongs to a friend, and explains what will happen before anything opens or gets shared.</li>
+        <li>A friend can be sent a polished SwiftMiner invitation through the native macOS share sheet. A live 30-minute countdown shows exactly how long it remains valid, then offers Send Again to create a fresh invitation. They approve their own Twitch account from their own device, while SwiftMiner waits on the host Mac and adds the miner automatically. No Discord integration or Web Dashboard is required.</li>
+        <li>The invitation names the selected operator account, or the first account when no operator has been chosen, and opens a focused SwiftMiner setup page with a branded link preview, one clear Twitch connection action and a reminder that credentials are never shared. The initial Mail or Messages content no longer exposes Twitch&rsquo;s activation URL, device code or technical setup instructions.</li>
       </ul>
     </section>
 

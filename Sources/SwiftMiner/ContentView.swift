@@ -21,7 +21,8 @@ struct ContentView: View {
         .sheet(isPresented: $nav.showAddAccountSheet) {
             AuthRequiredSheet(
                 isPresented: $nav.showAddAccountSheet,
-                reconnectingMinerId: nav.reconnectingMinerId
+                reconnectingMinerId: nav.reconnectingMinerId,
+                existingAccountCount: navigation.minerManager.miners.count
             )
                 .environment(navigation)
                 .onDisappear {

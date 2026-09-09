@@ -5,12 +5,19 @@ import SwiftMinerCore
 /// Manages the Twitch OAuth device-code login flow for adding a new miner account.
 ///
 /// Usage:
-///   1. Call `startDeviceAuth()` — populates `deviceInfo` and opens the browser.
+///   1. Call `startDeviceAuth()` — creates a device code and optionally opens the browser.
 ///   2. Observe `state` to drive the UI.
 ///   3. When `state == .succeeded(let account)`, hand the account to `MinerManager`.
 @MainActor
 @Observable
 public final class MinerLoginService {
+
+    public struct DeviceAuthorization: Equatable, Sendable {
+        public let code: String
+        public let verificationURL: URL
+        public let expiresIn: Int
+        public let expiresAt: Date
+    }
 
     // MARK: - State
 
@@ -41,9 +48,11 @@ public final class MinerLoginService {
     }
 
     public private(set) var state: AuthState = .idle
+    public private(set) var deviceAuthorization: DeviceAuthorization?
 
     // MARK: - Private
 
+    private var authorizationTask: Task<Void, Never>?
     private var pollingTask: Task<Void, Never>?
 
     // MARK: - Init
@@ -52,9 +61,12 @@ public final class MinerLoginService {
 
     // MARK: - Public API
 
-    /// Begin the device-code flow. Updates `state` as the flow progresses.
-    public func startDeviceAuth() {
+    /// Begin the device-code flow. The browser can stay closed when the code is
+    /// being handed to someone on another device.
+    public func startDeviceAuth(opensBrowser: Bool = true) {
         guard state == .idle || isFailed else { return }
+        authorizationTask?.cancel()
+        deviceAuthorization = nil
 
         // resolvedClientId always returns a value (falls back to Twitch's web client ID)
         let clientId = Settings.shared.resolvedClientId
@@ -68,15 +80,26 @@ public final class MinerLoginService {
 
         state = .starting
 
-        Task {
+        authorizationTask = Task { [weak self] in
+            guard let self else { return }
+            defer { authorizationTask = nil }
             do {
                 let authService = TwitchAuthService(clientId: clientId, tokenStore: TokenStoreFactory.makeDefault())
                 let response = try await authService.initiateDeviceFlow(
                     includeFollowedChannels: Settings.shared.prioritiseFollowedStreamers
                 )
+                guard !Task.isCancelled else { return }
 
-                // Auto-open browser for user convenience
-                NSWorkspace.shared.open(response.verificationURI)
+                deviceAuthorization = DeviceAuthorization(
+                    code: response.userCode,
+                    verificationURL: response.verificationURI,
+                    expiresIn: response.expiresIn,
+                    expiresAt: Date().addingTimeInterval(TimeInterval(response.expiresIn))
+                )
+
+                if opensBrowser {
+                    NSWorkspace.shared.open(response.verificationURI)
+                }
                 
                 state = .waitingForUser(
                     code: response.userCode,
@@ -91,6 +114,7 @@ public final class MinerLoginService {
                     interval: response.interval
                 )
             } catch {
+                guard !Task.isCancelled else { return }
                 let raw = error.localizedDescription
                 // Include the first 8 chars of the client ID so we can verify which one was used
                 let idHint = clientId.count > 8 ? String(clientId.prefix(8)) + "…" : clientId
@@ -101,14 +125,20 @@ public final class MinerLoginService {
 
     /// Cancel any in-flight polling and reset to idle.
     public func cancel() {
+        authorizationTask?.cancel()
+        authorizationTask = nil
         pollingTask?.cancel()
         pollingTask = nil
+        deviceAuthorization = nil
         state = .idle
     }
 
     public func fail(message: String) {
+        authorizationTask?.cancel()
+        authorizationTask = nil
         pollingTask?.cancel()
         pollingTask = nil
+        deviceAuthorization = nil
         state = .failed(message: message)
     }
 
