@@ -182,7 +182,7 @@ Tools/
 Website/
   public/              production website, help pages, release notes, appcasts
   styles/              website stylesheet source
-Documentation/         architecture, research, testing, and release notes
+Documentation/         architecture, engine changelog, and curated release notes
 SwiftMiner.icon/       source assets for the macOS application icon
 SwiftMiner.xcodeproj/  generated Xcode project
 project.yml            XcodeGen source configuration

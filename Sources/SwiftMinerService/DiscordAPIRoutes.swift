@@ -828,6 +828,12 @@ public actor DiscordAPIRoutes {
         }
     }
 
+#if DEBUG
+    public func marketingSharedPriorities() async -> (games: [String], artwork: [String: String]) {
+        await projectionBuilder.marketingSharedPriorities()
+    }
+#endif
+
     public func webProjection(discordId: String) async -> HTTPResponse {
         await handleGetProjection(request: emptyRequest(), params: ["discordUserId": discordId])
     }

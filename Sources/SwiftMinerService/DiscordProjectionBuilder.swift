@@ -128,6 +128,28 @@ public actor DiscordProjectionBuilder {
 
     /// Build a projection for the given Discord user ID.
     /// Returns `nil` if the user is not registered in `miner_users`.
+#if DEBUG
+    /// The operator's actual pinned games and the artwork the app already
+    /// resolved for them, for the marketing dashboard fixture.
+    ///
+    /// The fixture invents the account it shows, but the priority queue is the
+    /// one thing a reader can cross-check against the app screenshots on the
+    /// same page — so it comes from the app rather than being made up, and the
+    /// box art comes with it. Twitch keys box art by game id, and guessing the
+    /// URL from a game's name 404s for most titles.
+    ///
+    /// Deliberately does not return `sharedPriorityOwner()`: that resolves to
+    /// the operator's real Discord or Twitch handle, which is exactly what a
+    /// published screenshot must not carry.
+    public func marketingSharedPriorities() async -> (games: [String], artwork: [String: String]) {
+        guard let accountId = await manager.allTwitchAccountIds().first else { return ([], [:]) }
+        return (
+            await stateProvider.priorityGames(forTwitchAccount: accountId),
+            await stateProvider.priorityGameArtwork(forTwitchAccount: accountId)
+        )
+    }
+#endif
+
     public func buildProjection(discordUserId: String) async -> DiscordUserProjection? {
         guard await userExists(discordUserId: discordUserId) else {
             return nil
