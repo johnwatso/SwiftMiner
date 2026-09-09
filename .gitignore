@@ -109,6 +109,11 @@ DerivedData/
 Build/
 release-artifacts/
 
+# Coverage and scratch artifacts
+*.profraw
+*.profdata
+.tmp-*
+
 # IDE
 .idea/
 *.swp
@@ -138,3 +143,6 @@ Website/public/beta/appcast.xml
 # scripts/build_release_notes.py, which writes this site output and its index.
 # These Website/public copies are build output — do not commit them.
 Website/public/release-notes/
+
+# Scratch generation output (icon concepts, one-off renders)
+output/

@@ -1,6 +1,8 @@
 # SwiftMiner Architecture
 
-SwiftMiner is a native macOS app built with SwiftUI and SwiftMinerCore. The app owns presentation, settings, account onboarding, update controls, and notifications. SwiftMinerCore owns Twitch authentication, campaign data, watch sessions, claiming, and multi-account mining state.
+SwiftMiner is a native macOS app built with SwiftUI on top of two static libraries. The app owns presentation, settings, account onboarding, update controls, and notifications. `SwiftMinerCore` owns Twitch authentication, campaign data, watch sessions, claiming, and multi-account mining state. `SwiftMinerService` owns the optional outward-facing surfaces: the embedded web dashboard and the Discord/SwiftBot integration.
+
+For how the engine itself is put together, see [EngineArchitecture.md](EngineArchitecture.md); for what changed in it and when, [EngineChangelog.md](EngineChangelog.md).
 
 ## Runtime Shape
 
@@ -44,6 +46,26 @@ The manager also coordinates cross-account behavior such as:
 - applying priority and excluded game settings
 - mapping engine `SessionStatus` values into user-facing `MinerStatus`
 - maintaining per-account `AccountStateStore` data for the dashboard
+
+## Service Layer
+
+`SwiftMinerService` is a separate static library, depending on `SwiftMinerCore` but not on
+the app target. It is disabled by default and only comes to life once the operator
+configures it.
+
+- `HTTPAPIServer` is the embedded server; `WebDashboardRoutes`, `WebDashboardConfig`, and
+  the `WebDashboard*Assets` files serve the self-service dashboard, whose per-session
+  security model is described in [SECURITY.md](../SECURITY.md).
+- `SwiftBotConnectionService`, `SwiftMinerDMEventService`, and `DiscordAPIRoutes` carry
+  the Discord integration. The DM payload SwiftMiner sends and what SwiftBot renders from
+  it are specified in [SwiftBotDMContract.md](SwiftBotDMContract.md).
+- `EventEmitterService` and `EventOutboxService` queue outbound events through the
+  SQLite outbox so a DM survives a restart or an offline SwiftBot.
+- `AdminLinkingService` and `SwiftMinerPortalLink` link a mined Twitch account to a
+  Discord identity and build the deep links that DMs point at.
+
+`main.swift` is excluded from the library and builds separately as the
+`SwiftMinerServiceTool` command-line target.
 
 ## Persistence
 

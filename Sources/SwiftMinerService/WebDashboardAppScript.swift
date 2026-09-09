@@ -527,16 +527,27 @@ extension WebDashboardAssets {
       </section>`;
     }
 
+    /// Profile pictures are third-party URLs, so only HTTPS is accepted — an
+    /// http:// avatar would be mixed content and a plain-text request for a
+    /// picture that identifies the account. The one exception is the marketing
+    /// fixture's own same-origin portrait, and only when a debug build has set
+    /// the global: with it undefined this reads exactly as the check above it.
+    function allowedProfileImageURL(url) {
+      if (typeof url !== 'string') return false;
+      if (url.toLowerCase().startsWith('https://')) return true;
+      return typeof MARKETING_PORTRAIT === 'string' && url === MARKETING_PORTRAIT;
+    }
+
     function customProfileImageURL(...urls) {
       return urls.find((url) => {
-        if (typeof url !== 'string' || !url.toLowerCase().startsWith('https://')) return false;
+        if (!allowedProfileImageURL(url)) return false;
         const value = url.toLowerCase();
         return !value.includes('/xarth/404_user_') && !value.includes('discordapp.com/embed/avatars/');
       });
     }
 
     function secureProfileImageURL(url) {
-      return typeof url === 'string' && url.toLowerCase().startsWith('https://') ? url : undefined;
+      return allowedProfileImageURL(url) ? url : undefined;
     }
 
     // Honours the account's picture source from the app, trying the other

@@ -131,11 +131,19 @@ public actor WebDashboardRoutes {
             await me.handleApp(req)
         })
         await router.register(HTTPRoute(method: "GET", pattern: "/app/app.js") { _, _ in
-            HTTPResponse(statusCode: 200,
-                         headers: ["Content-Type": "application/javascript; charset=utf-8",
-                                   "X-Content-Type-Options": "nosniff",
-                                   "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"],
-                         body: Data(WebDashboardAssets.appJS.utf8))
+            var script = WebDashboardAssets.appJS
+#if DEBUG
+            // Declares the one same-origin portrait the avatar guard will accept.
+            // Absent from every build that is not taking marketing captures.
+            if MarketingDashboardFixture.isEnabled {
+                script = MarketingDashboardFixture.scriptPrelude + script
+            }
+#endif
+            return HTTPResponse(statusCode: 200,
+                                headers: ["Content-Type": "application/javascript; charset=utf-8",
+                                          "X-Content-Type-Options": "nosniff",
+                                          "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"],
+                                body: Data(script.utf8))
         })
         await router.register(HTTPRoute(method: "GET", pattern: "/app/login.js") { _, _ in
             HTTPResponse(statusCode: 200,
@@ -156,6 +164,19 @@ public actor WebDashboardRoutes {
                              body: favicon)
             })
         }
+#if DEBUG
+        // Debug-only portrait for marketing captures. The bytes live in the app
+        // bundle, so this is registered only when they are actually there.
+        if MarketingDashboardFixture.isEnabled, let portrait = MarketingDashboardFixture.avatarPNG {
+            await router.register(HTTPRoute(method: "GET", pattern: MarketingDashboardFixture.avatarPath) { _, _ in
+                HTTPResponse(statusCode: 200,
+                             headers: ["Content-Type": "image/png",
+                                       "Cache-Control": "no-store",
+                                       "Content-Length": "\(portrait.count)"],
+                             body: portrait)
+            })
+        }
+#endif
         for (path, data) in [("/app/logo-dark.png", logoDarkPNG), ("/app/logo-light.png", logoLightPNG)] {
             guard let data else { continue }
             await router.register(HTTPRoute(method: "GET", pattern: path) { _, _ in
@@ -235,6 +256,15 @@ public actor WebDashboardRoutes {
     // MARK: - Principal-aware dispatch
 
     private func projection(for s: WebSessionRecord) async -> HTTPResponse {
+#if DEBUG
+        // Deliberately ahead of the operator checks: the capture wants the
+        // member view, and the fixture session would otherwise be resolved
+        // against accounts that do not exist.
+        if MarketingDashboardFixture.isEnabled {
+            let shared = await apiRoutes.marketingSharedPriorities()
+            return .json(MarketingDashboardFixture.projection(shared: shared))
+        }
+#endif
         if s.principalType == WebProvider.twitch.rawValue {
             if await apiRoutes.isOperatorTwitch(twitchId: s.principalId) {
                 return await apiRoutes.webOverview()
@@ -409,6 +439,11 @@ public actor WebDashboardRoutes {
         requireCSRF: Bool = false,
         _ body: (WebSessionRecord) async -> HTTPResponse
     ) async -> HTTPResponse {
+#if DEBUG
+        if MarketingDashboardFixture.isEnabled {
+            return await body(MarketingDashboardFixture.session())
+        }
+#endif
         let cookies = WebCookie.parse(req.header("cookie"))
         guard let sid = cookies[WebDashboardConfig.sessionCookieName],
               let session = await manager.fetchWebSession(id: sid, now: Date().timeIntervalSince1970) else {
@@ -426,6 +461,9 @@ public actor WebDashboardRoutes {
     }
 
     private func currentSession(_ req: HTTPRequest) async -> WebSessionRecord? {
+#if DEBUG
+        if MarketingDashboardFixture.isEnabled { return MarketingDashboardFixture.session() }
+#endif
         let cookies = WebCookie.parse(req.header("cookie"))
         guard let sid = cookies[WebDashboardConfig.sessionCookieName] else { return nil }
         return await manager.fetchWebSession(id: sid, now: Date().timeIntervalSince1970)
