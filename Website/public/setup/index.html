@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Connect to SwiftMiner</title>
+  <meta name="description" content="A SwiftMiner user invited you to connect your Twitch account.">
+  <meta name="robots" content="noindex, nofollow, max-image-preview:large">
+  <meta name="theme-color" content="#171124">
+  <link rel="canonical" href="https://swiftminer.app/setup/">
+
+  <link rel="icon" type="image/png" sizes="192x192" href="https://swiftminer.app/icon-192.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="https://swiftminer.app/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="https://swiftminer.app/apple-touch-icon.png">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="SwiftMiner">
+  <meta property="og:locale" content="en_US">
+  <meta property="og:url" content="https://swiftminer.app/setup/">
+  <meta property="og:title" content="Connect to SwiftMiner">
+  <meta property="og:description" content="A SwiftMiner user invited you to connect your Twitch account.">
+  <meta property="og:image" content="https://swiftminer.app/assets/share/swiftminer-invitation.png">
+  <meta property="og:image:secure_url" content="https://swiftminer.app/assets/share/swiftminer-invitation.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="The SwiftMiner icon on a restrained purple background.">
+
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Connect to SwiftMiner">
+  <meta name="twitter:description" content="A SwiftMiner user invited you to connect your Twitch account.">
+  <meta name="twitter:image" content="https://swiftminer.app/assets/share/swiftminer-invitation.png">
+  <meta name="twitter:image:alt" content="The SwiftMiner icon on a restrained purple background.">
+
+  <style>
+    :root {
+      color-scheme: light dark;
+      --background: #f5f3f8;
+      --surface: rgba(255, 255, 255, 0.94);
+      --surface-muted: #f7f5fa;
+      --text: #1c1822;
+      --secondary: #68616f;
+      --tertiary: #8c8494;
+      --line: rgba(43, 30, 55, 0.11);
+      --purple: #7651d6;
+      --purple-hover: #6542c5;
+      --purple-soft: rgba(118, 81, 214, 0.10);
+      --shadow: 0 22px 70px rgba(39, 25, 55, 0.14);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --background: #100c17;
+        --surface: rgba(29, 23, 38, 0.95);
+        --surface-muted: #241d2f;
+        --text: #f7f3fb;
+        --secondary: #b7aebf;
+        --tertiary: #91879a;
+        --line: rgba(255, 255, 255, 0.10);
+        --purple: #9d79f0;
+        --purple-hover: #ad8cf5;
+        --purple-soft: rgba(157, 121, 240, 0.13);
+        --shadow: 0 24px 80px rgba(0, 0, 0, 0.42);
+      }
+    }
+
+    * { box-sizing: border-box; }
+
+    html { min-height: 100%; }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      background:
+        radial-gradient(circle at 50% 0%, rgba(127, 80, 220, 0.13), transparent 42rem),
+        var(--background);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .page {
+      width: min(100% - 32px, 620px);
+      margin: 0 auto;
+      padding: max(36px, env(safe-area-inset-top)) 0 max(28px, env(safe-area-inset-bottom));
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0 0 22px 4px;
+      color: var(--text);
+      font-size: 15px;
+      font-weight: 650;
+      letter-spacing: -0.01em;
+      text-decoration: none;
+    }
+
+    .brand img {
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+    }
+
+    .card {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 26px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+    }
+
+    .content { padding: clamp(28px, 7vw, 48px); }
+
+    .app-icon {
+      width: 72px;
+      height: 72px;
+      margin-bottom: 24px;
+      border-radius: 18px;
+      box-shadow: 0 12px 30px rgba(101, 60, 185, 0.24);
+    }
+
+    .eyebrow {
+      margin: 0 0 10px;
+      color: var(--purple);
+      font-size: 12px;
+      font-weight: 750;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      max-width: 480px;
+      margin: 0;
+      font-size: clamp(32px, 8vw, 44px);
+      font-weight: 720;
+      letter-spacing: -0.045em;
+      line-height: 1.06;
+    }
+
+    .inviter-copy {
+      margin: 18px 0 0;
+      color: var(--secondary);
+      font-size: 18px;
+      line-height: 1.5;
+    }
+
+    .cta {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 52px;
+      margin-top: 30px;
+      border-radius: 13px;
+      background: var(--purple);
+      color: white;
+      font-size: 16px;
+      font-weight: 680;
+      text-decoration: none;
+      transition: transform 140ms ease, background 140ms ease, opacity 140ms ease;
+    }
+
+    .cta:hover { background: var(--purple-hover); transform: translateY(-1px); }
+    .cta:focus-visible { outline: 3px solid color-mix(in srgb, var(--purple) 38%, transparent); outline-offset: 3px; }
+    .cta.disabled { pointer-events: none; opacity: 0.5; }
+
+    .security {
+      display: grid;
+      grid-template-columns: 28px 1fr;
+      gap: 12px;
+      margin-top: 24px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      background: var(--surface-muted);
+    }
+
+    .security svg { width: 22px; height: 22px; color: var(--purple); }
+
+    .security p {
+      margin: 0;
+      color: var(--secondary);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .security strong { color: var(--text); font-weight: 650; }
+
+    .status {
+      margin: 18px 0 0;
+      color: var(--tertiary);
+      font-size: 13px;
+      line-height: 1.45;
+      text-align: center;
+    }
+
+    details {
+      margin-top: 18px;
+      color: var(--secondary);
+      font-size: 13px;
+      text-align: center;
+    }
+
+    summary { cursor: pointer; }
+
+    .code {
+      display: block;
+      width: fit-content;
+      margin: 12px auto 0;
+      padding: 9px 12px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: var(--surface-muted);
+      color: var(--text);
+      font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      user-select: all;
+    }
+
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 17px clamp(28px, 7vw, 48px);
+      border-top: 1px solid var(--line);
+      color: var(--tertiary);
+      font-size: 12px;
+    }
+
+    .footer a { color: inherit; text-decoration: none; }
+    .footer a:hover { color: var(--text); }
+
+    .noscript {
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--surface-muted);
+      color: var(--secondary);
+      line-height: 1.5;
+    }
+
+    @media (max-width: 480px) {
+      .page { width: min(100% - 20px, 620px); padding-top: 20px; }
+      .card { border-radius: 21px; }
+      .footer { flex-direction: column; align-items: center; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .cta { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <a class="brand" href="https://swiftminer.app/" aria-label="SwiftMiner home">
+      <img src="https://swiftminer.app/icon-192.png" alt="">
+      <span>SwiftMiner</span>
+    </a>
+
+    <section class="card" aria-labelledby="page-title">
+      <div class="content">
+        <noscript><p class="noscript">JavaScript is required to open this temporary SwiftMiner invitation.</p></noscript>
+
+        <img class="app-icon" src="https://swiftminer.app/icon-192.png" alt="SwiftMiner app icon">
+        <p class="eyebrow" id="eyebrow">Invitation</p>
+        <h1 id="page-title">Opening your invitation…</h1>
+        <p class="inviter-copy" id="inviter-copy">Checking the temporary setup link.</p>
+
+        <a class="cta disabled" id="connect-button" aria-disabled="true">Connect to SwiftMiner</a>
+
+        <div class="security">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M12 3.5 19 6v5.2c0 4.4-2.8 7.7-7 9.3-4.2-1.6-7-4.9-7-9.3V6l7-2.5Z"/>
+            <path d="m9 12 2 2 4-4"/>
+          </svg>
+          <p><strong>You sign in directly with Twitch.</strong> Your Twitch password and credentials are never shared with the person who invited you.</p>
+        </div>
+
+        <p class="status" id="status" aria-live="polite">This invitation expires in 30 minutes.</p>
+        <details id="fallback" hidden>
+          <summary>Need the activation code?</summary>
+          <code class="code" id="device-code"></code>
+        </details>
+      </div>
+
+      <footer class="footer">
+        <span>Temporary Twitch connection</span>
+        <a href="https://swiftminer.app/">swiftminer.app</a>
+      </footer>
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      // A freshly regenerated invitation from the same person differs only in
+      // its fragment. Reload so a browser reusing this tab never keeps the old
+      // Twitch code or expiry on screen.
+      window.addEventListener('hashchange', () => window.location.reload());
+
+      const title = document.querySelector('#page-title');
+      const inviterCopy = document.querySelector('#inviter-copy');
+      const eyebrow = document.querySelector('#eyebrow');
+      const connectButton = document.querySelector('#connect-button');
+      const status = document.querySelector('#status');
+      const fallback = document.querySelector('#fallback');
+      const deviceCode = document.querySelector('#device-code');
+
+      function setMeta(selector, content) {
+        const element = document.querySelector(selector);
+        if (element) element.setAttribute('content', content);
+      }
+
+      function decodeBase64URL(value) {
+        const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+        const padded = normalized + '='.repeat((4 - normalized.length % 4) % 4);
+        const bytes = Uint8Array.from(atob(padded), character => character.charCodeAt(0));
+        return new TextDecoder().decode(bytes);
+      }
+
+      function invitationFromURL() {
+        const fragment = new URLSearchParams(location.hash.slice(1));
+        const parts = (fragment.get('invitation') || '').split('.');
+        if (parts.length !== 4 || parts[0] !== 'v1') return null;
+
+        const expiresAt = Number(parts[1]);
+        const code = decodeBase64URL(parts[2]);
+        const inviter = decodeBase64URL(parts[3]);
+        if (!Number.isFinite(expiresAt) || !code || !inviter) return null;
+
+        return { expiresAt: expiresAt * 1000, code, inviter };
+      }
+
+      function showUnavailable(message) {
+        eyebrow.textContent = 'Invitation unavailable';
+        title.textContent = 'This setup link can’t be used';
+        inviterCopy.textContent = message;
+        connectButton.removeAttribute('href');
+        connectButton.classList.add('disabled');
+        connectButton.setAttribute('aria-disabled', 'true');
+        status.textContent = 'Ask the person who invited you to choose Send Again in SwiftMiner.';
+        fallback.hidden = true;
+      }
+
+      let invitation;
+      try {
+        invitation = invitationFromURL();
+      } catch (_) {
+        invitation = null;
+      }
+
+      if (!invitation) {
+        showUnavailable('The invitation is incomplete or has been changed.');
+        return;
+      }
+
+      const dynamicTitle = `${invitation.inviter} invited you to SwiftMiner`;
+      const dynamicDescription = `${invitation.inviter} invited you to connect your Twitch account.`;
+      document.title = dynamicTitle;
+      setMeta('meta[name="description"]', dynamicDescription);
+      setMeta('meta[property="og:title"]', dynamicTitle);
+      setMeta('meta[property="og:description"]', dynamicDescription);
+      setMeta('meta[name="twitter:title"]', dynamicTitle);
+      setMeta('meta[name="twitter:description"]', dynamicDescription);
+
+      title.textContent = 'You’ve been invited to SwiftMiner';
+      inviterCopy.textContent = `${invitation.inviter} has invited you to connect your Twitch account.`;
+      deviceCode.textContent = invitation.code;
+      fallback.hidden = false;
+
+      const twitchURL = new URL('https://www.twitch.tv/activate');
+      twitchURL.searchParams.set('device-code', invitation.code);
+      connectButton.href = twitchURL.toString();
+      connectButton.target = '_blank';
+      connectButton.rel = 'noopener noreferrer';
+      connectButton.referrerPolicy = 'no-referrer';
+      connectButton.classList.remove('disabled');
+      connectButton.removeAttribute('aria-disabled');
+
+      let twitchOpened = false;
+      connectButton.addEventListener('click', () => {
+        twitchOpened = true;
+        updateCountdown();
+      });
+
+      function updateCountdown() {
+        const remainingSeconds = Math.max(0, Math.ceil((invitation.expiresAt - Date.now()) / 1000));
+        if (remainingSeconds === 0) {
+          showUnavailable('This invitation has expired.');
+          return false;
+        }
+
+        const minutes = Math.floor(remainingSeconds / 60);
+        const seconds = remainingSeconds % 60;
+        const timeRemaining = `${minutes}:${String(seconds).padStart(2, '0')}`;
+        status.textContent = twitchOpened
+          ? `Finish approving SwiftMiner in Twitch. The inviter’s Mac will detect your account automatically. Expires in ${timeRemaining}.`
+          : `Invitation expires in ${timeRemaining}.`;
+        return true;
+      }
+
+      if (updateCountdown()) {
+        const timer = window.setInterval(() => {
+          if (!updateCountdown()) window.clearInterval(timer);
+        }, 1000);
+      }
+    })();
+  </script>
+</body>
+</html>
