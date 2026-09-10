@@ -39,16 +39,20 @@ enum InvitationEmailBody {
         <h1 style="margin:0 0 12px 0;font-family:\(fontStack);font-size:29px;line-height:1.15;font-weight:700;letter-spacing:-0.02em;color:\(ink);">You&rsquo;ve been invited to SwiftMiner</h1>
         <p style="margin:0 0 26px 0;font-family:\(fontStack);font-size:16px;line-height:1.5;color:\(secondary);">\(inviter) has invited you to connect your Twitch account.</p>
         <a href="\(link)" style="display:block;padding:15px 24px;border-radius:12px;background:\(purple);font-family:\(fontStack);font-size:16px;font-weight:600;color:#ffffff;text-align:center;text-decoration:none;">Connect to SwiftMiner</a>
+        <p style="margin:10px 0 0 0;font-family:\(fontStack);font-size:12px;line-height:1.5;color:\(tertiary);text-align:center;">This opens swiftminer.app, not Twitch. You&rsquo;ll see what you&rsquo;re approving there first, then sign in with Twitch.</p>
         <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate;margin:24px 0 0 0;background:rgba(118, 81, 214, 0.08);border-radius:12px;">
         <tr><td style="padding:14px 16px;font-family:\(fontStack);font-size:13px;line-height:1.5;color:\(secondary);">
         <span style="color:\(ink);font-weight:600;">You sign in directly with Twitch.</span> Your Twitch password and credentials are never shared with the person who invited you.
+        </td></tr>
+        <tr><td style="padding:0 16px 14px 16px;font-family:\(fontStack);font-size:13px;line-height:1.5;">
+        <a href="\(explainerURL)" style="color:\(purple);font-weight:600;text-decoration:none;">New to SwiftMiner? What this invitation means &rsaquo;</a>
         </td></tr></table>
         <p style="margin:18px 0 0 0;font-family:\(fontStack);font-size:12px;color:\(tertiary);">\(expiry)</p>
         </td></tr>
         <tr><td style="padding:15px 38px;border-top:1px solid \(hairline);font-family:\(fontStack);font-size:11px;color:\(tertiary);">
         <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;">
         <tr>
-        <td align="left" style="font-family:\(fontStack);font-size:11px;color:\(tertiary);"><a href="\(explainerURL)" style="color:\(tertiary);">What is SwiftMiner?</a></td>
+        <td align="left" style="font-family:\(fontStack);font-size:11px;color:\(tertiary);">Secure SwiftMiner invitation</td>
         <td align="right" style="font-family:\(fontStack);font-size:11px;color:\(tertiary);">swiftminer.app</td>
         </tr></table>
         </td></tr></table>

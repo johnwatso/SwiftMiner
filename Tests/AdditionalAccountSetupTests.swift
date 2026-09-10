@@ -128,6 +128,9 @@ final class AdditionalAccountSetupTests: XCTestCase {
         XCTAssertTrue(html.contains("This invitation expires in 30 minutes."))
         // The recipient gets a route to the honest explainer, not a summary of it.
         XCTAssertTrue(html.contains(InvitationEmailBody.explainerURL))
+        // The button lands on swiftminer.app, not Twitch — say so, or the mail
+        // reads like a phishing attempt to anyone who checks where links go.
+        XCTAssertTrue(html.contains("This opens swiftminer.app, not Twitch."))
 
         // The CTA and the fallback line both point at the real invitation.
         let escapedURL = invitation.invitationURL.absoluteString.replacingOccurrences(of: "&", with: "&amp;")
