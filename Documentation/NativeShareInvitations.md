@@ -140,8 +140,15 @@ inviter can and cannot see, the reasons to decline (including "do you trust this
 person and their Mac?"), what SwiftMiner cannot do, and how to revoke the grant
 at Twitch without the operator's help.
 
-It is linked from the setup page above the expiry line, from the Mail
-invitation's footer, and as `help_url` on the SwiftBot `friend_invitation` DM.
+It is linked from the setup page above the expiry line, from inside the Mail
+invitation's reassurance panel, and as `help_url` on the SwiftBot
+`friend_invitation` DM.
+
+Both call-to-action buttons say "Connect to SwiftMiner" but go to different
+places — the mail's opens `swiftminer.app/setup/`, the page's opens
+`twitch.tv/activate` — so each now says where it lands underneath. A button that
+claims Twitch and opens somewhere else is exactly what a recipient checking the
+link would read as phishing.
 The page is deliberately two-sided — an invitation that only argues for itself is
 the kind recipients are right to distrust.
 

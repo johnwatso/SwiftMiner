@@ -189,6 +189,14 @@
 
     .security strong { color: var(--text); font-weight: 650; }
 
+    .cta-note {
+      margin: 10px 0 0;
+      color: var(--tertiary);
+      font-size: 12.5px;
+      line-height: 1.45;
+      text-align: center;
+    }
+
     .learn-more {
       margin: 14px 0 0;
       text-align: center;
@@ -287,6 +295,7 @@
         <p class="inviter-copy" id="inviter-copy">Checking the temporary setup link.</p>
 
         <a class="cta disabled" id="connect-button" aria-disabled="true">Connect to SwiftMiner</a>
+        <p class="cta-note" id="cta-note">This takes you to twitch.tv, where you approve the connection with your Twitch account.</p>
 
         <div class="security">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
@@ -326,6 +335,7 @@
       const status = document.querySelector('#status');
       const fallback = document.querySelector('#fallback');
       const deviceCode = document.querySelector('#device-code');
+      const ctaNote = document.querySelector('#cta-note');
 
       function setMeta(selector, content) {
         const element = document.querySelector(selector);
@@ -360,6 +370,7 @@
         connectButton.classList.add('disabled');
         connectButton.setAttribute('aria-disabled', 'true');
         status.textContent = 'Ask the person who invited you to choose Send Again in SwiftMiner.';
+        ctaNote.hidden = true;
         fallback.hidden = true;
       }
 
