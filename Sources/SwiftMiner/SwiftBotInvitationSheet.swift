@@ -3,11 +3,14 @@ import SwiftMinerCore
 import SwiftMinerService
 
 enum SwiftBotInvitationEligibility {
+    /// Bots and webhooks are dropped alongside the accounts already linked to a
+    /// miner: SwiftBot cannot start a real DM conversation with one, so
+    /// offering it as a recipient only invites a send that quietly goes nowhere.
     static func eligibleMembers(
         from members: [SwiftBotDiscordUser],
         excluding linkedDiscordIDs: Set<String>
     ) -> [SwiftBotDiscordUser] {
-        members.filter { !linkedDiscordIDs.contains($0.id) }
+        members.filter { !$0.isBot && !linkedDiscordIDs.contains($0.id) }
     }
 }
 
