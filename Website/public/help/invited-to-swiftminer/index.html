@@ -27,7 +27,10 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
     <link rel="manifest" href="/site.webmanifest">
     <link rel="stylesheet" href="../../assets/css/tailwind.css">
-    <link rel="stylesheet" href="../assets/css/kbase.css">
+    <!-- Versioned: kbase.css is served with a 4-hour CDN max-age and this page is
+         the first to use the .fact-grid / .verdict-grid rules, so it cannot wait
+         for the shared stylesheet to expire. Bump on any future rule this page needs. -->
+    <link rel="stylesheet" href="../assets/css/kbase.css?v=20260910">
     <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
     <script src="../assets/js/search-index.js" defer></script>
     <script src="../assets/js/search.js" defer></script>
