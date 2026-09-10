@@ -233,8 +233,8 @@ struct MinerStateCard: View {
                 )
             } else {
                 return StateConfig(
-                    headline: "Looking for Streams",
-                    subtitle: gameName ?? "No participating channels are live right now.",
+                    headline: gameName.map { "Looking for \($0) streams" } ?? "Looking for Streams",
+                    subtitle: "No participating channels are live right now.",
                     icon: "antenna.radiowaves.left.and.right",
                     color: .cyan
                 )
@@ -243,8 +243,8 @@ struct MinerStateCard: View {
         case .ready:
             if let campaign = firstActivityCampaign {
                 return StateConfig(
-                    headline: "Looking for Streams",
-                    subtitle: campaign.game.name,
+                    headline: "Looking for \(campaign.game.name) streams",
+                    subtitle: "Waiting for an eligible live stream.",
                     icon: "antenna.radiowaves.left.and.right",
                     color: .cyan
                 )
@@ -1281,14 +1281,22 @@ struct MinerActivitySnapshot {
             )
         case .waitingForStream:
             if let campaign {
+                // Game over campaign, exactly as the watching and claiming items above set
+                // them. A waiting miner is working the same campaign it will watch the moment
+                // a channel goes live, so the card names it the same way; the state is carried
+                // by the antenna symbol, the cyan accent, the absent progress bar and the
+                // detail below. Leading with the state instead left the game to a one-line
+                // detail that a compact card truncates, so the card could not say what it was
+                // waiting for.
                 return MinerActivityItem(
                     id: "stream-\(miner.id)-\(campaign.id)",
-                    title: "No eligible stream live",
+                    title: campaign.game.name,
                     subtitle: campaign.name,
-                    detail: "SwiftMiner will automatically start earning when an eligible \(campaign.game.name) stream goes live.",
+                    detail: "Waiting for an eligible live stream.",
                     symbol: "antenna.radiowaves.left.and.right",
                     accent: .cyan,
-                    campaignId: campaign.id
+                    campaignId: campaign.id,
+                    artworkURL: campaign.game.boxArtURL
                 )
             }
 
@@ -1385,14 +1393,18 @@ struct MinerActivitySnapshot {
         case .notLinked:
             return unlinkedPriorityItem(id: "unlinked-\(miner.id)-\(resolved.gameId)")
         case .noLiveStreams:
+            // Named the same way as the watching item, for the same reason as the waiting item
+            // in `currentActivityItem`: the game belongs in the title the card actually shows,
+            // not in a detail line a compact card truncates.
             return MinerActivityItem(
                 id: "blocked-stream-\(miner.id)-\(resolved.gameId)",
-                title: "No eligible stream live",
-                subtitle: campaign?.name ?? resolved.gameName,
-                detail: "SwiftMiner will automatically start earning when an eligible \(resolved.gameName) stream goes live.",
+                title: campaign?.game.name ?? resolved.gameName,
+                subtitle: campaign?.name,
+                detail: "Waiting for an eligible live stream.",
                 symbol: "antenna.radiowaves.left.and.right",
                 accent: .cyan,
-                campaignId: resolved.campaignId
+                campaignId: resolved.campaignId,
+                artworkURL: campaign?.game.boxArtURL
             )
         default:
             return MinerActivityItem(
@@ -1734,8 +1746,8 @@ struct MinerActivitySnapshot {
             return "Watching \(now.title)"
         case .claiming:
             return "Claiming Rewards"
-        case .lookingForStreams:
-            return "Looking for Streams"
+        case .lookingForStreams(let gameName):
+            return gameName.map { "Looking for \($0) streams" } ?? "Looking for Streams"
         case .upToDate:
             return "Up to Date"
         }

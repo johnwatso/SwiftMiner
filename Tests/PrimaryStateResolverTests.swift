@@ -379,7 +379,7 @@ final class PrimaryStateResolverTests: XCTestCase {
         )
 
         XCTAssertEqual(miner.resolvedPrimaryState?.resolved?.gameName, "Brawlhalla")
-        XCTAssertEqual(miner.statusLabel, "Waiting — No live stream")
+        XCTAssertEqual(miner.statusLabel, "Waiting for an eligible live Brawlhalla stream")
     }
 
     func testScheduledGameAlreadyPrioritisedIsNotDuplicated() {
@@ -427,6 +427,6 @@ final class PrimaryStateResolverTests: XCTestCase {
         )
 
         XCTAssertEqual(miner.resolvedPrimaryState?.resolved?.gameName, "Brawlhalla")
-        XCTAssertEqual(miner.statusLabel, "Waiting — No live stream")
+        XCTAssertEqual(miner.statusLabel, "Waiting for an eligible live Brawlhalla stream")
     }
 }

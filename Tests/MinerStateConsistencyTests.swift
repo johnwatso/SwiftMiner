@@ -83,7 +83,7 @@ struct MinerStateConsistencyTests {
     }
 
     private static func claimsActiveWork(_ label: String) -> Bool {
-        ["Looking for Streams", "Waiting", "Watching", "Currently mining"]
+        ["Looking for", "Waiting", "Watching", "Currently mining"]
             .contains { label.localizedCaseInsensitiveContains($0) }
     }
 
