@@ -33,6 +33,13 @@ struct GameSearchField: View {
     /// When true each suggestion offers both Prioritise and Exclude, so the user never has to
     /// decide which list they are managing before searching.
     var offersBothStates: Bool = false
+    /// Invoked when the user takes up the "connect an account" prompt shown while search is
+    /// gated. Callers that have no way to present the account sheet leave this nil and the
+    /// prompt simply omits the button.
+    var onAddAccount: (() -> Void)?
+    /// Set false by hosts that already state the account requirement themselves, so the reason
+    /// search is disabled is given once rather than beside every control that depends on it.
+    var showsAccountRequirementNotice: Bool = true
     @State private var searchText = ""
     @State private var showSuggestions = false
     @State private var availableGames: [Game] = []
@@ -87,9 +94,6 @@ struct GameSearchField: View {
         hasAccounts && !hasLoadedGames && availableGames.isEmpty && isLoadingGames
     }
 
-    private var shouldShowAddAccountState: Bool {
-        !hasAccounts && !hasLoadedGames
-    }
 
     private var shouldShowNoMatchesState: Bool {
         !normalizedQuery.isEmpty
@@ -158,9 +162,10 @@ struct GameSearchField: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            TextField(placeholder, text: $searchText)
+            TextField(hasAccounts ? placeholder : "Connect an account to search games\u{2026}", text: $searchText)
                 .textFieldStyle(.roundedBorder)
                 .focused($isSearchFocused)
+                .disabled(!hasAccounts)
                 .onChange(of: searchText) { _, newValue in
                     let trimmed = newValue.trimmingCharacters(in: .whitespaces)
                     showSuggestions = !trimmed.isEmpty
@@ -184,7 +189,11 @@ struct GameSearchField: View {
                     }
                 }
 
-            if showSuggestions {
+            if !hasAccounts {
+                if showsAccountRequirementNotice {
+                    accountRequiredNotice
+                }
+            } else if showSuggestions {
                 if allSuggestions.isEmpty {
                     if shouldShowLoadingState || isSearchingTwitch {
                         HStack(spacing: 8) {
@@ -196,12 +205,6 @@ struct GameSearchField: View {
                         }
                         .padding(.horizontal, 8)
                         .padding(.vertical, 6)
-                    } else if shouldShowAddAccountState {
-                        Text("Add an account to search games.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 6)
                     } else if shouldShowSearchErrorState, let errorMessage = twitchSearchErrorMessage {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(errorMessage)
@@ -300,6 +303,31 @@ struct GameSearchField: View {
                 }
             }
         }
+    }
+
+    /// Every suggestion in this field comes from Twitch — the account's campaign feed for the
+    /// local list, and the category search for everything else. With no account connected the
+    /// dropdown could only ever be empty, which reads as "this game doesn't exist" rather than
+    /// "SwiftMiner has no connection", so the field is disabled and says why instead.
+    private var accountRequiredNotice: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+
+            Text("Connect a Twitch account before adding games.")
+                .foregroundStyle(.secondary)
+
+            if let onAddAccount {
+                Button("Add Account\u{2026}") { onAddAccount() }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.accentColor)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .font(.caption)
+        .padding(.horizontal, 2)
+        .padding(.top, 6)
     }
 
     @MainActor

@@ -96,19 +96,38 @@ extension OverviewView {
         VStack(alignment: .leading, spacing: 12) {
             sectionHeading("Priority Queue")
 
-            MaterialEmptyStatePanel(
-                "No prioritised games",
-                systemImage: "star",
-                description: "Add a game to keep it surfaced here and mine it first when drops are available."
-            ) {
-                Button {
-                    isShowingGameManagement = true
-                } label: {
-                    Label("Add Prioritised Game", systemImage: "plus")
+            // Games are looked up on Twitch, so offering "Add Prioritised Game" with no account
+            // connected sends the user into a search field that can never return a result. Point
+            // them at the step that actually unblocks it instead.
+            if navigation.minerManager.miners.isEmpty {
+                MaterialEmptyStatePanel(
+                    "Connect an account first",
+                    systemImage: "person.crop.circle.badge.plus",
+                    description: "Games are looked up on Twitch, so prioritised games can only be added once an account is connected."
+                ) {
+                    Button {
+                        navigation.showAddAccountSheet = true
+                    } label: {
+                        Label("Add Account", systemImage: "plus")
+                    }
+                    .buttonStyle(.borderedProminent)
                 }
-                .buttonStyle(.borderedProminent)
+                .frame(maxWidth: .infinity, minHeight: 180)
+            } else {
+                MaterialEmptyStatePanel(
+                    "No prioritised games",
+                    systemImage: "star",
+                    description: "Add a game to keep it surfaced here and mine it first when drops are available."
+                ) {
+                    Button {
+                        isShowingGameManagement = true
+                    } label: {
+                        Label("Add Prioritised Game", systemImage: "plus")
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+                .frame(maxWidth: .infinity, minHeight: 180)
             }
-            .frame(maxWidth: .infinity, minHeight: 180)
         }
     }
 

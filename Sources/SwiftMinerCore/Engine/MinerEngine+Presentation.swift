@@ -8,6 +8,13 @@ import Foundation
 
 extension MinerEngine {
     // MARK: - UI Helper APIs
+
+    /// Why followed-streamer prioritisation is not being applied, if it is switched on and isn't
+    /// working. Nil when the setting is off, or on and functioning.
+    public func followPrioritisationDegradation() async -> TwitchAPIClient.FollowLookupDegradation? {
+        guard prioritiseFollowedStreamers, let userId = currentAccount?.id else { return nil }
+        return await apiClient.followLookupDegradation(userId: userId)
+    }
     
     /// Get current stall state for UI display.
     public func getStallState() async -> StallState {

@@ -38,6 +38,9 @@ enum LogExporter {
             let lastDropProgressAt: Date?
             let stallConfidencePercent: Int?
             let stallSignals: [String]
+            /// Set when `prioritiseFollowedStreamers` is on but Twitch is not serving follow
+            /// state for this account, so channel ranking is silently running without it.
+            let followPrioritisation: String?
 
             init(
                 id: String,
@@ -65,7 +68,8 @@ enum LogExporter {
                 nextCampaignCheckAt: Date? = nil,
                 lastDropProgressAt: Date? = nil,
                 stallConfidencePercent: Int? = nil,
-                stallSignals: [String] = []
+                stallSignals: [String] = [],
+                followPrioritisation: String? = nil
             ) {
                 self.id = id
                 self.username = username
@@ -93,6 +97,7 @@ enum LogExporter {
                 self.lastDropProgressAt = lastDropProgressAt
                 self.stallConfidencePercent = stallConfidencePercent
                 self.stallSignals = stallSignals
+                self.followPrioritisation = followPrioritisation
             }
         }
 
@@ -224,6 +229,9 @@ enum LogExporter {
                 if !miner.priorityGames.isEmpty {
                     let joined = miner.priorityGames.joined(separator: ", ")
                     out += "  priorityGames=[\(joined)]\n"
+                }
+                if let followPrioritisation = miner.followPrioritisation {
+                    out += "  followedStreamerPrioritisation=\(followPrioritisation)\n"
                 }
             }
         }
@@ -583,6 +591,8 @@ enum LogExporter {
             }
         }
 
+        let followDegradations = await navigation.minerManager.followPrioritisationDegradations()
+
         let miners = navigation.minerManager.miners.map { m in
             let healthSnapshot = MinerHealthSnapshot.make(miner: m)
             return Snapshot.Miner(
@@ -611,7 +621,8 @@ enum LogExporter {
                 nextCampaignCheckAt: m.nextCampaignCheckAt,
                 lastDropProgressAt: healthSnapshot.lastDropProgressAt,
                 stallConfidencePercent: healthSnapshot.stallConfidencePercent,
-                stallSignals: healthSnapshot.stallSignals
+                stallSignals: healthSnapshot.stallSignals,
+                followPrioritisation: followDegradations[m.id]?.summary
             )
         }
 

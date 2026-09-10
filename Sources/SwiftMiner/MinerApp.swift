@@ -817,8 +817,11 @@ struct MenuBarContent: View {
             )
         }
 
-        // Some running, some not: mining is degraded rather than stopped.
+        // Some running, some not. That is only a fault when a miner actually needs the
+        // user; otherwise the idle ones are up to date or between streams, so the plain
+        // bolt reports mining without raising a warning over a healthy fleet.
         if appModel.activeMiners > 0, appModel.activeMiners < appModel.totalMiners {
+            guard appModel.hasMinerAttentionItems else { return "bolt.fill" }
             return SystemSymbolCompatibility.resolvedName(for: "bolt.trianglebadge.exclamationmark.fill")
         }
 
@@ -846,7 +849,7 @@ struct MenuBarContent: View {
         }
 
         if appModel.activeMiners > 0, appModel.activeMiners < appModel.totalMiners {
-            return .orange
+            return appModel.hasMinerAttentionItems ? .orange : .green
         }
 
         switch appModel.overallStatus {

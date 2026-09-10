@@ -140,7 +140,7 @@ enum MailInvitationComposer {
     /// not `.activateAllWindows`, which would raise Mail's inbox over it.
     private static func activateMail() async {
         await MainActor.run {
-            NSRunningApplication
+            _ = NSRunningApplication
                 .runningApplications(withBundleIdentifier: mailBundleIdentifier)
                 .first?
                 .activate()

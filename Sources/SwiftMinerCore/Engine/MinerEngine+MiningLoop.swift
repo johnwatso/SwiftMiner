@@ -99,7 +99,8 @@ extension MinerEngine {
                         from: allEnriched,
                         priorityGames: priorityGames,
                         excludedGames: excludedGames,
-                        strategy: miningStrategy
+                        strategy: miningStrategy,
+                        logSummary: false
                     )
                     perfCandidateCount = candidates.count
                     onCampaignUpdate?(candidates)
@@ -649,7 +650,8 @@ extension MinerEngine {
                                         from: fetched,
                                         priorityGames: priorityGames,
                                         excludedGames: excludedGames,
-                                        strategy: miningStrategy
+                                        strategy: miningStrategy,
+                                        logSummary: false
                                     )
                                 ) ?? "Campaign '\(campaign.name)' no longer returned by API — clearing and rescanning."
                                 log("Warning: \(warning)")
@@ -707,7 +709,8 @@ extension MinerEngine {
                                 from: allCampaigns,
                                 priorityGames: priorityGames,
                                 excludedGames: excludedGames,
-                                strategy: miningStrategy
+                                strategy: miningStrategy,
+                                logSummary: false
                             )
                             let currentStillMineable = claimSyncCandidates.contains { $0.id == currentCampaignId }
 

@@ -73,4 +73,35 @@ public enum TwitchMinerError: LocalizedError {
         if case .twitchAPICompatibility = self { return true }
         return false
     }
+
+    /// Condenses an HTTP error body into one line fit to carry in an error message.
+    ///
+    /// Twitch's edge answers an outage with a Varnish error *page*, so putting the body in
+    /// verbatim spilled fifteen lines of XHTML into the Activity Log for every 503 — the useful
+    /// part being the four words in its `<title>`. Extract that when the body is markup;
+    /// otherwise collapse whitespace and cap the length. Diagnostics keep the full body.
+    public static func condensedErrorBody(_ body: String, limit: Int = 200) -> String {
+        let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "no response body" }
+
+        let looksLikeMarkup = trimmed.hasPrefix("<")
+        if looksLikeMarkup,
+           let open = trimmed.range(of: "<title>", options: .caseInsensitive),
+           let close = trimmed.range(
+               of: "</title>",
+               options: .caseInsensitive,
+               range: open.upperBound..<trimmed.endIndex
+           ) {
+            let title = trimmed[open.upperBound..<close.lowerBound]
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !title.isEmpty { return title }
+        }
+        if looksLikeMarkup {
+            return "HTML error page (\(trimmed.count) bytes)"
+        }
+
+        let collapsed = trimmed.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        guard collapsed.count > limit else { return collapsed }
+        return collapsed.prefix(limit) + "…"
+    }
 }

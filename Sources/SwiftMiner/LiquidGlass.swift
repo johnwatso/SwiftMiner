@@ -41,35 +41,42 @@ struct SwiftMinerAppearance {
         return accent
     }
 
-    /// Wash used where a surface stays translucent — the floating status bar and
-    /// the Drops panels, which are meant to show content moving underneath.
+    /// The wash a themed surface paints over its blur — and, under Atomic
+    /// Purple, that is now every surface: window, sidebar and cards alike.
+    ///
+    /// This table is the whole translucency control. A wash rather than a fill
+    /// is what keeps the hue the theme's own: the blur underneath is already
+    /// blurred and muted by the material, so what comes through moves the
+    /// surface's brightness far more than its colour. The steps between roles
+    /// have to carry the surface hierarchy by themselves now that nothing is
+    /// painted solid — each role sits a little heavier than the one it lifts off.
     func tint(for role: AppearanceSurfaceRole) -> Color {
         guard usesTintedSurfaces else { return .clear }
         if isLight {
             switch role {
             case .window:
-                return Color(red: 0.82, green: 0.76, blue: 0.94).opacity(0.30)
+                return Color(red: 0.80, green: 0.73, blue: 0.94).opacity(0.18)
             case .sidebar:
-                return Color(red: 0.72, green: 0.62, blue: 0.90).opacity(0.40)
+                return Color(red: 0.70, green: 0.59, blue: 0.90).opacity(0.36)
             case .secondary:
-                return Color(red: 0.76, green: 0.68, blue: 0.94).opacity(0.34)
+                return Color(red: 0.74, green: 0.65, blue: 0.93).opacity(0.32)
             case .elevated:
-                return Color(red: 0.70, green: 0.60, blue: 0.91).opacity(0.42)
+                return Color(red: 0.69, green: 0.58, blue: 0.91).opacity(0.38)
             case .selected:
-                return Color(red: 0.60, green: 0.44, blue: 0.86).opacity(0.44)
+                return Color(red: 0.60, green: 0.44, blue: 0.86).opacity(0.46)
             }
         }
         switch role {
         case .window:
-            return Color(red: 0.17, green: 0.13, blue: 0.32).opacity(0.62)
+            return Color(red: 0.22, green: 0.13, blue: 0.45).opacity(0.38)
         case .sidebar:
-            return Color(red: 0.18, green: 0.15, blue: 0.30).opacity(0.70)
+            return Color(red: 0.24, green: 0.15, blue: 0.46).opacity(0.56)
         case .secondary:
-            return Color(red: 0.22, green: 0.18, blue: 0.39).opacity(0.62)
+            return Color(red: 0.29, green: 0.19, blue: 0.54).opacity(0.50)
         case .elevated:
-            return Color(red: 0.26, green: 0.21, blue: 0.46).opacity(0.68)
+            return Color(red: 0.34, green: 0.23, blue: 0.60).opacity(0.54)
         case .selected:
-            return Color(red: 0.44, green: 0.29, blue: 0.74).opacity(0.72)
+            return Color(red: 0.47, green: 0.31, blue: 0.78).opacity(0.62)
         }
     }
 
@@ -147,14 +154,60 @@ extension View {
 
 struct LiquidGlassBackdrop: View {
     @Environment(\.swiftMinerAppearance) private var appearance
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    private var isTranslucent: Bool {
+        appearance.usesTintedSurfaces && !reduceTransparency
+    }
 
     var body: some View {
-        // Flat, not vibrancy: a behind-window blur takes its colour from whatever
-        // wallpaper happens to be there, so Atomic Purple landed a different shade
-        // on every desk. The window plane is the one surface that has to be
-        // exactly the colour the theme says it is.
-        appearance.opaqueColor(for: .window)
-            .ignoresSafeArea()
+        ZStack {
+            if isTranslucent {
+                // Blur first, theme colour over it. Painting the colour on top —
+                // rather than tinting a vibrancy material and letting it blend —
+                // is what keeps the hue the theme's own: the desktop underneath
+                // shifts how bright the plane reads, not what colour it is.
+                VisualEffectMaterialView(
+                    material: .fullScreenUI,
+                    blendingMode: .behindWindow
+                )
+                appearance.tint(for: .window)
+            } else {
+                // Standard stays exactly as it was: a flat window plane, which is
+                // also where Reduce Transparency lands.
+                appearance.opaqueColor(for: .window)
+            }
+        }
+        .background(WindowTranslucencyConfigurator(isTranslucent: isTranslucent))
+        .ignoresSafeArea()
+    }
+}
+
+/// Lets the desktop reach the window's backing store.
+///
+/// A behind-window `NSVisualEffectView` blurs whatever the window is sitting on,
+/// but an opaque window paints its own background over that first, so the blur
+/// never shows. The flags are reverted the moment the style stops asking for
+/// translucency, so switching back to Standard restores an ordinary window
+/// rather than leaving a see-through one behind.
+private struct WindowTranslucencyConfigurator: NSViewRepresentable {
+    let isTranslucent: Bool
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        // The view has no window during `makeNSView`; apply once it is installed.
+        DispatchQueue.main.async { apply(to: view.window) }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        apply(to: nsView.window)
+    }
+
+    private func apply(to window: NSWindow?) {
+        guard let window else { return }
+        window.isOpaque = !isTranslucent
+        window.backgroundColor = isTranslucent ? .clear : .windowBackgroundColor
     }
 }
 
@@ -165,8 +218,16 @@ struct SidebarMaterialBackground: View {
 
     var body: some View {
         Group {
-            if appearance.usesTintedSurfaces || reduceTransparency {
+            if reduceTransparency {
                 appearance.opaqueColor(for: .sidebar)
+            } else if appearance.usesTintedSurfaces {
+                // The sidebar is the most translucent surface in the app: it is
+                // chrome, it holds no body text, and it is where the desktop
+                // moving behind the window is worth seeing.
+                ZStack {
+                    VisualEffectMaterialView(material: .sidebar, blendingMode: .behindWindow)
+                    appearance.tint(for: .sidebar)
+                }
             } else {
                 VisualEffectMaterialView(material: .sidebar)
             }
@@ -212,22 +273,27 @@ struct AppearanceRoundedSurface: View {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
+    /// Atomic Purple asks for real glass on every surface it owns, not only the
+    /// layers that opted in — the theme is the see-through one, so its cards are
+    /// glass for the same reason its window is. Everything else keeps whatever
+    /// its caller asked for.
+    private var prefersNativeGlass: Bool {
+        usesNativeGlass || appearance.usesTintedSurfaces
+    }
+
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         Group {
             if reduceTransparency {
                 shape.fill(appearance.opaqueColor(for: role))
-            } else if appearance.usesTintedSurfaces && !usesNativeGlass {
-                // Themed surfaces are painted, not blended. A material lightens
-                // whatever it sits on, which pushed light-mode cards *up* towards
-                // the window colour when the design wants them a step down from it.
-                shape.fill(appearance.opaqueColor(for: role))
-            } else if usesNativeGlass {
+            } else if prefersNativeGlass {
                 if #available(macOS 26, *) {
+                    // Tinting the glass rather than washing over it: the tint is
+                    // part of how the material refracts what is behind it, so the
+                    // purple stays lit instead of sitting on top as a flat film.
                     shape
                         .fill(.clear)
-                        .glassEffect(.regular, in: shape)
-                        .overlay(shape.fill(appearance.tint(for: role)))
+                        .glassEffect(.regular.tint(appearance.tint(for: role)), in: shape)
                 } else {
                     materialSurface(shape)
                 }
@@ -467,10 +533,13 @@ private struct TahoeCardModifier: ViewModifier {
 
 /// Raised surface for headers and action bars sitting above content.
 ///
-/// Deliberately *not* `.glassEffect`: a real Liquid Glass backdrop inside a
-/// scroll view resamples what's behind it every frame, which reads as scroll
-/// jank. This matches the near-opaque `.thinMaterial` treatment the Drops feed
-/// cards use, which scrolls smoothly.
+/// Under Standard this is deliberately *not* `.glassEffect`: a real Liquid Glass
+/// backdrop inside a scroll view resamples what's behind it every frame, which
+/// reads as scroll jank, so it takes the near-opaque `.thinMaterial` treatment
+/// the Drops feed cards use, which scrolls smoothly. Atomic Purple opts into the
+/// glass anyway — being see-through is the whole point of that style — and pays
+/// the resampling cost for it. If a list ever scrolls badly under the theme,
+/// `AppearanceRoundedSurface.prefersNativeGlass` is the one switch to reach for.
 private struct TahoeRaisedSurfaceModifier: ViewModifier {
     let cornerRadius: CGFloat
     @Environment(\.swiftMinerAppearance) private var appearance

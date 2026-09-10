@@ -23,16 +23,13 @@ struct GeneralSettingsView: View {
     var body: some View {
         Form {
             Section {
-                Picker("Theme", selection: $settings.appearanceStyle) {
-                    ForEach(AppearanceStyle.allCases) { style in
-                        Text(style.title).tag(style)
-                    }
+                LabeledContent("Theme") {
+                    AppearanceStylePicker(selection: $settings.appearanceStyle)
                 }
-                .pickerStyle(.segmented)
 
                 SettingsSecondaryText(
                     settings.appearanceStyle == .atomicPurple
-                        ? "A purple treatment that follows your Mac's light or dark appearance. Game artwork and status colours stay unchanged."
+                        ? "A translucent purple treatment that follows your Mac's light or dark appearance. The window and sidebar let your desktop show through. Game artwork and status colours stay unchanged."
                         : "SwiftMiner's standard macOS appearance."
                 )
             } header: {

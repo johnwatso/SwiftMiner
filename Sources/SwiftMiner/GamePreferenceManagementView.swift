@@ -8,6 +8,7 @@ import SwiftMinerCore
 /// showed the same controls twice and let the user move a game between the lists anyway.
 struct GamePreferenceManagementView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(NavigationModel.self) private var navigation
     var settings: Settings
     let minerManager: MinerManager
 
@@ -23,11 +24,32 @@ struct GamePreferenceManagementView: View {
         settings.gamePreferences.filter { $0.state == .excluded }
     }
 
+    /// Game lookup is a Twitch call, so the whole add path is inert without an account.
+    /// Existing rules stay editable — removing every account should not strand them.
+    private var hasAccounts: Bool {
+        !minerManager.miners.isEmpty
+    }
+
+    /// The account sheet lives on the main window, so this sheet has to get out of the way
+    /// first. The hop off this run loop keeps the dismissal from swallowing the presentation.
+    private func presentAddAccount() {
+        dismiss()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            navigation.showAddAccountSheet = true
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             header
 
             Divider()
+
+            if !hasAccounts {
+                accountRequiredBanner
+
+                Divider()
+            }
 
             ruleList
 
@@ -77,6 +99,37 @@ struct GamePreferenceManagementView: View {
         .background(.ultraThinMaterial)
     }
 
+    /// Stated once at the top of the sheet rather than only at the point of failure: the user
+    /// opened this sheet to add a game, and finding out why they can't only after typing into a
+    /// dead search field is the complaint this banner answers.
+    private var accountRequiredBanner: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("No Twitch account connected")
+                    .font(.callout.weight(.semibold))
+
+                Text("Games are looked up on Twitch, so search stays disabled until an account is connected.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 8)
+
+            Button("Add Account\u{2026}") {
+                presentAddAccount()
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(Color.orange.opacity(0.12))
+    }
+
     private var footer: some View {
         HStack(alignment: .top, spacing: 6) {
             Image(systemName: "lightbulb")
@@ -105,7 +158,8 @@ struct GamePreferenceManagementView: View {
                     settings: settings,
                     minerManager: minerManager,
                     placeholder: "Search games to add\u{2026}",
-                    offersBothStates: true
+                    offersBothStates: true,
+                    showsAccountRequirementNotice: false
                 )
                 .padding(.vertical, 4)
             } footer: {
@@ -175,7 +229,7 @@ struct GamePreferenceManagementView: View {
             Image(systemName: SystemSymbolCompatibility.resolvedName(for: "list.bullet.rectangle.stack"))
                 .font(.system(size: 24))
                 .foregroundStyle(.tertiary)
-            Text("No game rules configured.")
+            Text(hasAccounts ? "No game rules configured." : "Connect a Twitch account to add game rules.")
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
