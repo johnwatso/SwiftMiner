@@ -200,6 +200,10 @@ h1 {
     margin-bottom: 0.6rem;
 }
 
+.invitation-article .kb-content > h2:first-child {
+    margin-top: 1rem;
+}
+
 /* Styled Lists */
 .kb-content ul,
 .kb-content ol {
@@ -641,70 +645,63 @@ tr:last-child td {
     .fact-card.is-never .fact-list li i { color: #7aa7ff; }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 700px) {
     .fact-grid { grid-template-columns: 1fr; }
 }
 
-/* Verdict pair — the accept / decline call, side by side. */
-.verdict-grid {
+.decision-note {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 1rem;
-    margin: 1.5rem 0 1rem;
-}
-
-.verdict {
-    padding: 1.15rem 1.2rem 1.25rem;
-    border: 1px solid var(--line);
-    border-radius: 16px;
-}
-
-.verdict.is-accept { background: var(--green-soft); border-color: rgba(52, 168, 105, 0.28); }
-.verdict.is-decline { background: var(--red-soft); border-color: rgba(220, 90, 90, 0.28); }
-
-.verdict h3 {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin: 0 0 0.7rem;
-    font-size: 1rem;
-    font-weight: 650;
-    color: var(--ink);
-}
-
-.verdict h3 i { font-size: 1.25rem; }
-.verdict.is-accept h3 i { color: #1f9254; }
-.verdict.is-decline h3 i { color: #c0392b; }
-
-.verdict ul { margin: 0; padding: 0; list-style: none; }
-
-.verdict li {
-    display: grid;
-    grid-template-columns: 1.05rem 1fr;
-    gap: 0.55rem;
+    grid-template-columns: 1.5rem 1fr;
+    gap: 0.8rem;
     align-items: start;
-    margin: 0 0 0.55rem;
-    font-size: 0.92rem;
-    line-height: 1.5;
+    margin: 1rem 0 2.6rem;
+    padding: 1.1rem 1.2rem;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    border-radius: 14px;
+    background: var(--orange-soft);
+}
+
+.decision-note > i {
+    color: #b7791f;
+    font-size: 1.3rem;
+    line-height: 1.4;
+}
+
+.decision-note strong {
+    display: block;
+    margin-bottom: 0.2rem;
+}
+
+.decision-note p {
+    margin: 0;
     color: var(--muted);
+    font-size: 0.96rem;
+    line-height: 1.55;
 }
 
-.verdict li i { font-size: 0.95rem; line-height: 1.4; }
-.verdict.is-accept li i { color: #1f9254; }
-.verdict.is-decline li i { color: #c0392b; }
+.compact-steps > li {
+    margin-bottom: 1.15rem;
+}
+
+.consideration-list {
+    list-style: none;
+    padding: 0 !important;
+}
+
+.consideration-list li {
+    padding: 0.85rem 0;
+    margin: 0;
+    border-bottom: 1px solid var(--line);
+}
+
+.consideration-list li:first-child {
+    padding-top: 0.25rem;
+}
+
+.consideration-list li:last-child {
+    border-bottom: 0;
+}
 
 @media (prefers-color-scheme: dark) {
-    .verdict.is-accept li i { color: #53d18c; }
-    .verdict.is-decline li i { color: #ff8f8f; }
-}
-
-.verdict li:last-child { margin-bottom: 0; }
-
-@media (prefers-color-scheme: dark) {
-    .verdict.is-accept h3 i { color: #53d18c; }
-    .verdict.is-decline h3 i { color: #ff8f8f; }
-}
-
-@media (max-width: 700px) {
-    .verdict-grid { grid-template-columns: 1fr; }
+    .decision-note > i { color: #ffc46b; }
 }
