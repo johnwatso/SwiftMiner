@@ -17,11 +17,16 @@ public struct SwiftBotDiscordUser: Codable, Sendable, Identifiable, Equatable {
     public let displayName: String // Guild display name or global name
     public let username: String?
     public let avatarURL: URL?
+    /// SwiftBot flags bots and webhooks so account pickers can leave out the
+    /// things nobody can invite or link. Absent in older SwiftBot payloads,
+    /// which is why it defaults to a person rather than to a bot.
+    public let isBot: Bool
 
-    public init(id: String, displayName: String, username: String? = nil, avatarURL: URL? = nil) {
+    public init(id: String, displayName: String, username: String? = nil, avatarURL: URL? = nil, isBot: Bool = false) {
         self.id = id
         self.displayName = displayName
         self.username = username
+        self.isBot = isBot
         // Generated `/embed/avatars` images only mean SwiftBot has no usable
         // account picture yet. Filtering them here lets every consumer retain
         // its Twitch/initial fallback until the real Discord hash is resolved.
@@ -33,6 +38,7 @@ public struct SwiftBotDiscordUser: Codable, Sendable, Identifiable, Equatable {
         case displayName = "display_name"
         case username
         case avatarURL = "avatar_url"
+        case isBot = "bot"
     }
 
     enum AlternateCodingKeys: String, CodingKey {
@@ -47,6 +53,7 @@ public struct SwiftBotDiscordUser: Codable, Sendable, Identifiable, Equatable {
         id = try container.decode(String.self, forKey: .id)
         displayName = try container.decode(String.self, forKey: .displayName)
         username = try container.decodeIfPresent(String.self, forKey: .username)
+        isBot = try container.decodeIfPresent(Bool.self, forKey: .isBot) ?? false
         avatarURL = MinerAvatarURL.usable(try container.decodeIfPresent(URL.self, forKey: .avatarURL)
             ?? alternate.decodeIfPresent(URL.self, forKey: .avatarUrl)
             ?? alternate.decodeIfPresent(URL.self, forKey: .displayAvatarURL)
@@ -59,6 +66,7 @@ public struct SwiftBotDiscordUser: Codable, Sendable, Identifiable, Equatable {
         try container.encode(displayName, forKey: .displayName)
         try container.encodeIfPresent(username, forKey: .username)
         try container.encodeIfPresent(avatarURL, forKey: .avatarURL)
+        try container.encode(isBot, forKey: .isBot)
     }
 }
 

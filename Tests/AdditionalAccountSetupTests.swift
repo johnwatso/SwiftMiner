@@ -231,6 +231,40 @@ final class SwiftBotFriendInvitationTests: XCTestCase {
         XCTAssertEqual(eligible.map(\.id), ["available"])
     }
 
+    /// SwiftBot's member list carries the bots and webhooks it has cached.
+    /// Nobody can accept an invitation on their behalf, so they must not reach
+    /// the picker even though they are not linked to a miner.
+    func testRecipientPickerExcludesBots() {
+        let members = [
+            SwiftBotDiscordUser(id: "bot", displayName: "CatBot", isBot: true),
+            SwiftBotDiscordUser(id: "person", displayName: "Available User")
+        ]
+
+        let eligible = SwiftBotInvitationEligibility.eligibleMembers(from: members, excluding: [])
+
+        XCTAssertEqual(eligible.map(\.id), ["person"])
+    }
+
+    /// The flag is optional in the payload. A SwiftBot that predates it must
+    /// still yield people rather than an empty picker.
+    func testMemberWithoutBotFlagIsTreatedAsAPerson() throws {
+        let payload = Data(#"{"discord_id":"123","display_name":"Gabe","username":"gabe"}"#.utf8)
+
+        let member = try JSONDecoder().decode(SwiftBotDiscordUser.self, from: payload)
+
+        XCTAssertFalse(member.isBot)
+        XCTAssertEqual(
+            SwiftBotInvitationEligibility.eligibleMembers(from: [member], excluding: []).map(\.id),
+            ["123"]
+        )
+    }
+
+    func testBotFlagIsDecodedFromSwiftBotPayload() throws {
+        let payload = Data(#"{"discord_id":"9","display_name":"CatBot","bot":true}"#.utf8)
+
+        XCTAssertTrue(try JSONDecoder().decode(SwiftBotDiscordUser.self, from: payload).isBot)
+    }
+
     func testFriendInvitationDMCarriesOnlyTheSetupLink() async {
         let service = RecordingFriendInvitationService()
         let invitation = SwiftMinerInvitation(
