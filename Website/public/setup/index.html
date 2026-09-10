@@ -130,36 +130,32 @@
       line-height: 1.5;
     }
 
+    /* Matches the Twitch button on SwiftMiner's web dashboard sign-in, down to
+       Twitch Purple and its glow, so the same action looks the same wherever a
+       SwiftMiner surface offers it. See WebDashboardLoginAssets. */
     .cta {
       display: flex;
       align-items: center;
       justify-content: center;
+      gap: 10px;
       min-height: 52px;
       margin-top: 30px;
       border-radius: 13px;
-      background: var(--purple);
-      color: white;
+      background: #9146FF;
+      box-shadow: 0 8px 20px rgba(145, 70, 255, 0.35);
+      color: #fff;
       font-size: 16px;
       font-weight: 680;
       text-decoration: none;
-      transition: transform 140ms ease, background 140ms ease, opacity 140ms ease;
+      transition: transform 140ms ease, filter 140ms ease, opacity 140ms ease;
     }
 
-    .cta { gap: 10px; }
+    .cta .mark { width: 19px; height: 19px; flex: none; }
 
-    /* Twitch's Glitch: one solid silhouette with the eyes knocked out by
-       fill-rule, which is how the real mark is drawn. Reproduced in white per
-       Twitch's brand guidance — undistorted, and never recoloured. */
-    .cta svg {
-      width: 17px;
-      height: 20px;
-      flex: none;
-      fill: currentColor;
-    }
-
-    .cta:hover { background: var(--purple-hover); transform: translateY(-1px); }
-    .cta:focus-visible { outline: 3px solid color-mix(in srgb, var(--purple) 38%, transparent); outline-offset: 3px; }
-    .cta.disabled { pointer-events: none; opacity: 0.5; }
+    .cta:hover { transform: translateY(-1px); filter: brightness(1.07); }
+    .cta:active { transform: translateY(0); filter: brightness(0.96); }
+    .cta:focus-visible { outline: 3px solid color-mix(in srgb, #9146FF 38%, transparent); outline-offset: 3px; }
+    .cta.disabled { pointer-events: none; opacity: 0.5; box-shadow: none; }
 
     .security {
       display: grid;
@@ -284,7 +280,7 @@
         <p class="inviter-copy" id="inviter-copy">Checking the temporary setup link.</p>
 
         <a class="cta disabled" id="connect-button" aria-disabled="true">
-          <svg viewBox="0 0 2400 2800" fill-rule="evenodd" aria-hidden="true" focusable="false"><path d="M500 0L0 500v1800h600v500l500-500h400l900-900V0H500zM1150 550h200v600h-200zM1700 550h200v600h-200z"/></svg>
+          <svg class="mark" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor" aria-hidden="true" focusable="false"><path fill-rule="evenodd" d="M6 0 1.714 4.286V19.714H6.857V24l4.286-4.286h3.428L22.286 12V0Zm14.571 11.143-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714ZM11.571 4.714h1.715v5.143h-1.715Zm4.715 0H18v5.143h-1.714Z"/></svg>
           <span>Link Twitch with SwiftMiner</span>
         </a>
         <p class="cta-note" id="cta-note">Opens twitch.tv, where you approve the connection.</p>
