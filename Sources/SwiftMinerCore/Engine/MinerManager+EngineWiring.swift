@@ -15,11 +15,12 @@ extension MinerManager {
     }
     
     func setupEngineCallbacks(engine: MinerEngine, minerId: String) async {
-        await engine.setChannelAssignmentAvoidanceProvider { [weak self] campaignId, viableChannelCount in
-            guard let self else { return [] }
-            return await self.assignedChannelIds(
+        await engine.setChannelAssignmentReservationProvider { [weak self] campaignId, rankedChannelIds, viableChannelCount in
+            guard let self else { return rankedChannelIds.first }
+            return await self.reserveChannel(
                 campaignId: campaignId,
-                excluding: minerId,
+                for: minerId,
+                rankedChannelIds: rankedChannelIds,
                 viableChannelCount: viableChannelCount
             )
         }
@@ -307,23 +308,76 @@ extension MinerManager {
         }
     }
 
-    func assignedChannelIds(
-        campaignId: String,
-        excluding minerId: String,
-        viableChannelCount: Int
-    ) async -> Set<String> {
-        guard avoidDuplicateStreams, viableChannelCount > 4 else { return [] }
+    /// Standing follow-prioritisation degradations, by miner ID, for miners that have one.
+    ///
+    /// Surfaced for the diagnostic report: the Activity Log warning fires once, on the
+    /// transition, so a report pulled later gave no sign the setting had been inert all run.
+    public func followPrioritisationDegradations() async -> [String: TwitchAPIClient.FollowLookupDegradation] {
+        var result: [String: TwitchAPIClient.FollowLookupDegradation] = [:]
+        for miner in miners where miner.isRunning {
+            guard let engine = engines[miner.id] else { continue }
+            if let degradation = await engine.followPrioritisationDegradation() {
+                result[miner.id] = degradation
+            }
+        }
+        return result
+    }
 
-        var assigned = Set<String>()
+    /// Picks the highest-ranked channel no sibling miner already holds, and records the choice
+    /// before returning so a miner selecting a moment later sees it.
+    ///
+    /// The reservation is the point. Occupancy used to be read from each engine's committed
+    /// `currentChannelId`, which is only set once that engine has actually *started* watching —
+    /// so miners that re-picked together (a campaign ending, say) all read the same stale
+    /// snapshot and piled onto one stream despite the setting being on. Reservations bridge
+    /// the gap between choosing and committing.
+    ///
+    /// Everything after the `await` below runs in one MainActor turn with no suspension, so the
+    /// read of `channelReservations` and the write that follows cannot interleave with another
+    /// miner's call. Returns nil when every viable channel is taken; the engine then reuses its
+    /// own best match.
+    func reserveChannel(
+        campaignId: String,
+        for minerId: String,
+        rankedChannelIds: [String],
+        viableChannelCount: Int
+    ) async -> String? {
+        guard avoidDuplicateStreams, viableChannelCount > 4 else { return rankedChannelIds.first }
+
+        var committed = Set<String>()
         for miner in miners where miner.id != minerId && miner.isRunning && miner.currentCampaignId == campaignId {
             guard let engine = engines[miner.id] else { continue }
             let state = await engine.getStallState()
             if let channelId = state.currentChannelId, !channelId.isEmpty {
-                assigned.insert(channelId)
+                committed.insert(MinerEngine.normalizedChannelIdentity(channelId))
             }
         }
 
-        return assigned
+        // --- No suspension points from here to the write below. ---
+        let now = Date()
+        channelReservations = channelReservations.filter { $0.value.expiresAt > now }
+
+        var taken = committed
+        for (holder, reservation) in channelReservations
+        where holder != minerId && reservation.campaignId == campaignId {
+            taken.insert(reservation.channelIdentity)
+        }
+
+        let pick = rankedChannelIds.first {
+            !taken.contains(MinerEngine.normalizedChannelIdentity($0))
+        }
+
+        guard let pick else {
+            channelReservations.removeValue(forKey: minerId)
+            return nil
+        }
+
+        channelReservations[minerId] = ChannelReservation(
+            campaignId: campaignId,
+            channelIdentity: MinerEngine.normalizedChannelIdentity(pick),
+            expiresAt: now.addingTimeInterval(Self.channelReservationTTL)
+        )
+        return pick
     }
     
     func mapSessionStatus(_ status: SessionStatus) -> MinerStatus {

@@ -15,7 +15,8 @@ extension MinerEngine {
             from: mergedCampaigns,
             priorityGames: priorityGames,
             excludedGames: excludedGames,
-            strategy: miningStrategy
+            strategy: miningStrategy,
+            logSummary: false
         )
         onCampaignUpdate?(updatedCandidates)
     }

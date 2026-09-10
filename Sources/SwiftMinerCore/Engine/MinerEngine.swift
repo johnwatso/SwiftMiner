@@ -375,6 +375,14 @@ public actor MinerEngine {
     /// GQL liveness query, then expire it in case a corresponding stream-down is lost.
     static let recentRestrictedStreamUpInterval: TimeInterval = 10 * 60
     var recentRestrictedStreamUpUntil: [String: UInt64] = [:]
+    /// How often a stream's viewer count is worth a line. The PubSub `viewcount` push arrives
+    /// roughly every ten seconds per watched channel, which made it 17% of a 16-hour Activity
+    /// Log — 3,706 lines saying nothing but "PubSub is still delivering". That evidence is worth
+    /// keeping (a silently dead PubSub is exactly the failure this log is read to find), so the
+    /// line is throttled rather than dropped: still positive proof of delivery, at a rate that
+    /// leaves the log readable.
+    static let viewerCountLogInterval: TimeInterval = 5 * 60
+    var nextViewerCountLogAt: [String: UInt64] = [:]
     static let approvedChannelProbeFailureThreshold = 3
     var consecutiveApprovedChannelProbeFailures = 0
     /// Whether the current run of failures was reported, so recovery clears exactly the
@@ -412,7 +420,17 @@ public actor MinerEngine {
     /// True while watching the override streamer even though none of this miner's eligible
     /// drop campaigns are active on their channel (pure "watch them anyway" session).
     var streamOverrideWatchOnly: Bool = false
-    var channelAssignmentAvoidanceProvider: (@Sendable (_ campaignId: String, _ viableChannelCount: Int) async -> Set<String>)?
+    /// Asks the manager to pick — and atomically reserve — one of `rankedChannelIds` for this
+    /// miner, so two engines selecting in the same instant cannot land on the same stream.
+    ///
+    /// This deliberately hands the *choice* to the manager rather than asking it which channels
+    /// are occupied. The read-then-choose shape it replaces had a window between the two: three
+    /// miners re-picking together each saw the same occupancy snapshot, each "avoided" it, and
+    /// all three converged on the same top-ranked free channel. Returning nil means the manager
+    /// has no opinion and the engine should use its own best match.
+    var channelAssignmentReservationProvider: (
+        @Sendable (_ campaignId: String, _ rankedChannelIds: [String], _ viableChannelCount: Int) async -> String?
+    )?
 
     struct PendingFailoverTarget: Sendable {
         let campaignId: String
@@ -587,8 +605,14 @@ public actor MinerEngine {
             }
         case .down:
             recentRestrictedStreamUpUntil.removeValue(forKey: event.channelId)
+            nextViewerCountLogAt.removeValue(forKey: event.channelId)
             log("Stream \(event.channelId) went OFFLINE")
         case .viewcount(let count):
+            let due = nextViewerCountLogAt[event.channelId]
+            guard due == nil || runtimeClock.hasReached(due!) else { return }
+            nextViewerCountLogAt[event.channelId] = runtimeClock.deadline(
+                after: Self.viewerCountLogInterval
+            )
             log("Stream \(event.channelId) viewers: \(count)")
         case .commercial(let duration):
             log("Stream \(event.channelId) commercial: \(duration)s")

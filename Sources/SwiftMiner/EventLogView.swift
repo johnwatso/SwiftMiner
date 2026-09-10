@@ -5,6 +5,7 @@ import SwiftMinerCore
 struct EventLogView: View {
     @Environment(NavigationModel.self) private var navigation
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.swiftMinerAppearance) private var appearance
     private var settings: Settings { .shared }
     @State private var searchText = ""
     @State private var selectedMinerFilterId = Self.allMinersFilterId
@@ -166,7 +167,13 @@ struct EventLogView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(.background)
+        // `.background` is the system's opaque page colour, which under a
+        // see-through theme painted a white slab across the top of the log with
+        // the translucent list starting underneath it. Nothing scrolls behind
+        // the controls — the list is a sibling, not a layer below — so the theme
+        // can simply leave them on the window plane, with the hairline below
+        // still doing the separating.
+        .background(appearance.usesTintedSurfaces ? AnyShapeStyle(.clear) : AnyShapeStyle(.background))
         .overlay(alignment: .bottom) {
             Rectangle()
                 .fill(Color.secondary.opacity(0.12))

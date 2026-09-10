@@ -423,6 +423,23 @@ public final class MinerManager {
     /// The actual engine instances (by miner ID)
     var engines: [String: MinerEngine] = [:]
 
+    /// A channel one miner has chosen but not yet started watching, held just long enough for a
+    /// sibling selecting concurrently to see it. See `reserveChannel(campaignId:for:...)`.
+    struct ChannelReservation: Sendable {
+        let campaignId: String
+        let channelIdentity: String
+        let expiresAt: Date
+    }
+
+    /// Pending channel reservations, by miner ID. At most one per miner — a new selection
+    /// replaces the miner's previous reservation.
+    var channelReservations: [String: ChannelReservation] = [:]
+
+    /// How long a reservation survives without the miner committing to the channel. Long enough
+    /// to cover a slow watch start, short enough that a miner which died mid-selection cannot
+    /// keep a channel fenced off from everyone else.
+    static let channelReservationTTL: TimeInterval = 90
+
     /// Tracks in-flight engine setup tasks (setAccount + callback registration).
     /// `startMiner()` awaits these before starting the engine, eliminating the
     /// race condition where status callbacks were not yet registered on autostart.
@@ -1170,6 +1187,7 @@ public final class MinerManager {
               let miner = getMiner(id: minerId) else { return }
         
         await engine.stop()
+        channelReservations.removeValue(forKey: minerId)
         await supervisor.recordWorkerStop(minerId: minerId)
         await applySupervisorSnapshot(for: minerId)
         await dataCoordinator.updateAccountNeedsAuth(accountId: miner.accountId, needsAuth: false)

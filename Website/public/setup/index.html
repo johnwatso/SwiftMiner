@@ -263,12 +263,106 @@
       .footer { flex-direction: column; align-items: center; }
     }
 
+    /* Page-wide take on the landing page's reward-card confetti (site.css,
+       .how-step-confetti): same palette and motion, stretched to the viewport
+       and kept behind the card. Only shown once the invitation checks out, so
+       an expired or broken link doesn't celebrate. */
+    .page { position: relative; z-index: 1; }
+
+    .confetti {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      overflow: hidden;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 600ms ease;
+      -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 35%, rgba(0, 0, 0, 0.45) 70%, rgba(0, 0, 0, 0.15) 92%, transparent 100%);
+      mask-image: linear-gradient(to bottom, #000 0%, #000 35%, rgba(0, 0, 0, 0.45) 70%, rgba(0, 0, 0, 0.15) 92%, transparent 100%);
+    }
+
+    .confetti.active { opacity: 1; }
+    .confetti:not(.active) i { animation-play-state: paused; }
+
+    .confetti i {
+      position: absolute;
+      top: -16px;
+      width: 8px;
+      height: 12px;
+      border-radius: 2px;
+      opacity: 0;
+      /* Transform and opacity only — the card above uses backdrop-filter, so
+         anything that triggers layout or paint would be recomputed every frame. */
+      will-change: transform, opacity;
+      animation: confetti-fall 14s linear infinite;
+      --peak: 0.62;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .confetti i { --peak: 0.78; }
+    }
+
+    /* vh rather than %: percentages in a transform resolve against the piece
+       itself, not the viewport. */
+    @keyframes confetti-fall {
+      0%   { transform: translate3d(0, 0, 0) rotate(0deg); opacity: 0; }
+      8%   { opacity: var(--peak); }
+      80%  { opacity: var(--peak); }
+      100% { transform: translate3d(var(--drift, 20px), calc(100vh + 32px), 0) rotate(var(--spin, 360deg)); opacity: 0; }
+    }
+
+    .confetti i:nth-child(1)  { left: 3%;  background: #9333ea; animation-duration: 13s;   animation-delay: -0.4s;  --drift: 28px;  --spin: 420deg;  --rest: 12vh; }
+    .confetti i:nth-child(2)  { left: 8%;  background: #ff007f; animation-duration: 15.5s; animation-delay: -6.1s;  --drift: -22px; --spin: -340deg; --rest: 58vh; }
+    .confetti i:nth-child(3)  { left: 12%; background: #2563eb; animation-duration: 12s;   animation-delay: -9.3s;  --drift: 34px;  --spin: 520deg;  --rest: 34vh; width: 7px; height: 7px; border-radius: 999px; }
+    .confetti i:nth-child(4)  { left: 17%; background: #fbbf24; animation-duration: 14.6s; animation-delay: -2.8s;  --drift: -30px; --spin: 380deg;  --rest: 76vh; }
+    .confetti i:nth-child(5)  { left: 21%; background: #ff007f; animation-duration: 12.8s; animation-delay: -11.2s; --drift: 18px;  --spin: -460deg; --rest: 22vh; width: 9px; height: 9px; }
+    .confetti i:nth-child(6)  { left: 26%; background: #9333ea; animation-duration: 16s;   animation-delay: -4.5s;  --drift: -24px; --spin: 340deg;  --rest: 64vh; }
+    .confetti i:nth-child(7)  { left: 30%; background: #2563eb; animation-duration: 13.7s; animation-delay: -8.4s;  --drift: 30px;  --spin: 500deg;  --rest: 44vh; }
+    .confetti i:nth-child(8)  { left: 35%; background: #fbbf24; animation-duration: 11.6s; animation-delay: -1.7s;  --drift: -16px; --spin: -400deg; --rest: 8vh;  width: 7px; height: 7px; border-radius: 999px; }
+    .confetti i:nth-child(9)  { left: 39%; background: #ff007f; animation-duration: 15.2s; animation-delay: -10.4s; --drift: 24px;  --spin: 360deg;  --rest: 82vh; }
+    .confetti i:nth-child(10) { left: 44%; background: #9333ea; animation-duration: 12.9s; animation-delay: -5.6s;  --drift: -32px; --spin: -520deg; --rest: 28vh; width: 9px; height: 9px; }
+    .confetti i:nth-child(11) { left: 48%; background: #2563eb; animation-duration: 14.9s; animation-delay: -2.2s;  --drift: 20px;  --spin: 440deg;  --rest: 52vh; }
+    .confetti i:nth-child(12) { left: 53%; background: #fbbf24; animation-duration: 13.9s; animation-delay: -12.4s; --drift: -22px; --spin: 300deg;  --rest: 70vh; }
+    .confetti i:nth-child(13) { left: 57%; background: #9333ea; animation-duration: 12.4s; animation-delay: -7.3s;  --drift: 26px;  --spin: -380deg; --rest: 16vh; }
+    .confetti i:nth-child(14) { left: 62%; background: #ff007f; animation-duration: 15.8s; animation-delay: -3.6s;  --drift: -28px; --spin: 460deg;  --rest: 88vh; width: 7px; height: 7px; border-radius: 999px; }
+    .confetti i:nth-child(15) { left: 66%; background: #2563eb; animation-duration: 13.3s; animation-delay: -9.9s;  --drift: 16px;  --spin: 340deg;  --rest: 38vh; }
+    .confetti i:nth-child(16) { left: 71%; background: #fbbf24; animation-duration: 14.2s; animation-delay: -0.9s;  --drift: -20px; --spin: -440deg; --rest: 62vh; width: 9px; height: 9px; }
+    .confetti i:nth-child(17) { left: 75%; background: #ff007f; animation-duration: 12.2s; animation-delay: -6.8s;  --drift: 32px;  --spin: 400deg;  --rest: 26vh; }
+    .confetti i:nth-child(18) { left: 80%; background: #9333ea; animation-duration: 16.4s; animation-delay: -11.8s; --drift: -18px; --spin: 520deg;  --rest: 74vh; }
+    .confetti i:nth-child(19) { left: 84%; background: #2563eb; animation-duration: 13.5s; animation-delay: -4.1s;  --drift: 22px;  --spin: -360deg; --rest: 48vh; width: 7px; height: 7px; border-radius: 999px; }
+    .confetti i:nth-child(20) { left: 89%; background: #fbbf24; animation-duration: 15s;   animation-delay: -8.9s;  --drift: -26px; --spin: 380deg;  --rest: 14vh; }
+    .confetti i:nth-child(21) { left: 93%; background: #ff007f; animation-duration: 12.6s; animation-delay: -2.5s;  --drift: 18px;  --spin: -420deg; --rest: 66vh; }
+    .confetti i:nth-child(22) { left: 97%; background: #9333ea; animation-duration: 14.4s; animation-delay: -13.1s; --drift: -30px; --spin: 340deg;  --rest: 40vh; width: 9px; height: 9px; }
+    .confetti i:nth-child(23) { left: 1%;  background: #fbbf24; animation-duration: 14.1s; animation-delay: -7.7s;  --drift: 20px;  --spin: -380deg; --rest: 86vh; }
+    .confetti i:nth-child(24) { left: 5%;  background: #2563eb; animation-duration: 12.3s; animation-delay: -3.2s;  --drift: -18px; --spin: 460deg;  --rest: 30vh; width: 7px; height: 7px; border-radius: 999px; }
+    .confetti i:nth-child(25) { left: 10%; background: #9333ea; animation-duration: 15.7s; animation-delay: -12.9s; --drift: 26px;  --spin: 320deg;  --rest: 68vh; }
+    .confetti i:nth-child(26) { left: 14%; background: #ff007f; animation-duration: 13.1s; animation-delay: -5.1s;  --drift: -28px; --spin: -500deg; --rest: 6vh;  width: 9px; height: 9px; }
+    .confetti i:nth-child(27) { left: 19%; background: #2563eb; animation-duration: 14.8s; animation-delay: -10.1s; --drift: 16px;  --spin: 420deg;  --rest: 50vh; }
+    .confetti i:nth-child(28) { left: 24%; background: #fbbf24; animation-duration: 11.9s; animation-delay: -0.6s;  --drift: -22px; --spin: 360deg;  --rest: 20vh; width: 7px; height: 7px; border-radius: 999px; }
+    .confetti i:nth-child(29) { left: 33%; background: #ff007f; animation-duration: 16.2s; animation-delay: -6.5s;  --drift: 30px;  --spin: -340deg; --rest: 60vh; }
+    .confetti i:nth-child(30) { left: 67%; background: #9333ea; animation-duration: 12.7s; animation-delay: -1.3s;  --drift: -24px; --spin: 480deg;  --rest: 78vh; width: 9px; height: 9px; }
+    .confetti i:nth-child(31) { left: 73%; background: #2563eb; animation-duration: 15.4s; animation-delay: -11.5s; --drift: 22px;  --spin: 340deg;  --rest: 10vh; }
+    .confetti i:nth-child(32) { left: 78%; background: #fbbf24; animation-duration: 13.6s; animation-delay: -4.8s;  --drift: -16px; --spin: -420deg; --rest: 56vh; width: 7px; height: 7px; border-radius: 999px; }
+    .confetti i:nth-child(33) { left: 82%; background: #ff007f; animation-duration: 14.7s; animation-delay: -9.4s;  --drift: 28px;  --spin: 400deg;  --rest: 32vh; }
+    .confetti i:nth-child(34) { left: 87%; background: #9333ea; animation-duration: 12.1s; animation-delay: -2.9s;  --drift: -30px; --spin: 520deg;  --rest: 84vh; }
+    .confetti i:nth-child(35) { left: 91%; background: #2563eb; animation-duration: 15.9s; animation-delay: -13.6s; --drift: 18px;  --spin: -360deg; --rest: 46vh; width: 9px; height: 9px; }
+    .confetti i:nth-child(36) { left: 95%; background: #fbbf24; animation-duration: 13.2s; animation-delay: -6.0s;  --drift: -20px; --spin: 440deg;  --rest: 18vh; }
+
     @media (prefers-reduced-motion: reduce) {
       .cta { transition: none; }
+      .confetti { transition: none; }
+      /* A static scatter rather than hiding it — the pieces start at opacity 0,
+         so simply stopping the animation would blank them. */
+      .confetti i {
+        animation: none !important;
+        opacity: 0.55;
+        transform: translate3d(var(--drift, 20px), var(--rest, 40vh), 0) rotate(var(--spin, 360deg));
+      }
     }
   </style>
 </head>
 <body>
+  <div class="confetti" id="confetti" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
   <main class="page">
     <section class="card" aria-labelledby="page-title">
       <div class="content">
@@ -324,6 +418,7 @@
       const fallback = document.querySelector('#fallback');
       const deviceCode = document.querySelector('#device-code');
       const ctaNote = document.querySelector('#cta-note');
+      const confetti = document.querySelector('#confetti');
 
       function setMeta(selector, content) {
         const element = document.querySelector(selector);
@@ -360,6 +455,7 @@
         status.textContent = 'Ask the person who invited you to choose Send Again in SwiftMiner.';
         ctaNote.hidden = true;
         fallback.hidden = true;
+        confetti.classList.remove('active');
       }
 
       let invitation;
@@ -383,10 +479,12 @@
       setMeta('meta[name="twitter:title"]', dynamicTitle);
       setMeta('meta[name="twitter:description"]', dynamicDescription);
 
-      title.textContent = 'You’ve been invited to SwiftMiner';
-      inviterCopy.textContent = `${invitation.inviter} has invited you to connect your Twitch account.`;
+      eyebrow.textContent = 'You’re invited 🎉';
+      title.textContent = 'Come collect drops with SwiftMiner!';
+      inviterCopy.textContent = `${invitation.inviter} wants you in. Link your Twitch account and SwiftMiner will start earning drops for you.`;
       deviceCode.textContent = invitation.code;
       fallback.hidden = false;
+      confetti.classList.add('active');
 
       const twitchURL = new URL('https://www.twitch.tv/activate');
       twitchURL.searchParams.set('device-code', invitation.code);

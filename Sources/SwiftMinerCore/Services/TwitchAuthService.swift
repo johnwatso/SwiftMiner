@@ -91,7 +91,8 @@ public actor TwitchAuthService {
         }
 
         guard httpResponse.statusCode == 200 else {
-            let message = String(data: data, encoding: .utf8) ?? "Unknown error"
+            let message = (data.isEmpty ? nil : String(data: data, encoding: .utf8))
+                .map { TwitchMinerError.condensedErrorBody($0) } ?? "Unknown error"
             // Debug logging
             Logger.auth.error("ERROR: status=\(httpResponse.statusCode)")
             Logger.auth.debug("Device authorization request failed for scopes='\(scopes)'")
@@ -157,7 +158,8 @@ public actor TwitchAuthService {
         }
 
         if httpResponse.statusCode != 200 {
-            let message = String(data: data, encoding: .utf8) ?? "Unknown error"
+            let message = (data.isEmpty ? nil : String(data: data, encoding: .utf8))
+                .map { TwitchMinerError.condensedErrorBody($0) } ?? "Unknown error"
             throw TwitchMinerError.apiError(statusCode: httpResponse.statusCode, message: message)
         }
 

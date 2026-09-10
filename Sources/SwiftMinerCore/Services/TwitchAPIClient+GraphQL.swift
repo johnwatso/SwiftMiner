@@ -877,16 +877,6 @@ extension TwitchAPIClient {
         )
     }
 
-    /// Delete a notification from the user's Twitch inbox
-    public func deleteNotification(id: String) async throws {
-        let request = GraphQLRequest(
-            operationName: "NotificationsDelete",
-            sha256Hash: GQLHashes.notificationsDelete,
-            variables: ["input": ["id": id]]
-        )
-        _ = try await makeGraphQLRequest(request: request)
-    }
-
     /// Fetches a playback access token for a channel.
     /// This is used to verify that the session is valid and the user can earn drops.
     public func fetchPlaybackAccessToken(channelLogin: String) async throws -> (value: String, signature: String) {

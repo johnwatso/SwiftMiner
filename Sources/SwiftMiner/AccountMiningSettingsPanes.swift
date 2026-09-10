@@ -468,6 +468,10 @@ struct MiningSettingsView: View {
     @Environment(NavigationModel.self) private var navigation
     @State private var isShowingGameRules = false
 
+    private var hasAccounts: Bool {
+        !navigation.minerManager.miners.isEmpty
+    }
+
     var body: some View {
         Form {
             Section {
@@ -506,6 +510,12 @@ struct MiningSettingsView: View {
 
             Section {
                 SettingsSecondaryText("Control which games SwiftMiner prioritises or avoids.")
+
+                if !hasAccounts {
+                    Label("Connect a Twitch account before adding games — game search has nothing to search without one.", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
 
                 gameRuleSummary
 
@@ -547,6 +557,7 @@ struct MiningSettingsView: View {
                 settings: settings,
                 minerManager: navigation.minerManager
             )
+            .environment(navigation)
         }
     }
 

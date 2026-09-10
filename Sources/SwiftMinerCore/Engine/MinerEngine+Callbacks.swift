@@ -130,10 +130,12 @@ extension MinerEngine {
         self.miningStrategy = strategy
     }
 
-    public func setChannelAssignmentAvoidanceProvider(
-        _ provider: (@Sendable (_ campaignId: String, _ viableChannelCount: Int) async -> Set<String>)?
+    public func setChannelAssignmentReservationProvider(
+        _ provider: (
+            @Sendable (_ campaignId: String, _ rankedChannelIds: [String], _ viableChannelCount: Int) async -> String?
+        )?
     ) {
-        channelAssignmentAvoidanceProvider = provider
+        channelAssignmentReservationProvider = provider
     }
 
     public func setDropClaimedHandler(_ handler: (@Sendable (Drop) -> Void)?) {

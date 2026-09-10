@@ -9,11 +9,20 @@ struct MiningChannelSelection: Sendable {
 }
 
 extension MinerEngine {
+    /// Ranked campaigns this miner may work, with the filter tally logged for the Activity Log.
+    ///
+    /// `logSummary` exists because this is both the scheduler's decision point and a convenient
+    /// way to refresh the UI's campaign list. Call sites of the second kind — republishing after
+    /// an inventory merge — pass `false`: they re-derive the same list from a *different*
+    /// snapshot moments later, so logging there emitted the summary two and three times a
+    /// second, with contradictory eligible counts between neighbouring lines. Only the
+    /// scheduler's own call describes the decision the miner actually made.
     func candidateCampaigns(
         from campaigns: [Campaign],
         priorityGames: [String],
         excludedGames: [String],
-        strategy: MiningStrategy
+        strategy: MiningStrategy,
+        logSummary: Bool = true
     ) -> [Campaign] {
         let priorityKeys = priorityGames.map { normalizedGameKey($0) }.filter { !$0.isEmpty }
         let prioritySet = Set(priorityKeys)
@@ -113,7 +122,9 @@ extension MinerEngine {
             .map { ", best=\($0.name) (\($0.gameName), \($0.miningStatus.rawValue))" }
             ?? ""
         let filterSuffix = filterSummary.isEmpty ? "" : ", filtered=[\(filterSummary)]"
-        log("[CampaignSelect] \(strategy.displayName): \(campaigns.count) total, \(sorted.count) eligible, excludedGames=\(excludedGames.count), priorityGames=\(priorityGames.count), badgeEmotes=\(enableBadgesEmotes)\(filterSuffix)\(bestSummary)")
+        if logSummary {
+            log("[CampaignSelect] \(strategy.displayName): \(campaigns.count) total, \(sorted.count) eligible, excludedGames=\(excludedGames.count), priorityGames=\(priorityGames.count), badgeEmotes=\(enableBadgesEmotes)\(filterSuffix)\(bestSummary)")
+        }
         return sorted
     }
 
@@ -826,7 +837,7 @@ extension MinerEngine {
             return (left.channel.viewerCount ?? 0) > (right.channel.viewerCount ?? 0)
         }
 
-        guard avoidDuplicateStreams, let provider = channelAssignmentAvoidanceProvider else {
+        guard avoidDuplicateStreams, let reserve = channelAssignmentReservationProvider else {
             return Self.bestVerifiedCampaignMatch(candidates: candidates, matches: rankedMatches)
         }
 
@@ -835,25 +846,34 @@ extension MinerEngine {
             guard !candidateMatches.isEmpty else { continue }
 
             let uniqueChannelCount = Set(candidateMatches.map { Self.normalizedChannelIdentity($0.channel.id) }).count
-            let assignedChannelIds = await provider(candidate.id, uniqueChannelCount)
-            let avoided = Set(assignedChannelIds.map { Self.normalizedChannelIdentity($0) })
 
             if uniqueChannelCount <= 4 {
                 log("[ChannelSelect]   Stream spreading bypassed for \(candidate.name): only \(uniqueChannelCount) viable channel(s)")
                 return candidateMatches[0]
             }
 
-            if let unassigned = candidateMatches.first(where: {
-                !avoided.contains(Self.normalizedChannelIdentity($0.channel.id))
-            }) {
-                if !avoided.isEmpty {
-                    log("[ChannelSelect]   Stream spreading: avoiding \(avoided.count) occupied channel(s) for \(candidate.name)")
-                }
-                return unassigned
+            let reserved = await reserve(
+                candidate.id,
+                candidateMatches.map(\.channel.id),
+                uniqueChannelCount
+            )
+
+            guard let reserved else {
+                log("[ChannelSelect]   Stream spreading: all \(uniqueChannelCount) viable channel(s) occupied for \(candidate.name); reusing best channel")
+                return candidateMatches[0]
             }
 
-            log("[ChannelSelect]   Stream spreading: all \(uniqueChannelCount) viable channel(s) occupied for \(candidate.name); reusing best channel")
-            return candidateMatches[0]
+            let reservedIdentity = Self.normalizedChannelIdentity(reserved)
+            guard let match = candidateMatches.first(where: {
+                Self.normalizedChannelIdentity($0.channel.id) == reservedIdentity
+            }) else {
+                return candidateMatches[0]
+            }
+
+            if Self.normalizedChannelIdentity(candidateMatches[0].channel.id) != reservedIdentity {
+                log("[ChannelSelect]   Stream spreading: \(candidateMatches[0].channel.displayName) is taken for \(candidate.name); reserved \(match.channel.displayName)")
+            }
+            return match
         }
 
         return nil

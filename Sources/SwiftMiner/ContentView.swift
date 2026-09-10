@@ -19,6 +19,14 @@ struct ContentView: View {
         .background(WindowZoomConfigurator())
         .frame(minWidth: 800, minHeight: 600)
         .swiftMinerAppearance(style: settings.appearanceStyle)
+        // Atomic Purple owns the whole window plane, and the toolbar's own
+        // background painted an opaque band across the top of it — the one strip
+        // of the window the theme could not reach. Standard keeps the system's
+        // toolbar, which is the right backdrop for an opaque window.
+        .toolbarBackground(
+            settings.appearanceStyle == .atomicPurple ? .hidden : .automatic,
+            for: .windowToolbar
+        )
         .sheet(isPresented: $nav.showAddAccountSheet) {
             AuthRequiredSheet(
                 isPresented: $nav.showAddAccountSheet,
@@ -267,6 +275,7 @@ struct OverviewView: View {
                 settings: settings,
                 minerManager: navigation.minerManager
             )
+            .environment(navigation)
         }
         .fileImporter(
             isPresented: $isShowingArtworkImporter,
@@ -589,12 +598,15 @@ enum OverviewSystemState: Equatable {
             return "exclamationmark.triangle.fill"
         case .mining(let activeMinerCount, let totalMinerCount):
             // The bolt is what mining looks like everywhere else in the app, so the banner
-            // uses it too, badged with whether the whole squad is up.
-            return SystemSymbolCompatibility.resolvedName(
-                for: activeMinerCount < totalMinerCount
-                    ? "bolt.trianglebadge.exclamationmark.fill"
-                    : "bolt.badge.checkmark.fill"
-            )
+            // uses it too. Every fault state is checked before `.mining` is reached, so a
+            // miner that is not watching here is idle for a benign reason — up to date, or
+            // between streams. A warning badge would call that a problem; the checkmark
+            // badge is reserved for the whole squad being up, and the plain pulsing bolt
+            // covers the rest without claiming anything is wrong.
+            guard activeMinerCount < totalMinerCount else {
+                return SystemSymbolCompatibility.resolvedName(for: "bolt.badge.checkmark.fill")
+            }
+            return "bolt.fill"
         }
     }
 

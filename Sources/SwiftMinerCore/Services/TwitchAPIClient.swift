@@ -657,6 +657,42 @@ public actor TwitchAPIClient {
         pendingFollowLookupNotices.removeValue(forKey: userId)
     }
 
+    /// Whether follow state is unavailable for this user right now, and why.
+    ///
+    /// `drainFollowLookupNotice` reports the *transition* and is consumed once. That is right for
+    /// the Activity Log and useless to anything that asks later: a diagnostic report pulled hours
+    /// after the 401 showed `prioritiseFollowedStreamers` switched on with nothing to say it had
+    /// been inert the whole run. This reads the standing state instead, so the condition stays
+    /// visible for as long as it lasts.
+    public func followLookupDegradation(userId: String) -> FollowLookupDegradation? {
+        if followedChannelLookupUnavailable.contains(userId) {
+            return .unavailableForSession
+        }
+        if let retryAt = followedChannelLookupRetryAt[userId], retryAt > Date() {
+            return .backingOff(until: retryAt)
+        }
+        return nil
+    }
+
+    /// A standing reason follow state is not being applied to channel ranking.
+    public enum FollowLookupDegradation: Sendable, Equatable {
+        /// Twitch refuses this session's token for the follow endpoint. Needs a re-sign-in.
+        case unavailableForSession
+        /// A transient failure; follow state resumes by itself once the backoff expires.
+        case backingOff(until: Date)
+
+        /// Wording for the diagnostic report, phrased so the remedy is obvious.
+        public var summary: String {
+            switch self {
+            case .unavailableForSession:
+                return "off (Twitch rejects this session's token — sign the account in again)"
+            case .backingOff(let until):
+                let minutes = max(1, Int(until.timeIntervalSinceNow / 60))
+                return "paused (lookup failing; retries in \(minutes)m)"
+            }
+        }
+    }
+
     /// A rejection no amount of retrying will change: the session's token is not accepted for
     /// this endpoint. Distinguished from transport or server-side failures, which are worth
     /// retrying later.
@@ -1296,7 +1332,8 @@ public actor TwitchAPIClient {
                     }
                     throw TwitchMinerError.rateLimited(retryAfter: retryAfter)
                 case 408, 425, 500...599:
-                    let errorMessage = String(data: data, encoding: .utf8) ?? "Transient Twitch failure"
+                    let errorMessage = (data.isEmpty ? nil : String(data: data, encoding: .utf8))
+                        .map { TwitchMinerError.condensedErrorBody($0) } ?? "Transient Twitch failure"
                     let transient = TwitchMinerError.apiError(
                         statusCode: httpResponse.statusCode,
                         message: errorMessage
@@ -1308,7 +1345,8 @@ public actor TwitchAPIClient {
                     lastError = transient
                     continue
                 default:
-                    let errorMessage = String(data: data, encoding: .utf8) ?? "Unknown error"
+                    let errorMessage = (data.isEmpty ? nil : String(data: data, encoding: .utf8))
+                        .map { TwitchMinerError.condensedErrorBody($0) } ?? "Unknown error"
                     throw TwitchMinerError.apiError(statusCode: httpResponse.statusCode, message: errorMessage)
                 }
             } catch let error as TwitchMinerError {

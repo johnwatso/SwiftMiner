@@ -51,9 +51,6 @@ extension MinerEngine {
                     let confirmation = result.confirmedByInventory ? " (confirmed by fresh inventory)" : ""
                     log("Claimed drop: \(result.dropName)\(confirmation)")
 
-                    // TDM PARITY: Delete notification after successful claim
-                    try? await apiClient.deleteNotification(id: progress.id)
-
                     let drop = Drop(
                         id: progress.dropId,
                         name: progress.dropName,
