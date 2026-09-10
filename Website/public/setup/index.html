@@ -145,6 +145,18 @@
       transition: transform 140ms ease, background 140ms ease, opacity 140ms ease;
     }
 
+    .cta { gap: 10px; }
+
+    /* Twitch's Glitch: one solid silhouette with the eyes knocked out by
+       fill-rule, which is how the real mark is drawn. Reproduced in white per
+       Twitch's brand guidance — undistorted, and never recoloured. */
+    .cta svg {
+      width: 17px;
+      height: 20px;
+      flex: none;
+      fill: currentColor;
+    }
+
     .cta:hover { background: var(--purple-hover); transform: translateY(-1px); }
     .cta:focus-visible { outline: 3px solid color-mix(in srgb, var(--purple) 38%, transparent); outline-offset: 3px; }
     .cta.disabled { pointer-events: none; opacity: 0.5; }
@@ -271,8 +283,11 @@
         <h1 id="page-title">Opening your invitation…</h1>
         <p class="inviter-copy" id="inviter-copy">Checking the temporary setup link.</p>
 
-        <a class="cta disabled" id="connect-button" aria-disabled="true">Connect to SwiftMiner</a>
-        <p class="cta-note" id="cta-note">This takes you to twitch.tv, where you approve the connection with your Twitch account.</p>
+        <a class="cta disabled" id="connect-button" aria-disabled="true">
+          <svg viewBox="0 0 2400 2800" fill-rule="evenodd" aria-hidden="true" focusable="false"><path d="M500 0L0 500v1800h600v500l500-500h400l900-900V0H500zM1150 550h200v600h-200zM1700 550h200v600h-200z"/></svg>
+          <span>Link Twitch with SwiftMiner</span>
+        </a>
+        <p class="cta-note" id="cta-note">Opens twitch.tv, where you approve the connection.</p>
 
         <div class="security">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
