@@ -1,19 +1,179 @@
 import AppKit
 import SwiftUI
 
+// MARK: - Semantic Appearance
+
+enum AppearanceSurfaceRole {
+    case window
+    case sidebar
+    case secondary
+    case elevated
+    case selected
+}
+
+/// App-wide semantic appearance values. Views ask for a surface role and never
+/// need to know which concrete theme supplied its color.
+struct SwiftMinerAppearance {
+    /// Resolved by the system, never by the app: SwiftMiner has no light/dark
+    /// switch of its own, so both variants of a style come from macOS.
+    let colorScheme: ColorScheme
+    let style: AppearanceStyle
+
+    var usesTintedSurfaces: Bool { style == .atomicPurple }
+    private var isLight: Bool { colorScheme == .light }
+
+    /// Atomic Purple is anchored to a single blue-violet hue (~256°) so every
+    /// surface reads as one family. The values below are the theme's own colours
+    /// and are painted flat: blending them out of a vibrancy material let the
+    /// desktop behind the window pull the hue around from machine to machine.
+    var accent: Color {
+        guard usesTintedSurfaces else { return .accentColor }
+        return isLight
+            ? Color(red: 0.518, green: 0.263, blue: 0.969)
+            : Color(red: 0.780, green: 0.620, blue: 0.969)
+    }
+
+    /// Semantic activity colors follow the theme accent under a tinted style —
+    /// a green progress bar fights the purple it sits on. Warning and failure
+    /// colors are left alone: those carry meaning the theme must not repaint.
+    func activityAccent(_ color: Color) -> Color {
+        guard usesTintedSurfaces, color == .green else { return color }
+        return accent
+    }
+
+    /// Wash used where a surface stays translucent — the floating status bar and
+    /// the Drops panels, which are meant to show content moving underneath.
+    func tint(for role: AppearanceSurfaceRole) -> Color {
+        guard usesTintedSurfaces else { return .clear }
+        if isLight {
+            switch role {
+            case .window:
+                return Color(red: 0.82, green: 0.76, blue: 0.94).opacity(0.30)
+            case .sidebar:
+                return Color(red: 0.72, green: 0.62, blue: 0.90).opacity(0.40)
+            case .secondary:
+                return Color(red: 0.76, green: 0.68, blue: 0.94).opacity(0.34)
+            case .elevated:
+                return Color(red: 0.70, green: 0.60, blue: 0.91).opacity(0.42)
+            case .selected:
+                return Color(red: 0.60, green: 0.44, blue: 0.86).opacity(0.44)
+            }
+        }
+        switch role {
+        case .window:
+            return Color(red: 0.17, green: 0.13, blue: 0.32).opacity(0.62)
+        case .sidebar:
+            return Color(red: 0.18, green: 0.15, blue: 0.30).opacity(0.70)
+        case .secondary:
+            return Color(red: 0.22, green: 0.18, blue: 0.39).opacity(0.62)
+        case .elevated:
+            return Color(red: 0.26, green: 0.21, blue: 0.46).opacity(0.68)
+        case .selected:
+            return Color(red: 0.44, green: 0.29, blue: 0.74).opacity(0.72)
+        }
+    }
+
+    func opaqueColor(for role: AppearanceSurfaceRole) -> Color {
+        guard usesTintedSurfaces else {
+            switch role {
+            case .window: return Color(nsColor: .windowBackgroundColor)
+            case .sidebar: return Color(nsColor: .underPageBackgroundColor)
+            case .secondary, .elevated, .selected: return Color(nsColor: .controlBackgroundColor)
+            }
+        }
+        if isLight {
+            switch role {
+            // Near-white with only a breath of lavender: the content plane is
+            // where text lives, and the colour belongs to the chrome around it.
+            case .window: return Color(red: 0.973, green: 0.961, blue: 0.992)
+            case .sidebar: return Color(red: 0.824, green: 0.765, blue: 0.933)
+            case .secondary: return Color(red: 0.922, green: 0.894, blue: 0.976)
+            case .elevated: return Color(red: 0.894, green: 0.855, blue: 0.965)
+            case .selected: return Color(red: 0.718, green: 0.600, blue: 0.910)
+            }
+        }
+        switch role {
+        // Dark keeps the steps close together — deep indigo rather than black —
+        // so cards lift off the window without turning into separate slabs.
+        case .window: return Color(red: 0.173, green: 0.133, blue: 0.322)
+        case .sidebar: return Color(red: 0.176, green: 0.149, blue: 0.302)
+        case .secondary: return Color(red: 0.192, green: 0.161, blue: 0.337)
+        case .elevated: return Color(red: 0.220, green: 0.180, blue: 0.388)
+        case .selected: return Color(red: 0.443, green: 0.290, blue: 0.741)
+        }
+    }
+
+    func separator(for contrast: ColorSchemeContrast) -> Color {
+        guard usesTintedSurfaces else { return Color(nsColor: .separatorColor) }
+        // A white hairline disappears on a near-white light surface, so light
+        // draws its edges darker than the fill and dark draws them lighter.
+        return isLight
+            ? Color(red: 0.36, green: 0.24, blue: 0.60).opacity(contrast == .increased ? 0.38 : 0.16)
+            : Color.white.opacity(contrast == .increased ? 0.30 : 0.12)
+    }
+}
+
+private struct SwiftMinerAppearanceKey: EnvironmentKey {
+    static let defaultValue = SwiftMinerAppearance(colorScheme: .dark, style: .standard)
+}
+
+extension EnvironmentValues {
+    var swiftMinerAppearance: SwiftMinerAppearance {
+        get { self[SwiftMinerAppearanceKey.self] }
+        set { self[SwiftMinerAppearanceKey.self] = newValue }
+    }
+}
+
+/// Publishes the chosen style, resolved against whichever appearance macOS is
+/// currently in. Deliberately no `preferredColorScheme`: forcing one would
+/// override the system setting the whole theme is now keyed to.
+private struct SwiftMinerAppearanceModifier: ViewModifier {
+    let style: AppearanceStyle
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        let appearance = SwiftMinerAppearance(colorScheme: colorScheme, style: style)
+        content
+            .environment(\.swiftMinerAppearance, appearance)
+            .tint(appearance.accent)
+    }
+}
+
+extension View {
+    func swiftMinerAppearance(style: AppearanceStyle) -> some View {
+        modifier(SwiftMinerAppearanceModifier(style: style))
+    }
+}
+
 struct LiquidGlassBackdrop: View {
+    @Environment(\.swiftMinerAppearance) private var appearance
+
     var body: some View {
-        VisualEffectMaterialView(material: .windowBackground, blendingMode: .behindWindow)
+        // Flat, not vibrancy: a behind-window blur takes its colour from whatever
+        // wallpaper happens to be there, so Atomic Purple landed a different shade
+        // on every desk. The window plane is the one surface that has to be
+        // exactly the colour the theme says it is.
+        appearance.opaqueColor(for: .window)
             .ignoresSafeArea()
     }
 }
 
 struct SidebarMaterialBackground: View {
+    @Environment(\.swiftMinerAppearance) private var appearance
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+
     var body: some View {
-        VisualEffectMaterialView(material: .sidebar)
+        Group {
+            if appearance.usesTintedSurfaces || reduceTransparency {
+                appearance.opaqueColor(for: .sidebar)
+            } else {
+                VisualEffectMaterialView(material: .sidebar)
+            }
+        }
             .overlay(alignment: .trailing) {
                 Rectangle()
-                    .fill(Color.black.opacity(0.10))
+                    .fill(appearance.separator(for: colorSchemeContrast))
                     .frame(width: 1)
             }
             .clipShape(Rectangle())
@@ -40,10 +200,61 @@ struct VisualEffectMaterialView: NSViewRepresentable {
     }
 }
 
+/// A rounded semantic surface shared by selection, card and floating layers.
+/// Accessibility fallbacks live here so every themed surface behaves alike.
+struct AppearanceRoundedSurface: View {
+    let role: AppearanceSurfaceRole
+    let cornerRadius: CGFloat
+    var material: Material = .thinMaterial
+    var usesNativeGlass = false
+
+    @Environment(\.swiftMinerAppearance) private var appearance
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        Group {
+            if reduceTransparency {
+                shape.fill(appearance.opaqueColor(for: role))
+            } else if appearance.usesTintedSurfaces && !usesNativeGlass {
+                // Themed surfaces are painted, not blended. A material lightens
+                // whatever it sits on, which pushed light-mode cards *up* towards
+                // the window colour when the design wants them a step down from it.
+                shape.fill(appearance.opaqueColor(for: role))
+            } else if usesNativeGlass {
+                if #available(macOS 26, *) {
+                    shape
+                        .fill(.clear)
+                        .glassEffect(.regular, in: shape)
+                        .overlay(shape.fill(appearance.tint(for: role)))
+                } else {
+                    materialSurface(shape)
+                }
+            } else {
+                materialSurface(shape)
+            }
+        }
+        .overlay {
+            shape
+                .strokeBorder(appearance.separator(for: colorSchemeContrast), lineWidth: colorSchemeContrast == .increased ? 1.25 : 1)
+                .allowsHitTesting(false)
+        }
+    }
+
+    private func materialSurface(_ shape: RoundedRectangle) -> some View {
+        shape
+            .fill(material)
+            .overlay(shape.fill(appearance.tint(for: role)))
+    }
+}
+
 // MARK: - Glass Card (SwiftBot-aligned)
 
 private struct GlassCardModifier: ViewModifier {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.swiftMinerAppearance) private var appearance
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     let cornerRadius: CGFloat
     let tint: Color
     let stroke: Color
@@ -51,22 +262,34 @@ private struct GlassCardModifier: ViewModifier {
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         content
-            .background(.thinMaterial, in: shape)
+            .background {
+                AppearanceRoundedSurface(role: .secondary, cornerRadius: cornerRadius)
+            }
             .overlay(
                 shape
-                    .fill(tint.opacity(colorScheme == .dark ? 1.0 : 0.50))
+                    // The white wash belongs to the glass look. On a themed fill it
+                    // only bleaches the colour the palette just chose.
+                    .fill(appearance.usesTintedSurfaces
+                          ? Color.clear
+                          : tint.opacity(colorScheme == .dark ? 1.0 : 0.50))
                     .allowsHitTesting(false)
             )
             .overlay(
                 shape
-                    .strokeBorder(stroke.opacity(colorScheme == .dark ? 1.0 : 0.90), lineWidth: 1)
+                    .strokeBorder(
+                        appearance.usesTintedSurfaces
+                            ? appearance.separator(for: colorSchemeContrast)
+                            : stroke.opacity(colorScheme == .dark ? 1.0 : 0.90),
+                        lineWidth: colorSchemeContrast == .increased ? 1.25 : 1
+                    )
                     .allowsHitTesting(false)
             )
     }
 }
 
 private struct GlassSurfaceModifier: ViewModifier {
-    let material: AnyShapeStyle
+    let role: AppearanceSurfaceRole
+    let material: Material
     let cornerRadius: CGFloat
     let shadowOpacity: Double
     let shadowRadius: CGFloat
@@ -79,17 +302,15 @@ private struct GlassSurfaceModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .background {
-                if #available(macOS 26, *) {
-                    shape
-                        .fill(.clear)
-                        .glassEffect(.regular.interactive())
-                } else {
-                    // Shadow on the background shape, not on the clipped view —
-                    // avoids the rectangular NSVisualEffectView shadow artefact.
-                    shape
-                        .fill(material)
-                        .shadow(color: .black.opacity(shadowOpacity), radius: shadowRadius, y: shadowY)
-                }
+                AppearanceRoundedSurface(
+                    role: role,
+                    cornerRadius: cornerRadius,
+                    material: material,
+                    usesNativeGlass: true
+                )
+                // Shadow on the background shape, not on the clipped view —
+                // avoids the rectangular NSVisualEffectView shadow artefact.
+                .shadow(color: .black.opacity(shadowOpacity), radius: shadowRadius, y: shadowY)
             }
             .overlay {
                 if #unavailable(macOS 26) {
@@ -126,7 +347,8 @@ extension View {
     func glassContentSurface(cornerRadius: CGFloat = GlassRadius.medium) -> some View {
         modifier(
             GlassSurfaceModifier(
-                material: AnyShapeStyle(.regularMaterial),
+                role: .secondary,
+                material: .regularMaterial,
                 cornerRadius: cornerRadius,
                 shadowOpacity: 0.08,
                 shadowRadius: 6,
@@ -138,7 +360,8 @@ extension View {
     func glassPanel(cornerRadius: CGFloat = GlassRadius.small) -> some View {
         modifier(
             GlassSurfaceModifier(
-                material: AnyShapeStyle(.thinMaterial),
+                role: .elevated,
+                material: .thinMaterial,
                 cornerRadius: cornerRadius,
                 shadowOpacity: 0.06,
                 shadowRadius: 4,
@@ -150,7 +373,8 @@ extension View {
     func glassControlSurface(cornerRadius: CGFloat = GlassRadius.subtle) -> some View {
         modifier(
             GlassSurfaceModifier(
-                material: AnyShapeStyle(.ultraThinMaterial),
+                role: .selected,
+                material: .ultraThinMaterial,
                 cornerRadius: cornerRadius,
                 shadowOpacity: 0,
                 shadowRadius: 0,
@@ -201,6 +425,8 @@ enum TahoeMetrics {
 private struct TahoeCardModifier: ViewModifier {
     let cornerRadius: CGFloat
     let tint: Color?
+    @Environment(\.swiftMinerAppearance) private var appearance
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
     private var borderOpacity: Double {
         // Tahoe's grouped boxes sit on a lighter fill and carry a fainter edge
@@ -213,14 +439,27 @@ private struct TahoeCardModifier: ViewModifier {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         content
             .background {
-                shape.fill(.background.secondary)
+                if appearance.usesTintedSurfaces {
+                    AppearanceRoundedSurface(
+                        role: .secondary,
+                        cornerRadius: cornerRadius,
+                        material: .thinMaterial
+                    )
+                } else {
+                    shape.fill(.background.secondary)
+                }
                 if let tint {
                     shape.fill(tint)
                 }
             }
             .overlay {
                 shape
-                    .strokeBorder(.separator.opacity(borderOpacity), lineWidth: 1)
+                    .strokeBorder(
+                        appearance.usesTintedSurfaces
+                            ? appearance.separator(for: colorSchemeContrast)
+                            : Color(nsColor: .separatorColor).opacity(borderOpacity),
+                        lineWidth: colorSchemeContrast == .increased ? 1.25 : 1
+                    )
                     .allowsHitTesting(false)
             }
     }
@@ -234,14 +473,27 @@ private struct TahoeCardModifier: ViewModifier {
 /// cards use, which scrolls smoothly.
 private struct TahoeRaisedSurfaceModifier: ViewModifier {
     let cornerRadius: CGFloat
+    @Environment(\.swiftMinerAppearance) private var appearance
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         content
-            .background(.thinMaterial.opacity(0.96), in: shape)
+            .background {
+                AppearanceRoundedSurface(
+                    role: .elevated,
+                    cornerRadius: cornerRadius,
+                    material: .thinMaterial
+                )
+            }
             .overlay {
                 shape
-                    .strokeBorder(.separator.opacity(0.22), lineWidth: 1)
+                    .strokeBorder(
+                        appearance.usesTintedSurfaces
+                            ? appearance.separator(for: colorSchemeContrast)
+                            : Color(nsColor: .separatorColor).opacity(0.22),
+                        lineWidth: colorSchemeContrast == .increased ? 1.25 : 1
+                    )
                     .allowsHitTesting(false)
             }
     }
@@ -261,12 +513,20 @@ extension View {
     }
 
     /// Tahoe's glass button treatment where available, bordered elsewhere.
+    ///
+    /// The tint is cleared deliberately. SwiftUI fills a `.glass` button with
+    /// whatever tint is in the environment, and SwiftMiner sets one app-wide for
+    /// the theme — which turned every ordinary action into a solid accent capsule
+    /// indistinguishable from `.glassProminent`. A Pending row carries three of
+    /// them side by side, so the row read as three default buttons competing.
+    /// Tahoe's own buttons are clear glass with a plain label; a filled one means
+    /// "this is the default action", which none of these are.
     @ViewBuilder
     func tahoeButtonStyle() -> some View {
         if #available(macOS 26, *) {
-            buttonStyle(.glass)
+            buttonStyle(.glass).tint(nil)
         } else {
-            buttonStyle(.bordered)
+            buttonStyle(.bordered).tint(nil)
         }
     }
 }

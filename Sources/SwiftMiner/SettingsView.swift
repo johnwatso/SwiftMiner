@@ -56,6 +56,7 @@ struct SettingsView: View {
         }
         .padding(.top, -2)
         .frame(width: 640)
+        .swiftMinerAppearance(style: settings.appearanceStyle)
         .onAppear(perform: consumeIntegrationsRequestIfNeeded)
         .onChange(of: navigation.pendingIntegrationsSettingsRequest) { _, _ in
             consumeIntegrationsRequestIfNeeded()

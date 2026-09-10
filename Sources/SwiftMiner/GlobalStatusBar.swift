@@ -269,18 +269,12 @@ struct OverviewSystemStateBanner: View {
 
     @ViewBuilder
     private var statusSurface: some View {
-        let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
-        if #available(macOS 26, *) {
-            shape
-                .fill(.clear)
-                .glassEffect(.regular, in: shape)
-        } else {
-            shape
-                .fill(.regularMaterial)
-                .overlay {
-                    shape.strokeBorder(.white.opacity(0.10), lineWidth: 1)
-                }
-        }
+        AppearanceRoundedSurface(
+            role: .elevated,
+            cornerRadius: 18,
+            material: .regularMaterial,
+            usesNativeGlass: true
+        )
     }
 
     private func fleetCluster(showsLabels: Bool) -> some View {

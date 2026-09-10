@@ -108,4 +108,9 @@ public enum SwiftMinerHelpLink {
     }
 
     public static let webDashboard = "\(base)/web-dashboard/"
+
+    /// Written for the person receiving an invitation, not the operator: what
+    /// they are approving, what the inviter can and cannot see, the reasons to
+    /// decline, and how to revoke the token at Twitch.
+    public static let invitation = "\(base)/invited-to-swiftminer/"
 }

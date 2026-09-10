@@ -77,6 +77,7 @@ public enum SwiftBotDMMessageType: String, Codable, CaseIterable, Sendable, Iden
     case accountActionRequired = "account_action_required"
     case prioritisedGameNeedsLinking = "prioritised_game_needs_linking"
     case webDashboardAvailable = "web_dashboard_available"
+    case friendInvitation = "friend_invitation"
 
     public var id: String { rawValue }
 
@@ -110,6 +111,7 @@ public enum SwiftBotDMMessageType: String, Codable, CaseIterable, Sendable, Iden
         case .accountActionRequired: return "Needs a Look"
         case .prioritisedGameNeedsLinking: return "Link Twitch to Claim Drops"
         case .webDashboardAvailable: return "Web Dashboard Live"
+        case .friendInvitation: return "Friend Invitation"
         }
     }
 }
@@ -148,6 +150,10 @@ public struct SwiftBotDMRequest: Codable, Sendable, Equatable {
     public let campaignId: String?
     /// Public help article covering this situation on swiftminer.app.
     public let helpURL: String?
+    /// Who is inviting the recipient, already formatted as "@name". Only set on
+    /// `friend_invitation`, where the DM is about someone else's Twitch account
+    /// rather than the recipient's own.
+    public let inviterDisplayName: String?
 
     public init(
         messageType: SwiftBotDMMessageType,
@@ -170,7 +176,8 @@ public struct SwiftBotDMRequest: Codable, Sendable, Equatable {
         portalDestination: String? = nil,
         issueKind: String? = nil,
         campaignId: String? = nil,
-        helpURL: String? = nil
+        helpURL: String? = nil,
+        inviterDisplayName: String? = nil
     ) {
         self.messageType = messageType
         self.debug = debug
@@ -193,6 +200,7 @@ public struct SwiftBotDMRequest: Codable, Sendable, Equatable {
         self.issueKind = issueKind
         self.campaignId = campaignId
         self.helpURL = helpURL
+        self.inviterDisplayName = inviterDisplayName
     }
 
     enum CodingKeys: String, CodingKey {
@@ -217,6 +225,7 @@ public struct SwiftBotDMRequest: Codable, Sendable, Equatable {
         case issueKind = "issue_kind"
         case campaignId = "campaign_id"
         case helpURL = "help_url"
+        case inviterDisplayName = "inviter_display_name"
     }
 }
 
@@ -357,4 +366,28 @@ public extension SwiftBotConnectionService {
 
     /// Default for implementations (and test doubles) without tunnel info.
     func fetchTunnelInfo() async -> SwiftBotTunnelInfo? { nil }
+
+    /// Asks SwiftBot to DM a chosen server member a SwiftMiner invitation.
+    ///
+    /// `invitationURL` is the swiftminer.app setup link; the Twitch device code
+    /// stays inside its fragment, so the DM never names a code or a Twitch
+    /// activation URL.
+    func sendFriendInvitationDM(
+        to discordUserId: String,
+        invitationURL: String,
+        inviterDisplayName: String,
+        expiresInMinutes: Int
+    ) async -> Bool {
+        await sendEventDM(
+            to: discordUserId,
+            request: SwiftBotDMRequest(
+                messageType: .friendInvitation,
+                debug: false,
+                activationExpiresInMinutes: expiresInMinutes,
+                activationURL: invitationURL,
+                helpURL: SwiftMinerHelpLink.invitation,
+                inviterDisplayName: inviterDisplayName
+            )
+        )
+    }
 }

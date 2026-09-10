@@ -849,6 +849,8 @@ enum MinerDiscordFormat {
         case .prioritisedGameNeedsLinking: return settings.dmLinkRequiredEnabled
         // One-time announcement; always show in history.
         case .webDashboardAvailable: return true
+        // Sent by hand from Share With a Friend, so it always belongs in history.
+        case .friendInvitation: return true
         }
     }
 }

@@ -136,6 +136,25 @@ public final class Settings {
     }
 
     // MARK: - Persisted Properties
+
+    /// The visual style, and only that. Light and dark follow the system
+    /// appearance — SwiftMiner has no mode of its own to override it with.
+    public var appearanceStyle: AppearanceStyle {
+        get {
+            access(keyPath: \.appearanceStyle)
+            if Self.appStorageStore.object(forKey: "appearanceStyle") != nil {
+                return Self.read("appearanceStyle", default: .standard)
+            }
+            return Self.read("appearanceTheme", default: "") == "atomicPurple"
+                ? .atomicPurple
+                : .standard
+        }
+        set {
+            withMutation(keyPath: \.appearanceStyle) {
+                Self.write("appearanceStyle", newValue)
+            }
+        }
+    }
     
     /// Whether auto-claim is enabled for completed drops
     public var autoClaimEnabled: Bool {
@@ -1312,6 +1331,7 @@ public final class Settings {
         maxLogEntries = Self.defaultLogEntries
         minimizeToMenuBar = false
         appPresenceMode = .dockOnly
+        appearanceStyle = .standard
         autoStartOnLaunch = false
         enableBadgesEmotes = false
         mineIRLCampaigns = false

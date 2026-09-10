@@ -30,10 +30,20 @@ private enum AccountAddSheetStage: Equatable {
     case authentication
 }
 
+private enum InvitationDeliveryRoute: Equatable {
+    case manual
+    case swiftBot
+}
+
 /// Sheet for adding a new Twitch account via device-code OAuth.
 ///
 /// Presented from `ContentView` at the `NavigationSplitView` level so that
 /// macOS List selection never interferes with sheet presentation.
+///
+/// The layout follows SwiftMiner's macOS 26 settings language: one quiet content
+/// layer, generously rounded grouped surfaces, and system controls. The sheet
+/// supplies no material of its own, leaving its Liquid Glass appearance to
+/// SwiftUI and macOS.
 struct AuthRequiredSheet: View {
     @Binding var isPresented: Bool
     let reconnectingMinerId: String?
@@ -43,13 +53,16 @@ struct AuthRequiredSheet: View {
     @State private var loginService = MinerLoginService()
     @State private var successDismissTask: Task<Void, Never>?
     @State private var copiedCode = false
-    @Environment(\.colorScheme) private var colorScheme
+    @State private var swiftBotInvitation: SwiftMinerInvitation?
+    @State private var mailFailureMessage: String?
+    @State private var connectedAvatarURL: URL?
+    @State private var invitationDeliveryRoute: InvitationDeliveryRoute = .manual
+    @State private var shouldPresentSwiftBotPickerWhenReady = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private let sheetCornerRadius: CGFloat = 18
+    private var settings: Settings { .shared }
 
-    private var sheetShape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: sheetCornerRadius, style: .continuous)
-    }
+    private let sheetWidth: CGFloat = 520
 
     init(
         isPresented: Binding<Bool>,
@@ -65,46 +78,29 @@ struct AuthRequiredSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 22) {
-            headerSection
-            contentArea
-            footerBar
+        Group {
+            if let invitation = swiftBotInvitation {
+                SwiftBotInvitationSheet(
+                    invitation: invitation,
+                    onCancel: { swiftBotInvitation = nil },
+                    onSent: { swiftBotInvitation = nil }
+                )
+            } else {
+                sheetContent
+            }
         }
-        .frame(width: 540, height: 500)
-        .padding(30)
-        .background {
-            sheetShape
-                .fill(Color(nsColor: .windowBackgroundColor).opacity(0.96))
-                .overlay {
-                    LinearGradient(
-                        colors: [
-                            Color.purple.opacity(colorScheme == .dark ? 0.16 : 0.10),
-                            Color.indigo.opacity(colorScheme == .dark ? 0.10 : 0.06),
-                            Color(nsColor: .windowBackgroundColor).opacity(0.12)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                    .clipShape(sheetShape)
-                }
-                .overlay {
-                    sheetShape
-                        .fill(.ultraThinMaterial.opacity(0.28))
-                }
-                .shadow(color: .black.opacity(0.14), radius: 16, y: 10)
-        }
-        .overlay {
-            sheetShape
-                .strokeBorder(.white.opacity(0.10), lineWidth: 1)
-        }
-        .clipShape(sheetShape)
-        .compositingGroup()
+        .frame(width: sheetWidth)
+        .fixedSize(horizontal: false, vertical: true)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: stage)
         .onAppear {
             startDeviceAuthIfNeeded()
         }
         .onChange(of: loginService.state) { _, newState in
             if case .succeeded(let account) = newState {
                 handleSuccess(account: account)
+                loadConnectedAvatar(for: account)
+            } else {
+                presentSwiftBotPickerIfReady()
             }
         }
         .onDisappear {
@@ -114,31 +110,27 @@ struct AuthRequiredSheet: View {
         }
     }
 
+    private var sheetContent: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            header
+            contentArea
+            footerBar
+        }
+        .padding(24)
+    }
+
     // MARK: - Header
 
-    private var headerSection: some View {
-        HStack(alignment: .top, spacing: 16) {
-            ZStack {
-                RoundedRectangle(cornerRadius: GlassRadius.large, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color(red: 0.57, green: 0.28, blue: 1.0),
-                                Color(red: 0.36, green: 0.18, blue: 0.88)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
+    private var header: some View {
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: headerSymbol)
+                .font(.system(size: 20, weight: .medium))
+                .foregroundStyle(.tint)
+                .frame(width: 42, height: 42)
+                .background(.tint.opacity(0.10), in: Circle())
+                .accessibilityHidden(true)
 
-                Image(systemName: headerSymbol)
-                    .font(.system(size: 24, weight: .semibold))
-                    .foregroundStyle(.white)
-            }
-            .frame(width: 52, height: 52)
-            .shadow(color: Color.purple.opacity(0.24), radius: 10, y: 5)
-
-            VStack(alignment: .leading, spacing: 7) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(headerTitle)
                     .font(.title2.weight(.semibold))
                     .foregroundStyle(.primary)
@@ -149,6 +141,68 @@ struct AuthRequiredSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
+    }
+
+    private var headerTitle: String {
+        if isSuccessState {
+            return reconnectingMinerId == nil ? "Account Connected" : "Twitch Reconnected"
+        }
+        switch stage {
+        case .choice: return "Add Account"
+        case .localOverview: return "On This Mac"
+        case .friendOverview: return "Invite Someone"
+        case .friendActivation: return invitationIsReady ? "Invitation Ready" : "Creating Invitation"
+        case .authentication:
+            return reconnectingMinerId == nil ? "Connect Twitch" : "Reconnect Twitch"
+        }
+    }
+
+    private var headerSymbol: String {
+        if isSuccessState { return "checkmark.circle.fill" }
+        switch stage {
+        case .choice: return "person.crop.circle.badge.plus"
+        case .localOverview: return "desktopcomputer"
+        case .friendOverview: return "person.badge.plus"
+        case .friendActivation: return invitationIsReady ? "link" : "clock"
+        case .authentication: return "person.crop.circle.badge.checkmark"
+        }
+    }
+
+    private var headerSubtitle: String {
+        if isSuccessState {
+            return reconnectingMinerId == nil
+                ? "The account is set up and mining starts automatically."
+                : "Credentials have been refreshed and mining will resume."
+        }
+        switch stage {
+        case .choice:
+            return "Choose how to connect the next Twitch account."
+        case .localOverview:
+            return "You'll approve the account in Twitch, and this Mac will run its miner."
+        case .friendOverview:
+            return "They'll connect their Twitch account from their device. SwiftMiner will add it automatically once they're done."
+        case .friendActivation:
+            return invitationIsReady
+                ? "Send it however suits them. This Mac keeps waiting until they connect."
+                : "Asking Twitch for a temporary activation code."
+        case .authentication:
+            return reconnectingMinerId == nil
+                ? "Approve SwiftMiner in Twitch to finish adding the account."
+                : "Approve SwiftMiner in Twitch to restore this miner."
+        }
+    }
+
+    /// True once the device code exists, which is what turns "Creating
+    /// Invitation" into the shareable "Invitation Ready" state.
+    private var invitationIsReady: Bool {
+        switch loginService.state {
+        case .waitingForUser, .polling: return true
+        case .failed: return loginService.deviceAuthorization != nil
+        default: return false
+        }
     }
 
     // MARK: - Content
@@ -157,7 +211,7 @@ struct AuthRequiredSheet: View {
     private var contentArea: some View {
         switch stage {
         case .choice:
-            accountPurposeChoice
+            addMinerChoice
         case .localOverview:
             localSetupOverview
         case .friendOverview:
@@ -169,325 +223,537 @@ struct AuthRequiredSheet: View {
         }
     }
 
-    @ViewBuilder
-    private var authenticationContent: some View {
-        switch loginService.state {
-        case .idle, .starting:
-            startingView
-        case .waitingForUser(let code, let url, let expiresIn):
-            waitingView(code: code, url: url, expiresIn: expiresIn)
-        case .polling:
-            pollingView
-        case .succeeded:
-            successView
-        case .failed(let message):
-            failureView(message: message, opensBrowserOnRetry: true)
-        }
-    }
+    // MARK: - Screen 1 · Add Miner
 
-    private var headerTitle: String {
-        switch stage {
-        case .choice: return "Add Another Account"
-        case .localOverview: return "Set Up on This Mac"
-        case .friendOverview: return "Share With a Friend"
-        case .friendActivation: return "Share Invitation"
-        case .authentication:
-            return reconnectingMinerId == nil ? "Add Twitch Account" : "Reconnect Twitch Account"
-        }
-    }
-
-    private var headerSubtitle: String {
-        switch stage {
-        case .choice:
-            return "Choose who will connect the next Twitch account."
-        case .localOverview:
-            return "You will approve the account in Twitch, and this Mac will run its miner."
-        case .friendOverview:
-            return "Create a temporary SwiftMiner invitation they can open on their own device."
-        case .friendActivation:
-            return "Share the invitation, then keep this window open while SwiftMiner waits for approval."
-        case .authentication:
-            return reconnectingMinerId == nil
-                ? "SwiftMiner opens Twitch in your browser, then finishes here as soon as the account is approved."
-                : "SwiftMiner opens Twitch in your browser, then resumes this miner as soon as the account is approved."
-        }
-    }
-
-    private var headerSymbol: String {
-        switch stage {
-        case .choice: return "person.2.fill"
-        case .localOverview: return "desktopcomputer"
-        case .friendOverview: return "square.and.arrow.up"
-        case .friendActivation: return "envelope.open.fill"
-        case .authentication: return "tv.fill"
-        }
-    }
-
-    // MARK: - Additional account setup
-
-    private var accountPurposeChoice: some View {
-        VStack(spacing: 14) {
-            setupChoice(
-                title: "Set up on this Mac",
-                detail: "Sign in to another Twitch account here and start mining on this device.",
-                symbol: "desktopcomputer"
+    private var addMinerChoice: some View {
+        SheetGroupedRows {
+            SheetSelectionRow(
+                symbol: "desktopcomputer",
+                title: "Set Up on This Mac",
+                detail: "Sign in to another Twitch account on this Mac."
             ) {
                 stage = .localOverview
             }
 
-            setupChoice(
-                title: "Share with a friend",
-                detail: "Send a temporary SwiftMiner invitation so they can connect their account from their own device.",
-                symbol: "person.crop.circle.badge.plus"
+            TahoeRowDivider(leadingInset: 58)
+
+            SheetSelectionRow(
+                symbol: "square.and.arrow.up",
+                title: "Send It to Them",
+                detail: "Create an invitation to send with Mail, Messages or AirDrop."
             ) {
+                invitationDeliveryRoute = .manual
                 stage = .friendOverview
             }
 
-            Text("No Discord integration or Web Dashboard is required.")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-                .frame(maxWidth: .infinity, alignment: .center)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-    }
+            if settings.swiftBotEnabled {
+                TahoeRowDivider(leadingInset: 58)
 
-    private func setupChoice(
-        title: String,
-        detail: String,
-        symbol: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            HStack(spacing: 16) {
-                Image(systemName: symbol)
-                    .font(.system(size: 24, weight: .medium))
-                    .foregroundStyle(Color.purple)
-                    .frame(width: 46, height: 46)
-                    .background(Color.purple.opacity(0.11), in: RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                    Text(detail)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.leading)
-                        .fixedSize(horizontal: false, vertical: true)
+                SheetSelectionRow(
+                    symbol: "paperplane.fill",
+                    title: "Invite via SwiftBot",
+                    detail: swiftBotChoiceDetail
+                ) {
+                    invitationDeliveryRoute = .swiftBot
+                    stage = .friendActivation
+                    shouldPresentSwiftBotPickerWhenReady = true
+                    loginService.startDeviceAuth(opensBrowser: false)
                 }
-
-                Spacer(minLength: 8)
-
-                Image(systemName: "chevron.right")
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.thinMaterial.opacity(0.72), in: RoundedRectangle(cornerRadius: GlassRadius.large, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: GlassRadius.large, style: .continuous)
-                    .strokeBorder(.white.opacity(0.12), lineWidth: 1)
+                .disabled(navigation.swiftBotState != .connected)
             }
         }
-        .buttonStyle(.plain)
     }
+
+    private var swiftBotChoiceDetail: String {
+        switch navigation.swiftBotState {
+        case .connected:
+            return "Choose someone from your connected Discord server."
+        case .disconnected:
+            return "SwiftBot is enabled but currently unavailable."
+        case .unpaired:
+            return "Finish pairing SwiftBot in Settings first."
+        case .notConfigured:
+            return "Finish setting up SwiftBot in Settings first."
+        }
+    }
+
+    // MARK: - Screen 2 · Overviews
 
     private var localSetupOverview: some View {
-        setupOverview(
+        return stepList(
             steps: [
-                ("1", "Check the Twitch account", "Your browser may already be signed in. Switch accounts there before approving if needed."),
-                ("2", "Approve SwiftMiner", "Twitch shows a short activation code and asks you to confirm access."),
-                ("3", "Mining starts here", "The new account gets its own miner and can use its own priorities.")
+                ("Check the Twitch account", "Your browser may already be signed in — switch accounts there first if needed."),
+                ("Approve SwiftMiner", "Twitch shows a short activation code and asks you to confirm access."),
+                ("Mining starts here", "The new account gets its own miner and its own priorities.")
             ],
-            note: "This takes about a minute. SwiftMiner never asks you to type a Twitch password into the app."
+            note: "SwiftMiner never asks you to type a Twitch password into the app."
         )
     }
 
     private var friendSetupOverview: some View {
-        setupOverview(
+        let deliveryStep = invitationDeliveryRoute == .swiftBot
+            ? ("Choose someone", "Select one person from your Discord server.")
+            : ("Send it to them", "Use Mail, Messages or AirDrop.")
+
+        return stepList(
             steps: [
-                ("1", "SwiftMiner creates an invitation", "The private setup link is temporary and is only used to connect the next account."),
-                ("2", "Share it with your friend", "Use the macOS share sheet to send it through Messages, Mail, AirDrop, or another app."),
-                ("3", "They connect with Twitch", "The SwiftMiner page guides them while this Mac waits, then adds their account automatically.")
+                ("Create an invitation", "A temporary link is generated."),
+                deliveryStep,
+                ("They connect Twitch", "Their account appears automatically.")
             ],
-            note: "Send the invitation only to the intended person. Anyone with the temporary link can connect the next Twitch account until it expires."
+            note: "The invitation expires after 30 minutes and can only connect one account."
         )
     }
+
+    private func stepList(steps: [(String, String)], note: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SheetGroupedRows {
+            ForEach(Array(steps.enumerated()), id: \.offset) { entry in
+                HStack(alignment: .top, spacing: 12) {
+                    Text("\(entry.offset + 1)")
+                        .font(.caption.weight(.semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(.tint)
+                        .frame(width: 26, height: 26)
+                        .background(.tint.opacity(0.10), in: Circle())
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(entry.element.0)
+                            .font(.body.weight(.medium))
+                        Text(entry.element.1)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 11)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .combine)
+
+                if entry.offset < steps.count - 1 {
+                    TahoeRowDivider(leadingInset: 52)
+                }
+            }
+            }
+
+            Text(note)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 2)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: - Screen 3 · Invitation
 
     @ViewBuilder
     private var friendActivationContent: some View {
         switch loginService.state {
         case .idle, .starting:
-            statusView(
-                title: "Creating setup link…",
-                description: "Requesting a temporary activation code from Twitch."
-            )
+            inlineProgress("Creating the invitation…")
         case .waitingForUser(let code, _, let expiresIn):
-            sharedSetupReadyView(
+            invitationReadyView(
                 code: code,
                 expiresAt: loginService.deviceAuthorization?.expiresAt
                     ?? Date().addingTimeInterval(TimeInterval(expiresIn))
             )
         case .polling:
             if let authorization = loginService.deviceAuthorization {
-                sharedSetupReadyView(
-                    code: authorization.code,
-                    expiresAt: authorization.expiresAt
-                )
+                invitationReadyView(code: authorization.code, expiresAt: authorization.expiresAt)
             } else {
-                statusView(title: "Creating setup link…", description: "Waiting for Twitch to return an activation code.")
+                inlineProgress("Creating the invitation…")
             }
-        case .succeeded:
-            successView
+        case .succeeded(let account):
+            connectedSummary(username: account.username)
         case .failed(let message):
-            if message.localizedCaseInsensitiveContains("expired"),
-               let authorization = loginService.deviceAuthorization {
-                sharedSetupReadyView(
-                    code: authorization.code,
-                    expiresAt: authorization.expiresAt
-                )
+            if let authorization = loginService.deviceAuthorization,
+               message.localizedCaseInsensitiveContains("expired") {
+                invitationReadyView(code: authorization.code, expiresAt: authorization.expiresAt)
             } else {
                 failureView(message: message, opensBrowserOnRetry: false)
             }
         }
     }
 
-    private func sharedSetupReadyView(
-        code: String,
-        expiresAt: Date
-    ) -> some View {
+    private func invitationReadyView(code: String, expiresAt: Date) -> some View {
         let invitation = SwiftMinerInvitation(
             inviterName: setupInviterName,
             deviceCode: code,
             expiresAt: expiresAt
         )
 
+        // One timeline drives both the countdown and the switch to the expired
+        // state, so the sharing options cannot outlive the invitation.
         return TimelineView(.periodic(from: .now, by: 1)) { context in
-            let remainingSeconds = AdditionalAccountSetup.remainingSeconds(
-                expiresAt: expiresAt,
-                now: context.date
-            )
-            let isExpired = remainingSeconds == 0
+            let remaining = AdditionalAccountSetup.remainingSeconds(expiresAt: expiresAt, now: context.date)
 
-            VStack(alignment: .leading, spacing: 16) {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(isExpired ? "Invitation expired" : "Invitation is ready")
-                                .font(.headline)
-                            Text(isExpired
-                                ? "Code \(code) can no longer be used"
-                                : "Code \(code) · \(AdditionalAccountSetup.countdownText(remainingSeconds: remainingSeconds)) remaining")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Image(systemName: isExpired ? "clock.badge.exclamationmark.fill" : "checkmark.circle.fill")
-                            .font(.title2)
-                            .foregroundStyle(isExpired ? Color.orange : Color.green)
-                    }
+            VStack(alignment: .leading, spacing: 18) {
+                invitationSummary(code: code, remainingSeconds: remaining)
 
-                    if isExpired {
-                        Button(action: sendFriendSetupAgain) {
-                            Label("Send Again", systemImage: "arrow.clockwise")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.borderedProminent)
+                if remaining == 0 {
+                    Button("Create a New Invitation", action: sendFriendSetupAgain)
                         .controlSize(.large)
-                    } else {
-                        ShareLink(
-                            item: invitation.invitationURL,
-                            subject: Text(invitation.subject),
-                            message: Text(invitation.plainText)
-                        ) {
-                            Label("Share Invitation…", systemImage: "square.and.arrow.up")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
-                    }
+                } else {
+                    sharingOptions(invitation: invitation)
                 }
-                .padding(16)
-                .background(.thinMaterial.opacity(0.72), in: RoundedRectangle(cornerRadius: GlassRadius.large, style: .continuous))
 
-                HStack(spacing: 12) {
-                    if isExpired {
-                        Image(systemName: "arrow.clockwise.circle.fill")
-                            .font(.title2)
-                            .foregroundStyle(.orange)
-                    } else {
-                        ProgressView()
-                            .controlSize(.small)
-                    }
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(isExpired ? "Ready to try again" : "Waiting for your friend")
-                            .font(.callout.weight(.medium))
-                        Text(isExpired
-                            ? "Send Again creates a fresh 30-minute invitation for your friend."
-                            : "Keep this window open. Their miner appears automatically after they approve SwiftMiner in Twitch.")
-                            .font(.caption)
+                if let mailFailureMessage {
+                    Label(mailFailureMessage, systemImage: "exclamationmark.triangle")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if remaining > 0 {
+                    waitingRow
+                }
+            }
+        }
+    }
+
+    /// Code and countdown carry the weight here, so neither needs a container.
+    /// The countdown is monospaced-digit so ticking never shifts the layout.
+    private func invitationSummary(code: String, remainingSeconds: Int) -> some View {
+        let expired = remainingSeconds == 0
+        return HStack(spacing: 8) {
+            Image(systemName: expired ? "clock.badge.exclamationmark" : "checkmark.circle.fill")
+                .foregroundStyle(expired ? .orange : .green)
+                .imageScale(.large)
+                .accessibilityHidden(true)
+
+            Text(code)
+                .font(.system(.title3, design: .monospaced).weight(.semibold))
+                .textSelection(.enabled)
+
+            Text("·")
+                .foregroundStyle(.tertiary)
+
+            Text(expired
+                 ? "Expired"
+                 : "Expires in \(AdditionalAccountSetup.countdownText(remainingSeconds: remainingSeconds))")
+                .font(.callout)
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+
+            Spacer(minLength: 0)
+
+            Button {
+                copyCode(code)
+            } label: {
+                Image(systemName: copiedCode ? "checkmark" : "doc.on.doc")
+            }
+            .buttonStyle(.borderless)
+            .help("Copy the activation code")
+            .accessibilityLabel(copiedCode ? "Code copied" : "Copy activation code")
+        }
+        .padding(14)
+        .tahoeCard(tint: expired ? .orange.opacity(0.05) : .green.opacity(0.05))
+        .accessibilityElement(children: .contain)
+    }
+
+    private func sharingOptions(invitation: SwiftMinerInvitation) -> some View {
+        SheetGroupedRows {
+            SheetSelectionRow(
+                symbol: "envelope",
+                title: "Mail",
+                detail: "Open in Mail"
+            ) {
+                composeMailInvitation(invitation)
+            }
+
+            TahoeRowDivider(leadingInset: 58)
+
+            InvitationShareButton(invitation: invitation) {
+                SheetSelectionRowLabel(
+                    symbol: "square.and.arrow.up",
+                    title: "Share…",
+                    detail: "Messages, AirDrop and other apps"
+                )
+            }
+            .buttonStyle(SheetSelectionRowStyle())
+
+            if navigation.swiftBotState == .connected {
+                TahoeRowDivider(leadingInset: 58)
+
+                SheetSelectionRow(
+                    symbol: "person.crop.circle.badge.checkmark",
+                    title: "SwiftBot",
+                    detail: "Send to someone on your Discord server"
+                ) {
+                    swiftBotInvitation = invitation
+                }
+            }
+        }
+    }
+
+    /// The connection status lives below the sharing options and becomes the
+    /// connected account in place, so the sheet never has to change screens for
+    /// the thing the user is already waiting on.
+    @ViewBuilder
+    private var waitingRow: some View {
+        HStack(spacing: 10) {
+            ProgressView()
+                .controlSize(.small)
+
+            Text("Waiting for them to connect…")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+
+            Spacer(minLength: 0)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func connectedSummary(username: String) -> some View {
+        let displayName = username.hasPrefix("@") ? username : "@\(username)"
+        return HStack(spacing: 12) {
+            CachedAvatarImage(url: connectedAvatarURL) {
+                Circle()
+                    .fill(.quaternary)
+                    .overlay {
+                        Text(username.prefix(1).uppercased())
+                            .font(.headline)
                             .foregroundStyle(.secondary)
                     }
-                }
-                .padding(14)
-                .background(
-                    (isExpired ? Color.orange : Color.green).opacity(0.08),
-                    in: RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
-                )
-
-                Text("The invitation shares no password, Twitch token, Discord account, or Web Dashboard access.")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                    .frame(maxWidth: .infinity, alignment: .center)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            .frame(width: 40, height: 40)
+            .clipShape(Circle())
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(displayName)
+                    .font(.body.weight(.medium))
+                Text(stage == .friendActivation ? "Added to SwiftMiner" : "Connected to SwiftMiner")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 0)
+
+            AnimatedStatusIcon(symbol: "checkmark.circle.fill", color: .green, size: 22)
+                .accessibilityHidden(true)
+        }
+        .padding(14)
+        .tahoeCard(tint: .green.opacity(0.05))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(displayName) added to SwiftMiner")
+    }
+
+    // MARK: - Twitch device-code flow
+
+    @ViewBuilder
+    private var authenticationContent: some View {
+        switch loginService.state {
+        case .idle, .starting:
+            inlineProgress("Requesting a device code from Twitch…")
+        case .waitingForUser(let code, let url, let expiresIn):
+            waitingView(code: code, url: url, expiresIn: expiresIn)
+        case .polling:
+            inlineProgress("Waiting for you to approve SwiftMiner in Twitch…")
+        case .succeeded(let account):
+            connectedSummary(username: account.username)
+        case .failed(let message):
+            failureView(message: message, opensBrowserOnRetry: true)
+        }
+    }
+
+    private func waitingView(code: String, url: URL, expiresIn: Int) -> some View {
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Enter this code on Twitch")
+                    .font(.body.weight(.medium))
+
+                HStack(spacing: 10) {
+                    Text(code)
+                        .font(.system(.title, design: .monospaced).weight(.semibold))
+                        .tracking(4)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .textSelection(.enabled)
+
+                    Button {
+                        copyCode(code)
+                    } label: {
+                        Image(systemName: copiedCode ? "checkmark" : "doc.on.doc")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Copy the activation code")
+                    .accessibilityLabel(copiedCode ? "Code copied" : "Copy activation code")
+
+                    Spacer(minLength: 0)
+                }
+
+                Text("Expires in \(max(expiresIn / 60, 1)) minutes")
+                    .font(.footnote)
+                    .monospacedDigit()
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(14)
+            .tahoeCard()
+
+            Button {
+                NSWorkspace.shared.open(url)
+            } label: {
+                Label("Open Twitch Activation Page", systemImage: "safari")
+            }
+            .buttonStyle(.borderedProminent)
+
+            waitingConfirmationRow
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var waitingConfirmationRow: some View {
+        HStack(spacing: 10) {
+            ProgressView()
+                .controlSize(.small)
+            Text("Waiting for Twitch to confirm…")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func inlineProgress(_ title: String) -> some View {
+        HStack(spacing: 10) {
+            ProgressView()
+                .controlSize(.small)
+            Text(title)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func failureView(message: String, opensBrowserOnRetry: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Label {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(failureTitle(for: message))
+                        .font(.body.weight(.medium))
+                    Text(message)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } icon: {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+            }
+
+            Button("Try Again") {
+                loginService.cancel()
+                loginService.startDeviceAuth(opensBrowser: opensBrowserOnRetry)
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .padding(14)
+        .tahoeCard(tint: .orange.opacity(0.05))
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: - Footer
+
+    private var footerBar: some View {
+        HStack(spacing: 12) {
+            switch footerLayout {
+            case .success:
+                Spacer()
+                Button("Done") { dismissSuccessState() }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
+
+            case .overview(let backStage, let continueTitle, let continueAction):
+                Button {
+                    stage = backStage
+                } label: {
+                    Label("Back", systemImage: "chevron.backward")
+                }
+                    .keyboardShortcut(.cancelAction)
+                Spacer()
+                Button(continueTitle, action: continueAction)
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
+
+            case .cancelOnly:
+                Spacer()
+                Button("Cancel") {
+                    loginService.cancel()
+                    isPresented = false
+                }
+                .keyboardShortcut(.cancelAction)
+            }
+        }
+        .controlSize(.regular)
+    }
+
+    private enum FooterLayout {
+        case success
+        case overview(back: AccountAddSheetStage, continueTitle: String, action: () -> Void)
+        case cancelOnly
+    }
+
+    private var footerLayout: FooterLayout {
+        if isSuccessState { return .success }
+        switch stage {
+        case .localOverview:
+            return .overview(back: .choice, continueTitle: "Continue") {
+                stage = .authentication
+                startDeviceAuthIfNeeded()
+            }
+        case .friendOverview:
+            return .overview(back: .choice, continueTitle: "Create Invitation") {
+                stage = .friendActivation
+                shouldPresentSwiftBotPickerWhenReady = invitationDeliveryRoute == .swiftBot
+                loginService.startDeviceAuth(opensBrowser: false)
+            }
+        default:
+            return .cancelOnly
+        }
+    }
+
+    private var isSuccessState: Bool {
+        if case .succeeded = loginService.state { return true }
+        return false
+    }
+
+    // MARK: - Actions
+
+    private func composeMailInvitation(_ invitation: SwiftMinerInvitation) {
+        mailFailureMessage = nil
+        Task {
+            do {
+                try await MailInvitationComposer.composeDraft(for: invitation)
+            } catch let failure as MailInvitationComposer.Failure {
+                mailFailureMessage = failure.message
+            }
         }
     }
 
     private func sendFriendSetupAgain() {
+        mailFailureMessage = nil
+        shouldPresentSwiftBotPickerWhenReady = invitationDeliveryRoute == .swiftBot
         loginService.cancel()
         loginService.startDeviceAuth(opensBrowser: false)
     }
 
-    private func setupOverview(
-        steps: [(String, String, String)],
-        note: String
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 13) {
-            ForEach(Array(steps.enumerated()), id: \.offset) { entry in
-                let step = entry.element
-                HStack(alignment: .top, spacing: 12) {
-                    Text(step.0)
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 24, height: 24)
-                        .background(Color.purple, in: Circle())
+    private func presentSwiftBotPickerIfReady() {
+        guard shouldPresentSwiftBotPickerWhenReady,
+              stage == .friendActivation,
+              let authorization = loginService.deviceAuthorization
+        else { return }
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(step.1)
-                            .font(.callout.weight(.semibold))
-                        Text(step.2)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-            }
-
-            Text(note)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.purple.opacity(0.08), in: RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
-        }
-        .padding(16)
-        .background(.thinMaterial.opacity(0.72), in: RoundedRectangle(cornerRadius: GlassRadius.large, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: GlassRadius.large, style: .continuous)
-                .strokeBorder(.white.opacity(0.12), lineWidth: 1)
-        }
+        shouldPresentSwiftBotPickerWhenReady = false
+        swiftBotInvitation = SwiftMinerInvitation(
+            inviterName: setupInviterName,
+            deviceCode: authorization.code,
+            expiresAt: authorization.expiresAt
+        )
     }
 
     private var setupInviterName: String {
@@ -496,294 +762,16 @@ struct AuthRequiredSheet: View {
         })
     }
 
-    // MARK: - Starting
-
-    private var startingView: some View {
-        statusView(
-            title: "Connecting to Twitch…",
-            description: "Requesting a device code from Twitch."
-        )
-    }
-
-    private func statusView(title: String, description: String) -> some View {
-        VStack(spacing: 20) {
-            ZStack {
-                RoundedRectangle(cornerRadius: GlassRadius.large, style: .continuous)
-                    .fill(Color.purple.opacity(0.12))
-                    .frame(width: 72, height: 72)
-
-                ProgressView()
-                    .controlSize(.large)
-            }
-
-            VStack(spacing: 6) {
-                Text(title)
-                    .font(.title3.weight(.semibold))
-
-                Text(description)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
+    /// Best effort — the connected row falls back to the account's initial while
+    /// this resolves, or if Twitch has no picture for them.
+    private func loadConnectedAvatar(for account: Account) {
+        connectedAvatarURL = TwitchAvatarStore.shared.url(forAccountId: account.id)
+        Task {
+            guard let miner = navigation.minerManager.miners.first(where: { $0.accountId == account.id })
+            else { return }
+            await TwitchAvatarStore.shared.refresh(miner: miner, manager: navigation.minerManager)
+            connectedAvatarURL = TwitchAvatarStore.shared.url(forAccountId: account.id)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-    }
-
-    // MARK: - Waiting for user
-
-    private func waitingView(code: String, url: URL, expiresIn: Int) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            stepRow(
-                number: "1",
-                title: "Open Twitch",
-                detail: "Use the activation page in your browser."
-            ) {
-                Button {
-                    NSWorkspace.shared.open(url)
-                } label: {
-                    Label("Open Activation Page", systemImage: "safari")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-            }
-
-            stepRow(
-                number: "2",
-                title: "Enter the code",
-                detail: "Paste this code on Twitch to approve SwiftMiner."
-            ) {
-                codePanel(code: code, expiresIn: expiresIn)
-            }
-
-            waitingStatusPanel
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private func stepRow<Content: View>(
-        number: String,
-        title: String,
-        detail: String,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        HStack(alignment: .top, spacing: 14) {
-            Text(number)
-                .font(.callout.weight(.bold))
-                .foregroundStyle(.white)
-                .frame(width: 28, height: 28)
-                .background(Color.purple, in: Circle())
-
-            VStack(alignment: .leading, spacing: 10) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(title)
-                        .font(.headline)
-
-                    Text(detail)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-
-                content()
-            }
-        }
-        .padding(14)
-        .background(.thinMaterial.opacity(0.72), in: RoundedRectangle(cornerRadius: GlassRadius.large, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: GlassRadius.large, style: .continuous)
-                .strokeBorder(.white.opacity(0.12), lineWidth: 1)
-        }
-    }
-
-    private func codePanel(code: String, expiresIn: Int) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .center, spacing: 12) {
-                Text(code)
-                    .font(.system(size: 36, weight: .bold, design: .monospaced))
-                    .tracking(5)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.72)
-                    .textSelection(.enabled)
-
-                Spacer(minLength: 12)
-
-                Button {
-                    copyCode(code)
-                } label: {
-                    Label(copiedCode ? "Copied" : "Copy", systemImage: copiedCode ? "checkmark" : "doc.on.doc")
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.regular)
-                .help("Copy code")
-            }
-
-            HStack(spacing: 8) {
-                Image(systemName: "clock")
-                    .foregroundStyle(.tertiary)
-                Text("Expires in \(max(expiresIn / 60, 1)) minutes")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
-        .background(Color(nsColor: .textBackgroundColor).opacity(0.34), in: RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
-                .strokeBorder(Color.purple.opacity(0.20), lineWidth: 1)
-        }
-    }
-
-    private var waitingStatusPanel: some View {
-        HStack(spacing: 12) {
-            ProgressView()
-                .controlSize(.small)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Waiting for confirmation")
-                    .font(.callout.weight(.medium))
-                Text("This sheet closes automatically after Twitch approves the login.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(Color.green.opacity(0.08), in: RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
-                .strokeBorder(Color.green.opacity(0.16), lineWidth: 1)
-        }
-    }
-
-    // MARK: - Polling
-
-    private var pollingView: some View {
-        statusView(
-            title: "Waiting for confirmation…",
-            description: "Complete the authorization in your browser."
-        )
-    }
-
-    // MARK: - Success
-
-    private var successView: some View {
-        VStack(spacing: 16) {
-            AnimatedStatusIcon(symbol: "checkmark.circle.fill", color: .green, size: 48)
-            Text(reconnectingMinerId == nil ? "Account Added!" : "Twitch Reconnected!")
-                .font(.title3.weight(.semibold))
-            Text(reconnectingMinerId == nil
-                ? "Your Twitch account has been connected."
-                : "Your Twitch credentials have been refreshed and mining will resume.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-    }
-
-    // MARK: - Failure
-
-    private func failureView(message: String, opensBrowserOnRetry: Bool) -> some View {
-        VStack(spacing: 16) {
-            ZStack {
-                RoundedRectangle(cornerRadius: GlassRadius.large, style: .continuous)
-                    .fill(Color.orange.opacity(0.14))
-                    .frame(width: 72, height: 72)
-
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 34, weight: .semibold))
-                    .foregroundStyle(.orange)
-            }
-
-            Text(failureTitle(for: message))
-                .font(.title3.weight(.semibold))
-
-            Text(message)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Button("Try Again") {
-                loginService.cancel()
-                loginService.startDeviceAuth(opensBrowser: opensBrowserOnRetry)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-    }
-
-    // MARK: - Footer
-
-    private var footerBar: some View {
-        HStack {
-            if isSuccessState {
-                Spacer()
-
-                Button(successActionTitle) {
-                    dismissSuccessState()
-                }
-                .buttonStyle(.borderedProminent)
-                .keyboardShortcut(.defaultAction)
-            } else if stage == .localOverview {
-                Button("Back") {
-                    stage = .choice
-                }
-
-                Spacer()
-
-                Button("Continue") {
-                    stage = .authentication
-                    startDeviceAuthIfNeeded()
-                }
-                .buttonStyle(.borderedProminent)
-                .keyboardShortcut(.defaultAction)
-            } else if stage == .friendOverview {
-                Button("Back") {
-                    stage = .choice
-                }
-
-                Spacer()
-
-                Button("Create Setup Link") {
-                    stage = .friendActivation
-                    loginService.startDeviceAuth(opensBrowser: false)
-                }
-                .buttonStyle(.borderedProminent)
-                .keyboardShortcut(.defaultAction)
-            } else if stage == .friendActivation {
-                Button("Cancel Setup") {
-                    loginService.cancel()
-                    isPresented = false
-                }
-                .keyboardShortcut(.cancelAction)
-
-                Spacer()
-            } else {
-                Button("Cancel") {
-                    loginService.cancel()
-                    isPresented = false
-                }
-                .keyboardShortcut(.cancelAction)
-
-                Spacer()
-            }
-        }
-    }
-
-    private var isSuccessState: Bool {
-        if case .succeeded = loginService.state {
-            return true
-        }
-        return false
-    }
-
-    private var successActionTitle: String {
-        "Done"
     }
 
     private func dismissSuccessState() {
@@ -883,6 +871,9 @@ struct AuthRequiredSheet: View {
     }
 
     private func scheduleSuccessDismissal() {
+        // The invite flow shows the connected account in place of the waiting
+        // row, so it stays put until the user is done looking at it.
+        guard stage != .friendActivation else { return }
         successDismissTask = Task {
             // Brief pause so the user sees the success state.
             try? await Task.sleep(nanoseconds: 1_200_000_000)
@@ -903,4 +894,95 @@ struct AuthRequiredSheet: View {
         existingAccountCount: 1
     )
         .environment(NavigationModel(clientId: "preview"))
+}
+
+// MARK: - Grouped sheet rows
+
+/// Uses the same content surface as Settings. Liquid Glass stays in the control
+/// layer supplied by macOS instead of being painted behind every row.
+private struct SheetGroupedRows<Content: View>: View {
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        VStack(spacing: 0) {
+            content()
+        }
+        .clipShape(RoundedRectangle(cornerRadius: TahoeMetrics.card, style: .continuous))
+        .tahoeCard()
+    }
+}
+
+/// The visual half of a selection row, so a plain button and a `ShareLink`-style
+/// control can present the same way.
+private struct SheetSelectionRowLabel: View {
+    let symbol: String
+    let title: String
+    let detail: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: symbol)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(.tint)
+                .frame(width: 32, height: 32)
+                .background(.tint.opacity(0.10), in: Circle())
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(.primary)
+                Text(detail)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 8)
+
+            Image(systemName: "chevron.forward")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.tertiary)
+                .accessibilityHidden(true)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+}
+
+/// Restrained hover feedback across the whole row, and a focus ring for keyboard
+/// navigation — both from the system rather than drawn by hand.
+private struct SheetSelectionRowStyle: ButtonStyle {
+    @State private var isHovering = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background {
+                if configuration.isPressed {
+                    Color.accentColor.opacity(0.10)
+                } else if isHovering {
+                    Color.accentColor.opacity(0.055)
+                }
+            }
+            .onHover { isHovering = $0 }
+    }
+}
+
+private struct SheetSelectionRow: View {
+    let symbol: String
+    let title: String
+    let detail: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            SheetSelectionRowLabel(symbol: symbol, title: title, detail: detail)
+        }
+        .buttonStyle(SheetSelectionRowStyle())
+        .accessibilityLabel(title)
+        .accessibilityHint(detail)
+    }
 }

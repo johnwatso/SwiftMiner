@@ -30,6 +30,7 @@ incrementally.
 | `issue_kind` | string? | The specific problem behind a broad message type. |
 | `campaign_id` | string? | The campaign this DM is about, where one applies. |
 | `help_url` | string? | Public help article on swiftminer.app covering this situation. |
+| `inviter_display_name` | string? | Who is inviting the recipient, already formatted as `@name`. Only on `friend_invitation`. |
 
 ### The one rule
 
@@ -139,6 +140,34 @@ Informational. A button is fine; they must not read as errors.
 | `welcome` | `dashboard` | Manual only, from the miner's Discord card. |
 | `linked` | `dashboard` | Sent when a Twitch account finishes activating. |
 | `web_dashboard_available` | `dashboard` | One time ever, to every registered user. |
+
+### Invitation
+
+| Type | `portal_destination` | Key fields |
+|---|---|---|
+| `friend_invitation` | none | `activation_url`, `activation_expires_in_minutes`, `inviter_display_name` |
+
+Sent by hand from **Add a Miner › Share With a Friend › Share via SwiftBot…**, to
+a Discord member the operator picks. Unlike every other DM this one is about the
+*recipient's* Twitch account, which they have not connected yet — so there is no
+miner to name and no portal to link.
+
+`activation_url` is a `swiftminer.app/setup/` link that carries the Twitch device
+code inside its URL fragment. Render it as the one primary button ("Connect to
+SwiftMiner"). Do not surface a Twitch activation code or a `twitch.tv/activate`
+URL: the setup page owns that fallback.
+
+Suggested embed: title "You've been invited to SwiftMiner", body
+"`inviter_display_name` has invited you to connect your Twitch account.", the
+reassurance that they sign in directly with Twitch and their credentials are
+never shared with the inviter, and the expiry from
+`activation_expires_in_minutes`.
+
+**Status: SwiftMiner side only.** SwiftBot needs a matching
+`friend_invitation` case before these DMs render.
+
+`inviter_display_name` is a display hint. The invitation payload is encoded, not
+signed, so it must not be used for any authorisation decision.
 
 ### Not sent by SwiftMiner
 

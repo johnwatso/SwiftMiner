@@ -3,6 +3,22 @@ import ServiceManagement
 import SwiftUI
 import SwiftMinerCore
 
+// MARK: - Appearance
+
+public enum AppearanceStyle: String, CaseIterable, Identifiable, Sendable {
+    case standard
+    case atomicPurple
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .standard: return "Standard"
+        case .atomicPurple: return "Atomic Purple"
+        }
+    }
+}
+
 public struct SettingsBackup: Codable, Sendable {
     public let schemaVersion: Int
     public let exportedAt: Date
@@ -11,6 +27,12 @@ public struct SettingsBackup: Codable, Sendable {
     public let logLevel: String
     public let maxLogEntries: Int
     public let appPresenceMode: String
+    /// Legacy combined theme value, retained so early Atomic Purple backups import.
+    public let appearanceTheme: String?
+    /// Legacy light/dark choice. SwiftMiner follows the system appearance, so the
+    /// value is ignored on import; the field stays only so older backups decode.
+    public let appearanceMode: String?
+    public let appearanceStyle: String?
     public let autoStartOnLaunch: Bool
     public let startMinimized: Bool
     public let enableBadgesEmotes: Bool
@@ -63,6 +85,9 @@ public struct SettingsBackup: Codable, Sendable {
         logLevel: String,
         maxLogEntries: Int,
         appPresenceMode: String,
+        appearanceTheme: String? = nil,
+        appearanceMode: String? = nil,
+        appearanceStyle: String? = nil,
         autoStartOnLaunch: Bool,
         startMinimized: Bool,
         enableBadgesEmotes: Bool,
@@ -107,6 +132,9 @@ public struct SettingsBackup: Codable, Sendable {
         self.logLevel = logLevel
         self.maxLogEntries = maxLogEntries
         self.appPresenceMode = appPresenceMode
+        self.appearanceTheme = appearanceTheme
+        self.appearanceMode = appearanceMode
+        self.appearanceStyle = appearanceStyle
         self.autoStartOnLaunch = autoStartOnLaunch
         self.startMinimized = startMinimized
         self.enableBadgesEmotes = enableBadgesEmotes

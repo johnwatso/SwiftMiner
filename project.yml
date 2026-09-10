@@ -38,6 +38,7 @@ targets:
       - path: Sources/SwiftMiner
         excludes:
           - Info.plist
+          - SwiftMiner.entitlements
       - path: SwiftMiner.icon
         type: file
         buildPhase: resources
@@ -62,6 +63,9 @@ targets:
       properties:
         CFBundleIconFile: SwiftMiner
         LSApplicationCategoryType: public.app-category.utilities
+        # "Email Invitation…" asks Mail to open a pre-written draft. macOS shows
+        # this string when it asks the user to allow that the first time.
+        NSAppleEventsUsageDescription: SwiftMiner uses Mail to open a pre-written invitation you can review and send yourself.
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         # New installs check in the background and prompt before downloading.
@@ -82,11 +86,11 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.swiftminer.app
         MACOSX_DEPLOYMENT_TARGET: "14.0"
         MARKETING_VERSION: "1.41"
-        CURRENT_PROJECT_VERSION: "2026090915"
+        CURRENT_PROJECT_VERSION: "2026091011"
         INFOPLIST_KEY_CFBundleDisplayName: SwiftMiner
         INFOPLIST_KEY_CFBundleName: SwiftMiner
         CODE_SIGN_STYLE: Automatic
-        CODE_SIGN_ENTITLEMENTS: ""
+        CODE_SIGN_ENTITLEMENTS: Sources/SwiftMiner/SwiftMiner.entitlements
         ENABLE_HARDENED_RUNTIME: YES
         ENABLE_USER_SCRIPT_SANDBOXING: NO
         ASSETCATALOG_COMPILER_APPICON_NAME: SwiftMiner

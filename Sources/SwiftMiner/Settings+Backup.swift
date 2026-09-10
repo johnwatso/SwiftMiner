@@ -17,6 +17,7 @@ extension Settings {
             logLevel: logLevel.rawValue,
             maxLogEntries: maxLogEntries,
             appPresenceMode: appPresenceMode.rawValue,
+            appearanceStyle: appearanceStyle.rawValue,
             autoStartOnLaunch: autoStartOnLaunch,
             startMinimized: startMinimized,
             enableBadgesEmotes: enableBadgesEmotes,
@@ -70,6 +71,8 @@ extension Settings {
         logLevel = Settings.LogLevel(rawValue: backup.logLevel) ?? .info
         maxLogEntries = backup.maxLogEntries
         appPresenceMode = AppPresenceMode(rawValue: backup.appPresenceMode) ?? .dockOnly
+        appearanceStyle = backup.appearanceStyle.flatMap(AppearanceStyle.init(rawValue:))
+            ?? (backup.appearanceTheme == "atomicPurple" ? .atomicPurple : .standard)
         autoStartOnLaunch = backup.autoStartOnLaunch
         startMinimized = backup.startMinimized
         enableBadgesEmotes = backup.enableBadgesEmotes

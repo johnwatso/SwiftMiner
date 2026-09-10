@@ -1,4 +1,26 @@
 const searchIndex = [
+  {
+    title: "You've been invited to SwiftMiner",
+    url: "invited-to-swiftminer/",
+    category: "Security & Privacy",
+    keywords: "invite invitation invited someone sent me link trust safe scam should i accept what is swiftminer why",
+    snippet: "Someone asked you to connect your Twitch account to their SwiftMiner. What it gives them, what it does not, and how to disconnect."
+  },
+  {
+    title: "Reasons to decline an invitation",
+    url: "invited-to-swiftminer/#reasons-to-decline",
+    category: "Security & Privacy",
+    keywords: "decline refuse say no risk trust stranger unsolicited discord suspicious safe",
+    snippet: "Do you trust the person and their Mac? The honest reasons not to accept an invitation."
+  },
+  {
+    title: "Disconnect SwiftMiner from your Twitch account",
+    url: "invited-to-swiftminer/#disconnect",
+    category: "Security & Privacy",
+    keywords: "revoke disconnect remove token unlink twitch settings connections sessions password stop",
+    snippet: "Revoke the token from twitch.tv, or ask the operator to remove the account, at any time."
+  },
+
   // Getting Started
   {
     title: "Get Started with SwiftMiner",
