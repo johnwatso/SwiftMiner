@@ -31,6 +31,18 @@ incrementally.
 | `campaign_id` | string? | The campaign this DM is about, where one applies. |
 | `help_url` | string? | Public help article on swiftminer.app covering this situation. |
 | `inviter_display_name` | string? | Who is inviting the recipient, already formatted as `@name`. Only on `friend_invitation`. |
+| `activation_expires_at` | string? | Absolute expiry as an **ISO 8601 string**, so SwiftBot can render Discord's `<t:UNIX:R>` live countdown instead of a minute count frozen at send time. |
+
+### Dates on the wire
+
+`activation_expires_at` is an ISO 8601 string. SwiftBot decodes it with a plain
+`try` against `String`, so a numeric date does not merely lose the countdown —
+it fails the decode of the entire payload and the DM is dropped. SwiftMiner
+sends it through `RestSwiftBotConnectionService.dmEncoder`, which is pinned to
+`.iso8601` and covered by a test.
+
+Senders should include `activation_expires_in_minutes` as well; SwiftBot prefers
+the absolute instant and falls back to the minute count on older builds.
 
 ### The one rule
 
@@ -163,8 +175,17 @@ reassurance that they sign in directly with Twitch and their credentials are
 never shared with the inviter, and the expiry from
 `activation_expires_in_minutes`.
 
-**Status: SwiftMiner side only.** SwiftBot needs a matching
-`friend_invitation` case before these DMs render.
+**Status: implemented on both sides.** SwiftBot renders the invitation as its
+own embed, with the setup link as the primary button and `help_url` as a
+secondary "What is SwiftMiner?" — the only DM where a help link appears without
+a portal button, because a recipient who cannot open the invitation is exactly
+the one who needs to know what they were sent.
+
+Two behaviours are specific to this type. SwiftBot's per-type notification
+preferences do not apply: they describe ongoing mining alerts for an existing
+miner, and none of them should silence a one-off invitation an operator sent by
+hand. And a `friend_invitation` never falls back to advertising the operator's
+dashboard, which the recipient cannot sign in to.
 
 `inviter_display_name` is a display hint. The invitation payload is encoded, not
 signed, so it must not be used for any authorisation decision.

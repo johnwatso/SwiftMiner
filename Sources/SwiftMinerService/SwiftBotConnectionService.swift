@@ -231,7 +231,7 @@ public actor RestSwiftBotConnectionService: SwiftBotConnectionService {
         request.timeoutInterval = 10.0
 
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try? JSONEncoder().encode(dmRequest)
+        request.httpBody = try? Self.dmEncoder.encode(dmRequest)
 
         swiftBotConnectionLogger.info(
             "sendDM POST discordId=\(discordUserId, privacy: .private) messageType=\(dmRequest.messageType.rawValue, privacy: .public) debug=\(dmRequest.debug, privacy: .public) twitchUsername=\(dmRequest.twitchUsername ?? "<nil>", privacy: .private) priorityCount=\(dmRequest.priorityGames.count)"
@@ -261,6 +261,15 @@ public actor RestSwiftBotConnectionService: SwiftBotConnectionService {
     }
 
     // MARK: - Private Helpers
+
+    /// SwiftBot decodes `activation_expires_at` as an ISO 8601 string, and does
+    /// so with a plain `try`: the default numeric date encoding would not merely
+    /// lose the field, it would fail the whole payload decode and drop the DM.
+    public static let dmEncoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }()
 
     private struct UsersResponse: Decodable {
         let users: [SwiftBotDiscordUser]
