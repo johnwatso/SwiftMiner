@@ -75,8 +75,12 @@
         radial-gradient(circle at 50% 0%, rgba(127, 80, 220, 0.13), transparent 42rem),
         var(--background);
       color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+      /* SF Pro on Apple devices (the system font can't be self-hosted), then
+         each platform's own UI face — the same stack as site.css. -apple-system
+         switches between SF Pro Text and Display by size on its own. */
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
     }
 
     .page {
@@ -97,37 +101,46 @@
 
     .content { padding: clamp(28px, 7vw, 48px); }
 
+    /* Centered hero in the manner of Apple's own product and sign-in pages:
+       icon, a sentence-case colored eyebrow, a bold headline with near-neutral
+       tracking, then a softer intro line. */
+    .intro { text-align: center; }
+
     .app-icon {
-      width: 72px;
-      height: 72px;
-      margin-bottom: 24px;
-      border-radius: 18px;
+      display: block;
+      width: 84px;
+      height: 84px;
+      margin: 0 auto 22px;
+      border-radius: 19px;
       box-shadow: 0 12px 30px rgba(101, 60, 185, 0.24);
     }
 
     .eyebrow {
-      margin: 0 0 10px;
+      margin: 0 0 8px;
       color: var(--purple);
-      font-size: 12px;
-      font-weight: 750;
-      letter-spacing: 0.09em;
-      text-transform: uppercase;
+      font-size: 17px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
     }
 
     h1 {
       max-width: 480px;
-      margin: 0;
+      margin: 0 auto;
       font-size: clamp(32px, 8vw, 44px);
-      font-weight: 720;
-      letter-spacing: -0.045em;
-      line-height: 1.06;
+      font-weight: 700;
+      letter-spacing: -0.015em;
+      line-height: 1.1;
+      text-wrap: balance;
     }
 
     .inviter-copy {
-      margin: 18px 0 0;
+      max-width: 440px;
+      margin: 14px auto 0;
       color: var(--secondary);
-      font-size: 18px;
-      line-height: 1.5;
+      font-size: 19px;
+      letter-spacing: -0.01em;
+      line-height: 1.42;
+      text-wrap: pretty;
     }
 
     /* Matches the Twitch button on SwiftMiner's web dashboard sign-in, down to
@@ -144,8 +157,9 @@
       background: #9146FF;
       box-shadow: 0 8px 20px rgba(145, 70, 255, 0.35);
       color: #fff;
-      font-size: 16px;
-      font-weight: 680;
+      font-size: 17px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
       text-decoration: none;
       transition: transform 140ms ease, filter 140ms ease, opacity 140ms ease;
     }
@@ -177,7 +191,7 @@
       line-height: 1.5;
     }
 
-    .security strong { color: var(--text); font-weight: 650; }
+    .security strong { color: var(--text); font-weight: 600; }
 
     .cta-note {
       margin: 10px 0 0;
@@ -197,7 +211,7 @@
     .learn-more a {
       color: var(--purple);
       text-decoration: none;
-      font-weight: 550;
+      font-weight: 500;
     }
 
     .learn-more a:hover { text-decoration: underline; }
@@ -368,10 +382,12 @@
       <div class="content">
         <noscript><p class="noscript">JavaScript is required to open this temporary SwiftMiner invitation.</p></noscript>
 
-        <img class="app-icon" src="https://swiftminer.app/icon-192.png" alt="SwiftMiner app icon">
-        <p class="eyebrow" id="eyebrow">Invitation</p>
-        <h1 id="page-title">Opening your invitation…</h1>
-        <p class="inviter-copy" id="inviter-copy">Checking the temporary setup link.</p>
+        <header class="intro">
+          <img class="app-icon" src="https://swiftminer.app/icon-192.png" alt="SwiftMiner app icon">
+          <p class="eyebrow" id="eyebrow">Invitation</p>
+          <h1 id="page-title">Opening your invitation…</h1>
+          <p class="inviter-copy" id="inviter-copy">Checking the temporary setup link.</p>
+        </header>
 
         <a class="cta disabled" id="connect-button" aria-disabled="true">
           <svg class="mark" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor" aria-hidden="true" focusable="false"><path fill-rule="evenodd" d="M6 0 1.714 4.286V19.714H6.857V24l4.286-4.286h3.428L22.286 12V0Zm14.571 11.143-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714ZM11.571 4.714h1.715v5.143h-1.715Zm4.715 0H18v5.143h-1.714Z"/></svg>
@@ -445,14 +461,14 @@
         return { expiresAt: expiresAt * 1000, code, inviter };
       }
 
-      function showUnavailable(message) {
-        eyebrow.textContent = 'Invitation unavailable';
-        title.textContent = 'This setup link can’t be used';
+      function showUnavailable({ eyebrowText, titleText, message, statusText }) {
+        eyebrow.textContent = eyebrowText;
+        title.textContent = titleText;
         inviterCopy.textContent = message;
         connectButton.removeAttribute('href');
         connectButton.classList.add('disabled');
         connectButton.setAttribute('aria-disabled', 'true');
-        status.textContent = 'Ask the person who invited you to choose Send Again in SwiftMiner.';
+        status.textContent = statusText;
         ctaNote.hidden = true;
         fallback.hidden = true;
         confetti.classList.remove('active');
@@ -466,7 +482,12 @@
       }
 
       if (!invitation) {
-        showUnavailable('The invitation is incomplete or has been changed.');
+        showUnavailable({
+          eyebrowText: 'Hmm… 🤔',
+          titleText: 'This link isn’t quite right',
+          message: 'Part of the invitation seems to be missing. Try opening the link again, or ask whoever invited you to send a fresh one.',
+          statusText: 'They can choose Send Again in SwiftMiner.'
+        });
         return;
       }
 
@@ -504,7 +525,12 @@
       function updateCountdown() {
         const remainingSeconds = Math.max(0, Math.ceil((invitation.expiresAt - Date.now()) / 1000));
         if (remainingSeconds === 0) {
-          showUnavailable('This invitation has expired.');
+          showUnavailable({
+            eyebrowText: 'Oops ⏳',
+            titleText: 'Sorry, this link has expired',
+            message: `Invitations only last 30 minutes to keep your account safe. Ask ${invitation.inviter} to send you a fresh one — it only takes a second.`,
+            statusText: `${invitation.inviter} can choose Send Again in SwiftMiner.`
+          });
           return false;
         }
 
