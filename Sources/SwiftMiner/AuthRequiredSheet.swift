@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftMinerCore
+import SwiftMinerService
 
 enum AdditionalAccountSetup {
     static func shouldPresentChoice(existingAccountCount: Int, isReconnecting: Bool) -> Bool {
@@ -57,6 +58,10 @@ struct AuthRequiredSheet: View {
     @State private var mailFailureMessage: String?
     @State private var connectedAvatarURL: URL?
     @State private var invitationDeliveryRoute: InvitationDeliveryRoute = .manual
+    /// Set once SwiftBot confirms delivery. Mail and the share sheet hand off
+    /// without telling us whether anything was actually sent, so only this
+    /// route can honestly claim the invitation reached someone.
+    @State private var swiftBotRecipient: SwiftBotDiscordUser?
     @State private var shouldPresentSwiftBotPickerWhenReady = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -83,7 +88,10 @@ struct AuthRequiredSheet: View {
                 SwiftBotInvitationSheet(
                     invitation: invitation,
                     onCancel: { swiftBotInvitation = nil },
-                    onSent: { swiftBotInvitation = nil }
+                    onSent: { member in
+                        swiftBotInvitation = nil
+                        swiftBotRecipient = member
+                    }
                 )
             } else {
                 sheetContent
@@ -154,7 +162,9 @@ struct AuthRequiredSheet: View {
         case .choice: return "Add Account"
         case .localOverview: return "On This Mac"
         case .friendOverview: return "Invite Someone"
-        case .friendActivation: return invitationIsReady ? "Invitation Ready" : "Creating Invitation"
+        case .friendActivation:
+            if !invitationIsReady { return "Creating Invitation" }
+            return swiftBotRecipient == nil ? "Invitation Ready" : "Invitation Sent"
         case .authentication:
             return reconnectingMinerId == nil ? "Connect Twitch" : "Reconnect Twitch"
         }
@@ -185,9 +195,10 @@ struct AuthRequiredSheet: View {
         case .friendOverview:
             return "They'll connect their Twitch account from their device. SwiftMiner will add it automatically once they're done."
         case .friendActivation:
-            return invitationIsReady
+            if !invitationIsReady { return "Asking Twitch for a temporary activation code." }
+            return swiftBotRecipient == nil
                 ? "Send it however suits them. This Mac keeps waiting until they connect."
-                : "Asking Twitch for a temporary activation code."
+                : "SwiftBot delivered it. This Mac keeps waiting until they connect."
         case .authentication:
             return reconnectingMinerId == nil
                 ? "Approve SwiftMiner in Twitch to finish adding the account."
@@ -395,6 +406,8 @@ struct AuthRequiredSheet: View {
                 if remaining == 0 {
                     Button("Create a New Invitation", action: sendFriendSetupAgain)
                         .controlSize(.large)
+                } else if let swiftBotRecipient {
+                    sentViaSwiftBot(recipient: swiftBotRecipient)
                 } else {
                     sharingOptions(invitation: invitation)
                 }
@@ -410,6 +423,47 @@ struct AuthRequiredSheet: View {
                     waitingRow
                 }
             }
+        }
+    }
+
+    /// What the screen becomes once SwiftBot has actually delivered it. The
+    /// countdown above and the waiting row below both keep running — the
+    /// invitation is sent, not finished.
+    private func sentViaSwiftBot(recipient: SwiftBotDiscordUser) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                MinerDiscordAvatar(url: recipient.avatarURL)
+                    .frame(width: 34, height: 34)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Sent to \(recipient.displayName)")
+                        .font(.body.weight(.medium))
+                    Text(recipient.username.map { "@\($0) · Delivered by SwiftBot" } ?? "Delivered by SwiftBot")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "paperplane.fill")
+                    .foregroundStyle(.green)
+                    .accessibilityHidden(true)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: TahoeMetrics.card, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: TahoeMetrics.card, style: .continuous)
+                    .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1)
+            }
+            .accessibilityElement(children: .combine)
+
+            // Not a dead end: the DM may never be read, and the same invitation
+            // is still valid through any other channel until it expires.
+            Button("Send another way") { swiftBotRecipient = nil }
+                .buttonStyle(.link)
+                .font(.callout)
         }
     }
 
@@ -737,6 +791,7 @@ struct AuthRequiredSheet: View {
 
     private func sendFriendSetupAgain() {
         mailFailureMessage = nil
+        swiftBotRecipient = nil
         shouldPresentSwiftBotPickerWhenReady = invitationDeliveryRoute == .swiftBot
         loginService.cancel()
         loginService.startDeviceAuth(opensBrowser: false)

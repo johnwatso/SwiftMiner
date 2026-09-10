@@ -19,7 +19,10 @@ enum SwiftBotInvitationEligibility {
 struct SwiftBotInvitationSheet: View {
     let invitation: SwiftMinerInvitation
     let onCancel: () -> Void
-    let onSent: () -> Void
+    /// Reports who it went to, so the invitation screen can say so rather than
+    /// dropping the user back onto a list of ways to send something they have
+    /// already sent.
+    let onSent: (SwiftBotDiscordUser) -> Void
 
     @Environment(NavigationModel.self) private var navigation
 
@@ -210,7 +213,7 @@ struct SwiftBotInvitationSheet: View {
 
         isSending = false
         if sent {
-            onSent()
+            onSent(member)
         } else {
             errorMessage = "SwiftBot could not deliver the invitation to \(member.displayName). Check the SwiftBot connection in Settings and try again."
         }
