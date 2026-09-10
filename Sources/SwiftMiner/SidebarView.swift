@@ -169,22 +169,12 @@ private struct SidebarRow: View {
 private struct SidebarSelectionHighlight: View {
     @Environment(\.controlActiveState) private var controlActiveState
 
-    private var highlightMaterial: Material {
-        controlActiveState == .active ? .ultraThinMaterial : .bar
-    }
-
-    private var strokeOpacity: Double {
-        controlActiveState == .active ? 0.16 : 0.10
-    }
-
     var body: some View {
-        RoundedRectangle(cornerRadius: 11, style: .continuous)
-            .fill(highlightMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .strokeBorder(.white.opacity(strokeOpacity), lineWidth: 1)
-            )
+        AppearanceRoundedSurface(
+            role: .selected,
+            cornerRadius: 11,
+            material: controlActiveState == .active ? .ultraThinMaterial : .bar
+        )
     }
 }
 

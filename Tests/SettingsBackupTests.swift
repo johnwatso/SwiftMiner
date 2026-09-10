@@ -29,6 +29,7 @@ final class SettingsBackupTests: XCTestCase {
     }
 
     func testBackupRoundTripRestoresOperatorPreferences() throws {
+        settings.appearanceStyle = .atomicPurple
         settings.quietHoursEnabled = true
         settings.quietHoursStartMinute = 21 * 60
         settings.quietHoursEndMinute = 8 * 60
@@ -38,10 +39,56 @@ final class SettingsBackupTests: XCTestCase {
         settings.resetToDefaults()
         try settings.importBackupData(data)
 
+        XCTAssertEqual(settings.appearanceStyle, .atomicPurple)
         XCTAssertTrue(settings.quietHoursEnabled)
         XCTAssertEqual(settings.quietHoursStartMinute, 21 * 60)
         XCTAssertEqual(settings.quietHoursEndMinute, 8 * 60)
         XCTAssertEqual(settings.swiftBotEndpoint, "http://127.0.0.1:9000")
+    }
+
+    func testAppearanceChoicesPersistAndInvalidValuesUseDefaults() {
+        settings.appearanceStyle = .atomicPurple
+
+        XCTAssertEqual(
+            Settings.appStorageStore.string(forKey: "appearanceStyle"),
+            AppearanceStyle.atomicPurple.rawValue
+        )
+
+        Settings.appStorageStore.set("unknown-style", forKey: "appearanceStyle")
+        XCTAssertEqual(settings.appearanceStyle, .standard)
+    }
+
+    /// Backups written while SwiftMiner still had its own light/dark switch must
+    /// still import. The mode itself is gone — macOS owns it — so the only thing
+    /// that has to survive the trip is the style.
+    func testBackupCarryingALegacyModeStillImportsTheStyle() throws {
+        settings.appearanceStyle = .standard
+        let data = try settings.exportBackupData()
+        var payload = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        payload["appearanceMode"] = "light"
+        payload["appearanceStyle"] = AppearanceStyle.atomicPurple.rawValue
+        let older = try JSONSerialization.data(withJSONObject: payload)
+
+        try settings.importBackupData(older)
+
+        XCTAssertEqual(settings.appearanceStyle, .atomicPurple)
+    }
+
+    func testCombinedAtomicPurpleBackupMigratesToTheAtomicPurpleStyle() throws {
+        settings.appearanceStyle = .standard
+        let data = try settings.exportBackupData()
+        var payload = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        XCTAssertNotNil(payload.removeValue(forKey: "appearanceStyle"))
+        payload["appearanceTheme"] = "atomicPurple"
+        let older = try JSONSerialization.data(withJSONObject: payload)
+
+        try settings.importBackupData(older)
+
+        XCTAssertEqual(settings.appearanceStyle, .atomicPurple)
     }
 
     func testBackupRoundTripRestoresTheMinerArrangement() throws {

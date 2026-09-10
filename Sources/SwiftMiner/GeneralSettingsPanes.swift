@@ -23,6 +23,23 @@ struct GeneralSettingsView: View {
     var body: some View {
         Form {
             Section {
+                Picker("Theme", selection: $settings.appearanceStyle) {
+                    ForEach(AppearanceStyle.allCases) { style in
+                        Text(style.title).tag(style)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                SettingsSecondaryText(
+                    settings.appearanceStyle == .atomicPurple
+                        ? "A purple treatment that follows your Mac's light or dark appearance. Game artwork and status colours stay unchanged."
+                        : "SwiftMiner's standard macOS appearance."
+                )
+            } header: {
+                Text("Appearance")
+            }
+
+            Section {
                 Picker("App Presence", selection: $settings.appPresenceMode) {
                     ForEach(AppPresenceMode.allCases) { mode in
                         Text(mode.title).tag(mode)

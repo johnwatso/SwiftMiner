@@ -1585,6 +1585,9 @@ struct IntegrationsSettingsView: View {
         case .campaignCompleted, .dropClaimed: return .drops
         case .welcomeBack: return .miner
         case .welcome, .discordLinked, .setup, .linked, .webDashboardAvailable: return .dashboard
+        // The invitation DM carries the swiftminer.app setup link, not a portal
+        // link, so the portal destination is only the debug preview's fallback.
+        case .friendInvitation: return .dashboard
         }
     }
 

@@ -10,6 +10,8 @@ struct MinerStateCard: View {
     var onAction: (() -> Void)? = nil
     var onDismiss: ((String) -> Void)? = nil
 
+    @Environment(\.swiftMinerAppearance) private var appearance
+
     private var state: PrimaryState { miner.primaryState }
     private var resolved: ResolvedPrimaryState? { miner.resolvedPrimaryState }
     private var firstActivityCampaign: Campaign? { activityCampaigns.first }
@@ -72,10 +74,13 @@ struct MinerStateCard: View {
                 Text("\(Int(progress.progressFraction * 100))%")
                     .font(.subheadline.weight(.bold))
                     .monospacedDigit()
-                    .foregroundStyle(.green)
+                    .foregroundStyle(appearance.activityAccent(.green))
             }
 
-            AnimatedLinearProgressView(value: progress.progressFraction, tint: .green)
+            AnimatedLinearProgressView(
+                value: progress.progressFraction,
+                tint: appearance.activityAccent(.green)
+            )
 
             HStack {
                 Text("\(progress.campaignName)")
@@ -322,6 +327,7 @@ struct MinerActivityCard: View {
 
     @Environment(NavigationModel.self) private var navigation
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.swiftMinerAppearance) private var appearance
     private var settings: Settings { .shared }
     @State private var activityRefreshPulse = Date()
     @State private var streamOverrideEditor: MinerStreamOverridePresentation?
@@ -346,7 +352,7 @@ struct MinerActivityCard: View {
     }
 
     private func effectiveAccent(_ color: Color) -> Color {
-        color
+        appearance.activityAccent(color)
     }
 
     var body: some View {

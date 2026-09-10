@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>You've Been Invited to SwiftMiner - SwiftMiner Help</title>
+    <meta name="description" content="Someone asked you to connect your Twitch account to their SwiftMiner. What it does, what they can and cannot see, the reasons to say no, and how to disconnect at any time.">
+    <link rel="canonical" href="https://swiftminer.app/help/invited-to-swiftminer/">
+    <meta property="og:type" content="article">
+    <meta property="og:site_name" content="SwiftMiner">
+    <meta property="og:url" content="https://swiftminer.app/help/invited-to-swiftminer/">
+    <meta property="og:title" content="You've Been Invited to SwiftMiner">
+    <meta property="og:description" content="What you are approving, what the person who invited you can and cannot see, and how to disconnect at any time.">
+    <meta property="og:image" content="https://swiftminer.app/assets/landing/og-image.jpg">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="You've Been Invited to SwiftMiner">
+    <meta name="twitter:description" content="What you are approving, what the person who invited you can and cannot see, and how to disconnect at any time.">
+    <meta name="twitter:image" content="https://swiftminer.app/assets/landing/og-image.jpg">
+    <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"SwiftMiner","item":"https://swiftminer.app/"},{"@type":"ListItem","position":2,"name":"Help","item":"https://swiftminer.app/help/"},{"@type":"ListItem","position":3,"name":"You've Been Invited","item":"https://swiftminer.app/help/invited-to-swiftminer/"}]}
+    </script>
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#f5f5f7">
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <link rel="stylesheet" href="../../assets/css/tailwind.css">
+    <link rel="stylesheet" href="../assets/css/kbase.css">
+    <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
+    <script src="../assets/js/search-index.js" defer></script>
+    <script src="../assets/js/search.js" defer></script>
+    <script src="../assets/js/kbase.js" defer></script>
+</head>
+<body>
+    <nav class="nav" aria-label="Main">
+        <div class="shell nav-inner">
+            <a class="brand" href="../">
+                <img src="../../assets/landing/swiftminer-icon.webp" alt="">
+                <span>SwiftMiner Help</span>
+            </a>
+            <div class="nav-actions">
+                <a class="nav-link" href="../">Help Home</a>
+                <a class="nav-link optional" href="../../">Overview</a>
+                <a class="nav-link" href="https://github.com/johnwatso/SwiftMiner/issues">Raise an Issue</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="shell">
+        <div class="breadcrumbs" aria-label="Breadcrumbs">
+            <a href="../">Help Home</a>
+            <span class="sep">/</span>
+            <span class="current">You've Been Invited</span>
+        </div>
+
+        <header class="article-header">
+            <h1>You've Been Invited to SwiftMiner</h1>
+            <p class="article-intro">Someone has asked you to connect your Twitch account to SwiftMiner running on their Mac. This page explains what that actually gives them, what it doesn't, the reasons you might want to say no, and how to disconnect at any time.</p>
+        </header>
+
+        <div class="kb-grid">
+            <main class="kb-content">
+
+                <h2 id="what-it-is">What SwiftMiner is</h2>
+                <p>SwiftMiner is an open-source macOS app that watches Twitch streams on your behalf so your account earns <strong>Twitch Drops</strong> — the in-game rewards publishers hand out for watching eligible streams. It runs on someone's Mac, talks directly to Twitch, and claims Drops as they complete.</p>
+                <p>It is not made by Twitch. It is a third-party app, and you can read every line of it on <a href="https://github.com/johnwatso/SwiftMiner" target="_blank" rel="noopener noreferrer">GitHub</a>.</p>
+
+                <h2 id="why-invited">Why you're being invited</h2>
+                <p>Drops are earned per Twitch account. The person who invited you already runs SwiftMiner and wants it to earn Drops for your account alongside theirs. If you accept:</p>
+                <ul>
+                    <li><strong>The rewards are yours.</strong> Drops are granted to your Twitch account. They cannot be transferred to the person who invited you.</li>
+                    <li><strong>You don't run anything.</strong> The watching happens on their Mac. You install nothing and leave no computer on.</li>
+                    <li><strong>It keeps going without you.</strong> Campaigns are picked up and claimed while you get on with other things.</li>
+                </ul>
+
+                <h2 id="what-you-approve">What you're actually approving</h2>
+                <p>You sign in on <strong>twitch.tv</strong>, not inside their app. SwiftMiner uses Twitch's official device flow, so:</p>
+                <ul>
+                    <li>Your Twitch password is never entered into, seen by, or stored by SwiftMiner.</li>
+                    <li>SwiftMiner requests <strong>no Twitch permissions by default</strong>. The single optional permission is read-only access to the list of channels you follow, and it is requested only if the operator has turned on Followed Streamer Prioritisation.</li>
+                    <li>Twitch issues an access token to their Mac, which SwiftMiner stores in that Mac's Keychain rather than in a file.</li>
+                </ul>
+                <p>Be clear-eyed about what that token is. Requesting no permissions limits what the app can <em>ask Twitch's API to do</em>. The token still represents your account on that machine until it is revoked or expires. That is the thing you are deciding to hand over.</p>
+
+                <h2 id="what-they-see">What they can and can't see</h2>
+                <p>Through SwiftMiner, the person who invited you can see:</p>
+                <ul>
+                    <li>Your Twitch display name and profile picture.</li>
+                    <li>Which campaigns and games their miner is working on for your account, and how far along it is.</li>
+                    <li>Which channel it is currently watching for you.</li>
+                    <li>The Drops it has claimed for you.</li>
+                </ul>
+                <p>They do not get:</p>
+                <ul>
+                    <li>Your password, email address or payment details.</li>
+                    <li>Your direct messages, chat history or whisper history.</li>
+                    <li>The ability to stream as you, change your settings, or buy anything.</li>
+                    <li>Access to your other Twitch sessions or devices.</li>
+                </ul>
+
+                <h2 id="reasons-to-decline">Reasons you might not want to accept</h2>
+                <p>This is the part worth reading slowly.</p>
+
+                <h3 id="trust">Do you trust the person — and their Mac?</h3>
+                <p>This is the real question, and no amount of engineering answers it for you. The rewards land on your account, but the credential lives on hardware you do not control and cannot inspect. If that Mac is compromised, or the person is not who you think they are, your token is exposed along with it. Treat an invitation the way you would treat lending someone a spare key: fine for people you actually know, not for strangers.</p>
+
+                <h3 id="unsolicited">Did you ask for this?</h3>
+                <p>An invitation that arrives out of the blue — from someone you don't know, or in a Discord server, or with any kind of urgency attached — deserves a no. A genuine invitation comes from someone who already told you it was coming.</p>
+
+                <h3 id="account-activity">It changes what your account looks like</h3>
+                <p>Your account will appear as a viewer in whatever channels are being watched for you, from their internet connection rather than yours. Your watch history, recommendations and channel points in those channels will reflect that activity. If you would rather your Twitch account only reflect things you actually watched, this isn't for you.</p>
+
+                <h3 id="link-sharing">The link works for whoever holds it</h3>
+                <p>An invitation link is temporary — it expires after 30 minutes and connects a single account — but until it expires, anyone holding it can use it. Don't forward it, and don't post it anywhere.</p>
+
+                <h3 id="visibility">You can't watch it from your side</h3>
+                <p>Once connected, there is no recipient-facing view in SwiftMiner. You cannot check from your Twitch account what it is doing on your behalf, unless the operator has enabled the optional <a href="../web-dashboard/">web dashboard</a> and given you a sign-in. Otherwise your options are to ask them, or to disconnect.</p>
+
+                <h2 id="limitations">What SwiftMiner can't do</h2>
+                <p>So that expectations are set honestly:</p>
+                <ul>
+                    <li><strong>Drops only.</strong> It does not chat, follow, subscribe, or farm channel points as a goal.</li>
+                    <li><strong>Subscriber-only campaigns need a subscription.</strong> Some Drops require an active paid sub to the channel; SwiftMiner cannot earn those without one. See <a href="../subscription-required-drops/">Subscription-Required Drops</a>.</li>
+                    <li><strong>Some rewards need an account link.</strong> Many publishers only deliver a Drop once your Twitch account is linked to their own game account. Only you can do that, on the publisher's website.</li>
+                    <li><strong>One channel at a time, per account.</strong> Your account watches a single eligible stream at a time.</li>
+                    <li><strong>It only runs while their Mac does.</strong> If their Mac sleeps or the app is quit, your miner stops until it comes back.</li>
+                    <li><strong>It cannot force a Drop.</strong> Twitch and the publisher decide what is granted; SwiftMiner only watches eligible streams and claims what becomes available.</li>
+                </ul>
+
+                <h2 id="disconnect">How to disconnect — at any time</h2>
+                <p>You never need the other person's permission to end this. Any one of these works:</p>
+                <ol>
+                    <li><strong>Ask them to remove the account in SwiftMiner.</strong> This is the cleanest route: removing an account revokes the token with Twitch and deletes it from their Mac in one step.</li>
+                    <li><strong>Revoke it yourself on Twitch.</strong> Go to <a href="https://www.twitch.tv/settings/connections" target="_blank" rel="noopener noreferrer">twitch.tv/settings/connections</a>, find the connection under your connected apps, and choose <strong>Disconnect</strong>. Depending on how the operator has configured SwiftMiner, the entry may not be labelled &ldquo;SwiftMiner&rdquo; — it is named after the Twitch application credentials the app was set up with.</li>
+                    <li><strong>End every session.</strong> If you cannot find the entry, or you simply want everything gone, open Twitch <strong>Settings &rsaquo; Security and Privacy</strong> and disconnect your other sessions. Changing your Twitch password and logging out other devices has the same effect.</li>
+                </ol>
+                <p>Revoking takes effect immediately: their SwiftMiner stops being able to watch for you, and shows the account as needing to reconnect. Drops already claimed to your account stay yours.</p>
+
+                <h2 id="deciding">Deciding</h2>
+                <p><strong>Accepting is reasonable if</strong> you know the person, you would be comfortable telling them to remove your account later, and you don't mind your Twitch account showing viewing activity you didn't do yourself.</p>
+                <p><strong>Decline if</strong> the invitation came from someone you don't know, you were pushed to accept quickly, you can't tell where the link came from, or you would feel awkward asking for it to be undone. Declining costs you nothing — the invitation simply expires.</p>
+
+            </main>
+
+            <aside class="kb-sidebar" aria-label="Sidebar">
+                <div class="sidebar-section">
+                    <h2 class="sidebar-title">On this page</h2>
+                    <ul class="toc-list">
+                        <li><a href="#what-it-is" class="toc-link">What SwiftMiner is</a></li>
+                        <li><a href="#why-invited" class="toc-link">Why you're invited</a></li>
+                        <li><a href="#what-you-approve" class="toc-link">What you're approving</a></li>
+                        <li><a href="#what-they-see" class="toc-link">What they can see</a></li>
+                        <li><a href="#reasons-to-decline" class="toc-link">Reasons to decline</a></li>
+                        <li><a href="#limitations" class="toc-link">What it can't do</a></li>
+                        <li><a href="#disconnect" class="toc-link">How to disconnect</a></li>
+                        <li><a href="#deciding" class="toc-link">Deciding</a></li>
+                    </ul>
+                </div>
+
+                <div class="sidebar-section">
+                    <h2 class="sidebar-title">Related Articles</h2>
+                    <ul class="related-links">
+                        <li><a href="../security-privacy/"><i class="ph-bold ph-shield-check"></i> Security &amp; Privacy</a></li>
+                        <li><a href="../getting-started/"><i class="ph-bold ph-rocket-launch"></i> Getting Started</a></li>
+                        <li><a href="../subscription-required-drops/"><i class="ph-bold ph-crown-simple"></i> Subscription-Required Drops</a></li>
+                        <li><a href="../multi-account-twitch-drops/"><i class="ph-bold ph-users-three"></i> Multiple Accounts</a></li>
+                    </ul>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="shell">
+            <span>SwiftMiner Help · Published September 10, 2026</span>
+            <span><a class="nav-link" href="../../release-notes/">Release Notes</a> · <a class="nav-link" href="https://github.com/johnwatso/SwiftMiner">GitHub</a></span>
+        </div>
+    </footer>
+</body>
+</html>

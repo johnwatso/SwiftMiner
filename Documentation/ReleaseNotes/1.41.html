@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SwiftMiner 1.41 - Release Notes</title>
-  <meta name="description" content="Release notes for SwiftMiner 1.41: share secure friend setup links, arrange miners in your own order, configure the status dock, and avoid channels that credit nothing.">
+  <meta name="description" content="Release notes for SwiftMiner 1.41: choose Atomic Purple, share secure friend setup links, arrange miners in your own order, configure the status dock, and avoid channels that credit nothing.">
   <link rel="canonical" href="https://swiftminer.app/release-notes/1.41.html">
   <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
@@ -26,8 +26,16 @@
 <body>
   <main>
     <h1>SwiftMiner 1.41</h1>
-    <p class="meta">Version 1.41 &middot; Build 2026090915</p>
-    <p class="intro">Two of the fixes here each cost hours of watching that earned nothing, and both were invisible while they happened &mdash; a miner sitting on a stream that had already ended, and recovery quietly switched off on any campaign whose reward is offered at more than one watch time. The rest of the release is about making a multi-account SwiftMiner easier to run: invite a friend without handling their credentials, put miners in an order of your choosing, place the status dock where it belongs, and see which mining engine is running.</p>
+    <p class="meta">Version 1.41 &middot; Build 2026091011</p>
+    <p class="intro">Two of the fixes here each cost hours of watching that earned nothing, and both were invisible while they happened &mdash; a miner sitting on a stream that had already ended, and recovery quietly switched off on any campaign whose reward is offered at more than one watch time. The rest of the release is about making a multi-account SwiftMiner easier and more personal to run: choose Atomic Purple, invite a friend without handling their credentials, put miners in an order of your choosing, place the status dock where it belongs, and see which mining engine is running.</p>
+
+    <section>
+      <h2>&#128156; Atomic Purple</h2>
+      <ul>
+        <li>General settings now carry a theme: SwiftMiner&rsquo;s Standard look, or Atomic Purple. Atomic Purple paints the window, sidebar, cards, selection and floating status dock in violet, and takes light or dark from your Mac rather than carrying a switch of its own &mdash; change the system appearance and the theme changes with it. Game artwork keeps its own colour, as do the green, orange and red operational states; only the mining progress bar and its percentage move to the theme&rsquo;s purple.</li>
+        <li>Atomic Purple follows macOS accessibility preferences: Reduce Transparency turns the floating status dock and the Drops panels opaque, Increase Contrast strengthens surface edges, and the existing Reduce Motion behaviour remains intact. The choice applies immediately and travels with a settings backup.</li>
+      </ul>
+    </section>
 
     <section>
       <h2>&#128029; Bug fixes</h2>
@@ -44,9 +52,12 @@
     <section>
       <h2>&#128279; Bring a Friend</h2>
       <ul>
-        <li>Adding a first Twitch account still goes straight to Twitch. Once SwiftMiner already has an account, Add Account now asks whether the next miner is being set up on this Mac or belongs to a friend, and explains what will happen before anything opens or gets shared.</li>
-        <li>A friend can be sent a polished SwiftMiner invitation through the native macOS share sheet. A live 30-minute countdown shows exactly how long it remains valid, then offers Send Again to create a fresh invitation. They approve their own Twitch account from their own device, while SwiftMiner waits on the host Mac and adds the miner automatically. No Discord integration or Web Dashboard is required.</li>
-        <li>The invitation names the selected operator account, or the first account when no operator has been chosen, and opens a focused SwiftMiner setup page with a branded link preview, one clear Twitch connection action and a reminder that credentials are never shared. The initial Mail or Messages content no longer exposes Twitch&rsquo;s activation URL, device code or technical setup instructions.</li>
+        <li>Adding a first Twitch account still goes straight to Twitch. Once SwiftMiner already has an account, Add Account offers three clear paths: set it up on this Mac, create an invitation to send yourself, or invite someone directly through SwiftBot when the integration is enabled.</li>
+        <li>A friend can be sent a polished SwiftMiner invitation three ways: Mail opens a branded, ready-to-send draft in Apple Mail, Share hands the link to the native macOS share sheet for Messages, AirDrop or anywhere else, and Invite via SwiftBot lists people from the connected Discord server who do not already have a SwiftMiner account. A live 30-minute countdown shows exactly how long the invitation remains valid, then offers Send Again to create a fresh one. They approve their own Twitch account from their own device, while SwiftMiner waits on the host Mac and adds the miner automatically.</li>
+        <li>The Mail invitation arrives as a real invitation rather than a pasted link: a subject line naming the inviter, the SwiftMiner icon, one clear Connect to SwiftMiner button, and the reminder that they sign in directly with Twitch. SwiftMiner never sends it &mdash; the draft opens unaddressed for you to review and send yourself.</li>
+        <li>Add Account and the invitation flow were rebuilt around the current macOS design language: the same softly rounded grouped surfaces used throughout SwiftMiner&rsquo;s Settings, system-supplied sheet material and controls, clear default actions, and restrained accent colour. The invitation code and its countdown now sit at the top of the screen, the connected account appears in place of the waiting indicator, and choosing a SwiftBot recipient stays within the same modal instead of stacking another sheet on top.</li>
+        <li>Invitations now link to a page written for the person receiving one: what connecting actually approves, what the inviter can and cannot see, honest reasons to decline, what SwiftMiner cannot do, and how to revoke the Twitch connection themselves at any time. It is linked from the invitation page, the Mail invitation and the SwiftBot message.</li>
+        <li>The invitation names the selected operator account, or the first account when no operator has been chosen, and opens a focused SwiftMiner setup page with a branded link preview, one clear Twitch connection action and a reminder that credentials are never shared. Nothing SwiftMiner shares exposes Twitch&rsquo;s activation URL, device code or technical setup instructions.</li>
       </ul>
     </section>
 

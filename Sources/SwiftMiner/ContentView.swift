@@ -18,6 +18,7 @@ struct ContentView: View {
         }
         .background(WindowZoomConfigurator())
         .frame(minWidth: 800, minHeight: 600)
+        .swiftMinerAppearance(style: settings.appearanceStyle)
         .sheet(isPresented: $nav.showAddAccountSheet) {
             AuthRequiredSheet(
                 isPresented: $nav.showAddAccountSheet,
@@ -43,8 +44,7 @@ struct ContentView: View {
 
     private var detailContainer: some View {
         ZStack {
-            Color(nsColor: .windowBackgroundColor)
-                .ignoresSafeArea()
+            LiquidGlassBackdrop()
 
             detailView
                 .id(navigation.selectedItem ?? .overview)
