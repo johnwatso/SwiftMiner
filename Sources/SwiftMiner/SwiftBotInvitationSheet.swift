@@ -201,12 +201,11 @@ struct SwiftBotInvitationSheet: View {
         isSending = true
         errorMessage = nil
 
-        let minutes = max(1, Int(ceil(invitation.expiresAt.timeIntervalSinceNow / 60)))
         let sent = await navigation.swiftBotConnectionService.sendFriendInvitationDM(
             to: member.id,
             invitationURL: invitation.invitationURL.absoluteString,
             inviterDisplayName: invitation.inviterDisplayName,
-            expiresInMinutes: minutes
+            expiresAt: invitation.expiresAt
         )
 
         isSending = false

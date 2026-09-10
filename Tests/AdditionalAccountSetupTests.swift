@@ -243,7 +243,7 @@ final class SwiftBotFriendInvitationTests: XCTestCase {
             to: "123456789012345678",
             invitationURL: invitation.invitationURL.absoluteString,
             inviterDisplayName: invitation.inviterDisplayName,
-            expiresInMinutes: 30
+            expiresAt: Date().addingTimeInterval(30 * 60)
         )
         XCTAssertTrue(sent)
 
@@ -252,10 +252,30 @@ final class SwiftBotFriendInvitationTests: XCTestCase {
         XCTAssertEqual(request?.debug, false)
         XCTAssertEqual(request?.inviterDisplayName, "@operator")
         XCTAssertEqual(request?.activationExpiresInMinutes, 30)
+        XCTAssertNotNil(request?.activationExpiresAt)
         XCTAssertEqual(request?.activationURL, invitation.invitationURL.absoluteString)
         XCTAssertEqual(request?.helpURL, "https://swiftminer.app/help/invited-to-swiftminer/")
         XCTAssertNil(request?.activationCode)
         XCTAssertFalse(request?.activationURL?.contains("twitch.tv") ?? true)
+    }
+
+    /// SwiftBot decodes `activation_expires_at` with a plain `try` against
+    /// `String`. A numeric date here would fail its decode of the whole payload,
+    /// so the DM would vanish rather than merely lose its countdown.
+    func testExpiryIsSentAsAnISO8601StringNotANumber() throws {
+        let request = SwiftBotDMRequest(
+            messageType: .friendInvitation,
+            debug: false,
+            activationExpiresAt: Date(timeIntervalSince1970: 1_800_000_000)
+        )
+        let json = try XCTUnwrap(
+            try JSONSerialization.jsonObject(
+                with: RestSwiftBotConnectionService.dmEncoder.encode(request)
+            ) as? [String: Any]
+        )
+
+        let expiry = try XCTUnwrap(json["activation_expires_at"] as? String)
+        XCTAssertEqual(expiry, "2027-01-15T08:00:00Z")
     }
 
     func testFriendInvitationDMEncodesTheInviterForSwiftBot() throws {

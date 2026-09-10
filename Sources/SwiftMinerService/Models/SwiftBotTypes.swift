@@ -123,6 +123,10 @@ public struct SwiftBotDMRequest: Codable, Sendable, Equatable {
     public let priorityGames: [String]
     public let activationCode: String?
     public let activationExpiresInMinutes: Int?
+    /// Absolute expiry instant. SwiftBot prefers this over the minute count and
+    /// renders Discord's `<t:UNIX:R>`, which keeps counting down in the DM
+    /// instead of freezing at whatever it was when the message was sent.
+    public let activationExpiresAt: Date?
     public let activationURL: String?
     public let affectedGame: String?
     public let campaignName: String?
@@ -162,6 +166,7 @@ public struct SwiftBotDMRequest: Codable, Sendable, Equatable {
         priorityGames: [String] = [],
         activationCode: String? = nil,
         activationExpiresInMinutes: Int? = nil,
+        activationExpiresAt: Date? = nil,
         activationURL: String? = nil,
         affectedGame: String? = nil,
         campaignName: String? = nil,
@@ -185,6 +190,7 @@ public struct SwiftBotDMRequest: Codable, Sendable, Equatable {
         self.priorityGames = priorityGames
         self.activationCode = activationCode
         self.activationExpiresInMinutes = activationExpiresInMinutes
+        self.activationExpiresAt = activationExpiresAt
         self.activationURL = activationURL
         self.affectedGame = affectedGame
         self.campaignName = campaignName
@@ -210,6 +216,7 @@ public struct SwiftBotDMRequest: Codable, Sendable, Equatable {
         case priorityGames = "priority_games"
         case activationCode = "activation_code"
         case activationExpiresInMinutes = "activation_expires_in_minutes"
+        case activationExpiresAt = "activation_expires_at"
         case activationURL = "activation_url"
         case affectedGame = "affected_game"
         case campaignName = "campaign_name"
@@ -376,14 +383,18 @@ public extension SwiftBotConnectionService {
         to discordUserId: String,
         invitationURL: String,
         inviterDisplayName: String,
-        expiresInMinutes: Int
+        expiresAt: Date
     ) async -> Bool {
-        await sendEventDM(
+        // Both forms go out: the absolute instant drives SwiftBot's live
+        // countdown, and the minute count keeps older builds correct.
+        let minutes = max(1, Int(ceil(expiresAt.timeIntervalSinceNow / 60)))
+        return await sendEventDM(
             to: discordUserId,
             request: SwiftBotDMRequest(
                 messageType: .friendInvitation,
                 debug: false,
-                activationExpiresInMinutes: expiresInMinutes,
+                activationExpiresInMinutes: minutes,
+                activationExpiresAt: expiresAt,
                 activationURL: invitationURL,
                 helpURL: SwiftMinerHelpLink.invitation,
                 inviterDisplayName: inviterDisplayName
