@@ -63,6 +63,45 @@
         <div class="kb-grid">
             <main class="kb-content">
 
+                <h2 id="at-a-glance">What accepting means</h2>
+                <div class="fact-grid">
+                    <div class="fact-card is-yours">
+                        <div class="fact-head">
+                            <i class="ph-bold ph-gift"></i>
+                            <h3>What you get</h3>
+                        </div>
+                        <ul class="fact-list">
+                            <li><i class="ph-bold ph-trophy"></i><span><strong>The Drops.</strong> Rewards are granted to your Twitch account and cannot be transferred to anyone else.</span></li>
+                            <li><i class="ph-bold ph-moon"></i><span><strong>Nothing to run.</strong> No app to install, no computer to leave on.</span></li>
+                            <li><i class="ph-bold ph-power"></i><span><strong>An exit.</strong> You can revoke it yourself at Twitch, without asking them.</span></li>
+                        </ul>
+                    </div>
+
+                    <div class="fact-card is-theirs">
+                        <div class="fact-head">
+                            <i class="ph-bold ph-key"></i>
+                            <h3>What they get</h3>
+                        </div>
+                        <ul class="fact-list">
+                            <li><i class="ph-bold ph-key"></i><span><strong>A Twitch token</strong> for your account, stored in their Mac's Keychain until you revoke it.</span></li>
+                            <li><i class="ph-bold ph-eye"></i><span><strong>A view of the mining.</strong> Your username, the campaigns being farmed and what has been claimed.</span></li>
+                            <li><i class="ph-bold ph-globe"></i><span><strong>Watch activity on your account,</strong> from their internet connection rather than yours.</span></li>
+                        </ul>
+                    </div>
+
+                    <div class="fact-card is-never">
+                        <div class="fact-head">
+                            <i class="ph-bold ph-shield-check"></i>
+                            <h3>What they never get</h3>
+                        </div>
+                        <ul class="fact-list">
+                            <li><i class="ph-bold ph-lock-key"></i><span><strong>Your password,</strong> email address or payment details.</span></li>
+                            <li><i class="ph-bold ph-chat-circle"></i><span><strong>Your messages.</strong> No DMs, whispers or chat history.</span></li>
+                            <li><i class="ph-bold ph-prohibit"></i><span><strong>Control of your account.</strong> They cannot stream as you, change settings or buy anything.</span></li>
+                        </ul>
+                    </div>
+                </div>
+
                 <h2 id="what-it-is">What SwiftMiner is</h2>
                 <p>SwiftMiner is an open-source macOS app that watches Twitch streams on your behalf so your account earns <strong>Twitch Drops</strong> — the in-game rewards publishers hand out for watching eligible streams. It runs on someone's Mac, talks directly to Twitch, and claims Drops as they complete.</p>
                 <p>It is not made by Twitch. It is a third-party app, and you can read every line of it on <a href="https://github.com/johnwatso/SwiftMiner" target="_blank" rel="noopener noreferrer">GitHub</a>.</p>
@@ -139,8 +178,26 @@
                 <p>Revoking takes effect immediately: their SwiftMiner stops being able to watch for you, and shows the account as needing to reconnect. Drops already claimed to your account stay yours.</p>
 
                 <h2 id="deciding">Deciding</h2>
-                <p><strong>Accepting is reasonable if</strong> you know the person, you would be comfortable telling them to remove your account later, and you don't mind your Twitch account showing viewing activity you didn't do yourself.</p>
-                <p><strong>Decline if</strong> the invitation came from someone you don't know, you were pushed to accept quickly, you can't tell where the link came from, or you would feel awkward asking for it to be undone. Declining costs you nothing — the invitation simply expires.</p>
+                <div class="verdict-grid">
+                    <div class="verdict is-accept">
+                        <h3><i class="ph-bold ph-thumbs-up"></i>Accepting is reasonable if…</h3>
+                        <ul>
+                            <li><i class="ph-bold ph-check"></i><span>You know the person, and you were expecting this.</span></li>
+                            <li><i class="ph-bold ph-check"></i><span>You'd be comfortable telling them to remove your account later.</span></li>
+                            <li><i class="ph-bold ph-check"></i><span>You don't mind your Twitch account showing viewing activity you didn't do yourself.</span></li>
+                        </ul>
+                    </div>
+
+                    <div class="verdict is-decline">
+                        <h3><i class="ph-bold ph-thumbs-down"></i>Decline if…</h3>
+                        <ul>
+                            <li><i class="ph-bold ph-x"></i><span>It came from someone you don't know, or you can't tell where the link came from.</span></li>
+                            <li><i class="ph-bold ph-x"></i><span>You were pushed to accept quickly.</span></li>
+                            <li><i class="ph-bold ph-x"></i><span>You'd feel awkward asking for it to be undone.</span></li>
+                        </ul>
+                    </div>
+                </div>
+                <p>Declining costs you nothing — the invitation simply expires.</p>
 
             </main>
 
@@ -148,6 +205,7 @@
                 <div class="sidebar-section">
                     <h2 class="sidebar-title">On this page</h2>
                     <ul class="toc-list">
+                        <li><a href="#at-a-glance" class="toc-link">What accepting means</a></li>
                         <li><a href="#what-it-is" class="toc-link">What SwiftMiner is</a></li>
                         <li><a href="#why-invited" class="toc-link">Why you're invited</a></li>
                         <li><a href="#what-you-approve" class="toc-link">What you're approving</a></li>
