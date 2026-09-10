@@ -429,6 +429,12 @@ struct AuthRequiredSheet: View {
     /// What the screen becomes once SwiftBot has actually delivered it. The
     /// countdown above and the waiting row below both keep running — the
     /// invitation is sent, not finished.
+    ///
+    /// Deliberately terminal: there is no route back to the delivery options.
+    /// An invitation connects exactly one account, so offering to send this same
+    /// one again would put two recipients in a race the loser experiences as a
+    /// dead link. The honest ways on are the two that already exist — they
+    /// connect, or it expires and "Create a New Invitation" mints a fresh code.
     private func sentViaSwiftBot(recipient: SwiftBotDiscordUser) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 12) {
@@ -458,13 +464,8 @@ struct AuthRequiredSheet: View {
                     .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1)
             }
             .accessibilityElement(children: .combine)
-
-            // Not a dead end: the DM may never be read, and the same invitation
-            // is still valid through any other channel until it expires.
-            Button("Send another way") { swiftBotRecipient = nil }
-                .buttonStyle(.link)
-                .font(.callout)
         }
+        .accessibilityElement(children: .contain)
     }
 
     /// Code and countdown carry the weight here, so neither needs a container.
