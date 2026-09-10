@@ -809,7 +809,7 @@ final class MinerActivitySnapshotTests: XCTestCase {
         )
 
         XCTAssertEqual(snapshot.statusText, "Looking for Streams")
-        XCTAssertEqual(snapshot.now.title, "No eligible stream live")
+        XCTAssertEqual(snapshot.now.title, "007 First Light")
         XCTAssertEqual(snapshot.now.campaignId, creators.id)
         XCTAssertFalse(snapshot.now.id.hasPrefix("subscription-"))
     }
@@ -842,11 +842,11 @@ final class MinerActivitySnapshotTests: XCTestCase {
             includesBadgeAndEmoteCampaigns: false
         )
 
-        XCTAssertEqual(snapshot.now.title, "No eligible stream live")
+        XCTAssertEqual(snapshot.now.title, "Skull and Bones")
         XCTAssertEqual(snapshot.now.subtitle, campaign.name)
         XCTAssertEqual(
             snapshot.now.detail,
-            "SwiftMiner will automatically start earning when an eligible Skull and Bones stream goes live."
+            "Waiting for an eligible live stream."
         )
         XCTAssertEqual(snapshot.now.campaignId, campaign.id)
     }

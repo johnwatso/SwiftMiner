@@ -199,8 +199,9 @@ public final class MinerManager {
                 return gameName.map { "Watching \($0)" } ?? "Watching"
             case .claiming:
                 return "Claiming"
-            case .lookingForStreams:
-                return "Waiting — No live stream"
+            case .lookingForStreams(let gameName):
+                return gameName.map { "Waiting for an eligible live \($0) stream" }
+                    ?? "Waiting for an eligible live stream"
             case .upToDate:
                 return "Drops complete"
             }
@@ -320,7 +321,7 @@ public final class MinerManager {
             case .fetchingCampaigns: return "Waiting — Refreshing campaigns"
             case .watching: return "Watching"
             case .claiming: return "Claiming"
-            case .waitingForStream: return "Waiting — No live stream"
+            case .waitingForStream: return "Waiting for an eligible live stream"
             case .paused: return "Paused"
             case .error: return "Blocked — Needs attention"
             case .idleNoEligibleCampaigns: return "Idle — No eligible campaigns"
