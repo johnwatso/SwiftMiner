@@ -133,6 +133,7 @@
 		792074BDC73160F55F5F2539 /* InvitationEmailBody.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D22E6502B22EC334D3A9CAD /* InvitationEmailBody.swift */; };
 		7A285A522B13348935F669DD /* AdditionalAccountSetupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA678757C3ECC80291A42652 /* AdditionalAccountSetupTests.swift */; };
 		7C8CE0DBEFD484DBD5371F13 /* GameMatchIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73CC30EE7E88151928E8140C /* GameMatchIndex.swift */; };
+		7CC7BD7CDBF9A4D20CDA076A /* SafariQueryHashDebugBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCC5FFB44775707411D3E339 /* SafariQueryHashDebugBridge.swift */; };
 		7CDC0528B7FE59F8756FFC72 /* Campaign.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6C4D73F0D9BE5537D245A73 /* Campaign.swift */; };
 		7DF44A97293F3825BC006F7C /* MinerManager+GameState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D15B4A8E728CF157B9C0866 /* MinerManager+GameState.swift */; };
 		7E402CB3D782A91832915A52 /* CampaignMetadataSharingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2CF7310267C5DADE83E23CE /* CampaignMetadataSharingTests.swift */; };
@@ -582,6 +583,7 @@
 		B867787CA22A6074C1C312B7 /* UnattendedHealthModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnattendedHealthModel.swift; sourceTree = "<group>"; };
 		B973441312A34CB1FD0E87F2 /* PrimaryStateResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrimaryStateResolver.swift; sourceTree = "<group>"; };
 		B9F957F048CC5621019DC58A /* SettingsSupportingTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsSupportingTypes.swift; sourceTree = "<group>"; };
+		BCC5FFB44775707411D3E339 /* SafariQueryHashDebugBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariQueryHashDebugBridge.swift; sourceTree = "<group>"; };
 		BD3A3FA3D2C53873D6817D19 /* TwitchAvatarStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwitchAvatarStore.swift; sourceTree = "<group>"; };
 		BD604060A32F79AEC14A26B9 /* AvatarImageCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarImageCache.swift; sourceTree = "<group>"; };
 		BD8985A46BE58B3140B0E681 /* MinerAttentionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinerAttentionTests.swift; sourceTree = "<group>"; };
@@ -884,6 +886,7 @@
 				C4ABAC3151CCAA6E2AF5C27C /* OverviewView+MinerActivity.swift */,
 				1FBC0CAD455541E2EDEF38BA /* OverviewView+SystemState.swift */,
 				104E69E6B6B6F84B8E2B240F /* ResourceUsageMonitor.swift */,
+				BCC5FFB44775707411D3E339 /* SafariQueryHashDebugBridge.swift */,
 				FE95137E28DEA812A2D3D1E7 /* Settings.swift */,
 				02640CD508B897F6E537B77B /* Settings+Backup.swift */,
 				27D4F1E10169D583B5A8B923 /* Settings+DiscordNotifications.swift */,
@@ -1604,6 +1607,7 @@
 				CEEC961DFEA7EA4C4D9ECF8B /* OverviewView+MinerActivity.swift in Sources */,
 				D90BCCFFA412217D391D8588 /* OverviewView+SystemState.swift in Sources */,
 				D6CC430AD2446A844C8FB57B /* ResourceUsageMonitor.swift in Sources */,
+				7CC7BD7CDBF9A4D20CDA076A /* SafariQueryHashDebugBridge.swift in Sources */,
 				17CABFD758C91B87B85581F7 /* Settings+Backup.swift in Sources */,
 				03BDA5C5DFBB81EE3F5DCD40 /* Settings+DiscordNotifications.swift in Sources */,
 				8321014D72F8520DFE67FB7D /* Settings+GamePreferences.swift in Sources */,
@@ -1969,10 +1973,11 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = Sources/SwiftMinerSafariExtension/SwiftMinerSafariExtensionDebug.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 2026091211;
-				ENABLE_APP_SANDBOX = NO;
+				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = Sources/SwiftMinerSafariExtension/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (

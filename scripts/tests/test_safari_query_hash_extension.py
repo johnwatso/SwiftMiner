@@ -16,6 +16,8 @@ SWIFT_HANDLER = (
     ROOT / "Sources" / "SwiftMinerSafariExtension" / "SafariWebExtensionHandler.swift"
 )
 CORE_HASHES = ROOT / "Sources" / "SwiftMinerCore" / "Utils" / "GQLHashes.swift"
+PROJECT = ROOT / "project.yml"
+ADVANCED_SETTINGS = ROOT / "Sources" / "SwiftMiner" / "AdvancedSettingsPane.swift"
 
 
 def allowed_operations(source: str) -> set[str]:
@@ -25,6 +27,28 @@ def allowed_operations(source: str) -> set[str]:
 
 
 class SafariQueryHashExtensionTests(unittest.TestCase):
+    def test_debug_extension_is_sandboxed_without_protected_app_group(self) -> None:
+        project = PROJECT.read_text()
+        debug_entitlements = (
+            ROOT
+            / "Sources"
+            / "SwiftMinerSafariExtension"
+            / "SwiftMinerSafariExtensionDebug.entitlements"
+        ).read_text()
+
+        self.assertIn("ENABLE_APP_SANDBOX: YES", project)
+        self.assertIn("SwiftMinerSafariExtensionDebug.entitlements", project)
+        self.assertIn("com.apple.security.app-sandbox", debug_entitlements)
+        self.assertNotIn("com.apple.security.application-groups", debug_entitlements)
+
+    def test_check_action_opens_both_supported_twitch_pages(self) -> None:
+        source = ADVANCED_SETTINGS.read_text()
+
+        self.assertIn('Button("Check Hash Values in Safari")', source)
+        self.assertIn('"https://www.twitch.tv/drops/campaigns"', source)
+        self.assertIn('"https://www.twitch.tv/drops/inventory"', source)
+        self.assertIn("store.automaticDiscoveryEnabled = true", source)
+
     def test_manifest_has_only_the_required_surface(self) -> None:
         manifest = json.loads((RESOURCES / "manifest.json").read_text())
 
