@@ -6,6 +6,9 @@ import SafariServices
 /// never receives or persists request headers, cookies, variables or responses.
 final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
     private static let suiteName = "group.com.swiftminer.shared"
+    private static let debugNotificationName = Notification.Name(
+        "com.swiftminer.debug.query-hash-candidate"
+    )
     private static let automaticDiscoveryKey = "TwitchQueryHash.automaticDiscovery"
     private static let allowedOperations: Set<String> = [
         "DirectoryGameRedirect",
@@ -38,18 +41,35 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
               let operation = message["operationName"] as? String,
               Self.allowedOperations.contains(operation),
               let hash = message["sha256Hash"] as? String,
-              Self.isValidHash(hash),
-              let defaults = Self.sharedDefaults,
-              defaults.bool(forKey: Self.automaticDiscoveryKey) else {
+              Self.isValidHash(hash) else {
             return false
         }
 
+        #if DEBUG
+        // Sandboxed local builds cannot use the Release App Group when signed
+        // ad hoc. A distributed notification may carry no userInfo from a
+        // sandbox, so the two allow-listed values travel in the object string.
+        DistributedNotificationCenter.default().postNotificationName(
+            Self.debugNotificationName,
+            object: "\(operation):\(hash)",
+            userInfo: nil,
+            options: [.deliverImmediately]
+        )
+        // The extension cannot synchronously know whether discovery is enabled
+        // in the host. Declining keeps the background worker willing to retry.
+        return false
+        #else
+        guard let defaults = Self.sharedDefaults,
+              defaults.bool(forKey: Self.automaticDiscoveryKey) else {
+            return false
+        }
         defaults.set(hash, forKey: "TwitchQueryHash.candidate.\(operation)")
         defaults.set(
             Date().timeIntervalSince1970,
             forKey: "TwitchQueryHash.candidateDate.\(operation)"
         )
         return true
+        #endif
     }
 
     private static func isValidHash(_ value: String) -> Bool {
@@ -58,14 +78,7 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
         }
     }
 
-    /// Local Debug builds deliberately carry no protected App Group entitlement,
-    /// so they can be built with Xcode's ad-hoc identity. The unsandboxed test
-    /// extension writes into the containing app's preferences domain instead.
     private static var sharedDefaults: UserDefaults? {
-        #if DEBUG
-        UserDefaults(suiteName: "com.swiftminer.app")
-        #else
         UserDefaults(suiteName: suiteName)
-        #endif
     }
 }

@@ -25,6 +25,7 @@ struct AdvancedSettingsView: View {
     @State private var selectedQuery: GQLQuery = .viewerDropsDashboard
     @State private var queryHashDraft = ""
     @State private var queryHashMessage: String?
+    @State private var queryHashCheckMessage: String?
     @State private var queryHashStateVersion = 0
     @State private var automaticQueryHashDiscovery = false
 
@@ -135,9 +136,18 @@ struct AdvancedSettingsView: View {
                     queryHashStateVersion &+= 1
                 }
 
-            SettingsSecondaryText("Optional. The SwiftMiner Safari extension watches only Twitch Drops request names and hashes. It never keeps cookies, tokens, variables, or responses.")
+            SettingsSecondaryText("SwiftMiner can open the Twitch Drops pages and collect every supported hash Twitch uses there. The extension never keeps cookies, tokens, variables, or responses.")
 
-            DisclosureGroup("Manual compatibility override") {
+            Button("Check Hash Values in Safari") {
+                checkQueryHashesInSafari()
+            }
+            .buttonStyle(.borderedProminent)
+
+            if let queryHashCheckMessage {
+                SettingsSecondaryText(queryHashCheckMessage, tint: .green)
+            }
+
+            DisclosureGroup("Emergency manual override") {
                 Picker("Twitch query", selection: $selectedQuery) {
                     ForEach(GQLQuery.allCases) { query in
                         Text(query.displayName).tag(query)
@@ -191,9 +201,6 @@ struct AdvancedSettingsView: View {
             }
 
             HStack(spacing: 8) {
-                Button("Open Twitch Drops in Safari") {
-                    openTwitchDropsInSafari()
-                }
                 Button("Safari Extension Settings\u{2026}") {
                     openSafariExtensionSettings()
                 }
@@ -303,16 +310,26 @@ struct AdvancedSettingsView: View {
         SafariQueryHashExtensionBridge.showPreferences()
     }
 
-    private func openTwitchDropsInSafari() {
-        guard let url = URL(string: "https://www.twitch.tv/drops/campaigns") else { return }
+    private func checkQueryHashesInSafari() {
+        let store = TwitchQueryHashStore.standard
+        store.automaticDiscoveryEnabled = true
+        automaticQueryHashDiscovery = true
+        queryHashCheckMessage = "Opened Campaigns and Inventory. If Safari shows a badge on the extension, allow twitch.tv once; collection and validation are automatic after that."
+        queryHashStateVersion &+= 1
+
+        let urls = [
+            "https://www.twitch.tv/drops/campaigns",
+            "https://www.twitch.tv/drops/inventory"
+        ].compactMap(URL.init(string:))
+        guard !urls.isEmpty else { return }
         guard let safari = NSWorkspace.shared.urlForApplication(
             withBundleIdentifier: "com.apple.Safari"
         ) else {
-            NSWorkspace.shared.open(url)
+            urls.forEach { NSWorkspace.shared.open($0) }
             return
         }
         NSWorkspace.shared.open(
-            [url],
+            urls,
             withApplicationAt: safari,
             configuration: NSWorkspace.OpenConfiguration()
         )

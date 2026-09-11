@@ -73,6 +73,9 @@ public final class AppModel {
     private weak var minerManager: MinerManager?
     private var badgeRefreshTask: Task<Void, Never>?
     private var lastAppliedBadgeCount: Int?
+    #if DEBUG
+    private let safariQueryHashBridge: SafariQueryHashDebugBridge
+    #endif
 
     // MARK: - Init
 
@@ -80,6 +83,9 @@ public final class AppModel {
         self.clientId = clientId
         self.engine = MinerEngine(clientId: clientId)
         self.minerManager = minerManager
+        #if DEBUG
+        self.safariQueryHashBridge = SafariQueryHashDebugBridge()
+        #endif
     }
 
     // MARK: - Lifecycle

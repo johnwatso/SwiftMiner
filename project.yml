@@ -57,15 +57,16 @@ targets:
         SWIFT_VERSION: "6.0"
         SWIFT_STRICT_CONCURRENCY: complete
         CODE_SIGN_STYLE: Automatic
-        ENABLE_APP_SANDBOX: NO
+        ENABLE_APP_SANDBOX: YES
         ENABLE_HARDENED_RUNTIME: YES
         APPLICATION_EXTENSION_API_ONLY: YES
         SKIP_INSTALL: YES
         OTHER_LDFLAGS: -framework SafariServices
       configs:
+        Debug:
+          CODE_SIGN_ENTITLEMENTS: Sources/SwiftMinerSafariExtension/SwiftMinerSafariExtensionDebug.entitlements
         Release:
           CODE_SIGN_ENTITLEMENTS: Sources/SwiftMinerSafariExtension/SwiftMinerSafariExtension.entitlements
-          ENABLE_APP_SANDBOX: YES
 
   SwiftMiner:
     type: application

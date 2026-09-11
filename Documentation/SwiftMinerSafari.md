@@ -4,8 +4,8 @@ SwiftMiner can recover from a Twitch persisted-query hash change without a new a
 release. Settings → Advanced → Twitch Compatibility exposes two paths:
 
 - paste a 64-character hash for one known operation; or
-- enable the bundled Safari Web Extension and let it observe hashes used by Twitch's
-  own Drops pages.
+- choose **Check Hash Values in Safari** and let the bundled Safari Web Extension
+  observe hashes used by Twitch's own Campaigns and Inventory pages.
 
 Both paths save an untrusted **candidate**, not an active override. SwiftMiner tries
 that candidate through its normal Twitch client. A response that recognizes the
@@ -32,9 +32,10 @@ are never forwarded or stored. Automatic discovery is off by default.
 
 ## Test an unsigned Debug build locally
 
-The Debug extension deliberately uses the containing app's preferences domain and
-does not require the production App Group entitlement. That keeps local development
-compatible with Xcode's ad-hoc **Sign to Run Locally** identity.
+Safari requires the Debug extension to run in its sandbox. App Groups cannot be
+attached to Xcode's ad-hoc **Sign to Run Locally** identity, so local builds pass the
+same allow-listed operation/hash pair to the running SwiftMiner app with a local
+notification. Release builds use the signed App Group described below.
 
 1. Generate and build the project:
 
@@ -47,8 +48,11 @@ compatible with Xcode's ad-hoc **Sign to Run Locally** identity.
 3. In Safari, enable **Develop → Allow Unsigned Extensions**. Safari may require you
    to enable its Develop menu first in Settings → Advanced.
 4. Open Safari Settings → Extensions and enable **SwiftMiner Query Hash Discovery**.
-5. In SwiftMiner Settings → Advanced, enable **Discover query hashes in Safari**,
-   then open Twitch Drops from the same section and reload the page.
+5. In SwiftMiner Settings → Advanced, choose **Check Hash Values in Safari**.
+   SwiftMiner enables discovery and opens Twitch Campaigns and Inventory in Safari;
+   the extension collects supported hashes those pages use without manual entry.
+   On first use, approve the extension's request for access to `twitch.tv`; Safari
+   owns this one-time permission and SwiftMiner cannot grant it on your behalf.
 
 Safari controls extension enablement and site access, so those steps cannot be
 silently performed by SwiftMiner. Safari may require **Allow Unsigned Extensions**
