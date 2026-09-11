@@ -26,7 +26,7 @@
 <body>
   <main>
     <h1>SwiftMiner 1.41.1</h1>
-    <p class="meta">Version 1.41.1 &middot; Build 2026091111</p>
+    <p class="meta">Version 1.41.1 &middot; Build 2026091113</p>
     <p class="intro">Three things a long diagnostic caught the fleet doing to no purpose: miners piling onto one stream despite stream spreading being on, every claim pausing on a Twitch call that has never once succeeded, and the Activity Log burying the useful lines under duplicates. A miner waiting for a stream now says which game it is waiting on, and inviting a friend through SwiftBot no longer offers the server&rsquo;s bots as people to invite.</p>
 
     <section>
@@ -34,6 +34,7 @@
       <ul>
         <li>Miners no longer pile onto one stream when several pick a channel at the same moment. Stream spreading asked which channels its siblings held, but a miner only counts as holding a channel once it has <em>started</em> watching &mdash; so when a campaign ended and several miners re-picked together, each of them read the same snapshot, each avoided the one stream that was genuinely taken, and all of them landed on the same free one. A miner now reserves its choice as it makes it, so the next miner to choose can already see it.</li>
         <li>Claiming a drop is no longer followed by a request that cannot succeed. Every successful claim triggered a tidy-up call to remove the matching Twitch notification, and that call has been failing every single time &mdash; Twitch no longer recognises the query, and it was being given the wrong kind of identifier besides. It added several seconds to each claim while accomplishing nothing, and it failed quietly enough that only a diagnostic export showed it. The call is gone; claiming itself was never affected.</li>
+        <li>Campaign discovery uses Twitch&rsquo;s replacement Drops dashboard query, and temporary GraphQL timeouts now retry with bounded backoff. A cancelled or unavailable upstream request can no longer masquerade as an incompatible response and stop that mining cycle.</li>
         <li>A miner waiting for a stream now names the game it is waiting for. A miner that is watching leads its card with the game, and so do the claiming and stream-override cards &mdash; but the waiting card led with its state and left the game to a single line of detail, which a compact card on Overview cuts short. Waiting is the state a fleet spends most of its time in, and it was the one card that never said what it was waiting for. It now names the game where the watching card does, with the campaign beneath it and the game&rsquo;s artwork alongside, while the antenna symbol and the absent progress bar go on saying that nothing is being earned yet. The miner&rsquo;s detail page, the sidebar and the status label name the game too.</li>
         <li>The wording of that state is now the same everywhere it appears: &ldquo;Waiting for an eligible live stream&rdquo;, in place of &ldquo;No eligible stream live&rdquo; on the card and &ldquo;Waiting &mdash; No live stream&rdquo; in the status label.</li>
         <li>Inviting a friend through SwiftBot no longer lists the server&rsquo;s bots and webhooks as people you could invite. A recipient without a bot flag is still treated as a person, so a server whose member list predates the flag is unaffected.</li>

@@ -7,7 +7,7 @@ public enum GQLHashes {
     public static let directoryGameRedirect = "1f0300090caceec51f33c5e20647aceff9017f740f223c3c532ba6fa59f6b6cc"
     
     /// Fetches available drop campaigns (basic info only)
-    public static let viewerDropsDashboard = "d9cae7761dafab85908c85e6683cb4201b449e66ac3bb5e894f15ff12aeafaa7"
+    public static let viewerDropsDashboard = "c16bb890cc8ce7647a96ee69cd313d423a378a3dedadf630a1017cde18975feb"
     
     /// Fetches detailed drop campaign info including timeBasedDrops
     public static let dropCampaignDetails = "039277bf98f3130929262cc7c6efd9c141ca3749cb6dca442fc8ead9a53f77c1"

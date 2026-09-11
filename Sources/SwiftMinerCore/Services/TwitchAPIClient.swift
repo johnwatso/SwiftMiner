@@ -1220,6 +1220,16 @@ public actor TwitchAPIClient {
     /// request loop; longer waits are thrown so callers can reschedule instead.
     private static let maxInlineRetryAfterSeconds: TimeInterval = 30
 
+    /// Twitch sometimes reports an upstream timeout as an HTTP 200 GraphQL response.
+    /// These messages describe temporary service conditions rather than a bad query,
+    /// so they belong in the same bounded backoff loop as transient HTTP failures.
+    private static let retryableGraphQLErrorMessages: Set<String> = [
+        "service timeout",
+        "request cancelled",
+        "service unavailable",
+        "context deadline exceeded",
+    ]
+
     static func retryAfterSeconds(from value: String?, now: Date = Date()) -> TimeInterval? {
         guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
             return nil
@@ -1266,12 +1276,15 @@ public actor TwitchAPIClient {
                     // GQL errors arrive as HTTP 200 with a body-level error array.
                     // Detect PersistedQueryNotFound so callers get a clear signal.
                     var persistedQueryMissing = false
+                    var retryableGraphQLError: String?
                     if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                        let errors = json["errors"] as? [[String: Any]] {
                         for gqlError in errors {
                             if let msg = gqlError["message"] as? String {
                                 if msg.contains("PersistedQueryNotFound") {
                                     persistedQueryMissing = true
+                                } else if Self.retryableGraphQLErrorMessages.contains(msg) {
+                                    retryableGraphQLError = msg
                                 } else {
                                     // Log other GQL errors too
                                     Logger.api.warning("[GQL] Error: \(msg)")
@@ -1306,6 +1319,22 @@ public actor TwitchAPIClient {
                         Logger.api.warning("[GQL] PersistedQueryNotFound for \(operationName) (attempt \(attempt)/\(maxAttempts)); retrying in \(String(format: "%.1f", delay))s")
                         try await sleepBeforeRetry(delay)
                         lastError = compatibility
+                        continue
+                    }
+
+                    if let retryableGraphQLError {
+                        let transient = TwitchMinerError.networkError(
+                            "Twitch GraphQL \(operationName) returned \"\(retryableGraphQLError)\""
+                        )
+                        guard attempt < maxAttempts else {
+                            Logger.api.error("[GQL] Transient error \"\(retryableGraphQLError)\" for \(operationName) after \(attempt) attempt(s)")
+                            throw transient
+                        }
+
+                        let delay = retryDelay(for: attempt)
+                        Logger.api.warning("[GQL] Transient error \"\(retryableGraphQLError)\" for \(operationName) (attempt \(attempt)/\(maxAttempts)); retrying in \(String(format: "%.1f", delay))s")
+                        try await sleepBeforeRetry(delay)
+                        lastError = transient
                         continue
                     }
 

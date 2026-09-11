@@ -138,6 +138,93 @@ final class MiningReliabilityChaosTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(clock.now, 5_000_000_000)
     }
 
+    func testHTTP200TransientGraphQLErrorsRetryAndRecover() async throws {
+        let messages = [
+            "service timeout",
+            "request cancelled",
+            "service unavailable",
+            "context deadline exceeded",
+        ]
+
+        for message in messages {
+            let clock = ChaosClock()
+            let coordinator = TwitchRequestCoordinator(maxRequests: 100, runtimeClock: clock.clock)
+            let client = TwitchAPIClient(
+                authService: authService,
+                clientId: "test-client",
+                session: session,
+                requestCoordinator: coordinator,
+                runtimeClock: clock.clock,
+                retryJitterFactor: { 1 },
+                persistsCampaignCaches: false
+            )
+            let gqlAttempts = LockedInt()
+            MockURLProtocol.requestHandler = { request in
+                let response = HTTPURLResponse(
+                    url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+                )!
+                if request.url?.path == "/integrity" {
+                    return (
+                        response,
+                        Data(#"{"token":"integrity-token","expiration":4102444800000}"#.utf8)
+                    )
+                }
+
+                let body = gqlAttempts.increment() == 1
+                    ? #"{"errors":[{"message":"\#(message)"}]}"#
+                    : #"{"data":{"currentUser":{"dropCampaigns":[]}}}"#
+                return (response, Data(body.utf8))
+            }
+
+            let campaigns = try await client.fetchDropCampaigns()
+
+            XCTAssertTrue(campaigns.isEmpty, message)
+            XCTAssertEqual(gqlAttempts.get(), 2, message)
+            XCTAssertEqual(clock.requestedSleeps, [2_000_000_000], message)
+        }
+    }
+
+    func testHTTP200TransientGraphQLErrorStopsAfterRetryBudget() async throws {
+        let clock = ChaosClock()
+        let coordinator = TwitchRequestCoordinator(maxRequests: 100, runtimeClock: clock.clock)
+        let client = TwitchAPIClient(
+            authService: authService,
+            clientId: "test-client",
+            session: session,
+            requestCoordinator: coordinator,
+            runtimeClock: clock.clock,
+            retryJitterFactor: { 1 },
+            persistsCampaignCaches: false
+        )
+        let gqlAttempts = LockedInt()
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            if request.url?.path == "/integrity" {
+                return (
+                    response,
+                    Data(#"{"token":"integrity-token","expiration":4102444800000}"#.utf8)
+                )
+            }
+            _ = gqlAttempts.increment()
+            return (response, Data(#"{"errors":[{"message":"request cancelled"}]}"#.utf8))
+        }
+
+        do {
+            _ = try await client.fetchDropCampaigns()
+            XCTFail("A persistent transient GraphQL error must exhaust its retry budget")
+        } catch let error as TwitchMinerError {
+            guard case .networkError(let message) = error else {
+                return XCTFail("Expected networkError, got \(error)")
+            }
+            XCTAssertTrue(message.contains("request cancelled"))
+        }
+
+        XCTAssertEqual(gqlAttempts.get(), 3)
+        XCTAssertEqual(clock.requestedSleeps, [2_000_000_000, 4_000_000_000])
+    }
+
     func testLongRetryAfterIsSharedWithAnotherClient() async throws {
         let clock = ChaosClock()
         let coordinator = TwitchRequestCoordinator(
