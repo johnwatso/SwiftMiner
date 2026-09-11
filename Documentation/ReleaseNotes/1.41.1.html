@@ -26,8 +26,8 @@
 <body>
   <main>
     <h1>SwiftMiner 1.41.1</h1>
-    <p class="meta">Version 1.41.1 &middot; Build 2026091113</p>
-    <p class="intro">Three things a long diagnostic caught the fleet doing to no purpose: miners piling onto one stream despite stream spreading being on, every claim pausing on a Twitch call that has never once succeeded, and the Activity Log burying the useful lines under duplicates. A miner waiting for a stream now says which game it is waiting on, and inviting a friend through SwiftBot no longer offers the server&rsquo;s bots as people to invite.</p>
+    <p class="meta">Version 1.41.1 &middot; Build 2026091211</p>
+    <p class="intro">SwiftMiner 1.41.1 makes a fleet easier to trust and operate: miners spread across streams as configured, claims no longer pause on a Twitch call that cannot succeed, and the Activity Log keeps the useful lines visible. Waiting cards identify their game, Game Rules are calmer to scan, and a new Advanced compatibility path can recover from future Twitch query-hash changes even without another SwiftMiner release.</p>
 
     <section>
       <h2>&#128029; Bug fixes</h2>
@@ -48,6 +48,14 @@
         <li>The viewer count of the stream being watched is recorded every five minutes rather than every ten seconds. It was a sixth of the whole log. It is kept at all because it is proof that Twitch&rsquo;s live event feed is still delivering &mdash; a feed that fails silently is exactly the sort of thing these logs get read to find.</li>
         <li>When Twitch&rsquo;s edge returns an error page instead of an answer, the log records what went wrong in one line instead of pasting the entire fifteen-line page.</li>
         <li>A diagnostic export now says when followed-streamer prioritisation is switched on but not actually working. Twitch can refuse to serve follow state for an account until it is signed in again; that was reported once, when it happened, and a report pulled hours later gave no sign the setting had been doing nothing all along.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#129520; Twitch compatibility that can outlive an app update</h2>
+      <ul>
+        <li>Advanced Settings can accept a replacement Twitch persisted-query hash without rebuilding or restarting SwiftMiner. A candidate is tried against Twitch before it becomes active; rejected values are removed automatically and the immutable bundled hash remains available at all times.</li>
+        <li>An optional, toolbar-free Safari extension can discover known query hashes while the Twitch Drops page is open. It is restricted to Twitch Drops pages and passes only an allow-listed operation name and its 64-character hash to SwiftMiner &mdash; never cookies, tokens, variables, or responses.</li>
       </ul>
     </section>
 

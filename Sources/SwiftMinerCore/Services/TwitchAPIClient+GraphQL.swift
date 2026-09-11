@@ -35,9 +35,8 @@ extension TwitchAPIClient {
     /// `fetchDropCampaigns()`, which shares this work when the mining engine and the
     /// Drops projection ask for the same cold data at launch.
     private func fetchDropCampaignsUncoalesced() async throws -> [Campaign] {
-        let request = GraphQLRequest(
-            operationName: "ViewerDropsDashboard",
-            sha256Hash: GQLHashes.viewerDropsDashboard,
+        let request = graphQLRequest(
+            for: .viewerDropsDashboard,
             variables: ["fetchRewardCampaigns": false]
         )
 
@@ -375,9 +374,8 @@ extension TwitchAPIClient {
         userLogin: String
     ) async throws -> Campaign {
 
-        let request = GraphQLRequest(
-            operationName: "DropCampaignDetails",
-            sha256Hash: GQLHashes.dropCampaignDetails,
+        let request = graphQLRequest(
+            for: .dropCampaignDetails,
             variables: [
                 "dropID": campaignId,
                 "channelLogin": userLogin  // Login name (e.g. "john"), not numeric ID
@@ -637,9 +635,8 @@ extension TwitchAPIClient {
 
     /// Fetch inventory with drops
     public func fetchInventory() async throws -> (progress: [Progress], discoveredCampaigns: [Campaign]) {
-        let request = GraphQLRequest(
-            operationName: "Inventory",
-            sha256Hash: GQLHashes.inventory,
+        let request = graphQLRequest(
+            for: .inventory,
             variables: ["fetchRewardCampaigns": false]
         )
 
@@ -713,9 +710,8 @@ extension TwitchAPIClient {
     /// Fetch current drop progress for the watched channel.
     /// Returns (dropId, currentMinutes) if a drop is being earned, nil otherwise.
     public func fetchCurrentDrop(channelId: String) async throws -> (dropId: String, currentMinutes: Int)? {
-        let request = GraphQLRequest(
-            operationName: "DropCurrentSessionContext",
-            sha256Hash: GQLHashes.currentDrop,
+        let request = graphQLRequest(
+            for: .dropCurrentSessionContext,
             variables: [
                 "channelID": channelId,
                 "channelLogin": ""
@@ -768,9 +764,8 @@ extension TwitchAPIClient {
             return shared
         }
 
-        let request = GraphQLRequest(
-            operationName: "DropsHighlightService_AvailableDrops",
-            sha256Hash: GQLHashes.availableDrops,
+        let request = graphQLRequest(
+            for: .dropsHighlightServiceAvailableDrops,
             variables: ["channelID": channelId]
         )
 
@@ -808,9 +803,8 @@ extension TwitchAPIClient {
 
     /// Claim a drop
     public func claimDrop(dropInstanceId: String) async throws -> ClaimDropResponse {
-        let request = GraphQLRequest(
-            operationName: "DropsPage_ClaimDropRewards",
-            sha256Hash: GQLHashes.dropsPage_ClaimDropRewards,
+        let request = graphQLRequest(
+            for: .dropsPageClaimDropRewards,
             variables: [
                 "input": [
                     "dropInstanceID": dropInstanceId
@@ -880,9 +874,8 @@ extension TwitchAPIClient {
     /// Fetches a playback access token for a channel.
     /// This is used to verify that the session is valid and the user can earn drops.
     public func fetchPlaybackAccessToken(channelLogin: String) async throws -> (value: String, signature: String) {
-        let request = GraphQLRequest(
-            operationName: "PlaybackAccessToken",
-            sha256Hash: GQLHashes.playbackAccessToken,
+        let request = graphQLRequest(
+            for: .playbackAccessToken,
             variables: [
                 "isLive": true,
                 "isVod": false,
@@ -908,9 +901,8 @@ extension TwitchAPIClient {
 
     /// Watch stream heartbeat (maintains watch session)
     public func sendWatchHeartbeat(channelId: String, channelLogin: String) async throws {
-        let request = GraphQLRequest(
-            operationName: "PlaybackAccessToken",
-            sha256Hash: GQLHashes.playbackAccessToken,
+        let request = graphQLRequest(
+            for: .playbackAccessToken,
             variables: [
                 "isLive": true,
                 "isVod": false,
@@ -1005,9 +997,8 @@ extension TwitchAPIClient {
             return shared
         }
 
-        let request = GraphQLRequest(
-            operationName: "DirectoryPage_Game",
-            sha256Hash: GQLHashes.directoryPage_Game,
+        let request = graphQLRequest(
+            for: .directoryPageGame,
             variables: [
                 "limit": limit,
                 "slug": gameSlug,
@@ -1126,9 +1117,8 @@ extension TwitchAPIClient {
     /// Returns nil if the channel is offline or the query fails.
     /// Used to populate `WatchSession.broadcastId` for accurate Spade beacons.
     public func fetchBroadcastId(channelLogin: String) async throws -> String? {
-        let request = GraphQLRequest(
-            operationName: "VideoPlayerStreamInfoOverlayChannel",
-            sha256Hash: GQLHashes.videoPlayerStreamInfoOverlayChannel,
+        let request = graphQLRequest(
+            for: .videoPlayerStreamInfoOverlayChannel,
             variables: [
                 "channel": channelLogin,
                 "platform": "web",
@@ -1154,9 +1144,8 @@ extension TwitchAPIClient {
     /// Get channel points context for a channel.
     /// Returns the available claim ID if a bonus is ready, nil otherwise.
     public func getChannelPointsContext(channelLogin: String) async throws -> ChannelPointsContext? {
-        let request = GraphQLRequest(
-            operationName: "ChannelPointsContext",
-            sha256Hash: GQLHashes.channelPointsContext,
+        let request = graphQLRequest(
+            for: .channelPointsContext,
             variables: ["channelLogin": channelLogin]
         )
 
@@ -1184,9 +1173,8 @@ extension TwitchAPIClient {
     
     /// Claim channel points bonus
     public func claimCommunityPoints(channelId: String, claimId: String) async throws {
-        let request = GraphQLRequest(
-            operationName: "ClaimCommunityPoints",
-            sha256Hash: GQLHashes.claimCommunityPoints,
+        let request = graphQLRequest(
+            for: .claimCommunityPoints,
             variables: [
                 "input": [
                     "channelID": channelId,

@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "SwiftMiner Query Hash Discovery",
+  "version": "1.41.1",
+  "description": "Privately discovers Twitch persisted-query hashes for SwiftMiner.",
+  "permissions": [
+    "nativeMessaging"
+  ],
+  "host_permissions": [
+    "https://www.twitch.tv/drops/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.twitch.tv/drops/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_start"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "page-hook.js"
+      ],
+      "matches": [
+        "https://www.twitch.tv/drops/*"
+      ]
+    }
+  ]
+}

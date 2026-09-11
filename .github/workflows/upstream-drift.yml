@@ -1,4 +1,4 @@
-name: Upstream drift monitor
+name: Twitch query hash monitor
 
 on:
   schedule:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: upstream-drift-monitor
+  group: twitch-query-hash-monitor
   cancel-in-progress: true
 
 jobs:
@@ -26,7 +26,7 @@ jobs:
       - name: Test monitor
         run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 
-      - name: Check upstream mining behavior
+      - name: Check upstream persisted-query hashes
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: python3 scripts/check_twitchdropsminer_upstream.py

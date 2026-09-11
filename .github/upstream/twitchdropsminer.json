@@ -1,14 +1,6 @@
 {
   "repository": "DevilXD/TwitchDropsMiner",
   "branch": "master",
-  "reviewedCommit": "0e4bc437cc6e8f18b1c44b8143c7d251b42d1dab",
-  "watchedPaths": [
-    "channel.py",
-    "constants.py",
-    "inventory.py",
-    "twitch.py",
-    "websocket.py"
-  ],
   "hashMappings": [
     {
       "upstreamKey": "SlugRedirect",

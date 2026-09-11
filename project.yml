@@ -30,6 +30,43 @@ targets:
         ENABLE_STRICT_CONCURRENCY: YES
         SWIFT_STRICT_CONCURRENCY: complete
 
+  SwiftMinerSafariExtension:
+    type: app-extension
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: Sources/SwiftMinerSafariExtension/SafariWebExtensionHandler.swift
+      - path: Sources/SwiftMinerSafariExtension/Resources
+        buildPhase: resources
+    info:
+      path: Sources/SwiftMinerSafariExtension/Info.plist
+      properties:
+        CFBundleDisplayName: SwiftMiner Query Hash Discovery
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.Safari.web-extension
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).SafariWebExtensionHandler
+        SFSafariWebExtensionConverterVersion: 1
+    settings:
+      base:
+        PRODUCT_NAME: SwiftMinerSafariExtension
+        PRODUCT_BUNDLE_IDENTIFIER: com.swiftminer.app.SafariQueryHash
+        MARKETING_VERSION: "1.41.1"
+        CURRENT_PROJECT_VERSION: "2026091211"
+        SWIFT_VERSION: "6.0"
+        SWIFT_STRICT_CONCURRENCY: complete
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_APP_SANDBOX: NO
+        ENABLE_HARDENED_RUNTIME: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: YES
+        OTHER_LDFLAGS: -framework SafariServices
+      configs:
+        Release:
+          CODE_SIGN_ENTITLEMENTS: Sources/SwiftMinerSafariExtension/SwiftMinerSafariExtension.entitlements
+          ENABLE_APP_SANDBOX: YES
+
   SwiftMiner:
     type: application
     platform: macOS
@@ -39,6 +76,7 @@ targets:
         excludes:
           - Info.plist
           - SwiftMiner.entitlements
+          - SwiftMinerRelease.entitlements
       - path: SwiftMiner.icon
         type: file
         buildPhase: resources
@@ -49,6 +87,7 @@ targets:
         type: file
         buildPhase: resources
     dependencies:
+      - target: SwiftMinerSafariExtension
       - target: SwiftMinerCore
       - target: SwiftMinerService
       - package: Sparkle
@@ -58,6 +97,7 @@ targets:
       # Xcode runs App Intents metadata extraction for Swift app targets. Linking
       # the system framework lets that probe complete without a false warning.
       - sdk: AppIntents.framework
+      - sdk: SafariServices.framework
     info:
       path: Sources/SwiftMiner/Info.plist
       properties:
@@ -86,7 +126,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.swiftminer.app
         MACOSX_DEPLOYMENT_TARGET: "14.0"
         MARKETING_VERSION: "1.41.1"
-        CURRENT_PROJECT_VERSION: "2026091113"
+        CURRENT_PROJECT_VERSION: "2026091211"
         INFOPLIST_KEY_CFBundleDisplayName: SwiftMiner
         INFOPLIST_KEY_CFBundleName: SwiftMiner
         CODE_SIGN_STYLE: Automatic
@@ -101,6 +141,7 @@ targets:
         SPARKLE_PUBLIC_ED_KEY: "rxaJsfCpTKtpqRubSfkJwKnztT5S8RHsdAueuT+jKck="
       configs:
         Release:
+          CODE_SIGN_ENTITLEMENTS: Sources/SwiftMiner/SwiftMinerRelease.entitlements
           EXCLUDED_SOURCE_FILE_NAMES:
             - "$(inherited)"
             - "DebugAvatar*.png"

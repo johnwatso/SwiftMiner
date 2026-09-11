@@ -161,6 +161,7 @@ public actor TwitchAPIClient {
     private let requestCoordinatorClientID = UUID().uuidString
     private let runtimeClock: RuntimeClock
     private let retryJitterFactor: @Sendable () -> Double
+    private let queryHashStore: TwitchQueryHashStore
 
     /// Android User-Agent that matches the Android client ID. Starts as a
     /// random pick for pre-login traffic; swapped to a sticky-per-account UA
@@ -454,6 +455,7 @@ public actor TwitchAPIClient {
         requestCoordinator: TwitchRequestCoordinator = .shared,
         runtimeClock: RuntimeClock = .continuous,
         retryJitterFactor: @escaping @Sendable () -> Double = { Double.random(in: 0.8...1.2) },
+        queryHashStore: TwitchQueryHashStore = .standard,
         persistsCampaignCaches: Bool = true
     ) {
         self.authService = authService
@@ -462,6 +464,7 @@ public actor TwitchAPIClient {
         self.requestCoordinator = requestCoordinator
         self.runtimeClock = runtimeClock
         self.retryJitterFactor = retryJitterFactor
+        self.queryHashStore = queryHashStore
         self.persistsCampaignCaches = persistsCampaignCaches
 
         if let session = session {
@@ -1007,9 +1010,8 @@ public actor TwitchAPIClient {
     }
 
     private func fetchGameSlugFromDirectoryRedirect(name: String) async throws -> String? {
-        let request = GraphQLRequest(
-            operationName: "DirectoryGameRedirect",
-            sha256Hash: GQLHashes.directoryGameRedirect,
+        let request = graphQLRequest(
+            for: .directoryGameRedirect,
             variables: ["name": name]
         )
 
@@ -1472,9 +1474,18 @@ public actor TwitchAPIClient {
     /// Detects `PersistedQueryNotFound` and surfaces it as a clear error.
     func makeGraphQLRequest(
         request: GraphQLRequest,
-        allowRefreshRetry: Bool = true
+        allowRefreshRetry: Bool = true,
+        allowHashFallback: Bool = true
     ) async throws -> Data {
         let operationName = request.operationName
+        let query = GQLQuery(rawValue: operationName)
+        let requestHashSource: TwitchQueryHashSource? = request.hashSource ?? query.flatMap {
+            let resolution = queryHashStore.resolution(for: $0)
+            guard request.sha256Hash != $0.bundledHash else { return nil }
+            // If Safari replaced the candidate between request construction and
+            // dispatch, this request is an older candidate, not the active override.
+            return resolution.hash == request.sha256Hash ? resolution.source : .candidate
+        }
         await traceGQL(operationName)
         let isAuthenticated = !accessToken.isEmpty
         await traceGQLDebug {
@@ -1507,19 +1518,67 @@ public actor TwitchAPIClient {
         urlRequest.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
 
         do {
-            return try await performMeasuredRequest(
+            let data = try await performMeasuredRequest(
                 urlRequest,
                 operationName: operationName,
                 rateLimitWaitSeconds: 0
+            )
+            if let query {
+                queryHashStore.accept(request.sha256Hash, for: query)
+            }
+            return data
+        } catch let error as TwitchMinerError
+            where allowHashFallback && error.isTwitchAPICompatibilityIssue {
+            guard let query else { throw error }
+            // The extension may observe a newer candidate while this request is in
+            // flight. Judge the hash that was actually sent; never discard the newer
+            // value merely because the older one failed on Twitch.
+            guard request.sha256Hash != query.bundledHash else {
+                throw error
+            }
+
+            queryHashStore.reject(
+                request.sha256Hash,
+                for: query,
+                source: requestHashSource
+            )
+            exhaustedPersistedQueries[operationName] = nil
+            Logger.api.warning(
+                "[GQL] Rejected runtime hash for \(operationName); retrying bundled compatibility fallback"
+            )
+            let fallback = GraphQLRequest(
+                operationName: request.operationName,
+                sha256Hash: query.bundledHash,
+                variables: request.variables
+            )
+            return try await makeGraphQLRequest(
+                request: fallback,
+                allowRefreshRetry: allowRefreshRetry,
+                allowHashFallback: false
             )
         } catch TwitchMinerError.tokenExpired where allowRefreshRetry {
             await PerformanceDiagnostics.shared.recordTokenRefresh(operation: operationName)
             await traceGQLDebug { "[TwitchAPIClient] \(operationName): token expired, forcing refresh and retrying once" }
             _ = try await refreshAccessTokenAfterExpiry()
-            return try await makeGraphQLRequest(request: request, allowRefreshRetry: false)
+            return try await makeGraphQLRequest(
+                request: request,
+                allowRefreshRetry: false,
+                allowHashFallback: allowHashFallback
+            )
         } catch TwitchMinerError.tokenExpired {
             throw Self.rejectedSavedSessionError(operation: operationName)
         }
+    }
+
+    func graphQLRequest(
+        for query: GQLQuery,
+        variables: [String: Any]
+    ) -> GraphQLRequest {
+        GraphQLRequest(
+            query: query,
+            resolution: queryHashStore.resolution(for: query),
+            variables: variables
+        )
     }
 
     func makeRawGraphQLRequest(
@@ -1743,15 +1802,31 @@ public struct GraphQLRequest {
     public let operationName: String
     public let sha256Hash: String
     public let variables: [String: Any]
+    public let hashSource: TwitchQueryHashSource?
 
     public init(
         operationName: String,
         sha256Hash: String,
-        variables: [String: Any]
+        variables: [String: Any],
+        hashSource: TwitchQueryHashSource? = nil
     ) {
         self.operationName = operationName
         self.sha256Hash = sha256Hash
         self.variables = variables
+        self.hashSource = hashSource
+    }
+
+    public init(
+        query: GQLQuery,
+        resolution: TwitchQueryHashResolution,
+        variables: [String: Any]
+    ) {
+        self.init(
+            operationName: query.rawValue,
+            sha256Hash: resolution.hash,
+            variables: variables,
+            hashSource: resolution.source
+        )
     }
 
     /// Convert to JSON dictionary for request body
