@@ -7,32 +7,10 @@ import SafariServices
 import UniformTypeIdentifiers
 
 private enum SafariQueryHashExtensionBridge {
-    static let identifier = "com.swiftminer.app.SafariQueryHash"
-
-    static func fetchEnabledState(
-        completion: @escaping @MainActor @Sendable (Bool?) -> Void
-    ) {
-        SFSafariExtensionManager.getStateOfSafariExtension(
-            withIdentifier: identifier
-        ) { state, _ in
-            let isEnabled = state?.isEnabled
-            Task { @MainActor in
-                completion(isEnabled)
-            }
-        }
-    }
-
-    static func showPreferences(
-        completion: @escaping @MainActor @Sendable (String?) -> Void
-    ) {
+    nonisolated static func showPreferences() {
         SFSafariApplication.showPreferencesForExtension(
-            withIdentifier: identifier
-        ) { error in
-            let errorDescription = error?.localizedDescription
-            Task { @MainActor in
-                completion(errorDescription)
-            }
-        }
+            withIdentifier: "com.swiftminer.app.SafariQueryHash"
+        ) { @Sendable _ in }
     }
 }
 
@@ -49,7 +27,6 @@ struct AdvancedSettingsView: View {
     @State private var queryHashMessage: String?
     @State private var queryHashStateVersion = 0
     @State private var automaticQueryHashDiscovery = false
-    @State private var safariExtensionEnabled: Bool?
 
     var body: some View {
         Form {
@@ -160,11 +137,6 @@ struct AdvancedSettingsView: View {
 
             SettingsSecondaryText("Optional. The SwiftMiner Safari extension watches only Twitch Drops request names and hashes. It never keeps cookies, tokens, variables, or responses.")
 
-            LabeledContent("Safari extension") {
-                Text(safariExtensionEnabled == true ? "Enabled" : "Not enabled")
-                    .foregroundStyle(safariExtensionEnabled == true ? Color.green : Color.secondary)
-            }
-
             DisclosureGroup("Manual compatibility override") {
                 Picker("Twitch query", selection: $selectedQuery) {
                     ForEach(GQLQuery.allCases) { query in
@@ -233,11 +205,9 @@ struct AdvancedSettingsView: View {
         }
         .onAppear {
             automaticQueryHashDiscovery = store.automaticDiscoveryEnabled
-            refreshSafariExtensionState()
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             queryHashStateVersion &+= 1
-            refreshSafariExtensionState()
         }
     }
 
@@ -330,17 +300,7 @@ struct AdvancedSettingsView: View {
     }
 
     private func openSafariExtensionSettings() {
-        SafariQueryHashExtensionBridge.showPreferences { errorDescription in
-            queryHashMessage = errorDescription.map {
-                "Safari could not open extension settings: \($0)"
-            }
-        }
-    }
-
-    private func refreshSafariExtensionState() {
-        SafariQueryHashExtensionBridge.fetchEnabledState { isEnabled in
-            safariExtensionEnabled = isEnabled
-        }
+        SafariQueryHashExtensionBridge.showPreferences()
     }
 
     private func openTwitchDropsInSafari() {
