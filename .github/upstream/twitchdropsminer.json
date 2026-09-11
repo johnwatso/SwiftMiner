@@ -1,7 +1,7 @@
 {
   "repository": "DevilXD/TwitchDropsMiner",
   "branch": "master",
-  "reviewedCommit": "65d109289874b7c8e9ef2d667a9bf9e46c51fdce",
+  "reviewedCommit": "0e4bc437cc6e8f18b1c44b8143c7d251b42d1dab",
   "watchedPaths": [
     "channel.py",
     "constants.py",
