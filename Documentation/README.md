@@ -8,6 +8,8 @@ The main [README](../README.md) is a concise project overview. End-user installa
 - [Architecture Overview](ARCHITECTURE.md) — app, core, service, persistence, and data flow
 - [Engine Architecture](EngineArchitecture.md) — mining loop, account isolation, watch sessions, and campaign selection
 - [Engine Changelog](EngineChangelog.md) — behavioural history of the mining engine
+- [Twitch Query Hash Discovery](TwitchQueryHashDiscovery.md) — extract persisted-query hashes from a local browser capture
+- [SwiftMiner Safari](SwiftMinerSafari.md) — runtime hash recovery, extension privacy boundaries, and local Debug setup
 
 ## Integrations and Implementation Notes
 

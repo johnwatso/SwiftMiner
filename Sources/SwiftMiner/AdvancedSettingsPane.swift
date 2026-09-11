@@ -3,7 +3,38 @@ import SwiftUI
 import SwiftMinerCore
 import SwiftMinerService
 import AppKit
+import SafariServices
 import UniformTypeIdentifiers
+
+private enum SafariQueryHashExtensionBridge {
+    static let identifier = "com.swiftminer.app.SafariQueryHash"
+
+    static func fetchEnabledState(
+        completion: @escaping @MainActor @Sendable (Bool?) -> Void
+    ) {
+        SFSafariExtensionManager.getStateOfSafariExtension(
+            withIdentifier: identifier
+        ) { state, _ in
+            let isEnabled = state?.isEnabled
+            Task { @MainActor in
+                completion(isEnabled)
+            }
+        }
+    }
+
+    static func showPreferences(
+        completion: @escaping @MainActor @Sendable (String?) -> Void
+    ) {
+        SFSafariApplication.showPreferencesForExtension(
+            withIdentifier: identifier
+        ) { error in
+            let errorDescription = error?.localizedDescription
+            Task { @MainActor in
+                completion(errorDescription)
+            }
+        }
+    }
+}
 
 // MARK: - Advanced Settings
 
@@ -13,10 +44,17 @@ struct AdvancedSettingsView: View {
     @State private var showClientIdAlert = false
     @State private var tempClientId = ""
     @State private var backupMessage: String?
+    @State private var selectedQuery: GQLQuery = .viewerDropsDashboard
+    @State private var queryHashDraft = ""
+    @State private var queryHashMessage: String?
+    @State private var queryHashStateVersion = 0
+    @State private var automaticQueryHashDiscovery = false
+    @State private var safariExtensionEnabled: Bool?
 
     var body: some View {
         Form {
             apiConfigurationSection
+            twitchCompatibilitySection
             backupSection
             diagnosticsSection
         }
@@ -108,6 +146,101 @@ struct AdvancedSettingsView: View {
         }
     }
 
+    private var twitchCompatibilitySection: some View {
+        let store = TwitchQueryHashStore.standard
+        let resolution = store.resolution(for: selectedQuery)
+        _ = queryHashStateVersion
+
+        return Section {
+            Toggle("Discover query hashes in Safari", isOn: $automaticQueryHashDiscovery)
+                .onChange(of: automaticQueryHashDiscovery) { _, enabled in
+                    store.automaticDiscoveryEnabled = enabled
+                    queryHashStateVersion &+= 1
+                }
+
+            SettingsSecondaryText("Optional. The SwiftMiner Safari extension watches only Twitch Drops request names and hashes. It never keeps cookies, tokens, variables, or responses.")
+
+            LabeledContent("Safari extension") {
+                Text(safariExtensionEnabled == true ? "Enabled" : "Not enabled")
+                    .foregroundStyle(safariExtensionEnabled == true ? Color.green : Color.secondary)
+            }
+
+            DisclosureGroup("Manual compatibility override") {
+                Picker("Twitch query", selection: $selectedQuery) {
+                    ForEach(GQLQuery.allCases) { query in
+                        Text(query.displayName).tag(query)
+                    }
+                }
+                .onChange(of: selectedQuery) { _, _ in
+                    queryHashDraft = ""
+                    queryHashMessage = nil
+                    queryHashStateVersion &+= 1
+                }
+
+                LabeledContent("Active source") {
+                    Text(queryHashSourceLabel(resolution.source))
+                        .foregroundStyle(resolution.source == .bundled ? Color.secondary : Color.green)
+                }
+
+                Text(resolution.hash)
+                    .font(.caption.monospaced())
+                    .textSelection(.enabled)
+                    .lineLimit(2)
+
+                TextField("Paste 64-character SHA-256 hash", text: $queryHashDraft)
+                    .font(.caption.monospaced())
+                    .textFieldStyle(.roundedBorder)
+
+                HStack(spacing: 8) {
+                    Button("Save & Test") {
+                        submitQueryHashCandidate()
+                    }
+                    .disabled(queryHashDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                    Button("Reset to Bundled", role: .destructive) {
+                        store.reset(selectedQuery)
+                        queryHashDraft = ""
+                        queryHashMessage = "Restored SwiftMiner's bundled hash."
+                        queryHashStateVersion &+= 1
+                        refreshQueryHashUsers()
+                    }
+                    .disabled(resolution.source == .bundled)
+                }
+
+                if let queryHashMessage {
+                    SettingsSecondaryText(queryHashMessage)
+                } else if resolution.source == .candidate {
+                    SettingsSecondaryText("Waiting for the next Twitch request to validate this candidate.", tint: .orange)
+                } else if let accepted = store.date(for: .accepted, query: selectedQuery) {
+                    SettingsSecondaryText("Twitch accepted this override \(accepted.formatted(date: .abbreviated, time: .shortened)).", tint: .green)
+                } else if let rejected = store.date(for: .rejected, query: selectedQuery) {
+                    SettingsSecondaryText("The last candidate was rejected \(rejected.formatted(date: .abbreviated, time: .shortened)); the bundled hash was restored.", tint: .orange)
+                }
+            }
+
+            HStack(spacing: 8) {
+                Button("Open Twitch Drops in Safari") {
+                    openTwitchDropsInSafari()
+                }
+                Button("Safari Extension Settings\u{2026}") {
+                    openSafariExtensionSettings()
+                }
+            }
+        } header: {
+            Text("Twitch Compatibility")
+        } footer: {
+            Text("Runtime overrides apply without rebuilding or restarting. Unknown or rejected values never replace SwiftMiner's bundled fallback.")
+        }
+        .onAppear {
+            automaticQueryHashDiscovery = store.automaticDiscoveryEnabled
+            refreshSafariExtensionState()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            queryHashStateVersion &+= 1
+            refreshSafariExtensionState()
+        }
+    }
+
     private var backupSection: some View {
         Section {
             HStack(spacing: 8) {
@@ -160,6 +293,69 @@ struct AdvancedSettingsView: View {
         } catch {
             backupMessage = "Import failed: \(error.localizedDescription)"
         }
+    }
+
+    private func submitQueryHashCandidate() {
+        let candidate = queryHashDraft
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        let store = TwitchQueryHashStore.standard
+        guard store.submitCandidate(candidate, for: selectedQuery) else {
+            queryHashMessage = "Enter exactly 64 hexadecimal characters."
+            return
+        }
+
+        queryHashDraft = ""
+        queryHashMessage = candidate == selectedQuery.bundledHash
+            ? "That is already SwiftMiner's bundled hash."
+            : nil
+        queryHashStateVersion &+= 1
+        refreshQueryHashUsers()
+    }
+
+    private func refreshQueryHashUsers() {
+        Task {
+            await navigation.minerManager.forceRefreshAllMiners()
+            _ = navigation.refreshDropsInBackground(force: true)
+            queryHashStateVersion &+= 1
+        }
+    }
+
+    private func queryHashSourceLabel(_ source: TwitchQueryHashSource) -> String {
+        switch source {
+        case .bundled: return "Bundled fallback"
+        case .override: return "Validated override"
+        case .candidate: return "Testing candidate"
+        }
+    }
+
+    private func openSafariExtensionSettings() {
+        SafariQueryHashExtensionBridge.showPreferences { errorDescription in
+            queryHashMessage = errorDescription.map {
+                "Safari could not open extension settings: \($0)"
+            }
+        }
+    }
+
+    private func refreshSafariExtensionState() {
+        SafariQueryHashExtensionBridge.fetchEnabledState { isEnabled in
+            safariExtensionEnabled = isEnabled
+        }
+    }
+
+    private func openTwitchDropsInSafari() {
+        guard let url = URL(string: "https://www.twitch.tv/drops/campaigns") else { return }
+        guard let safari = NSWorkspace.shared.urlForApplication(
+            withBundleIdentifier: "com.apple.Safari"
+        ) else {
+            NSWorkspace.shared.open(url)
+            return
+        }
+        NSWorkspace.shared.open(
+            [url],
+            withApplicationAt: safari,
+            configuration: NSWorkspace.OpenConfiguration()
+        )
     }
 
 }

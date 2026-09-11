@@ -15,11 +15,9 @@ sys.modules[SPEC.name] = MONITOR
 SPEC.loader.exec_module(MONITOR)
 
 
-class UpstreamDriftMonitorTests(unittest.TestCase):
+class PersistedQueryHashMonitorTests(unittest.TestCase):
     def setUp(self) -> None:
         self.config = {
-            "reviewedCommit": "a" * 40,
-            "watchedPaths": ["constants.py", "channel.py"],
             "hashMappings": [
                 {"upstreamKey": "GameDirectory", "swiftConstant": "directoryPage_Game"}
             ],
@@ -48,45 +46,27 @@ class UpstreamDriftMonitorTests(unittest.TestCase):
         report = MONITOR.analyze(
             self.config,
             head="a" * 40,
-            comparison_status="identical",
-            changed_paths=set(),
             upstream_queries=self.upstream,
             swift_hashes=self.swift,
         )
         self.assertFalse(report.has_drift)
 
-    def test_unrelated_upstream_change_is_silent(self) -> None:
+    def test_upstream_commit_change_with_matching_hashes_is_silent(self) -> None:
         report = MONITOR.analyze(
             self.config,
             head="b" * 40,
-            comparison_status="ahead",
-            changed_paths={"lang/Polish.json", "gui.py"},
             upstream_queries=self.upstream,
             swift_hashes=self.swift,
         )
         self.assertFalse(report.has_drift)
 
-    def test_watched_file_change_requires_review(self) -> None:
-        report = MONITOR.analyze(
-            self.config,
-            head="b" * 40,
-            comparison_status="ahead",
-            changed_paths={"channel.py"},
-            upstream_queries=self.upstream,
-            swift_hashes=self.swift,
-        )
-        self.assertTrue(report.has_drift)
-        self.assertEqual(report.watched_changes, ("channel.py",))
-
-    def test_hash_change_requires_review_even_without_file_comparison(self) -> None:
+    def test_hash_change_requires_update(self) -> None:
         upstream = {
             "GameDirectory": ("DirectoryPage_Game", "2" * 64),
         }
         report = MONITOR.analyze(
             self.config,
             head="b" * 40,
-            comparison_status="ahead",
-            changed_paths=set(),
             upstream_queries=upstream,
             swift_hashes=self.swift,
         )
@@ -97,8 +77,6 @@ class UpstreamDriftMonitorTests(unittest.TestCase):
         report = MONITOR.analyze(
             self.config,
             head="b" * 40,
-            comparison_status="ahead",
-            changed_paths=set(),
             upstream_queries={},
             swift_hashes=self.swift,
         )
@@ -109,8 +87,6 @@ class UpstreamDriftMonitorTests(unittest.TestCase):
         config = {
             "repository": "DevilXD/TwitchDropsMiner",
             "branch": "master",
-            "reviewedCommit": "a" * 40,
-            "watchedPaths": ["constants.py"],
             "hashMappings": [{"upstreamKey": "GameDirectory"}],
         }
         with self.assertRaises(MONITOR.CheckError):
@@ -127,6 +103,8 @@ class UpstreamDriftMonitorTests(unittest.TestCase):
         self.assertEqual(mappings["Campaigns"], "viewerDropsDashboard")
         self.assertEqual(mappings["Inventory"], "inventory")
         self.assertEqual(mappings["GameDirectory"], "directoryPage_Game")
+        self.assertNotIn("reviewedCommit", config)
+        self.assertNotIn("watchedPaths", config)
 
 
 if __name__ == "__main__":

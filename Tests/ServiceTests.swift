@@ -97,6 +97,146 @@ final class ServiceTests: XCTestCase {
         XCTAssertGreaterThan(provingCall, laterCall)
     }
 
+    func testRuntimeQueryHashIsPromotedAfterSuccessfulTwitchResponse() async throws {
+        let suiteName = "com.swiftminer.tests.query-hash-api.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = TwitchQueryHashStore(defaults: defaults)
+        let candidate = String(repeating: "a", count: 64)
+        XCTAssertTrue(store.submitCandidate(candidate, for: .viewerDropsDashboard))
+
+        let client = TwitchAPIClient(
+            authService: authService,
+            clientId: "test_client",
+            session: mockSession,
+            queryHashStore: store,
+            persistsCampaignCaches: false
+        )
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            if request.url?.path == "/integrity" {
+                return (response, Data(#"{"token":"test","expiration":4102444800000}"#.utf8))
+            }
+            let body = try XCTUnwrap(request.httpBody)
+            let json = try XCTUnwrap(
+                JSONSerialization.jsonObject(with: body) as? [String: Any]
+            )
+            let extensions = try XCTUnwrap(json["extensions"] as? [String: Any])
+            let persisted = try XCTUnwrap(extensions["persistedQuery"] as? [String: Any])
+            XCTAssertEqual(persisted["sha256Hash"] as? String, candidate)
+            return (response, Data(#"{"data":{"currentUser":{"dropCampaigns":[]}}}"#.utf8))
+        }
+
+        _ = try await client.fetchDropCampaigns()
+
+        XCTAssertNil(store.candidate(for: .viewerDropsDashboard))
+        XCTAssertEqual(store.override(for: .viewerDropsDashboard), candidate)
+    }
+
+    func testRejectedRuntimeQueryHashFallsBackToBundledValue() async throws {
+        let suiteName = "com.swiftminer.tests.query-hash-fallback.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = TwitchQueryHashStore(defaults: defaults)
+        let candidate = String(repeating: "b", count: 64)
+        XCTAssertTrue(store.submitCandidate(candidate, for: .viewerDropsDashboard))
+        let attemptedHashes = StringRequestRecorder()
+        let immediateClock = RuntimeClock(
+            nowNanoseconds: { 0 },
+            sleepNanoseconds: { _ in }
+        )
+
+        let client = TwitchAPIClient(
+            authService: authService,
+            clientId: "test_client",
+            session: mockSession,
+            runtimeClock: immediateClock,
+            retryJitterFactor: { 1 },
+            queryHashStore: store,
+            persistsCampaignCaches: false
+        )
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            if request.url?.path == "/integrity" {
+                return (response, Data(#"{"token":"test","expiration":4102444800000}"#.utf8))
+            }
+            let body = try XCTUnwrap(request.httpBody)
+            let json = try XCTUnwrap(
+                JSONSerialization.jsonObject(with: body) as? [String: Any]
+            )
+            let extensions = try XCTUnwrap(json["extensions"] as? [String: Any])
+            let persisted = try XCTUnwrap(extensions["persistedQuery"] as? [String: Any])
+            let hash = try XCTUnwrap(persisted["sha256Hash"] as? String)
+            attemptedHashes.append(hash)
+            if hash == candidate {
+                return (response, Data(#"{"errors":[{"message":"PersistedQueryNotFound"}]}"#.utf8))
+            }
+            return (response, Data(#"{"data":{"currentUser":{"dropCampaigns":[]}}}"#.utf8))
+        }
+
+        _ = try await client.fetchDropCampaigns()
+
+        XCTAssertEqual(attemptedHashes.recordedValues.last, GQLHashes.viewerDropsDashboard)
+        XCTAssertNil(store.candidate(for: .viewerDropsDashboard))
+        XCTAssertNil(store.override(for: .viewerDropsDashboard))
+        XCTAssertNotNil(store.date(for: .rejected, query: .viewerDropsDashboard))
+    }
+
+    func testNewerCandidateSurvivesWhileInFlightCandidateFallsBack() async throws {
+        let suiteName = "com.swiftminer.tests.query-hash-race.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = TwitchQueryHashStore(defaults: defaults)
+        let firstCandidate = String(repeating: "c", count: 64)
+        let newerCandidate = String(repeating: "d", count: 64)
+        XCTAssertTrue(store.submitCandidate(firstCandidate, for: .viewerDropsDashboard))
+        let attemptedHashes = StringRequestRecorder()
+        let immediateClock = RuntimeClock(
+            nowNanoseconds: { 0 },
+            sleepNanoseconds: { _ in }
+        )
+
+        let client = TwitchAPIClient(
+            authService: authService,
+            clientId: "test_client",
+            session: mockSession,
+            runtimeClock: immediateClock,
+            retryJitterFactor: { 1 },
+            queryHashStore: store,
+            persistsCampaignCaches: false
+        )
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            if request.url?.path == "/integrity" {
+                return (response, Data(#"{"token":"test","expiration":4102444800000}"#.utf8))
+            }
+            let body = try XCTUnwrap(request.httpBody)
+            let json = try XCTUnwrap(
+                JSONSerialization.jsonObject(with: body) as? [String: Any]
+            )
+            let extensions = try XCTUnwrap(json["extensions"] as? [String: Any])
+            let persisted = try XCTUnwrap(extensions["persistedQuery"] as? [String: Any])
+            let hash = try XCTUnwrap(persisted["sha256Hash"] as? String)
+            attemptedHashes.append(hash)
+            if hash == firstCandidate {
+                XCTAssertTrue(store.submitCandidate(newerCandidate, for: .viewerDropsDashboard))
+                return (response, Data(#"{"errors":[{"message":"PersistedQueryNotFound"}]}"#.utf8))
+            }
+            return (response, Data(#"{"data":{"currentUser":{"dropCampaigns":[]}}}"#.utf8))
+        }
+
+        _ = try await client.fetchDropCampaigns()
+
+        XCTAssertEqual(attemptedHashes.recordedValues.last, GQLHashes.viewerDropsDashboard)
+        XCTAssertEqual(store.candidate(for: .viewerDropsDashboard), newerCandidate)
+    }
+
     func testMissingInventoryShapeIsFlaggedAsTwitchCompatibilityIssue() async throws {
         MockURLProtocol.stubResponseData = #"{"data":{"currentUser":{}}}"#.data(using: .utf8)
 
