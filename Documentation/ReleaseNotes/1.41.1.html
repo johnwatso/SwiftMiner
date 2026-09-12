@@ -61,8 +61,9 @@
     </section>
 
     <section>
-      <h2>&#129520; Twitch compatibility that can outlive an app update</h2>
+      <h2>&#129520; Twitch compatibility that can outlive an app update <em>(beta)</em></h2>
       <ul>
+        <li>This one is marked <strong>beta</strong> in Settings. It is new, and the situation it exists for &mdash; Twitch retiring a query SwiftMiner depends on &mdash; happens every couple of months, so it will take a few of those to prove. Nothing it does can stop mining: the queries SwiftMiner ships with are never discarded, and anything it cannot confirm is thrown away rather than adopted.</li>
         <li>Automatic Twitch Compatibility closes the gap that normally leaves a Twitch miner broken for days. When Twitch retires one of the queries SwiftMiner depends on, SwiftMiner notices that its own value has stopped working, opens the Twitch Drops pages in Safari so the extension can read the replacement Twitch itself moved to, tries it, and adopts it only if the reply carries what SwiftMiner actually reads. It checks at most once every half hour, says so in the Activity Log, and falls back to the version it shipped with if anything is wrong. The whole system can be switched off with a single toggle.</li>
         <li>When Twitch retires a query outright, SwiftMiner can now send the query itself instead of waiting for a replacement value. A persisted query is only a reference to something Twitch stores; where SwiftMiner knows the query exactly it sends it inline and carries on, which is the difference between a miner that stops for days and one that does not notice. Claiming a drop is the first to work this way.</li>
         <li>A query that still works is never touched, however different the value on Twitch&rsquo;s own site is. Twitch serves more than one document under some operation names, and copying one of those over a healthy query is a way to break a miner rather than fix it.</li>

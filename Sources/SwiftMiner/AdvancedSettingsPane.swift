@@ -102,6 +102,24 @@ private struct CompatibilityStatus {
     var action: Action?
 }
 
+/// Marks a shipped-but-unproven feature.
+///
+/// Filled capsule rather than an outlined one, matching the badges elsewhere in the app.
+/// The detail sits in `.help()` rather than on screen: the badge only needs to set an
+/// expectation, and the section beneath it is already carrying a lot of explanation.
+private struct BetaBadge: View {
+    var body: some View {
+        Text("BETA")
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(Color.orange)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Color.orange.opacity(0.16), in: Capsule())
+            .accessibilityLabel("Beta feature")
+            .help("Twitch compatibility updates are new and still being proven. SwiftMiner always keeps the queries it shipped with, so an update that goes wrong cannot stop mining.")
+    }
+}
+
 // MARK: - Advanced Settings
 
 struct AdvancedSettingsView: View {
@@ -247,7 +265,10 @@ struct AdvancedSettingsView: View {
             }
             .padding(.vertical, 2)
         } header: {
-            Text("Twitch Compatibility")
+            HStack(spacing: 7) {
+                Text("Twitch Compatibility")
+                BetaBadge()
+            }
         }
         .onAppear {
             automaticQueryHashDiscovery = store.automaticDiscoveryEnabled
