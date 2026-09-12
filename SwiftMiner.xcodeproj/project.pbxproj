@@ -43,6 +43,7 @@
 		25D5E5483F55EA58AE81948A /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8A9E39DA6F930F08E6C1E1E /* SettingsView.swift */; };
 		282470A799B0647FB7FB4CB3 /* MiningReliabilityChaosTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF13F08E80FAC638D0E25E6B /* MiningReliabilityChaosTests.swift */; };
 		28EDA16CBDDA751FA6447CAF /* Settings+MinerOrder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C4D557EB57A18925A899B44 /* Settings+MinerOrder.swift */; };
+		29E573B6A66AAE3647E0CD96 /* swiftminer-icon.png in Resources */ = {isa = PBXBuildFile; fileRef = 1737640DE8A51D496C5EFFF0 /* swiftminer-icon.png */; };
 		2B503A529D384687C95757EC /* GameAggregateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41D6E3EDBE9FEE60A15BCD57 /* GameAggregateTests.swift */; };
 		2B859C567EF99B5FC7C0B670 /* MinerUser.swift in Sources */ = {isa = PBXBuildFile; fileRef = F31EBF76B156C28A2FB348D2 /* MinerUser.swift */; };
 		2D011D07DA750AF66BFC2C25 /* CampaignTabRoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 573073692F55774FD9E03776 /* CampaignTabRoutingTests.swift */; };
@@ -104,7 +105,10 @@
 		5C9C015AB5D0821028185BC8 /* GlobalStatusBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 785FE7DC18CBE689F3317BFD /* GlobalStatusBar.swift */; };
 		5CAB6B6719145827104E700E /* MinerStateConsistencyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E59E184954577C2546E1721B /* MinerStateConsistencyTests.swift */; };
 		5D719D19813209223BA476F9 /* Progress.swift in Sources */ = {isa = PBXBuildFile; fileRef = E226CD7402250468FFD4C2DF /* Progress.swift */; };
+		5E7731FD92259B617609675C /* popup.html in Resources */ = {isa = PBXBuildFile; fileRef = 69A05685AB6FD2FAAD2107A5 /* popup.html */; };
 		5FCB29AB39702C89A1B9369F /* DiscordMarkOfficial.svg in Resources */ = {isa = PBXBuildFile; fileRef = 7C7DCDFEAD0FB5F4149126DB /* DiscordMarkOfficial.svg */; };
+		62A524215C8C9A485E51D8DC /* popup.css in Resources */ = {isa = PBXBuildFile; fileRef = E9CAC7E3094D84D226B5273B /* popup.css */; };
+		6424EAD9D7AFB467C6DD9DAB /* TwitchCompatibilityContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 743B0576F7DEE62A8930F633 /* TwitchCompatibilityContractTests.swift */; };
 		65515309E9B509F56C5FC4F8 /* AppearanceStylePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACAD463A2950FF09AAA40BCB /* AppearanceStylePicker.swift */; };
 		66099E7E794758FB7B605F10 /* MinerHealthCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7CF370FB28AF15B644BAD3E /* MinerHealthCard.swift */; };
 		66ED85C0C416B95E4B08A875 /* NetworkGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = DECCB3AB7329CAE568F00BEC /* NetworkGuard.swift */; };
@@ -264,10 +268,12 @@
 		D98D9E425CE00B2FB2C57686 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46366DBAD54AF15E48C9E501 /* main.swift */; };
 		D9E4B76670DBD16E2DB5EAF1 /* DebugTracer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B8617965DD708EF04CA5A35 /* DebugTracer.swift */; };
 		D9ED48085AC9C519F0FCD0E7 /* CampaignDataService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 011876AF5BD64BEC7BC88B09 /* CampaignDataService.swift */; };
+		DA8BE7D6A688A1DAC5134D7E /* InventoryBenefitPreservationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59CFDCF743F4E429D038B035 /* InventoryBenefitPreservationTests.swift */; };
 		DAC7FA7B5C4D11DC4DC7327B /* SettingsBackupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2FAAA719F7BE0489949753A /* SettingsBackupTests.swift */; };
 		DC1317DA23FDBB175488AD1D /* MinerPresentedState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A319936A0EDBABFEC9667ED0 /* MinerPresentedState.swift */; };
 		DD4BEB71DFE7F4289A2EE792 /* DiscordAPIRoutesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9801029B6FF0AE01627EE293 /* DiscordAPIRoutesTests.swift */; };
 		DF835D2347542373D6FC51ED /* MinerOrderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15023E474693397C14135649 /* MinerOrderTests.swift */; };
+		E073C8BD3BBE3D5320421FC2 /* TwitchCompatibilityRecovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 368CD1F54C243641154FAD3E /* TwitchCompatibilityRecovery.swift */; };
 		E186E7AF4106DE58771185D1 /* DebugAvatarCorgi.png in Resources */ = {isa = PBXBuildFile; fileRef = F38DE6963362A198547011B5 /* DebugAvatarCorgi.png */; };
 		E43DEC94C9BDD5175A511E3F /* SwiftMinerDMEventServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 629F288CD5F83A1A3925F9AC /* SwiftMinerDMEventServiceTests.swift */; };
 		E516EF700F03709A84BCE6B1 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = CA24FE7FF6A44AF39A372F9C /* manifest.json */; };
@@ -398,6 +404,7 @@
 		150DA97EC15BAA3B90DB54A4 /* ChannelLivenessCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelLivenessCache.swift; sourceTree = "<group>"; };
 		165ABC94EC037719B5DE0C7E /* WebDashboardAssets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebDashboardAssets.swift; sourceTree = "<group>"; };
 		17054AC963AE815169890A76 /* RuntimeClock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeClock.swift; sourceTree = "<group>"; };
+		1737640DE8A51D496C5EFFF0 /* swiftminer-icon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "swiftminer-icon.png"; sourceTree = "<group>"; };
 		19C66F8182D8FB572197B2EC /* SparkleConfigTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SparkleConfigTests.swift; sourceTree = "<group>"; };
 		1A41A42D94BFB27670F81465 /* InventoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InventoryService.swift; sourceTree = "<group>"; };
 		1AA7279BA84C285A25A44F58 /* AccountPriorityGamesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountPriorityGamesTests.swift; sourceTree = "<group>"; };
@@ -441,6 +448,7 @@
 		3263002894A3B72AFC4F2E77 /* ApprovedChannelPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApprovedChannelPersistenceTests.swift; sourceTree = "<group>"; };
 		33B3A3F3F9BC6F96CC3B358D /* TwitchRequestCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwitchRequestCoordinator.swift; sourceTree = "<group>"; };
 		3663F6AAC34D5A6F09FC908E /* DebugAvatarPixelPanda.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = DebugAvatarPixelPanda.png; sourceTree = "<group>"; };
+		368CD1F54C243641154FAD3E /* TwitchCompatibilityRecovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwitchCompatibilityRecovery.swift; sourceTree = "<group>"; };
 		36C4B40CA1A00C6AB1960760 /* MinerEngine+Callbacks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MinerEngine+Callbacks.swift"; sourceTree = "<group>"; };
 		3890500ACC8AE036BC125962 /* UnattendedIncidentNotificationServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnattendedIncidentNotificationServiceTests.swift; sourceTree = "<group>"; };
 		39229503F2645FA72401C529 /* MarketingDashboardFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarketingDashboardFixture.swift; sourceTree = "<group>"; };
@@ -481,6 +489,7 @@
 		573283C16E2BE14FF4AB880C /* KeychainTokenStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainTokenStore.swift; sourceTree = "<group>"; };
 		57FA1EDC268748340DA9F991 /* web-logo-light.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "web-logo-light.png"; sourceTree = "<group>"; };
 		58CE4A1460AC0FDF90CDCAA5 /* MinerGameState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinerGameState.swift; sourceTree = "<group>"; };
+		59CFDCF743F4E429D038B035 /* InventoryBenefitPreservationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InventoryBenefitPreservationTests.swift; sourceTree = "<group>"; };
 		5A79F35AB0C08E6F2BE9A648 /* LiquidGlass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidGlass.swift; sourceTree = "<group>"; };
 		5BF00FC996141AD5345CE864 /* AuthRequiredSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthRequiredSheet.swift; sourceTree = "<group>"; };
 		5D554E5B8D10473479B46D38 /* MinerEngineVersion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinerEngineVersion.swift; sourceTree = "<group>"; };
@@ -496,6 +505,7 @@
 		652BFE1553856C6C892F74B6 /* MinerEngine+CampaignWarnings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MinerEngine+CampaignWarnings.swift"; sourceTree = "<group>"; };
 		65FB3E563B38E973DD424620 /* MinersOverviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinersOverviewView.swift; sourceTree = "<group>"; };
 		66D3CD478576ED0783BFEED7 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		69A05685AB6FD2FAAD2107A5 /* popup.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = popup.html; sourceTree = "<group>"; };
 		6A5991355C80575BF49772CB /* DebugAvatarYellowDuck.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = DebugAvatarYellowDuck.png; sourceTree = "<group>"; };
 		6E08A9966225179B652AC9C8 /* DropsMinerCampaignFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropsMinerCampaignFilter.swift; sourceTree = "<group>"; };
 		6E3DEEF3F6DA2049777E3722 /* DropsMinerCampaignFilterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropsMinerCampaignFilterTests.swift; sourceTree = "<group>"; };
@@ -504,6 +514,7 @@
 		703A0B41A5D6897C4E31F17D /* LogExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogExporter.swift; sourceTree = "<group>"; };
 		71FA5DF07B124B51C6C833B4 /* TwitchClientFingerprint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwitchClientFingerprint.swift; sourceTree = "<group>"; };
 		73CC30EE7E88151928E8140C /* GameMatchIndex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameMatchIndex.swift; sourceTree = "<group>"; };
+		743B0576F7DEE62A8930F633 /* TwitchCompatibilityContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwitchCompatibilityContractTests.swift; sourceTree = "<group>"; };
 		7559E3ABB6B9BA9EDAFCA012 /* NavigationProjectionStateProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationProjectionStateProvider.swift; sourceTree = "<group>"; };
 		758AF13E9334C95906C1A325 /* SwiftMinerCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftMinerCore.swift; sourceTree = "<group>"; };
 		761F9A6E040E9D6034DFEC8C /* DebugAvatarPixelPandaDiscord.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = DebugAvatarPixelPandaDiscord.png; sourceTree = "<group>"; };
@@ -632,6 +643,7 @@
 		E844D3FBA9C31BB2D919C364 /* AccountMiningSettingsPanes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountMiningSettingsPanes.swift; sourceTree = "<group>"; };
 		E8AA7E5479C3A8C70111FF9A /* CampaignStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignStore.swift; sourceTree = "<group>"; };
 		E99FD0C85997B76325EB0056 /* WebDashboardRoutes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebDashboardRoutes.swift; sourceTree = "<group>"; };
+		E9CAC7E3094D84D226B5273B /* popup.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; path = popup.css; sourceTree = "<group>"; };
 		EB9A5D80D3D77E386B961144 /* DMPreviewPayloadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DMPreviewPayloadTests.swift; sourceTree = "<group>"; };
 		EBA1A5E3A980893167B1EA34 /* PersistenceFailureDiagnosticsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceFailureDiagnosticsTests.swift; sourceTree = "<group>"; };
 		ED1A226A04A8542F56E96CBF /* WebDashboardSecurityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebDashboardSecurityTests.swift; sourceTree = "<group>"; };
@@ -821,6 +833,9 @@
 				25C0587923B2FA394E848DF7 /* content.js */,
 				CA24FE7FF6A44AF39A372F9C /* manifest.json */,
 				B71A8637A806A5D69F521CCE /* page-hook.js */,
+				E9CAC7E3094D84D226B5273B /* popup.css */,
+				69A05685AB6FD2FAAD2107A5 /* popup.html */,
+				1737640DE8A51D496C5EFFF0 /* swiftminer-icon.png */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -899,6 +914,7 @@
 				4FB620CFDEBA5F3A2E13C44A /* SwiftBotInvitationSheet.swift */,
 				AD3B416F9FDC5DC4764D6E9C /* SwiftMinerInvitation.swift */,
 				BD3A3FA3D2C53873D6817D19 /* TwitchAvatarStore.swift */,
+				368CD1F54C243641154FAD3E /* TwitchCompatibilityRecovery.swift */,
 				B867787CA22A6074C1C312B7 /* UnattendedHealthModel.swift */,
 				F86CAAFB40BE4E27C33FD6E3 /* UpToDateUserDriver.swift */,
 				B94A5A973E3B708093027C66 /* DebugAvatars */,
@@ -1075,6 +1091,7 @@
 				41D6E3EDBE9FEE60A15BCD57 /* GameAggregateTests.swift */,
 				CEF247F1E20923EFA7310FF7 /* GameMatchIndexTests.swift */,
 				401204D63B3DD71670C4C32A /* IdleSignOfLifeTests.swift */,
+				59CFDCF743F4E429D038B035 /* InventoryBenefitPreservationTests.swift */,
 				D3674D197B60A0404ACB40DE /* KeychainAccountStoreTests.swift */,
 				B6C699D919FF9FA3106CB659 /* LegacyAccountMigratorTests.swift */,
 				637C207EE3AF4206DA9F2C8F /* LogExporterTests.swift */,
@@ -1113,6 +1130,7 @@
 				629F288CD5F83A1A3925F9AC /* SwiftMinerDMEventServiceTests.swift */,
 				31596634B545A13E781528E7 /* SwiftMinerPortalLinkTests.swift */,
 				9289E4C22C90837BB4EF95A9 /* TwitchAuthServiceTests.swift */,
+				743B0576F7DEE62A8930F633 /* TwitchCompatibilityContractTests.swift */,
 				6185C3A8B677CE14EE058952 /* TwitchQueryHashStoreTests.swift */,
 				B199FBD956E177F78210A113 /* UnattendedHealthStoreTests.swift */,
 				3890500ACC8AE036BC125962 /* UnattendedIncidentNotificationServiceTests.swift */,
@@ -1348,6 +1366,9 @@
 				A941450A3597CA0F57E71A20 /* content.js in Resources */,
 				E516EF700F03709A84BCE6B1 /* manifest.json in Resources */,
 				06F8E156655F8B7717968012 /* page-hook.js in Resources */,
+				62A524215C8C9A485E51D8DC /* popup.css in Resources */,
+				5E7731FD92259B617609675C /* popup.html in Resources */,
+				29E573B6A66AAE3647E0CD96 /* swiftminer-icon.png in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1620,6 +1641,7 @@
 				500DC362DE32EDBD78ACACDF /* SwiftBotInvitationSheet.swift in Sources */,
 				683F3FCC5F8DAE7327552AA4 /* SwiftMinerInvitation.swift in Sources */,
 				812443DB837ACE81CF97CCB8 /* TwitchAvatarStore.swift in Sources */,
+				E073C8BD3BBE3D5320421FC2 /* TwitchCompatibilityRecovery.swift in Sources */,
 				D5A6926B7FE2FD8EDEC43F28 /* UnattendedHealthModel.swift in Sources */,
 				B781D6B4860AC7E854163FD1 /* UpToDateUserDriver.swift in Sources */,
 			);
@@ -1679,6 +1701,7 @@
 				2B503A529D384687C95757EC /* GameAggregateTests.swift in Sources */,
 				02CCA331ADD516C85B99DD92 /* GameMatchIndexTests.swift in Sources */,
 				691D24C0CE69743D636B78BB /* IdleSignOfLifeTests.swift in Sources */,
+				DA8BE7D6A688A1DAC5134D7E /* InventoryBenefitPreservationTests.swift in Sources */,
 				C67CDEF2767FE8F285D04C8F /* KeychainAccountStoreTests.swift in Sources */,
 				FBF849B4B3BF782439BF16F9 /* LegacyAccountMigratorTests.swift in Sources */,
 				0DA97EF00308C1F2837F3394 /* LogExporterTests.swift in Sources */,
@@ -1717,6 +1740,7 @@
 				E43DEC94C9BDD5175A511E3F /* SwiftMinerDMEventServiceTests.swift in Sources */,
 				D804AC3D008479E568EE5EA6 /* SwiftMinerPortalLinkTests.swift in Sources */,
 				9D9B628CB3A53990DC0082E0 /* TwitchAuthServiceTests.swift in Sources */,
+				6424EAD9D7AFB467C6DD9DAB /* TwitchCompatibilityContractTests.swift in Sources */,
 				510945CFE773FF6607FDE09C /* TwitchQueryHashStoreTests.swift in Sources */,
 				86F53EA04C314F8DC4C23BCE /* UnattendedHealthStoreTests.swift in Sources */,
 				4779EB5BA77BA01ED1404CC2 /* UnattendedIncidentNotificationServiceTests.swift in Sources */,
@@ -1822,7 +1846,7 @@
 				CODE_SIGN_ENTITLEMENTS = Sources/SwiftMinerSafariExtension/SwiftMinerSafariExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026091211;
+				CURRENT_PROJECT_VERSION = 2026091221;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = Sources/SwiftMinerSafariExtension/Info.plist;
@@ -1850,7 +1874,7 @@
 				CODE_SIGN_ENTITLEMENTS = Sources/SwiftMiner/SwiftMinerRelease.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026091211;
+				CURRENT_PROJECT_VERSION = 2026091221;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				EXCLUDED_SOURCE_FILE_NAMES = (
@@ -1976,7 +2000,7 @@
 				CODE_SIGN_ENTITLEMENTS = Sources/SwiftMinerSafariExtension/SwiftMinerSafariExtensionDebug.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026091211;
+				CURRENT_PROJECT_VERSION = 2026091221;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = Sources/SwiftMinerSafariExtension/Info.plist;
@@ -2043,7 +2067,7 @@
 				CODE_SIGN_ENTITLEMENTS = Sources/SwiftMiner/SwiftMiner.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026091211;
+				CURRENT_PROJECT_VERSION = 2026091221;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;

@@ -19,14 +19,6 @@ struct ContentView: View {
         .background(WindowZoomConfigurator())
         .frame(minWidth: 800, minHeight: 600)
         .swiftMinerAppearance(style: settings.appearanceStyle)
-        // Atomic Purple owns the whole window plane, and the toolbar's own
-        // background painted an opaque band across the top of it — the one strip
-        // of the window the theme could not reach. Standard keeps the system's
-        // toolbar, which is the right backdrop for an opaque window.
-        .toolbarBackground(
-            settings.appearanceStyle == .atomicPurple ? .hidden : .automatic,
-            for: .windowToolbar
-        )
         .sheet(isPresented: $nav.showAddAccountSheet) {
             AuthRequiredSheet(
                 isPresented: $nav.showAddAccountSheet,

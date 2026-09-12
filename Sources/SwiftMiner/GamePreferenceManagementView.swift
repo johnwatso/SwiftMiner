@@ -153,18 +153,24 @@ struct GamePreferenceManagementView: View {
         let fallbacks = fallbackLogins
 
         return List {
-            Section {
-                GameSearchField(
-                    settings: settings,
-                    minerManager: minerManager,
-                    placeholder: "Search games to add\u{2026}",
-                    offersBothStates: true,
-                    showsAccountRequirementNotice: false
-                )
-                .padding(.vertical, 4)
-            } footer: {
-                Text("Search and add games to prioritise or exclude.")
-            }
+            GameSearchField(
+                settings: settings,
+                minerManager: minerManager,
+                placeholder: "Search games to add\u{2026}",
+                offersBothStates: true,
+                showsAccountRequirementNotice: false
+            )
+            .padding(.vertical, 4)
+            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 0, trailing: 16))
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
+
+            Text("Search and add games to prioritise or exclude.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .listRowInsets(EdgeInsets(top: 3, leading: 16, bottom: 8, trailing: 16))
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
 
             if !prioritisedGames.isEmpty {
                 Section {
@@ -185,6 +191,7 @@ struct GamePreferenceManagementView: View {
                         isExpanded: $isPrioritisedExpanded
                     )
                 }
+                .listSectionSeparator(.hidden)
             }
 
             if !excludedGames.isEmpty {
@@ -206,13 +213,17 @@ struct GamePreferenceManagementView: View {
                         isExpanded: $isExcludedExpanded
                     )
                 }
+                .listSectionSeparator(.hidden)
             }
 
             if prioritisedGames.isEmpty && excludedGames.isEmpty {
                 emptyState
             }
         }
-        .listStyle(.inset)
+        // Plain style is deliberate: AppKit's inset list keeps painting table rules even
+        // when individual rows opt out, which fights the card grouping used below.
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
     }
 
     private func row(for preference: GamePreference, fallbacks: [String: String]) -> some View {
@@ -222,6 +233,16 @@ struct GamePreferenceManagementView: View {
             storedFallbackLogin: fallbacks[preference.id] ?? fallbacks[Self.nameKey(for: preference.gameName)],
             isExpanded: expandedBinding(for: preference)
         )
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(
+            Color.primary.opacity(0.075),
+            in: RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
+        )
+        .shadow(color: .black.opacity(0.035), radius: 2, y: 1)
+        .listRowInsets(EdgeInsets(top: 3, leading: 12, bottom: 3, trailing: 12))
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
     }
 
     private var emptyState: some View {
@@ -331,7 +352,6 @@ private struct GameRuleRow: View {
                     .padding(.bottom, 2)
             }
         }
-        .padding(.vertical, 3)
         .task(id: storedFallbackLogin) {
             syncFallback()
         }

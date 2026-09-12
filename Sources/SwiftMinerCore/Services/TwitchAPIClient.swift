@@ -1524,6 +1524,18 @@ public actor TwitchAPIClient {
                 rateLimitWaitSeconds: 0
             )
             if let query {
+                // Judge the body before trusting the hash. `accept` used to fire on transport
+                // success alone, which cannot distinguish a usable document from a different
+                // one Twitch is equally happy to serve. Throwing here routes into the same
+                // catch that handles a retired persisted query: the hash is retired and the
+                // bundled document retried, so a bad discovery costs one request, not a day.
+                if request.sha256Hash != query.bundledHash,
+                   !query.responseSatisfiesContract(data) {
+                    throw TwitchMinerError.twitchAPICompatibility(
+                        operation: operationName,
+                        reason: "The response did not carry the fields SwiftMiner reads for this query."
+                    )
+                }
                 queryHashStore.accept(request.sha256Hash, for: query)
             }
             return data
@@ -1534,6 +1546,37 @@ public actor TwitchAPIClient {
             // flight. Judge the hash that was actually sent; never discard the newer
             // value merely because the older one failed on Twitch.
             guard request.sha256Hash != query.bundledHash else {
+                // The bundled hash itself is gone. This — and only this — is the moment a
+                // Twitch rotation has actually broken SwiftMiner, so record it: the status
+                // card reports it and discovery goes looking for the replacement hash.
+                queryHashStore.recordRecoveryNeeded(for: query)
+
+                // But a retired hash need not stop anything. The hash was only ever a
+                // reference to a document Twitch stores; where SwiftMiner can state that
+                // document itself, send it inline and carry on. This is the difference
+                // between waiting days for a release and not noticing the rotation at all.
+                if let document = query.documentFallback {
+                    Logger.api.warning(
+                        "[GQL] \(operationName) persisted query is gone; sending the query document inline"
+                    )
+                    let data = try await makeRawGraphQLRequest(
+                        body: [
+                            "operationName": request.operationName,
+                            "query": document,
+                            "variables": request.variables
+                        ],
+                        operationName: operationName,
+                        allowRefreshRetry: allowRefreshRetry
+                    )
+                    // The operation works again, so stop hunting a replacement hash for it.
+                    // Without this the recovery scan keeps finding this query "broken" and
+                    // reopens Twitch in Safari every half hour, for a value it is no longer
+                    // waiting on. The warning above still records that the bundled hash is
+                    // stale; the daily upstream monitor is what gets it refreshed.
+                    queryHashStore.clearRecoveryNeeded(for: query)
+                    return data
+                }
+
                 throw error
             }
 

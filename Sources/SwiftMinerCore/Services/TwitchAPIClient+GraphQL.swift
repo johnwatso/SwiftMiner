@@ -665,6 +665,13 @@ extension TwitchAPIClient {
         // Parse gameEventDrops — maps benefit ID → ClaimedBenefit.
         // Twitch omits `self.isClaimed` for fully-claimed drops in DropCampaignDetails,
         // so we use this dict as a fallback to detect claimed drops by ID or name.
+        //
+        // A discovered hash whose reply lacks this field never reaches here: the field is
+        // `GQLQuery.inventory`'s response contract, checked before the hash is trusted.
+        // Reaching here without it means the bundled document itself answered that way, so
+        // leave the last known benefits alone — an account Twitch has never awarded
+        // anything reads as the same shape, and believing it would mark every earned drop
+        // unclaimed.
         if let gameEventDrops = inventory["gameEventDrops"] as? [[String: Any]] {
             var benefits: [String: ClaimedBenefit] = [:]
             for benefit in gameEventDrops {
@@ -676,6 +683,8 @@ extension TwitchAPIClient {
             lastKnownClaimedBenefits = benefits
             let benefitCount = benefits.count
             await traceGQLDebug { "[TwitchAPIClient] fetchInventory: \(benefitCount) claimed benefit IDs" }
+        } else {
+            await traceGQLDebug { "[TwitchAPIClient] fetchInventory: no gameEventDrops in response" }
         }
 
         // dropCampaignsInProgress is null when no campaigns are actively in-progress (all claimed or not started)

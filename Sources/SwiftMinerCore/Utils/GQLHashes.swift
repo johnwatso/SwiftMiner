@@ -36,6 +36,88 @@ public enum GQLQuery: String, CaseIterable, Codable, Identifiable, Sendable {
         }
     }
 
+    /// The query text to send when the persisted hash for this operation is gone.
+    ///
+    /// A persisted hash is a *reference* to a document Twitch has stored. When Twitch
+    /// retires one there is nothing to look up, and every miner built on that hash stops
+    /// until someone ships a replacement — the days-long outage this whole feature exists
+    /// to shorten. But the hash was only ever an optimisation: `SendSpadeEvents` has always
+    /// posted its document inline, with no hash at all, and Twitch answers it. So an
+    /// operation whose document SwiftMiner can state itself never has to wait for anyone.
+    ///
+    /// Written out only where the document is known exactly. A document that is merely
+    /// close would parse into the wrong shape, which is worse than not trying — the
+    /// response contract above is the backstop where one exists, and the operation's own
+    /// parser is the backstop where it does not.
+    public var documentFallback: String? {
+        switch self {
+        case .dropsPageClaimDropRewards:
+            // `dropInstanceID` in, `status` out — exactly what `claimDrop` sends and reads.
+            return """
+            mutation DropsPage_ClaimDropRewards($input: ClaimDropRewardsInput!) {
+              claimDropRewards(input: $input) {
+                status
+              }
+            }
+            """
+        default:
+            return nil
+        }
+    }
+
+    /// Response shapes that prove the document behind a hash is the one SwiftMiner reads.
+    ///
+    /// Twitch keys persisted queries by document, not by operation name, so a hash can be
+    /// registered, answer 200, and still be a *different* query wearing the same name —
+    /// which is exactly how a swapped `Inventory` hash marked every claimed drop unclaimed.
+    /// Any one path being present and non-null is enough.
+    ///
+    /// Only ever consulted for a *discovered* hash. The bundled document is never judged,
+    /// so a contract that is too strict can at worst decline an automatic update; it can
+    /// never break a working install. An empty list means "no contract yet" and preserves
+    /// the old behaviour of trusting the transport.
+    ///
+    /// Left empty on purpose where a correct response can legitimately omit the field:
+    /// `DropCampaignDetails` returns a null `dropCampaign` for a campaign the account
+    /// cannot see, and `PlaybackAccessToken` returns nothing for a restricted channel.
+    /// Asserting those would retire good hashes on ordinary days.
+    public var responseContracts: [[String]] {
+        switch self {
+        case .inventory:
+            return [["data", "currentUser", "inventory", "gameEventDrops"]]
+        case .viewerDropsDashboard:
+            // Twitch has served this under `currentUser` and at the root; either is fine.
+            return [
+                ["data", "currentUser", "dropCampaigns"],
+                ["data", "dropCampaigns"]
+            ]
+        default:
+            return []
+        }
+    }
+
+    /// Whether a response body carries what this operation is parsed for.
+    /// Vacuously true for an operation with no contract.
+    public func responseSatisfiesContract(_ body: Data) -> Bool {
+        let contracts = responseContracts
+        guard !contracts.isEmpty else { return true }
+        guard let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any] else {
+            return false
+        }
+        return contracts.contains { path in
+            var node: Any? = json
+            for key in path {
+                guard let dictionary = node as? [String: Any],
+                      let next = dictionary[key],
+                      !(next is NSNull) else {
+                    return false
+                }
+                node = next
+            }
+            return true
+        }
+    }
+
     public var bundledHash: String {
         switch self {
         case .directoryGameRedirect: return GQLHashes.directoryGameRedirect
@@ -82,6 +164,7 @@ public struct TwitchQueryHashResolution: Equatable, Sendable {
 }
 
 public enum TwitchQueryHashDate: String, Sendable {
+    case observed = "observedDate"
     case candidate = "candidateDate"
     case accepted = "acceptedDate"
     case rejected = "rejectedDate"
@@ -153,6 +236,9 @@ public struct TwitchQueryHashStore: @unchecked Sendable {
     @discardableResult
     public func submitCandidate(_ hash: String, for query: GQLQuery) -> Bool {
         guard Self.isValidHash(hash) else { return false }
+        // A hash that has already been tried and failed is not a candidate. `clearObservations`
+        // lifts this, so an explicit re-check is still a genuine retry.
+        guard hash != rejectedHash(for: query) else { return false }
         guard hash != query.bundledHash, hash != override(for: query) else {
             defaults.removeObject(forKey: key("candidate", query))
             defaults.removeObject(forKey: key("candidateDate", query))
@@ -163,6 +249,33 @@ public struct TwitchQueryHashStore: @unchecked Sendable {
         return true
     }
 
+    /// Record that Twitch used this hash, even when it still matches the
+    /// bundled fallback. Observation metadata powers the live Safari-check UI;
+    /// the value remains an untrusted candidate until Twitch accepts it through
+    /// SwiftMiner's normal request path.
+    @discardableResult
+    public func recordObservation(_ hash: String, for query: GQLQuery) -> Bool {
+        guard Self.isValidHash(hash) else { return false }
+        defaults.set(hash, forKey: key("observed", query))
+        defaults.set(Date().timeIntervalSince1970, forKey: key("observedDate", query))
+        return submitCandidate(hash, for: query)
+    }
+
+    public func observedHash(for query: GQLQuery) -> String? {
+        validStoredHash(forKey: key("observed", query))
+    }
+
+    public func clearObservations() {
+        for query in GQLQuery.allCases {
+            defaults.removeObject(forKey: key("observed", query))
+            defaults.removeObject(forKey: key("observedDate", query))
+            // Deliberate: an explicit re-check means "try again", so a hash refused last
+            // time gets another go rather than being permanently written off.
+            defaults.removeObject(forKey: key("rejected", query))
+            defaults.removeObject(forKey: key("rejectedDate", query))
+        }
+    }
+
     /// Promote the exact candidate used by a successful Twitch request.
     public func accept(_ hash: String, for query: GQLQuery) {
         guard candidate(for: query) == hash else { return }
@@ -170,7 +283,14 @@ public struct TwitchQueryHashStore: @unchecked Sendable {
         defaults.set(Date().timeIntervalSince1970, forKey: key("acceptedDate", query))
         defaults.removeObject(forKey: key("candidate", query))
         defaults.removeObject(forKey: key("candidateDate", query))
+        defaults.removeObject(forKey: key("rejected", query))
         defaults.removeObject(forKey: key("rejectedDate", query))
+        defaults.removeObject(forKey: key("recoveryNeeded", query))
+    }
+
+    /// The last hash that was tried for this query and did not work.
+    public func rejectedHash(for query: GQLQuery) -> String? {
+        validStoredHash(forKey: key("rejected", query))
     }
 
     /// Remove a rejected runtime value only when it is still the value that failed.
@@ -194,13 +314,59 @@ public struct TwitchQueryHashStore: @unchecked Sendable {
             removed = true
         }
         if removed {
+            // Remember the value, not just the moment. Twitch keeps serving the same hash
+            // on every page load, so without this the extension re-queues a hash that has
+            // already failed the moment the user opens Twitch again — try, fail, retire,
+            // repeat, with the status row flickering between "validating" and "changed"
+            // and never settling.
+            defaults.set(hash, forKey: key("rejected", query))
             defaults.set(Date().timeIntervalSince1970, forKey: key("rejectedDate", query))
         }
         return removed
     }
 
+    /// Note that SwiftMiner's own bundled hash for this query has stopped working.
+    ///
+    /// This is the signal the whole feature exists for: Twitch retired the document, every
+    /// miner using it is broken, and a release is days away. The replacement Twitch's own
+    /// site moved to is a *successor* of that document, so adopting it is both safe and the
+    /// point. A query whose bundled hash still works is never marked, which is what keeps
+    /// an unrelated sibling query from being copied over a healthy one.
+    public func recordRecoveryNeeded(for query: GQLQuery) {
+        guard defaults.double(forKey: key("recoveryNeeded", query)) == 0 else { return }
+        defaults.set(Date().timeIntervalSince1970, forKey: key("recoveryNeeded", query))
+    }
+
+    public func clearRecoveryNeeded(for query: GQLQuery) {
+        defaults.removeObject(forKey: key("recoveryNeeded", query))
+    }
+
+    public func queriesNeedingRecovery() -> [GQLQuery] {
+        GQLQuery.allCases.filter { defaults.double(forKey: key("recoveryNeeded", $0)) > 0 }
+    }
+
+    /// When a refresh was last forced to settle a pending candidate.
+    public var lastSettleAttempt: Date? {
+        let value = defaults.double(forKey: "TwitchQueryHash.lastSettleAttempt")
+        return value > 0 ? Date(timeIntervalSince1970: value) : nil
+    }
+
+    public func recordSettleAttempt(at date: Date = Date()) {
+        defaults.set(date.timeIntervalSince1970, forKey: "TwitchQueryHash.lastSettleAttempt")
+    }
+
+    /// When discovery was last sent looking, so a broken query cannot reopen Safari on a loop.
+    public var lastRecoveryAttempt: Date? {
+        let value = defaults.double(forKey: "TwitchQueryHash.lastRecoveryAttempt")
+        return value > 0 ? Date(timeIntervalSince1970: value) : nil
+    }
+
+    public func recordRecoveryAttempt(at date: Date = Date()) {
+        defaults.set(date.timeIntervalSince1970, forKey: "TwitchQueryHash.lastRecoveryAttempt")
+    }
+
     public func reset(_ query: GQLQuery) {
-        for kind in ["candidate", "candidateDate", "override", "acceptedDate", "rejectedDate"] {
+        for kind in ["observed", "observedDate", "candidate", "candidateDate", "override", "acceptedDate", "rejected", "rejectedDate", "recoveryNeeded"] {
             defaults.removeObject(forKey: key(kind, query))
         }
     }

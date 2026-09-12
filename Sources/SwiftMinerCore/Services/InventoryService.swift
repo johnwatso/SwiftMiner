@@ -108,10 +108,14 @@ public actor InventoryService {
         do {
             let result = try await apiClient.fetchInventory()
             let claimedBenefits = await apiClient.getClaimedBenefits()
+            let claimed = Self.preservingKnownBenefits(
+                fresh: claimedBenefits,
+                previous: snapshotCache
+            )
             let snapshot = InventorySnapshot(
                 accountId: accountId,
-                benefitIDs: Set(claimedBenefits.keys),
-                benefitAwardedAt: claimedBenefits.mapValues(\.lastAwardedAt),
+                benefitIDs: claimed.benefitIDs,
+                benefitAwardedAt: claimed.awardedAt,
                 progress: result.progress,
                 discoveredCampaigns: result.discoveredCampaigns
             )
@@ -134,6 +138,35 @@ public actor InventoryService {
             }
             throw error
         }
+    }
+
+
+    /// Twitch never un-awards a claimed benefit, so a snapshot that comes back with none
+    /// where we previously held some describes a degraded response, not an emptied
+    /// inventory. Believing it is expensive: `DropsService.mergeInventory` treats the
+    /// benefit set as the sole source of truth for claimed state, so an empty one marks
+    /// every earned drop unclaimed, and finished campaigns return to mining as AVAILABLE
+    /// with a full slate of "earnable" drops. That is exactly how a completed THE FINALS
+    /// campaign sent the fleet hunting streams for a reward it had already claimed.
+    ///
+    /// Only the wholesale-empty case is covered. A snapshot that still lists benefits is
+    /// trusted as-is, so this can never resurrect a benefit Twitch has genuinely dropped
+    /// from a non-empty list.
+    static func preservingKnownBenefits(
+        fresh: [String: TwitchAPIClient.ClaimedBenefit],
+        previous: InventorySnapshot?
+    ) -> (benefitIDs: Set<String>, awardedAt: [String: Date]) {
+        let freshIDs = Set(fresh.keys)
+        guard freshIDs.isEmpty,
+              let previous,
+              !previous.benefitIDs.isEmpty else {
+            return (freshIDs, fresh.mapValues(\.lastAwardedAt))
+        }
+
+        Logger.campaigns.warning(
+            "Inventory returned no claimed benefits; keeping \(previous.benefitIDs.count) already known rather than marking every drop unclaimed"
+        )
+        return (previous.benefitIDs, previous.benefitAwardedAt)
     }
 
     public func currentSnapshot() async -> InventorySnapshot? {

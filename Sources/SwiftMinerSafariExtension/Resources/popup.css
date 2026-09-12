@@ -1,0 +1,9 @@
+:root { color-scheme: light dark; }
+body {
+  width: 268px; margin: 0; padding: 16px;
+  font: 12px/1.45 -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+.mark { width: 28px; height: 28px; border-radius: 7px; display: block; }
+h1 { margin: 10px 0 6px; font-size: 13px; }
+p { margin: 0 0 8px; opacity: 0.85; }
+.fine { opacity: 0.6; font-size: 11px; margin-bottom: 0; }
