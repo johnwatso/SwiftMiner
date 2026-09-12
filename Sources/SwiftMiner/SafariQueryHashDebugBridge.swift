@@ -31,7 +31,7 @@ final class SafariQueryHashDebugBridge: @unchecked Sendable {
             let hash = String(payload[payload.index(after: separator)...])
             let store = TwitchQueryHashStore.standard
             guard store.automaticDiscoveryEnabled else { return }
-            store.submitCandidate(hash, for: query)
+            store.recordObservation(hash, for: query)
         }
     }
 

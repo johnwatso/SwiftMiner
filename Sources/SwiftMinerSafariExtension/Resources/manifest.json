@@ -2,12 +2,18 @@
   "manifest_version": 3,
   "name": "SwiftMiner Query Hash Discovery",
   "version": "1.41.1",
-  "description": "Privately discovers Twitch persisted-query hashes for SwiftMiner.",
+  "description": "Updates SwiftMiner's Twitch query hashes on request. Idle otherwise.",
+  "action": {
+    "default_title": "SwiftMiner",
+    "default_popup": "popup.html",
+    "default_icon": "swiftminer-icon.png"
+  },
   "permissions": [
     "nativeMessaging"
   ],
   "host_permissions": [
-    "https://www.twitch.tv/drops/*"
+    "https://www.twitch.tv/drops/*",
+    "https://www.twitch.tv/directory/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -15,7 +21,8 @@
   "content_scripts": [
     {
       "matches": [
-        "https://www.twitch.tv/drops/*"
+        "https://www.twitch.tv/drops/*",
+        "https://www.twitch.tv/directory/*"
       ],
       "js": [
         "content.js"
@@ -26,11 +33,16 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "page-hook.js"
+        "page-hook.js",
+        "swiftminer-icon.png"
       ],
       "matches": [
-        "https://www.twitch.tv/drops/*"
+        "https://www.twitch.tv/drops/*",
+        "https://www.twitch.tv/directory/*"
       ]
     }
-  ]
+  ],
+  "icons": {
+    "96": "swiftminer-icon.png"
+  }
 }

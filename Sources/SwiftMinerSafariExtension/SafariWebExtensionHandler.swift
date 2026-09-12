@@ -1,15 +1,18 @@
 import Foundation
 import SafariServices
 
-/// Receives an already-scrubbed operation/hash pair from the extension's
-/// background worker and places it in the shared candidate store. The handler
-/// never receives or persists request headers, cookies, variables or responses.
+/// Receives already-scrubbed operation/hash pairs from the extension's background
+/// worker during a SwiftMiner update session, plus the summary when that session
+/// ends. The handler never receives or persists request headers, cookies,
+/// variables or responses.
 final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
     private static let suiteName = "group.com.swiftminer.shared"
     private static let debugNotificationName = Notification.Name(
         "com.swiftminer.debug.query-hash-candidate"
     )
-    private static let automaticDiscoveryKey = "TwitchQueryHash.automaticDiscovery"
+    private static let debugSessionNotificationName = Notification.Name(
+        "com.swiftminer.debug.query-hash-session"
+    )
     private static let allowedOperations: Set<String> = [
         "DirectoryGameRedirect",
         "ViewerDropsDashboard",
@@ -28,16 +31,50 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
     func beginRequest(with context: NSExtensionContext) {
         let item = context.inputItems.first as? NSExtensionItem
         let message = item?.userInfo?[SFExtensionMessageKey] as? [String: Any]
-        let accepted = storeCandidate(from: message)
+
+        let accepted: Bool
+        switch message?["type"] as? String {
+        case "queryHashCandidate":
+            accepted = storeCandidate(from: message)
+        case "queryHashSessionFinished":
+            accepted = storeSessionResult(from: message)
+        default:
+            accepted = false
+        }
 
         let response = NSExtensionItem()
         response.userInfo = [SFExtensionMessageKey: ["accepted": accepted]]
         context.completeRequest(returningItems: [response], completionHandler: nil)
     }
 
+    /// Records how an update session ended so SwiftMiner can report it without having to
+    /// infer success from the absence of observations.
+    private func storeSessionResult(from message: [String: Any]?) -> Bool {
+        guard let message else { return false }
+        let succeeded = (message["succeeded"] as? [String] ?? [])
+            .filter(Self.allowedOperations.contains)
+        let failed = (message["failed"] as? [String] ?? [])
+            .filter(Self.allowedOperations.contains)
+
+        #if DEBUG
+        DistributedNotificationCenter.default().postNotificationName(
+            Self.debugSessionNotificationName,
+            object: "\(succeeded.joined(separator: ","))|\(failed.joined(separator: ","))",
+            userInfo: nil,
+            options: [.deliverImmediately]
+        )
+        return true
+        #else
+        guard let defaults = Self.sharedDefaults else { return false }
+        defaults.set(succeeded, forKey: "TwitchQueryHash.session.succeeded")
+        defaults.set(failed, forKey: "TwitchQueryHash.session.failed")
+        defaults.set(Date().timeIntervalSince1970, forKey: "TwitchQueryHash.session.finishedDate")
+        return true
+        #endif
+    }
+
     private func storeCandidate(from message: [String: Any]?) -> Bool {
         guard let message,
-              message["type"] as? String == "queryHashCandidate",
               let operation = message["operationName"] as? String,
               Self.allowedOperations.contains(operation),
               let hash = message["sha256Hash"] as? String,
@@ -59,10 +96,14 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
         // in the host. Declining keeps the background worker willing to retry.
         return false
         #else
-        guard let defaults = Self.sharedDefaults,
-              defaults.bool(forKey: Self.automaticDiscoveryKey) else {
-            return false
-        }
+        // No discovery-toggle check: a hash only reaches here inside a session SwiftMiner
+        // itself started, so the request to observe has already been made explicitly.
+        guard let defaults = Self.sharedDefaults else { return false }
+        defaults.set(hash, forKey: "TwitchQueryHash.observed.\(operation)")
+        defaults.set(
+            Date().timeIntervalSince1970,
+            forKey: "TwitchQueryHash.observedDate.\(operation)"
+        )
         defaults.set(hash, forKey: "TwitchQueryHash.candidate.\(operation)")
         defaults.set(
             Date().timeIntervalSince1970,

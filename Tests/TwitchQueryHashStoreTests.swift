@@ -111,4 +111,84 @@ final class TwitchQueryHashStoreTests: XCTestCase {
         store.automaticDiscoveryEnabled = true
         XCTAssertTrue(store.automaticDiscoveryEnabled)
     }
+
+    func testObservationIsRecordedWhenHashStillMatchesBundledFallback() {
+        XCTAssertTrue(
+            store.recordObservation(GQLHashes.viewerDropsDashboard, for: .viewerDropsDashboard)
+        )
+
+        XCTAssertEqual(
+            store.observedHash(for: .viewerDropsDashboard),
+            GQLHashes.viewerDropsDashboard
+        )
+        XCTAssertNotNil(store.date(for: .observed, query: .viewerDropsDashboard))
+        XCTAssertNil(store.candidate(for: .viewerDropsDashboard))
+    }
+
+    func testClearingObservationsPreservesCandidateAndOverrideState() {
+        let candidate = String(repeating: "f", count: 64)
+        XCTAssertTrue(store.recordObservation(candidate, for: .inventory))
+
+        store.clearObservations()
+
+        XCTAssertNil(store.observedHash(for: .inventory))
+        XCTAssertNil(store.date(for: .observed, query: .inventory))
+        XCTAssertEqual(store.candidate(for: .inventory), candidate)
+    }
+
+    // MARK: Retired hashes
+
+    func testRejectingAPromotedCandidateRemovesItWhereverItLanded() {
+        let hash = String(repeating: "a", count: 64)
+        store.submitCandidate(hash, for: .inventory)
+        // Transport success promotes before any response body is read.
+        store.accept(hash, for: .inventory)
+        XCTAssertEqual(store.resolution(for: .inventory).hash, hash)
+
+        // The parser only now discovers the reply is unusable. An unqualified source must
+        // retire the hash from the override slot it was promoted into.
+        XCTAssertTrue(store.reject(hash, for: .inventory))
+
+        XCTAssertEqual(store.resolution(for: .inventory).hash, GQLQuery.inventory.bundledHash)
+        XCTAssertEqual(store.resolution(for: .inventory).source, .bundled)
+    }
+
+    func testRejectedHashIsNotQueuedAgainByANewObservation() {
+        let hash = String(repeating: "b", count: 64)
+        store.submitCandidate(hash, for: .inventory)
+        store.accept(hash, for: .inventory)
+        store.reject(hash, for: .inventory)
+
+        // Twitch serves the same hash on every page load; re-queueing it is the loop that
+        // left the status row checking forever.
+        XCTAssertFalse(store.recordObservation(hash, for: .inventory))
+        XCTAssertNil(store.candidate(for: .inventory))
+        XCTAssertEqual(store.resolution(for: .inventory).source, .bundled)
+        // The observation itself is still recorded, so the UI can say Twitch has changed.
+        XCTAssertEqual(store.observedHash(for: .inventory), hash)
+    }
+
+    func testAnExplicitRecheckGivesARejectedHashAnotherGo() {
+        let hash = String(repeating: "c", count: 64)
+        store.submitCandidate(hash, for: .inventory)
+        store.accept(hash, for: .inventory)
+        store.reject(hash, for: .inventory)
+
+        store.clearObservations()
+
+        XCTAssertNil(store.rejectedHash(for: .inventory))
+        XCTAssertTrue(store.recordObservation(hash, for: .inventory))
+        XCTAssertEqual(store.candidate(for: .inventory), hash)
+    }
+
+    func testADifferentHashIsStillTriedAfterOneWasRejected() {
+        let bad = String(repeating: "d", count: 64)
+        let next = String(repeating: "e", count: 64)
+        store.submitCandidate(bad, for: .inventory)
+        store.accept(bad, for: .inventory)
+        store.reject(bad, for: .inventory)
+
+        XCTAssertTrue(store.recordObservation(next, for: .inventory))
+        XCTAssertEqual(store.candidate(for: .inventory), next)
+    }
 }

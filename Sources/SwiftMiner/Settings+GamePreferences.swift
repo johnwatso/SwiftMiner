@@ -218,6 +218,23 @@ extension Settings {
         }
     }
 
+    /// A Twitch category slug for the compatibility recovery scan to open.
+    ///
+    /// `DirectoryPage_Game` only fires on a real category page, so the scan needs some
+    /// category to load, and a game the user already prioritises is both certain to exist
+    /// and the least surprising thing to see appear in Safari. Nil when nothing is
+    /// prioritised anywhere — that operation then stays unobservable, which is the
+    /// pre-existing behaviour rather than a regression.
+    public var firstPriorityGameCategorySlug: String? {
+        let names = accountPriorityGames.values.flatMap { $0 }
+        for name in names {
+            if let slug = TwitchCompatibilityRecovery.categorySlug(from: name) {
+                return slug
+            }
+        }
+        return nil
+    }
+
     public func priorityGames(forAccountId accountId: String) -> [String] {
         let key = accountId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return priorityGames }

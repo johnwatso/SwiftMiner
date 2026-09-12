@@ -178,6 +178,14 @@ struct MinerApp: App {
                     NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
                 ) { _ in
                     appModel.refreshNotificationBadge()
+                    recoverTwitchCompatibilityIfNeeded()
+                }
+                // Also on a timer: a fleet left mining unattended is precisely the case this
+                // exists for, and it would never see an activation.
+                .onReceive(
+                    Timer.publish(every: 300, on: .main, in: .common).autoconnect()
+                ) { _ in
+                    recoverTwitchCompatibilityIfNeeded()
                 }
                 .onReceive(
                     NotificationCenter.default.publisher(for: .openSwiftMinerReleaseNotes)
@@ -341,6 +349,33 @@ struct MinerApp: App {
 
     private func requestNotificationPermission() async {
         _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
+    }
+
+    /// Opening Safari on its own is intrusive, so it only ever happens when a Twitch
+    /// rotation has actually broken a query, at most once every half hour, and it says so
+    /// in the Activity Log — otherwise two tabs appear with no explanation.
+    private func recoverTwitchCompatibilityIfNeeded() {
+        // A queued candidate is only tried when something needs that query. Force the
+        // routine refresh that uses it so validation actually happens, rather than the
+        // status card claiming to validate while nothing is in flight.
+        if TwitchCompatibilityRecovery.shouldForceRefreshToSettle() {
+            Task {
+                await navigation.minerManager.forceRefreshAllMiners()
+                _ = navigation.refreshDropsInBackground(force: true)
+            }
+        }
+
+        let chasing = TwitchCompatibilityRecovery.runIfNeeded(
+            directorySlug: settings.firstPriorityGameCategorySlug
+        )
+        guard !chasing.isEmpty else { return }
+
+        let names = chasing.map(\.displayName).joined(separator: ", ")
+        navigation.logEvent(
+            message: "Twitch changed a query SwiftMiner depends on (\(names)). Checking Twitch in Safari for the replacement.",
+            level: .warning,
+            rawMessage: "[compatibility] recovery scan opened for \(chasing.map(\.rawValue).joined(separator: ", "))"
+        )
     }
 
     private func handleDeepLink(_ url: URL) {
