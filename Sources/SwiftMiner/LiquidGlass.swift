@@ -598,6 +598,19 @@ extension View {
             buttonStyle(.bordered).tint(nil)
         }
     }
+
+    /// Soft top scroll edge for the detail plane. Tahoe's default hard edge
+    /// frosts a band under the toolbar and closes it with a divider once content
+    /// scrolls beneath — a ruled strip across a window whose chrome otherwise
+    /// runs straight into the content. The soft edge fades the blur out instead.
+    @ViewBuilder
+    func tahoeSoftTopScrollEdge() -> some View {
+        if #available(macOS 26, *) {
+            scrollEdgeEffectStyle(.soft, for: .top)
+        } else {
+            self
+        }
+    }
 }
 
 /// A titled content group: sentence-case header above a rounded grouped box,
