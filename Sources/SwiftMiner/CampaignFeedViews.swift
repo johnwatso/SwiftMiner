@@ -349,7 +349,6 @@ struct CampaignFeedCard: View {
             if let accent = priority?.accentOutline {
                 RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
                     .strokeBorder(accent.color, lineWidth: accent.width)
-                    .shadow(color: accent.glow, radius: 6)
                     .overlay {
                         RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous)
                             .inset(by: accent.width)
@@ -1011,23 +1010,16 @@ struct PriorityQueueDropLabel: View {
     }
 }
 
-/// What a card shows about its place in the queue: its number, whether it leads,
-/// and whether the queue is currently being reordered.
+/// What a card shows about its place in the queue: its number and whether the queue
+/// is currently being reordered.
 struct PriorityQueueDecoration: Equatable {
     let rank: Int
-    let isTopPriority: Bool
     let isReordering: Bool
     /// False for a card that has no stored priority slot to move.
     let canReorder: Bool
 
-    var accentOutline: (color: Color, width: CGFloat, glow: Color)? {
-        if isReordering && canReorder {
-            return (Color.accentColor.opacity(0.8), 1.4, .clear)
-        }
-        if isTopPriority {
-            return (Color.green.opacity(0.7), 1.4, Color.green.opacity(0.2))
-        }
-        return nil
+    var accentOutline: (color: Color, width: CGFloat)? {
+        isReordering && canReorder ? (Color.accentColor.opacity(0.8), 1.4) : nil
     }
 
     /// Cards that cannot take part fade back while the queue is being reordered.
@@ -1036,8 +1028,8 @@ struct PriorityQueueDecoration: Equatable {
     }
 }
 
-/// Queue position markings drawn over the artwork: the rank, the leader's badge,
-/// and the grip that only appears while reordering.
+/// Queue position markings drawn over the artwork: the rank and the grip that only
+/// appears while reordering.
 struct PriorityQueueCardMarkings: View {
     let decoration: PriorityQueueDecoration
 
@@ -1050,12 +1042,6 @@ struct PriorityQueueCardMarkings: View {
                 .padding(Self.inset)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
-            if decoration.isTopPriority {
-                topBadge
-                    .padding(Self.inset)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-            }
-
             if decoration.isReordering && decoration.canReorder {
                 gripBadge
                     .padding(Self.inset)
@@ -1066,39 +1052,18 @@ struct PriorityQueueCardMarkings: View {
     }
 
     private var rankBadge: some View {
-        let isTop = decoration.isTopPriority
-        return Text("\(decoration.rank)")
-            .font(.system(size: isTop ? 11 : 10, weight: .semibold, design: .rounded))
+        Text("\(decoration.rank)")
+            .font(.system(size: 10, weight: .semibold, design: .rounded))
             .monospacedDigit()
-            .foregroundStyle(isTop ? Color.green : Color.white.opacity(0.8))
-            .frame(width: isTop ? 20 : 18, height: isTop ? 20 : 18)
+            .foregroundStyle(Color.white.opacity(0.8))
+            .frame(width: 18, height: 18)
             .background {
-                Circle().fill(Color.black.opacity(isTop ? 0.55 : 0.5))
+                Circle().fill(Color.black.opacity(0.5))
             }
             .overlay {
-                Circle()
-                    .strokeBorder(
-                        isTop ? Color.green.opacity(0.5) : Color.white.opacity(0.2),
-                        lineWidth: 1
-                    )
+                Circle().strokeBorder(Color.white.opacity(0.2), lineWidth: 1)
             }
-            .shadow(color: .black.opacity(isTop ? 0.3 : 0.22), radius: isTop ? 3 : 2, y: 1)
-    }
-
-    private var topBadge: some View {
-        Text("TOP")
-            .font(.system(size: 8, weight: .bold, design: .rounded))
-            .tracking(0.4)
-            .foregroundStyle(Color.green.opacity(0.85))
-            .padding(.horizontal, 4.5)
-            .padding(.vertical, 2)
-            .background {
-                Capsule().fill(Color.black.opacity(0.44))
-            }
-            .overlay {
-                Capsule().strokeBorder(Color.green.opacity(0.3), lineWidth: 1)
-            }
-            .shadow(color: .black.opacity(0.18), radius: 2, y: 1)
+            .shadow(color: .black.opacity(0.22), radius: 2, y: 1)
     }
 
     private var gripBadge: some View {
@@ -1171,7 +1136,6 @@ struct PriorityQueueRail: View {
                             onManageGames: onManageGames,
                             priority: PriorityQueueDecoration(
                                 rank: index + 1,
-                                isTopPriority: index == 0,
                                 isReordering: isReordering,
                                 canReorder: item.isPriorityPinned
                             )
