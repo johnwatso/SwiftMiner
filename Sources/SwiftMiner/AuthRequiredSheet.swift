@@ -782,10 +782,10 @@ struct AuthRequiredSheet: View {
     private func composeMailInvitation(_ invitation: SwiftMinerInvitation) {
         mailFailureMessage = nil
         Task {
-            do {
+            do throws(MailInvitationComposer.Failure) {
                 try await MailInvitationComposer.composeDraft(for: invitation)
-            } catch let failure as MailInvitationComposer.Failure {
-                mailFailureMessage = failure.message
+            } catch {
+                mailFailureMessage = error.message
             }
         }
     }
