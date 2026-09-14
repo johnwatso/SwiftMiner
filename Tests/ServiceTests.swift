@@ -135,6 +135,38 @@ final class ServiceTests: XCTestCase {
         XCTAssertEqual(store.override(for: .viewerDropsDashboard), candidate)
     }
 
+    /// The recovery alarm is raised by a persisted-query miss that outlasted its retries,
+    /// which one out-of-step edge node can produce. A later working reply from the bundled
+    /// hash must lower it, or the recovery scan keeps reopening Safari for a healthy query.
+    func testWorkingBundledReplyClearsTheRecoveryAlarm() async throws {
+        let suiteName = "com.swiftminer.tests.query-hash-recovery.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = TwitchQueryHashStore(defaults: defaults)
+        store.recordRecoveryNeeded(for: .viewerDropsDashboard)
+
+        let client = TwitchAPIClient(
+            authService: authService,
+            clientId: "test_client",
+            session: mockSession,
+            queryHashStore: store,
+            persistsCampaignCaches: false
+        )
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            if request.url?.path == "/integrity" {
+                return (response, Data(#"{"token":"test","expiration":4102444800000}"#.utf8))
+            }
+            return (response, Data(#"{"data":{"currentUser":{"dropCampaigns":[]}}}"#.utf8))
+        }
+
+        _ = try await client.fetchDropCampaigns()
+
+        XCTAssertTrue(store.queriesNeedingRecovery().isEmpty)
+    }
+
     func testRejectedRuntimeQueryHashFallsBackToBundledValue() async throws {
         let suiteName = "com.swiftminer.tests.query-hash-fallback.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

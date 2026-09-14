@@ -56,6 +56,16 @@ final class AppUpdater: NSObject, ObservableObject {
     var onError: ((Error) -> Void)?
     /// Called when an update check completes and the app is already current.
     var onUpToDate: (() -> Void)?
+    /// Whether the current run of successful checks has already been reported as up to date.
+    private var hasAnnouncedUpToDate = false
+
+    /// True the first time it is asked after launch or after a failed check, false for every
+    /// other "up to date" result. The background loop checks every five minutes, and logging
+    /// each result put hundreds of identical lines a day into the Activity Log.
+    func claimUpToDateAnnouncement() -> Bool {
+        defer { hasAnnouncedUpToDate = true }
+        return !hasAnnouncedUpToDate
+    }
     /// Called when a downloaded update is ready. Arguments are the new version
     /// and a human-readable description of when it will install.
     var onAutoInstall: ((String, String) -> Void)?
@@ -296,6 +306,8 @@ extension AppUpdater: SPUUpdaterDelegate {
             }
         }
 
+        // The next successful check is news again.
+        hasAnnouncedUpToDate = false
         onError?(error)
     }
 

@@ -26,7 +26,7 @@
 <body>
   <main>
     <h1>SwiftMiner 1.41.1</h1>
-    <p class="meta">Version 1.41.1 &middot; Build 2026091211</p>
+    <p class="meta">Version 1.41.1 &middot; Build 2026091414</p>
     <p class="intro">SwiftMiner 1.41.1 makes a fleet easier to trust and operate: miners spread across streams as configured, claims no longer pause on a Twitch call that cannot succeed, and the Activity Log keeps the useful lines visible. Waiting cards identify their game, Game Rules are calmer to scan, and a new Advanced compatibility path can recover from future Twitch query-hash changes even without another SwiftMiner release.</p>
 
     <section>
@@ -39,6 +39,7 @@
         <li>A miner waiting for a stream now names the game it is waiting for. A miner that is watching leads its card with the game, and so do the claiming and stream-override cards &mdash; but the waiting card led with its state and left the game to a single line of detail, which a compact card on Overview cuts short. Waiting is the state a fleet spends most of its time in, and it was the one card that never said what it was waiting for. It now names the game where the watching card does, with the campaign beneath it and the game&rsquo;s artwork alongside, while the antenna symbol and the absent progress bar go on saying that nothing is being earned yet. The miner&rsquo;s detail page, the sidebar and the status label name the game too.</li>
         <li>The wording of that state is now the same everywhere it appears: &ldquo;Waiting for an eligible live stream&rdquo;, in place of &ldquo;No eligible stream live&rdquo; on the card and &ldquo;Waiting &mdash; No live stream&rdquo; in the status label.</li>
         <li>Inviting a friend through SwiftBot no longer lists the server&rsquo;s bots and webhooks as people you could invite. A recipient without a bot flag is still treated as a person, so a server whose member list predates the flag is unaffected.</li>
+        <li>A miner is no longer briefly reported as &ldquo;Watching &mdash; Not Earning&rdquo; the moment it starts watching after a quiet spell. Time without earning was counted from the last drop progress, so hours spent with no eligible campaign or no live stream were carried into the next stream it found &mdash; one miner was flagged as not earning for 925 minutes one second after it began watching. The clock now starts when the miner has something to watch, and a miner that genuinely watches without earning is still flagged after 20 minutes.</li>
         <li>The Overview toolbar no longer paints a blank white strip over the top of the dashboard in the Standard appearance.</li>
       </ul>
     </section>
@@ -55,6 +56,7 @@
       <ul>
         <li>The line explaining which campaign a miner chose, and why, is written once per decision instead of several times a second. It was also being emitted by parts of the app that only wanted the campaign list in order to refresh the screen, and because each of those read a slightly different snapshot, neighbouring lines could disagree about how many campaigns were eligible. Over sixteen hours that was more than a thousand duplicate lines.</li>
         <li>The viewer count of the stream being watched is recorded every five minutes rather than every ten seconds. It was a sixth of the whole log. It is kept at all because it is proof that Twitch&rsquo;s live event feed is still delivering &mdash; a feed that fails silently is exactly the sort of thing these logs get read to find.</li>
+        <li>&ldquo;Already up to date&rdquo; is written once rather than after every background update check. SwiftMiner checks every five minutes, and each check added the same line &mdash; over three hundred of them in a day. It is written again after a check has failed and a later one succeeds.</li>
         <li>When Twitch&rsquo;s edge returns an error page instead of an answer, the log records what went wrong in one line instead of pasting the entire fifteen-line page.</li>
         <li>A diagnostic export now says when followed-streamer prioritisation is switched on but not actually working. Twitch can refuse to serve follow state for an account until it is signed in again; that was reported once, when it happened, and a report pulled hours later gave no sign the setting had been doing nothing all along.</li>
       </ul>

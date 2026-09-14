@@ -68,6 +68,10 @@ public final class MinerManager {
         public var nextCampaignCheckAt: Date?
         /// When the current worker started. Survives the routine status churn of mining.
         public var workerStartedAt: Date?
+        /// When the miner last left a status with nothing to watch (see
+        /// `MinerStatus.hasNothingToWatch`). Stamped by the manager on that transition, and one
+        /// of the anchors of `earningReferenceDate`.
+        public var awaitingWorkEndedAt: Date?
         public var workerState: MinerWorkerState = .idle
         public var workerTaskID: String?
         public var isHealthy: Bool = true
@@ -130,10 +134,15 @@ public final class MinerManager {
         public static let notEarningThreshold: TimeInterval = 20 * 60
 
         /// The point from which time-without-earning is measured: the last banked progress,
-        /// or the worker start for a miner that has never earned. `nil` when neither is
+        /// the worker start for a miner that has never earned, or the moment it last came
+        /// back from having nothing to watch — whichever is latest. `nil` when none is
         /// known, in which case nothing can honestly be concluded.
+        ///
+        /// The last of those is what a quiet day needs. A miner that earned, then idled for
+        /// fourteen hours with no eligible campaign, was "not earning for 925 minutes" one
+        /// second into the next stream it found.
         public var earningReferenceDate: Date? {
-            [lastDropProgressAt, workerStartedAt].compactMap { $0 }.max()
+            [lastDropProgressAt, workerStartedAt, awaitingWorkEndedAt].compactMap { $0 }.max()
         }
 
         /// True when the miner looks alive but is not banking any drop progress.
@@ -313,6 +322,19 @@ public final class MinerManager {
         case idleNoEligibleCampaigns = "IDLE_NO_ELIGIBLE_CAMPAIGNS"
         /// Campaigns exist but account is not linked, preventing mining (Task 4).
         case blockedAccountNotLinked = "BLOCKED_ACCOUNT_NOT_LINKED"
+
+        /// Statuses in which the miner has no stream to watch: nothing eligible, no live
+        /// channel, paused, or blocked on an account link. Time spent here is not time spent
+        /// failing to earn. `fetchingCampaigns`, `claiming` and `authenticating` are excluded
+        /// on purpose — they are the routine churn of a miner that is mining.
+        public var hasNothingToWatch: Bool {
+            switch self {
+            case .idle, .idleNoEligibleCampaigns, .waitingForStream, .paused, .blockedAccountNotLinked:
+                return true
+            case .authenticating, .fetchingCampaigns, .watching, .claiming, .error:
+                return false
+            }
+        }
 
         public var displayName: String {
             switch self {

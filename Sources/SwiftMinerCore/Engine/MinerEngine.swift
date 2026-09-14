@@ -482,7 +482,7 @@ public actor MinerEngine {
 
         // Handle token refresh automatically for PubSub and API Client
         Task {
-            await authService.setTokenRefreshHandler { [weak self] newToken in
+            await authService.setTokenRefreshHandler { [weak self = self] newToken in
                 guard let self = self else { return }
                 Task {
                     await self.apiClient.updateAccessToken(newToken)

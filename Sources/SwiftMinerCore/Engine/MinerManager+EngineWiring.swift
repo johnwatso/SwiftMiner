@@ -543,7 +543,17 @@ extension MinerManager {
         let previous = miners[index]
         var miner = previous
         if let status = status {
-            if status != miner.status { miner.statusChangedAt = Date() }
+            if status != miner.status {
+                let now = Date()
+                // Time with nothing to watch is not time spent failing to earn, so the earning
+                // clock restarts on the way out. Only the exit is stamped: an idle miner passes
+                // through fetchingCampaigns every few minutes, and the exit that matters is the
+                // last one before it finds a stream.
+                if miner.status.hasNothingToWatch, !status.hasNothingToWatch {
+                    miner.awaitingWorkEndedAt = now
+                }
+                miner.statusChangedAt = now
+            }
             miner.status = status
         }
         if let campaign = currentCampaign { miner.currentCampaign = campaign }

@@ -338,6 +338,8 @@ public struct TwitchQueryHashStore: @unchecked Sendable {
     }
 
     public func clearRecoveryNeeded(for query: GQLQuery) {
+        // Called on every successful request, so only write when there is something to clear.
+        guard defaults.double(forKey: key("recoveryNeeded", query)) > 0 else { return }
         defaults.removeObject(forKey: key("recoveryNeeded", query))
     }
 

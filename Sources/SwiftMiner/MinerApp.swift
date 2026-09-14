@@ -143,6 +143,9 @@ struct MinerApp: App {
                                 kind: .automaticUpdateFailed
                             )
                         }
+                        // The background loop checks every five minutes. Say so once per run of
+                        // successful checks, not 288 times a day; a failed check re-arms it.
+                        guard updater.claimUpToDateAnnouncement() else { return }
                         let version = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? ""
                         navigation.logEvent(
                             message: "Already up to date\(version.isEmpty ? "" : " — SwiftMiner \(version)")",
