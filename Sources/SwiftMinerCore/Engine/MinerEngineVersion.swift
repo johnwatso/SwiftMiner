@@ -30,10 +30,10 @@ import Foundation
 public enum MinerEngineVersion {
     /// Bumped whenever anything under `Sources/SwiftMinerCore/Engine` changes
     /// mining behaviour.
-    public static let current = "4.18"
+    public static let current = "4.19"
 
     /// The date `current` last moved, as `yyyy-MM-dd`.
-    public static let updated = "2026-09-11"
+    public static let updated = "2026-09-14"
 
     /// `"4.17 · updated 2026-09-11"` — the form used wherever the surrounding
     /// context already says this is the engine.

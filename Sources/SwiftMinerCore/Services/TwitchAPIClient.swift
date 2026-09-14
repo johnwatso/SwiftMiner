@@ -1537,6 +1537,12 @@ public actor TwitchAPIClient {
                     )
                 }
                 queryHashStore.accept(request.sha256Hash, for: query)
+                // A working reply proves the query is not broken, whichever hash carried it.
+                // The alarm is raised by a persisted-query miss that outlasted its retries,
+                // which one out-of-step edge node can produce, and nothing else lowered it —
+                // so a single bad node left the recovery scan reopening Safari every half
+                // hour for a query that had been answering all along.
+                queryHashStore.clearRecoveryNeeded(for: query)
             }
             return data
         } catch let error as TwitchMinerError

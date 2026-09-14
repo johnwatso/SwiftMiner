@@ -118,6 +118,32 @@ final class MinerHealthSnapshotTests: XCTestCase {
         XCTAssertEqual(MinerHealthSnapshot.make(miner: miner, now: now).health, .mining)
     }
 
+    /// Hours with nothing to watch are not hours spent failing to earn. A miner that earned,
+    /// idled overnight with no eligible campaign, and has just found a stream must not be
+    /// flagged the moment it starts watching.
+    func testQuietStretchBeforeWatchingIsNotCountedAsNotEarning() {
+        let now = Date(timeIntervalSince1970: 100_000)
+        var miner = MinerManager.ManagedMiner(
+            id: "miner",
+            accountId: "account",
+            username: "tester",
+            status: .watching,
+            isRunning: true,
+            priorityGames: [],
+            lastEventAt: now.addingTimeInterval(-5),
+            lastSuccessfulPollAt: now.addingTimeInterval(-5),
+            lastDropProgressAt: now.addingTimeInterval(-15 * 60 * 60),
+            workerStartedAt: now.addingTimeInterval(-16 * 60 * 60),
+            isHealthy: true
+        )
+        miner.awaitingWorkEndedAt = now.addingTimeInterval(-60)
+        XCTAssertFalse(miner.isNotEarning(now: now))
+
+        // Still flagged once it has watched a full threshold without earning.
+        miner.awaitingWorkEndedAt = now.addingTimeInterval(-25 * 60)
+        XCTAssertTrue(miner.isNotEarning(now: now))
+    }
+
     /// A miner that has never earned is measured from when its worker started, so a freshly
     /// started session is not flagged before it has had a chance to bank anything.
     func testFreshSessionWithoutProgressHistoryIsNotFlagged() {
@@ -304,3 +330,44 @@ final class MinerManagerDebugStateTests: XCTestCase {
     }
 }
 #endif
+
+@MainActor
+final class EarningClockTransitionTests: XCTestCase {
+    private func miner(status: MinerManager.MinerStatus) -> MinerManager.ManagedMiner {
+        MinerManager.ManagedMiner(
+            id: "miner",
+            accountId: "account",
+            username: "tester",
+            status: status,
+            isRunning: true
+        )
+    }
+
+    /// Leaving a status with nothing to watch restarts the earning clock, and the watching
+    /// that follows does not move it again.
+    func testLeavingANothingToWatchStatusRestartsTheEarningClock() throws {
+        let manager = MinerManager(clientId: "test")
+        manager.miners = [miner(status: .idleNoEligibleCampaigns)]
+        let before = Date()
+
+        manager.updateMinerStatus(minerId: "miner", status: .fetchingCampaigns)
+        let stamped = try XCTUnwrap(manager.miners.first?.awaitingWorkEndedAt)
+        XCTAssertGreaterThanOrEqual(stamped, before)
+
+        manager.updateMinerStatus(minerId: "miner", status: .watching)
+        XCTAssertEqual(manager.miners.first?.awaitingWorkEndedAt, stamped)
+    }
+
+    /// The routine watching -> fetching -> claiming -> watching churn must never restart the
+    /// clock, or a miner watching without earning could never reach the threshold.
+    func testRoutineMiningChurnDoesNotMoveTheEarningClock() {
+        let manager = MinerManager(clientId: "test")
+        manager.miners = [miner(status: .watching)]
+
+        manager.updateMinerStatus(minerId: "miner", status: .fetchingCampaigns)
+        manager.updateMinerStatus(minerId: "miner", status: .claiming)
+        manager.updateMinerStatus(minerId: "miner", status: .watching)
+
+        XCTAssertNil(manager.miners.first?.awaitingWorkEndedAt)
+    }
+}
