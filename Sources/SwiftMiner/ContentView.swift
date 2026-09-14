@@ -49,6 +49,7 @@ struct ContentView: View {
             detailView
                 .id(navigation.selectedItem ?? .overview)
         }
+        .tahoeSoftTopScrollEdge()
         // Applied to the container rather than to `detailView`, so the bar is
         // not torn down and rebuilt by that view's `.id` on every tab change.
         // The safe-area inset leaves room to scroll the last content above the
