@@ -471,6 +471,11 @@ public final class MinerManager {
     var antiStallMonitorTask: Task<Void, Never>?
     let supervisor = MinerSupervisor()
     let unattendedHealthStore: UnattendedHealthStore?
+    /// Tail of the non-blocking health-store queue. Recording and pruning both mutate the same
+    /// persisted snapshot set, so they must execute in the order the main actor requested them.
+    /// Independent fire-and-forget tasks could let an older prune run after a newer miner was
+    /// recorded and erase that current miner's health snapshot.
+    var healthStorageTask: Task<Void, Never>?
     public let earningLedgerStore: EarningLedgerStore?
     var initializedCampaignSnapshots: Set<String> = []
     /// When each miner was last seen watching, so elapsed watch time can be credited to the
@@ -791,6 +796,7 @@ public final class MinerManager {
         )
         miners.append(miner)
         recordHealth(.minerObserved(minerID: minerId, displayName: miner.displayName, at: Date()))
+        pruneHealthSnapshots()
         onMinersChanged?()
         onMinerCollectionChanged?()
         onMinerIdentitiesChanged?()
@@ -990,6 +996,7 @@ public final class MinerManager {
         currentExcludedGamesByAccount.removeValue(forKey: removedAccountId)
         lastOperationalPresentationAt.removeValue(forKey: minerId)
         miners.removeAll { $0.id == minerId }
+        pruneHealthSnapshots()
         await supervisor.unregisterMiner(minerId)
         onMinersChanged?()
         onMinerCollectionChanged?()

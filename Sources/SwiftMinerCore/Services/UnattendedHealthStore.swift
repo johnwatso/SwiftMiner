@@ -1,6 +1,10 @@
 import Foundation
 
 public actor UnattendedHealthStore {
+    /// IDs of snapshots that describe the app rather than a miner, such as automatic updates.
+    /// They outlive any miner, so pruning leaves them alone.
+    public static let systemSnapshotPrefix = "system:"
+
     private struct PersistedState: Codable {
         static let currentSchemaVersion = 1
 
@@ -127,6 +131,29 @@ public actor UnattendedHealthStore {
             }
         }
 
+        try persist()
+    }
+
+    /// Drops the live state of miners that no longer exist, keeping system entries.
+    ///
+    /// Miner IDs are minted per launch, so every relaunch used to leave its miners' snapshots
+    /// behind for good. They were not just clutter: the summary reports a healthy duration only
+    /// when every snapshot has one, so stale entries hid it permanently, and each made every
+    /// write of this file larger. An incident still open on a dropped miner is archived as
+    /// ended when it was last observed, so the history keeps it.
+    public func retainMinerSnapshots(activeMinerIDs: Set<String>) throws {
+        let staleIDs = state.snapshots.keys.filter { id in
+            !activeMinerIDs.contains(id) && !id.hasPrefix(Self.systemSnapshotPrefix)
+        }
+        guard !staleIDs.isEmpty else { return }
+
+        for id in staleIDs {
+            if var incident = state.snapshots[id]?.activeIncident {
+                incident.resolvedAt = incident.lastObservedAt
+                appendIncident(incident)
+            }
+            state.snapshots.removeValue(forKey: id)
+        }
         try persist()
     }
 
