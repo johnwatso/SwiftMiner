@@ -738,27 +738,9 @@ struct MinerDiscordAvatar: View {
 }
 
 struct DiscordLogoFallback: View {
-    private static let officialMark = Bundle.main
-        .url(forResource: "DiscordMarkOfficial", withExtension: "svg")
-        .flatMap(NSImage.init(contentsOf:))
-
-    private let discordBlurple = Color(red: 0.345, green: 0.396, blue: 0.949)
-
     var body: some View {
-        Circle()
-            .fill(discordBlurple)
-            .overlay {
-                if let officialMark = Self.officialMark {
-                    Image(nsImage: officialMark)
-                        .resizable()
-                        .scaledToFit()
-                        .padding(5)
-                } else {
-                    Image(systemName: "message.fill")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.white)
-                }
-            }
+        DiscordLogo()
+            .padding(2)
             .accessibilityLabel("Discord")
     }
 }
