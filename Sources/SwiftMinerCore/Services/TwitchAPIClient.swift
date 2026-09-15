@@ -1479,12 +1479,17 @@ public actor TwitchAPIClient {
     ) async throws -> Data {
         let operationName = request.operationName
         let query = GQLQuery(rawValue: operationName)
-        let requestHashSource: TwitchQueryHashSource? = request.hashSource ?? query.flatMap {
-            let resolution = queryHashStore.resolution(for: $0)
-            guard request.sha256Hash != $0.bundledHash else { return nil }
+        let requestHash = request.sha256Hash
+        let requestHashSource: TwitchQueryHashSource?
+        if let hashSource = request.hashSource {
+            requestHashSource = hashSource
+        } else if let query, requestHash != query.bundledHash {
+            let resolution = queryHashStore.resolution(for: query)
             // If Safari replaced the candidate between request construction and
             // dispatch, this request is an older candidate, not the active override.
-            return resolution.hash == request.sha256Hash ? resolution.source : .candidate
+            requestHashSource = resolution.hash == requestHash ? resolution.source : .candidate
+        } else {
+            requestHashSource = nil
         }
         await traceGQL(operationName)
         let isAuthenticated = !accessToken.isEmpty
