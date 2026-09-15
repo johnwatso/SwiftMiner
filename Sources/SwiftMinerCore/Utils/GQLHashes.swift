@@ -177,7 +177,9 @@ public enum TwitchQueryHashDate: String, Sendable {
 /// the immutable bundled value. Each operation has its own defaults key so
 /// simultaneous app/extension writes do not replace unrelated observations.
 public struct TwitchQueryHashStore: @unchecked Sendable {
-    public static let suiteName = "group.com.swiftminer.shared"
+    /// The Team-ID-prefixed form is supported by macOS without a provisioning
+    /// profile. Both the app and its embedded extension are signed by this team.
+    public static let suiteName = "FHXMYC956U.com.swiftminer.shared"
     public static let automaticDiscoveryKey = "TwitchQueryHash.automaticDiscovery"
 
     private let defaults: UserDefaults

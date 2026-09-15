@@ -82,11 +82,13 @@ again after it is relaunched.
 
 ## Release signing
 
-Release builds use `group.com.swiftminer.shared` so the sandboxed app and extension
-share candidates. Shipping therefore requires the App Group to exist for the release
-team and to be present in both provisioning profiles. The existing notarized app
-release remains the distribution vehicle; this is an embedded Safari Web Extension,
-not a separate Safari App Store product.
+Release builds use the macOS-only, Team-ID-prefixed group
+`FHXMYC956U.com.swiftminer.shared` so the sandboxed app and extension share candidates.
+Unlike a provisioned `group.` identifier, this form does not require provisioning
+profiles; macOS grants access when both processes have the entitlement and are signed
+by team `FHXMYC956U`. This keeps the Developer ID archive compatible with ShipHook's
+manual signer. The existing notarized app release remains the distribution vehicle;
+this is an embedded Safari Web Extension, not a separate Safari App Store product.
 
 The manual Advanced setting remains the long-term escape hatch if the extension is
 disabled, Safari changes its extension behavior, or future maintainers stop shipping
