@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import plistlib
 import re
 import subprocess
 import unittest
@@ -41,6 +42,34 @@ class SafariQueryHashExtensionTests(unittest.TestCase):
         self.assertIn("SwiftMinerSafariExtensionDebug.entitlements", project)
         self.assertIn("com.apple.security.app-sandbox", debug_entitlements)
         self.assertNotIn("com.apple.security.application-groups", debug_entitlements)
+
+    def test_release_uses_unprovisioned_macos_app_group_consistently(self) -> None:
+        """ShipHook's manual Developer ID archive has no provisioning profiles."""
+        expected_group = "FHXMYC956U.com.swiftminer.shared"
+        entitlement_paths = [
+            ROOT / "Sources" / "SwiftMiner" / "SwiftMinerRelease.entitlements",
+            ROOT
+            / "Sources"
+            / "SwiftMinerSafariExtension"
+            / "SwiftMinerSafariExtension.entitlements",
+        ]
+
+        for path in entitlement_paths:
+            with path.open("rb") as file:
+                entitlements = plistlib.load(file)
+            self.assertEqual(
+                entitlements["com.apple.security.application-groups"],
+                [expected_group],
+            )
+
+        self.assertIn(
+            f'public static let suiteName = "{expected_group}"',
+            CORE_HASHES.read_text(),
+        )
+        self.assertIn(
+            f'private static let suiteName = "{expected_group}"',
+            SWIFT_HANDLER.read_text(),
+        )
 
     def test_check_action_opens_both_supported_twitch_pages(self) -> None:
         source = ADVANCED_SETTINGS.read_text()

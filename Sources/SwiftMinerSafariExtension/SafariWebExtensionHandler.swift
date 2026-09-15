@@ -6,7 +6,9 @@ import SafariServices
 /// ends. The handler never receives or persists request headers, cookies,
 /// variables or responses.
 final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
-    private static let suiteName = "group.com.swiftminer.shared"
+    // A Team-ID-prefixed group works on macOS without provisioning profiles,
+    // which keeps Developer ID archives compatible with ShipHook's signer.
+    private static let suiteName = "FHXMYC956U.com.swiftminer.shared"
     private static let debugNotificationName = Notification.Name(
         "com.swiftminer.debug.query-hash-candidate"
     )
