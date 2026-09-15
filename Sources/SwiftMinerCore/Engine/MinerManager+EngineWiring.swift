@@ -863,14 +863,46 @@ extension MinerManager {
     /// failure still has to leave a trace. Discarding it silently meant the incident history
     /// could stop accumulating while everything upstream carried on as if it were being written.
     func recordHealth(_ event: UnattendedHealthEvent) {
+        enqueueHealthStorageOperation(
+            failureMessage: "Could not record unattended health event"
+        ) { store in
+            try await store.record(event)
+        }
+    }
+
+    /// Clears health snapshots left by miners from earlier launches, or since removed.
+    func pruneHealthSnapshots() {
+        let activeMinerIDs = Set(miners.map(\.id))
+        enqueueHealthStorageOperation(
+            failureMessage: "Could not prune unattended health snapshots"
+        ) { store in
+            try await store.retainMinerSnapshots(activeMinerIDs: activeMinerIDs)
+        }
+    }
+
+    /// Appends one store mutation to a serial asynchronous queue without making mining wait on
+    /// disk I/O. The predecessor dependency is explicit because separate unstructured tasks do
+    /// not promise FIFO execution, even when the main actor creates them in order.
+    private func enqueueHealthStorageOperation(
+        failureMessage: String,
+        operation: @escaping @Sendable (UnattendedHealthStore) async throws -> Void
+    ) {
         guard let unattendedHealthStore else { return }
-        Task {
+        let predecessor = healthStorageTask
+        healthStorageTask = Task {
+            await predecessor?.value
             do {
-                try await unattendedHealthStore.record(event)
+                try await operation(unattendedHealthStore)
             } catch {
-                Logger.storage.error("Could not record unattended health event: \(error.localizedDescription)")
+                Logger.storage.error("\(failureMessage): \(error.localizedDescription)")
             }
         }
+    }
+
+    /// Waits for the operations already queued at the time of the call. Used by deterministic
+    /// persistence tests; production callers keep health storage fire-and-forget.
+    func waitForPendingHealthStorageOperations() async {
+        await healthStorageTask?.value
     }
 
     private static func healthRecoveryStage(_ stage: MinerSupervisor.RecoveryStage) -> RecoveryRecord.Stage {

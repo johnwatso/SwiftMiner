@@ -56,6 +56,20 @@ final class SecretStoreTests: XCTestCase {
         XCTAssertEqual(SecretStore.read(.swiftMinerAPIKey, legacyDefaults: defaults), "current-key")
     }
 
+    /// `read` cannot tell "no secret" from "a secret the Keychain would not hand over";
+    /// `isMissing` must, or a launch-time check generates a new secret over a working pairing.
+    func testAnUnreadableSecretIsNotReportedMissing() throws {
+        XCTAssertTrue(SecretStore.isMissing(.swiftBotHmacSecret))
+
+        try SecretStore.write(.swiftBotHmacSecret, "hmac-secret")
+        SecretStore.setUnreadableForTesting(.swiftBotHmacSecret, true)
+        XCTAssertNil(SecretStore.read(.swiftBotHmacSecret))
+        XCTAssertFalse(SecretStore.isMissing(.swiftBotHmacSecret))
+
+        defaults.set("legacy-key", forKey: SecretStore.Key.swiftMinerAPIKey.rawValue)
+        XCTAssertFalse(SecretStore.isMissing(.swiftMinerAPIKey, legacyDefaults: defaults))
+    }
+
     func testWritingAnEmptyValueRemovesTheSecret() throws {
         try SecretStore.write(.webDashboardTwitchClientSecret, "twitch-secret")
         XCTAssertEqual(SecretStore.read(.webDashboardTwitchClientSecret), "twitch-secret")

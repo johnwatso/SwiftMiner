@@ -18,6 +18,31 @@ final class SettingsBackupTests: XCTestCase {
         try await super.tearDown()
     }
 
+    func testMissingPairingSecretsAreGenerated() {
+        settings.ensureSwiftBotSecrets()
+
+        XCTAssertEqual(settings.swiftBotHmacSecret.count, 64)
+        XCTAssertEqual(settings.swiftMinerAPIKey.count, 64)
+    }
+
+    /// A pairing secret the Keychain will not hand over must survive launch: replacing it
+    /// silently unpairs SwiftBot, which still holds the original.
+    func testUnreadablePairingSecretsAreNotReplaced() throws {
+        let hmacSecret = String(repeating: "a", count: 64)
+        let apiKey = String(repeating: "b", count: 64)
+        try SecretStore.write(.swiftBotHmacSecret, hmacSecret)
+        try SecretStore.write(.swiftMinerAPIKey, apiKey)
+        SecretStore.setUnreadableForTesting(.swiftBotHmacSecret, true)
+        SecretStore.setUnreadableForTesting(.swiftMinerAPIKey, true)
+
+        settings.ensureSwiftBotSecrets()
+
+        SecretStore.setUnreadableForTesting(.swiftBotHmacSecret, false)
+        SecretStore.setUnreadableForTesting(.swiftMinerAPIKey, false)
+        XCTAssertEqual(SecretStore.read(.swiftBotHmacSecret), hmacSecret)
+        XCTAssertEqual(SecretStore.read(.swiftMinerAPIKey), apiKey)
+    }
+
     func testQuietHoursHandlesOvernightWindow() {
         settings.quietHoursEnabled = true
         settings.quietHoursStartMinute = 22 * 60

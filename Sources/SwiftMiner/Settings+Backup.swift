@@ -127,13 +127,29 @@ extension Settings {
     }
 
     public func ensureSwiftBotSecrets() {
-        if swiftMinerAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).count < 32 ||
-            swiftMinerAPIKey == "dev-key-change-in-production" {
+        // Anything under 32 characters is replaced, including the old
+        // "dev-key-change-in-production" placeholder.
+        if Self.shouldGenerateSecret(.swiftMinerAPIKey, current: swiftMinerAPIKey) {
             swiftMinerAPIKey = Self.generateSecret()
         }
-        if swiftBotHmacSecret.trimmingCharacters(in: .whitespacesAndNewlines).count < 32 {
+        if Self.shouldGenerateSecret(.swiftBotHmacSecret, current: swiftBotHmacSecret) {
             swiftBotHmacSecret = Self.generateSecret()
         }
+    }
+
+    /// A pairing secret is replaced when it is too weak to use, or confirmed absent — never
+    /// when it merely could not be read. An empty read also covers a locked Keychain or access
+    /// refused after a signature change, and generating over that silently unpairs SwiftBot,
+    /// which still holds the original.
+    private static func shouldGenerateSecret(_ key: SecretStore.Key, current: String) -> Bool {
+        let trimmed = current.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count < 32 else { return false }
+        guard trimmed.isEmpty else { return true }
+        guard SecretStore.isMissing(key, legacyDefaults: appStorageStore) else {
+            Logger.storage.error("\(key.rawValue) is stored but could not be read; keeping it rather than replacing the SwiftBot pairing")
+            return false
+        }
+        return true
     }
 
     private static func generateSecret(byteCount: Int = 32) -> String {

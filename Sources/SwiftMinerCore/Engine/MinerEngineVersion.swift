@@ -20,8 +20,8 @@ import Foundation
 ///   layout (mining loop, events, claiming, callbacks, campaign warnings,
 ///   presentation).
 ///
-/// The minor counts engine-changing commits within the era, so `4.18` is the
-/// eighteenth engine change since that decomposition.
+/// The minor counts engine-changing commits within the era, so `4.20` is the
+/// twentieth engine change since that decomposition.
 ///
 /// Every version listed above, and every one since, is described in
 /// `Documentation/EngineChangelog.md`. Bumping this number and adding an entry
@@ -30,10 +30,10 @@ import Foundation
 public enum MinerEngineVersion {
     /// Bumped whenever anything under `Sources/SwiftMinerCore/Engine` changes
     /// mining behaviour.
-    public static let current = "4.19"
+    public static let current = "4.20"
 
     /// The date `current` last moved, as `yyyy-MM-dd`.
-    public static let updated = "2026-09-14"
+    public static let updated = "2026-09-15"
 
     /// `"4.17 · updated 2026-09-11"` — the form used wherever the surrounding
     /// context already says this is the engine.

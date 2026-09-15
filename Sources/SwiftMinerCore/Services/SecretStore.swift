@@ -49,6 +49,7 @@ public enum SecretStore {
     /// not run `migrateIfNeeded` yet must not lose its configuration.
     public static func read(_ key: Key, legacyDefaults defaults: UserDefaults? = nil) -> String? {
         if SwiftMinerRuntime.isRunningTests {
+            if testStore.isUnreadable(key.rawValue) { return nil }
             if let value = testStore.get(key.rawValue), !value.isEmpty { return value }
             if let legacy = defaults?.string(forKey: key.rawValue), !legacy.isEmpty { return legacy }
             return nil
@@ -65,6 +66,35 @@ public enum SecretStore {
         if let legacy = defaults?.string(forKey: key.rawValue), !legacy.isEmpty { return legacy }
         return nil
         #endif
+    }
+
+    /// Whether the store positively holds no value for `key`.
+    ///
+    /// `read` returns `nil` both when there is no item and when the Keychain will not hand one
+    /// over — locked, or access refused after the app's code signature changed. Only the first
+    /// means a secret may be generated: treating the second the same way overwrites a working
+    /// SwiftBot pairing with a fresh secret, silently unpairing it.
+    public static func isMissing(_ key: Key, legacyDefaults defaults: UserDefaults? = nil) -> Bool {
+        if let legacy = defaults?.string(forKey: key.rawValue), !legacy.isEmpty { return false }
+
+        if SwiftMinerRuntime.isRunningTests {
+            return !testStore.isUnreadable(key.rawValue) && (testStore.get(key.rawValue) ?? "").isEmpty
+        }
+
+        #if DEBUG
+        return (UserDefaults.standard.string(forKey: debugDefaultsKey(key)) ?? "").isEmpty
+        #else
+        var q = query(key)
+        q[kSecMatchLimit as String] = kSecMatchLimitOne
+        return SecItemCopyMatching(q as CFDictionary, nil) == errSecItemNotFound
+        #endif
+    }
+
+    /// Makes `key` behave like a Keychain item that exists but cannot be read. Tests only;
+    /// ignored outside XCTest.
+    public static func setUnreadableForTesting(_ key: Key, _ unreadable: Bool) {
+        guard SwiftMinerRuntime.isRunningTests else { return }
+        testStore.setUnreadable(key.rawValue, unreadable)
     }
 
     /// Stores `value`, or removes the item when `value` is empty.
@@ -102,6 +132,7 @@ public enum SecretStore {
     public static func delete(_ key: Key) {
         if SwiftMinerRuntime.isRunningTests {
             testStore.set(key.rawValue, nil)
+            testStore.setUnreadable(key.rawValue, false)
             return
         }
         #if DEBUG
@@ -152,7 +183,7 @@ public enum SecretStore {
 
     private static func readKeychain(_ key: Key) -> String? {
         if SwiftMinerRuntime.isRunningTests {
-            return testStore.get(key.rawValue)
+            return testStore.isUnreadable(key.rawValue) ? nil : testStore.get(key.rawValue)
         }
         var q = query(key)
         q[kSecReturnData as String] = true
@@ -192,6 +223,7 @@ public enum SecretStore {
 private final class TestSecretBox: @unchecked Sendable {
     private let lock = NSLock()
     private var values: [String: String] = [:]
+    private var unreadable: Set<String> = []
 
     func get(_ key: String) -> String? {
         lock.lock()
@@ -203,5 +235,21 @@ private final class TestSecretBox: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         values[key] = value
+    }
+
+    func isUnreadable(_ key: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return unreadable.contains(key)
+    }
+
+    func setUnreadable(_ key: String, _ isUnreadable: Bool) {
+        lock.lock()
+        defer { lock.unlock() }
+        if isUnreadable {
+            unreadable.insert(key)
+        } else {
+            unreadable.remove(key)
+        }
     }
 }

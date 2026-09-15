@@ -26,7 +26,7 @@
 <body>
   <main>
     <h1>SwiftMiner 1.41.1</h1>
-    <p class="meta">Version 1.41.1 &middot; Build 2026091414</p>
+    <p class="meta">Version 1.41.1 &middot; Build 2026091520</p>
     <p class="intro">SwiftMiner 1.41.1 spreads miners across streams properly, makes claiming faster, quiets the Activity Log, and adds a beta feature that can recover from Twitch query changes without waiting for an update.</p>
 
     <section>
@@ -37,6 +37,8 @@
         <li>Claiming a drop is a few seconds faster &mdash; a follow-up Twitch call that always failed has been removed.</li>
         <li>Campaign discovery works again after Twitch replaced its Drops dashboard query, and temporary Twitch timeouts are retried instead of stopping mining.</li>
         <li>A miner is no longer flagged &ldquo;Watching &mdash; Not Earning&rdquo; the moment it starts watching after a quiet spell.</li>
+        <li>SwiftMiner no longer replaces its SwiftBot pairing secret when the Keychain can&rsquo;t be read, which silently disconnected SwiftBot until you paired again.</li>
+        <li>The Overview health card shows how long your miners have been running normally again, instead of being held back by miners from earlier launches.</li>
         <li>Inviting a friend through SwiftBot no longer lists bots and webhooks.</li>
         <li>The Overview toolbar no longer shows a blank white strip in the Standard appearance.</li>
       </ul>

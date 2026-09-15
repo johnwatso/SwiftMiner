@@ -148,6 +148,85 @@ final class UnattendedHealthStoreTests: XCTestCase {
         XCTAssertEqual(history, [snapshot?.lastRecovery].compactMap { $0 })
     }
 
+    func testRetainingMinersDropsStaleSnapshotsButKeepsSystemEntriesAndHistory() async throws {
+        let fileURL = temporaryStoreURL()
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+
+        let at = Date(timeIntervalSince1970: 1_800_000_000)
+        let store = UnattendedHealthStore(fileURL: fileURL)
+
+        try await store.record(.minerObserved(minerID: "previous-launch", displayName: "Primary", at: at))
+        try await store.record(.incidentObserved(
+            minerID: "previous-launch",
+            kind: .notEarning,
+            severity: .warning,
+            summary: "Watching without earning",
+            recommendedAction: nil,
+            at: at
+        ))
+        try await store.record(.minerObserved(minerID: "current", displayName: "Primary", at: at))
+        try await store.record(.minerObserved(minerID: "system:automatic-updates", displayName: "Automatic Updates", at: at))
+
+        try await store.retainMinerSnapshots(activeMinerIDs: ["current"])
+
+        let reloaded = UnattendedHealthStore(fileURL: fileURL)
+        let stale = await reloaded.snapshot(for: "previous-launch")
+        let current = await reloaded.snapshot(for: "current")
+        let system = await reloaded.snapshot(for: "system:automatic-updates")
+        let incidents = await reloaded.incidents()
+        XCTAssertNil(stale)
+        XCTAssertNotNil(current)
+        XCTAssertNotNil(system)
+        XCTAssertEqual(incidents.first?.minerID, "previous-launch")
+        XCTAssertEqual(incidents.first?.resolvedAt, at)
+    }
+
+    /// Account restoration can enqueue several record/prune pairs before any disk work begins.
+    /// They must retain creation order, or an older prune can run late and erase a miner that a
+    /// newer record has already added.
+    @MainActor
+    func testManagerOrdersRapidHealthRecordsAndPrunes() async throws {
+        let fileURL = temporaryStoreURL()
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+
+        let store = UnattendedHealthStore(fileURL: fileURL)
+        let at = Date(timeIntervalSince1970: 1_800_000_000)
+        try await store.record(.minerObserved(minerID: "previous-launch", displayName: "Old", at: at))
+        try await store.record(.minerObserved(
+            minerID: "system:automatic-updates",
+            displayName: "Automatic Updates",
+            at: at
+        ))
+
+        let manager = MinerManager(
+            clientId: "test",
+            tokenStore: InMemoryTokenStore(),
+            unattendedHealthStore: store
+        )
+        let expectedMinerIDs = Set((0..<40).map { "current-\($0)" })
+
+        for minerID in expectedMinerIDs.sorted() {
+            let miner = MinerManager.ManagedMiner(
+                id: minerID,
+                accountId: "account-\(minerID)",
+                username: minerID
+            )
+            manager.miners.append(miner)
+            manager.recordHealth(.minerObserved(
+                minerID: minerID,
+                displayName: miner.displayName,
+                at: at
+            ))
+            manager.pruneHealthSnapshots()
+        }
+
+        await manager.waitForPendingHealthStorageOperations()
+
+        let snapshotIDs = Set(await store.allSnapshots().map(\.id))
+        XCTAssertEqual(snapshotIDs, expectedMinerIDs.union(["system:automatic-updates"]))
+        XCTAssertFalse(snapshotIDs.contains("previous-launch"))
+    }
+
     func testSummaryUsesNewestSharedHealthyStartAndLatestFacts() {
         let base = Date(timeIntervalSince1970: 1_800_000_000)
         let olderRecovery = RecoveryRecord(
