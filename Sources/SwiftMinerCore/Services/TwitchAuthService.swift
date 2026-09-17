@@ -56,8 +56,12 @@ public actor TwitchAuthService {
     /// Followed-channel prioritisation is disabled by default, so a normal login
     /// must not grant access to a user's followed channels.
     public static func deviceAuthorizationScopes(includeFollowedChannels: Bool) -> [String] {
-        includeFollowedChannels ? ["user:read:follows"] : []
+        includeFollowedChannels ? [followedChannelsScope] : []
     }
+
+    /// The Helix scope `channels/followed` requires. Named once so the scope this asks for and
+    /// the scope callers check a token against cannot drift apart.
+    public static let followedChannelsScope = "user:read:follows"
 
     /// Initiates device code flow and returns the device code info for user to authorize.
     ///
@@ -504,6 +508,23 @@ public actor TwitchAuthService {
 
     public var isAuthenticated: Bool {
         currentAccount?.isTokenValid == true
+    }
+
+    /// The scopes Twitch says `userId`'s token carries, or nil when that is not the account
+    /// this service is bound to.
+    ///
+    /// Kept honest by `rearmingWindow`, which writes back the scope list from Twitch's own
+    /// validate response. Callers use it to avoid issuing a scoped request the token cannot
+    /// satisfy: such a request comes back 401, which is indistinguishable from an expired
+    /// token and would otherwise force a pointless refresh.
+    ///
+    /// Taking the id rather than exposing the scopes outright is deliberate. Each miner owns
+    /// its own service, so in practice the answer is always this account's — but a caller
+    /// asking about a *different* user must get "I don't know" rather than one account's
+    /// grant silently standing in for another's.
+    public func grantedScopes(forUserId userId: String) -> [String]? {
+        guard let account = currentAccount, account.id == userId else { return nil }
+        return account.scopes
     }
 
     // MARK: - Response Models

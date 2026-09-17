@@ -287,21 +287,49 @@ extension MinerEngine {
                 batch.channelIds,
                 limit: batch.channelIds.count
             )
-            monitoredRestrictedChannelIds.formUnion(monitored)
-            if !monitored.isEmpty {
-                if channelIds.count > monitored.count {
-                    log(
-                        "[ChannelSelect]   Listening for stream-up on \(monitored.count) of "
-                        + "\(channelIds.count) approved channel(s) this wait; overflow coverage rotates."
-                    )
-                } else {
-                    log("[ChannelSelect]   Listening for stream-up on \(monitored.count) approved channel(s) while waiting.")
-                }
-            }
+            reportRestrictedChannelMonitoring(monitored: monitored, requested: channelIds.count)
+            return
+        } catch {
+            // A waiting miner is the one that most needs this signal and is least able to get
+            // it back by itself: `startDropEventsWatching` is the only other path that
+            // reconnects, and it runs when a watch session starts. A miner waiting for an
+            // approved channel to go live has no watch session, so without a reconnect here a
+            // dropped socket leaves it blind to stream-up push for the rest of the session.
+            log(
+                "[ChannelSelect]   Could not listen for approved-channel stream-up: "
+                + "\(error.localizedDescription). Reconnecting PubSub…"
+            )
+        }
+
+        do {
+            try await pubSubClient.connect()
+            let monitored = try await dropEventsService.startMonitoringChannels(
+                batch.channelIds,
+                limit: batch.channelIds.count
+            )
+            reportRestrictedChannelMonitoring(monitored: monitored, requested: channelIds.count)
         } catch {
             // Losing the push signal costs promptness, not correctness: the 60s probe still
             // runs, so the wait carries on rather than failing.
-            log("[ChannelSelect]   Could not listen for approved-channel stream-up: \(error.localizedDescription)")
+            log(
+                "[ChannelSelect]   PubSub reconnect failed: \(error.localizedDescription). "
+                + "Falling back to polling for approved-channel stream-up this wait."
+            )
+        }
+    }
+
+    /// Records which approved channels ended up covered by push, and says so when the topic
+    /// budget meant that was fewer than were asked for.
+    private func reportRestrictedChannelMonitoring(monitored: [String], requested: Int) {
+        monitoredRestrictedChannelIds.formUnion(monitored)
+        guard !monitored.isEmpty else { return }
+        if requested > monitored.count {
+            log(
+                "[ChannelSelect]   Listening for stream-up on \(monitored.count) of "
+                + "\(requested) approved channel(s) this wait; overflow coverage rotates."
+            )
+        } else {
+            log("[ChannelSelect]   Listening for stream-up on \(monitored.count) approved channel(s) while waiting.")
         }
     }
 

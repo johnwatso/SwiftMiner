@@ -47,13 +47,12 @@ targets:
         NSExtension:
           NSExtensionPointIdentifier: com.apple.Safari.web-extension
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).SafariWebExtensionHandler
-        SFSafariWebExtensionConverterVersion: 1
     settings:
       base:
         PRODUCT_NAME: SwiftMinerSafariExtension
         PRODUCT_BUNDLE_IDENTIFIER: com.swiftminer.app.SafariQueryHash
         MARKETING_VERSION: "1.41.1"
-        CURRENT_PROJECT_VERSION: "2026091609"
+        CURRENT_PROJECT_VERSION: "2026091808"
         SWIFT_VERSION: "6.0"
         SWIFT_STRICT_CONCURRENCY: complete
         CODE_SIGN_STYLE: Automatic
@@ -107,6 +106,7 @@ targets:
         # "Email Invitation…" asks Mail to open a pre-written draft. macOS shows
         # this string when it asks the user to allow that the first time.
         NSAppleEventsUsageDescription: SwiftMiner uses Mail to open a pre-written invitation you can review and send yourself.
+        SFSafariWebExtensionConverterVersion: "27.0"
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         # New installs check in the background and prompt before downloading.
@@ -127,7 +127,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.swiftminer.app
         MACOSX_DEPLOYMENT_TARGET: "14.0"
         MARKETING_VERSION: "1.41.1"
-        CURRENT_PROJECT_VERSION: "2026091609"
+        CURRENT_PROJECT_VERSION: "2026091808"
         INFOPLIST_KEY_CFBundleDisplayName: SwiftMiner
         INFOPLIST_KEY_CFBundleName: SwiftMiner
         CODE_SIGN_STYLE: Automatic
