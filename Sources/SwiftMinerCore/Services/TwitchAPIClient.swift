@@ -585,6 +585,22 @@ public actor TwitchAPIClient {
             return [:]
         }
 
+        // Asking without the scope earns a 401, which `makeRESTRequest` cannot tell from an
+        // expired token: it forces a token refresh, retries, and is refused again. That
+        // happens on every launch for any account signed in while the preference was off, and
+        // rotating refresh tokens to answer a question the grant already settles is the kind
+        // of fabricated expiry worth not repeating. The grant is knowable up front, so check it.
+        if let scopes = await authService.grantedScopes(forUserId: userId),
+           !scopes.contains(TwitchAuthService.followedChannelsScope) {
+            followedChannelLookupUnavailable.insert(userId)
+            pendingFollowLookupNotices[userId] = .unavailableForSession(
+                reason: "this account was signed in before the setting was turned on, so Twitch "
+                    + "never granted the follow permission (\(TwitchAuthService.followedChannelsScope))"
+            )
+            Logger.api.info("Account lacks \(TwitchAuthService.followedChannelsScope); ranking channels without follow state for this session")
+            return [:]
+        }
+
         // Non-nil here means the backoff has expired and this is a retry, so the previous
         // answer was a failure. Read it before the await, which clears it on success.
         let wasDegraded = followedChannelLookupRetryAt[userId] != nil

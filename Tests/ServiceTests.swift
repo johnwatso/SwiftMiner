@@ -438,6 +438,97 @@ final class ServiceTests: XCTestCase {
         XCTAssertEqual(requestedPaths.recordedValues, ["/helix/channels/followed", "/helix/channels/followed"])
     }
 
+    /// An account signed in while the preference was off never received `user:read:follows`.
+    /// Asking anyway earns a 401, which is indistinguishable from an expired token, so the
+    /// client forces a refresh and is refused again — once per launch, per account, forever.
+    /// The grant is knowable without asking Twitch, so nothing should go out.
+    func testFollowLookupIsSkippedWhenTheAccountNeverGrantedTheScope() async throws {
+        let requestedPaths = StringRequestRecorder()
+        MockURLProtocol.requestHandler = { request in
+            requestedPaths.append(request.url?.path ?? "")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 401, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(#"{"message":"Unauthorized"}"#.utf8))
+        }
+
+        await authService.setCurrentAccount(
+            makeAccount(scopes: ["user:read:email"])
+        )
+
+        let relationships = await apiClient.getChannelRelationships(
+            userId: "viewer",
+            broadcasterIds: ["followed"]
+        )
+
+        XCTAssertTrue(relationships.isEmpty)
+        XCTAssertEqual(requestedPaths.recordedValues, [], "A scope the account never granted must not cost a request or a token refresh")
+
+        // The user turned the preference on, so they are entitled to know it is inert and why.
+        let notice = await apiClient.drainFollowLookupNotice(userId: "viewer")
+        guard case .unavailableForSession(let reason) = notice else {
+            return XCTFail("Expected the preference to be reported inert for this session, got \(String(describing: notice))")
+        }
+        XCTAssertTrue(reason.contains(TwitchAuthService.followedChannelsScope), "The reason should name the missing permission, got: \(reason)")
+        let degradation = await apiClient.followLookupDegradation(userId: "viewer")
+        XCTAssertEqual(degradation, .unavailableForSession)
+    }
+
+    func testFollowLookupProceedsWhenTheAccountGrantedTheScope() async throws {
+        let requestedPaths = StringRequestRecorder()
+        MockURLProtocol.requestHandler = { request in
+            requestedPaths.append(request.url?.path ?? "")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            let body = #"{"data":[{"broadcaster_id":"followed","broadcaster_login":"followed_streamer","broadcaster_name":"Followed Streamer"}],"pagination":{}}"#
+            return (response, Data(body.utf8))
+        }
+
+        await authService.setCurrentAccount(
+            makeAccount(scopes: ["user:read:email", TwitchAuthService.followedChannelsScope])
+        )
+
+        let relationships = await apiClient.getChannelRelationships(
+            userId: "viewer",
+            broadcasterIds: ["followed", "not-followed"]
+        )
+
+        XCTAssertEqual(relationships["followed"], ChannelRelationship(isFollowed: true))
+        XCTAssertEqual(relationships["not-followed"], ChannelRelationship())
+        XCTAssertEqual(requestedPaths.recordedValues, ["/helix/channels/followed"])
+        let degradation = await apiClient.followLookupDegradation(userId: "viewer")
+        XCTAssertNil(degradation)
+    }
+
+    /// The scope check is only meaningful for the account it was read from. Asked about a
+    /// different user, the client must fall back to asking Twitch rather than letting one
+    /// account's grant decide another's.
+    func testFollowLookupForADifferentUserIgnoresTheBoundAccountsScopes() async throws {
+        let requestedPaths = StringRequestRecorder()
+        MockURLProtocol.requestHandler = { request in
+            requestedPaths.append(request.url?.path ?? "")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            let body = #"{"data":[{"broadcaster_id":"followed","broadcaster_login":"followed_streamer","broadcaster_name":"Followed Streamer"}],"pagination":{}}"#
+            return (response, Data(body.utf8))
+        }
+
+        // Bound to an account with no follow grant, but asked about somebody else.
+        await authService.setCurrentAccount(
+            makeAccount(id: "someone-else", scopes: ["user:read:email"])
+        )
+
+        let relationships = await apiClient.getChannelRelationships(
+            userId: "viewer",
+            broadcasterIds: ["followed"]
+        )
+
+        XCTAssertEqual(relationships["followed"], ChannelRelationship(isFollowed: true))
+        XCTAssertEqual(requestedPaths.recordedValues, ["/helix/channels/followed"])
+    }
+
     func testGetChannelByLoginResolvesNumericId() async throws {
         let jsonString = """
         {
@@ -1550,6 +1641,23 @@ final class ServiceTests: XCTestCase {
         XCTAssertNotNil(MockURLProtocol.lastRequest)
         
         await pointsService.stopAutoClaim()
+    }
+}
+
+private extension ServiceTests {
+    func makeAccount(
+        id: String = "viewer",
+        username: String = "testuser",
+        scopes: [String]
+    ) -> Account {
+        Account(
+            id: id,
+            username: username,
+            accessToken: "test_token",
+            refreshToken: "test_refresh",
+            tokenExpiry: Date().addingTimeInterval(3600),
+            scopes: scopes
+        )
     }
 }
 
