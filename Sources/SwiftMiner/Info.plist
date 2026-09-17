@@ -35,6 +35,8 @@
 	<string>public.app-category.utilities</string>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>SwiftMiner uses Mail to open a pre-written invitation you can review and send yourself.</string>
+	<key>SFSafariWebExtensionConverterVersion</key>
+	<string>27.0</string>
 	<key>SUAutomaticallyUpdate</key>
 	<false/>
 	<key>SUEnableAutomaticChecks</key>

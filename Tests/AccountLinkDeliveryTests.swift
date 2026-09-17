@@ -239,6 +239,43 @@ final class AccountLinkDeliveryTests: XCTestCase {
         XCTAssertTrue(isDropsCardCompleted(legacy))
     }
 
+    func testGroupedDropsMergeClaimStateFromLaterDuplicateCampaign() throws {
+        let rewards = dropsCardDisplayRewards(
+            from: [
+                reward(id: "region-a", accountID: "miner-a", progress: 0.25),
+                reward(id: "region-b", accountID: "miner-b", progress: 1, isClaimed: true)
+            ],
+            selectedAccountID: nil
+        )
+
+        let merged = try XCTUnwrap(rewards.first)
+        XCTAssertEqual(rewards.count, 1)
+        XCTAssertTrue(merged.isClaimed)
+        XCTAssertEqual(merged.claimedAccountIDs, ["miner-b"])
+        XCTAssertEqual(merged.accountStates?.map(\.accountID), ["miner-a", "miner-b"])
+    }
+
+    func testGroupedDropsUseSelectedMinersOwnRewardState() throws {
+        let drops = [
+            reward(id: "shared-a", accountID: "miner-a", progress: 1, isClaimed: true),
+            reward(id: "shared-b", accountID: "miner-b", progress: 0.5)
+        ]
+
+        let forMinerA = try XCTUnwrap(
+            dropsCardDisplayRewards(from: drops, selectedAccountID: "miner-a").first
+        )
+        let forMinerB = try XCTUnwrap(
+            dropsCardDisplayRewards(from: drops, selectedAccountID: "miner-b").first
+        )
+
+        XCTAssertTrue(forMinerA.isClaimed)
+        XCTAssertEqual(forMinerA.claimedAccountIDs, ["miner-a"])
+        XCTAssertFalse(forMinerB.isClaimed)
+        XCTAssertEqual(forMinerB.progress, 0.5)
+        XCTAssertEqual(forMinerB.currentMinutes, 15)
+        XCTAssertEqual(forMinerB.claimedAccountIDs, [])
+    }
+
     // MARK: - Fixtures
 
     private func issue(awaitingDelivery: Bool) -> PrioritisedLinkIssue {
@@ -251,6 +288,37 @@ final class AccountLinkDeliveryTests: XCTestCase {
             campaignNames: ["Modern Warfare 4 Beta W2"],
             isIgnored: false,
             awaitingDelivery: awaitingDelivery
+        )
+    }
+
+    private func reward(
+        id: String,
+        accountID: String,
+        progress: Double,
+        isClaimed: Bool = false
+    ) -> DropViewData {
+        let currentMinutes = Int(progress * 30)
+        let accountState = DropAccountState(
+            accountID: accountID,
+            currentMinutes: currentMinutes,
+            progress: progress,
+            isClaimed: isClaimed,
+            isClaimable: !isClaimed && progress >= 1,
+            isEarnable: !isClaimed && progress < 1
+        )
+        return DropViewData(
+            id: id,
+            name: "Shared Reward",
+            description: nil,
+            imageURL: nil,
+            rewardType: .inGame,
+            requiredMinutes: 30,
+            currentMinutes: currentMinutes,
+            progress: progress,
+            isClaimed: isClaimed,
+            isClaimable: accountState.isClaimable,
+            isEarnable: accountState.isEarnable,
+            accountStates: [accountState]
         )
     }
 

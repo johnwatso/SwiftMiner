@@ -191,4 +191,32 @@ final class TwitchQueryHashStoreTests: XCTestCase {
         XCTAssertTrue(store.recordObservation(next, for: .inventory))
         XCTAssertEqual(store.candidate(for: .inventory), next)
     }
+
+    // MARK: Browser session results
+
+    func testBrowserSessionResultRoundTripsAndDeduplicatesOperations() throws {
+        let finishedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        store.recordSessionResult(
+            succeeded: [.inventory, .inventory],
+            failed: [.inventory, .directoryPageGame, .directoryPageGame],
+            at: finishedAt
+        )
+
+        let result = try XCTUnwrap(store.latestSessionResult)
+        XCTAssertEqual(result.succeeded, [.inventory])
+        XCTAssertEqual(result.failed, [.directoryPageGame])
+        XCTAssertEqual(result.finishedAt.timeIntervalSince1970, finishedAt.timeIntervalSince1970)
+    }
+
+    func testClearingBrowserSessionResultRemovesOnlyTheRunSummary() {
+        let candidate = String(repeating: "a", count: 64)
+        store.recordObservation(candidate, for: .inventory)
+        store.recordSessionResult(succeeded: [.inventory], failed: [])
+
+        store.clearSessionResult()
+
+        XCTAssertNil(store.latestSessionResult)
+        XCTAssertEqual(store.observedHash(for: .inventory), candidate)
+        XCTAssertEqual(store.candidate(for: .inventory), candidate)
+    }
 }

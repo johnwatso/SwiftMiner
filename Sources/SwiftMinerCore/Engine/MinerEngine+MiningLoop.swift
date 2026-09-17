@@ -382,7 +382,7 @@ extension MinerEngine {
                                 // Watching with no mineable drop — re-check whether an eligible
                                 // campaign has since gone live on this channel so we can upgrade
                                 // from watch-only to actually mining a drop.
-                                let activeCampaignIds = (try? await apiClient.fetchAvailableDrops(channelId: channel.id)) ?? []
+                                let activeCampaignIds = (try? await fetchAvailableDrops(for: channel)) ?? []
                                 if candidates.contains(where: { activeCampaignIds.contains($0.id) }) {
                                     log("Stream override @\(overrideLogin) now has a mineable drop — switching to mine it.")
                                     shouldSwitchChannel = true

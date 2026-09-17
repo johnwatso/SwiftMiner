@@ -19,6 +19,22 @@ public enum GQLQuery: String, CaseIterable, Codable, Identifiable, Sendable {
 
     public var id: String { rawValue }
 
+    /// Persisted queries that Twitch has repeatedly rotated in TwitchDropsMiner's
+    /// public history, ordered by observed churn through September 2026.
+    ///
+    /// The Safari recovery scan deliberately concentrates on this set instead of
+    /// opening pages for every operation SwiftMiner knows. TDM has recorded nine
+    /// `DirectoryPage_Game` changes, five each for `ViewerDropsDashboard`, `Inventory`
+    /// and `AvailableDrops`, and four for `DropCampaignDetails`. Every other shared
+    /// operation changed at most twice over the same period.
+    public static let frequentlyRotated: [GQLQuery] = [
+        .directoryPageGame,
+        .viewerDropsDashboard,
+        .inventory,
+        .dropsHighlightServiceAvailableDrops,
+        .dropCampaignDetails,
+    ]
+
     public var displayName: String {
         switch self {
         case .directoryGameRedirect: return "Game redirect"
@@ -91,6 +107,15 @@ public enum GQLQuery: String, CaseIterable, Codable, Identifiable, Sendable {
                 ["data", "currentUser", "dropCampaigns"],
                 ["data", "dropCampaigns"]
             ]
+        case .directoryPageGame:
+            // Twitch renamed this response field from `directoryPageGame` to `game`.
+            // Both variants must still contain the stream edge list SwiftMiner parses.
+            return [
+                ["data", "game", "streams", "edges"],
+                ["data", "directoryPageGame", "streams", "edges"]
+            ]
+        case .dropsHighlightServiceAvailableDrops:
+            return [["data", "channel", "viewerDropCampaigns"]]
         default:
             return []
         }
@@ -136,6 +161,81 @@ public enum GQLQuery: String, CaseIterable, Codable, Identifiable, Sendable {
     }
 }
 
+/// Current hashes published by TwitchDropsMiner (TDM), whose public history also defines
+/// the small set of operations SwiftMiner actively watches for rotations.
+///
+/// Twitch's website does not always issue the same persisted document that mining clients
+/// use. In particular, its `Inventory` request currently shares the operation name but not
+/// the document. The recovery session therefore carries TDM's exact operation/hash pair as
+/// a fallback. It is still only a candidate: SwiftMiner's normal Twitch request and response
+/// contract must accept it before it can become an override.
+public enum TwitchDropsMinerQueryCatalog {
+    public static let sourceURL = URL(
+        string: "https://raw.githubusercontent.com/DevilXD/TwitchDropsMiner/master/constants.py"
+    )!
+
+    public enum FetchError: Error {
+        case invalidResponse
+        case responseTooLarge
+        case invalidText
+    }
+
+    /// Downloads the current public TDM catalog. Failure is intentionally recoverable: the
+    /// Safari session can still collect whatever Twitch's own pages genuinely issue.
+    public static func fetch(
+        for queries: Set<GQLQuery>,
+        using session: URLSession = .shared
+    ) async throws -> [GQLQuery: String] {
+        var request = URLRequest(
+            url: sourceURL,
+            cachePolicy: .reloadIgnoringLocalCacheData,
+            timeoutInterval: 10
+        )
+        request.setValue("text/plain", forHTTPHeaderField: "Accept")
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            throw FetchError.invalidResponse
+        }
+        guard data.count <= 1_000_000 else { throw FetchError.responseTooLarge }
+        guard let source = String(data: data, encoding: .utf8) else {
+            throw FetchError.invalidText
+        }
+        return hashes(in: source, for: queries)
+    }
+
+    /// Parses only an exact TDM dictionary key + Twitch operation + 64-hex hash tuple.
+    /// Python variables, comments, and every other value in the file are ignored.
+    public static func hashes(
+        in source: String,
+        for queries: Set<GQLQuery>
+    ) -> [GQLQuery: String] {
+        var result: [GQLQuery: String] = [:]
+        let fullRange = NSRange(source.startIndex..<source.endIndex, in: source)
+
+        for query in queries {
+            guard let key = tdmKey[query] else { continue }
+            let escapedKey = NSRegularExpression.escapedPattern(for: key)
+            let escapedOperation = NSRegularExpression.escapedPattern(for: query.rawValue)
+            let pattern = #""\#(escapedKey)"\s*:\s*GQLPersistedQuery\(\s*"\#(escapedOperation)"\s*,\s*"([0-9a-f]{64})""#
+            guard let expression = try? NSRegularExpression(pattern: pattern),
+                  let match = expression.firstMatch(in: source, range: fullRange),
+                  let hashRange = Range(match.range(at: 1), in: source) else {
+                continue
+            }
+            result[query] = String(source[hashRange])
+        }
+        return result
+    }
+
+    private static let tdmKey: [GQLQuery: String] = [
+        .directoryPageGame: "GameDirectory",
+        .viewerDropsDashboard: "Campaigns",
+        .inventory: "Inventory",
+        .dropsHighlightServiceAvailableDrops: "AvailableDrops",
+        .dropCampaignDetails: "CampaignDetails",
+    ]
+}
+
 /// Immutable fallbacks compiled into SwiftMiner.
 public enum GQLHashes {
     public static let directoryGameRedirect = "1f0300090caceec51f33c5e20647aceff9017f740f223c3c532ba6fa59f6b6cc"
@@ -161,6 +261,21 @@ public enum TwitchQueryHashSource: String, Sendable {
 public struct TwitchQueryHashResolution: Equatable, Sendable {
     public let hash: String
     public let source: TwitchQueryHashSource
+}
+
+/// The last browser collection run acknowledged by the native extension handler.
+/// This is deliberately separate from query acceptance: it says which operations Safari
+/// observed, not whether SwiftMiner later promoted their hashes.
+public struct TwitchQueryHashSessionResult: Equatable, Sendable {
+    public let succeeded: [GQLQuery]
+    public let failed: [GQLQuery]
+    public let finishedAt: Date
+
+    public init(succeeded: [GQLQuery], failed: [GQLQuery], finishedAt: Date) {
+        self.succeeded = succeeded
+        self.failed = failed
+        self.finishedAt = finishedAt
+    }
 }
 
 public enum TwitchQueryHashDate: String, Sendable {
@@ -367,6 +482,43 @@ public struct TwitchQueryHashStore: @unchecked Sendable {
 
     public func recordRecoveryAttempt(at date: Date = Date()) {
         defaults.set(date.timeIntervalSince1970, forKey: "TwitchQueryHash.lastRecoveryAttempt")
+    }
+
+    /// Store the browser run's transport result so the UI can distinguish an extension
+    /// that did not answer from one that answered but never saw a particular Twitch query.
+    public func recordSessionResult(
+        succeeded: [GQLQuery],
+        failed: [GQLQuery],
+        at date: Date = Date()
+    ) {
+        var seen = Set<GQLQuery>()
+        let uniqueSucceeded = succeeded.filter { seen.insert($0).inserted }
+        let uniqueFailed = failed.filter { seen.insert($0).inserted }
+        defaults.set(uniqueSucceeded.map(\.rawValue), forKey: "TwitchQueryHash.session.succeeded")
+        defaults.set(uniqueFailed.map(\.rawValue), forKey: "TwitchQueryHash.session.failed")
+        defaults.set(date.timeIntervalSince1970, forKey: "TwitchQueryHash.session.finishedDate")
+    }
+
+    public var latestSessionResult: TwitchQueryHashSessionResult? {
+        let timestamp = defaults.double(forKey: "TwitchQueryHash.session.finishedDate")
+        guard timestamp > 0 else { return nil }
+        let succeeded = (defaults.stringArray(forKey: "TwitchQueryHash.session.succeeded") ?? [])
+            .compactMap(GQLQuery.init(rawValue:))
+        let succeededSet = Set(succeeded)
+        let failed = (defaults.stringArray(forKey: "TwitchQueryHash.session.failed") ?? [])
+            .compactMap(GQLQuery.init(rawValue:))
+            .filter { !succeededSet.contains($0) }
+        return TwitchQueryHashSessionResult(
+            succeeded: succeeded,
+            failed: failed,
+            finishedAt: Date(timeIntervalSince1970: timestamp)
+        )
+    }
+
+    public func clearSessionResult() {
+        defaults.removeObject(forKey: "TwitchQueryHash.session.succeeded")
+        defaults.removeObject(forKey: "TwitchQueryHash.session.failed")
+        defaults.removeObject(forKey: "TwitchQueryHash.session.finishedDate")
     }
 
     public func reset(_ query: GQLQuery) {

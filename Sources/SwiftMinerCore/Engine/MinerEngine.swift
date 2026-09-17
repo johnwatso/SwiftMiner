@@ -235,6 +235,11 @@ public actor MinerEngine {
     /// the liveness cache is keyed by login and a PubSub stream-down only carries the ID.
     var currentChannelLogin: String?
 
+    /// Most recent live channel considered by the `AvailableDrops` compatibility probe.
+    /// That query can fail before a channel is selected, so `currentChannelLogin` alone
+    /// cannot tell Safari which channel page would issue its replacement hash.
+    var compatibilityRecoveryChannelLoginHint: String?
+
     /// How long a watch session may go without server-verified progress before its channel's
     /// liveness is re-checked directly.
     ///

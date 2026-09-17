@@ -150,3 +150,6 @@ output/
 # Index store that editor tooling writes into the project when it mistakes the
 # -Xcc compiler flag for a path. Build output, never source.
 SwiftMiner.xcodeproj/-Xcc/
+
+# graphify knowledge-graph output (regenerable tool artifacts)
+graphify-out/

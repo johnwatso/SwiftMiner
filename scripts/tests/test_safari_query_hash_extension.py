@@ -20,6 +20,9 @@ CORE_HASHES = ROOT / "Sources" / "SwiftMinerCore" / "Utils" / "GQLHashes.swift"
 PROJECT = ROOT / "project.yml"
 ADVANCED_SETTINGS = ROOT / "Sources" / "SwiftMiner" / "AdvancedSettingsPane.swift"
 RECOVERY = ROOT / "Sources" / "SwiftMiner" / "TwitchCompatibilityRecovery.swift"
+DEBUG_BRIDGE = ROOT / "Sources" / "SwiftMiner" / "SafariQueryHashDebugBridge.swift"
+APP_INFO = ROOT / "Sources" / "SwiftMiner" / "Info.plist"
+EXTENSION_INFO = ROOT / "Sources" / "SwiftMinerSafariExtension" / "Info.plist"
 
 
 def allowed_operations(source: str) -> set[str]:
@@ -29,6 +32,15 @@ def allowed_operations(source: str) -> set[str]:
 
 
 class SafariQueryHashExtensionTests(unittest.TestCase):
+    def test_safari_converter_metadata_belongs_to_the_containing_app(self) -> None:
+        with APP_INFO.open("rb") as file:
+            app_info = plistlib.load(file)
+        with EXTENSION_INFO.open("rb") as file:
+            extension_info = plistlib.load(file)
+
+        self.assertEqual(app_info["SFSafariWebExtensionConverterVersion"], "27.0")
+        self.assertNotIn("SFSafariWebExtensionConverterVersion", extension_info)
+
     def test_debug_extension_is_sandboxed_without_protected_app_group(self) -> None:
         project = PROJECT.read_text()
         debug_entitlements = (
@@ -71,7 +83,7 @@ class SafariQueryHashExtensionTests(unittest.TestCase):
             SWIFT_HANDLER.read_text(),
         )
 
-    def test_check_action_opens_both_supported_twitch_pages(self) -> None:
+    def test_check_action_targets_the_high_churn_twitch_pages(self) -> None:
         source = ADVANCED_SETTINGS.read_text()
         recovery = RECOVERY.read_text()
 
@@ -82,15 +94,40 @@ class SafariQueryHashExtensionTests(unittest.TestCase):
         self.assertIn('"/drops/campaigns"', recovery)
         self.assertIn('"/drops/inventory"', recovery)
         # DirectoryPage_Game only fires on a real category page, and it is the single
-        # most-rotated operation upstream.
+        # most-rotated operation in TDM's history.
         self.assertIn('"/directory/category/', recovery)
+        # AvailableDrops is the other repeatedly rotated operation; Twitch issues it on
+        # a Drops-enabled live channel page, not on either /drops page.
+        self.assertIn("dropsHighlightServiceAvailableDrops", recovery)
+        self.assertIn('page: "/\\(channelLogin)"', recovery)
+        self.assertIn("TwitchDropsMinerQueryCatalog.fetch", recovery)
+        self.assertIn('value["fallbackHash"] = fallbackHash', recovery)
+
+        core = CORE_HASHES.read_text()
+        frequent = (
+            core.split("public static let frequentlyRotated", 1)[1]
+            .split("= [", 1)[1]
+            .split("]", 1)[0]
+        )
+        for query in (
+            "directoryPageGame",
+            "viewerDropsDashboard",
+            "inventory",
+            "dropsHighlightServiceAvailableDrops",
+            "dropCampaignDetails",
+        ):
+            self.assertIn(f".{query}", frequent)
 
     def test_progress_is_shown_in_the_page_not_a_toolbar_popover(self) -> None:
         content = (RESOURCES / "content.js").read_text()
         popup = (RESOURCES / "popup.html").read_text()
 
         self.assertIn("swiftminer-update-banner", content)
-        self.assertIn("Updating hashes via Safari", content)
+        self.assertIn("Collecting Twitch query hashes", content)
+        self.assertIn("backdrop-filter: blur(26px) saturate(175%)", content)
+        self.assertIn("border-radius: 22px", content)
+        self.assertIn("prefers-reduced-motion: reduce", content)
+        self.assertNotIn("html { padding-top", content)
 
         # The banner shows the real app icon, which a content script can only load when
         # the file is declared web-accessible.
@@ -104,6 +141,23 @@ class SafariQueryHashExtensionTests(unittest.TestCase):
         # The popup is static information; it carries no progress and no controls.
         self.assertNotIn("progress", popup.lower())
         self.assertNotIn("<button", popup.lower())
+
+    def test_native_delivery_preserves_rejected_hash_safety_and_session_results(self) -> None:
+        handler = SWIFT_HANDLER.read_text()
+        rejected = 'defaults.string(forKey: "TwitchQueryHash.rejected.\\(operation)") == hash'
+        candidate_write = 'defaults.set(hash, forKey: "TwitchQueryHash.candidate.\\(operation)")'
+
+        # Release shares defaults directly with the app, so it must apply the same
+        # no-requeue rule as TwitchQueryHashStore.recordObservation.
+        self.assertIn(rejected, handler)
+        self.assertLess(handler.index(rejected), handler.index(candidate_write))
+
+        # Debug cannot use the signed App Group. Its notification bridge must still
+        # persist the same completed-session summary that Release writes directly.
+        bridge = DEBUG_BRIDGE.read_text()
+        self.assertIn("sessionNotificationName", bridge)
+        self.assertIn("recordSessionResult(", bridge)
+        self.assertIn("latestSessionResult", ADVANCED_SETTINGS.read_text())
 
     def test_automatic_recovery_only_chases_a_broken_query(self) -> None:
         """Discovery must fire on breakage, never on mere difference.
@@ -144,21 +198,179 @@ class SafariQueryHashExtensionTests(unittest.TestCase):
         manifest = json.loads((RESOURCES / "manifest.json").read_text())
 
         self.assertEqual(manifest["manifest_version"], 3)
-        self.assertEqual(manifest["permissions"], ["nativeMessaging"])
-        # Drops pages carry ViewerDropsDashboard and Inventory; the category directory
-        # carries DirectoryPage_Game, which TDM has rotated more often than every other
-        # operation combined. Anything wider would mean the whole of twitch.tv.
+        self.assertEqual(manifest["permissions"], ["nativeMessaging", "scripting"])
+        # AvailableDrops is one of TDM's five repeat rotators and only appears on channel
+        # pages, so Safari must grant twitch.tv. content.js returns before installing its
+        # page hook unless SwiftMiner's validated one-tab session is present.
         self.assertEqual(
             manifest["host_permissions"],
-            ["https://www.twitch.tv/drops/*", "https://www.twitch.tv/directory/*"],
+            ["https://www.twitch.tv/*"],
         )
         self.assertEqual(
             manifest["action"]["default_popup"],
             "popup.html",
         )
+        [coordinator] = manifest["content_scripts"]
+        self.assertEqual(coordinator["matches"], ["https://www.twitch.tv/*"])
+        self.assertEqual(coordinator["js"], ["content.js"])
+        self.assertEqual(coordinator["run_at"], "document_start")
+
+        # The fetch observer is injected by Safari itself. Exposing it as a page-loadable
+        # resource lets Twitch's CSP block it and makes the Debug extension look active
+        # while silently missing every startup request.
+        web_resources = manifest["web_accessible_resources"][0]["resources"]
+        self.assertNotIn("page-hook.js", web_resources)
+
+    def test_page_hook_starts_before_dom_ready_and_buffers_parallel_requests(self) -> None:
+        content = (RESOURCES / "content.js").read_text()
+        background = (RESOURCES / "background.js").read_text()
+
+        # Twitch's startup requests can precede DOMContentLoaded. The document_start
+        # coordinator registers the observer in the page's main world and primes it with
+        # one reload. A script element is blocked by CSP, and one-off execution is too late.
+        self.assertIn('type: "swiftminer:install-page-hook"', content)
+        self.assertLess(content.index("const pageHookReady"), content.index("if (document.body)"))
+        self.assertIn("registerContentScripts", background)
+        self.assertIn('js: ["page-hook.js"]', background)
+        self.assertIn('runAt: "document_start"', background)
+        self.assertIn('world: "MAIN"', background)
+        self.assertIn("location.reload()", content)
+        self.assertNotIn("injectPageHook", content)
+
+        # ViewerDropsDashboard and DropCampaignDetails are dispatched together on the
+        # campaigns page. Seeing the second before the queue awaits it must not lose it.
+        self.assertIn("const observedHashes = new Map();", content)
+        self.assertIn("observedHashes.set(value.operationName, value.sha256Hash)", content)
+        self.assertIn("const observed = observedHashFor(operation)", content)
+        self.assertIn("swiftminer.update.observed.${operation}", content)
+        self.assertIn(
+            'new Set(["Inventory", "DropCampaignDetails"])',
+            content,
+        )
+        self.assertIn("item.fallbackHash", content)
+        self.assertIn("if (!samePage(item.page) && !retainedHash)", content)
+        self.assertIn("const hash = retainedHash || await waitForOperation(item.operation)", content)
+        self.assertIn("Waiting up to ${ITEM_TIMEOUT_MS / 1000}s", content)
+        self.assertIn('Not issued by Twitch: ${missed.join(", ")}', content)
+
+        # A Twitch page cannot forge a stored session that leaves twitch.tv or asks the
+        # page hook to forward operations outside the five recovery targets.
+        self.assertIn("url.origin !== location.origin", content)
+        self.assertIn("ALLOWED_OPERATIONS.has(item.operation)", content)
+
+        harness = r'''
+const fs = require("fs");
+const nativeSetTimeout = global.setTimeout;
+const sent = [];
+const listeners = {};
+const hashes = {
+  ViewerDropsDashboard: "a".repeat(64),
+  DropCampaignDetails: "b".repeat(64)
+};
+const queue = Object.keys(hashes).map(operation => ({
+  operation,
+  page: "/drops/campaigns"
+}));
+queue.push({
+  operation: "Inventory",
+  page: "/drops/inventory",
+  fallbackHash: "c".repeat(64)
+});
+
+global.window = global;
+global.location = {
+  origin: "https://www.twitch.tv",
+  pathname: "/drops/campaigns",
+  search: "",
+  hash: "",
+  assign: () => { throw new Error("unexpected navigation"); },
+  reload: () => { throw new Error("unexpected reload"); }
+};
+global.history = { replaceState: () => { location.hash = ""; } };
+global.sessionStorage = {
+  values: new Map([["swiftminer.update.session", JSON.stringify({
+    items: queue.map(item => ({ ...item, state: "pending", hash: null })),
+    index: 0,
+    hookPrimed: true
+  })]]),
+  getItem(key) { return this.values.get(key) || null; },
+  setItem(key, value) { this.values.set(key, value); },
+  removeItem(key) { this.values.delete(key); }
+};
+global.setTimeout = (fn, delay) => nativeSetTimeout(fn, delay === 4000 ? 0 : delay);
+global.clearTimeout = clearTimeout;
+global.addEventListener = (name, listener) => { listeners[name] = listener; };
+
+const makeElement = tag => {
+  const children = new Map();
+  return {
+    tagName: tag.toUpperCase(),
+    style: {},
+    classList: { add() {}, remove() {} },
+    appendChild() {},
+    remove() {},
+    setAttribute() {},
+    querySelector(selector) {
+      if (!children.has(selector)) children.set(selector, makeElement("div"));
+      return children.get(selector);
+    }
+  };
+};
+const elements = new Map();
+global.document = {
+  documentElement: makeElement("html"),
+  head: makeElement("head"),
+  body: makeElement("body"),
+  createElement: makeElement,
+  getElementById: id => elements.get(id) || null,
+  addEventListener() {}
+};
+const originalCreate = document.createElement;
+document.createElement = tag => {
+  const element = originalCreate(tag);
+  Object.defineProperty(element, "id", {
+    set(value) { this._id = value; elements.set(value, this); },
+    get() { return this._id; }
+  });
+  return element;
+};
+global.browser = { runtime: {
+  getURL: value => `extension://${value}`,
+  sendMessage: value => {
+    if (value.type !== "swiftminer:install-page-hook") sent.push(value);
+    return Promise.resolve(value.type === "swiftminer:install-page-hook"
+      ? { registered: true }
+      : { accepted: true });
+  }
+} };
+
+eval(fs.readFileSync(process.argv[1], "utf8"));
+for (const [operationName, sha256Hash] of Object.entries(hashes)) {
+  listeners.message({
+    source: global,
+    origin: "https://www.twitch.tv",
+    data: { source: "swiftminer-query-hash", version: 1, operationName, sha256Hash }
+  });
+}
+nativeSetTimeout(() => {
+  console.log(JSON.stringify(sent));
+}, 25);
+'''
+        result = subprocess.run(
+            ["node", "-e", harness, str(RESOURCES / "content.js")],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        sent = json.loads(result.stdout)
+        candidates = [message for message in sent if message["type"] == "swiftminer:hash"]
         self.assertEqual(
-            manifest["content_scripts"][0]["matches"],
-            ["https://www.twitch.tv/drops/*", "https://www.twitch.tv/directory/*"],
+            [(message["operationName"], message["sha256Hash"]) for message in candidates],
+            [
+                ("ViewerDropsDashboard", "a" * 64),
+                ("DropCampaignDetails", "b" * 64),
+                ("Inventory", "c" * 64),
+            ],
         )
 
     def test_operation_allow_lists_match_the_core_catalog(self) -> None:
@@ -169,8 +381,8 @@ class SafariQueryHashExtensionTests(unittest.TestCase):
         expected = set(re.findall(r'case \w+ = "([^"]+)"', query_catalog))
         self.assertEqual(len(expected), 12)
 
-        # content.js is absent by design: it accepts only the operation the current queue
-        # item is waiting for, which is narrower than any list it could hold.
+        # content.js is absent by design: its recovery-session allow-list is the five
+        # high-churn operations, while these relays accept the complete query catalog.
         for path in [
             RESOURCES / "page-hook.js",
             RESOURCES / "background.js",
@@ -183,7 +395,15 @@ class SafariQueryHashExtensionTests(unittest.TestCase):
 const fs = require("fs");
 const emitted = [];
 global.window = global;
-global.location = { href: "https://www.twitch.tv/drops/campaigns" };
+global.location = {
+  href: "https://www.twitch.tv/drops/campaigns#swiftminer-update=test",
+  hash: "#swiftminer-update=test"
+};
+global.sessionStorage = {
+  values: new Map(),
+  getItem(key) { return this.values.get(key) || null; },
+  setItem(key, value) { this.values.set(key, value); }
+};
 global.postMessage = value => emitted.push(value);
 global.fetch = () => Promise.resolve({ ok: true });
 global.XMLHttpRequest = function() {};
@@ -213,6 +433,22 @@ window.fetch("https://example.com/gql", {
     extensions: { persistedQuery: { sha256Hash: "c".repeat(64) } }
   })
 });
+window.fetch("https://gql.twitch.tv/gql", {
+  method: "POST",
+  body: JSON.stringify({
+    operationName: "Inventory",
+    variables: { fetchRewardCampaigns: true, oauthToken: "sibling-must-never-leave-page" },
+    extensions: { persistedQuery: { sha256Hash: "d".repeat(64) } }
+  })
+});
+window.fetch("https://gql.twitch.tv/gql", {
+  method: "POST",
+  body: JSON.stringify({
+    operationName: "Inventory",
+    variables: { fetchRewardCampaigns: false, oauthToken: "must-stay-in-page" },
+    extensions: { persistedQuery: { sha256Hash: "e".repeat(64) } }
+  })
+});
 console.log(JSON.stringify(emitted));
 '''
         result = subprocess.run(
@@ -231,10 +467,18 @@ console.log(JSON.stringify(emitted));
                     "version": 1,
                     "operationName": "ViewerDropsDashboard",
                     "sha256Hash": "a" * 64,
-                }
+                },
+                {
+                    "source": "swiftminer-query-hash",
+                    "version": 1,
+                    "operationName": "Inventory",
+                    "sha256Hash": "e" * 64,
+                },
             ],
         )
         self.assertNotIn("must-never-leave-page", result.stdout)
+        self.assertNotIn("sibling-must-never-leave-page", result.stdout)
+        self.assertNotIn("must-stay-in-page", result.stdout)
 
     def test_background_is_a_stateless_relay(self) -> None:
         """Every hash is forwarded, and nothing is remembered between them.
@@ -247,9 +491,14 @@ console.log(JSON.stringify(emitted));
 const fs = require("fs");
 let listener;
 const sent = [];
+const registrations = [];
 global.browser = { runtime: {
   onMessage: { addListener: value => { listener = value; } },
   sendNativeMessage: (host, payload) => { sent.push(payload); return Promise.resolve({ accepted: true }); }
+}, scripting: {
+  getRegisteredContentScripts: () => Promise.resolve([]),
+  registerContentScripts: options => { registrations.push(...options); return Promise.resolve(); },
+  updateContentScripts: () => Promise.resolve()
 } };
 eval(fs.readFileSync(process.argv[1], "utf8"));
 const hash = { type: "swiftminer:hash", operationName: "ViewerDropsDashboard", sha256Hash: "a".repeat(64) };
@@ -262,7 +511,8 @@ const hash = { type: "swiftminer:hash", operationName: "ViewerDropsDashboard", s
     { operation: "ViewerDropsDashboard", ok: true },
     { operation: "Inventory", ok: false }
   ] });
-  console.log(JSON.stringify(sent));
+  await listener({ type: "swiftminer:install-page-hook" }, { tab: { id: 42 } });
+  console.log(JSON.stringify({ sent, registrations }));
 })().catch(error => { console.error(error); process.exit(1); });
 '''
         result = subprocess.run(
@@ -271,7 +521,8 @@ const hash = { type: "swiftminer:hash", operationName: "ViewerDropsDashboard", s
             capture_output=True,
             text=True,
         )
-        sent = json.loads(result.stdout)
+        output = json.loads(result.stdout)
+        sent = output["sent"]
 
         # Both repeats forwarded; neither the unknown operation nor the malformed hash was.
         self.assertEqual(len([m for m in sent if m["type"] == "queryHashCandidate"]), 2)
@@ -280,6 +531,19 @@ const hash = { type: "swiftminer:hash", operationName: "ViewerDropsDashboard", s
         self.assertEqual(len(finished), 1)
         self.assertEqual(finished[0]["succeeded"], ["ViewerDropsDashboard"])
         self.assertEqual(finished[0]["failed"], ["Inventory"])
+
+        self.assertEqual(
+            output["registrations"],
+            [
+                {
+                    "id": "swiftminer-query-hash-page-hook",
+                    "matches": ["https://www.twitch.tv/*"],
+                    "js": ["page-hook.js"],
+                    "runAt": "document_start",
+                    "world": "MAIN",
+                }
+            ],
+        )
 
 
 if __name__ == "__main__":

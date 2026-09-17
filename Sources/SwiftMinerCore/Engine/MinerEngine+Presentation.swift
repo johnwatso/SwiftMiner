@@ -9,6 +9,13 @@ import Foundation
 extension MinerEngine {
     // MARK: - UI Helper APIs
 
+    /// A live channel page whose Twitch requests can refresh channel-scoped query hashes.
+    /// This is read-only presentation data: compatibility recovery must never influence
+    /// which channel the engine chooses or how it watches that channel.
+    public func compatibilityRecoveryChannelLogin() -> String? {
+        currentChannelLogin ?? compatibilityRecoveryChannelLoginHint
+    }
+
     /// Why followed-streamer prioritisation is not being applied, if it is switched on and isn't
     /// working. Nil when the setting is off, or on and functioning.
     public func followPrioritisationDegradation() async -> TwitchAPIClient.FollowLookupDegradation? {

@@ -7,6 +7,7 @@
   "use strict";
 
   const NATIVE_HOST = "com.swiftminer.app.SafariQueryHash";
+  const PAGE_HOOK_ID = "swiftminer-query-hash-page-hook";
   const HASH_PATTERN = /^[0-9a-f]{64}$/;
   const allowedOperations = new Set([
     "DirectoryGameRedirect",
@@ -24,10 +25,37 @@
   ]);
 
   const toNative = payload =>
-    browser.runtime.sendNativeMessage(NATIVE_HOST, payload).catch(() => undefined);
+    browser.runtime.sendNativeMessage(NATIVE_HOST, payload)
+      .catch(() => ({ accepted: false }));
 
-  browser.runtime.onMessage.addListener(message => {
+  const ensurePageHookRegistered = async () => {
+    const existing = await browser.scripting.getRegisteredContentScripts({
+      ids: [PAGE_HOOK_ID]
+    });
+    const definition = {
+      id: PAGE_HOOK_ID,
+      matches: ["https://www.twitch.tv/*"],
+      js: ["page-hook.js"],
+      runAt: "document_start",
+      world: "MAIN"
+    };
+    if (existing.length) {
+      await browser.scripting.updateContentScripts([definition]);
+    } else {
+      await browser.scripting.registerContentScripts([definition]);
+    }
+    return { registered: true };
+  };
+
+  browser.runtime.onMessage.addListener((message, sender) => {
     if (!message) return;
+
+    if (message.type === "swiftminer:install-page-hook") {
+      if (!sender || !sender.tab || !Number.isInteger(sender.tab.id)) return;
+      // Registered scripts are placed into the document before Twitch starts. A one-off
+      // executeScript call arrives too late to see the page's startup GraphQL requests.
+      return ensurePageHookRegistered();
+    }
 
     if (message.type === "swiftminer:hash") {
       // Re-validated here even though the content script already checked: this is the last

@@ -30,8 +30,9 @@ enum TwitchCompatibilityRecovery {
     static func runIfNeeded(
         store: TwitchQueryHashStore = .standard,
         directorySlug: String? = nil,
+        channelLogin: String? = nil,
         now: Date = Date()
-    ) -> [GQLQuery] {
+    ) async -> [GQLQuery] {
         guard store.automaticDiscoveryEnabled else { return [] }
 
         let broken = store.queriesNeedingRecovery()
@@ -41,9 +42,16 @@ enum TwitchCompatibilityRecovery {
             return []
         }
 
+        let queued = await startUpdate(
+            directorySlug: directorySlug,
+            channelLogin: channelLogin,
+            requestedQueries: Set(broken),
+            store: store
+        )
+        guard !queued.isEmpty else { return [] }
+
         store.recordRecoveryAttempt(at: now)
-        startUpdate(directorySlug: directorySlug)
-        return broken
+        return queued.map(\.operation)
     }
 
     /// Twitch category slugs are the game name lowercased with runs of anything else
@@ -62,27 +70,61 @@ enum TwitchCompatibilityRecovery {
     struct QueueItem {
         let operation: GQLQuery
         let page: String
+        let fallbackHash: String?
     }
 
-    /// The pages that issue the operations SwiftMiner can refresh this way, in the order
-    /// the session visits them. Grouped so the campaigns page is loaded once for both of
-    /// the operations it issues.
+    /// The pages associated with the operations SwiftMiner can refresh, in the order the
+    /// session visits them. A page observation is preferred where Twitch issues the client
+    /// document; otherwise the exact TDM catalog pair carried in the queue is used.
     ///
-    /// Only operations a page issues *by itself* can be here. Claiming a drop, for one,
-    /// fires only when someone presses Claim, and driving that from a compatibility check
-    /// would claim a reward as a side effect.
-    static func queue(directorySlug: String?) -> [QueueItem] {
-        var items = [
-            QueueItem(operation: .viewerDropsDashboard, page: "/drops/campaigns"),
-            QueueItem(operation: .dropCampaignDetails, page: "/drops/campaigns"),
-            QueueItem(operation: .inventory, page: "/drops/inventory")
-        ]
-        if let directorySlug, !directorySlug.isEmpty {
-            items.append(
-                QueueItem(operation: .directoryPageGame, page: "/directory/category/\(directorySlug)")
-            )
+    /// A side-effecting operation can never be here. Claiming a drop, for one, fires only
+    /// when someone presses Claim, and driving that from a compatibility check would claim
+    /// a reward as a side effect.
+    static func queue(
+        directorySlug: String?,
+        channelLogin: String?,
+        requestedQueries: Set<GQLQuery> = Set(GQLQuery.frequentlyRotated),
+        fallbackHashes: [GQLQuery: String] = [:]
+    ) -> [QueueItem] {
+        var items: [QueueItem] = []
+
+        func append(_ operation: GQLQuery, page: String) {
+            guard requestedQueries.contains(operation) else { return }
+            items.append(QueueItem(
+                operation: operation,
+                page: page,
+                fallbackHash: fallbackHashes[operation]
+            ))
+        }
+
+        // The campaigns page issues the dashboard request. Campaign details is associated
+        // with the same route but needs a user click, so its TDM fallback is normally used.
+        // Any requests Twitch does dispatch together are buffered until their queue turn.
+        append(.viewerDropsDashboard, page: "/drops/campaigns")
+        append(.dropCampaignDetails, page: "/drops/campaigns")
+        append(.inventory, page: "/drops/inventory")
+
+        if let directorySlug = normalizedPathComponent(directorySlug) {
+            append(.directoryPageGame, page: "/directory/category/\(directorySlug)")
+        }
+        if let channelLogin = normalizedPathComponent(channelLogin) {
+            append(.dropsHighlightServiceAvailableDrops, page: "/\(channelLogin)")
         }
         return items
+    }
+
+    /// Twitch category slugs and channel logins are ASCII path components. Rejecting
+    /// anything else keeps the fragment-carried queue from becoming a general redirect.
+    private static func normalizedPathComponent(_ value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+              !value.isEmpty,
+              value.count <= 100,
+              value.utf8.allSatisfy({
+                  ($0 >= 97 && $0 <= 122) || ($0 >= 48 && $0 <= 57) || $0 == 45 || $0 == 95
+              }) else {
+            return nil
+        }
+        return value
     }
 
     /// The single URL that starts a session.
@@ -94,7 +136,14 @@ enum TwitchCompatibilityRecovery {
     /// bookmarked URL cannot restart a session.
     static func sessionURL(queue: [QueueItem]) -> URL? {
         guard !queue.isEmpty else { return nil }
-        let payload = queue.map { ["operation": $0.operation.rawValue, "page": $0.page] }
+        let payload = queue.map { item -> [String: String] in
+            var value = ["operation": item.operation.rawValue, "page": item.page]
+            if let fallbackHash = item.fallbackHash,
+               TwitchQueryHashStore.isValidHash(fallbackHash) {
+                value["fallbackHash"] = fallbackHash
+            }
+            return value
+        }
         guard let json = try? JSONSerialization.data(withJSONObject: payload),
               let encoded = json.base64EncodedString()
                 .addingPercentEncoding(withAllowedCharacters: .alphanumerics) else {
@@ -106,9 +155,27 @@ enum TwitchCompatibilityRecovery {
 
     /// Starts an update session in a single Safari tab.
     @discardableResult
-    static func startUpdate(directorySlug: String?) -> [QueueItem] {
-        let items = queue(directorySlug: directorySlug)
+    static func startUpdate(
+        directorySlug: String?,
+        channelLogin: String?,
+        requestedQueries: Set<GQLQuery> = Set(GQLQuery.frequentlyRotated),
+        store: TwitchQueryHashStore = .standard
+    ) async -> [QueueItem] {
+        // The public TDM catalog is a fallback for documents Twitch's website cannot
+        // reproduce on demand. Every changed value is still untrusted until the normal
+        // SwiftMiner request path proves Twitch accepts it and its response has the fields
+        // SwiftMiner reads.
+        let fallbackHashes = (try? await TwitchDropsMinerQueryCatalog.fetch(
+            for: requestedQueries
+        )) ?? [:]
+        let items = queue(
+            directorySlug: directorySlug,
+            channelLogin: channelLogin,
+            requestedQueries: requestedQueries,
+            fallbackHashes: fallbackHashes
+        )
         guard let url = sessionURL(queue: items) else { return [] }
+        store.clearSessionResult()
         open([url])
         return items
     }

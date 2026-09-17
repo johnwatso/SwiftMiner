@@ -368,17 +368,21 @@ struct MinerApp: App {
             }
         }
 
-        let chasing = TwitchCompatibilityRecovery.runIfNeeded(
-            directorySlug: settings.firstPriorityGameCategorySlug
-        )
-        guard !chasing.isEmpty else { return }
+        Task { @MainActor in
+            let channelLogin = await navigation.minerManager.compatibilityRecoveryChannelLogin()
+            let chasing = await TwitchCompatibilityRecovery.runIfNeeded(
+                directorySlug: settings.firstPriorityGameCategorySlug,
+                channelLogin: channelLogin
+            )
+            guard !chasing.isEmpty else { return }
 
-        let names = chasing.map(\.displayName).joined(separator: ", ")
-        navigation.logEvent(
-            message: "Twitch changed a query SwiftMiner depends on (\(names)). Checking Twitch in Safari for the replacement.",
-            level: .warning,
-            rawMessage: "[compatibility] recovery scan opened for \(chasing.map(\.rawValue).joined(separator: ", "))"
-        )
+            let names = chasing.map(\.displayName).joined(separator: ", ")
+            navigation.logEvent(
+                message: "Twitch changed a query SwiftMiner depends on (\(names)). Checking Twitch in Safari for the replacement.",
+                level: .warning,
+                rawMessage: "[compatibility] recovery scan opened for \(chasing.map(\.rawValue).joined(separator: ", "))"
+            )
+        }
     }
 
     private func handleDeepLink(_ url: URL) {
