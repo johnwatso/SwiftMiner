@@ -10,11 +10,15 @@ final class SafariQueryHashDebugBridge: @unchecked Sendable {
     static let notificationName = Notification.Name(
         "com.swiftminer.debug.query-hash-candidate"
     )
+    static let sessionNotificationName = Notification.Name(
+        "com.swiftminer.debug.query-hash-session"
+    )
 
-    private var observer: NSObjectProtocol?
+    private var candidateObserver: NSObjectProtocol?
+    private var sessionObserver: NSObjectProtocol?
 
     init() {
-        observer = DistributedNotificationCenter.default().addObserver(
+        candidateObserver = DistributedNotificationCenter.default().addObserver(
             forName: Self.notificationName,
             object: nil,
             queue: nil
@@ -33,12 +37,33 @@ final class SafariQueryHashDebugBridge: @unchecked Sendable {
             guard store.automaticDiscoveryEnabled else { return }
             store.recordObservation(hash, for: query)
         }
+
+        sessionObserver = DistributedNotificationCenter.default().addObserver(
+            forName: Self.sessionNotificationName,
+            object: nil,
+            queue: nil
+        ) { notification in
+            guard let payload = notification.object as? String else { return }
+            let parts = payload.split(separator: "|", maxSplits: 1, omittingEmptySubsequences: false)
+            guard parts.count == 2 else { return }
+            TwitchQueryHashStore.standard.recordSessionResult(
+                succeeded: Self.queries(from: parts[0]),
+                failed: Self.queries(from: parts[1])
+            )
+        }
     }
 
     deinit {
-        if let observer {
-            DistributedNotificationCenter.default().removeObserver(observer)
+        if let candidateObserver {
+            DistributedNotificationCenter.default().removeObserver(candidateObserver)
         }
+        if let sessionObserver {
+            DistributedNotificationCenter.default().removeObserver(sessionObserver)
+        }
+    }
+
+    private static func queries(from value: Substring) -> [GQLQuery] {
+        value.split(separator: ",").compactMap { GQLQuery(rawValue: String($0)) }
     }
 }
 #endif

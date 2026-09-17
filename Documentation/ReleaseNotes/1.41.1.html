@@ -26,12 +26,13 @@
 <body>
   <main>
     <h1>SwiftMiner 1.41.1</h1>
-    <p class="meta">Version 1.41.1 &middot; Build 2026091609</p>
+    <p class="meta">Version 1.41.1 &middot; Build 2026091716</p>
     <p class="intro">SwiftMiner 1.41.1 spreads miners across streams properly, makes claiming faster, quiets the Activity Log, and adds a beta feature that can recover from Twitch query changes without waiting for an update.</p>
 
     <section>
       <h2>&#128029; Bug fixes</h2>
       <ul>
+        <li>Claimed rewards on the Drops page now identify the miner whose Twitch inventory supplied the claim, including rewards claimed outside SwiftMiner.</li>
         <li>Finished campaigns no longer reappear as unmined when Twitch returns an incomplete inventory.</li>
         <li>Miners choosing a channel at the same moment no longer all land on the same stream.</li>
         <li>Claiming a drop is a few seconds faster &mdash; a follow-up Twitch call that always failed has been removed.</li>
@@ -59,6 +60,8 @@
       <h2>&#129520; Automatic Twitch compatibility <em>(beta)</em></h2>
       <ul>
         <li>When Twitch retires a query SwiftMiner depends on, SwiftMiner can find the replacement through its Safari extension and adopt it once verified &mdash; no app update needed. It checks at most every half hour and can be switched off.</li>
+        <li>Safari recovery now starts listening before Twitch sends its page-load requests, keeps simultaneous campaign hashes instead of dropping one, ignores Twitch's incompatible same-name Inventory document, and uses TwitchDropsMiner's current public catalog when a client query cannot be reproduced by passively loading a page.</li>
+        <li>A compact glass progress panel follows the recovery session across Twitch pages, reuses hashes Twitch already supplied instead of loading redundant pages, records partial results accurately, and will not retry a replacement hash it has already proved incompatible.</li>
         <li>Claiming a drop keeps working even if Twitch retires its query.</li>
         <li>Advanced Settings shows a simple status board for each Twitch query in place of manual hash overrides.</li>
         <li>The extension only ever passes an operation name and hash to SwiftMiner &mdash; never cookies, tokens or responses.</li>

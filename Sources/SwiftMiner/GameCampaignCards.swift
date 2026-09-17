@@ -34,6 +34,32 @@ func isDropsCardCompleted(_ account: AccountState) -> Bool {
         || (account.progressFraction ?? 0) >= 0.995
 }
 
+/// Collapse duplicate/region campaign rewards without discarding a later account's
+/// claim or progress, then apply the selected-miner projection when one is active.
+func dropsCardDisplayRewards(
+    from drops: [DropViewData],
+    selectedAccountID: String?
+) -> [DropViewData] {
+    var indexByIdentity: [String: Int] = [:]
+    var merged: [DropViewData] = []
+
+    for drop in drops {
+        let identity = drop.name.isEmpty
+            ? drop.id
+            : "\(drop.name.lowercased())|\(drop.requiredMinutes)"
+
+        if let index = indexByIdentity[identity] {
+            merged[index] = merged[index].merging(with: drop)
+        } else {
+            indexByIdentity[identity] = merged.count
+            merged.append(drop)
+        }
+    }
+
+    guard let selectedAccountID else { return merged }
+    return merged.map { $0.projected(forAccountID: selectedAccountID) }
+}
+
 // MARK: - Grouped Game Card
 struct GameCampaignDeckCard: View {
     let group: GameAggregate
@@ -225,25 +251,10 @@ struct GameCampaignDeckCard: View {
     }
 
     private var displayDrops: [DropViewData] {
-        // Collapse repeated rewards across every campaign in this game group.
-        // Twitch can expose the same reward through more than one campaign entry
-        // (e.g. duplicate/region variants or a creators campaign that shares the
-        // base drops), which would otherwise render the same reward tile twice.
-        // Identity is the reward name + required watch time; fall back to the
-        // drop id only when the name is missing.
-        var seen = Set<String>()
-        var result: [DropViewData] = []
-        for item in group.campaigns {
-            for drop in item.campaign.drops {
-                let key = drop.name.isEmpty
-                    ? drop.id
-                    : "\(drop.name.lowercased())|\(drop.requiredMinutes)"
-                if seen.insert(key).inserted {
-                    result.append(drop)
-                }
-            }
-        }
-        return result
+        dropsCardDisplayRewards(
+            from: group.campaigns.flatMap(\.campaign.drops),
+            selectedAccountID: selectedAccountId
+        )
     }
 
     var body: some View {
@@ -320,7 +331,10 @@ struct GameCampaignDeckCard: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         LazyHStack(alignment: .top, spacing: 12) {
                             ForEach(drops) { drop in
-                                BeautifulRewardCard(drop: drop)
+                                BeautifulRewardCard(
+                                    drop: drop,
+                                    accountStates: accountStates
+                                )
                             }
                         }
                         .padding(.vertical, 4)
@@ -432,6 +446,8 @@ struct GameArtworkCard: View {
 
 struct BeautifulRewardCard: View {
     let drop: DropViewData
+    let accountStates: [AccountState]
+    @Environment(NavigationModel.self) private var navigation
     @State private var isHovered = false
     @State private var loadedArtwork: LoadedCampaignArtwork?
 
@@ -462,6 +478,14 @@ struct BeautifulRewardCard: View {
         VStack(spacing: 6) {
             rewardWell
             durationLabel
+            if let claimantSummary {
+                Text(claimantSummary)
+                    .font(.system(size: 9, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.green)
+                    .lineLimit(1)
+                    .frame(width: wellSize)
+                    .help(claimantHelpText)
+            }
         }
         .onHover { hovering in
             isHovered = hovering
@@ -560,11 +584,41 @@ struct BeautifulRewardCard: View {
     /// a tooltip rather than a popover covering the cards around it.
     private var helpText: String {
         var lines = ["\(drop.name) — \(statusTitle)"]
+        if !claimantNames.isEmpty {
+            lines.append(claimantHelpText)
+        }
         if let description = drop.description, !description.isEmpty {
             lines.append(description)
         }
         lines.append("Requires \(drop.requiredMinutes) min")
         return lines.joined(separator: "\n")
+    }
+
+    private var claimantNames: [String] {
+        guard drop.isClaimed else { return [] }
+        let accountsByID = Dictionary(
+            accountStates.map { ($0.accountId, $0) },
+            uniquingKeysWith: { existing, _ in existing }
+        )
+        return (drop.claimedAccountIDs ?? []).map { accountID in
+            let account = accountsByID[accountID]
+            return navigation.minerManager.displayName(
+                forAccountId: accountID,
+                fallback: account?.username ?? accountID
+            )
+        }
+    }
+
+    private var claimantSummary: String? {
+        guard !claimantNames.isEmpty else { return nil }
+        if claimantNames.count == 1 {
+            return "by \(claimantNames[0])"
+        }
+        return "by \(claimantNames[0]) +\(claimantNames.count - 1)"
+    }
+
+    private var claimantHelpText: String {
+        "Claimed by \(claimantNames.joined(separator: ", "))"
     }
 
     private var statusTitle: String {

@@ -7,15 +7,26 @@ only when SwiftMiner asks it to, from Settings → Advanced → Twitch Compatibi
 
 An update is a single session in a single tab:
 
-1. SwiftMiner builds a queue of the pages that issue the operations it needs, and opens
-   one Twitch tab whose URL fragment carries that queue.
+1. SwiftMiner reads the current operation/hash pairs from TwitchDropsMiner's public
+   `constants.py`, builds a queue of the Twitch pages that can issue those operations,
+   and opens one Twitch tab whose URL fragment carries the queue and validated 64-hex
+   fallback values. No Twitch account data is sent to GitHub.
 2. The content script takes the queue, strips the fragment so a reload cannot restart
    the run, and stores the session in `sessionStorage` — per tab, gone when it closes.
-3. For each item it waits for that operation's GraphQL request, reads its hash, reports
-   it, updates an in-page progress banner, then navigates the same tab to the next page.
-4. An operation that does not appear within twenty seconds is marked failed and the
-   queue continues, so one missing hash cannot abort the rest.
-5. At the end SwiftMiner receives both the hashes found and the operations that failed,
+3. The network hook is installed at document start, before Twitch's startup requests,
+   and buffers every requested operation seen on that page. This matters on the campaigns
+   page, where Twitch sends multiple useful requests together.
+4. For each item it reads the buffered hash, reports it, and updates a floating glass
+   progress panel. If Twitch already issued a later operation on the current page, the
+   runner consumes that buffered result instead of loading its otherwise-required page.
+   Only operations still unseen navigate the same tab to their target page. The browser
+   cannot passively reproduce the mining client's `Inventory` document or a campaign
+   detail request that requires a click, so those use the exact TDM catalog pair directly.
+   Other operations prefer the browser observation and use the catalog only if the page
+   no longer issues them.
+5. An operation that does not appear within twenty seconds and has no catalog fallback is
+   marked failed; the queue continues, so one missing hash cannot abort the rest.
+6. At the end SwiftMiner receives both the hashes found and the operations that failed,
    the banner reports the outcome, and the extension goes idle again.
 
 Without a queue in the fragment or an active session in `sessionStorage`, the content
@@ -25,15 +36,23 @@ An observation is saved as an untrusted **candidate**, never an active override.
 SwiftMiner tries that candidate through its normal Twitch client. A response that
 recognizes the persisted query *and* carries the fields SwiftMiner reads promotes it to
 the active override. Anything else retires it and restores the immutable bundled hash.
+The extension records the observation but does not queue the same rejected value again;
+an explicit manual re-check can deliberately give it another attempt.
 
 ## Privacy boundary
 
-The extension is limited to `https://www.twitch.tv/drops/*` and
-`https://www.twitch.tv/directory/*`. The Drops pages carry `ViewerDropsDashboard` and
-`Inventory`; the category directory carries `DirectoryPage_Game`, which upstream has
-rotated more often than every other operation combined — four of the eight rotations in
-the year to September 2026. Reaching the remaining operation, `AvailableDrops`, would mean
-matching channel pages, which is effectively the whole of twitch.tv, so it is left out.
+The extension has permission for `https://www.twitch.tv/*` because one of the five
+repeat rotators, `AvailableDrops`, is issued only on a channel page. SwiftMiner uses the
+login of a live channel it is already checking; it never chooses an unrelated channel or
+reads the page to discover one. The other targeted operations are `ViewerDropsDashboard`,
+`Inventory`, `DropCampaignDetails`, and `DirectoryPage_Game`; as described above, the
+browser cannot passively reproduce every one of those client documents.
+
+That host permission does not make the extension a continuous observer. On every Twitch
+page, the content script validates a SwiftMiner-created, same-origin queue before doing
+anything. Without that queue in the URL fragment or the same tab's active `sessionStorage`,
+it returns before installing the network hook. The queue accepts only those five operations
+and the specific Drops, category, and channel paths SwiftMiner can generate.
 
 Its page
 hook examines only POST bodies sent to `https://gql.twitch.tv/gql`, allow-lists the
@@ -47,8 +66,13 @@ same operations SwiftMiner knows, and sends only:
 ```
 
 The content script, background worker, and native handler independently validate the
-operation and hash. Headers, cookies, OAuth values, GraphQL variables, and responses
-are never forwarded or stored. Automatic discovery is off by default.
+operation and hash. Headers, cookies, OAuth values, GraphQL variables, responses, and
+channel page contents are never forwarded or stored. Automatic discovery is off by default.
+Twitch currently uses two different persisted documents named `Inventory`; the hook
+checks the non-sensitive `fetchRewardCampaigns` boolean locally and ignores the
+incompatible sibling. That boolean never leaves the page world. SwiftMiner supplies the
+correct mining-client Inventory pair from TDM's public catalog instead, and still runs it
+through the same candidate validation before adoption.
 
 ## Test an unsigned Debug build locally
 
@@ -69,8 +93,8 @@ notification. Release builds use the signed App Group described below.
    to enable its Develop menu first in Settings → Advanced.
 4. Open Safari Settings → Extensions and enable **SwiftMiner Query Hash Discovery**.
 5. In SwiftMiner Settings → Advanced → Twitch Compatibility, choose
-   **Update via Safari**. One Twitch tab opens and steps through the queue; a banner
-   under the page header reports progress, and the tab is left alone once it finishes.
+   **Update via Safari**. One Twitch tab opens and steps through the queue; a floating
+   glass panel reports progress, and the tab is left alone once it finishes.
    On first use, approve the extension's request for access to `twitch.tv`; Safari
    owns this one-time permission and SwiftMiner cannot grant it on your behalf. If
    nothing is reported back, SwiftMiner points directly to the likely missing Safari

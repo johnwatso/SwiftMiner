@@ -94,9 +94,10 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
             userInfo: nil,
             options: [.deliverImmediately]
         )
-        // The extension cannot synchronously know whether discovery is enabled
-        // in the host. Declining keeps the background worker willing to retry.
-        return false
+        // Delivery succeeded. The Debug host validates the notification again and decides
+        // whether discovery is enabled; this acknowledgement only prevents Safari from
+        // claiming success when the native handler was never reached.
+        return true
         #else
         // No discovery-toggle check: a hash only reaches here inside a session SwiftMiner
         // itself started, so the request to observe has already been made explicitly.
@@ -106,6 +107,23 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
             Date().timeIntervalSince1970,
             forKey: "TwitchQueryHash.observedDate.\(operation)"
         )
+
+        // Match TwitchQueryHashStore.recordObservation's most important safety rule.
+        // Twitch keeps serving a sibling document after SwiftMiner has proved it cannot
+        // satisfy the app's response contract; putting that same value back into the
+        // candidate slot on every Safari run creates an endless validate/reject loop.
+        if defaults.string(forKey: "TwitchQueryHash.rejected.\(operation)") == hash {
+            return true
+        }
+
+        // Re-observing the value already in use is still a successful collection, but it
+        // is not pending work. Clear a stale candidate if one survived an interrupted run.
+        if defaults.string(forKey: "TwitchQueryHash.override.\(operation)") == hash {
+            defaults.removeObject(forKey: "TwitchQueryHash.candidate.\(operation)")
+            defaults.removeObject(forKey: "TwitchQueryHash.candidateDate.\(operation)")
+            return true
+        }
+
         defaults.set(hash, forKey: "TwitchQueryHash.candidate.\(operation)")
         defaults.set(
             Date().timeIntervalSince1970,

@@ -285,9 +285,10 @@ struct AdvancedSettingsView: View {
         // on showing "validating…" indefinitely. The tick reads a handful of defaults keys.
         .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
             if let startedAt = queryHashCheckStartedAt,
-               GQLQuery.allCases.contains(where: {
-                   (store.date(for: .observed, query: $0) ?? .distantPast) >= startedAt
-               }) {
+               (store.latestSessionResult?.finishedAt ?? .distantPast) >= startedAt
+                || GQLQuery.allCases.contains(where: {
+                    (store.date(for: .observed, query: $0) ?? .distantPast) >= startedAt
+                }) {
                 // Retire the manual check's marker once the extension has reported back.
                 queryHashCheckStartedAt = nil
             }
@@ -398,6 +399,21 @@ struct AdvancedSettingsView: View {
                 symbol: "clock",
                 tint: .secondary,
                 isWaiting: settleable
+            )
+        }
+
+        if let session = recentSessionResult(store: store), !session.failed.isEmpty {
+            let broken = Set(store.queriesNeedingRecovery())
+            let missedBrokenQuery = session.failed.contains { broken.contains($0) }
+            let missedNames = session.failed.map(\.displayName).joined(separator: ", ")
+            return CompatibilityStatus(
+                title: missedBrokenQuery ? "Replacement not found" : "Check completed with gaps",
+                detail: missedBrokenQuery
+                    ? "Safari ran, but Twitch did not issue \(missedNames). SwiftMiner kept the built-in query in use."
+                    : "Safari ran successfully, but Twitch did not issue \(missedNames) during this pass.",
+                symbol: missedBrokenQuery ? "exclamationmark.triangle.fill" : "info.circle.fill",
+                tint: missedBrokenQuery ? .orange : .secondary,
+                action: .checkAgain
             )
         }
 
@@ -627,7 +643,7 @@ struct AdvancedSettingsView: View {
     // MARK: Compatibility dates
 
     private func safariExtensionState(store: TwitchQueryHashStore) -> SafariExtensionAvailability {
-        lastCheckDate(store: store) == nil ? .unknown : .active
+        lastCheckDate(store: store) == nil && store.latestSessionResult == nil ? .unknown : .active
     }
 
     private func lastCheckDate(store: TwitchQueryHashStore) -> Date? {
@@ -646,9 +662,23 @@ struct AdvancedSettingsView: View {
     private func checkFoundNothing(store: TwitchQueryHashStore) -> Bool {
         guard let startedAt = queryHashCheckStartedAt else { return false }
         guard Date().timeIntervalSince(startedAt) >= 12 else { return false }
+        if let session = store.latestSessionResult, session.finishedAt >= startedAt {
+            return false
+        }
         return !GQLQuery.allCases.contains { query in
             (store.date(for: .observed, query: query) ?? .distantPast) >= startedAt
         }
+    }
+
+    /// Session failures describe one browser pass, not a lasting compatibility fault.
+    /// Keep them visible long enough to explain what just happened, then let the durable
+    /// per-query state take over again.
+    private func recentSessionResult(store: TwitchQueryHashStore) -> TwitchQueryHashSessionResult? {
+        guard let result = store.latestSessionResult,
+              Date().timeIntervalSince(result.finishedAt) < 15 * 60 else {
+            return nil
+        }
+        return result
     }
 
     private func compatibilityDateLabel(_ date: Date?) -> String {
@@ -725,9 +755,13 @@ struct AdvancedSettingsView: View {
         queryHashCheckStartedAt = Date()
         queryHashStateVersion &+= 1
 
-        TwitchCompatibilityRecovery.startUpdate(
-            directorySlug: settings.firstPriorityGameCategorySlug
-        )
+        Task { @MainActor in
+            let channelLogin = await navigation.minerManager.compatibilityRecoveryChannelLogin()
+            await TwitchCompatibilityRecovery.startUpdate(
+                directorySlug: settings.firstPriorityGameCategorySlug,
+                channelLogin: channelLogin
+            )
+        }
     }
 
 }

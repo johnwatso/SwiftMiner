@@ -1102,6 +1102,22 @@ public final class MinerManager {
         }
     }
 
+    /// Prefer a channel an engine is already watching for Safari compatibility recovery.
+    /// A Drops-enabled live channel causes Twitch's own page to issue `AvailableDrops`, the
+    /// high-churn operation that cannot be observed on the Drops or directory pages.
+    public func compatibilityRecoveryChannelLogin() async -> String? {
+        for miner in miners where miner.isRunning {
+            guard let engine = engines[miner.id],
+                  let login = await engine.compatibilityRecoveryChannelLogin()?
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                  !login.isEmpty else {
+                continue
+            }
+            return login
+        }
+        return nil
+    }
+
     /// Get a structured activity summary for a specific miner (for UI display).
     /// This provides a clean, structured snapshot of miner state without requiring
     /// the UI to parse raw engine logs.

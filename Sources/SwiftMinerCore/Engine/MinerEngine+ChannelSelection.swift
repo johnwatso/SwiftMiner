@@ -9,6 +9,17 @@ struct MiningChannelSelection: Sendable {
 }
 
 extension MinerEngine {
+    /// Preserve the page identity before asking the channel-scoped query. If that query's
+    /// bundled hash has just expired, Safari needs the login—not Twitch's numeric channel
+    /// ID—to open the same live channel and observe the replacement request.
+    func fetchAvailableDrops(for channel: Channel) async throws -> [String] {
+        let login = channel.login.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !login.isEmpty {
+            compatibilityRecoveryChannelLoginHint = login
+        }
+        return try await apiClient.fetchAvailableDrops(channelId: channel.id)
+    }
+
     /// Ranked campaigns this miner may work, with the filter tally logged for the Activity Log.
     ///
     /// `logSummary` exists because this is both the scheduler's decision point and a convenient
@@ -530,7 +541,7 @@ extension MinerEngine {
             attemptedChannelIdentities.formUnion(Self.identityKeys(for: channel))
 
             do {
-                let activeCampaignIds = try await apiClient.fetchAvailableDrops(channelId: channel.id)
+                let activeCampaignIds = try await fetchAvailableDrops(for: channel)
                 anyVerificationSucceeded = true
                 verifiedChannelCount += 1
 
@@ -607,7 +618,7 @@ extension MinerEngine {
                 attemptedChannelIdentities.formUnion(channelIdentities)
                 aclProbeCount += 1
                 do {
-                    let activeCampaignIds = try await apiClient.fetchAvailableDrops(channelId: channel.id)
+                    let activeCampaignIds = try await fetchAvailableDrops(for: channel)
                     anyVerificationSucceeded = true
                     verifiedChannelCount += 1
                     let matches = candidates.filter { possibleMatch in
@@ -983,7 +994,7 @@ extension MinerEngine {
 
                 do {
                     // TDM PARITY: Strict drops-enabled verification via GQL
-                    let activeCampaignIds = try await apiClient.fetchAvailableDrops(channelId: channel.id)
+                    let activeCampaignIds = try await fetchAvailableDrops(for: channel)
                     allVerificationsFailed = false  // GQL responded — campaign simply not active here
                     if activeCampaignIds.contains(campaign.id) {
                         log("[ChannelSelect]     Verified: Campaign \(campaign.id) is active on \(channel.displayName)")
@@ -1346,7 +1357,7 @@ extension MinerEngine {
             }
 
             let resolved = await resolveChannelIdIfNeeded(Channel(id: login, login: login, displayName: login))
-            let activeCampaignIds = try await apiClient.fetchAvailableDrops(channelId: resolved.id)
+            let activeCampaignIds = try await fetchAvailableDrops(for: resolved)
             guard activeCampaignIds.contains(campaign.id) else {
                 log("[ChannelSelect] Failover @\(login) is live but not running \(campaign.name).")
                 return nil
@@ -1395,7 +1406,7 @@ extension MinerEngine {
             }
 
             let channel = await resolveChannelIdIfNeeded(Channel(id: login, login: login, displayName: login))
-            let activeCampaignIds = try await apiClient.fetchAvailableDrops(channelId: channel.id)
+            let activeCampaignIds = try await fetchAvailableDrops(for: channel)
             let matches = candidates.filter { activeCampaignIds.contains($0.id) }
 
             // Prefer a drop campaign this miner can actually mine on the override channel.

@@ -1,6 +1,18 @@
 (() => {
   "use strict";
 
+  const SESSION_KEY = "swiftminer.update.session";
+  const FRAGMENT = "#swiftminer-update=";
+  // Safari registers this script ahead of time so it can run before Twitch's page code,
+  // but normal Twitch browsing remains completely inert.
+  let sessionActive = location.hash.startsWith(FRAGMENT);
+  if (!sessionActive) {
+    try {
+      sessionActive = sessionStorage.getItem(SESSION_KEY) !== null;
+    } catch (_) {}
+  }
+  if (!sessionActive) return;
+
   if (window.__swiftMinerQueryHashHookInstalled) return;
   Object.defineProperty(window, "__swiftMinerQueryHashHookInstalled", { value: true });
 
@@ -19,6 +31,18 @@
     "ClaimCommunityPoints"
   ]);
   const hashPattern = /^[0-9a-f]{64}$/;
+
+  // Twitch sometimes reuses an operation name for more than one persisted document.
+  // SwiftMiner's Inventory request is the drops-progress document; the sibling document
+  // asks Twitch to include reward campaigns and is not compatible even though it has the
+  // same operationName. Inspect this one non-sensitive discriminator in the page world,
+  // but continue forwarding only the operation/hash pair across the privacy boundary.
+  const matchesSwiftMinerDocument = request => {
+    if (request && request.operationName === "Inventory") {
+      return request.variables && request.variables.fetchRewardCampaigns === false;
+    }
+    return true;
+  };
 
   const isTwitchGQL = value => {
     try {
@@ -44,7 +68,15 @@
       const sha256Hash = request && request.extensions &&
         request.extensions.persistedQuery &&
         request.extensions.persistedQuery.sha256Hash;
-      if (!allowedOperations.has(operationName) || !hashPattern.test(sha256Hash)) continue;
+      if (!allowedOperations.has(operationName) ||
+          !hashPattern.test(sha256Hash) ||
+          !matchesSwiftMinerDocument(request)) continue;
+      // Retaining only the allow-listed operation/hash pair closes the tiny startup race
+      // where the main-world hook can observe a request before the isolated coordinator
+      // has attached its message listener.
+      try {
+        sessionStorage.setItem(`swiftminer.update.observed.${operationName}`, sha256Hash);
+      } catch (_) {}
       window.postMessage({
         source: "swiftminer-query-hash",
         version: 1,

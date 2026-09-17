@@ -9,11 +9,11 @@
     "default_icon": "swiftminer-icon.png"
   },
   "permissions": [
-    "nativeMessaging"
+    "nativeMessaging",
+    "scripting"
   ],
   "host_permissions": [
-    "https://www.twitch.tv/drops/*",
-    "https://www.twitch.tv/directory/*"
+    "https://www.twitch.tv/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -21,8 +21,7 @@
   "content_scripts": [
     {
       "matches": [
-        "https://www.twitch.tv/drops/*",
-        "https://www.twitch.tv/directory/*"
+        "https://www.twitch.tv/*"
       ],
       "js": [
         "content.js"
@@ -33,12 +32,10 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "page-hook.js",
         "swiftminer-icon.png"
       ],
       "matches": [
-        "https://www.twitch.tv/drops/*",
-        "https://www.twitch.tv/directory/*"
+        "https://www.twitch.tv/*"
       ]
     }
   ],

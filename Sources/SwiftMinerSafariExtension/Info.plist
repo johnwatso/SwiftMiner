@@ -27,7 +27,5 @@
 		<key>NSExtensionPrincipalClass</key>
 		<string>$(PRODUCT_MODULE_NAME).SafariWebExtensionHandler</string>
 	</dict>
-	<key>SFSafariWebExtensionConverterVersion</key>
-	<integer>1</integer>
 </dict>
 </plist>

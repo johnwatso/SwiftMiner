@@ -44,6 +44,27 @@ final class TwitchCompatibilityContractTests: XCTestCase {
         ))
     }
 
+    func testDirectoryContractAcceptsBothKnownResponseKeys() {
+        XCTAssertTrue(GQLQuery.directoryPageGame.responseSatisfiesContract(
+            body(["data": ["game": ["streams": ["edges": []]]]])
+        ))
+        XCTAssertTrue(GQLQuery.directoryPageGame.responseSatisfiesContract(
+            body(["data": ["directoryPageGame": ["streams": ["edges": []]]]])
+        ))
+        XCTAssertFalse(GQLQuery.directoryPageGame.responseSatisfiesContract(
+            body(["data": ["game": ["displayName": "A sibling document"]]])
+        ))
+    }
+
+    func testAvailableDropsContractRequiresCampaignsForTheChannel() {
+        XCTAssertTrue(GQLQuery.dropsHighlightServiceAvailableDrops.responseSatisfiesContract(
+            body(["data": ["channel": ["viewerDropCampaigns": []]]])
+        ))
+        XCTAssertFalse(GQLQuery.dropsHighlightServiceAvailableDrops.responseSatisfiesContract(
+            body(["data": ["channel": ["displayName": "A sibling document"]]])
+        ))
+    }
+
     func testAnOperationWithoutAContractIsNeverRejected() {
         // A contract that cannot be stated safely must not block adoption: these responses
         // legitimately omit their payload (a campaign the account cannot see, a restricted
@@ -57,6 +78,70 @@ final class TwitchCompatibilityContractTests: XCTestCase {
         XCTAssertFalse(GQLQuery.inventory.responseSatisfiesContract(Data("not json".utf8)))
         // …but still passes where nothing is asserted.
         XCTAssertTrue(GQLQuery.playbackAccessToken.responseSatisfiesContract(Data("not json".utf8)))
+    }
+}
+
+/// The browser recovery surface follows the operations that repeatedly changed in
+/// TwitchDropsMiner's public history, rather than treating every query as equally likely.
+final class TwitchRotationPriorityTests: XCTestCase {
+    func testFrequentlyRotatedQueriesMatchUpstreamHistory() {
+        XCTAssertEqual(
+            GQLQuery.frequentlyRotated,
+            [
+                .directoryPageGame,
+                .viewerDropsDashboard,
+                .inventory,
+                .dropsHighlightServiceAvailableDrops,
+                .dropCampaignDetails,
+            ]
+        )
+    }
+
+    func testTDMParserRequiresTheExactCatalogKeyAndOperationPair() {
+        let inventory = String(repeating: "a", count: 64)
+        let directory = String(repeating: "b", count: 64)
+        let source = """
+        GQL_QUERIES = {
+            "Inventory": GQLPersistedQuery(
+                "Inventory",
+                "\(inventory)",
+                variables={"fetchRewardCampaigns": False},
+            ),
+            "GameDirectory": GQLPersistedQuery(
+                "DirectoryPage_Game",
+                "\(directory)",
+            ),
+            "WrongKey": GQLPersistedQuery(
+                "ViewerDropsDashboard",
+                "\(String(repeating: "c", count: 64))",
+            ),
+        }
+        """
+
+        let hashes = TwitchDropsMinerQueryCatalog.hashes(
+            in: source,
+            for: [.inventory, .directoryPageGame, .viewerDropsDashboard]
+        )
+        XCTAssertEqual(hashes[.inventory], inventory)
+        XCTAssertEqual(hashes[.directoryPageGame], directory)
+        XCTAssertNil(hashes[.viewerDropsDashboard])
+    }
+
+    func testTDMParserRejectsMalformedAndUppercaseHashes() {
+        let source = """
+        "Inventory": GQLPersistedQuery(
+            "Inventory",
+            "\(String(repeating: "A", count: 64))",
+        )
+        "Campaigns": GQLPersistedQuery(
+            "ViewerDropsDashboard",
+            "not-a-hash",
+        )
+        """
+        XCTAssertTrue(TwitchDropsMinerQueryCatalog.hashes(
+            in: source,
+            for: [.inventory, .viewerDropsDashboard]
+        ).isEmpty)
     }
 }
 

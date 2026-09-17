@@ -61,6 +61,17 @@ final class AggregatedCampaignDataServiceTests: XCTestCase {
 
         XCTAssertEqual(statesByAccount[claimedAccountId], .claimed)
         XCTAssertEqual(statesByAccount[readyAccountId], .ready)
+        let mergedDrop = try XCTUnwrap(merged.drops.first)
+        XCTAssertEqual(
+            mergedDrop.claimedAccountIDs,
+            [claimedAccountId],
+            "A merged claimed reward must retain the account that supplied the inventory claim."
+        )
+        XCTAssertEqual(mergedDrop.accountStates?.count, 2)
+        XCTAssertEqual(
+            mergedDrop.accountStates?.first { $0.accountID == readyAccountId }?.isClaimed,
+            false
+        )
         XCTAssertFalse(merged.isClaimed, "A campaign is not fully claimed while any registered miner still has unclaimed obtainable drops.")
         XCTAssertFalse(merged.showsInClaimedTab)
         XCTAssertTrue(merged.showsInActiveTab)
@@ -92,6 +103,63 @@ final class AggregatedCampaignDataServiceTests: XCTestCase {
             [campaign.id],
             "Repeated UI reads should use the decoded actor cache instead of reopening the campaign file."
         )
+    }
+
+    func testExternallyClaimedRewardRetainsMinerWhenRemainingRewardNeedsSubscription() async throws {
+        let suffix = UUID().uuidString
+        let accountId = "partial-\(suffix)"
+        accountIds = [accountId]
+
+        let claimedBenefitId = "claimed-benefit-\(suffix)"
+        let subscriptionBenefitId = "subscription-benefit-\(suffix)"
+        let campaign = Campaign(
+            id: "campaign-\(suffix)",
+            name: "Badge and Subscription Campaign",
+            game: Game(id: "game-\(suffix)", name: "Attribution Test"),
+            startDate: Date().addingTimeInterval(-3600),
+            endDate: Date().addingTimeInterval(3600),
+            drops: [
+                Drop(
+                    id: "claimed-drop-\(suffix)",
+                    name: "Watch Badge",
+                    requiredMinutes: 30,
+                    benefitID: claimedBenefitId
+                ),
+                Drop(
+                    id: "subscription-drop-\(suffix)",
+                    name: "Subscriber Badge",
+                    requiredMinutes: 0,
+                    benefitID: subscriptionBenefitId,
+                    requiredSubs: 1
+                )
+            ],
+            isAccountConnected: false
+        )
+
+        CampaignDiskCache.save(campaigns: [campaign], accountId: accountId)
+        InventoryDiskCache.save(
+            InventorySnapshot(accountId: accountId, benefitIDs: [claimedBenefitId], progress: [])
+        )
+
+        let service = AggregatedCampaignDataService()
+        await service.registerAccount(
+            accountId: accountId,
+            username: "External Claim Miner",
+            service: await makeCampaignDataService(accountId: accountId)
+        )
+
+        let campaigns = await service.allCampaigns()
+        let merged = try XCTUnwrap(campaigns.first { $0.id == campaign.id })
+        let claimedDrop = try XCTUnwrap(merged.drops.first { $0.id == campaign.drops[0].id })
+        let subscriptionDrop = try XCTUnwrap(merged.drops.first { $0.id == campaign.drops[1].id })
+
+        XCTAssertTrue(claimedDrop.isClaimed)
+        XCTAssertEqual(claimedDrop.claimedAccountIDs, [accountId])
+        XCTAssertEqual(claimedDrop.accountStates?.first?.accountID, accountId)
+        XCTAssertFalse(subscriptionDrop.isClaimed)
+        XCTAssertTrue(subscriptionDrop.isSubscriptionRequired)
+        XCTAssertEqual(merged.accountStates.first?.miningStatus, .blocked)
+        XCTAssertFalse(merged.isClaimed)
     }
 
     private func makeCampaignDataService(accountId: String) async -> CampaignDataService {

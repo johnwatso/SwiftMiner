@@ -463,7 +463,7 @@ public actor AggregatedCampaignDataService {
         }
 
         // Merge drops for status calculation in CampaignStore
-        let mergedDropData = mergeDrops(from: accountCampaigns.map(\.1))
+        let mergedDropData = mergeDrops(from: accountCampaigns)
         let drops = mergedDropData.map { d in
             Drop(
                 id: d.id,
@@ -560,7 +560,7 @@ public actor AggregatedCampaignDataService {
             : progressValues.max() ?? data.progress  // Use max progress, not average
 
         let anyConnected = accountCampaigns.contains { $0.1.isAccountConnected }
-        let drops = mergeDrops(from: accountCampaigns.map(\.1))
+        let drops = mergeDrops(from: accountCampaigns)
         let accountStates = buildCampaignAccountStates(
             for: data.id,
             accountCampaigns: accountCampaigns
@@ -664,17 +664,18 @@ public actor AggregatedCampaignDataService {
         }
     }
 
-    private func mergeDrops(from campaigns: [CampaignViewData]) -> [DropViewData] {
+    private func mergeDrops(from accountCampaigns: [(String, CampaignViewData)]) -> [DropViewData] {
         var bestDrops: [String: DropViewData] = [:]
         var order: [String] = []
 
-        for campaign in campaigns {
+        for (accountID, campaign) in accountCampaigns {
             for drop in campaign.drops {
+                let attributedDrop = attributingClaim(in: drop, to: accountID)
                 if bestDrops[drop.id] == nil {
                     order.append(drop.id)
-                    bestDrops[drop.id] = drop
+                    bestDrops[drop.id] = attributedDrop
                 } else if let existing = bestDrops[drop.id] {
-                    bestDrops[drop.id] = mergeDrop(existing: existing, incoming: drop)
+                    bestDrops[drop.id] = existing.merging(with: attributedDrop)
                 }
             }
         }
@@ -682,20 +683,30 @@ public actor AggregatedCampaignDataService {
         return order.compactMap { bestDrops[$0] }
     }
 
-    private func mergeDrop(existing: DropViewData, incoming: DropViewData) -> DropViewData {
-        DropViewData(
-            id: existing.id,
-            name: existing.name.isEmpty ? incoming.name : existing.name,
-            description: existing.description ?? incoming.description,
-            imageURL: existing.imageURL ?? incoming.imageURL,
-            rewardType: existing.rewardType,
-            requiredMinutes: max(existing.requiredMinutes, incoming.requiredMinutes),
-            currentMinutes: max(existing.currentMinutes, incoming.currentMinutes),
-            progress: max(existing.progress, incoming.progress),
-            isClaimed: existing.isClaimed || incoming.isClaimed,
-            isClaimable: existing.isClaimable || incoming.isClaimable,
-            isEarnable: existing.isEarnable || incoming.isEarnable,
-            isSubscriptionRequired: existing.isSubscriptionRequired || incoming.isSubscriptionRequired
+    private func attributingClaim(in drop: DropViewData, to accountID: String) -> DropViewData {
+        return DropViewData(
+            id: drop.id,
+            name: drop.name,
+            description: drop.description,
+            imageURL: drop.imageURL,
+            rewardType: drop.rewardType,
+            requiredMinutes: drop.requiredMinutes,
+            currentMinutes: drop.currentMinutes,
+            progress: drop.progress,
+            isClaimed: drop.isClaimed,
+            isClaimable: drop.isClaimable,
+            isEarnable: drop.isEarnable,
+            isSubscriptionRequired: drop.isSubscriptionRequired,
+            accountStates: [
+                DropAccountState(
+                    accountID: accountID,
+                    currentMinutes: drop.currentMinutes,
+                    progress: drop.progress,
+                    isClaimed: drop.isClaimed,
+                    isClaimable: drop.isClaimable,
+                    isEarnable: drop.isEarnable
+                )
+            ]
         )
     }
 
