@@ -472,6 +472,13 @@ private struct EventLogRow: View {
     let isNew: Bool
     let animateAppearance: Bool
     @State private var appeared = false
+    @State private var showsDiagnostics = false
+
+    /// Troubleshooting detail this event carries, if any. Only the rows that have something
+    /// worth reading become expandable, so the log does not grow a chevron per line.
+    private var diagnostics: [String] {
+        compatibilityDiagnostics(for: event)
+    }
 
     private var eventFilter: EventFilter {
         primaryEventFilter(for: event)
@@ -525,6 +532,55 @@ private struct EventLogRow: View {
     }
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if diagnostics.isEmpty {
+                summaryRow
+            } else {
+                Button {
+                    withAnimation(animateAppearance ? .easeOut(duration: 0.15) : nil) {
+                        showsDiagnostics.toggle()
+                    }
+                } label: {
+                    summaryRow
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(showsDiagnostics ? "Hide details" : "Show details")
+
+                if showsDiagnostics {
+                    diagnosticsList
+                }
+            }
+        }
+        .opacity(animateAppearance && isNew ? (appeared ? 1 : 0) : 1)
+        .offset(y: animateAppearance && isNew ? (appeared ? 0 : 6) : 0)
+        .onAppear {
+            guard animateAppearance, isNew else { return }
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                appeared = true
+            }
+        }
+    }
+
+    private var diagnosticsList: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            ForEach(Array(diagnostics.enumerated()), id: \.offset) { _, line in
+                Text(line)
+                    .font(.system(
+                        size: 11,
+                        design: line.range(of: "[0-9a-f]{64}", options: .regularExpression) == nil
+                            ? .default
+                            : .monospaced
+                    ))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.leading, 26)
+        .padding(.bottom, 2)
+    }
+
+    private var summaryRow: some View {
         HStack(alignment: .center, spacing: 10) {
             if let stall = stallRecoveryIcon {
                 Image(systemName: stall.symbol)
@@ -542,7 +598,9 @@ private struct EventLogRow: View {
                 Text(messageText)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.primary)
-                    .lineLimit(1)
+                    .lineLimit(showsDiagnostics ? nil : 1)
+                    .fixedSize(horizontal: false, vertical: showsDiagnostics)
+                    .multilineTextAlignment(.leading)
 
                 if let metadataText {
                     Text(metadataText)
@@ -554,20 +612,19 @@ private struct EventLogRow: View {
 
             Spacer(minLength: 12)
 
+            if !diagnostics.isEmpty {
+                Image(systemName: showsDiagnostics ? "chevron.down" : "chevron.right")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+
             Text(relativeTime)
                 .font(.system(size: 11, weight: .regular))
                 .foregroundStyle(.tertiary)
                 .lineLimit(1)
         }
         .padding(.vertical, metadataText == nil ? 1 : 2)
-        .opacity(animateAppearance && isNew ? (appeared ? 1 : 0) : 1)
-        .offset(y: animateAppearance && isNew ? (appeared ? 0 : 6) : 0)
-        .onAppear {
-            guard animateAppearance, isNew else { return }
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                appeared = true
-            }
-        }
+        .contentShape(Rectangle())
     }
 }
 
@@ -613,6 +670,12 @@ private func eventDisplayText(for event: EventEntry) -> EventDisplayText {
     // Discord DM events tag the raw message with a sentinel for filter routing,
     // but the friendly text on `event.message` is what should actually render.
     if let raw = event.rawMessage, raw.hasPrefix(discordEventTag) {
+        return EventDisplayText(title: event.message, detail: nil)
+    }
+
+    // Compatibility events are written for a person already, and their raw message is a
+    // diagnostic payload for the expanded row rather than something to parse into a title.
+    if let raw = event.rawMessage, isCompatibilityEvent(raw) {
         return EventDisplayText(title: event.message, detail: nil)
     }
 
@@ -757,6 +820,14 @@ private func eventDisplayText(for event: EventEntry) -> EventDisplayText {
 func eventFilters(for event: EventEntry) -> Set<EventFilter> {
     let text = eventSearchText(for: event)
 
+    // Routed explicitly rather than by keyword: a compatibility run talks about queries,
+    // Twitch and Safari, and must not be filed under Drops or Mining by coincidence.
+    if isCompatibilityEvent(text) {
+        if event.level == .error { return [.system, .errors] }
+        if event.level == .warning { return [.system, .warnings] }
+        return [.system]
+    }
+
     if isStallRecoveryEvent(text) {
         if text.contains("recovery failed") || event.level == .error {
             return [.warnings, .errors]
@@ -876,6 +947,28 @@ private let updateEventTag = "[update]"
 
 private func isUpdateEvent(_ text: String) -> Bool {
     text.contains(updateEventTag)
+}
+
+let compatibilityEventTag = "[compatibility]"
+
+func isCompatibilityEvent(_ text: String) -> Bool {
+    text.contains(compatibilityEventTag)
+}
+
+/// The troubleshooting detail behind a Twitch compatibility event: which queries were read,
+/// which changed, and the hashes involved.
+///
+/// This is why the Settings pane no longer carries a "Technical Details" disclosure. The
+/// hashes belong with the event that changed them, where they are dated, ordered and
+/// exported with the rest of the log, rather than as a permanent fixture on a settings
+/// screen that is meant to answer one question.
+func compatibilityDiagnostics(for event: EventEntry) -> [String] {
+    guard let raw = event.rawMessage, isCompatibilityEvent(raw) else { return [] }
+    return raw
+        .replacingOccurrences(of: compatibilityEventTag, with: "")
+        .components(separatedBy: " · ")
+        .map { $0.trimmingCharacters(in: .whitespaces) }
+        .filter { !$0.isEmpty }
 }
 
 /// Both stall mechanisms: the supervisor's out-of-band recovery, and the engine's own

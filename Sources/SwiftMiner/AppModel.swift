@@ -356,11 +356,14 @@ public final class AppModel {
             return
         }
 
+        // A Twitch query that needs updating counts once, for the app rather than per
+        // miner: it is one fix, pressed once, however many miners it affects.
+        let twitchUpdateNeeded = TwitchQueryUpdateController.shared.queriesWorthAlerting().isEmpty ? 0 : 1
         applyDockBadgeCountIfChanged(
             MinerAttention.attentionCount(
                 miners: manager.miners,
                 settings: Settings.shared
-            )
+            ) + twitchUpdateNeeded
         )
     }
 

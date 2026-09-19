@@ -32,7 +32,7 @@ public final class NavigationModel {
         public var displayName: String {
             switch self {
             case .overview: return "Overview"
-            case .miners: return "miners"
+            case .miners: return "Miners"
             case .drops: return "Drops"
             case .events: return "Activity Log"
             }

@@ -12,7 +12,7 @@ struct ContentView: View {
         @Bindable var nav = navigation
         NavigationSplitView(columnVisibility: $nav.columnVisibility) {
             SidebarView()
-                .navigationSplitViewColumnWidth(min: 180, ideal: 180, max: 180)
+                .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 300)
         } detail: {
             detailContainer
         }
@@ -499,6 +499,9 @@ enum OverviewSystemState: Equatable {
     case blockedAccountNotLinked(minerName: String?, blockedCount: Int)
     case blockedAuthenticationExpired
     case blockedNeedsAttention
+    /// Twitch has stopped accepting one of SwiftMiner's queries. SwiftMiner never goes
+    /// looking for the replacement on its own, so this is the prompt to ask it to.
+    case twitchQueriesNeedUpdate(queries: [GQLQuery])
     case mining(activeMinerCount: Int, totalMinerCount: Int)
 
     var title: String {
@@ -522,6 +525,8 @@ enum OverviewSystemState: Equatable {
             return "\(blockedCount) miners blocked"
         case .blockedAuthenticationExpired, .blockedNeedsAttention:
             return "Blocked"
+        case .twitchQueriesNeedUpdate:
+            return "Twitch Update Needed"
         case .mining:
             return "Mining Active"
         }
@@ -554,6 +559,13 @@ enum OverviewSystemState: Equatable {
             return "Account authentication expired. Please re-connect."
         case .blockedNeedsAttention:
             return "Check Activity Log for the latest issue before mining can continue."
+        case .twitchQueriesNeedUpdate(let queries):
+            // The bar is deliberately not clickable, so the subtitle names the one place
+            // that fixes this rather than a vague "check settings".
+            let what = queries.count == 1
+                ? "the \(TwitchQueryUpdateController.listed(queries)) query"
+                : "queries for \(TwitchQueryUpdateController.listed(queries))"
+            return "Twitch changed \(what). Choose Update via Safari in Settings \u{2192} Advanced."
         case .mining(let activeMinerCount, let totalMinerCount):
             if totalMinerCount <= 1 {
                 return "Miner is currently active."
@@ -587,7 +599,7 @@ enum OverviewSystemState: Equatable {
             return SystemSymbolCompatibility.resolvedName(for: "bolt.trianglebadge.exclamationmark.fill")
         case .blockedAccountNotLinked:
             return SystemSymbolCompatibility.resolvedName(for: "personalhotspot.slash")
-        case .blockedAuthenticationExpired, .blockedNeedsAttention:
+        case .blockedAuthenticationExpired, .blockedNeedsAttention, .twitchQueriesNeedUpdate:
             return "exclamationmark.triangle.fill"
         case .mining(let activeMinerCount, let totalMinerCount):
             // The bolt is what mining looks like everywhere else in the app, so the banner
@@ -619,7 +631,8 @@ enum OverviewSystemState: Equatable {
             return .orange
         case .noRecentActivity:
             return .yellow
-        case .blockedAccountNotLinked, .blockedAuthenticationExpired, .blockedNeedsAttention:
+        case .blockedAccountNotLinked, .blockedAuthenticationExpired, .blockedNeedsAttention,
+             .twitchQueriesNeedUpdate:
             return .orange
         case .mining:
             return .green

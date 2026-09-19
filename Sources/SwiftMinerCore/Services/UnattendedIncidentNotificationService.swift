@@ -93,6 +93,8 @@ public actor UnattendedIncidentNotificationService {
             return "Account Link Required"
         case .realtimeEventsOffline:
             return "Live Drop Updates Unavailable"
+        case .twitchQueriesNeedUpdate:
+            return "Twitch Update Needed"
         case .other:
             return "SwiftMiner Needs Attention"
         }

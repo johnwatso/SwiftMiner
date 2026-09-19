@@ -18,14 +18,26 @@ import UniformTypeIdentifiers
 enum SafariExtensionAvailability {
     /// The extension has reported a hash, which is proof it is installed and running.
     case active
-    /// Nothing heard from it yet. Not the same as switched off — a healthy extension is
-    /// silent until Twitch is open, so this must never raise a warning on its own.
+    /// Nothing heard from it yet. Not the same as switched off — the extension is inert
+    /// until an update asks it for something, so this must never raise a warning on its own.
     case unknown
+    /// An update ran and nothing came back at all, which does mean something is wrong.
+    case unavailable
 
     var label: String {
         switch self {
         case .active: return "Active"
         case .unknown: return "Not detected yet"
+        case .unavailable: return "Not responding"
+        }
+    }
+
+    /// Green is reserved for the one state that is genuinely healthy.
+    var tint: Color {
+        switch self {
+        case .active: return .green
+        case .unknown: return .secondary
+        case .unavailable: return .orange
         }
     }
 }
@@ -40,66 +52,76 @@ private enum SafariQueryHashExtensionBridge {
     }
 }
 
-/// How one Twitch operation SwiftMiner depends on compares against the live site.
+/// Whether one Twitch query SwiftMiner depends on is healthy.
 ///
-/// Twitch keys persisted queries by the hash of the document, so "what SwiftMiner sends"
-/// and "what twitch.tv sends" are directly comparable values. That comparison — not a
-/// transport result — is what this screen reports.
+/// Worked out by comparing what SwiftMiner sends with what Twitch's own site was last seen
+/// using, but that comparison is the mechanism, not the message. A row only ever says
+/// "fine" (a quiet tick) or names the one thing the user might need to know.
 private struct QueryCompatibility: Identifiable {
     enum State {
-        /// Twitch is using the same document SwiftMiner sends.
+        /// Twitch is using the same query SwiftMiner sends.
         case upToDate
-        /// Twitch has changed, and the replacement is being tried against a live request.
-        case validating
-        /// Twitch's own site uses a different document for this operation, and SwiftMiner's
-        /// works fine. Normal, not a problem: Twitch serves more than one query under some
-        /// operation names, and the Drops inventory is permanently one of them. Flagging it
-        /// would put an amber warning on screen forever over nothing.
+        /// Twitch's site uses a different query under this name and SwiftMiner's still
+        /// works. Normal — Twitch serves more than one query under some names, and the
+        /// Drops inventory is permanently one of them — so it reads exactly like `upToDate`.
         case differs
-        /// SwiftMiner's own query has stopped working *and* the replacement could not be
-        /// adopted. The only case here that is genuinely a warning.
+        /// A replacement from the user's update is being tried against a live request.
+        case validating
+        /// SwiftMiner's own query has stopped working and nothing has replaced it. The one
+        /// state that needs the user.
         case unverified
-        /// The extension has not seen this query yet. A healthy extension is silent until
-        /// Twitch is open, so this must not read as a problem.
+        /// Never checked. Checks only happen when the user asks, so this is not a problem.
         case waiting
+        /// The last check could not reach this query: Twitch only issues `Available drops`
+        /// on a live Drops channel, and nothing with a running campaign was live.
+        case notChecked
     }
 
     let query: GQLQuery
     let state: State
-    let appHash: String
-    let siteHash: String?
-    let usesDiscoveredHash: Bool
 
     var id: String { query.rawValue }
 
-    var appLabel: String { usesDiscoveredHash ? "Updated" : "Built-in" }
+    var isHealthy: Bool { state == .upToDate || state == .differs }
 
-    var siteLabel: String {
+    /// Replaces the tick when there is something to say. Deliberately short.
+    var statusLabel: String? {
         switch state {
-        case .upToDate: return "Matches"
-        case .differs: return "Differs"
-        case .validating, .unverified: return "Changed"
-        case .waiting: return "Not seen yet"
+        case .upToDate, .differs: return nil
+        case .validating: return "Updating"
+        case .unverified: return "Needs Update"
+        case .waiting: return "Not Checked"
+        case .notChecked: return "Unavailable"
+        }
+    }
+
+    /// Hover detail for the rows that are not simply fine.
+    var explanation: String? {
+        switch state {
+        case .upToDate, .differs:
+            return nil
+        case .validating:
+            return "SwiftMiner is finishing the update you started."
+        case .unverified:
+            return "Twitch has changed this query. Choose Update via Safari to update it."
+        case .waiting:
+            return "Choose Update via Safari to check this query."
+        case .notChecked:
+            return "Twitch only provides this query while a Drops stream is live. Try again when one is."
         }
     }
 }
 
-/// The single headline state at the top of the card.
+/// The single headline state at the top of the section.
 ///
-/// Modelled as a value with an action *case* rather than a closure so it can be derived
-/// outside the view builder without capturing view state.
+/// Modelled as a value so it can be derived outside the view builder, and so the one
+/// primary action on the page ("Update via Safari…") never has to move with the state.
 private struct CompatibilityStatus {
-    enum Action {
-        case safariSettings
-        case checkAgain
-    }
-
     var title: String
     var detail: String?
     var symbol: String = "checkmark.circle.fill"
     var tint: Color = .green
     var isWaiting: Bool = false
-    var action: Action?
 }
 
 /// Marks a shipped-but-unproven feature.
@@ -116,7 +138,7 @@ private struct BetaBadge: View {
             .padding(.vertical, 2)
             .background(Color.orange.opacity(0.16), in: Capsule())
             .accessibilityLabel("Beta feature")
-            .help("Twitch compatibility updates are new and still being proven. SwiftMiner always keeps the queries it shipped with, so an update that goes wrong cannot stop mining.")
+            .help("Refreshing Twitch queries from Safari is new and still being proven. SwiftMiner keeps the queries it shipped with unless a replacement is confirmed to work, so an update that goes wrong cannot stop mining.")
     }
 }
 
@@ -128,10 +150,11 @@ struct AdvancedSettingsView: View {
     @State private var showClientIdAlert = false
     @State private var tempClientId = ""
     @State private var backupMessage: String?
-    @State private var queryHashCheckStartedAt: Date?
     @State private var queryHashStateVersion = 0
-    @State private var automaticQueryHashDiscovery = false
-    @State private var showCompatibilityAdvanced = false
+
+    /// The live update, if one is running. Shared rather than owned by this view: a run
+    /// takes a minute or two and must survive the Settings window being closed.
+    private var updates: TwitchQueryUpdateController { .shared }
 
     var body: some View {
         Form {
@@ -228,71 +251,56 @@ struct AdvancedSettingsView: View {
         }
     }
 
+    /// Three sections rather than one: status, the queries, and the extension. Section
+    /// spacing does the separating that used to take a divider between every block.
+    @ViewBuilder
     private var twitchCompatibilitySection: some View {
         let store = TwitchQueryHashStore.standard
-        _ = queryHashStateVersion
+        let _ = queryHashStateVersion
         let rows = comparedQueries(store: store)
         let status = compatibilityStatus(store: store, rows: rows)
+        let availability = safariExtensionState(store: store)
 
-        return Section {
-            VStack(alignment: .leading, spacing: 14) {
-                Toggle(isOn: $automaticQueryHashDiscovery) {
-                    Text("Keep Twitch queries up to date")
-                }
-                .toggleStyle(.switch)
-                .onChange(of: automaticQueryHashDiscovery) { _, enabled in
-                    store.automaticDiscoveryEnabled = enabled
-                    queryHashStateVersion &+= 1
-                }
-
-                compatibilityHeadline(status)
-
-                if automaticQueryHashDiscovery {
-                    Divider()
-                    compatibilityTable(rows)
-                }
-
-                Divider()
-                extensionFooter(store: store)
-
-                DisclosureGroup(isExpanded: $showCompatibilityAdvanced) {
-                    technicalDetails(store: store, rows: rows)
-                        .padding(.top, 8)
-                } label: {
-                    Text("Technical Details")
-                        .font(.callout)
-                }
-            }
-            .padding(.vertical, 2)
+        Section {
+            compatibilityHeadline(status)
         } header: {
             HStack(spacing: 7) {
-                Text("Twitch Compatibility")
+                Text("Twitch Query Compatibility")
                 BetaBadge()
             }
         }
+        // Attached to one section only: modifiers on the enclosing group would be applied
+        // to all three, running the settle and the tick three times over.
         .onAppear {
-            automaticQueryHashDiscovery = store.automaticDiscoveryEnabled
             settlePendingCandidates()
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             queryHashStateVersion &+= 1
         }
-        // Ticks for as long as the pane is on screen, not just during a manual check.
-        // Everything this card reports happens in the background — the extension observes,
-        // a refresh validates, a hash is retired — and the whole sequence can be over in
-        // half a second. Bumping only during a manual check left the card frozen on
-        // whatever it computed when it appeared, so a state that had already resolved went
-        // on showing "validating…" indefinitely. The tick reads a handful of defaults keys.
+        // The store is plain defaults, so nothing here publishes. A tick keeps the rows
+        // honest while the user's update is in flight — the whole sequence can be over in
+        // half a second — and stops as soon as there is nothing moving to report.
         .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
-            if let startedAt = queryHashCheckStartedAt,
-               (store.latestSessionResult?.finishedAt ?? .distantPast) >= startedAt
-                || GQLQuery.allCases.contains(where: {
-                    (store.date(for: .observed, query: $0) ?? .distantPast) >= startedAt
-                }) {
-                // Retire the manual check's marker once the extension has reported back.
-                queryHashCheckStartedAt = nil
+            guard updates.isRunning || rows.contains(where: { $0.state == .validating }) else {
+                return
             }
             queryHashStateVersion &+= 1
+        }
+
+        Section {
+            queryList(rows)
+        } header: {
+            Text("Queries")
+        } footer: {
+            Text("SwiftMiner uses these queries to access Twitch Drops.")
+        }
+
+        Section {
+            extensionRow(availability)
+        } footer: {
+            if availability == .unavailable {
+                Text("Turn on SwiftMiner in Safari \u{2192} Settings \u{2192} Extensions, then choose Update via Safari again.")
+            }
         }
     }
 
@@ -311,7 +319,7 @@ struct AdvancedSettingsView: View {
 
     @ViewBuilder
     private func compatibilityHeadline(_ status: CompatibilityStatus) -> some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .center, spacing: 10) {
             Group {
                 if status.isWaiting {
                     ProgressView()
@@ -323,7 +331,7 @@ struct AdvancedSettingsView: View {
             }
             .frame(width: 16, height: 16)
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(status.title)
                     .font(.callout.weight(.medium))
 
@@ -333,360 +341,249 @@ struct AdvancedSettingsView: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-
-                switch status.action {
-                case .none:
-                    EmptyView()
-                case .safariSettings:
-                    Button("Open Safari Settings\u{2026}") {
-                        openSafariExtensionSettings()
-                    }
-                    .buttonStyle(.link)
-                    .padding(.top, 1)
-                case .checkAgain:
-                    Button("Update via Safari") {
-                        startSafariUpdate()
-                    }
-                    .buttonStyle(.link)
-                    .padding(.top, 1)
-                }
             }
 
-            Spacer(minLength: 0)
+            Spacer(minLength: 16)
+
+            Button("Update via Safari\u{2026}") {
+                startSafariUpdate()
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(updates.isRunning)
+            .help("Checks Twitch in Safari and updates the queries if they have changed. SwiftMiner only does this when you ask.")
         }
+        .padding(.vertical, 1)
     }
 
     /// Only one state is ever on screen, so the order these are tested in is the order a
-    /// user should hear about them: a change SwiftMiner could not adopt first, then work
-    /// already under way, then a setup problem that would stop future updates.
+    /// user should hear about them: work in flight first, then an update that could not
+    /// run, then a query that needs updating, then the ordinary answer.
     private func compatibilityStatus(
         store: TwitchQueryHashStore,
         rows: [QueryCompatibility]
     ) -> CompatibilityStatus {
-        guard automaticQueryHashDiscovery else {
+        let lastChecked = lastCheckedDate(store: store).map(lastCheckedDescription)
+
+        switch updates.phase {
+        case .collecting:
             return CompatibilityStatus(
-                title: "Automatic updates are off",
-                detail: "SwiftMiner will keep using the Twitch queries it shipped with.",
-                symbol: "pause.circle.fill",
-                tint: .secondary
+                title: "Checking Twitch\u{2026}",
+                detail: "This takes about a minute in Safari.",
+                isWaiting: true
             )
+        case .validating:
+            return CompatibilityStatus(
+                title: "Updating\u{2026}",
+                detail: "Trying Twitch\u{2019}s latest version.",
+                isWaiting: true
+            )
+        case .idle:
+            break
+        }
+
+        switch updates.result?.failure {
+        case .extensionUnavailable:
+            return CompatibilityStatus(
+                title: "Update Didn\u{2019}t Finish",
+                detail: "Safari didn\u{2019}t respond, so nothing was changed.",
+                symbol: "exclamationmark.triangle.fill",
+                tint: .orange
+            )
+        case .couldNotStart:
+            return CompatibilityStatus(
+                title: "Update Couldn\u{2019}t Start",
+                detail: "Safari couldn\u{2019}t be opened.",
+                symbol: "exclamationmark.triangle.fill",
+                tint: .orange
+            )
+        case nil:
+            break
         }
 
         if rows.contains(where: { $0.state == .unverified }) {
             return CompatibilityStatus(
-                title: "Update couldn\u{2019}t be verified",
-                detail: "One of SwiftMiner\u{2019}s queries has stopped working and the replacement could not be confirmed. Mining continues on the version it shipped with.",
+                title: "Needs Update",
+                detail: lastChecked,
                 symbol: "exclamationmark.triangle.fill",
-                tint: .orange,
-                action: .checkAgain
+                tint: .orange
             )
         }
 
-        let validating = rows.filter { $0.state == .validating }
-        if !validating.isEmpty {
-            // Only claim to be validating when something is actually in flight. A query the
-            // app cannot exercise on demand — a claim mutation, say, which must never be
-            // fired just to test a hash — waits for its next real use, and saying so beats
-            // a spinner that could run for hours.
-            let settleable = validating.contains {
-                TwitchCompatibilityRecovery.settleableByRefresh.contains($0.query)
-            }
+        if rows.contains(where: { $0.state == .validating }) {
             return CompatibilityStatus(
-                title: "Update detected",
-                detail: settleable
-                    ? "SwiftMiner is validating the new Twitch query\u{2026}"
-                    : "SwiftMiner will check the new value the next time it uses this query.",
-                symbol: "clock",
-                tint: .secondary,
-                isWaiting: settleable
-            )
-        }
-
-        if let session = recentSessionResult(store: store), !session.failed.isEmpty {
-            let broken = Set(store.queriesNeedingRecovery())
-            let missedBrokenQuery = session.failed.contains { broken.contains($0) }
-            let missedNames = session.failed.map(\.displayName).joined(separator: ", ")
-            return CompatibilityStatus(
-                title: missedBrokenQuery ? "Replacement not found" : "Check completed with gaps",
-                detail: missedBrokenQuery
-                    ? "Safari ran, but Twitch did not issue \(missedNames). SwiftMiner kept the built-in query in use."
-                    : "Safari ran successfully, but Twitch did not issue \(missedNames) during this pass.",
-                symbol: missedBrokenQuery ? "exclamationmark.triangle.fill" : "info.circle.fill",
-                tint: missedBrokenQuery ? .orange : .secondary,
-                action: .checkAgain
-            )
-        }
-
-        if queryHashCheckStartedAt != nil, !checkFoundNothing(store: store) {
-            return CompatibilityStatus(
-                title: "Checking Twitch\u{2026}",
-                detail: "No action required.",
-                isWaiting: true
-            )
-        }
-
-        if checkFoundNothing(store: store) {
-            return CompatibilityStatus(
-                title: "Safari extension may be turned off",
-                detail: "The update ran but Twitch reported nothing back. Enabling the extension lets SwiftMiner refresh its Twitch queries in Safari.",
-                symbol: "exclamationmark.triangle.fill",
-                tint: .orange,
-                action: .safariSettings
-            )
-        }
-
-        if rows.allSatisfy({ $0.state == .waiting }) {
-            return CompatibilityStatus(
-                title: "Waiting for Twitch",
-                detail: "Choose Update via Safari and SwiftMiner will step through Twitch in one tab to refresh the queries it uses.",
+                title: "Update Pending",
+                detail: "Finishes the next time SwiftMiner uses the query.",
                 symbol: "clock",
                 tint: .secondary
             )
         }
 
-        // A recent adoption is worth saying out loud: it is the whole feature working, and
-        // it is the one moment the user might otherwise wonder what changed.
-        if let updated = lastUpdateDate(store: store),
-           Date().timeIntervalSince(updated) < 24 * 60 * 60 {
+        guard let lastChecked else {
             return CompatibilityStatus(
-                title: "Updated automatically",
-                detail: "SwiftMiner adopted a new Twitch query \(compatibilityDateLabel(updated).lowercased())."
+                title: "Not Checked Yet",
+                symbol: "circle.dashed",
+                tint: .secondary
             )
         }
 
-        return CompatibilityStatus(
-            title: "Up to Date",
-            detail: "SwiftMiner automatically keeps its Twitch queries compatible."
-        )
+        return CompatibilityStatus(title: "Up to Date", detail: lastChecked)
     }
 
-    // MARK: Compatibility table
+    // MARK: Queries
 
-    @ViewBuilder
-    private func compatibilityTable(_ rows: [QueryCompatibility]) -> some View {
-        Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 8) {
-            GridRow {
-                Text("Query")
-                Text("SwiftMiner")
-                Text("Twitch")
-                Color.clear.frame(width: 14, height: 1)
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-
+    /// One form row holding every query, so the list reads as a list rather than five
+    /// separately ruled-off rows. Healthy rows are a quiet trailing tick; anything else
+    /// swaps the tick for a word, and only a query that needs the user gets colour.
+    private func queryList(_ rows: [QueryCompatibility]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
             ForEach(rows) { row in
-                GridRow {
-                    Text(row.query.displayName)
-
-                    Label(row.appLabel, systemImage: "macwindow")
-                        .labelStyle(.titleAndIcon)
-
-                    Label(row.siteLabel, systemImage: "safari")
-                        .labelStyle(.titleAndIcon)
-
-                    compatibilitySymbol(row.state)
+                LabeledContent(row.query.displayName) {
+                    queryStatus(row)
                 }
-                .font(.callout)
+                .help(row.explanation ?? "")
             }
         }
-        .imageScale(.small)
+        .padding(.vertical, 2)
     }
 
     @ViewBuilder
-    private func compatibilitySymbol(_ state: QueryCompatibility.State) -> some View {
-        switch state {
-        case .upToDate:
-            Image(systemName: "checkmark.circle.fill")
+    private func queryStatus(_ row: QueryCompatibility) -> some View {
+        if row.isHealthy {
+            Image(systemName: "checkmark")
+                .font(.callout.weight(.semibold))
                 .foregroundStyle(.green)
-                .accessibilityLabel("Up to date")
-        case .validating:
-            ProgressView()
-                .controlSize(.small)
-                .accessibilityLabel("Validating")
-        case .differs:
-            Image(systemName: "info.circle")
-                .foregroundStyle(.secondary)
-                .accessibilityLabel("Twitch uses a different query; SwiftMiner's works")
-        case .unverified:
-            Image(systemName: "exclamationmark.triangle.fill")
+                .accessibilityLabel("Healthy")
+        } else if row.state == .validating {
+            HStack(spacing: 6) {
+                ProgressView()
+                    .controlSize(.mini)
+                Text(row.statusLabel ?? "")
+                    .foregroundStyle(.secondary)
+            }
+        } else if row.state == .unverified {
+            Label(row.statusLabel ?? "", systemImage: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
-                .accessibilityLabel("Not verified")
-        case .waiting:
-            Image(systemName: "clock")
+        } else {
+            Text(row.statusLabel ?? "")
                 .foregroundStyle(.secondary)
-                .accessibilityLabel("Not seen yet")
         }
     }
 
-    /// The operations shown in the table.
-    ///
-    /// The Drops pages are the only place the extension can observe anything, so those two
-    /// are always listed even before they have been seen. Anything else the extension has
-    /// actually reported joins them rather than being hidden.
+    /// The queries listed: the ones an update can actually refresh, in the order they
+    /// matter to Drops. Anything else the extension has reported joins them rather than
+    /// being hidden.
     private func comparedQueries(store: TwitchQueryHashStore) -> [QueryCompatibility] {
-        let core: [GQLQuery] = [.viewerDropsDashboard, .inventory]
+        let core: [GQLQuery] = [
+            .viewerDropsDashboard,
+            .inventory,
+            .dropCampaignDetails,
+            .directoryPageGame,
+            .dropsHighlightServiceAvailableDrops
+        ]
         let extra = GQLQuery.allCases.filter {
             !core.contains($0) && store.observedHash(for: $0) != nil
         }
-        let broken = Set(store.queriesNeedingRecovery())
-        return (core + extra).map { compatibility(of: $0, store: store, broken: broken) }
+        let broken = Set(updates.brokenQueries(store: store))
+        // Queries the last update had no page to open for. Nothing durable records this —
+        // it is a property of the moment the update ran, not of the query.
+        let skipped = Set(updates.result?.skipped ?? [])
+        return (core + extra).map {
+            compatibility(of: $0, store: store, broken: broken, skipped: skipped)
+        }
     }
 
     private func compatibility(
         of query: GQLQuery,
         store: TwitchQueryHashStore,
-        broken: Set<GQLQuery>
+        broken: Set<GQLQuery>,
+        skipped: Set<GQLQuery>
     ) -> QueryCompatibility {
-        let resolution = store.resolution(for: query)
         let observed = store.observedHash(for: query)
 
         let state: QueryCompatibility.State
         if store.candidate(for: query) != nil {
             state = .validating
+        } else if broken.contains(query) {
+            // Before the observation, not after: the last check may well have matched,
+            // and Twitch retired the query since. A tick from an older check must never
+            // outrank a failure recorded by a live request.
+            state = .unverified
         } else if let observed {
-            if observed == resolution.hash {
+            if observed == store.resolution(for: query).hash {
                 state = .upToDate
             } else {
                 // A difference only matters when SwiftMiner's own query has stopped
                 // working. Otherwise Twitch is simply asking a different question under the
                 // same name, which it does routinely and which costs nothing.
-                state = broken.contains(query) ? .unverified : .differs
+                state = .differs
             }
         } else {
-            state = .waiting
+            state = skipped.contains(query) ? .notChecked : .waiting
         }
 
-        return QueryCompatibility(
-            query: query,
-            state: state,
-            appHash: resolution.hash,
-            siteHash: observed,
-            usesDiscoveredHash: resolution.source != .bundled
-        )
+        return QueryCompatibility(query: query, state: state)
     }
 
-    // MARK: Extension footer
+    // MARK: Safari extension
 
-    @ViewBuilder
-    private func extensionFooter(store: TwitchQueryHashStore) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: "safari")
-                .foregroundStyle(.secondary)
+    private func extensionRow(_ availability: SafariExtensionAvailability) -> some View {
+        LabeledContent {
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(availability.tint)
+                    .frame(width: 7, height: 7)
 
-            Text("Safari Extension \u{00B7} \(safariExtensionState(store: store).label)")
+                Text(availability.label)
+                    .foregroundStyle(availability == .active ? .primary : .secondary)
 
-            if let verified = lastVerifiedDate(store: store) {
-                Text("\u{00B7}")
-                    .foregroundStyle(.tertiary)
-                Text("Last verified \u{00B7} \(compatibilityDateLabel(verified))")
-            }
+                Spacer(minLength: 12)
 
-            Spacer(minLength: 8)
-
-            Button("Update via Safari") {
-                startSafariUpdate()
-            }
-            .controlSize(.small)
-
-            Button("Extension Settings\u{2026}") {
-                openSafariExtensionSettings()
-            }
-            .buttonStyle(.link)
-        }
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .imageScale(.small)
-    }
-
-    // MARK: Technical details
-
-    @ViewBuilder
-    private func technicalDetails(
-        store: TwitchQueryHashStore,
-        rows: [QueryCompatibility]
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            ForEach(rows) { row in
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(row.query.displayName)
-                        .font(.caption.weight(.medium))
-                    hashLine("SwiftMiner", hash: row.appHash)
-                    hashLine("Twitch", hash: row.siteHash)
+                // A link is right for a place to look; when the extension is the thing
+                // standing in the way, it is the action to take.
+                if availability == .unavailable {
+                    Button("Extension Settings\u{2026}") {
+                        openSafariExtensionSettings()
+                    }
+                    .controlSize(.small)
+                } else {
+                    Button("Extension Settings\u{2026}") {
+                        openSafariExtensionSettings()
+                    }
+                    .buttonStyle(.link)
                 }
             }
-
-            LabeledContent("Last compatibility check", value: compatibilityDateLabel(lastCheckDate(store: store)))
-            LabeledContent("Last successful update", value: compatibilityDateLabel(lastUpdateDate(store: store)))
-
-            Text("An update opens one Twitch tab and steps through the pages SwiftMiner needs, then closes itself out. The extension does nothing at any other time, and a value SwiftMiner cannot confirm is never adopted \u{2014} the version it shipped with stays in use.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .font(.caption)
-        .foregroundStyle(.secondary)
-    }
-
-    @ViewBuilder
-    private func hashLine(_ label: String, hash: String?) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Text(label)
-                .frame(width: 72, alignment: .leading)
-            Text(hash ?? "Not seen yet")
-                .font(.caption.monospaced())
-                .textSelection(.enabled)
-                .lineLimit(1)
-                .truncationMode(.middle)
+        } label: {
+            Text("Safari Extension")
         }
     }
 
     // MARK: Compatibility dates
 
+    /// Honest about what it is derived from: the extension has been heard from, or it has
+    /// not. `SFSafariExtensionManager` cannot be asked — see `SafariExtensionAvailability`.
     private func safariExtensionState(store: TwitchQueryHashStore) -> SafariExtensionAvailability {
-        lastCheckDate(store: store) == nil && store.latestSessionResult == nil ? .unknown : .active
+        if updates.result?.failure == .extensionUnavailable { return .unavailable }
+        if lastCheckedDate(store: store) != nil { return .active }
+        return .unknown
     }
 
-    private func lastCheckDate(store: TwitchQueryHashStore) -> Date? {
-        GQLQuery.allCases.compactMap { store.date(for: .observed, query: $0) }.max()
+    /// When the user last ran a check. Only an explicit update writes either of these —
+    /// the extension's end-of-run summary, or a query it read — so this is never the time
+    /// of some background verification, because there is none.
+    private func lastCheckedDate(store: TwitchQueryHashStore) -> Date? {
+        let observed = GQLQuery.allCases.compactMap { store.date(for: .observed, query: $0) }
+        return (observed + [store.latestSessionResult?.finishedAt].compactMap { $0 }).max()
     }
 
-    private func lastUpdateDate(store: TwitchQueryHashStore) -> Date? {
-        GQLQuery.allCases.compactMap { store.date(for: .accepted, query: $0) }.max()
-    }
-
-    private func lastVerifiedDate(store: TwitchQueryHashStore) -> Date? {
-        [lastCheckDate(store: store), lastUpdateDate(store: store)].compactMap { $0 }.max()
-    }
-
-    /// True once a manual check has run long enough to conclude nothing is listening.
-    private func checkFoundNothing(store: TwitchQueryHashStore) -> Bool {
-        guard let startedAt = queryHashCheckStartedAt else { return false }
-        guard Date().timeIntervalSince(startedAt) >= 12 else { return false }
-        if let session = store.latestSessionResult, session.finishedAt >= startedAt {
-            return false
-        }
-        return !GQLQuery.allCases.contains { query in
-            (store.date(for: .observed, query: query) ?? .distantPast) >= startedAt
-        }
-    }
-
-    /// Session failures describe one browser pass, not a lasting compatibility fault.
-    /// Keep them visible long enough to explain what just happened, then let the durable
-    /// per-query state take over again.
-    private func recentSessionResult(store: TwitchQueryHashStore) -> TwitchQueryHashSessionResult? {
-        guard let result = store.latestSessionResult,
-              Date().timeIntervalSince(result.finishedAt) < 15 * 60 else {
-            return nil
-        }
-        return result
-    }
-
-    private func compatibilityDateLabel(_ date: Date?) -> String {
-        guard let date else { return "Never" }
+    private func lastCheckedDescription(_ date: Date) -> String {
+        let time = date.formatted(date: .omitted, time: .shortened)
         if Calendar.current.isDateInToday(date) {
-            return "Today, " + date.formatted(date: .omitted, time: .shortened)
+            return "Last checked today at \(time)"
         }
-        return date.formatted(date: .abbreviated, time: .shortened)
+        if Calendar.current.isDateInYesterday(date) {
+            return "Last checked yesterday at \(time)"
+        }
+        return "Last checked \(date.formatted(date: .abbreviated, time: .shortened))"
     }
 
     private var backupSection: some View {
@@ -747,21 +644,13 @@ struct AdvancedSettingsView: View {
         SafariQueryHashExtensionBridge.showPreferences()
     }
 
+    /// The only path that ever refreshes a Twitch query hash: the user pressed the button.
     private func startSafariUpdate() {
-        let store = TwitchQueryHashStore.standard
-        store.automaticDiscoveryEnabled = true
-        store.clearObservations()
-        automaticQueryHashDiscovery = true
-        queryHashCheckStartedAt = Date()
+        updates.startUpdate(
+            directorySlug: settings.firstPriorityGameCategorySlug,
+            navigation: navigation
+        )
         queryHashStateVersion &+= 1
-
-        Task { @MainActor in
-            let channelLogin = await navigation.minerManager.compatibilityRecoveryChannelLogin()
-            await TwitchCompatibilityRecovery.startUpdate(
-                directorySlug: settings.firstPriorityGameCategorySlug,
-                channelLogin: channelLogin
-            )
-        }
     }
 
 }

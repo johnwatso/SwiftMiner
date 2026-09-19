@@ -1105,6 +1105,11 @@ public final class MinerManager {
     /// Prefer a channel an engine is already watching for Safari compatibility recovery.
     /// A Drops-enabled live channel causes Twitch's own page to issue `AvailableDrops`, the
     /// high-churn operation that cannot be observed on the Drops or directory pages.
+    ///
+    /// Falls back to any live channel of any campaign running right now. Waiting for the
+    /// fleet to be mid-stream is not a condition a compatibility check should have: a fleet
+    /// on one game is between streams most of the time, and an update that starts then was
+    /// silently covering four of the five queries.
     public func compatibilityRecoveryChannelLogin() async -> String? {
         for miner in miners where miner.isRunning {
             guard let engine = engines[miner.id],
@@ -1115,7 +1120,79 @@ public final class MinerManager {
             }
             return login
         }
+        return await liveChannelFromAnyActiveCampaign()
+    }
+
+    /// How many games one compatibility check may probe for a live channel.
+    ///
+    /// Each probe is a directory query made while the user waits for Safari to open, and
+    /// the ordering below puts the likely hits first, so a third miss means the fleet's
+    /// games are genuinely quiet rather than that the search gave up early.
+    private static let compatibilityChannelGameLimit = 3
+
+    /// Any live channel of any campaign that is running — prioritised or not.
+    ///
+    /// `AvailableDrops` belongs to the *channel page*, not to the campaign SwiftMiner
+    /// happens to care about: any live Drops channel makes Twitch's own site issue it, so
+    /// the search has no reason to respect the priority list it would normally mine by.
+    private func liveChannelFromAnyActiveCampaign() async -> String? {
+        let games = compatibilityProbeGames()
+        guard !games.isEmpty, let engine = engines.values.first else { return nil }
+        let dropsService = await engine.getDropsService()
+
+        for game in games.prefix(Self.compatibilityChannelGameLimit) {
+            guard let channels = try? await dropsService.findLiveChannels(forGame: game) else {
+                continue
+            }
+            // A Drops-enabled stream is the one Twitch reliably issues the query on; any
+            // live channel in a game with a running campaign is the acceptable second best.
+            let login = channels.first { $0.hasDropsEnabled && !$0.login.isEmpty }?.login
+                ?? channels.first { !$0.login.isEmpty }?.login
+            if let login, !login.isEmpty {
+                return login
+            }
+        }
         return nil
+    }
+
+    /// A category page to open when the priority list yields no slug — the same idea as the
+    /// channel fallback: the directory query is read from whatever category page is open,
+    /// so any game with a running campaign will do. Only Twitch's own slug is used; deriving
+    /// one from a display name is guesswork that belongs to the caller that already has a
+    /// rule for it.
+    public func compatibilityRecoveryDirectorySlug() -> String? {
+        compatibilityProbeGames()
+            .lazy
+            .compactMap { $0.slug?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty }
+    }
+
+    /// Games worth probing, best first: one a miner has just seen a live channel for, then
+    /// everything else currently running. Deduplicated, because every miner carries its own
+    /// copy of what is largely the same campaign list.
+    private func compatibilityProbeGames(now: Date = Date()) -> [Game] {
+        func key(_ value: String) -> String {
+            value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        }
+
+        let knownLive = Set(
+            miners
+                .flatMap(\.gameChannelAvailability.values)
+                .filter { $0.hasEligibleChannel && $0.isFresh(at: now) }
+                .map { key($0.gameKey) }
+        )
+
+        var seen = Set<String>()
+        let running = miners
+            .flatMap(\.allCampaigns)
+            .filter { $0.status == .active && $0.startDate <= now && $0.endDate > now }
+            .map(\.game)
+            .filter { !key($0.name).isEmpty && seen.insert(key($0.name)).inserted }
+
+        // Partitioned rather than sorted: Swift's sort is not stable, and the order the
+        // campaigns arrived in is the only sensible tie-break among equally likely games.
+        return running.filter { knownLive.contains(key($0.name)) }
+            + running.filter { !knownLive.contains(key($0.name)) }
     }
 
     /// Get a structured activity summary for a specific miner (for UI display).
