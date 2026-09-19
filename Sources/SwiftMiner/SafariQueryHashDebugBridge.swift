@@ -32,10 +32,10 @@ final class SafariQueryHashDebugBridge: @unchecked Sendable {
                 return
             }
 
+            // No discovery-toggle check: the extension is inert until SwiftMiner opens an
+            // update session, so a hash arriving here is one the user asked for.
             let hash = String(payload[payload.index(after: separator)...])
-            let store = TwitchQueryHashStore.standard
-            guard store.automaticDiscoveryEnabled else { return }
-            store.recordObservation(hash, for: query)
+            TwitchQueryHashStore.standard.recordObservation(hash, for: query)
         }
 
         sessionObserver = DistributedNotificationCenter.default().addObserver(

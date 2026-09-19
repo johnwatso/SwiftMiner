@@ -181,14 +181,19 @@ struct MinerApp: App {
                     NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
                 ) { _ in
                     appModel.refreshNotificationBadge()
-                    recoverTwitchCompatibilityIfNeeded()
+                    reviewTwitchCompatibility()
+                }
+                // An update the user just ran is the likeliest moment a break clears. Review
+                // then, so the badge and the notification incident do not wait for the timer.
+                .onChange(of: TwitchQueryUpdateController.shared.finishedAt) { _, _ in
+                    reviewTwitchCompatibility()
                 }
                 // Also on a timer: a fleet left mining unattended is precisely the case this
                 // exists for, and it would never see an activation.
                 .onReceive(
                     Timer.publish(every: 300, on: .main, in: .common).autoconnect()
                 ) { _ in
-                    recoverTwitchCompatibilityIfNeeded()
+                    reviewTwitchCompatibility()
                 }
                 .onReceive(
                     NotificationCenter.default.publisher(for: .openSwiftMinerReleaseNotes)
@@ -288,6 +293,55 @@ struct MinerApp: App {
                     }
                 }
 
+                // Shows the Overview status bar and Settings → Advanced as they look when
+                // Twitch has stopped accepting a query. Display only — see `previewBreak`.
+                Menu("Preview Twitch Update Needed") {
+                    Button("One Query") {
+                        TwitchQueryUpdateController.shared.previewBreak(of: [.viewerDropsDashboard])
+                        appModel.refreshNotificationBadge()
+                    }
+                    Button("Several Queries") {
+                        TwitchQueryUpdateController.shared.previewBreak(
+                            of: [.viewerDropsDashboard, .inventory, .directoryPageGame]
+                        )
+                        appModel.refreshNotificationBadge()
+                    }
+                    Divider()
+                    // Sent straight to Notification Center with the real wording, rather
+                    // than by recording a fake incident: a preview must leave no trace in
+                    // the health history an operator reads back later.
+                    Button("Send Preview Notification") {
+                        Task {
+                            await requestNotificationPermission()
+                            let queries = TwitchQueryUpdateController.shared.previewBrokenQueries
+                                ?? [.viewerDropsDashboard]
+                            let now = Date()
+                            let incident = HealthIncident(
+                                id: "debug-preview:\(UUID().uuidString)",
+                                minerID: TwitchQueryUpdateController.incidentID,
+                                kind: .twitchQueriesNeedUpdate,
+                                severity: .warning,
+                                openedAt: now,
+                                lastObservedAt: now,
+                                summary: TwitchQueryUpdateController.incidentSummary(for: queries),
+                                recommendedAction: TwitchQueryUpdateController.incidentAction
+                            )
+                            try? await UNUserNotificationCenter.current().add(
+                                UnattendedIncidentNotificationService.makeRequest(
+                                    incident: incident,
+                                    displayName: "SwiftMiner"
+                                )
+                            )
+                        }
+                    }
+                    Divider()
+                    Button("End Preview") {
+                        TwitchQueryUpdateController.shared.previewBreak(of: nil)
+                        appModel.refreshNotificationBadge()
+                    }
+                    .disabled(TwitchQueryUpdateController.shared.previewBrokenQueries == nil)
+                }
+
                 Divider()
 
                 if minerManager.miners.isEmpty {
@@ -354,34 +408,46 @@ struct MinerApp: App {
         _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
     }
 
-    /// Opening Safari on its own is intrusive, so it only ever happens when a Twitch
-    /// rotation has actually broken a query, at most once every half hour, and it says so
-    /// in the Activity Log — otherwise two tabs appear with no explanation.
-    private func recoverTwitchCompatibilityIfNeeded() {
-        // A queued candidate is only tried when something needs that query. Force the
-        // routine refresh that uses it so validation actually happens, rather than the
-        // status card claiming to validate while nothing is in flight.
-        if TwitchCompatibilityRecovery.shouldForceRefreshToSettle() {
-            Task {
-                await navigation.minerManager.forceRefreshAllMiners()
-                _ = navigation.refreshDropsInBackground(force: true)
+    /// SwiftMiner never refreshes a Twitch query hash on its own: that is an explicit
+    /// "Update via Safari…" in Settings → Advanced. This does the two things that are
+    /// honestly unprompted work — it finishes validating a replacement the user's own
+    /// update already brought home, and it says in the Activity Log when Twitch has stopped
+    /// accepting one of SwiftMiner's queries, so an unattended fleet is not silent about it.
+    private func reviewTwitchCompatibility() {
+        let updates = TwitchQueryUpdateController.shared
+        updates.reportBrokenQueries(navigation: navigation)
+
+        // A break that outlasts its grace period reaches outside the app: a Dock badge,
+        // and — through the unattended-health pipeline, which sends one notification per
+        // incident however often it is re-observed — a notification naming the fix.
+        if let alerting = updates.takeAlertChange() {
+            Task { @MainActor in
+                if alerting.isEmpty {
+                    await unattendedHealth.resolveSystemIncident(
+                        id: TwitchQueryUpdateController.incidentID,
+                        kind: .twitchQueriesNeedUpdate
+                    )
+                } else {
+                    await unattendedHealth.recordSystemIncident(
+                        id: TwitchQueryUpdateController.incidentID,
+                        displayName: "SwiftMiner",
+                        kind: .twitchQueriesNeedUpdate,
+                        severity: .warning,
+                        summary: TwitchQueryUpdateController.incidentSummary(for: alerting),
+                        recommendedAction: TwitchQueryUpdateController.incidentAction
+                    )
+                }
             }
         }
+        appModel.refreshNotificationBadge()
 
-        Task { @MainActor in
-            let channelLogin = await navigation.minerManager.compatibilityRecoveryChannelLogin()
-            let chasing = await TwitchCompatibilityRecovery.runIfNeeded(
-                directorySlug: settings.firstPriorityGameCategorySlug,
-                channelLogin: channelLogin
-            )
-            guard !chasing.isEmpty else { return }
-
-            let names = chasing.map(\.displayName).joined(separator: ", ")
-            navigation.logEvent(
-                message: "Twitch changed a query SwiftMiner depends on (\(names)). Checking Twitch in Safari for the replacement.",
-                level: .warning,
-                rawMessage: "[compatibility] recovery scan opened for \(chasing.map(\.rawValue).joined(separator: ", "))"
-            )
+        // A queued candidate is only tried when something needs that query. Force the
+        // routine refresh that uses it so validation actually happens, rather than leaving
+        // a replacement the user asked for sitting untried for hours.
+        guard TwitchCompatibilityRecovery.shouldForceRefreshToSettle() else { return }
+        Task {
+            await navigation.minerManager.forceRefreshAllMiners()
+            _ = navigation.refreshDropsInBackground(force: true)
         }
     }
 

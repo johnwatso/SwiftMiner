@@ -51,7 +51,9 @@ public enum TwitchMinerError: LocalizedError {
         case .watchSessionFailed(let message):
             return "Watch session failed: \(message)"
         case .twitchAPICompatibility(let operation, _):
-            return "Twitch compatibility update required for \(operation). Update SwiftMiner, then try again."
+            // The "Twitch compatibility update required" prefix is what `MinerAttention`
+            // recognises; keep it stable. The advice after it names the fix available now.
+            return "Twitch compatibility update required for \(operation). Choose Update via Safari in Settings → Advanced, or update SwiftMiner."
         case .claimFailed(let message):
             return "Claim failed: \(message)"
         case .keychainError(let message):

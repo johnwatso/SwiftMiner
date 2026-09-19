@@ -39,6 +39,7 @@
 
 - A focused macOS application built with Swift 6, SwiftUI, and native frameworks
 - Automatic Twitch Drops progression and claiming
+- Detects retired Twitch Drops queries and offers a validated, Safari-assisted repair without waiting for an app release ([how it works](Documentation/SwiftMinerSafari.md))
 - Independent mining across multiple Twitch accounts
 - Campaign prioritisation, exclusions, and stream selection controls
 - Remote monitoring and management through the Web UI

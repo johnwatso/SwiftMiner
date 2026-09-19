@@ -106,12 +106,6 @@ final class TwitchQueryHashStoreTests: XCTestCase {
         XCTAssertEqual(store.override(for: .viewerDropsDashboard), accepted)
     }
 
-    func testAutomaticDiscoveryDefaultsOff() {
-        XCTAssertFalse(store.automaticDiscoveryEnabled)
-        store.automaticDiscoveryEnabled = true
-        XCTAssertTrue(store.automaticDiscoveryEnabled)
-    }
-
     func testObservationIsRecordedWhenHashStillMatchesBundledFallback() {
         XCTAssertTrue(
             store.recordObservation(GQLHashes.viewerDropsDashboard, for: .viewerDropsDashboard)
@@ -218,5 +212,52 @@ final class TwitchQueryHashStoreTests: XCTestCase {
         XCTAssertNil(store.latestSessionResult)
         XCTAssertEqual(store.observedHash(for: .inventory), candidate)
         XCTAssertEqual(store.candidate(for: .inventory), candidate)
+    }
+}
+
+/// An explicit re-check has to mean "try a refused value again" without meaning "forget
+/// what Twitch was last seen using" — the compatibility screen is built from that
+/// comparison, so wiping it turns a delivery failure into a loss of information.
+final class TwitchRecheckPreservesKnownStateTests: XCTestCase {
+    private var suiteName: String!
+    private var store: TwitchQueryHashStore!
+
+    override func setUp() {
+        super.setUp()
+        suiteName = "com.swiftminer.tests.recheck.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        store = TwitchQueryHashStore(defaults: defaults)
+    }
+
+    override func tearDown() {
+        UserDefaults().removePersistentDomain(forName: suiteName)
+        super.tearDown()
+    }
+
+    func testClearingRejectionsKeepsTheLastObservation() throws {
+        let refused = String(repeating: "1", count: 64)
+        store.recordObservation(refused, for: .inventory)
+        store.reject(refused, for: .inventory)
+        XCTAssertEqual(store.rejectedHash(for: .inventory), refused)
+
+        store.clearRejections()
+
+        // The refusal is lifted, so an update can try the value again…
+        XCTAssertNil(store.rejectedHash(for: .inventory))
+        // …while the screen still knows what Twitch was last seen using, and when.
+        XCTAssertEqual(store.observedHash(for: .inventory), refused)
+        XCTAssertNotNil(store.date(for: .observed, query: .inventory))
+    }
+
+    func testClearingObservationsStillClearsRejectionsToo() {
+        let refused = String(repeating: "2", count: 64)
+        store.recordObservation(refused, for: .viewerDropsDashboard)
+        store.reject(refused, for: .viewerDropsDashboard)
+
+        store.clearObservations()
+
+        XCTAssertNil(store.observedHash(for: .viewerDropsDashboard))
+        XCTAssertNil(store.rejectedHash(for: .viewerDropsDashboard))
     }
 }

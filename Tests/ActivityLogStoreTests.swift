@@ -493,3 +493,183 @@ final class ActivityLogStoreTests: XCTestCase {
         XCTAssertNotNil(request.content.sound)
     }
 }
+
+/// Twitch query compatibility is reported in the Activity Log rather than on the Settings
+/// screen, so what the log says about a run — and where a run's hashes live — is the
+/// contract worth pinning down.
+@MainActor
+final class TwitchCompatibilityActivityLogTests: XCTestCase {
+    private func entry(
+        _ message: String,
+        level: EventLevel = .info,
+        raw: String?
+    ) -> EventEntry {
+        EventEntry(message: message, level: level, rawMessage: raw)
+    }
+
+    func testACompatibilityRunStaysInOneCategoryPerLevel() {
+        let started = entry(
+            "Twitch query update started",
+            raw: "[compatibility] update started · requested by: Settings → Advanced"
+        )
+        XCTAssertEqual(eventFilters(for: started), [.system])
+
+        let failed = entry(
+            "Safari extension unavailable — Twitch queries were not updated",
+            level: .warning,
+            raw: "[compatibility] safari extension unavailable · nothing was reported back"
+        )
+        XCTAssertEqual(eventFilters(for: failed), [.system, .warnings])
+    }
+
+    /// Every category in the default filter set, so a compatibility run is never invisible
+    /// to someone who has not gone looking through the filter chips.
+    func testCompatibilityEventsAreVisibleUnderTheDefaultFilters() {
+        let defaults: Set<EventFilter> = [
+            .audit, .drops, .errors, .heartbeats, .mining, .system, .updates, .warnings
+        ]
+        let event = entry(
+            "No changes required — Twitch is using the queries SwiftMiner already has",
+            raw: "[compatibility] no changes required · unchanged: Drops dashboard"
+        )
+
+        let page = activityLogPage(
+            events: [event],
+            selectedFilters: defaults,
+            selectedMinerID: nil,
+            searchText: "",
+            minerNamesByID: [:],
+            limit: 10
+        )
+        XCTAssertEqual(page.entries.map(\.message), [event.message])
+    }
+
+    func testTheWrittenMessageIsWhatTheRowShows() {
+        let event = entry(
+            "Twitch changed its drops dashboard query",
+            raw: "[compatibility] query changed · Drops dashboard · SwiftMiner: \(String(repeating: "a", count: 64))"
+        )
+        // Not run through the raw-message parser: these messages are already written for
+        // a person, and parsing them produced titles like "Twitch changed its drops".
+        XCTAssertEqual(ActivityEventPresentation(event: event).title, event.message)
+    }
+
+    func testHashesTravelInTheEventsOwnDetailRatherThanSettings() {
+        let appHash = String(repeating: "a", count: 64)
+        let siteHash = String(repeating: "b", count: 64)
+        let event = entry(
+            "Twitch changed its drops dashboard query",
+            raw: "[compatibility] query changed · Drops dashboard · SwiftMiner: \(appHash) · Twitch: \(siteHash)"
+        )
+
+        XCTAssertEqual(compatibilityDiagnostics(for: event), [
+            "query changed",
+            "Drops dashboard",
+            "SwiftMiner: \(appHash)",
+            "Twitch: \(siteHash)"
+        ])
+    }
+
+    func testAnOrdinaryEventCarriesNoDiagnosticsAndStaysUnexpandable() {
+        let event = entry("Started watching rainbow6", raw: "[Engine] Started watching rainbow6")
+        XCTAssertTrue(compatibilityDiagnostics(for: event).isEmpty)
+    }
+
+    func testAnAdoptedReplacementIsReportedAsPlainGoodNews() {
+        let outcome = TwitchQueryUpdateController.completionEntry(
+            for: .init(adopted: [.viewerDropsDashboard], confirmed: [.inventory])
+        )
+        XCTAssertEqual(outcome.level, .info)
+        XCTAssertTrue(outcome.message.contains("drops dashboard"))
+        XCTAssertTrue(outcome.raw.contains("[compatibility] update completed"))
+        XCTAssertTrue(outcome.raw.contains("adopted: Drops dashboard"))
+        XCTAssertTrue(outcome.raw.contains("unchanged: Drops inventory"))
+    }
+
+    func testARunThatChangedNothingSaysSoWithoutRaisingAWarning() {
+        let outcome = TwitchQueryUpdateController.completionEntry(
+            for: .init(confirmed: GQLQuery.frequentlyRotated)
+        )
+        XCTAssertEqual(outcome.level, .info)
+        XCTAssertEqual(
+            outcome.message,
+            "No changes required — Twitch is using the queries SwiftMiner already has"
+        )
+    }
+
+    func testARefusedReplacementIsAWarningThatSaysWhatIsStillInUse() {
+        let outcome = TwitchQueryUpdateController.completionEntry(
+            for: .init(rejected: [.inventory])
+        )
+        XCTAssertEqual(outcome.level, .warning)
+        XCTAssertTrue(outcome.message.contains("kept the one it had"))
+    }
+
+    func testASilentExtensionIsReportedAsTheSetupProblemItIs() {
+        let outcome = TwitchQueryUpdateController.completionEntry(
+            for: .init(unseen: GQLQuery.frequentlyRotated, failure: .extensionUnavailable)
+        )
+        XCTAssertEqual(outcome.level, .warning)
+        XCTAssertTrue(outcome.message.contains("No response from the Safari extension"))
+        XCTAssertTrue(outcome.raw.contains("Safari → Settings → Extensions"))
+        // Both ways silence happens, because the app genuinely cannot tell them apart.
+        XCTAssertTrue(outcome.raw.contains("switched off"))
+        XCTAssertTrue(outcome.raw.contains("could not be handed back"))
+    }
+
+    func testSeveralQueriesReadAsASentenceNotAList() {
+        XCTAssertEqual(
+            TwitchQueryUpdateController.listed([.viewerDropsDashboard, .inventory]),
+            "drops dashboard and drops inventory"
+        )
+        XCTAssertEqual(
+            TwitchQueryUpdateController.listed([.inventory]),
+            "drops inventory"
+        )
+    }
+}
+
+/// "Twitch didn't issue it" and "SwiftMiner had nowhere to ask" are different answers, and
+/// the second one is the common one: `Available drops` only appears on a live channel page,
+/// so an update run while no miner is watching a channel covers four queries, not five.
+@MainActor
+final class TwitchCompatibilitySkippedQueryTests: XCTestCase {
+    func testAQueryWithNoPageToOpenIsNamedRatherThanLeftBlank() {
+        let outcome = TwitchQueryUpdateController.completionEntry(
+            for: .init(
+                skipped: [.dropsHighlightServiceAvailableDrops],
+                confirmed: [.viewerDropsDashboard, .inventory, .dropCampaignDetails, .directoryPageGame]
+            )
+        )
+
+        XCTAssertEqual(outcome.level, .info)
+        XCTAssertTrue(outcome.message.contains("available drops"))
+        XCTAssertTrue(outcome.message.contains("was live to read it from"))
+        XCTAssertTrue(outcome.raw.contains("no page to read them from"))
+    }
+
+    func testAFullRunSaysNothingAboutPagesItDidNotNeed() {
+        let outcome = TwitchQueryUpdateController.completionEntry(
+            for: .init(confirmed: GQLQuery.frequentlyRotated)
+        )
+        XCTAssertEqual(
+            outcome.message,
+            "No changes required — Twitch is using the queries SwiftMiner already has"
+        )
+        XCTAssertFalse(outcome.raw.contains("no page to read them from"))
+    }
+
+    /// A skipped query is not a missed one: it must not be reported as Twitch failing to
+    /// issue something, because the request was never made.
+    func testSkippedAndUnseenAreReportedSeparately() {
+        let outcome = TwitchQueryUpdateController.completionEntry(
+            for: .init(
+                unseen: [.dropCampaignDetails],
+                skipped: [.dropsHighlightServiceAvailableDrops],
+                confirmed: [.viewerDropsDashboard]
+            )
+        )
+        XCTAssertTrue(outcome.raw.contains("not issued by Twitch: Campaign details"))
+        XCTAssertTrue(outcome.raw.contains("no page to read them from: Available drops"))
+    }
+}

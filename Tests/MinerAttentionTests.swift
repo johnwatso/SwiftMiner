@@ -54,7 +54,7 @@ final class MinerAttentionTests: XCTestCase {
     func testCompatibilityFailureExplainsThatSwiftMinerNeedsAnUpdate() {
         let miner = makeMiner(status: .error, workerState: .failed)
         let error = EventEntry(
-            message: "Error: Twitch compatibility update required for Inventory. Update SwiftMiner, then try again.",
+            message: "Error: Twitch compatibility update required for Inventory. Choose Update via Safari in Settings → Advanced, or update SwiftMiner.",
             level: .error,
             minerId: miner.id
         )
@@ -327,6 +327,147 @@ final class MinerAttentionTests: XCTestCase {
         XCTAssertFalse(MinerEngine.isCompatibilityFailure(network))
         XCTAssertFalse(MinerEngine.isCompatibilityFailure(CancellationError()))
     }
+
+    // MARK: Twitch query breaks on Overview
+
+    /// SwiftMiner never looks for a replacement query by itself, so the fleet status is
+    /// the prompt — and it has to outrank the stall or error the break usually causes.
+    func testABrokenQueryOutranksTheFailureItCauses() {
+        let state = SwiftMinerFleet.systemState(
+            miners: [makeMiner(status: .error, workerState: .failed)],
+            campaigns: [],
+            brokenQueries: [.viewerDropsDashboard]
+        )
+        XCTAssertEqual(state, .twitchQueriesNeedUpdate(queries: [.viewerDropsDashboard]))
+        XCTAssertEqual(state.title, "Twitch Update Needed")
+    }
+
+    func testAnExpiredLoginStillOutranksABrokenQuery() {
+        let state = SwiftMinerFleet.systemState(
+            miners: [makeMiner(needsAuth: true)],
+            campaigns: [],
+            brokenQueries: [.inventory]
+        )
+        XCTAssertEqual(state, .blockedAuthenticationExpired)
+    }
+
+    func testNoBreakLeavesTheFleetStateAlone() {
+        let state = SwiftMinerFleet.systemState(
+            miners: [makeMiner()],
+            campaigns: [],
+            brokenQueries: []
+        )
+        XCTAssertEqual(state, .mining(activeMinerCount: 1, totalMinerCount: 1))
+    }
+
+    func testThePromptNamesTheQueryAndTheButtonThatFixesIt() {
+        let one = OverviewSystemState.twitchQueriesNeedUpdate(queries: [.viewerDropsDashboard])
+        XCTAssertEqual(
+            one.subtitle,
+            "Twitch changed the drops dashboard query. Choose Update via Safari in Settings \u{2192} Advanced."
+        )
+
+        let several = OverviewSystemState.twitchQueriesNeedUpdate(queries: [.viewerDropsDashboard, .inventory])
+        XCTAssertTrue(several.subtitle.hasPrefix("Twitch changed queries for drops dashboard and drops inventory."))
+    }
+
+    #if DEBUG
+    /// The Developer-menu preview is display only: it must end cleanly and must never be
+    /// mistaken for a real break by anything that reads the store.
+    func testThePreviewOverridesDisplayAndEndsCleanly() {
+        let suite = "com.swiftminer.tests.preview.\(UUID().uuidString)"
+        let store = TwitchQueryHashStore(defaults: UserDefaults(suiteName: suite)!)
+        defer { UserDefaults().removePersistentDomain(forName: suite) }
+        let controller = TwitchQueryUpdateController.shared
+        defer { controller.previewBreak(of: nil) }
+
+        controller.previewBreak(of: [.inventory])
+        XCTAssertEqual(controller.brokenQueries(store: store), [.inventory])
+        XCTAssertTrue(store.queriesNeedingRecovery().isEmpty, "a preview must not write the store")
+
+        controller.previewBreak(of: nil)
+        XCTAssertTrue(controller.brokenQueries(store: store).isEmpty)
+    }
+    #endif
+
+    // MARK: Badge and notification for a Twitch query break
+
+    private func breakStore(brokenAgo seconds: TimeInterval?) -> (TwitchQueryHashStore, String) {
+        let suite = "com.swiftminer.tests.alert.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        if let seconds {
+            // Written the way `recordRecoveryNeeded` writes it, but backdated.
+            defaults.set(
+                Date().addingTimeInterval(-seconds).timeIntervalSince1970,
+                forKey: "TwitchQueryHash.recoveryNeeded.ViewerDropsDashboard"
+            )
+        }
+        return (TwitchQueryHashStore(defaults: defaults), suite)
+    }
+
+    /// A single stale edge node can record a break that the next good reply clears, so the
+    /// Dock and Notification Center wait out the grace period; the app itself does not.
+    func testAFreshBreakShowsInTheAppButDoesNotYetAlert() {
+        let (store, suite) = breakStore(brokenAgo: 60)
+        defer { UserDefaults().removePersistentDomain(forName: suite) }
+        let controller = TwitchQueryUpdateController()
+
+        XCTAssertEqual(controller.brokenQueries(store: store), [.viewerDropsDashboard])
+        XCTAssertTrue(controller.queriesWorthAlerting(store: store).isEmpty)
+        XCTAssertEqual(controller.takeAlertChange(store: store), [])
+    }
+
+    func testASustainedBreakBadgesAndRaisesTheIncidentOnce() {
+        let (store, suite) = breakStore(brokenAgo: TwitchQueryUpdateController.alertGracePeriod + 60)
+        defer { UserDefaults().removePersistentDomain(forName: suite) }
+        let controller = TwitchQueryUpdateController()
+
+        XCTAssertEqual(controller.queriesWorthAlerting(store: store), [.viewerDropsDashboard])
+        XCTAssertEqual(controller.takeAlertChange(store: store), [.viewerDropsDashboard])
+        // Unchanged on the next five-minute review: nothing to re-record.
+        XCTAssertNil(controller.takeAlertChange(store: store))
+
+        store.clearRecoveryNeeded(for: .viewerDropsDashboard)
+        XCTAssertEqual(controller.takeAlertChange(store: store), [], "a cleared break resolves the incident")
+    }
+
+    func testTheIncidentNotifiesAndNamesTheFix() {
+        XCTAssertEqual(HealthIncident.Kind.twitchQueriesNeedUpdate.deliveryStage, .alerted)
+
+        let now = Date()
+        let request = UnattendedIncidentNotificationService.makeRequest(
+            incident: HealthIncident(
+                id: "test",
+                minerID: TwitchQueryUpdateController.incidentID,
+                kind: .twitchQueriesNeedUpdate,
+                severity: .warning,
+                openedAt: now,
+                lastObservedAt: now,
+                summary: TwitchQueryUpdateController.incidentSummary(for: [.inventory]),
+                recommendedAction: TwitchQueryUpdateController.incidentAction
+            ),
+            displayName: "SwiftMiner"
+        )
+        XCTAssertEqual(request.content.title, "Twitch Update Needed")
+        XCTAssertEqual(
+            request.content.body,
+            "SwiftMiner: Twitch changed the drops inventory query, so Drops can\u{2019}t be read until it\u{2019}s updated. In Settings \u{2192} Advanced, choose Update via Safari."
+        )
+    }
+
+    #if DEBUG
+    /// The Developer preview may badge the Dock — that is display — but must never raise
+    /// the incident, which would send a real notification and write the health history.
+    func testAPreviewBadgesButNeverRaisesTheIncident() {
+        let (store, suite) = breakStore(brokenAgo: nil)
+        defer { UserDefaults().removePersistentDomain(forName: suite) }
+        let controller = TwitchQueryUpdateController()
+
+        controller.previewBreak(of: [.inventory])
+        XCTAssertEqual(controller.queriesWorthAlerting(store: store), [.inventory])
+        XCTAssertEqual(controller.takeAlertChange(store: store), [])
+    }
+    #endif
 
     private func makeMiner(
         status: MinerManager.MinerStatus = .watching,

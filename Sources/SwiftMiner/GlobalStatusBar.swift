@@ -42,12 +42,21 @@ enum SwiftMinerFleet {
     /// has to act on outranks anything that is merely working.
     static func systemState(
         miners: [MinerManager.ManagedMiner],
-        campaigns: [CampaignViewData]
+        campaigns: [CampaignViewData],
+        brokenQueries: [GQLQuery] = []
     ) -> OverviewSystemState {
         let miningMinerCount = miners.filter { $0.status == .watching }.count
 
         if miners.contains(where: { $0.needsAuth }) {
             return .blockedAuthenticationExpired
+        }
+
+        // Ahead of stalls and errors on purpose: a query Twitch has stopped accepting is
+        // usually *why* a miner has stalled or failed, and the fix is a button the user
+        // has to press — SwiftMiner will not go looking for the replacement by itself.
+        // Only an expired login outranks it, being more specific to one account.
+        if !brokenQueries.isEmpty {
+            return .twitchQueriesNeedUpdate(queries: brokenQueries)
         }
 
         if miners.contains(where: \.isStalled) {
@@ -177,7 +186,11 @@ struct GlobalStatusBar: View {
         let miners = SwiftMinerFleet.displayedMiners(from: navigation.minerManager.miners)
 
         OverviewSystemStateBanner(
-            state: SwiftMinerFleet.systemState(miners: miners, campaigns: campaigns),
+            state: SwiftMinerFleet.systemState(
+                miners: miners,
+                campaigns: campaigns,
+                brokenQueries: TwitchQueryUpdateController.shared.brokenQueries()
+            ),
             fleet: MinerFleetStatus.make(miners: miners)
         )
         // The same 24pt gutter the page content uses, so the banner lines up

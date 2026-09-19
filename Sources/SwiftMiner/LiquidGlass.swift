@@ -211,12 +211,33 @@ private struct WindowTranslucencyConfigurator: NSViewRepresentable {
     }
 }
 
+/// Sidebar plane behind `SidebarView`.
+///
+/// Under Standard on macOS 26+ this paints nothing, so `NavigationSplitView`'s
+/// own Liquid Glass sidebar shows through. That is what makes the sidebar follow
+/// the user's Clear/Tinted Liquid Glass setting (macOS 26.1+, adjustable in 27):
+/// the setting is applied by the system to its glass and has no public API an
+/// `NSVisualEffectView` could honour. Atomic Purple and Reduce Transparency keep
+/// the custom planes, since both deliberately own the sidebar's appearance.
 struct SidebarMaterialBackground: View {
     @Environment(\.swiftMinerAppearance) private var appearance
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
+    private var usesSystemSidebar: Bool {
+        guard #available(macOS 26, *) else { return false }
+        return !reduceTransparency && !appearance.usesTintedSurfaces
+    }
+
     var body: some View {
+        if usesSystemSidebar {
+            Color.clear
+        } else {
+            customPlane
+        }
+    }
+
+    private var customPlane: some View {
         Group {
             if reduceTransparency {
                 appearance.opaqueColor(for: .sidebar)

@@ -81,6 +81,9 @@ public struct HealthIncident: Codable, Sendable, Equatable, Identifiable {
         /// miner is running on periodic reconciliation alone. Mining continues; progress
         /// updates arrive in batches rather than live.
         case realtimeEventsOffline
+        /// Twitch has stopped accepting a query SwiftMiner depends on, and SwiftMiner will not
+        /// look for the replacement unless the user asks — so the user has to be told.
+        case twitchQueriesNeedUpdate
         case other
 
         /// Where each signal sits on the promotion path. Adding a case forces this choice;
@@ -108,6 +111,15 @@ public struct HealthIncident: Codable, Sendable, Equatable, Identifiable {
             // healthy. Silence is the failure mode being fixed; displaying it would repeat
             // the miss on 2026-08-18, when 266 failures produced no user-visible signal.
             case .channelChecksIncompatible:
+                return .alerted
+            // Added in 1.41.x and alerted from the start, on the same reasoning as
+            // `channelChecksIncompatible`: it is a Twitch compatibility failure, not a
+            // network one. And unlike every other signal here, nothing recovers it
+            // automatically any more — the replacement is fetched only when the user
+            // presses Update via Safari, so an unannounced break simply persists. The
+            // one transient cause (a single stale edge node) is handled by the grace
+            // period before the incident is raised, not by staying quiet.
+            case .twitchQueriesNeedUpdate:
                 return .alerted
             // Added in 1.38.4. Starts at `.displayed` per the rule above: the transport it
             // watches is legacy Twitch infrastructure, so how often a real outage lasts past

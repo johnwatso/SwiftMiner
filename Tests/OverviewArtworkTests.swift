@@ -21,6 +21,7 @@ final class SystemSymbolCompatibilityTests: XCTestCase {
             "person.badge.shield.check.fill": "person.badge.shield.checkmark.fill",
             "personalhotspot.slash": "personalhotspot",
             "photo.badge.minus": "photo",
+            "waveform.path.ecg.text.clipboard": "list.bullet.clipboard",
             "waveform.path.ecg.text.clipboard.fill": "list.bullet.clipboard.fill",
         ]
 

@@ -318,10 +318,12 @@ struct MinerAttentionIssue: Equatable {
             }?.message
             if let latestError,
                latestError.localizedCaseInsensitiveContains("Twitch compatibility update required") {
+                // The Safari update is the fix the user can apply right now; a SwiftMiner
+                // release carrying the new query is the one that arrives later.
                 return MinerAttentionIssue(
                     title: "SwiftMiner needs a Twitch update",
                     detail: latestError,
-                    recommendation: "Update SwiftMiner, then restart this miner.",
+                    recommendation: "In Settings \u{2192} Advanced, choose Update via Safari, then restart this miner. Updating SwiftMiner also fixes this once a new version is out.",
                     action: .restart
                 )
             }

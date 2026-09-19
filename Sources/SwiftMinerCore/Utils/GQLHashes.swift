@@ -295,7 +295,6 @@ public struct TwitchQueryHashStore: @unchecked Sendable {
     /// The Team-ID-prefixed form is supported by macOS without a provisioning
     /// profile. Both the app and its embedded extension are signed by this team.
     public static let suiteName = "FHXMYC956U.com.swiftminer.shared"
-    public static let automaticDiscoveryKey = "TwitchQueryHash.automaticDiscovery"
 
     private let defaults: UserDefaults
 
@@ -386,8 +385,19 @@ public struct TwitchQueryHashStore: @unchecked Sendable {
         for query in GQLQuery.allCases {
             defaults.removeObject(forKey: key("observed", query))
             defaults.removeObject(forKey: key("observedDate", query))
-            // Deliberate: an explicit re-check means "try again", so a hash refused last
-            // time gets another go rather than being permanently written off.
+        }
+        clearRejections()
+    }
+
+    /// Forget which values were refused, without forgetting what Twitch was last seen using.
+    ///
+    /// This is what an explicit re-check needs. "Try again" has to mean a hash refused last
+    /// time gets another go — but it must not mean throwing away the comparison the screen
+    /// is built from, because then an update that fails to deliver anything leaves the user
+    /// knowing *less* than before they asked. New observations overwrite the old ones as
+    /// they arrive, so there is nothing stale to clear first.
+    public func clearRejections() {
+        for query in GQLQuery.allCases {
             defaults.removeObject(forKey: key("rejected", query))
             defaults.removeObject(forKey: key("rejectedDate", query))
         }
@@ -449,6 +459,9 @@ public struct TwitchQueryHashStore: @unchecked Sendable {
     /// site moved to is a *successor* of that document, so adopting it is both safe and the
     /// point. A query whose bundled hash still works is never marked, which is what keeps
     /// an unrelated sibling query from being copied over a healthy one.
+    ///
+    /// Recording it only reports the state. Going to look for the replacement is an
+    /// explicit “Update via Safari…” in Settings → Advanced, never automatic.
     public func recordRecoveryNeeded(for query: GQLQuery) {
         guard defaults.double(forKey: key("recoveryNeeded", query)) == 0 else { return }
         defaults.set(Date().timeIntervalSince1970, forKey: key("recoveryNeeded", query))
@@ -458,6 +471,14 @@ public struct TwitchQueryHashStore: @unchecked Sendable {
         // Called on every successful request, so only write when there is something to clear.
         guard defaults.double(forKey: key("recoveryNeeded", query)) > 0 else { return }
         defaults.removeObject(forKey: key("recoveryNeeded", query))
+    }
+
+    /// When this query was first found broken, or nil while it works. Lets a caller wait out
+    /// the one transient cause — a single edge node answering from a stale cache — before
+    /// interrupting anyone: the next good reply clears the mark.
+    public func recoveryNeededSince(for query: GQLQuery) -> Date? {
+        let value = defaults.double(forKey: key("recoveryNeeded", query))
+        return value > 0 ? Date(timeIntervalSince1970: value) : nil
     }
 
     public func queriesNeedingRecovery() -> [GQLQuery] {
@@ -472,16 +493,6 @@ public struct TwitchQueryHashStore: @unchecked Sendable {
 
     public func recordSettleAttempt(at date: Date = Date()) {
         defaults.set(date.timeIntervalSince1970, forKey: "TwitchQueryHash.lastSettleAttempt")
-    }
-
-    /// When discovery was last sent looking, so a broken query cannot reopen Safari on a loop.
-    public var lastRecoveryAttempt: Date? {
-        let value = defaults.double(forKey: "TwitchQueryHash.lastRecoveryAttempt")
-        return value > 0 ? Date(timeIntervalSince1970: value) : nil
-    }
-
-    public func recordRecoveryAttempt(at date: Date = Date()) {
-        defaults.set(date.timeIntervalSince1970, forKey: "TwitchQueryHash.lastRecoveryAttempt")
     }
 
     /// Store the browser run's transport result so the UI can distinguish an extension
@@ -530,11 +541,6 @@ public struct TwitchQueryHashStore: @unchecked Sendable {
     public func date(for kind: TwitchQueryHashDate, query: GQLQuery) -> Date? {
         let value = defaults.double(forKey: key(kind.rawValue, query))
         return value > 0 ? Date(timeIntervalSince1970: value) : nil
-    }
-
-    public var automaticDiscoveryEnabled: Bool {
-        get { defaults.bool(forKey: Self.automaticDiscoveryKey) }
-        nonmutating set { defaults.set(newValue, forKey: Self.automaticDiscoveryKey) }
     }
 
     private func validStoredHash(forKey key: String) -> String? {

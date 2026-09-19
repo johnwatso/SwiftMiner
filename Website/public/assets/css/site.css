@@ -441,6 +441,38 @@ html.light .integration-logo-light {
     grid-auto-rows: minmax(220px, auto);
 }
 
+.feature-beta {
+    display: inline-flex;
+    margin-left: 0.35rem;
+    padding: 0.14rem 0.42rem;
+    border: 1px solid rgba(245, 158, 11, 0.28);
+    border-radius: 999px;
+    background: rgba(245, 158, 11, 0.12);
+    color: #d97706;
+    font-size: 0.66rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    text-transform: uppercase;
+    vertical-align: 0.18em;
+}
+
+html.dark .feature-beta {
+    color: #fbbf24;
+}
+
+@media (min-width: 768px) {
+    .feature-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (min-width: 1280px) {
+    .feature-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
+
 .security-link {
     display: inline-flex;
     align-items: center;
