@@ -1,6 +1,5 @@
 import SwiftUI
 import SwiftMinerCore
-import AppKit
 
 /// Sidebar navigation for the multi-miner dashboard (Phase 6).
 ///
@@ -12,90 +11,171 @@ import AppKit
 struct SidebarView: View {
     @Environment(NavigationModel.self) private var navigation
     private var settings: Settings { .shared }
+    @Namespace private var selectionHighlightNamespace
+    @State private var rowFrames: [NavigationModel.SidebarItem: CGRect] = [:]
+    @State private var isDraggingSelection = false
+
+    private static let dragCoordinateSpace = "sidebarSelectorDrag"
 
     private var minerAttentionCount: Int {
         MinerAttention.attentionCount(miners: navigation.minerManager.miners, settings: settings)
     }
 
-    // Outline symbol names: the sidebar list picks the symbol variant itself.
-    private var sidebarItems: [SidebarItemSpec] {
+    fileprivate var sidebarItems: [SidebarItemSpec] {
         [
             SidebarItemSpec(
                 id: .overview,
                 title: "Overview",
-                systemImage: SystemSymbolCompatibility.resolvedName(for: "list.dash.header.rectangle")
+                systemImage: SystemSymbolCompatibility.resolvedName(for: "list.dash.header.rectangle.fill")
             ),
             SidebarItemSpec(id: .miners, title: "Miners", systemImage: "cpu"),
-            SidebarItemSpec(id: .drops, title: "Drops", systemImage: "gamecontroller"),
+            SidebarItemSpec(id: .drops, title: "Drops", systemImage: "gamecontroller.fill"),
             SidebarItemSpec(
                 id: .events,
                 title: "Activity Log",
-                systemImage: SystemSymbolCompatibility.resolvedName(for: "waveform.path.ecg.text.clipboard")
+                systemImage: SystemSymbolCompatibility.resolvedName(for: "waveform.path.ecg.text.clipboard.fill")
             ),
         ]
     }
 
-    private func row(for item: SidebarItemSpec) -> some View {
-        let attention = item.id == .miners ? minerAttentionCount : 0
+    private var currentSelection: NavigationModel.SidebarItem {
+        navigation.selectedItem ?? .overview
+    }
 
-        return Label(item.title, systemImage: item.systemImage)
-            .badge(attention)
-            .accessibilityValue(attention > 0 ? Text("\(attention) miners need attention") : Text(""))
-            .background(SidebarClickFocusOptOut())
-            .tag(item.id)
+    @ViewBuilder
+    private func rowView(for item: SidebarItemSpec) -> some View {
+        let attention = item.id == .miners ? minerAttentionCount : 0
+        SidebarRow(
+            item: item,
+            isSelected: currentSelection == item.id,
+            selectionHighlightNamespace: selectionHighlightNamespace,
+            attentionCount: attention
+        ) {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                navigation.selectedItem = item.id
+            }
+        }
     }
 
     var body: some View {
-        @Bindable var navigation = navigation
+        ZStack {
+            SidebarMaterialBackground()
 
-        // A plain sidebar list: selection, focus ring, type-select and arrow-key
-        // navigation and row height all come from AppKit, so the column tracks
-        // whatever the running macOS draws for sidebars.
-        List(selection: $navigation.selectedItem) {
-            ForEach(sidebarItems, content: row(for:))
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(sidebarItems) { item in
+                    rowView(for: item)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 8)
+            .padding(.top, 10)
+            .coordinateSpace(name: Self.dragCoordinateSpace)
+            .onPreferenceChange(SidebarRowFramesKey.self) { rowFrames = $0 }
+            .gesture(selectionDragGesture)
         }
-        .listStyle(.sidebar)
-        // The list's own backdrop gives way to `SidebarMaterialBackground`,
-        // which is clear under Standard on macOS 26+ (the split view's Liquid
-        // Glass shows through) and paints the custom plane otherwise.
-        .scrollContentBackground(.hidden)
-        .background { SidebarMaterialBackground() }
         .navigationTitle("SwiftMiner")
     }
-}
 
-// MARK: - Selection Style
-
-/// Keeps the sidebar's selection the neutral grey pill Apple Music uses.
-///
-/// macOS draws a sidebar's selection in the accent colour only while its table
-/// is first responder, and a click makes it first responder. SwiftUI has no
-/// modifier for this: `.tint`, `.focusable(false)` and `.focusEffectDisabled()`
-/// all leave the blue highlight in place on macOS 27. Refusing click-to-focus on
-/// the backing table does it — a click still selects the row, the system still
-/// draws the pill, and keyboard focus stays with the detail content, as in Music.
-private struct SidebarClickFocusOptOut: NSViewRepresentable {
-    func makeNSView(context: Context) -> ProbeView { ProbeView() }
-    func updateNSView(_ nsView: ProbeView, context: Context) {}
-
-    final class ProbeView: NSView {
-        override func viewDidMoveToWindow() {
-            super.viewDidMoveToWindow()
-            var view = superview
-            while let current = view, !(current is NSTableView) {
-                view = current.superview
+    private var selectionDragGesture: some Gesture {
+        DragGesture(minimumDistance: 6, coordinateSpace: .named(Self.dragCoordinateSpace))
+            .onChanged { value in
+                isDraggingSelection = true
+                updateSelection(forDragLocation: value.location)
             }
-            (view as? NSTableView)?.refusesFirstResponder = true
+            .onEnded { _ in
+                isDraggingSelection = false
+            }
+    }
+
+    private func updateSelection(forDragLocation point: CGPoint) {
+        guard let target = sidebarItems.first(where: { rowFrames[$0.id]?.contains(point) ?? false }) else {
+            return
+        }
+        guard navigation.selectedItem != target.id else { return }
+        withAnimation(.easeInOut(duration: 0.18)) {
+            navigation.selectedItem = target.id
         }
     }
 }
 
-// MARK: - Sidebar Item
+// MARK: - Drag tracking
 
-private struct SidebarItemSpec: Identifiable {
+private struct SidebarRowFramesKey: PreferenceKey {
+    static var defaultValue: [NavigationModel.SidebarItem: CGRect] { [:] }
+    static func reduce(value: inout [NavigationModel.SidebarItem: CGRect], nextValue: () -> [NavigationModel.SidebarItem: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+    }
+}
+
+// MARK: - Sidebar Row & Selection Highlight (ported from SwiftBot)
+
+fileprivate struct SidebarItemSpec: Identifiable {
     let id: NavigationModel.SidebarItem
     let title: String
     let systemImage: String
+}
+
+private struct SidebarRow: View {
+    let item: SidebarItemSpec
+    let isSelected: Bool
+    let selectionHighlightNamespace: Namespace.ID
+    let attentionCount: Int
+    let action: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: item.systemImage)
+                .font(.system(size: 14, weight: .semibold))
+                .frame(width: 18)
+
+            Text(item.title)
+                .font(.system(size: 14, weight: isSelected ? .semibold : .medium))
+                .lineLimit(1)
+
+            Spacer(minLength: 0)
+
+            if attentionCount > 0 {
+                Text("\(attentionCount)")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.orange, in: Capsule())
+            }
+        }
+        .foregroundStyle(.primary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background {
+            if isSelected {
+                SidebarSelectionHighlight()
+                    .matchedGeometryEffect(id: "sidebarSelectionHighlight", in: selectionHighlightNamespace)
+            }
+        }
+        .background(
+            GeometryReader { geo in
+                Color.clear.preference(
+                    key: SidebarRowFramesKey.self,
+                    value: [item.id: geo.frame(in: .named("sidebarSelectorDrag"))]
+                )
+            }
+        )
+        .contentShape(Rectangle())
+        .onTapGesture { action() }
+    }
+}
+
+private struct SidebarSelectionHighlight: View {
+    @Environment(\.controlActiveState) private var controlActiveState
+
+    var body: some View {
+        AppearanceRoundedSurface(
+            role: .selected,
+            cornerRadius: 11,
+            material: controlActiveState == .active ? .ultraThinMaterial : .bar
+        )
+    }
 }
 
 // MARK: - Preview

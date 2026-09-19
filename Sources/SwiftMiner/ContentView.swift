@@ -12,7 +12,7 @@ struct ContentView: View {
         @Bindable var nav = navigation
         NavigationSplitView(columnVisibility: $nav.columnVisibility) {
             SidebarView()
-                .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 300)
+                .navigationSplitViewColumnWidth(min: 180, ideal: 180, max: 180)
         } detail: {
             detailContainer
         }
