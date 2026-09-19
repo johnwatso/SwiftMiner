@@ -26,7 +26,7 @@
 <body>
   <main>
     <h1>SwiftMiner 1.42</h1>
-    <p class="meta">Version 1.42 &middot; Build 2026091913</p>
+    <p class="meta">Version 1.42 &middot; Build 2026091914</p>
     <p class="intro">SwiftMiner 1.42 keeps waiting miners connected to Twitch, stops refreshing logins it doesn&rsquo;t need to, and turns Twitch query repair into a clear update you start from Settings.</p>
 
     <section>
@@ -44,7 +44,7 @@
         <li>SwiftMiner no longer searches for replacement Twitch queries on its own. When Twitch retires one, the Overview shows &ldquo;Twitch Update Needed&rdquo; and you&rsquo;re notified. Choose <strong>Update via Safari</strong> in Settings &rarr; Advanced to fetch the replacement. This replaces the automatic half-hourly check from 1.41.1.</li>
         <li>An update takes about a minute. A small progress panel follows it across Twitch pages, and it can use any live Drops stream, not only the one your miners are watching.</li>
         <li>A replacement is adopted only after it&rsquo;s been verified. Otherwise SwiftMiner keeps the queries it shipped with, and it won&rsquo;t retry a replacement that has already failed.</li>
-        <li>When a query can&rsquo;t be captured just by loading a Twitch page, SwiftMiner uses TwitchDropsMiner&rsquo;s public query list.</li>
+        <li>SwiftMiner checks multiple sources for replacement queries, so it can recover even when a query can&rsquo;t be captured just by loading a Twitch page.</li>
         <li>Advanced Settings shows each query&rsquo;s status and when it was last checked, along with the Safari extension&rsquo;s status and a shortcut to its settings.</li>
         <li>The Safari extension now works on any twitch.tv page, so Safari may ask you to allow it again. It still passes only an operation name and hash to SwiftMiner &mdash; never cookies, tokens or responses.</li>
       </ul>
