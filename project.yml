@@ -51,7 +51,7 @@ targets:
       base:
         PRODUCT_NAME: SwiftMinerSafariExtension
         PRODUCT_BUNDLE_IDENTIFIER: com.swiftminer.app.SafariQueryHash
-        MARKETING_VERSION: "1.41.1"
+        MARKETING_VERSION: "1.42"
         CURRENT_PROJECT_VERSION: "2026091913"
         SWIFT_VERSION: "6.0"
         SWIFT_STRICT_CONCURRENCY: complete
@@ -126,7 +126,7 @@ targets:
         SWIFT_STRICT_CONCURRENCY: complete
         PRODUCT_BUNDLE_IDENTIFIER: com.swiftminer.app
         MACOSX_DEPLOYMENT_TARGET: "14.0"
-        MARKETING_VERSION: "1.41.1"
+        MARKETING_VERSION: "1.42"
         CURRENT_PROJECT_VERSION: "2026091913"
         INFOPLIST_KEY_CFBundleDisplayName: SwiftMiner
         INFOPLIST_KEY_CFBundleName: SwiftMiner
