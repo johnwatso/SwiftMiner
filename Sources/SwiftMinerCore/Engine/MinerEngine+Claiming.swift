@@ -6,7 +6,21 @@ import Foundation
 // Split out of MinerEngine.swift, which had grown past the point where one file could be read.
 
 extension MinerEngine {
-    func claimReadyDrops() async -> Bool {
+    func claimReadyDrops(forceInventoryRefresh: Bool = false) async -> Bool {
+        let nowTick = runtimeClock.nowNanoseconds()
+        guard Self.shouldRefreshClaimInventory(
+            lastCheck: lastClaimInventoryCheckTick,
+            now: nowTick,
+            interval: claimCheckInterval,
+            forced: forceInventoryRefresh
+        ) else {
+            return false
+        }
+        // Stamp before the await. Actor reentrancy must not let another rescan start the same
+        // forced inventory request while this one is in flight. A failed read is retried on the
+        // normal two-minute cadence rather than on every unrelated channel event.
+        lastClaimInventoryCheckTick = nowTick
+
         // Always ask inventory for claimable drops. Twitch can expose a ready claim there
         // after the campaign disappears from dashboard data or local campaign state.
         var didClaimAnyDrop = false

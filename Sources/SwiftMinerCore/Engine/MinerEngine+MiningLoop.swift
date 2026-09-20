@@ -143,6 +143,7 @@ extension MinerEngine {
                 if candidates.isEmpty, streamOverrideLogin == nil {
                     consecutiveNoCandidateCycles += 1
                     log("No account-eligible campaigns matching strategy '\(miningStrategy.displayName)'")
+                    await stopMonitoringRestrictedChannels()
                     await cleanupActiveWatchSession(clearTarget: true)
                     let emptyState = Self.resolveEmptyCandidateState(
                         from: allEnriched,
@@ -304,6 +305,11 @@ extension MinerEngine {
                 session?.currentChannelId = channel.id
                 currentChannelLogin = channel.login
                 shouldSwitchChannel = false
+
+                // Idle monitoring survives ordinary rescans. Once a target is chosen, release
+                // every other topic while keeping the selected channel subscribed for the watch
+                // session that starts immediately below.
+                await stopMonitoringRestrictedChannels(keeping: channel.id)
 
                 if previousCampaignId != campaign.id {
                     recordActivityEvent(.campaignSelected, "Selected campaign \(campaign.name)")

@@ -4,9 +4,11 @@ import SwiftMinerCore
 import UniformTypeIdentifiers
 
 /// Builds a single plain-text diagnostic report covering app version,
-/// per-miner state, settings, and the in-memory event log. Designed to be
-/// attached to a GitHub issue when reporting a problem.
+/// per-miner state, settings, and the seven retained daily event logs. Designed
+/// to be attached to a GitHub issue when reporting a problem.
 enum LogExporter {
+
+    static let defaultExportDirectory: FileManager.SearchPathDirectory = .desktopDirectory
 
     /// Snapshot inputs are kept primitive so `buildReport` can be unit-tested
     /// without standing up SwiftUI / NavigationModel.
@@ -656,7 +658,8 @@ enum LogExporter {
             uniquingKeysWith: { first, _ in first }
         )
 
-        let events = navigation.events.reversed().map { entry in
+        let diagnosticEvents = await navigation.diagnosticEventsForExport()
+        let events = diagnosticEvents.map { entry in
             let raw = entry.rawMessage ?? entry.message
             return Snapshot.Event(
                 timestamp: entry.timestamp,
@@ -704,7 +707,10 @@ enum LogExporter {
         panel.title = "Export Diagnostic Logs"
         panel.message = "Save a redacted diagnostic report you can attach to a GitHub issue."
         panel.canCreateDirectories = true
-        panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+        panel.directoryURL = FileManager.default.urls(
+            for: defaultExportDirectory,
+            in: .userDomainMask
+        ).first
 
         guard await present(panel) == .OK, let url = panel.url else { return }
 

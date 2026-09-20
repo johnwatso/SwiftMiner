@@ -273,6 +273,52 @@ final class MinerSchedulingTests: XCTestCase {
         XCTAssertEqual(confirmed, ["live"])
     }
 
+    func testRestrictedWaitWakesOnlyForAnActiveCandidateCampaign() {
+        let waiting: Set<String> = ["campaign-a", "campaign-b"]
+
+        XCTAssertFalse(MinerEngine.shouldWakeForRestrictedCampaign(
+            waitingCampaignIDs: waiting,
+            activeCampaignIDs: ["different-campaign"]
+        ))
+        XCTAssertFalse(MinerEngine.shouldWakeForRestrictedCampaign(
+            waitingCampaignIDs: waiting,
+            activeCampaignIDs: []
+        ))
+        XCTAssertTrue(MinerEngine.shouldWakeForRestrictedCampaign(
+            waitingCampaignIDs: waiting,
+            activeCampaignIDs: ["different-campaign", "campaign-b"]
+        ))
+    }
+
+    func testAutomaticClaimInventoryRefreshHonoursItsCadence() {
+        let interval: UInt64 = 120
+
+        XCTAssertTrue(MinerEngine.shouldRefreshClaimInventory(
+            lastCheck: nil,
+            now: 1_000,
+            interval: interval,
+            forced: false
+        ))
+        XCTAssertFalse(MinerEngine.shouldRefreshClaimInventory(
+            lastCheck: 1_000,
+            now: 1_119,
+            interval: interval,
+            forced: false
+        ))
+        XCTAssertTrue(MinerEngine.shouldRefreshClaimInventory(
+            lastCheck: 1_000,
+            now: 1_120,
+            interval: interval,
+            forced: false
+        ))
+        XCTAssertTrue(MinerEngine.shouldRefreshClaimInventory(
+            lastCheck: 1_119,
+            now: 1_120,
+            interval: interval,
+            forced: true
+        ))
+    }
+
     func testFoundationCancellationDoesNotCountAsAProbeFailure() {
         XCTAssertTrue(MinerEngine.isCancellationFailure(CancellationError()))
         XCTAssertTrue(MinerEngine.isCancellationFailure(URLError(.cancelled)))

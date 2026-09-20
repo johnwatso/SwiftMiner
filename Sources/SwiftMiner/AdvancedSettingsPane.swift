@@ -247,7 +247,7 @@ struct AdvancedSettingsView: View {
         } header: {
             Text("Diagnostics")
         } footer: {
-            Text("With five miners, 5,000 log entries is roughly 75 minutes of history. Automatic measurements are added to exported diagnostic reports.")
+            Text("The Activity Log keeps a bounded working set for the app. Diagnostics are also written to one file per day, with seven days included in an export. Automatic measurements are added to exported reports.")
         }
     }
 
