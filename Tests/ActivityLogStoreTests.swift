@@ -113,6 +113,87 @@ final class ActivityLogStoreTests: XCTestCase {
         XCTAssertEqual(entries, [nonAuditEntry, auditEntry])
     }
 
+    func testDailyArchiveRotatesAndExportsSevenCalendarDays() async throws {
+        let testRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftMinerDailyActivity-\(UUID().uuidString)", isDirectory: true)
+        let databaseURL = testRoot.appendingPathComponent("activity.sqlite")
+        let archiveURL = testRoot.appendingPathComponent("logs", isDirectory: true)
+        try FileManager.default.createDirectory(at: testRoot, withIntermediateDirectories: true)
+
+        let manager = SQLiteManager(databaseURL: databaseURL)
+        try await manager.open()
+        addTeardownBlock {
+            await manager.close()
+            try? FileManager.default.removeItem(at: testRoot)
+        }
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let today = calendar.date(from: DateComponents(
+            year: 2026,
+            month: 9,
+            day: 20,
+            hour: 12
+        ))!
+        let store = ActivityLogStore(
+            manager: manager,
+            archiveDirectoryURL: archiveURL,
+            archiveCalendar: calendar,
+            archiveRetentionDays: 7
+        )
+
+        for daysAgo in (0...7).reversed() {
+            let timestamp = calendar.date(byAdding: .day, value: -daysAgo, to: today)!
+            await store.save(EventEntry(
+                timestamp: timestamp,
+                message: "Day -\(daysAgo)\nwith detail",
+                level: daysAgo == 0 ? .warning : .info,
+                category: "system"
+            ))
+        }
+
+        let archived = await store.loadArchivedEntries(now: today)
+        XCTAssertEqual(archived.count, 7)
+        XCTAssertEqual(archived.first?.message, "Day -6\nwith detail")
+        XCTAssertEqual(archived.last?.message, "Day -0\nwith detail")
+        XCTAssertEqual(archived.last?.level, .warning)
+
+        let files = try FileManager.default.contentsOfDirectory(
+            at: archiveURL,
+            includingPropertiesForKeys: nil
+        ).filter { $0.lastPathComponent.hasPrefix("SwiftMiner-activity-") }
+        XCTAssertEqual(files.count, 7)
+        XCTAssertFalse(files.contains { $0.lastPathComponent.contains("2026-09-13") })
+        XCTAssertTrue(files.contains { $0.lastPathComponent == "SwiftMiner-activity-2026-09-20.log" })
+    }
+
+    func testClearingActivityLogAlsoRemovesDailyArchives() async throws {
+        let testRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftMinerDailyActivityClear-\(UUID().uuidString)", isDirectory: true)
+        let databaseURL = testRoot.appendingPathComponent("activity.sqlite")
+        let archiveURL = testRoot.appendingPathComponent("logs", isDirectory: true)
+        try FileManager.default.createDirectory(at: testRoot, withIntermediateDirectories: true)
+
+        let manager = SQLiteManager(databaseURL: databaseURL)
+        try await manager.open()
+        addTeardownBlock {
+            await manager.close()
+            try? FileManager.default.removeItem(at: testRoot)
+        }
+
+        let store = ActivityLogStore(manager: manager, archiveDirectoryURL: archiveURL)
+        await store.save(EventEntry(message: "Archived", level: .info))
+        await store.clear()
+
+        let files = try FileManager.default.contentsOfDirectory(
+            at: archiveURL,
+            includingPropertiesForKeys: nil
+        ).filter { $0.lastPathComponent.hasPrefix("SwiftMiner-activity-") }
+        let persisted = await store.loadEntries(limit: 10)
+        XCTAssertTrue(files.isEmpty)
+        XCTAssertTrue(persisted.isEmpty)
+    }
+
     func testClearRemovesAllPersistentEntries() async throws {
         let databaseURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftMinerActivityLog-\(UUID().uuidString).sqlite")
@@ -309,6 +390,32 @@ final class ActivityLogStoreTests: XCTestCase {
 
         XCTAssertEqual(retained.filter { $0.category == "audit" }.count, 3)
         XCTAssertLessThanOrEqual(retained.filter { $0.category == "scan" }.count, 50)
+    }
+
+    @MainActor
+    func testNewestFirstRetentionFastPathMatchesGeneralRetention() {
+        let entries = (0..<200).map { index in
+            EventEntry(
+                timestamp: Date(timeIntervalSince1970: Double(index)),
+                message: "Event \(index)",
+                level: .info,
+                category: index.isMultiple(of: 17) ? "audit" : "scan"
+            )
+        }
+        let newestFirst = entries.sorted { $0.timestamp > $1.timestamp }
+
+        XCTAssertEqual(
+            NavigationModel.applyRetentionToNewestFirst(
+                newestFirst,
+                maxEntries: 50,
+                perCategoryFloor: 5
+            ),
+            NavigationModel.applyRetention(
+                to: entries,
+                maxEntries: 50,
+                perCategoryFloor: 5
+            )
+        )
     }
 
     func testNoisyDiagnosticInfoLogsAreNotRecordedInActivityLog() {

@@ -245,15 +245,11 @@ extension MinerEngine {
             guard !restrictedCandidates.isEmpty,
                   elapsedTicks % ticksPerACLProbe == 0 else { continue }
 
-            if await anyApprovedChannelLive(in: restrictedCandidates) {
-                log("An approved channel for a restricted campaign just went live — re-checking immediately.")
+            if await anyApprovedChannelEligible(in: restrictedCandidates) {
+                log("An approved channel is live with a restricted campaign active — re-checking immediately.")
                 break
             }
         }
-
-        // This is part of the wait's state transition, not background housekeeping. Awaiting
-        // it prevents an old wait from unsubscribing topics installed by the next wait.
-        await stopMonitoringRestrictedChannels()
     }
 
     /// Subscribes to stream state for the approved channels of the restricted campaigns
@@ -263,7 +259,10 @@ extension MinerEngine {
     /// so the campaigns closest to ending are subscribed first: those are the windows that
     /// cannot be caught later.
     func startMonitoringRestrictedChannels(in candidates: [Campaign]) async {
-        guard !candidates.isEmpty else { return }
+        guard !candidates.isEmpty else {
+            await stopMonitoringRestrictedChannels()
+            return
+        }
 
         var channelIds: [String] = []
         var seen = Set<String>()
@@ -273,7 +272,10 @@ extension MinerEngine {
                 channelIds.append(channel.id)
             }
         }
-        guard !channelIds.isEmpty else { return }
+        guard !channelIds.isEmpty else {
+            await stopMonitoringRestrictedChannels()
+            return
+        }
 
         let batch = Self.rotatingRestrictedChannelMonitoringBatch(
             from: channelIds,
@@ -281,6 +283,19 @@ extension MinerEngine {
             offset: restrictedChannelMonitoringOffset
         )
         restrictedChannelMonitoringOffset = batch.nextOffset
+
+        let desiredChannelIDs = Set(batch.channelIds)
+        if desiredChannelIDs == monitoredRestrictedChannelIds {
+            return
+        }
+
+        // Keep an unchanged monitoring set across idle scans. Repeatedly sending UNLISTEN then
+        // LISTEN for the same channels churned Twitch's legacy socket and created avoidable
+        // reconnects. A changed/rotated batch is replaced explicitly so the topic budget stays
+        // bounded.
+        if !monitoredRestrictedChannelIds.isEmpty {
+            await stopMonitoringRestrictedChannels()
+        }
 
         do {
             let monitored = try await dropEventsService.startMonitoringChannels(
@@ -356,10 +371,10 @@ extension MinerEngine {
         return (pinned + rotating, nextOffset)
     }
 
-    func stopMonitoringRestrictedChannels() async {
+    func stopMonitoringRestrictedChannels(keeping keptChannelId: String? = nil) async {
         monitoredRestrictedChannelIds.removeAll()
         do {
-            try await dropEventsService.stopMonitoringChannels(except: session?.currentChannelId)
+            try await dropEventsService.stopMonitoringChannels(except: keptChannelId)
         } catch {
             log("[ChannelSelect]   Could not stop listening for approved-channel stream-up: \(error.localizedDescription)")
         }

@@ -712,6 +712,11 @@ public final class NavigationModel {
 
     /// Human-readable event entries.
     public var events: [EventEntry] = []
+    /// Retention is deliberately category-aware and can leave more than `maxEvents` rows in
+    /// memory. Re-sorting that whole collection for every log line dominated long-running
+    /// multi-miner sessions, so the already-newest-first live list is pruned in batches.
+    @ObservationIgnored private var activityLogWritesSincePrune = 0
+    private static let activityLogWritesBetweenPrunes = 250
     /// Retention size, from Settings. Read on each use so changing it in Advanced
     /// takes effect without a relaunch.
     private var maxEvents: Int { Settings.shared.maxLogEntries }
@@ -777,7 +782,10 @@ public final class NavigationModel {
         self.activityLogStore = ActivityLogStore(
             manager: manager,
             maxEntries: Settings.shared.maxLogEntries,
-            perCategoryFloor: Settings.shared.maxLogEntries
+            perCategoryFloor: Settings.shared.maxLogEntries,
+            archiveDirectoryURL: SwiftMinerRuntime.isRunningTests
+                ? nil
+                : folderURL.appendingPathComponent("Activity Logs", isDirectory: true)
         )
         self.adminLinkingService = SQLiteAdminLinkingService(manager: manager)
         self.eventEmitter = EventEmitterService(manager: manager)
@@ -1232,7 +1240,16 @@ public final class NavigationModel {
         let base = EventEntry(message: message, level: level, minerId: minerId, rawMessage: rawMessage)
         let entry = base.withCategory(primaryEventFilter(for: base).rawValue)
         events.insert(entry, at: 0)
-        events = Self.applyRetention(to: events, maxEntries: maxEvents, perCategoryFloor: maxEvents)
+        activityLogWritesSincePrune += 1
+        if events.count > maxEvents,
+           activityLogWritesSincePrune >= Self.activityLogWritesBetweenPrunes {
+            events = Self.applyRetentionToNewestFirst(
+                events,
+                maxEntries: maxEvents,
+                perCategoryFloor: maxEvents
+            )
+            activityLogWritesSincePrune = 0
+        }
         Task { [activityLogStore] in
             await activityLogStore.save(entry)
         }
@@ -1243,6 +1260,7 @@ public final class NavigationModel {
     /// reloads, since the extra history is on disk but not yet in `events`.
     public func setActivityLogRetention(_ maxEntries: Int) {
         events = Self.applyRetention(to: events, maxEntries: maxEntries, perCategoryFloor: maxEntries)
+        activityLogWritesSincePrune = 0
         Task { [activityLogStore] in
             await activityLogStore.setRetention(maxEntries: maxEntries, perCategoryFloor: maxEntries)
             await loadPersistentEvents()
@@ -1261,6 +1279,22 @@ public final class NavigationModel {
         guard entries.count > maxEntries else { return entries }
 
         let ordered = entries.sorted { $0.timestamp > $1.timestamp }
+        return applyRetentionToNewestFirst(
+            ordered,
+            maxEntries: maxEntries,
+            perCategoryFloor: perCategoryFloor
+        )
+    }
+
+    /// Fast path for the live Activity Log, whose insertion path already preserves newest-first
+    /// order. The general helper above still sorts merged disk data before entering this path.
+    static func applyRetentionToNewestFirst(
+        _ ordered: [EventEntry],
+        maxEntries: Int = 5000,
+        perCategoryFloor: Int = 500
+    ) -> [EventEntry] {
+        guard ordered.count > maxEntries else { return ordered }
+
         var keep = Set(ordered.prefix(maxEntries).map(\.id))
 
         var seenPerCategory: [String: Int] = [:]
@@ -1285,6 +1319,21 @@ public final class NavigationModel {
         }
 
         events = Self.applyRetention(to: Array(entriesById.values), maxEntries: maxEvents, perCategoryFloor: maxEvents)
+    }
+
+    /// Returns the seven daily on-disk logs for export, merged with the live UI working set
+    /// so an event whose asynchronous file write has not run yet is still included.
+    func diagnosticEventsForExport(now: Date = Date()) async -> [EventEntry] {
+        let archived = await activityLogStore.loadArchivedEntries(now: now)
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: now)
+        let windowStart = calendar.date(byAdding: .day, value: -6, to: today) ?? today
+
+        var entriesByID = Dictionary(uniqueKeysWithValues: archived.map { ($0.id, $0) })
+        for entry in events where entry.timestamp >= windowStart && entry.timestamp <= now {
+            entriesByID[entry.id] = entry
+        }
+        return entriesByID.values.sorted { $0.timestamp < $1.timestamp }
     }
 
     public func recordPendingUpdate(to version: String) {

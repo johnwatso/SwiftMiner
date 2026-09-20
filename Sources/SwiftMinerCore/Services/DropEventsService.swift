@@ -154,9 +154,12 @@ public actor DropEventsService {
     public func stopMonitoringChannels(except keptChannelId: String? = nil) async throws {
         var releasing = monitoredChannelIds
         if let keptChannelId { releasing.remove(keptChannelId) }
+        // A kept channel is transitioning from idle monitoring to the active watch. It remains
+        // subscribed, but is no longer owned by the monitoring set and must not be released by a
+        // later idle cleanup.
+        monitoredChannelIds.removeAll()
         guard !releasing.isEmpty else { return }
 
-        monitoredChannelIds.subtract(releasing)
         subscribedChannelIds.subtract(releasing)
         try await pubSubClient.unlisten(from: releasing.map { "video-playback-by-id.\($0)" })
     }

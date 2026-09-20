@@ -179,6 +179,10 @@ public actor MinerEngine {
     /// Set to true to interrupt the idle wait and immediately re-check for eligible campaigns
     var shouldRescanCampaigns = false
     var consecutiveNoCandidateCycles = 0
+    /// Last automatic inventory scan for claimable rewards. Channel and campaign events can
+    /// wake the outer mining loop much more frequently than the normal claim cadence; keeping
+    /// this deadline at engine scope prevents each wake from forcing the same inventory read.
+    var lastClaimInventoryCheckTick: UInt64?
     /// Rotating offsets keep bounded directory and approved-channel probes from repeatedly
     /// checking the same high-ranked prefix while permanently starving lower-ranked streams.
     var directoryVerificationOffsets: [String: Int] = [:]
@@ -403,6 +407,19 @@ public actor MinerEngine {
     // Configuration
     let campaignCheckInterval: UInt64 = 300 * 1_000_000_000 // 5 minutes
     let claimCheckInterval: UInt64 = 2 * 60 * 1_000_000_000 // 2 minutes (conditional polling)
+
+    static func shouldRefreshClaimInventory(
+        lastCheck: UInt64?,
+        now: UInt64,
+        interval: UInt64,
+        forced: Bool
+    ) -> Bool {
+        if forced { return true }
+        guard let lastCheck else { return true }
+        guard now >= lastCheck else { return true }
+        return now - lastCheck >= interval
+    }
+
     /// The active-watch loop wakes on this cadence and fires each check on its
     /// own interval, so a 60s check actually happens every ~60s rather than
     /// being rounded up to the sum of a long sleep plus the claim wait.
@@ -745,6 +762,9 @@ public actor MinerEngine {
         let workerTaskID = UUID().uuidString
         session = MiningSession()
         progressEventTracker = DropProgressEventTracker()
+        lastClaimInventoryCheckTick = nil
+        monitoredRestrictedChannelIds.removeAll()
+        recentRestrictedStreamUpUntil.removeAll()
         resetProgressStallClock()
         warnedUnlinkedPriorityGames.removeAll()
         startEventConsumer()
@@ -861,6 +881,8 @@ public actor MinerEngine {
         realtimeEventsOfflineSince = nil
         realtimeEventsOutageReported = false
         try? await dropEventsService.stopWatching()
+        monitoredRestrictedChannelIds.removeAll()
+        recentRestrictedStreamUpUntil.removeAll()
         
         await watchSessionManager.stopWatching()
         endActiveWatchActivity()
@@ -966,7 +988,7 @@ public actor MinerEngine {
             throw TwitchMinerError.sessionNotStarted
         }
 
-        _ = await claimReadyDrops()
+        _ = await claimReadyDrops(forceInventoryRefresh: true)
     }
 
     /// Gets current overall progress

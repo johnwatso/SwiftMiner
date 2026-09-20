@@ -208,7 +208,8 @@ public final class Settings {
         }
     }
     
-    /// How many Activity Log entries to keep, in memory and on disk.
+    /// How many Activity Log entries to keep in the UI working set and its SQLite index.
+    /// Diagnostic export has a separate seven-day daily-file archive.
     ///
     /// Rare categories are retained on top of this figure — see
     /// `NavigationModel.applyRetention` — so lowering it thins routine chatter

@@ -1064,16 +1064,51 @@ extension MinerEngine {
         }
     }
 
-    /// Lightweight liveness probe used while waiting for a stream. Returns true as soon as any
-    /// approved channel for the given ACL-restricted campaigns is live, so the engine can wake
-    /// from the idle wait and re-run channel selection without burning a full campaign interval.
-    func anyApprovedChannelLive(in candidates: [Campaign]) async -> Bool {
+    /// Lightweight eligibility probe used while waiting for a restricted campaign.
+    ///
+    /// Liveness alone is not enough: an approved broadcaster can remain online for hours while
+    /// Twitch reports that the candidate campaign is not active there. Treating every sighting
+    /// as a new go-live event made the outer mining loop refetch campaigns and inventory every
+    /// minute. Confirm the channel-scoped campaign list here and only wake for mineable work.
+    func anyApprovedChannelEligible(in candidates: [Campaign]) async -> Bool {
+        let waitingCampaignIDs = Set(candidates.map(\.id))
+        var checkedChannelIDs = Set<String>()
+
         for candidate in candidates where candidate.hasKnownChannelRestrictions {
-            if !(await liveACLChannels(for: candidate).isEmpty) {
-                return true
+            let liveChannels = await liveACLChannels(for: candidate)
+            for liveChannel in liveChannels {
+                let channel = await resolveChannelIdIfNeeded(liveChannel)
+                let identity = Self.normalizedChannelIdentity(
+                    channel.id.isEmpty ? channel.login : channel.id
+                )
+                guard checkedChannelIDs.insert(identity).inserted else { continue }
+
+                do {
+                    let activeCampaignIDs = Set(try await fetchAvailableDrops(for: channel))
+                    if Self.shouldWakeForRestrictedCampaign(
+                        waitingCampaignIDs: waitingCampaignIDs,
+                        activeCampaignIDs: activeCampaignIDs
+                    ) {
+                        return true
+                    }
+                } catch {
+                    // Inconclusive is not a positive transition. The normal five-minute scan
+                    // remains the fallback and retains its existing fail-open behaviour.
+                    log(
+                        "[ChannelSelect]   Could not confirm restricted campaign on "
+                        + "\(channel.displayName) while waiting: \(error.localizedDescription)"
+                    )
+                }
             }
         }
         return false
+    }
+
+    static func shouldWakeForRestrictedCampaign(
+        waitingCampaignIDs: Set<String>,
+        activeCampaignIDs: Set<String>
+    ) -> Bool {
+        !waitingCampaignIDs.isDisjoint(with: activeCampaignIDs)
     }
 
     func liveACLChannels(for campaign: Campaign, limit: Int = 30) async -> [Channel] {

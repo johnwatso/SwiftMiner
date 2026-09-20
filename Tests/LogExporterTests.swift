@@ -352,6 +352,10 @@ final class LogExporterTests: XCTestCase {
         XCTAssertTrue(name.hasSuffix(".txt"))
     }
 
+    func testDiagnosticExportDefaultsToDesktop() {
+        XCTAssertEqual(LogExporter.defaultExportDirectory, .desktopDirectory)
+    }
+
     // MARK: - Earning ledger
 
     private func bucket(

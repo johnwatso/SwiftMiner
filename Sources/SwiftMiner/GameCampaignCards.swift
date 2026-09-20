@@ -478,14 +478,6 @@ struct BeautifulRewardCard: View {
         VStack(spacing: 6) {
             rewardWell
             durationLabel
-            if let claimantSummary {
-                Text(claimantSummary)
-                    .font(.system(size: 9, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.green)
-                    .lineLimit(1)
-                    .frame(width: wellSize)
-                    .help(claimantHelpText)
-            }
         }
         .onHover { hovering in
             isHovered = hovering
@@ -607,14 +599,6 @@ struct BeautifulRewardCard: View {
                 fallback: account?.username ?? accountID
             )
         }
-    }
-
-    private var claimantSummary: String? {
-        guard !claimantNames.isEmpty else { return nil }
-        if claimantNames.count == 1 {
-            return "by \(claimantNames[0])"
-        }
-        return "by \(claimantNames[0]) +\(claimantNames.count - 1)"
     }
 
     private var claimantHelpText: String {

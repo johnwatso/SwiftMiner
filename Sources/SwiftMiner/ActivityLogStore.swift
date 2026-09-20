@@ -7,15 +7,31 @@ actor ActivityLogStore {
     private let manager: SQLiteManager
     private var maxEntries: Int
     private var perCategoryFloor: Int
+    private let archiveDirectoryURL: URL?
+    private let archiveCalendar: Calendar
+    private let archiveRetentionDays: Int
+    private var archiveFileHandle: FileHandle?
+    private var archiveFileURL: URL?
+    private var lastArchivePruneDay: Date?
     /// Writes since the last prune. Pruning ran on every insert, which meant a
     /// DELETE with two subqueries per logged line at ~65 lines a minute.
     private var writesSincePrune = 0
     private static let writesBetweenPrunes = 250
 
-    init(manager: SQLiteManager, maxEntries: Int = 5000, perCategoryFloor: Int = 500) {
+    init(
+        manager: SQLiteManager,
+        maxEntries: Int = 5000,
+        perCategoryFloor: Int = 500,
+        archiveDirectoryURL: URL? = nil,
+        archiveCalendar: Calendar = .current,
+        archiveRetentionDays: Int = 7
+    ) {
         self.manager = manager
         self.maxEntries = max(1, maxEntries)
         self.perCategoryFloor = max(0, perCategoryFloor)
+        self.archiveDirectoryURL = archiveDirectoryURL
+        self.archiveCalendar = archiveCalendar
+        self.archiveRetentionDays = max(1, archiveRetentionDays)
     }
 
     /// Applies a new retention size. Shrinking prunes straight away so the change is
@@ -81,6 +97,14 @@ actor ActivityLogStore {
         } catch {
             // Best effort: logging must never block the UI or web request path.
             Logger.storage.error("Failed to save activity-log entry: \(error.localizedDescription)")
+        }
+
+        do {
+            try appendToDailyArchive(entry)
+        } catch {
+            // SQLite remains the UI store if the plain-file archive is temporarily
+            // unavailable. One failed diagnostic write must never stop mining.
+            Logger.storage.error("Failed to append daily activity log: \(error.localizedDescription)")
         }
 
         if shouldPrune {
@@ -208,6 +232,39 @@ actor ActivityLogStore {
         }
     }
 
+    /// Loads the retained daily files for diagnostic export. These files are the durable,
+    /// seven-day timeline; the SQLite rows above remain a bounded working set for the UI.
+    func loadArchivedEntries(now: Date = Date()) -> [EventEntry] {
+        guard let archiveDirectoryURL else { return [] }
+
+        do {
+            try archiveFileHandle?.synchronize()
+        } catch {
+            Logger.storage.warning("Could not flush the current daily activity log before export: \(error.localizedDescription)")
+        }
+
+        let decoder = Self.archiveDecoder()
+        var entries: [EventEntry] = []
+        var corruptLineCount = 0
+
+        for fileURL in archiveFileURLs(now: now, directory: archiveDirectoryURL) {
+            guard let data = try? Data(contentsOf: fileURL) else { continue }
+            for line in data.split(separator: 0x0A) where !line.isEmpty {
+                do {
+                    let record = try decoder.decode(ArchivedEvent.self, from: Data(line))
+                    entries.append(record.eventEntry)
+                } catch {
+                    corruptLineCount += 1
+                }
+            }
+        }
+
+        if corruptLineCount > 0 {
+            Logger.storage.warning("Skipped \(corruptLineCount) unreadable line(s) in daily activity logs")
+        }
+        return entries.sorted { $0.timestamp < $1.timestamp }
+    }
+
     func clear() async {
         do {
             try await manager.execute { db in
@@ -224,6 +281,145 @@ actor ActivityLogStore {
             // Best effort.
             Logger.storage.error("Failed to clear activity-log entries: \(error.localizedDescription)")
         }
+
+        do {
+            try closeArchiveFile()
+            guard let archiveDirectoryURL,
+                  FileManager.default.fileExists(atPath: archiveDirectoryURL.path)
+            else { return }
+            for fileURL in try FileManager.default.contentsOfDirectory(
+                at: archiveDirectoryURL,
+                includingPropertiesForKeys: nil
+            ) where Self.isArchiveFile(fileURL) {
+                try FileManager.default.removeItem(at: fileURL)
+            }
+        } catch {
+            Logger.storage.error("Failed to clear daily activity logs: \(error.localizedDescription)")
+        }
+    }
+
+    private func appendToDailyArchive(_ entry: EventEntry) throws {
+        guard let archiveDirectoryURL else { return }
+        try FileManager.default.createDirectory(
+            at: archiveDirectoryURL,
+            withIntermediateDirectories: true
+        )
+
+        let targetURL = archiveDirectoryURL.appendingPathComponent(
+            Self.archiveFilename(for: entry.timestamp, calendar: archiveCalendar)
+        )
+        if archiveFileURL != targetURL {
+            try closeArchiveFile()
+            if !FileManager.default.fileExists(atPath: targetURL.path) {
+                guard FileManager.default.createFile(atPath: targetURL.path, contents: nil) else {
+                    throw CocoaError(.fileWriteUnknown)
+                }
+            }
+            archiveFileHandle = try FileHandle(forWritingTo: targetURL)
+            try archiveFileHandle?.seekToEnd()
+            archiveFileURL = targetURL
+        }
+
+        var encoded = try Self.archiveEncoder().encode(ArchivedEvent(entry))
+        encoded.append(0x0A)
+        try archiveFileHandle?.write(contentsOf: encoded)
+
+        // Use the current wall day for retention rather than the entry timestamp. Saves can
+        // complete out of order across SQLite's await at midnight; an older entry must never
+        // prune the new day's file that another save has just created.
+        let pruneReference = max(Date(), entry.timestamp)
+        let day = archiveCalendar.startOfDay(for: pruneReference)
+        if lastArchivePruneDay != day {
+            try pruneDailyArchives(now: pruneReference, directory: archiveDirectoryURL)
+            lastArchivePruneDay = day
+        }
+    }
+
+    private func pruneDailyArchives(now: Date, directory: URL) throws {
+        let retainedNames = Set(archiveFileURLs(now: now, directory: directory).map(\.lastPathComponent))
+        for fileURL in try FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil
+        ) where Self.isArchiveFile(fileURL) && !retainedNames.contains(fileURL.lastPathComponent) {
+            try FileManager.default.removeItem(at: fileURL)
+        }
+    }
+
+    private func archiveFileURLs(now: Date, directory: URL) -> [URL] {
+        let today = archiveCalendar.startOfDay(for: now)
+        return (0..<archiveRetentionDays).reversed().compactMap { daysAgo in
+            guard let day = archiveCalendar.date(byAdding: .day, value: -daysAgo, to: today) else {
+                return nil
+            }
+            return directory.appendingPathComponent(
+                Self.archiveFilename(for: day, calendar: archiveCalendar)
+            )
+        }
+    }
+
+    private func closeArchiveFile() throws {
+        try archiveFileHandle?.close()
+        archiveFileHandle = nil
+        archiveFileURL = nil
+    }
+
+    private static func archiveFilename(for date: Date, calendar: Calendar) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = calendar.timeZone
+        formatter.dateFormat = "yyyy-MM-dd"
+        return "SwiftMiner-activity-\(formatter.string(from: date)).log"
+    }
+
+    private static func isArchiveFile(_ url: URL) -> Bool {
+        url.lastPathComponent.hasPrefix("SwiftMiner-activity-") && url.pathExtension == "log"
+    }
+
+    private static func archiveEncoder() -> JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .millisecondsSince1970
+        return encoder
+    }
+
+    private static func archiveDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .millisecondsSince1970
+        return decoder
+    }
+}
+
+private struct ArchivedEvent: Codable {
+    let schemaVersion: Int
+    let id: UUID
+    let timestamp: Date
+    let message: String
+    let level: EventLevel
+    let minerId: String?
+    let rawMessage: String?
+    let category: String?
+
+    init(_ entry: EventEntry) {
+        schemaVersion = 1
+        id = entry.id
+        timestamp = entry.timestamp
+        message = entry.message
+        level = entry.level
+        minerId = entry.minerId
+        rawMessage = entry.rawMessage
+        category = entry.category
+    }
+
+    var eventEntry: EventEntry {
+        EventEntry(
+            id: id,
+            timestamp: timestamp,
+            message: message,
+            level: level,
+            minerId: minerId,
+            rawMessage: rawMessage,
+            category: category
+        )
     }
 }
 
