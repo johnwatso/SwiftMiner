@@ -437,6 +437,13 @@ const searchIndex = [
     snippet: "Learn how SwiftMiner uses thread-safe actors and background tasks to handle accounts concurrently."
   },
   {
+    title: "Campaign Scheduling",
+    url: "under-the-hood/#scheduling",
+    category: "Architecture",
+    keywords: "campaign scheduling mining strategy smart prioritised priority games drop aware ordering progress queue",
+    snippet: "How each miner picks its next campaign: the Smart, prefer-prioritised and only-prioritised strategies, and drop-aware ordering."
+  },
+  {
     title: "Embedded Web Server Engine",
     url: "under-the-hood/#web-server",
     category: "Architecture",

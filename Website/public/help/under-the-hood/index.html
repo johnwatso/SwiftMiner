@@ -69,7 +69,7 @@
                 <p>SwiftMiner is engineered from the ground up as a native macOS application. Instead of relying on bloated browser frameworks or resource-intensive electron wrappers, it is built directly on Apple's developer frameworks to run in the background with negligible memory and CPU footprints.</p>
 
                 <h2 id="architecture">System Architecture</h2>
-                <p>The application is split into three main modules to maintain strict separation of concerns:</p>
+                <p>The application is split into four shipping targets to maintain strict separation of concerns:</p>
                 <div class="screenshot-wrap">
                     <picture>
                         <source srcset="../assets/img/activity-log-dark.webp" media="(prefers-color-scheme: dark)">
@@ -81,7 +81,8 @@
                 <ul>
                     <li><strong>App UI (SwiftUI):</strong> Responsible for the native macOS layouts, including the multi-miner overview cards, real-time log consoles, and account settings panels.</li>
                     <li><strong>SwiftMinerCore:</strong> The core daemon engine that manages token lifecycle operations, active drop tracking, automatic claiming intervals, and database synchronization.</li>
-                    <li><strong>SwiftMinerService:</strong> Houses the embedded HTTP web dashboard daemon that parses incoming local LAN connections and enforces Twitch OAuth token validations.</li>
+                    <li><strong>SwiftMinerService:</strong> Houses the embedded HTTP daemon that parses incoming local LAN connections and enforces Twitch OAuth token validations. It also serves the Discord integration, including the device-code activation flow that links a Discord account to a miner.</li>
+                    <li><strong>SwiftMinerSafariExtension:</strong> An optional Safari web extension, <em>SwiftMiner Query Hash Discovery</em>, used to observe Twitch's current GraphQL query hashes. It is a fallback for when upstream hashes drift, and never runs unless you enable it.</li>
                 </ul>
 
                 <h2 id="concurrency">Swift Concurrency Model</h2>
@@ -98,6 +99,19 @@
                     <li>
                         <strong>Non-blocking UI:</strong>
                         State changes (such as progress bars updating or new logs arriving) are funneled from background threads back to the Main Actor (UI thread) using reactive publishers. This ensures the SwiftUI layout re-renders smoothly.
+                    </li>
+                </ul>
+
+                <h2 id="scheduling">Campaign Scheduling</h2>
+                <p>Each miner decides for itself what to watch next, so one account's choices never block another's.</p>
+                <ul>
+                    <li>
+                        <strong>Strategies:</strong>
+                        <code>MiningStrategy</code> offers three modes — <strong>Smart</strong>, which works through everything eligible; <strong>Prefer prioritised games</strong>, which favours your list but falls back to the rest; and <strong>Only prioritised games</strong>, which mines nothing else.
+                    </li>
+                    <li>
+                        <strong>Drop-aware ordering:</strong>
+                        The engine prefers campaigns that finish soonest and keeps partial progress rather than discarding it, so a nearly-complete drop is not abandoned for a fresher one.
                     </li>
                 </ul>
 
@@ -136,11 +150,15 @@
                 <ul>
                     <li>
                         <strong>Keychain Services:</strong>
-                        Your Twitch OAuth tokens and client credentials are never saved in plain text database tables. They are written to the macOS System Keychain using Apple's <code>Keychain Services</code> API, providing hardware-backed security.
+                        Your Twitch OAuth tokens and client credentials are never saved in plain text database tables. Release builds write each account to your login Keychain through Apple's <code>Keychain Services</code> API as its own generic-password item, marked <code>AfterFirstUnlockThisDeviceOnly</code> so it is readable only on the Mac that stored it and never syncs anywhere.
                     </li>
                     <li>
                         <strong>No Cloud Relays:</strong>
                         Unlike cloud-based services, SwiftMiner runs entirely on your Mac. Your private Twitch credentials never leave your machine and are only sent directly to Twitch APIs.
+                    </li>
+                    <li>
+                        <strong>Signed, self-updating builds:</strong>
+                        Releases are signed and notarized by Apple, and the in-app updater is built on <strong>Sparkle</strong>. Each update is checked against its EdDSA signature before it is allowed to install, so a tampered download is rejected rather than run.
                     </li>
                 </ul>
 
@@ -153,7 +171,11 @@
                     </li>
                     <li>
                         <strong>Performance:</strong>
-                        The server runs directly in the background with a memory overhead of less than 5 MB. It parses standard HTTP/1.1 headers, decodes query parameters, and routes them to handler closures asynchronously.
+                        The server runs in-process with no separate daemon and no third-party dependencies to load. It parses standard HTTP/1.1 headers, decodes query parameters, and routes them to handler closures asynchronously.
+                    </li>
+                    <li>
+                        <strong>Shared routing:</strong>
+                        The same listener serves the Discord integration. <code>DiscordAPIRoutes</code> and <code>DiscordProjectionBuilder</code> handle account linking and build the per-user views SwiftBot reads, so there is no second server to run or expose.
                     </li>
                 </ul>
 
@@ -165,6 +187,7 @@
                     <ul class="toc-list">
                         <li><a href="#architecture" class="toc-link">System Architecture</a></li>
                         <li><a href="#concurrency" class="toc-link">Swift Concurrency</a></li>
+                        <li><a href="#scheduling" class="toc-link">Campaign Scheduling</a></li>
                         <li><a href="#networking" class="toc-link">API & WebSockets</a></li>
                         <li><a href="#persistence" class="toc-link">SQLite Caching</a></li>
                         <li><a href="#security" class="toc-link">System Security</a></li>
@@ -188,7 +211,7 @@
 
     <footer class="footer">
         <div class="shell">
-            <span>SwiftMiner Help · Published June 22, 2026</span>
+            <span>SwiftMiner Help · Updated September 21, 2026</span>
             <span><a class="nav-link" href="../../release-notes/">Release Notes</a> · <a class="nav-link" href="https://github.com/johnwatso/SwiftMiner">GitHub</a></span>
         </div>
     </footer>
